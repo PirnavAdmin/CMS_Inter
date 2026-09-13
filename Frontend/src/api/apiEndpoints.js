@@ -145,9 +145,6 @@ export const apiEndpoints = {
     receiptByNumber: (receiptNumber) => `/api/v1/fees/receipt/${encodeURIComponent(receiptNumber)}`,
     paymentDetails: (feePaymentId) => `/api/v1/fees/payments/${encodeURIComponent(feePaymentId)}`,
     deletePayment: (id) => `/api/fees/payment/${id}`,
-    createPaymentPlan: "/api/v1/fees/payment-plans",
-    createPaymentPlanInstallment: (paymentPlanId) => `/api/v1/fees/payment-plans/${encodeURIComponent(paymentPlanId)}/installments`,
-    addPaymentPlanInstallment: (paymentPlanId) => `/api/v1/fees/payment-plans/${encodeURIComponent(paymentPlanId)}/installments`,
     addFine: "/api/fees/fine",
     waiveFine: (id) => `/api/fees/fine/${id}/waive`,
     refund: "/api/fees/refund",
@@ -225,6 +222,13 @@ export const apiEndpoints = {
     byGroup: (groupId) => `/api/v1/Sections/group/${groupId}`,
     getById: (sectionId) => `/api/v1/Sections/${sectionId}`,
     search: "/api/v1/Sections",
+  },
+  sectionRollAllocation: {
+    sectionPreview: "/api/v1/section-roll-allocation/section/preview",
+    sectionConfirm: "/api/v1/section-roll-allocation/section/confirm",
+    rollPreview: "/api/v1/section-roll-allocation/roll/preview",
+    rollConfirm: "/api/v1/section-roll-allocation/roll/confirm",
+    updateStudent: (studentId) => `/api/v1/section-roll-allocation/students/${studentId}`,
   },
   periods: {
     getAll: "/api/v1/periods",
