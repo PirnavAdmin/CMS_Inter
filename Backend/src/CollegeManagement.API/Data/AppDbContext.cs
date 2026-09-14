@@ -56,6 +56,8 @@ namespace CollegeManagement.API.Data
         public DbSet<Examination> Examinations { get; set; }
         public DbSet<ExamCodeSequence> ExamCodeSequences { get; set; }
         public DbSet<ExamSchedule> ExamSchedules { get; set; }
+        public DbSet<ExaminationScheduleHall> ExaminationScheduleHalls { get; set; }
+        public DbSet<ScheduleInvigilator> ScheduleInvigilators { get; set; }
         public DbSet<HallTicket> HallTickets { get; set; }
         public DbSet<InvigilatorAssignment> InvigilatorAssignments { get; set; }
         public DbSet<Mark> Marks { get; set; }
@@ -361,7 +363,34 @@ namespace CollegeManagement.API.Data
                 entity.HasOne(es => es.Subject)
                       .WithMany()
                       .HasForeignKey(es => es.SubjectId)
+                      .IsRequired(false)
                       .OnDelete(DeleteBehavior.Restrict);
+                entity.HasMany(es => es.HallAllocations)
+                      .WithOne(h => h.ExamSchedule)
+                      .HasForeignKey(h => h.ScheduleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ExaminationScheduleHall>(entity =>
+            {
+                entity.HasKey(h => h.ScheduleHallId);
+                entity.HasOne(h => h.ExamSchedule)
+                      .WithMany(es => es.HallAllocations)
+                      .HasForeignKey(h => h.ScheduleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+                entity.HasMany(h => h.Invigilators)
+                      .WithOne(i => i.ScheduleHall)
+                      .HasForeignKey(i => i.ScheduleHallId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.Entity<ScheduleInvigilator>(entity =>
+            {
+                entity.HasKey(i => i.Id);
+                entity.HasOne(i => i.ScheduleHall)
+                      .WithMany(h => h.Invigilators)
+                      .HasForeignKey(i => i.ScheduleHallId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
           
 

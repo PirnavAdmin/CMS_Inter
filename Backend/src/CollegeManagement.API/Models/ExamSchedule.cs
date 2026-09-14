@@ -29,8 +29,12 @@ namespace CollegeManagement.API.Models
             set => ExaminationId = value;
         }
 
-        [Required]
-        public int SubjectId { get; set; }
+        public int? GroupId { get; set; }
+
+        public int? SubjectId { get; set; }
+
+        [StringLength(100)]
+        public string? PatternName { get; set; }
 
         [Required]
         public DateOnly ExamDate { get; set; }
@@ -69,6 +73,8 @@ namespace CollegeManagement.API.Models
 
         public decimal PassingMarks { get; set; } = 35.00m;
 
+        public decimal PassPercentage { get; set; } = 35.00m;
+
         public bool IsActive { get; set; } = true;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -78,5 +84,6 @@ namespace CollegeManagement.API.Models
         // Navigation Properties
         public Examination? Examination { get; set; }
         public Subject? Subject { get; set; }
+        public virtual ICollection<ExaminationScheduleHall> HallAllocations { get; set; } = new List<ExaminationScheduleHall>();
     }
 }

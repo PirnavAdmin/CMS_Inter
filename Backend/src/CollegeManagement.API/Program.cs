@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Repositories.Interfaces;
+using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Implementations;
 using Asp.Versioning;
 using CollegeManagement.API.Data;
@@ -217,7 +217,8 @@ builder.Services.AddAutoMapper(
     typeof(MarksMappingProfile),
     typeof(AttendanceProfile),
     typeof(CollegeManagement.API.Profiles.TimetableMappingProfile),
-    typeof(SectionMappingProfile));
+    typeof(SectionMappingProfile),
+    typeof(ExaminationMappingProfile));
 
 builder.Services.AddValidatorsFromAssemblyContaining<CreateStaffDtoValidator>();
 
@@ -325,7 +326,7 @@ builder.Services.AddScoped<IAssignmentService, AssignmentService>();
 builder.Services.AddScoped<IAssignmentSubmissionService, AssignmentSubmissionService>();
 builder.Services.AddScoped<IExaminationService, ExaminationService>();
 builder.Services.AddScoped<IExaminationExportService, ExaminationExportService>();
-// builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 builder.Services.AddScoped<IMarksService, MarksService>();
 builder.Services.AddScoped<IEvaluationService, EvaluationService>();
 builder.Services.AddScoped<IResultService, ResultService>();

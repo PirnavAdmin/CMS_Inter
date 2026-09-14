@@ -56,9 +56,20 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.ExamPattern, opt => opt.MapFrom(src => !string.IsNullOrEmpty(src.ExamPattern) ? src.ExamPattern : "REGULAR_ACADEMIC"))
                 .ForMember(dest => dest.Schedules, opt => opt.MapFrom(src => src.ExamSchedules));
 
+            CreateMap<ExaminationScheduleDto, ExamSchedule>()
+                .ForMember(dest => dest.Examination, opt => opt.Ignore())
+                .ForMember(dest => dest.Subject, opt => opt.Ignore())
+                .ForMember(dest => dest.HallAllocations, opt => opt.Ignore());
+
             CreateMap<ExamSchedule, ExamScheduleResponse>()
-                .ForMember(dest => dest.SubjectName, opt => opt.MapFrom(src => src.Subject != null ? src.Subject.SubjectName : string.Empty))
-                .ForMember(dest => dest.SubjectCode, opt => opt.MapFrom(src => src.Subject != null ? src.Subject.SubjectCode : string.Empty));
+                .ForMember(dest => dest.SubjectName, opt => opt.MapFrom(src => src.Subject != null ? src.Subject.SubjectName : (src.PatternName ?? string.Empty)))
+                .ForMember(dest => dest.SubjectCode, opt => opt.MapFrom(src => src.Subject != null ? src.Subject.SubjectCode : (!string.IsNullOrEmpty(src.PatternName) ? "OBJ" : string.Empty)))
+                .ForMember(dest => dest.HallAssignments, opt => opt.MapFrom(src => src.HallAllocations.Select(h => new HallAssignmentDto
+                {
+                    HallId = h.HallId,
+                    CandidateCount = h.CandidateCount,
+                    InvigilatorIds = h.Invigilators.Select(i => i.FacultyId).ToList()
+                })));
 
             CreateMap<HallTicket, HallTicketResponse>()
                 .ForMember(dest => dest.StudentName, opt => opt.MapFrom(src => src.Student != null ? src.Student.Email : string.Empty))

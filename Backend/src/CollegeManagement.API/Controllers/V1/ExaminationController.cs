@@ -170,8 +170,15 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<ActionResult<FinalizeScheduleResponse>> FinalizeSchedule(int examinationId)
         {
             _logger.LogInformation("Finalizing schedule for examination ID: {Id}", examinationId);
-            var result = await _examinationService.FinalizeScheduleAsync(examinationId);
-            return Ok(result);
+            try
+            {
+                var result = await _examinationService.FinalizeScheduleAsync(examinationId);
+                return Ok(result);
+            }
+            catch (System.ComponentModel.DataAnnotations.ValidationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -195,14 +202,22 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpDelete("{examinationId:int}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> DeleteExamination(int examinationId)
         {
             _logger.LogInformation("Deleting examination ID: {Id}", examinationId);
-            var success = await _examinationService.DeleteExaminationAsync(examinationId);
-            if (!success) return NotFound(new { message = "Examination not found." });
-            return NoContent();
+            try
+            {
+                var success = await _examinationService.DeleteExaminationAsync(examinationId);
+                if (!success) return NotFound(new { message = "Examination not found." });
+                return NoContent();
+            }
+            catch (System.ComponentModel.DataAnnotations.ValidationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -210,14 +225,23 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPatch("{examinationId:int}/cancel")]
         [ProducesResponseType(typeof(ExaminationStatusResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<ActionResult<ExaminationStatusResponse>> CancelExamination(int examinationId, [FromBody] CancelExaminationRequest request)
+        public async Task<ActionResult<ExaminationStatusResponse>> CancelExamination(int examinationId, [FromBody] CancelExaminationRequest? request = null)
         {
             _logger.LogInformation("Cancelling examination ID: {Id}", examinationId);
-            var result = await _examinationService.CancelExaminationAsync(examinationId, request);
-            if (result == null) return NotFound(new { message = "Examination not found." });
-            return Ok(result);
+            try
+            {
+                request ??= new CancelExaminationRequest { Reason = "Cancelled by administrator" };
+                var result = await _examinationService.CancelExaminationAsync(examinationId, request);
+                if (result == null) return NotFound(new { message = "Examination not found." });
+                return Ok(result);
+            }
+            catch (System.ComponentModel.DataAnnotations.ValidationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         /// <summary>
@@ -319,6 +343,92 @@ namespace CollegeManagement.API.Controllers.V1
             if (!success) return NotFound(new { message = "Schedule not found." });
             return NoContent();
         }
+
+        #region Nested Examination Timetable APIs (/api/v1/examinations/{id}/schedules)
+
+        /// <summary>
+        /// Retrieves all timetable schedule slots for a specific examination.
+        /// </summary>
+        [HttpGet("{examinationId:int}/schedules")]
+        [ProducesResponseType(typeof(IEnumerable<ExamScheduleResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<ExamScheduleResponse>>> GetSchedulesByExaminationId(int examinationId)
+        {
+            _logger.LogInformation("Fetching exam schedules for Examination ID: {ExaminationId}", examinationId);
+            var result = await _examinationService.GetExamSchedulesAsync(examinationId);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Bulk saves timetable schedule slots for an examination (accepts direct List of ExaminationScheduleDto).
+        /// </summary>
+        [HttpPost("{examinationId:int}/schedules")]
+        [ProducesResponseType(typeof(IEnumerable<ExamScheduleResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<ExamScheduleResponse>>> BulkSaveExaminationSchedules(
+            int examinationId,
+            [FromBody] List<ExaminationScheduleDto> schedules)
+        {
+            _logger.LogInformation("Bulk saving {Count} schedules for Examination ID: {ExamId}", schedules?.Count ?? 0, examinationId);
+            if (schedules == null || !schedules.Any())
+            {
+                return BadRequest(new { message = "Schedule list cannot be empty." });
+            }
+
+            try
+            {
+                var result = await _examinationService.BulkSaveSchedulesAsync(examinationId, schedules);
+                return Ok(result);
+            }
+            catch (System.ComponentModel.DataAnnotations.ValidationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Updates a single schedule slot (postponement, room, or invigilator assignment).
+        /// </summary>
+        [HttpPut("{examinationId:int}/schedules/{scheduleId:int}")]
+        [ProducesResponseType(typeof(ExamScheduleResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<ExamScheduleResponse>> UpdateExaminationScheduleSlot(
+            int examinationId,
+            int scheduleId,
+            [FromBody] ExaminationScheduleDto schedule)
+        {
+            _logger.LogInformation("Updating schedule slot {ScheduleId} for Examination ID: {ExamId}", scheduleId, examinationId);
+            try
+            {
+                var result = await _examinationService.UpdateScheduleSlotAsync(examinationId, scheduleId, schedule);
+                if (result == null) return NotFound(new { message = "Schedule slot not found." });
+                return Ok(result);
+            }
+            catch (System.ComponentModel.DataAnnotations.ValidationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Deletes a single schedule slot from an examination.
+        /// </summary>
+        [HttpDelete("{examinationId:int}/schedules/{scheduleId:int}")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteExaminationScheduleSlot(int examinationId, int scheduleId)
+        {
+            _logger.LogInformation("Deleting schedule slot {ScheduleId} from Examination ID: {ExamId}", scheduleId, examinationId);
+            var success = await _examinationService.DeleteExamScheduleAsync(scheduleId);
+            if (!success) return NotFound(new { message = "Schedule slot not found." });
+            return NoContent();
+        }
+
+        #endregion
 
         /// <summary>
         /// Publishes examination schedules.

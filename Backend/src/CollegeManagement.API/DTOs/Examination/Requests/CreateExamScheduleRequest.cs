@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Examination.Requests
@@ -8,8 +9,11 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
         [Required]
         public int ExaminationId { get; set; }
 
-        [Required]
-        public int SubjectId { get; set; }
+        public int? GroupId { get; set; }
+
+        public int? SubjectId { get; set; }
+
+        public string? PatternName { get; set; }
 
         [Required]
         public DateOnly ExamDate { get; set; }
@@ -47,5 +51,9 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
         public decimal MaxMarks { get; set; } = 100.00m;
 
         public decimal PassingMarks { get; set; } = 35.00m;
+
+        public decimal PassPercentage { get; set; } = 35.00m;
+
+        public List<HallAssignmentDto> HallAssignments { get; set; } = new();
     }
 }

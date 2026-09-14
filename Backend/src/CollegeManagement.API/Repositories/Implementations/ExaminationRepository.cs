@@ -211,6 +211,10 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<ExamSchedule> CreateExamScheduleAsync(ExamSchedule schedule)
         {
+            if (schedule.SubjectId.HasValue && schedule.SubjectId.Value <= 0)
+            {
+                schedule.SubjectId = null;
+            }
             schedule.CreatedAt = DateTime.UtcNow;
             _context.ExamSchedules.Add(schedule);
             await _context.SaveChangesAsync();
@@ -222,6 +226,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await _context.ExamSchedules
                 .Include(s => s.Examination)
                 .Include(s => s.Subject)
+                .Include(s => s.HallAllocations)
+                    .ThenInclude(h => h.Invigilators)
                 .FirstOrDefaultAsync(s => s.ExamScheduleId == examScheduleId);
         }
 
@@ -230,6 +236,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             var query = _context.ExamSchedules
                 .Include(s => s.Examination)
                 .Include(s => s.Subject)
+                .Include(s => s.HallAllocations)
+                    .ThenInclude(h => h.Invigilators)
                 .Where(s => s.IsActive)
                 .AsQueryable();
 
@@ -241,8 +249,78 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await query.OrderBy(s => s.ExamDate).ThenBy(s => s.StartTime).ToListAsync();
         }
 
+        public async Task<IEnumerable<ExamSchedule>> BulkSaveSchedulesAsync(int examinationId, IEnumerable<ExamSchedule> schedules)
+        {
+            var scheduleList = schedules.ToList();
+            foreach (var s in scheduleList)
+            {
+                s.ExaminationId = examinationId;
+                if (s.SubjectId.HasValue && s.SubjectId.Value <= 0)
+                {
+                    s.SubjectId = null;
+                }
+
+                if (s.ExamScheduleId > 0)
+                {
+                    var existing = await _context.ExamSchedules
+                        .Include(x => x.HallAllocations)
+                        .ThenInclude(h => h.Invigilators)
+                        .FirstOrDefaultAsync(x => x.ExamScheduleId == s.ExamScheduleId);
+
+                    if (existing != null)
+                    {
+                        existing.GroupId = s.GroupId;
+                        existing.SubjectId = s.SubjectId;
+                        existing.PatternName = s.PatternName;
+                        existing.ExamDate = s.ExamDate;
+                        existing.StartTime = s.StartTime;
+                        existing.EndTime = s.EndTime;
+                        existing.MaxMarks = s.MaxMarks;
+                        existing.PassingMarks = s.PassingMarks;
+                        existing.PassPercentage = s.PassPercentage;
+                        existing.ExamMode = s.ExamMode;
+                        existing.ScheduleMode = s.ScheduleMode;
+                        existing.Hall = s.Hall;
+                        existing.Invigilator = s.Invigilator;
+                        existing.UpdatedAt = DateTime.UtcNow;
+                        existing.IsActive = true;
+
+                        if (existing.HallAllocations.Any())
+                        {
+                            _context.ExaminationScheduleHalls.RemoveRange(existing.HallAllocations);
+                        }
+
+                        foreach (var hall in s.HallAllocations)
+                        {
+                            hall.ScheduleId = existing.ExamScheduleId;
+                            _context.ExaminationScheduleHalls.Add(hall);
+                        }
+                    }
+                    else
+                    {
+                        s.CreatedAt = DateTime.UtcNow;
+                        s.IsActive = true;
+                        _context.ExamSchedules.Add(s);
+                    }
+                }
+                else
+                {
+                    s.CreatedAt = DateTime.UtcNow;
+                    s.IsActive = true;
+                    _context.ExamSchedules.Add(s);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return await GetExamSchedulesAsync(examinationId);
+        }
+
         public async Task UpdateExamScheduleAsync(ExamSchedule schedule)
         {
+            if (schedule.SubjectId.HasValue && schedule.SubjectId.Value <= 0)
+            {
+                schedule.SubjectId = null;
+            }
             schedule.UpdatedAt = DateTime.UtcNow;
             _context.ExamSchedules.Update(schedule);
             await _context.SaveChangesAsync();

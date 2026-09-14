@@ -1,3 +1,10 @@
+-- ====================================================================================
+-- Stored Procedure: sp_GetExaminations
+-- Target Database: CollegeManagement (MySQL 8.0+)
+-- Description: Retrieves examinations with pattern-aware eligible subjects count,
+--              status, and joined academic metadata.
+-- ====================================================================================
+
 DROP PROCEDURE IF EXISTS sp_GetExaminations;
 DELIMITER //
 CREATE PROCEDURE sp_GetExaminations()
@@ -18,6 +25,7 @@ BEGIN
         COALESCE(p.ProgramName, 'All Programs') AS ProgramName,
         e.AssessmentTypeId,
         at.AssessmentTypeName AS ExamType,
+        e.ExamPattern,
         e.StartDate,
         e.EndDate,
         e.Description,
@@ -26,12 +34,17 @@ BEGIN
         e.CreatedAt,
         e.UpdatedAt,
         (
-            SELECT COUNT(*) 
-            FROM Subjects s 
-            WHERE s.IsActive = 1 
-              AND s.BoardId = e.BoardId 
-              AND s.AcademicLevelId = e.AcademicLevelId 
-              AND s.GroupId = e.GroupId
+            CASE 
+                WHEN e.ExamPattern IN ('OBJECTIVE_COMBINED', 'JEE_MAIN', 'JEE_ADVANCED', 'NEET') THEN 1
+                ELSE (
+                    SELECT COUNT(*) 
+                    FROM Subjects s 
+                    WHERE s.IsActive = 1 
+                      AND s.BoardId = e.BoardId 
+                      AND s.AcademicLevelId = e.AcademicLevelId 
+                      AND s.GroupId = e.GroupId
+                )
+            END
         ) AS TotalEligibleSubjects,
         (
             SELECT COUNT(*) 

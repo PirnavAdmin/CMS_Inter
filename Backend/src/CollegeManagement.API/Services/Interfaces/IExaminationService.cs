@@ -21,6 +21,8 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<ExamScheduleResponse> CreateExamScheduleAsync(CreateExamScheduleRequest request);
         Task<ExamScheduleResponse?> GetExamScheduleByIdAsync(int examScheduleId);
         Task<IEnumerable<ExamScheduleResponse>> GetExamSchedulesAsync(int? examinationId);
+        Task<IEnumerable<ExamScheduleResponse>> BulkSaveSchedulesAsync(int examinationId, List<ExaminationScheduleDto> schedules);
+        Task<ExamScheduleResponse?> UpdateScheduleSlotAsync(int examinationId, int scheduleId, ExaminationScheduleDto schedule);
         Task<ExamScheduleResponse?> UpdateExamScheduleAsync(int examScheduleId, UpdateExamScheduleRequest request);
         Task<bool> DeleteExamScheduleAsync(int examScheduleId);
         Task<int> PublishExamSchedulesAsync(PublishExamScheduleRequest request);

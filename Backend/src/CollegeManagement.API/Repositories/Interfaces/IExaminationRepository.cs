@@ -18,6 +18,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<ExamSchedule> CreateExamScheduleAsync(ExamSchedule schedule);
         Task<ExamSchedule?> GetExamScheduleByIdAsync(int examScheduleId);
         Task<IEnumerable<ExamSchedule>> GetExamSchedulesAsync(int? examinationId);
+        Task<IEnumerable<ExamSchedule>> BulkSaveSchedulesAsync(int examinationId, IEnumerable<ExamSchedule> schedules);
         Task UpdateExamScheduleAsync(ExamSchedule schedule);
         Task<bool> DeleteExamScheduleAsync(ExamSchedule schedule);
         Task<int> PublishExamSchedulesAsync(IEnumerable<int> scheduleIds);
