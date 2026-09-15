@@ -1,0 +1,115 @@
+/* ==========================================================================
+   HOSTEL MANAGEMENT MODULE — EXACT REFERENCE UI STYLES
+   Leave Management Olive/Sage Green College Theme (#5b7a2b, #4d6924, #e2ebd8, #f0f4e8, #f2f6ed)
+   Text System: Primary #1f2913, Secondary #475569, Muted #6b7e5d
+   Cards: background white, border 1px solid #e2ebd8, border-radius 16px, shadow-sm
+   ========================================================================== */
+
+:root {
+  --hostel-blue-primary: #5b7a2b;
+  --hostel-sky-bright: #6f8f00;
+  --hostel-cyan: #476323;
+  --hostel-bg-light: #f0f4e8;
+  --hostel-border-card: #e2ebd8;
+  --hostel-card-bg: #FFFFFF;
+  --hostel-page-bg: #f2f6ed;
+  --hostel-text-primary: #1f2913;
+  --hostel-text-secondary: #475569;
+  --hostel-text-muted: #6b7e5d;
+}
+
+/* Page Layout */
+.hostel-dashboard-page {
+  background-color: #f2f6ed !important;
+  min-height: calc(100vh - 70px);
+  padding: 24px;
+  box-sizing: border-box;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1f2913 !important;
+}
+
+/* Card Styling: rounded-2xl border border-sky-100 shadow-sm */
+.hostel-card {
+  background-color: #FFFFFF;
+  border: 1px solid #e2ebd8 !important;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px 0 rgba(31, 41, 19, 0.05);
+  transition: box-shadow 0.2s ease;
+}
+
+.hostel-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(31, 41, 19, 0.07), 0 2px 4px -2px rgba(31, 41, 19, 0.05);
+}
+
+/* Base utility polyfills for seamless display */
+.whitespace-nowrap { white-space: nowrap !important; }
+.inline-flex { display: inline-flex !important; }
+.flex { display: flex !important; }
+.grid { display: grid !important; }
+.items-center { align-items: center !important; }
+.justify-between { justify-content: space-between !important; }
+.justify-center { justify-content: center !important; }
+
+/* Borders */
+.border-sky-100 { border-color: #e2ebd8 !important; }
+.border-sky-200 { border-color: #d5e2c7 !important; }
+.border-emerald-200 { border-color: #c8e6a6 !important; }
+.border-amber-200 { border-color: #FDE68A !important; }
+.border-violet-200 { border-color: #d5e2c7 !important; }
+.border-red-200 { border-color: #FECACA !important; }
+.border-slate-200 { border-color: #e2ebd8 !important; }
+
+/* Backgrounds */
+.bg-sky-50 { background-color: #f0f4e8 !important; }
+.bg-sky-100 { background-color: #e2ebd8 !important; }
+.bg-sky-600 { background-color: #5b7a2b !important; }
+.hover\:bg-sky-50:hover { background-color: #f0f4e8 !important; }
+.hover\:bg-sky-700:hover { background-color: #4d6924 !important; }
+
+.bg-emerald-50 { background-color: #e9f2dd !important; }
+.bg-emerald-100 { background-color: #dceccc !important; }
+.bg-emerald-400 { background-color: #c8e6a6 !important; }
+.bg-emerald-600 { background-color: #476323 !important; }
+.hover\:bg-emerald-700:hover { background-color: #3b5220 !important; }
+
+.bg-amber-50 { background-color: #FFFBEB !important; }
+.bg-violet-50 { background-color: #f0f4e8 !important; }
+.bg-red-50 { background-color: #FEF2F2 !important; }
+.bg-slate-50 { background-color: #f7faf3 !important; }
+.bg-cyan-50 { background-color: #f0f4e8 !important; }
+
+/* Text colors */
+.text-sky-600 { color: #5b7a2b !important; }
+.text-sky-700 { color: #476323 !important; }
+.text-slate-900 { color: #1f2913 !important; }
+.text-slate-800 { color: #2d3b1e !important; }
+.text-slate-700 { color: #475569 !important; }
+.text-slate-600 { color: #5a6e47 !important; }
+.text-slate-500 { color: #6b7e5d !important; }
+.text-slate-400 { color: #8e9e82 !important; }
+
+.text-emerald-600 { color: #476323 !important; }
+.text-emerald-700 { color: #34591f !important; }
+.text-amber-700 { color: #B45309 !important; }
+.text-violet-700 { color: #476323 !important; }
+.text-red-600 { color: #DC2626 !important; }
+.text-red-700 { color: #B91C1C !important; }
+
+/* Border Radius */
+.rounded-lg { border-radius: 8px !important; }
+.rounded-xl { border-radius: 12px !important; }
+.rounded-2xl { border-radius: 16px !important; }
+.rounded-full { border-radius: 9999px !important; }
+
+/* Shadows */
+.shadow-sm { box-shadow: 0 1px 2px 0 rgba(31, 41, 19, 0.05) !important; }
+
+/* Animation */
+@keyframes pulseGreen {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.15); }
+}
+
+.status-dot-pulse {
+  animation: pulseGreen 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

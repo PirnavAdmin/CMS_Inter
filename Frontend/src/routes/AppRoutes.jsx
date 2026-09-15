@@ -42,6 +42,13 @@ import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentDashboard from "@/Dashboard/StudentDashboard/StudentDashboard.jsx";
 import FacultyDashboard from "@/Dashboard/Facultydashboard.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
+import {
+  HostelDashboard,
+  HostelMasterSetup,
+  HostelStudentManagement,
+  HostelAttendanceRegister,
+  HostelReports,
+} from "@/modules/hostel/index.js";
 
 const moduleConfigs = {
   courses: courseGroupConfig,
@@ -213,6 +220,23 @@ export default function AppRoutes() {
         <Route path="/dashboard/staff-salary/reports" element={<SalaryManagementPage mode="reports" />} />
         <Route path="/dashboard/staff-salary/settings" element={<SalaryManagementPage mode="settings" />} />
         <Route path="/dashboard/staff-salary/import" element={<SalaryManagementPage mode="import" />} />
+
+        {/* Hostel Management Module Routes */}
+        <Route path="/hostel" element={<HostelDashboard />} />
+        <Route path="/hostel/master-setup" element={<HostelMasterSetup />} />
+        <Route path="/hostel/students" element={<HostelStudentManagement />} />
+        <Route path="/hostel/student-allocation" element={<HostelStudentManagement />} />
+        <Route path="/hostel/attendance" element={<HostelAttendanceRegister />} />
+        <Route path="/hostel/reports" element={<HostelReports />} />
+
+        <Route path="/dashboard/hostel" element={<HostelDashboard />} />
+        <Route path="/dashboard/hostel/master" element={<HostelMasterSetup />} />
+        <Route path="/dashboard/hostel/master-setup" element={<HostelMasterSetup />} />
+        <Route path="/dashboard/hostel/students" element={<HostelStudentManagement />} />
+        <Route path="/dashboard/hostel/student-allocation" element={<HostelStudentManagement />} />
+        <Route path="/dashboard/hostel/attendance" element={<HostelAttendanceRegister />} />
+        <Route path="/dashboard/hostel/reports" element={<HostelReports />} />
+
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-add`} path={`/dashboard/${slug}/add`} element={<ModuleFormRoute slug={slug} />} />)}
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-edit`} path={`/dashboard/${slug}/:id/edit`} element={<ModuleFormRoute slug={slug} />} />)}
         <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />

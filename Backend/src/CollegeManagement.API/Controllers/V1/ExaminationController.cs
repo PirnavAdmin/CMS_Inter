@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Examination.Requests;
 using CollegeManagement.API.DTOs.Examination.Responses;
+using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -197,33 +198,56 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Deletes an examination entry.
+        /// Deletes an examination entry. Only DRAFT or CANCELLED examinations can be deleted.
         /// </summary>
         [HttpDelete("{examinationId:int}")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<IActionResult> DeleteExamination(int examinationId)
         {
             _logger.LogInformation("Deleting examination ID: {Id}", examinationId);
-            var success = await _examinationService.DeleteExaminationAsync(examinationId);
-            if (!success) return NotFound(new { message = "Examination not found." });
-            return NoContent();
+            try
+            {
+                var success = await _examinationService.DeleteExaminationAsync(examinationId);
+                if (!success) return NotFound(new { success = false, message = "Examination not found." });
+                return NoContent();
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
 
         /// <summary>
         /// Cancels an existing examination.
         /// </summary>
         [HttpPatch("{examinationId:int}/cancel")]
-        [ProducesResponseType(typeof(ExaminationStatusResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<ActionResult<ExaminationStatusResponse>> CancelExamination(int examinationId, [FromBody] CancelExaminationRequest request)
+        public async Task<IActionResult> CancelExamination(
+            int examinationId,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CancelExaminationRequest? request = null)
         {
             _logger.LogInformation("Cancelling examination ID: {Id}", examinationId);
             var result = await _examinationService.CancelExaminationAsync(examinationId, request);
-            if (result == null) return NotFound(new { message = "Examination not found." });
-            return Ok(result);
+            if (result == null) return NotFound(new { success = false, message = "Examination not found." });
+
+            return Ok(new
+            {
+                success = true,
+                message = "Examination cancelled successfully.",
+                data = new
+                {
+                    id = result.ExaminationId,
+                    name = result.Name,
+                    status = result.Status,
+                    updatedAt = result.UpdatedAt
+                }
+            });
         }
 
         /// <summary>

@@ -62,6 +62,7 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
 
         public string? ExamType { get; set; }
         public string? ExamCategory { get; set; }
+        public string? Category { get => ExamCategory; set => ExamCategory = value; }
         public string? CustomCategoryName { get; set; }
 
         [Required]

@@ -362,13 +362,8 @@ builder.Services.AddScoped<IRoomService, RoomService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IStudyMaterialService, StudyMaterialService>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
-//section allocation//
-//SECTION ALLOCATION//
+// Section & Roll Allocation
 builder.Services.AddScoped<ISectionRepository, SectionRepository>();
-builder.Services.AddScoped<
-    ISectionRollAllocationRepository,
-    SectionRollAllocationRepository>();
-
 builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocationRepository>();
 builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 

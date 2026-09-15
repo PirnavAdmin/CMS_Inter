@@ -589,6 +589,13 @@ namespace CollegeManagement.API.Repositories.Implementations
                 !bookedInvigilatorNames.Contains(f.FirstName.Trim().ToLower()));
         }
 
+        public async Task<bool> IsInvigilatorTeachingSubjectAsync(int invigilatorId, int subjectId)
+        {
+            if (invigilatorId <= 0 || subjectId <= 0) return false;
+            return await _context.StaffSubjectAllocations
+                .AnyAsync(a => a.StaffId == invigilatorId && a.SubjectId == subjectId);
+        }
+
         #endregion
 
         #region Hall Ticket Methods
