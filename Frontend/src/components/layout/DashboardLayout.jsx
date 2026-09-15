@@ -119,6 +119,7 @@ export const menu = [
       { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon },
       { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon },
       { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon },
+      { to: "/dashboard/transport", label: "Transport", icon: timetableIcon },
     ],
   },
   {

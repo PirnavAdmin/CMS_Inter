@@ -23,6 +23,7 @@ import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
 import ResultProcessingPage from "@/components/pages/ResultProcessingPage.jsx";
 import PromotionPage from "@/components/pages/PromotionPage.jsx";
 import FeeManagementPage from "@/components/pages/FeeManagementPage.jsx";
+import TransportPage from "@/components/pages/TransportPage.jsx";
 import CertificatesPage, { pageConfig as certificatesConfig } from "@/components/pages/CertificatesPage.jsx";
 import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
@@ -153,6 +154,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/promotions/allocation" element={<PromotionPage screen="allocation" />} />
         <Route path="/dashboard/promotions/history" element={<PromotionPage screen="history" />} />
         <Route path="/dashboard/promotions/report" element={<PromotionPage screen="report" />} />
+        <Route path="/dashboard/transport" element={<TransportPage />} />
         <Route path="/dashboard/fee-structure" element={<FeeManagementPage />} />
         <Route path="/dashboard/certificates" element={<CertificatesPage />} />
         <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
@@ -236,6 +238,7 @@ export default function AppRoutes() {
       <Route path="/marks-entry" element={<Navigate to="/dashboard/marks-entry" replace />} />
       <Route path="/results" element={<Navigate to="/dashboard/results" replace />} />
       <Route path="/promotion" element={<Navigate to="/dashboard/promotion" replace />} />
+      <Route path="/transport" element={<Navigate to="/dashboard/transport" replace />} />
       <Route path="/reports" element={<Navigate to="/dashboard/reports" replace />} />
       <Route path="/settings" element={<Navigate to="/dashboard/settings" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

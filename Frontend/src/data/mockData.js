@@ -198,6 +198,84 @@ export const notifications = [
   { id: 3, title: "New faculty onboarding pending", time: "Yesterday" },
 ];
 
+export const transportRoutes = [
+  { id: "TR-001", routeCode: "R-01", routeName: "Main Campus - Benz Circle", routeStart: "Main Campus", routeEnd: "Benz Circle", totalDistanceKm: 18, estimatedTimeMinutes: 55, minDistanceKm: 3, minBaseFare: 1800, ratePerKm: 140, acMinBaseFare: 2300, acRatePerKm: 165, description: "Morning and evening route through MG Road and Governorpet.", status: "Active" },
+  { id: "TR-002", routeCode: "R-02", routeName: "Main Campus - Gannavaram", routeStart: "Main Campus", routeEnd: "Gannavaram", totalDistanceKm: 28, estimatedTimeMinutes: 75, minDistanceKm: 5, minBaseFare: 2200, ratePerKm: 155, acMinBaseFare: 2800, acRatePerKm: 180, description: "Airport road route covering Ramavarappadu and Enikepadu.", status: "Active" },
+  { id: "TR-003", routeCode: "R-03", routeName: "Main Campus - Poranki", routeStart: "Main Campus", routeEnd: "Poranki", totalDistanceKm: 16, estimatedTimeMinutes: 45, minDistanceKm: 3, minBaseFare: 1700, ratePerKm: 130, acMinBaseFare: 2200, acRatePerKm: 155, description: "Short city route covering Tadigadapa and Poranki.", status: "Active" },
+  { id: "TR-004", routeCode: "R-04", routeName: "Main Campus - Ibrahimpatnam", routeStart: "Main Campus", routeEnd: "Ibrahimpatnam", totalDistanceKm: 24, estimatedTimeMinutes: 65, minDistanceKm: 4, minBaseFare: 2000, ratePerKm: 150, acMinBaseFare: 2600, acRatePerKm: 175, description: "Outer route via Bhavanipuram and Kondapalli.", status: "Inactive" },
+];
+
+export const transportPickupPoints = [
+  { id: "TP-001", routeId: "TR-001", pickupName: "Benz Circle", area: "Benz Circle", landmark: "Trendset Mall", sequenceNumber: 1, pickupTime: "07:10", dropTime: "17:35", latitude: 16.5018, longitude: 80.648, distanceKm: 18, status: "Active" },
+  { id: "TP-002", routeId: "TR-001", pickupName: "MG Road", area: "Labbipet", landmark: "PVP Square", sequenceNumber: 2, pickupTime: "07:20", dropTime: "17:25", latitude: 16.5091, longitude: 80.6429, distanceKm: 12, status: "Active" },
+  { id: "TP-003", routeId: "TR-001", pickupName: "Governorpet", area: "Governorpet", landmark: "Old Bus Stand", sequenceNumber: 3, pickupTime: "07:32", dropTime: "17:15", latitude: 16.515, longitude: 80.6292, distanceKm: 7, status: "Active" },
+  { id: "TP-004", routeId: "TR-002", pickupName: "Gannavaram", area: "Gannavaram", landmark: "Airport Junction", sequenceNumber: 1, pickupTime: "06:55", dropTime: "17:55", latitude: 16.5409, longitude: 80.8025, distanceKm: 28, status: "Active" },
+  { id: "TP-005", routeId: "TR-002", pickupName: "Ramavarappadu", area: "Ramavarappadu", landmark: "Ring Road", sequenceNumber: 2, pickupTime: "07:18", dropTime: "17:30", latitude: 16.5279, longitude: 80.6817, distanceKm: 14, status: "Active" },
+  { id: "TP-006", routeId: "TR-003", pickupName: "Poranki", area: "Poranki", landmark: "Center", sequenceNumber: 1, pickupTime: "07:15", dropTime: "17:40", latitude: 16.4741, longitude: 80.7129, distanceKm: 16, status: "Active" },
+  { id: "TP-007", routeId: "TR-003", pickupName: "Tadigadapa", area: "Tadigadapa", landmark: "Municipal Office", sequenceNumber: 2, pickupTime: "07:28", dropTime: "17:25", latitude: 16.4867, longitude: 80.7001, distanceKm: 9, status: "Active" },
+  { id: "TP-008", routeId: "TR-004", pickupName: "Ibrahimpatnam", area: "Ibrahimpatnam", landmark: "Ferry Road", sequenceNumber: 1, pickupTime: "06:50", dropTime: "18:00", latitude: 16.5883, longitude: 80.5282, distanceKm: 24, status: "Inactive" },
+];
+
+export const transportVehicles = [
+  { id: "TV-001", vehicleNumber: "AP 16 TC 2401", registrationNumber: "AP16TC2401", vehicleType: "Bus", capacity: 52, isAC: false, chassisNumber: "MB1KBLHD2PA241001", engineNumber: "ENG2401", insuranceExpiry: "2026-11-30", pollutionExpiry: "2026-10-18", fitnessExpiry: "2027-03-12", gpsDeviceId: "GPS-BUS-2401", status: "Active" },
+  { id: "TV-002", vehicleNumber: "AP 16 TC 2402", registrationNumber: "AP16TC2402", vehicleType: "Bus", capacity: 48, isAC: true, chassisNumber: "MB1KBLHD2PA241002", engineNumber: "ENG2402", insuranceExpiry: "2026-10-02", pollutionExpiry: "2026-09-28", fitnessExpiry: "2027-01-09", gpsDeviceId: "GPS-BUS-2402", status: "Active" },
+  { id: "TV-003", vehicleNumber: "AP 16 TC 2403", registrationNumber: "AP16TC2403", vehicleType: "Mini Bus", capacity: 32, isAC: false, chassisNumber: "MB1KBLHD2PA241003", engineNumber: "ENG2403", insuranceExpiry: "2027-02-15", pollutionExpiry: "2026-12-11", fitnessExpiry: "2027-04-22", gpsDeviceId: "GPS-BUS-2403", status: "Maintenance" },
+  { id: "TV-004", vehicleNumber: "AP 16 TC 2404", registrationNumber: "AP16TC2404", vehicleType: "Van", capacity: 18, isAC: true, chassisNumber: "MB1KBLHD2PA241004", engineNumber: "ENG2404", insuranceExpiry: "2026-12-20", pollutionExpiry: "2026-11-05", fitnessExpiry: "2027-02-18", gpsDeviceId: "GPS-BUS-2404", status: "Inactive" },
+];
+
+export const transportDrivers = [
+  { id: "TD-001", employeeId: "DRV-1001", driverName: "Ramesh Kumar", mobileNumber: "9876501101", email: "ramesh.driver@college.edu", licenseNumber: "AP1620160012456", licenseExpiryDate: "2027-01-22", address: "Benz Circle, Vijayawada", status: "Active" },
+  { id: "TD-002", employeeId: "DRV-1002", driverName: "Shaik Ahmed", mobileNumber: "9876501102", email: "ahmed.driver@college.edu", licenseNumber: "AP1620180045789", licenseExpiryDate: "2026-10-12", address: "Gannavaram, Vijayawada", status: "Active" },
+  { id: "TD-003", employeeId: "DRV-1003", driverName: "Kiran Babu", mobileNumber: "9876501103", email: "kiran.driver@college.edu", licenseNumber: "AP1620190087612", licenseExpiryDate: "2026-12-03", address: "Poranki, Vijayawada", status: "Active" },
+  { id: "TD-004", employeeId: "DRV-1004", driverName: "Mohan Rao", mobileNumber: "9876501104", email: "mohan.driver@college.edu", licenseNumber: "AP1620140067123", licenseExpiryDate: "2026-09-25", address: "Ibrahimpatnam, Vijayawada", status: "Inactive" },
+];
+
+export const transportBusAttendants = [
+  { id: "TA-001", employeeId: "ATT-2001", attendantName: "Lakshmi Priya", mobileNumber: "9876512101", gender: "Female", branch: "Main Campus", status: "Active" },
+  { id: "TA-002", employeeId: "ATT-2002", attendantName: "Suresh Naidu", mobileNumber: "9876512102", gender: "Male", branch: "Main Campus", status: "Active" },
+  { id: "TA-003", employeeId: "ATT-2003", attendantName: "Mary Joseph", mobileNumber: "9876512103", gender: "Female", branch: "Main Campus", status: "Active" },
+  { id: "TA-004", employeeId: "ATT-2004", attendantName: "Vijay Kumar", mobileNumber: "9876512104", gender: "Male", branch: "Main Campus", status: "Inactive" },
+];
+
+export const transportVehicleAssignments = [
+  { id: "TVA-001", vehicleId: "TV-001", vehicleNumber: "AP 16 TC 2401", routeId: "TR-001", routeName: "Main Campus - Benz Circle", driverId: "TD-001", driverName: "Ramesh Kumar", attendantId: "TA-001", attendantName: "Lakshmi Priya", shift: "Morning & Evening", effectiveFrom: "2026-06-01", status: "Active" },
+  { id: "TVA-002", vehicleId: "TV-002", vehicleNumber: "AP 16 TC 2402", routeId: "TR-002", routeName: "Main Campus - Gannavaram", driverId: "TD-002", driverName: "Shaik Ahmed", attendantId: "TA-002", attendantName: "Suresh Naidu", shift: "Morning & Evening", effectiveFrom: "2026-06-01", status: "Active" },
+  { id: "TVA-003", vehicleId: "TV-003", vehicleNumber: "AP 16 TC 2403", routeId: "TR-003", routeName: "Main Campus - Poranki", driverId: "TD-003", driverName: "Kiran Babu", attendantId: "TA-003", attendantName: "Mary Joseph", shift: "Morning", effectiveFrom: "2026-06-10", status: "Maintenance" },
+];
+
+export const transportStudentAssignments = [
+  { id: "TSA-001", studentId: 1, admissionNo: "ADM-2024-001", studentName: "Aarav Reddy", group: "MPC", section: "A", routeId: "TR-001", routeName: "Main Campus - Benz Circle", pickupPointId: "TP-001", pickupPointName: "Benz Circle", vehicleId: "TV-001", vehicleNumber: "AP 16 TC 2401", feePlan: "Quarterly", monthlyFee: 2520, annualFee: 30240, guardianPhone: "9000012345", effectiveFrom: "2026-06-01", status: "Active" },
+  { id: "TSA-002", studentId: 2, admissionNo: "ADM-2024-002", studentName: "Diya Sharma", group: "MPC", section: "A", routeId: "TR-001", routeName: "Main Campus - Benz Circle", pickupPointId: "TP-002", pickupPointName: "MG Road", vehicleId: "TV-001", vehicleNumber: "AP 16 TC 2401", feePlan: "Monthly", monthlyFee: 1680, annualFee: 20160, guardianPhone: "9000023456", effectiveFrom: "2026-06-01", status: "Active" },
+  { id: "TSA-003", studentId: 3, admissionNo: "ADM-2024-003", studentName: "Vihaan Patel", group: "BIPC", section: "B", routeId: "TR-002", routeName: "Main Campus - Gannavaram", pickupPointId: "TP-004", pickupPointName: "Gannavaram", vehicleId: "TV-002", vehicleNumber: "AP 16 TC 2402", feePlan: "Quarterly", monthlyFee: 7140, annualFee: 85680, guardianPhone: "9000034567", effectiveFrom: "2026-06-01", status: "Active" },
+  { id: "TSA-004", studentId: 5, admissionNo: "ADM-2024-004", studentName: "Ishaan Verma", group: "MPC", section: "A", routeId: "TR-003", routeName: "Main Campus - Poranki", pickupPointId: "TP-006", pickupPointName: "Poranki", vehicleId: "TV-003", vehicleNumber: "AP 16 TC 2403", feePlan: "Half Yearly", monthlyFee: 2080, annualFee: 24960, guardianPhone: "9000056789", effectiveFrom: "2026-06-10", status: "Inactive" },
+];
+
+export const transportTrips = [
+  { id: "TT-001", assignmentId: "TVA-001", vehicleNumber: "AP 16 TC 2401", routeName: "Main Campus - Benz Circle", driverName: "Ramesh Kumar", tripType: "Morning", tripDate: "2026-09-15", startTime: "07:05", endTime: "08:05", status: "Completed", odometerStart: 18422, odometerEnd: 18440, studentsPresent: 41, remarks: "Reached on time" },
+  { id: "TT-002", assignmentId: "TVA-001", vehicleNumber: "AP 16 TC 2401", routeName: "Main Campus - Benz Circle", driverName: "Ramesh Kumar", tripType: "Evening", tripDate: "2026-09-15", startTime: "16:35", endTime: "", status: "Running", odometerStart: 18440, odometerEnd: "", studentsPresent: 39, remarks: "Vehicle crossed MG Road" },
+  { id: "TT-003", assignmentId: "TVA-002", vehicleNumber: "AP 16 TC 2402", routeName: "Main Campus - Gannavaram", driverName: "Shaik Ahmed", tripType: "Morning", tripDate: "2026-09-15", startTime: "06:55", endTime: "08:18", status: "Completed", odometerStart: 22108, odometerEnd: 22136, studentsPresent: 44, remarks: "Five minute delay at Ramavarappadu" },
+  { id: "TT-004", assignmentId: "TVA-003", vehicleNumber: "AP 16 TC 2403", routeName: "Main Campus - Poranki", driverName: "Kiran Babu", tripType: "Morning", tripDate: "2026-09-15", startTime: "", endTime: "", status: "Cancelled", odometerStart: "", odometerEnd: "", studentsPresent: 0, remarks: "Vehicle under maintenance" },
+];
+
+export const transportMaintenance = [
+  { id: "TM-001", vehicleId: "TV-003", vehicleNumber: "AP 16 TC 2403", category: "Preventive Service", serviceDate: "2026-09-12", nextDueDate: "2026-10-15", cost: 8500, vendor: "Metro Auto Care Center", status: "In Progress", notes: "Engine oil, brake pad and tyre rotation." },
+  { id: "TM-002", vehicleId: "TV-001", vehicleNumber: "AP 16 TC 2401", category: "Fitness Check", serviceDate: "2026-08-22", nextDueDate: "2027-02-22", cost: 3200, vendor: "Sri Durga Motors", status: "Completed", notes: "Routine safety inspection completed." },
+  { id: "TM-003", vehicleId: "TV-002", vehicleNumber: "AP 16 TC 2402", category: "AC Service", serviceDate: "2026-08-29", nextDueDate: "2026-11-29", cost: 6200, vendor: "Cool Ride Services", status: "Completed", notes: "Cabin filter and compressor check." },
+];
+
+export const transportFeeConfigs = [
+  { id: "TFC-001", routeId: "TR-001", routeName: "Main Campus - Benz Circle", minDistanceKm: 3, baseFare: 1800, ratePerKm: 140, acSurcharge: 0, billingCycle: "Monthly", status: "Active" },
+  { id: "TFC-002", routeId: "TR-002", routeName: "Main Campus - Gannavaram", minDistanceKm: 5, baseFare: 2200, ratePerKm: 155, acSurcharge: 850, billingCycle: "Monthly", status: "Active" },
+  { id: "TFC-003", routeId: "TR-003", routeName: "Main Campus - Poranki", minDistanceKm: 3, baseFare: 1700, ratePerKm: 130, acSurcharge: 0, billingCycle: "Monthly", status: "Active" },
+  { id: "TFC-004", routeId: "TR-004", routeName: "Main Campus - Ibrahimpatnam", minDistanceKm: 4, baseFare: 2000, ratePerKm: 150, acSurcharge: 650, billingCycle: "Monthly", status: "Inactive" },
+];
+
+export const transportGpsSnapshots = [
+  { id: "GPS-001", vehicleId: "TV-001", vehicleNumber: "AP 16 TC 2401", routeName: "Main Campus - Benz Circle", latitude: 16.5091, longitude: 80.6429, speed: 32, lastUpdated: "2026-09-15 16:48", status: "Running", nextStop: "Governorpet" },
+  { id: "GPS-002", vehicleId: "TV-002", vehicleNumber: "AP 16 TC 2402", routeName: "Main Campus - Gannavaram", latitude: 16.5279, longitude: 80.6817, speed: 0, lastUpdated: "2026-09-15 16:45", status: "Idle", nextStop: "Ramavarappadu" },
+  { id: "GPS-003", vehicleId: "TV-003", vehicleNumber: "AP 16 TC 2403", routeName: "Main Campus - Poranki", latitude: 16.4867, longitude: 80.7001, speed: 0, lastUpdated: "2026-09-15 09:05", status: "Offline", nextStop: "Maintenance Bay" },
+];
+
 export const options = {
   board: boards.map((b) => b.code),
   year: academicYears.map((y) => y.name),
