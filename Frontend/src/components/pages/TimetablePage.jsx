@@ -361,14 +361,6 @@ function useLookups(initial = {}) {
                 ["academicYearName", "yearName", "name", "Name"],
               ).filter((year) => isActiveRecord(year.raw))
             : [],
-        levels:
-          r[2].status === "fulfilled"
-            ? optionize(
-                r[2].value.data,
-                ["academicLevelId", "levelId", "id", "Id"],
-                ["academicLevelName", "levelName", "name", "Name"],
-              )
-            : [],
         allLevels:
           r[2].status === "fulfilled"
             ? optionize(
@@ -1641,6 +1633,7 @@ function Draft({ initial, notify }) {
   const [studentSearch, setStudentSearch] = useState("");
   const [staffChoices, setStaffChoices] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [staffSearch, setStaffSearch] = useState("");
   const [publishedFilter, setPublishedFilter] = useState(
     initial?.isPublished === undefined ? "" : String(Boolean(initial.isPublished)),
   );
@@ -1738,6 +1731,7 @@ function Draft({ initial, notify }) {
       setSelectedStudentId("");
       setStudentSearch("");
       setSelectedStaffId("");
+      setStaffSearch("");
       return undefined;
     }
     let cancelled = false;
@@ -1765,6 +1759,7 @@ function Draft({ initial, notify }) {
       setSelectedStudentId("");
       setStudentSearch("");
       setSelectedStaffId("");
+      setStaffSearch("");
     });
     return () => { cancelled = true; };
   }, [published, value.sectionId]);
@@ -2057,7 +2052,7 @@ function Draft({ initial, notify }) {
                         type="search"
                         list="ttm-staff-options"
                         aria-label="Select staff"
-                        value={selectedStaffId}
+                        value={staffSearch}
                         disabled={actionBusy || !staffChoices.length}
                         onChange={(event) => {
                           const search = event.target.value;
