@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Dapper;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -150,11 +151,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new InvalidOperationException($"Email address '{normalizedEmail}' is already registered to a user account.");
             }
 
-            // 3. Generate secure random temporary password and BCrypt hash
-            var tempPassword = _userProvisioningService.GenerateSecureTemporaryPassword(14);
-            var passwordHash = PasswordHasher.HashPassword(tempPassword);
-
-            // 4. Atomic Transaction: admins + Users
+            // 3. Atomic Transaction: admins + Users
             var connection = _context.Database.GetDbConnection();
             if (connection.State != ConnectionState.Open)
             {
@@ -170,7 +167,7 @@ namespace CollegeManagement.API.Services.Implementations
                 var admin = new Admin
                 {
                     Email = normalizedEmail,
-                    Password = passwordHash, // Dual-write for backward compatibility with /api/Admin/login
+                    Password = string.Empty,
                     IsActive = true
                 };
 
@@ -191,6 +188,16 @@ namespace CollegeManagement.API.Services.Implementations
                     throw new ValidationException(provisioningResult.ErrorMessage ?? "Admin user account provisioning failed.");
                 }
 
+                // Dual-write: Mirror the exact same BCrypt hash to admins.Password for legacy compatibility
+                if (!string.IsNullOrWhiteSpace(provisioningResult.TemporaryPassword))
+                {
+                    var dualWriteHash = PasswordHasher.HashPassword(provisioningResult.TemporaryPassword);
+                    await connection.ExecuteAsync(
+                        "UPDATE `admins` SET `Password` = @Password WHERE `id` = @Id;",
+                        new { Password = dualWriteHash, Id = adminId },
+                        transaction: transaction);
+                }
+
                 transaction.Commit();
             }
             catch
@@ -199,24 +206,27 @@ namespace CollegeManagement.API.Services.Implementations
                 throw;
             }
 
-            // 5. Post-Commit: Send initial credentials email
+            // 4. Post-Commit: Send initial credentials email with the EXACT provisioned temporary password
             var adminDisplayName = string.IsNullOrWhiteSpace(request.FullName) ? normalizedEmail.Split('@')[0] : request.FullName.Trim();
-            try
+            if (!string.IsNullOrWhiteSpace(provisioningResult.TemporaryPassword))
             {
-                var emailBody = AdminCredentialHelper.BuildInitialCredentialEmailHtml(
-                    adminDisplayName,
-                    normalizedEmail,
-                    role.RoleName,
-                    tempPassword);
+                try
+                {
+                    var emailBody = AdminCredentialHelper.BuildInitialCredentialEmailHtml(
+                        adminDisplayName,
+                        normalizedEmail,
+                        role.RoleName,
+                        provisioningResult.TemporaryPassword);
 
-                await _emailService.SendEmailAsync(
-                    normalizedEmail,
-                    "College Management System - Administrator Login Credentials",
-                    emailBody);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Initial credential email delivery failed for admin {Email} after successful commit.", normalizedEmail);
+                    await _emailService.SendEmailAsync(
+                        normalizedEmail,
+                        "College Management System - Administrator Login Credentials",
+                        emailBody);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Initial credential email delivery failed for admin {Email} after successful commit.", normalizedEmail);
+                }
             }
 
             return new AdminDto
