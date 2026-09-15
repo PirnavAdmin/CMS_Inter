@@ -237,6 +237,13 @@ export const apiEndpoints = {
     getById: (sectionId) => `/api/v1/Sections/${sectionId}`,
     search: "/api/v1/Sections",
   },
+  sectionRollAllocation: {
+    sectionPreview: "/api/v1/section-roll-allocation/section/preview",
+    sectionConfirm: "/api/v1/section-roll-allocation/section/confirm",
+    rollPreview: "/api/v1/section-roll-allocation/roll/preview",
+    rollConfirm: "/api/v1/section-roll-allocation/roll/confirm",
+    updateStudent: (studentId) => `/api/v1/section-roll-allocation/students/${studentId}`,
+  },
   periods: {
     getAll: "/api/v1/periods",
     create: "/api/v1/periods",
