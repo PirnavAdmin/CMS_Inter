@@ -14,7 +14,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<IEnumerable<ExaminationResponse>> GetExaminationsAsync(ExaminationSearchRequestDto filter);
         Task<ExaminationResponse?> UpdateExaminationAsync(int examinationId, UpdateExaminationRequest request);
         Task<bool> DeleteExaminationAsync(int examinationId);
-        Task<ExaminationStatusResponse?> CancelExaminationAsync(int examinationId, CancelExaminationRequest request);
+        Task<ExaminationStatusResponse?> CancelExaminationAsync(int examinationId, CancelExaminationRequest? request = null);
         Task<ExaminationStatusResponse?> RescheduleExaminationAsync(int examinationId, RescheduleExaminationRequest request);
 
         // Exam Schedule Methods
