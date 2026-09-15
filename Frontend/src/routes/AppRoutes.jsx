@@ -31,7 +31,6 @@ import SettingsPage from "@/components/pages/SettingsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
-import LeaveTypesSettingsPage from "@/components/pages/LeaveTypesSettingsPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
 import SalaryManagementPage from "@/components/pages/SalaryManagementPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
@@ -170,7 +169,6 @@ export default function AppRoutes() {
         <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
         <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<NumberSeriesPage mode="edit" />} />
         <Route path="/dashboard/settings/number-series/:seriesId" element={<NumberSeriesPage mode="detail" />} />
-        <Route path="/dashboard/settings/leave-types" element={<LeaveTypesSettingsPage />} />
 
         {/* Templates Management Module Routes */}
         <Route path="/dashboard/settings/templates" element={<TemplatesPage />} />
