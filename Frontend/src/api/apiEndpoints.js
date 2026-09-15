@@ -1,4 +1,14 @@
 export const apiEndpoints = {
+  auth: {
+    login: "/api/Auth/login",
+    register: "/api/Auth/register",
+    forgotPassword: "/api/Auth/forgot-password",
+    verifyOtp: "/api/Auth/verify-otp",
+    resetPassword: "/api/Auth/reset-password",
+    changePassword: "/api/Auth/change-password",
+    users: "/api/Auth/users",
+    userById: (id) => `/api/Auth/user/${id}`,
+  },
   admin: {
     login: "/api/Admin/login",
     forgotPassword: "/api/Admin/forgot-password",
