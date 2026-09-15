@@ -135,6 +135,20 @@ namespace CollegeManagement.API.Repositories.Implementations
                     await _context.SaveChangesAsync();
                 }
             }
+
+            try
+            {
+                // Synchronize Users table
+                const string syncSql = @"
+                    UPDATE `Users` 
+                    SET `PasswordHash` = @NewPasswordHash, `UpdatedAt` = UTC_TIMESTAMP() 
+                    WHERE `AdminId` = @Id OR LOWER(`Email`) = (SELECT LOWER(`Email`) FROM `admins` WHERE `id` = @Id LIMIT 1);";
+                await Connection.ExecuteAsync(syncSql, new { NewPasswordHash = newPasswordHash, Id = id });
+            }
+            catch
+            {
+                // Best effort sync
+            }
         }
     }
 }

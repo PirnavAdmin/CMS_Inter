@@ -237,6 +237,12 @@ namespace CollegeManagement.API.Tests
                     var hasPlaintextProp = dtoType.GetProperty("Password") != null || dtoType.GetProperty("TemporaryPassword") != null || dtoType.GetProperty("PasswordHash") != null;
                     AssertTrue(!hasPlaintextProp,
                         "Test 18: AdminDto does not expose any password or password hash properties");
+
+                    // Verify CreateAdminRequest does not expose Password input property
+                    var requestType = typeof(CreateAdminRequest);
+                    var requestHasPasswordProp = requestType.GetProperty("Password") != null || requestType.GetProperty("PasswordHash") != null;
+                    AssertTrue(!requestHasPasswordProp,
+                        "Test 18B: CreateAdminRequest contract does not expose Password or PasswordHash properties");
                 }
                 finally
                 {

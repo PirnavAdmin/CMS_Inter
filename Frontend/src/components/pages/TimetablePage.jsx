@@ -242,6 +242,32 @@ function Btn({ children, className = "cms-btn cms-btn-primary", ...props }) {
     </button>
   );
 }
+function TimetableViewTabs({ context, opening = false, onOpenGenerated }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const generatedActive = location.pathname === "/dashboard/timetable/draft";
+  const completeContext = [context?.boardId, context?.academicYearId, context?.academicLevelId, context?.groupId, context?.programId, context?.sectionId].every(Boolean);
+  return (
+    <div className="ttm-view-tabs" role="group" aria-label="Timetable view actions">
+      <Btn
+        className={`ttm-view-tab${generatedActive ? "" : " is-active"}`}
+        aria-pressed={!generatedActive}
+        disabled={!completeContext || generatedActive}
+        onClick={() => navigate("/dashboard/timetable/setup", { state: { timetableContext: context } })}
+      >
+        Create Timetable
+      </Btn>
+      <Btn
+        className={`ttm-view-tab${generatedActive ? " is-active" : ""}`}
+        aria-pressed={generatedActive}
+        disabled={!completeContext || opening || generatedActive}
+        onClick={onOpenGenerated}
+      >
+        {opening && !generatedActive ? "Opening…" : "Generated Timetable"}
+      </Btn>
+    </div>
+  );
+}
 function Field({ label, children }) {
   return (
     <label className="ttm-field">
@@ -334,14 +360,6 @@ function useLookups(initial = {}) {
                 ["academicYearId", "id", "Id"],
                 ["academicYearName", "yearName", "name", "Name"],
               ).filter((year) => isActiveRecord(year.raw))
-            : [],
-        levels:
-          r[2].status === "fulfilled"
-            ? optionize(
-                r[2].value.data,
-                ["academicLevelId", "levelId", "id", "Id"],
-                ["academicLevelName", "levelName", "name", "Name"],
-              )
             : [],
         allLevels:
           r[2].status === "fulfilled"
@@ -1615,6 +1633,7 @@ function Draft({ initial, notify }) {
   const [studentSearch, setStudentSearch] = useState("");
   const [staffChoices, setStaffChoices] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [staffSearch, setStaffSearch] = useState("");
   const [publishedFilter, setPublishedFilter] = useState(
     initial?.isPublished === undefined ? "" : String(Boolean(initial.isPublished)),
   );
@@ -1712,6 +1731,7 @@ function Draft({ initial, notify }) {
       setSelectedStudentId("");
       setStudentSearch("");
       setSelectedStaffId("");
+      setStaffSearch("");
       return undefined;
     }
     let cancelled = false;
@@ -1739,6 +1759,7 @@ function Draft({ initial, notify }) {
       setSelectedStudentId("");
       setStudentSearch("");
       setSelectedStaffId("");
+      setStaffSearch("");
     });
     return () => { cancelled = true; };
   }, [published, value.sectionId]);
@@ -2031,7 +2052,7 @@ function Draft({ initial, notify }) {
                         type="search"
                         list="ttm-staff-options"
                         aria-label="Select staff"
-                        value={selectedStaffId}
+                        value={staffSearch}
                         disabled={actionBusy || !staffChoices.length}
                         onChange={(event) => {
                           const search = event.target.value;
@@ -2286,10 +2307,7 @@ function MainTimetable({ notify }) {
       <section className="ttm-card">
         <div className="ttm-main-row">
           <Context state={state} hideGlobalContext />
-          <div className="ttm-view-tabs" role="group" aria-label="Timetable view actions">
-            <Btn className="ttm-view-tab is-active" aria-pressed="true" disabled={!completeContext} onClick={() => navigate("/dashboard/timetable/setup", { state: { timetableContext: value } })}>Create Timetable</Btn>
-            <Btn className="ttm-view-tab" aria-pressed="false" disabled={!completeContext || opening} onClick={openGenerated}>{opening ? "Opening…" : "Generated Timetable"}</Btn>
-          </div>
+          <TimetableViewTabs context={value} opening={opening} onOpenGenerated={openGenerated} />
         </div>
       </section>
     </Page>

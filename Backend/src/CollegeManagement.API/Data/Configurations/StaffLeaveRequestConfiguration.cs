@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using CollegeManagement.API.Models;
 
@@ -120,6 +120,11 @@ namespace CollegeManagement.API.Data.Configurations
                 .WithMany()
                 .HasForeignKey(lr => lr.ApprovedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(lr => lr.LeaveCategory)
+                .WithMany()
+                .HasForeignKey(lr => lr.LeaveCategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             #endregion
         }

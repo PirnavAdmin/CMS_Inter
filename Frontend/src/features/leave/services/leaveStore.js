@@ -35,7 +35,7 @@ const mapLeaveRequest = (req) => {
     if (!req) return req;
     return {
         ...req,
-        leaveType: mapLeaveType(req.leaveType),
+        leaveType: req.leaveCategoryName || mapLeaveType(req.leaveType),
         status: mapLeaveStatus(req.status),
         fromDate: req.startDate ? req.startDate.split('T')[0] : null,
         toDate: req.endDate ? req.endDate.split('T')[0] : null,

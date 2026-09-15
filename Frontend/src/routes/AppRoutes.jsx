@@ -23,11 +23,13 @@ import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
 import ResultProcessingPage from "@/components/pages/ResultProcessingPage.jsx";
 import PromotionPage from "@/components/pages/PromotionPage.jsx";
 import FeeManagementPage from "@/components/pages/FeeManagementPage.jsx";
+import TransportPage from "@/components/pages/TransportPage.jsx";
 import CertificatesPage, { pageConfig as certificatesConfig } from "@/components/pages/CertificatesPage.jsx";
 import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
+import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
@@ -40,6 +42,13 @@ import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentDashboard from "@/Dashboard/StudentDashboard/StudentDashboard.jsx";
 import FacultyDashboard from "@/Dashboard/Facultydashboard.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
+import {
+  HostelDashboard,
+  HostelMasterSetup,
+  HostelStudentManagement,
+  HostelAttendanceRegister,
+  HostelReports,
+} from "@/modules/hostel/index.js";
 
 const moduleConfigs = {
   courses: courseGroupConfig,
@@ -152,11 +161,13 @@ export default function AppRoutes() {
         <Route path="/dashboard/promotions/allocation" element={<PromotionPage screen="allocation" />} />
         <Route path="/dashboard/promotions/history" element={<PromotionPage screen="history" />} />
         <Route path="/dashboard/promotions/report" element={<PromotionPage screen="report" />} />
+        <Route path="/dashboard/transport" element={<TransportPage />} />
         <Route path="/dashboard/fee-structure" element={<FeeManagementPage />} />
         <Route path="/dashboard/certificates" element={<CertificatesPage />} />
         <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
         <Route path="/dashboard/settings" element={<SettingsPage />} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
+        <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
         <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
         <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<NumberSeriesPage mode="edit" />} />
         <Route path="/dashboard/settings/number-series/:seriesId" element={<NumberSeriesPage mode="detail" />} />
@@ -209,6 +220,23 @@ export default function AppRoutes() {
         <Route path="/dashboard/staff-salary/reports" element={<SalaryManagementPage mode="reports" />} />
         <Route path="/dashboard/staff-salary/settings" element={<SalaryManagementPage mode="settings" />} />
         <Route path="/dashboard/staff-salary/import" element={<SalaryManagementPage mode="import" />} />
+
+        {/* Hostel Management Module Routes */}
+        <Route path="/hostel" element={<HostelDashboard />} />
+        <Route path="/hostel/master-setup" element={<HostelMasterSetup />} />
+        <Route path="/hostel/students" element={<HostelStudentManagement />} />
+        <Route path="/hostel/student-allocation" element={<HostelStudentManagement />} />
+        <Route path="/hostel/attendance" element={<HostelAttendanceRegister />} />
+        <Route path="/hostel/reports" element={<HostelReports />} />
+
+        <Route path="/dashboard/hostel" element={<HostelDashboard />} />
+        <Route path="/dashboard/hostel/master" element={<HostelMasterSetup />} />
+        <Route path="/dashboard/hostel/master-setup" element={<HostelMasterSetup />} />
+        <Route path="/dashboard/hostel/students" element={<HostelStudentManagement />} />
+        <Route path="/dashboard/hostel/student-allocation" element={<HostelStudentManagement />} />
+        <Route path="/dashboard/hostel/attendance" element={<HostelAttendanceRegister />} />
+        <Route path="/dashboard/hostel/reports" element={<HostelReports />} />
+
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-add`} path={`/dashboard/${slug}/add`} element={<ModuleFormRoute slug={slug} />} />)}
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-edit`} path={`/dashboard/${slug}/:id/edit`} element={<ModuleFormRoute slug={slug} />} />)}
         <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />
@@ -234,6 +262,7 @@ export default function AppRoutes() {
       <Route path="/marks-entry" element={<Navigate to="/dashboard/marks-entry" replace />} />
       <Route path="/results" element={<Navigate to="/dashboard/results" replace />} />
       <Route path="/promotion" element={<Navigate to="/dashboard/promotion" replace />} />
+      <Route path="/transport" element={<Navigate to="/dashboard/transport" replace />} />
       <Route path="/reports" element={<Navigate to="/dashboard/reports" replace />} />
       <Route path="/settings" element={<Navigate to="/dashboard/settings" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

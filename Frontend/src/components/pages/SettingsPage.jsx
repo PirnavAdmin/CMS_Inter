@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText } from "lucide-react";
+import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import boardAcademicYearImage from "@/assets/settings-3d/board-academic-year.png";
 import numberSeriesImage from "@/assets/settings-3d/number-series.png";
@@ -40,6 +40,15 @@ export default function SettingsPage() {
       image: templatesImage,
       to: "/dashboard/settings/templates",
       buttonText: "Manage Templates",
+      primary: true,
+    },
+    {
+      id: "leave-types",
+      title: "Leave Types & Policy Configuration",
+      description: "Define annual leave quotas, staff eligibility, carry-forward policies, and proof requirements.",
+      icon: CalendarDays,
+      to: "/dashboard/settings/leave-types",
+      buttonText: "Manage Leave Types",
       primary: true,
     },
     {

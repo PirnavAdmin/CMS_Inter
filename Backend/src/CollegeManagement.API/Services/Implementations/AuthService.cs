@@ -102,11 +102,35 @@ namespace CollegeManagement.API.Services.Implementations
                 // Verify password against centralized Users.PasswordHash
                 if (!PasswordHasher.VerifyPassword(request.Password, user.PasswordHash))
                 {
-                    return new AuthResult
+                    // Self-healing legacy password fallback (e.g. if password was updated in admins table)
+                    bool selfHealed = false;
+                    var legacyAdminCheck = await connection.QueryFirstOrDefaultAsync<Admin>(
+                        "SELECT id AS Id, Email, Password, IsActive FROM `admins` WHERE LOWER(Email) = @Email LIMIT 1;",
+                        new { Email = normalizedEmail });
+
+                    if (legacyAdminCheck != null && legacyAdminCheck.IsActive && PasswordHasher.VerifyPassword(request.Password, legacyAdminCheck.Password))
                     {
-                        Status = false,
-                        Message = "Invalid Email or Password"
-                    };
+                        // Legacy admin password verified - auto-heal centralized Users table
+                        user.PasswordHash = legacyAdminCheck.Password;
+                        if (!user.AdminId.HasValue || user.AdminId.Value <= 0)
+                        {
+                            user.AdminId = legacyAdminCheck.Id;
+                        }
+                        await connection.ExecuteAsync(
+                            "UPDATE `Users` SET `PasswordHash` = @PasswordHash, `AdminId` = @AdminId, `UpdatedAt` = UTC_TIMESTAMP() WHERE `UserId` = @UserId;",
+                            new { PasswordHash = user.PasswordHash, AdminId = user.AdminId, UserId = user.UserId });
+                        _logger.LogInformation("Self-healed password hash for admin user {Email} from legacy admins table.", normalizedEmail);
+                        selfHealed = true;
+                    }
+
+                    if (!selfHealed)
+                    {
+                        return new AuthResult
+                        {
+                            Status = false,
+                            Message = "Invalid Email or Password"
+                        };
+                    }
                 }
 
                 // Verify Users account status

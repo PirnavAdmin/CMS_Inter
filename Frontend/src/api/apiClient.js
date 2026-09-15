@@ -33,6 +33,8 @@ export const getApiLoadingSnapshot = () => activeApiRequests > 0;
 const isHtmlResponse = (data) =>
   typeof data === "string" && /^\s*(<!doctype html|<html)/i.test(data);
 
+const isLoginRequest = (config) => /\/login\/?$/i.test(String(config?.url || ""));
+
 const getStoredAccessToken = () => {
   const stored = getAuthToken();
   if (!stored) return "";
@@ -136,12 +138,9 @@ apiClient.interceptors.response.use(
     if (isHtmlResponse(error.response?.data)) {
       error.response.data = { message: "Backend returned HTML instead of JSON. Check API base URL or proxy." };
     }
-    if (error.response?.status === 401) {
-      const expiry = getJwtExpiryState(getStoredAccessToken());
-      if (expiry.isJwt && expiry.isExpired) {
-        clearAuthSession();
-        if (window.location.pathname !== "/login") window.location.assign("/login");
-      }
+    if (error.response?.status === 401 && !isLoginRequest(error.config)) {
+      clearAuthSession();
+      if (window.location.pathname !== "/login") window.location.assign("/login");
     }
     return Promise.reject(error);
   },

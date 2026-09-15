@@ -124,7 +124,7 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> ExportStaffMonthlyCsv([FromQuery] StaffMonthlyReportRequest request)
         {
             var bytes = await _service.ExportStaffMonthlyReportToCsvAsync(request);
-            return File(bytes, "text/csv", $"StaffMonthlyReport_{request.StaffType}_{request.Year}_{request.Month:D2}.csv");
+            return File(bytes, "text/csv", $"StaffMonthlyReport_{request.StaffType?.ToString() ?? "All"}_{request.Year}_{request.Month:D2}.csv");
         }
 
         /// <summary>
@@ -136,7 +136,47 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> ExportStaffMonthlyExcel([FromQuery] StaffMonthlyReportRequest request)
         {
             var bytes = await _service.ExportStaffMonthlyReportToExcelAsync(request);
-            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"StaffMonthlyReport_{request.StaffType}_{request.Year}_{request.Month:D2}.xlsx");
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"StaffMonthlyReport_{request.StaffType?.ToString() ?? "All"}_{request.Year}_{request.Month:D2}.xlsx");
+        }
+
+        [HttpGet("staff/{staffId}/yearly-overview")]
+        [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        public async Task<IActionResult> GetStaffYearlyOverview(int staffId, [FromQuery] int academicYearId)
+        {
+            var result = await _service.GetStaffYearlyOverviewAsync(staffId, academicYearId);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Downloads the Excel import template for Staff Attendance.
+        /// </summary>
+        [HttpGet("import/template")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public async Task<IActionResult> DownloadImportTemplate()
+        {
+            var bytes = await _service.GenerateImportTemplateAsync();
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "StaffAttendance_Template.xlsx");
+        }
+
+        /// <summary>
+        /// Imports staff attendance records from an uploaded Excel file.
+        /// </summary>
+        [HttpPost("import/excel")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> ImportExcel(IFormFile file, [FromQuery] bool validateOnly = false)
+        {
+            if (file == null || file.Length == 0) return BadRequest("File is empty or not provided.");
+            using var ms = new System.IO.MemoryStream();
+            await file.CopyToAsync(ms);
+
+            var userName = GetCurrentUserName();
+            var userId = GetCurrentUserId();
+            var isAdmin = IsCurrentUserAdmin();
+
+            var result = await _service.ImportStaffAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId);
+            return Ok(result);
         }
 
         private int GetCurrentUserId()
@@ -147,6 +187,24 @@ namespace CollegeManagement.API.Controllers.V1
                 throw new CollegeManagement.API.Exceptions.UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
             }
             return userId.Value;
+        }
+        private string GetCurrentUserName()
+        {
+            var userName = User?.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+            if (string.IsNullOrEmpty(userName))
+            {
+                userName = User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+            }
+            if (string.IsNullOrEmpty(userName))
+            {
+                return "System Admin";
+            }
+            return userName;
+        }
+
+        private bool IsCurrentUserAdmin()
+        {
+            return User?.IsInRole("Admin") == true || User?.IsInRole("Super Admin") == true || User?.IsInRole("College Admin") == true;
         }
     }
 }

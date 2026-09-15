@@ -67,6 +67,13 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException("End Date cannot be earlier than Start Date.");
             }
 
+            var isObjective = string.Equals(request.ExamCategory, "OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(request.Category, "OBJECTIVE", StringComparison.OrdinalIgnoreCase);
+            if (isObjective && request.StartDate != request.EndDate)
+            {
+                throw new ValidationException("For OBJECTIVE examinations, Start Date must be equal to End Date.");
+            }
+
             if (request.BoardId <= 0)
             {
                 throw new ValidationException("A valid Board is required.");
@@ -154,12 +161,24 @@ namespace CollegeManagement.API.Services.Implementations
             var exam = await _examinationRepository.GetExaminationByIdAsync(examinationId);
             if (exam == null) return null;
 
+            if (string.Equals(exam.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException("Cannot modify a cancelled examination.");
+            }
+
             var targetStartDate = request.StartDate ?? exam.StartDate;
             var targetEndDate = request.EndDate ?? exam.EndDate;
 
             if (targetEndDate < targetStartDate)
             {
                 throw new ValidationException("End Date cannot be earlier than Start Date.");
+            }
+
+            var isObjective = string.Equals(request.ExamCategory, "OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(request.Category, "OBJECTIVE", StringComparison.OrdinalIgnoreCase);
+            if (isObjective && targetStartDate != targetEndDate)
+            {
+                throw new ValidationException("For OBJECTIVE examinations, Start Date must be equal to End Date.");
             }
 
             // Check if any existing active scheduled subjects fall outside the new date range
@@ -229,26 +248,50 @@ namespace CollegeManagement.API.Services.Implementations
             var exam = await _examinationRepository.GetExaminationByIdAsync(examinationId);
             if (exam == null) return false;
 
+            var currentStatus = (exam.Status ?? string.Empty).Trim().ToUpperInvariant();
+            if (currentStatus != "DRAFT" && currentStatus != "CANCELLED")
+            {
+                throw new ValidationException($"Cannot delete an examination with status '{exam.Status}'. Only DRAFT or CANCELLED examinations can be deleted.");
+            }
+
             var deleted = await _examinationRepository.DeleteExaminationAsync(exam);
             if (deleted) EvictExamCache(examinationId);
             return deleted;
         }
 
-        public async Task<ExaminationStatusResponse?> CancelExaminationAsync(int examinationId, CancelExaminationRequest request)
+        public async Task<ExaminationStatusResponse?> CancelExaminationAsync(int examinationId, CancelExaminationRequest? request = null)
         {
             var exam = await _examinationRepository.GetExaminationByIdAsync(examinationId);
             if (exam == null) return null;
 
             exam.Status = "CANCELLED";
+            exam.UpdatedAt = DateTime.UtcNow;
+
+            // Cascade cancellation to child active schedules
+            if (exam.ExamSchedules != null && exam.ExamSchedules.Any())
+            {
+                foreach (var schedule in exam.ExamSchedules.Where(s => s.IsActive))
+                {
+                    schedule.IsActive = false;
+                    schedule.UpdatedAt = DateTime.UtcNow;
+                    await _examinationRepository.UpdateExamScheduleAsync(schedule);
+                }
+            }
+
             await _examinationRepository.UpdateExaminationAsync(exam);
             EvictExamCache(examinationId);
+
+            var reason = request?.CancelReason ?? request?.Reason ?? "Cancelled by administrator";
 
             return new ExaminationStatusResponse
             {
                 ExaminationId = exam.ExaminationId,
+                Name = exam.ExamName,
                 Status = exam.Status,
-                ActionReason = request.Reason,
-                UpdatedAt = DateTime.UtcNow
+                ActionReason = reason,
+                UpdatedAt = DateTime.UtcNow,
+                Success = true,
+                Message = "Examination cancelled successfully."
             };
         }
 
@@ -304,6 +347,20 @@ namespace CollegeManagement.API.Services.Implementations
             if (exam == null)
             {
                 throw new ValidationException($"Examination with ID {request.ExaminationId} not found.");
+            }
+
+            if (string.Equals(exam.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException("Cannot create schedule entries for a cancelled examination.");
+            }
+
+            if (request.InvigilatorId.HasValue && request.InvigilatorId.Value > 0 && request.SubjectId > 0)
+            {
+                var isSubjectTeacher = await _examinationRepository.IsInvigilatorTeachingSubjectAsync(request.InvigilatorId.Value, request.SubjectId);
+                if (isSubjectTeacher)
+                {
+                    throw new ValidationException("An invigilator cannot be assigned to an examination for the subject they teach.");
+                }
             }
 
             if (exam.StartDate == default || exam.EndDate == default)
@@ -388,6 +445,23 @@ namespace CollegeManagement.API.Services.Implementations
             var schedule = await _examinationRepository.GetExamScheduleByIdAsync(examScheduleId);
             if (schedule == null) return null;
 
+            var parentExam = schedule.Examination ?? await _examinationRepository.GetExaminationByIdAsync(schedule.ExaminationId);
+            if (parentExam != null && string.Equals(parentExam.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException("Cannot modify schedules for a cancelled examination.");
+            }
+
+            var targetSubjectId = request.SubjectId ?? schedule.SubjectId;
+            var targetInvigilatorId = request.InvigilatorId ?? schedule.InvigilatorId;
+            if (targetInvigilatorId.HasValue && targetInvigilatorId.Value > 0 && targetSubjectId > 0)
+            {
+                var isSubjectTeacher = await _examinationRepository.IsInvigilatorTeachingSubjectAsync(targetInvigilatorId.Value, targetSubjectId);
+                if (isSubjectTeacher)
+                {
+                    throw new ValidationException("An invigilator cannot be assigned to an examination for the subject they teach.");
+                }
+            }
+
             var targetDate = request.ExamDate ?? schedule.ExamDate;
             var targetStartTime = request.StartTime ?? schedule.StartTime;
             var targetEndTime = request.EndTime ?? schedule.EndTime;
@@ -442,6 +516,12 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var schedule = await _examinationRepository.GetExamScheduleByIdAsync(examScheduleId);
             if (schedule == null) return false;
+
+            var parentExam = schedule.Examination ?? await _examinationRepository.GetExaminationByIdAsync(schedule.ExaminationId);
+            if (parentExam != null && string.Equals(parentExam.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException("Cannot delete schedules for a cancelled examination.");
+            }
 
             var deleted = await _examinationRepository.DeleteExamScheduleAsync(schedule);
             if (deleted) EvictExamCache(schedule.ExaminationId);

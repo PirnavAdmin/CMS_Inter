@@ -330,6 +330,7 @@ builder.Services.AddSingleton<IAttendanceCacheService, AttendanceCacheService>()
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
+builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
 
 // Student & Student Admissions
 builder.Services.AddScoped<IStudentService, StudentService>();
@@ -361,6 +362,10 @@ builder.Services.AddScoped<IRoomService, RoomService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IStudyMaterialService, StudyMaterialService>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
+// Section & Roll Allocation
+builder.Services.AddScoped<ISectionRepository, SectionRepository>();
+builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocationRepository>();
+builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>

@@ -1,0 +1,393 @@
+.cms-transport-page,
+.cms-transport-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.cms-transport-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--cms-border);
+  border-radius: 999px;
+  background: var(--cms-surface);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cms-transport-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.cms-transport-tabs.is-compact {
+  justify-self: start;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.cms-transport-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 8px 15px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cms-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cms-transport-tabs.is-compact .cms-transport-tab {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.cms-transport-tab:hover {
+  color: var(--cms-text);
+}
+
+.cms-transport-tab.is-active {
+  background: var(--cms-primary);
+  color: #fff;
+}
+
+.cms-transport-tabs.is-compact .cms-transport-tab.is-active {
+  border-color: var(--cms-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
+
+.cms-transport-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cms-transport-stat {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid var(--cms-border);
+  border-radius: 12px;
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow);
+}
+
+.cms-transport-stat-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
+
+.cms-transport-stat.tone-green .cms-transport-stat-icon {
+  background: var(--cms-green-soft);
+  color: var(--cms-green);
+}
+
+.cms-transport-stat.tone-amber .cms-transport-stat-icon {
+  background: var(--cms-amber-soft);
+  color: var(--cms-amber);
+}
+
+.cms-transport-stat.tone-violet .cms-transport-stat-icon {
+  background: var(--cms-violet-soft);
+  color: var(--cms-violet);
+}
+
+.cms-transport-stat small,
+.cms-transport-info-grid small {
+  display: block;
+  color: var(--cms-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.cms-transport-stat strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--cms-text);
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.cms-transport-stat em {
+  display: block;
+  margin-top: 3px;
+  color: var(--cms-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.cms-transport-warning {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--cms-amber);
+  border-radius: 10px;
+  background: var(--cms-amber-soft);
+  color: var(--cms-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.cms-transport-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.cms-transport-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.cms-transport-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: min(360px, 100%);
+  padding: 8px 11px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-subtle);
+  color: var(--cms-muted);
+}
+
+.cms-transport-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--cms-text);
+  font-size: 13px;
+}
+
+.cms-transport-toolbar-actions,
+.cms-transport-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cms-transport-actions .cms-action-btn.danger {
+  color: var(--cms-red);
+}
+
+.cms-transport-table th,
+.cms-transport-table td {
+  white-space: nowrap;
+}
+
+.cms-transport-empty {
+  padding: 24px !important;
+  color: var(--cms-muted);
+  text-align: center;
+}
+
+.cms-transport-trip-list,
+.cms-transport-occupancy {
+  display: grid;
+  gap: 10px;
+}
+
+.cms-transport-trip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-subtle);
+  color: var(--cms-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cms-transport-trip:hover {
+  border-color: var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+}
+
+.cms-transport-trip small,
+.cms-transport-occupancy small {
+  display: block;
+  margin-top: 2px;
+  color: var(--cms-muted);
+  font-size: 12px;
+}
+
+.cms-transport-occupancy > div {
+  display: grid;
+  gap: 7px;
+}
+
+.cms-transport-occupancy > div > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cms-transport-progress {
+  height: 9px;
+  border-radius: 999px;
+  background: var(--cms-primary-soft);
+  overflow: hidden;
+}
+
+.cms-transport-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cms-primary), var(--cms-green));
+}
+
+.cms-transport-gps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cms-transport-gps-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--cms-border);
+  border-radius: 12px;
+  background: var(--cms-subtle);
+}
+
+.cms-transport-gps-card > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cms-transport-gps-card p {
+  margin: 0;
+  color: var(--cms-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.cms-transport-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cms-transport-info-grid span {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--cms-border);
+  border-radius: 9px;
+  background: var(--cms-subtle);
+}
+
+.cms-transport-info-grid strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--cms-text);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.cms-transport-mapline {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 28px;
+  margin-top: 3px;
+}
+
+.cms-transport-mapline::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--cms-border);
+}
+
+.cms-transport-mapline span {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--cms-primary);
+  border-radius: 50%;
+  background: var(--cms-surface);
+}
+
+.cms-transport-portal-table {
+  margin-top: 14px;
+}
+
+.cms-transport-parent-track {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--cms-primary-border);
+  border-radius: 10px;
+  background: var(--cms-primary-soft);
+  color: var(--cms-text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+@media (max-width: 1120px) {
+  .cms-transport-stat-grid,
+  .cms-transport-gps-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .cms-transport-stat-grid,
+  .cms-transport-two-col,
+  .cms-transport-gps-grid,
+  .cms-transport-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cms-transport-toolbar,
+  .cms-transport-toolbar-actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .cms-transport-toolbar-actions .cms-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}

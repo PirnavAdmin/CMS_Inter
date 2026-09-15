@@ -29,6 +29,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> HasInvigilatorConflictAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, string invigilator, int? excludeScheduleId = null);
         Task<IEnumerable<Models.Timetable.Room>> GetAvailableHallsAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, int? excludeScheduleId = null);
         Task<IEnumerable<Models.Faculty.Faculty>> GetAvailableInvigilatorsAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, int? excludeScheduleId = null);
+        Task<bool> IsInvigilatorTeachingSubjectAsync(int invigilatorId, int subjectId);
 
         Task<DTOs.Examination.Responses.SchedulingContextResponseDto> GetSchedulingContextAsync(int examinationId);
         Task<string> GenerateUniqueExamCodeAsync(int boardId, int academicYearId, int groupId, int? programId);

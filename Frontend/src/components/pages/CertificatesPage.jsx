@@ -25,7 +25,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const workflowSteps = ["Generated", "Reviewed", "Approved", "Issued"];
 const statusChoices = ["All", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"];
 
-const CERTIFICATE_TYPES = ["Bonafide Certificate", "Study Certificate", "Conduct Certificate", "Transfer Certificate (TC)", "Others"];
+const CERTIFICATE_TYPES = ["Bonafide Certificate", "Study Certificate", "Conduct Certificate", "Transfer Certificate", "Others"];
 const CERTIFICATE_BASE = "/api/v1/certificates";
 const CERTIFICATE_API = {
   activeTemplates: `${CERTIFICATE_BASE}/active-templates`,
