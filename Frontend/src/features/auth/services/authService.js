@@ -18,21 +18,24 @@ export const userLogin = (data) =>
   });
 
 export const loginUser = async (credentials) => {
-  const emailOrMobile = String(credentials.emailOrMobile || "").trim();
+  const emailOrMobile = String(credentials.emailOrMobile || credentials.email || "").trim();
   const password = credentials.password;
-  const isAdminLogin = emailOrMobile.toLowerCase() === ADMIN_EMAIL;
-
-  if (isAdminLogin) {
-    logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
-    const response = await adminLogin({ email: emailOrMobile, password });
-    logLoginResponse(response.status);
-    return normalizeLoginResponse(response.data, emailOrMobile, "admin");
-  }
 
   logLoginSelection(apiEndpoints.auth.login, emailOrMobile);
-  const response = await userLogin({ emailOrMobile, password });
-  logLoginResponse(response.status);
-  return normalizeLoginResponse(response.data, emailOrMobile);
+  try {
+    const response = await userLogin({ emailOrMobile, password });
+    logLoginResponse(response.status);
+    return normalizeLoginResponse(response.data, emailOrMobile);
+  } catch (authError) {
+    // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
+    if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
+      logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
+      const fallbackResponse = await adminLogin({ email: emailOrMobile, password });
+      logLoginResponse(fallbackResponse.status);
+      return normalizeLoginResponse(fallbackResponse.data, emailOrMobile, "admin");
+    }
+    throw authError;
+  }
 };
 
 export const registerUser = (data) => apiClient.post(apiEndpoints.auth.register, data);

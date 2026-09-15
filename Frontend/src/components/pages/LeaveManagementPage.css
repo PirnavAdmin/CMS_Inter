@@ -15,3 +15,150 @@
 .history-balance-card small{color:var(--cms-muted);font-size:10px;font-weight:600}.history-balance-card.total{border-color:#dbe8f3;background:#f7fbfe}.history-balance-card.used{border-color:#f0e2bd;background:#fffaf0}.history-balance-card.remaining{border-color:#d7ead4;background:#f6fbf5}.history-usage>div span{display:flex;align-items:center;gap:7px}.history-usage>div span b{display:inline;color:var(--cms-text);font-size:12px}.history-usage i>b{display:block;height:100%;border-radius:inherit;background:var(--cms-primary,#597500)}.history-request-summary{display:grid;gap:10px;padding:13px 12px}.history-request-summary h4{margin:0;font-size:14px}.history-request-summary>div{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .leave-revoke-warning{padding:9px 10px;border:1px solid #eed59d;border-radius:8px;background:#fff8e6!important;color:#8a5a00!important;font-size:12px;line-height:1.45}
 .leave-awaiting-review{color:#9a6700;font-size:11px;font-weight:650}.leave-detail-usage{display:grid;gap:7px;padding-top:3px}.leave-detail-usage>div{display:flex;align-items:center;justify-content:space-between;gap:12px}.leave-detail-usage strong{font-size:12px}.leave-detail-usage span{color:var(--cms-muted);font-size:11px}.leave-detail-usage span b{margin-left:6px;color:var(--cms-text)}.leave-detail-usage i{display:block;height:7px;border-radius:999px;background:#e8eee5;overflow:hidden}.leave-detail-usage i>b{display:block;height:100%;border-radius:inherit;background:var(--cms-primary,#597500)}
+
+/* Leave Management Page Tabs and Filter Bar */
+.leave-tabs-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #ffffff;
+  border: 1px solid var(--cms-border, #e5e7eb);
+  border-radius: 12px;
+  width: 100%;
+}
+
+.leave-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cms-muted, #64748b);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.leave-tab-btn:hover {
+  background: #f8faf7;
+  color: var(--cms-text, #111827);
+}
+
+.leave-tab-btn.active {
+  background: #f1f7ed;
+  border-color: #d1e5c8;
+  color: var(--cms-primary, #47582b);
+}
+
+.tab-pill {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  background: #e2edd8;
+  color: #3b5020;
+}
+
+.tab-pill.count {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.leave-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  background: #ffffff;
+  border: 1px solid var(--cms-border, #e5e7eb);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.leave-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 260px;
+  max-width: 480px;
+  padding: 0 12px;
+  border: 1px solid var(--cms-border, #d1d5db);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--cms-muted, #6b7280);
+}
+
+.leave-search-box input {
+  width: 100%;
+  height: 38px;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: var(--cms-text, #111827);
+  background: transparent;
+}
+
+.leave-status-filter select {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--cms-border, #d1d5db);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--cms-text, #111827);
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+}
+
+.days-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f3eff9;
+  color: #7839ee;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.staff-table-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.staff-avatar-circle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e8f4e5;
+  color: #3f6634;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.staff-name-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.staff-name-col strong {
+  font-size: 13px;
+  color: var(--cms-text, #111827);
+}
+
+.staff-name-col span {
+  font-size: 11px;
+  color: var(--cms-muted, #6b7280);
+}
+

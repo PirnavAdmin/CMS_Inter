@@ -39,13 +39,16 @@ namespace CollegeManagement.API.Repositories.Implementations
             var query = _context.Staffs
                 .Where(f => !f.IsDeleted && f.Status == "Active");
 
-            if (request.StaffType == StaffType.Teaching)
+            if (request.StaffType.HasValue)
             {
-                query = query.Where(f => f.StaffType == null || f.StaffType.ToLower() == "teaching");
-            }
-            else
-            {
-                query = query.Where(f => f.StaffType != null && f.StaffType.ToLower() != "teaching");
+                if (request.StaffType.Value == StaffType.Teaching)
+                {
+                    query = query.Where(f => f.StaffType == null || f.StaffType.ToLower() == "teaching");
+                }
+                else if (request.StaffType.Value == StaffType.NonTeaching)
+                {
+                    query = query.Where(f => f.StaffType != null && f.StaffType.ToLower() != "teaching");
+                }
             }
 
             if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)
@@ -64,7 +67,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var attendancesForDate = await _context.StaffAttendances
                 .Include(a => a.StaffAttendanceSession)
                 .Where(a => a.StaffAttendanceSession.AttendanceDate.Date == targetDate
-                            && a.StaffAttendanceSession.StaffType == request.StaffType
+                            && (!request.StaffType.HasValue || a.StaffAttendanceSession.StaffType == request.StaffType.Value)
                             && a.IsActive)
                 .OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt)
                 .ToListAsync();
@@ -390,13 +393,16 @@ namespace CollegeManagement.API.Repositories.Implementations
             var facultyQuery = _context.Staffs
                 .Where(f => !f.IsDeleted && f.Status == "Active");
 
-            if (request.StaffType == StaffType.Teaching)
+            if (request.StaffType.HasValue)
             {
-                facultyQuery = facultyQuery.Where(f => f.StaffType == null || f.StaffType.ToLower() == "teaching");
-            }
-            else
-            {
-                facultyQuery = facultyQuery.Where(f => f.StaffType != null && f.StaffType.ToLower() != "teaching");
+                if (request.StaffType.Value == StaffType.Teaching)
+                {
+                    facultyQuery = facultyQuery.Where(f => f.StaffType == null || f.StaffType.ToLower() == "teaching");
+                }
+                else if (request.StaffType.Value == StaffType.NonTeaching)
+                {
+                    facultyQuery = facultyQuery.Where(f => f.StaffType != null && f.StaffType.ToLower() != "teaching");
+                }
             }
 
             if (request.BoardId.HasValue && request.BoardId.Value > 0)

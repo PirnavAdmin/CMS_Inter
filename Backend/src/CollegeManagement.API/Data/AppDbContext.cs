@@ -37,6 +37,7 @@ namespace CollegeManagement.API.Data
         public DbSet<StaffAttendance> StaffAttendances { get; set; }
         public DbSet<StaffLeaveRequest> StaffLeaveRequests { get; set; }
         public DbSet<StaffLeaveBalance> StaffLeaveBalances { get; set; }
+        public DbSet<LeaveCategory> LeaveCategories { get; set; }
         public DbSet<AttendanceAuditHistory> AttendanceAuditHistories { get; set; }
         public DbSet<GradingSystem> GradingSystems { get; set; }
         public DbSet<AssessmentType> AssessmentTypes { get; set; }
@@ -122,6 +123,7 @@ namespace CollegeManagement.API.Data
             modelBuilder.ApplyConfiguration(new AttendanceSessionConfiguration());
             modelBuilder.ApplyConfiguration(new StaffLeaveRequestConfiguration());
             modelBuilder.ApplyConfiguration(new StaffLeaveBalanceConfiguration());
+            modelBuilder.ApplyConfiguration(new LeaveCategoryConfiguration());
             modelBuilder.ApplyConfiguration(new TimetableSubstitutionConfiguration());
             modelBuilder.ApplyConfiguration(new AttendanceAuditHistoryConfiguration());
             #endregion

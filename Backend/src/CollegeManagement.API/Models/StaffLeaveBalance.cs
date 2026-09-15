@@ -22,6 +22,8 @@ namespace CollegeManagement.API.Models
         [Required]
         public LeaveType LeaveType { get; set; }
 
+        public int? LeaveCategoryId { get; set; }
+
         [Required]
         public int AcademicYearId { get; set; }
 
@@ -48,6 +50,9 @@ namespace CollegeManagement.API.Models
 
         [ForeignKey(nameof(AcademicYearId))]
         public virtual AcademicYear AcademicYear { get; set; } = null!;
+
+        [ForeignKey(nameof(LeaveCategoryId))]
+        public virtual LeaveCategory? LeaveCategory { get; set; }
 
         #endregion
     }

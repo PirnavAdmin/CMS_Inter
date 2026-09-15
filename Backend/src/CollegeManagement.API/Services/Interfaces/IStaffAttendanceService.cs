@@ -23,6 +23,8 @@ namespace CollegeManagement.API.Services.Interfaces
 
         Task<byte[]> ExportStaffMonthlyReportToExcelAsync(StaffMonthlyReportRequest request);
 
-
+        Task<CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse> GetStaffYearlyOverviewAsync(int staffId, int academicYearId);
+        Task<byte[]> GenerateImportTemplateAsync();
+        Task<object> ImportStaffAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId);
     }
 }

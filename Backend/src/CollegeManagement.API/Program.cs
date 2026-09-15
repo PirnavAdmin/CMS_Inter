@@ -330,6 +330,7 @@ builder.Services.AddSingleton<IAttendanceCacheService, AttendanceCacheService>()
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
+builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
 
 // Student & Student Admissions
 builder.Services.AddScoped<IStudentService, StudentService>();

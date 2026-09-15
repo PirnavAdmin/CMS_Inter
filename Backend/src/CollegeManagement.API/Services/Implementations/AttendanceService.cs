@@ -1482,8 +1482,246 @@ namespace CollegeManagement.API.Services.Implementations
                 TotalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize)
             };
         }
+
+        public async Task<YearlyOverviewResponse> GetStudentYearlyOverviewAsync(int studentId, int academicYearId)
+        {
+            var student = await _context.Students.FindAsync(studentId);
+            if (student == null) throw new NotFoundException($"Student with ID {studentId} was not found.");
+
+            AcademicYear? academicYear = null;
+            if (academicYearId > 0)
+            {
+                academicYear = await _context.AcademicYears.FindAsync(academicYearId);
+            }
+
+            if (academicYear == null && student.AcademicYearId.HasValue && student.AcademicYearId.Value > 0)
+            {
+                academicYear = await _context.AcademicYears.FindAsync(student.AcademicYearId.Value);
+            }
+
+            if (academicYear == null)
+            {
+                academicYear = await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsActive && y.BoardId == student.BoardId)
+                               ?? await _context.AcademicYears.FirstOrDefaultAsync(y => y.IsActive)
+                               ?? await _context.AcademicYears.OrderByDescending(y => y.AcademicYearId).FirstOrDefaultAsync();
+            }
+
+            if (academicYear == null)
+            {
+                throw new NotFoundException("No active Academic Year found in the system.");
+            }
+
+            academicYearId = academicYear.AcademicYearId;
+
+            var startDate = academicYear.StartDate.ToDateTime(TimeOnly.MinValue);
+            var endDate = academicYear.EndDate.ToDateTime(TimeOnly.MaxValue);
+
+            var records = await _context.Attendances
+                .Where(a => a.StudentId == studentId && a.IsActive && a.AcademicYearId == academicYearId && a.AttendanceDate >= startDate && a.AttendanceDate <= endDate)
+                .ToListAsync();
+
+            var response = new YearlyOverviewResponse();
+            var months = new List<MonthlyOverviewItem>();
+
+            var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
+            var endMonth = new DateTime(endDate.Year, endDate.Month, 1);
+
+            while (currentMonth <= endMonth)
+            {
+                var monthRecords = records.Where(r => r.AttendanceDate.Month == currentMonth.Month && r.AttendanceDate.Year == currentMonth.Year).ToList();
+                var distinctDays = monthRecords.Select(r => r.AttendanceDate.Date).Distinct().ToList();
+                int workingDays = distinctDays.Count;
+                
+                int presentDays = 0;
+                int absentDays = 0;
+                int halfDays = 0;
+
+                foreach (var day in distinctDays)
+                {
+                    var dayRecords = monthRecords.Where(r => r.AttendanceDate.Date == day).ToList();
+                    var morning = dayRecords.FirstOrDefault(r => r.Session == Enums.StudentAttendanceSession.Morning);
+                    var afternoon = dayRecords.FirstOrDefault(r => r.Session == Enums.StudentAttendanceSession.Afternoon);
+
+                    bool isMorningPresent = morning != null && morning.Status == Enums.AttendanceStatus.Present;
+                    bool isAfternoonPresent = afternoon != null && afternoon.Status == Enums.AttendanceStatus.Present;
+                    
+                    bool hasMorning = morning != null;
+                    bool hasAfternoon = afternoon != null;
+
+                    if (isMorningPresent && isAfternoonPresent) {
+                        presentDays++;
+                    } else if ((isMorningPresent && hasAfternoon && !isAfternoonPresent) || (isAfternoonPresent && hasMorning && !isMorningPresent)) {
+                        halfDays++;
+                    } else if (isMorningPresent || isAfternoonPresent) {
+                        presentDays++;
+                    } else {
+                        absentDays++;
+                    }
+                }
+
+                months.Add(new MonthlyOverviewItem
+                {
+                    MonthName = currentMonth.ToString("MMMM"),
+                    Month = currentMonth.Month,
+                    Year = currentMonth.Year,
+                    WorkingDays = workingDays,
+                    Present = presentDays,
+                    Absent = absentDays,
+                    HalfDays = halfDays,
+                    AttendancePercentage = workingDays > 0 ? Math.Round((double)(presentDays + 0.5 * halfDays) / workingDays * 100, 1) : 0
+                });
+
+                currentMonth = currentMonth.AddMonths(1);
+            }
+
+            response.MonthlyRecords = months;
+            response.TotalWorkingDays = months.Sum(m => m.WorkingDays);
+            response.TotalPresent = months.Sum(m => m.Present);
+            response.TotalAbsent = months.Sum(m => m.Absent);
+            response.TotalHalfDays = months.Sum(m => m.HalfDays);
+            
+            double totalAttended = response.TotalPresent + (0.5 * response.TotalHalfDays);
+            response.OverallAttendancePercentage = response.TotalWorkingDays > 0 
+                ? Math.Round(totalAttended / response.TotalWorkingDays * 100, 1) 
+                : 0;
+
+            return response;
+        }
+
+        public async Task<byte[]> GenerateImportTemplateAsync()
+        {
+            var dataList = new List<Dictionary<string, object>>
+            {
+                new Dictionary<string, object>
+                {
+                    { "Attendance Date", "2026-09-01" },
+                    { "Admission No", "ADM-001" },
+                    { "Student Name", "Example Student" },
+                    { "Session", "Morning" },
+                    { "Attendance Status", "Present" },
+                    { "Remarks", "On Time" }
+                }
+            };
+            
+            using var ms = new MemoryStream();
+            await ms.SaveAsAsync(dataList, sheetName: "Student Attendance");
+            return ms.ToArray();
+        }
+
+        public async Task<object> ImportAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId)
+        {
+            using var ms = new MemoryStream(fileBytes);
+            var rows = ms.Query(useHeaderRow: true, sheetName: "Student Attendance").ToList();
+
+            var errors = new List<object>();
+            int validCount = 0;
+            var toSave = new List<Attendance>();
+            var auditRecords = new List<AttendanceAuditHistory>();
+            int rowIndex = 1;
+
+            foreach (var r in rows)
+            {
+                rowIndex++;
+                var dict = r as IDictionary<string, object>;
+                if (dict == null) continue;
+
+                string? admNo = dict.ContainsKey("Admission No") ? dict["Admission No"]?.ToString() : null;
+                string? dateStr = dict.ContainsKey("Attendance Date") ? dict["Attendance Date"]?.ToString() : null;
+                string? sessionStr = dict.ContainsKey("Session") ? dict["Session"]?.ToString() : null;
+                string? statusStr = dict.ContainsKey("Attendance Status") ? dict["Attendance Status"]?.ToString() : null;
+                string? remarks = dict.ContainsKey("Remarks") ? dict["Remarks"]?.ToString() : null;
+
+                if (string.IsNullOrWhiteSpace(admNo) || string.IsNullOrWhiteSpace(dateStr) || string.IsNullOrWhiteSpace(statusStr))
+                {
+                    errors.Add(new[] { rowIndex.ToString(), admNo ?? "", "", dateStr ?? "", "Missing required fields" });
+                    continue;
+                }
+
+                if (!DateTime.TryParse(dateStr, out DateTime attDate))
+                {
+                    errors.Add(new[] { rowIndex.ToString(), admNo, "", dateStr, "Invalid Date format" });
+                    continue;
+                }
+
+                if (!Enum.TryParse<Enums.AttendanceStatus>(statusStr, true, out var status))
+                {
+                    errors.Add(new[] { rowIndex.ToString(), admNo, "", dateStr, "Invalid Attendance Status" });
+                    continue;
+                }
+
+                Enums.StudentAttendanceSession? session = null;
+                if (!string.IsNullOrWhiteSpace(sessionStr) && Enum.TryParse<Enums.StudentAttendanceSession>(sessionStr, true, out var s))
+                {
+                    session = s;
+                }
+
+                var student = await _context.Students.FirstOrDefaultAsync(st => st.AdmissionNo == admNo);
+                if (student == null)
+                {
+                    errors.Add(new[] { rowIndex.ToString(), admNo, "", dateStr, "Student not found" });
+                    continue;
+                }
+
+                var exists = await _context.Attendances.AnyAsync(a => a.StudentId == student.StudentId && a.AttendanceDate.Date == attDate.Date && a.Session == session && a.IsActive);
+                if (exists)
+                {
+                    errors.Add(new[] { rowIndex.ToString(), admNo, student.StudentName, dateStr, "Attendance already exists" });
+                    continue;
+                }
+
+                validCount++;
+                if (!validateOnly)
+                {
+                    var attendance = new Attendance
+                    {
+                        StudentId = student.StudentId,
+                        Status = status,
+                        Remarks = remarks,
+                        Session = session,
+                        AttendanceDate = attDate,
+                        BoardId = student.BoardId,
+                        AcademicYearId = student.AcademicYearId,
+                        AcademicLevelId = student.AcademicLevelId,
+                        GroupId = student.GroupId,
+                        SectionId = student.SectionId,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        ModifiedByUserId = userId,
+                        ModifiedAt = DateTime.UtcNow
+                    };
+                    toSave.Add(attendance);
+                }
+            }
+
+            if (!validateOnly && errors.Count == 0 && toSave.Any())
+            {
+                await _context.Attendances.AddRangeAsync(toSave);
+                await _context.SaveChangesAsync();
+                
+                foreach(var a in toSave)
+                {
+                    auditRecords.Add(new AttendanceAuditHistory
+                    {
+                        EntityType = "Student",
+                        EntityId = a.AttendanceId,
+                        StudentId = a.StudentId,
+                        AttendanceDate = a.AttendanceDate,
+                        OldStatus = null,
+                        NewStatus = (byte)a.Status,
+                        Action = "CREATE",
+                        Description = a.Remarks ?? "Imported bulk attendance as '" + a.Status + "'.",
+                        ModifiedByUserId = userId,
+                        ModifiedByUserName = userName,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+                await _context.AttendanceAuditHistories.AddRangeAsync(auditRecords);
+                await _context.SaveChangesAsync();
+                _attendanceCache.InvalidateAll();
+            }
+
+            return new { total = rows.Count, valid = validCount, errors = errors };
+        }
+
     }
 }
-
-
-

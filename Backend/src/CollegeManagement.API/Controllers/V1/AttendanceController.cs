@@ -478,5 +478,39 @@ namespace CollegeManagement.API.Controllers.V1
             var result = await _attendanceService.GetAuditHistoryAsync(request);
             return Ok(result);
         }
+
+        /// <summary>
+        /// Retrieves the yearly attendance overview for a specific student.
+        /// </summary>
+        [HttpGet("student/{studentId}/yearly-overview")]
+        [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetStudentYearlyOverview(int studentId, [FromQuery] int academicYearId)
+        {
+            var result = await _attendanceService.GetStudentYearlyOverviewAsync(studentId, academicYearId);
+            return Ok(result);
+        }
+
+        [HttpGet("import/template")]
+        public async Task<IActionResult> DownloadImportTemplate()
+        {
+            var bytes = await _attendanceService.GenerateImportTemplateAsync();
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "StudentAttendance_ImportTemplate.xlsx");
+        }
+
+        [HttpPost("import/excel")]
+        public async Task<IActionResult> ImportExcel(IFormFile file, [FromQuery] bool validateOnly = false)
+        {
+            if (file == null || file.Length == 0) return BadRequest("File is empty or not provided.");
+            using var ms = new System.IO.MemoryStream();
+            await file.CopyToAsync(ms);
+            
+            var userName = GetCurrentUserName();
+            var userId = GetCurrentUserId();
+            var isAdmin = IsCurrentUserAdmin();
+
+            var result = await _attendanceService.ImportAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId);
+            return Ok(result);
+        }
     }
 }
