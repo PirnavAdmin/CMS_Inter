@@ -21,6 +21,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/staff")]
     [EnableCors("AllowFrontend")]
+    [Authorize]
     [Produces("application/json")]
     public class StaffController : ControllerBase
     {
@@ -164,12 +165,46 @@ namespace CollegeManagement.API.Controllers.V1
         /// 10. POST /api/v1/staff/{id}/send-link
         /// Generates token, dispatches profile completion link via email/SMS.
         /// </summary>
-        [HttpPost("{id:int}/send-link")]
+        [HttpPost("{id}/send-link")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(SendProfileLinkResponseDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> SendProfileLink(int id, [FromBody] SendProfileLinkRequestDto dto)
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> SendProfileLink([FromRoute] string id, [FromBody] SendProfileLinkRequestDto? dto = null)
         {
-            var result = await _staffService.SendProfileLinkAsync(id, dto);
+            dto ??= new SendProfileLinkRequestDto();
+
+            int targetStaffId = 0;
+            if (int.TryParse(id, out int parsedId) && parsedId > 0)
+            {
+                var exists = await _db.Staffs.AsNoTracking().AnyAsync(s => s.Id == parsedId && !s.IsDeleted);
+                if (exists) targetStaffId = parsedId;
+            }
+
+            if (targetStaffId == 0 && !string.IsNullOrWhiteSpace(dto.Email))
+            {
+                var matched = await _db.Staffs.AsNoTracking()
+                    .Where(s => !s.IsDeleted && s.Email.ToLower() == dto.Email.Trim().ToLower())
+                    .OrderByDescending(s => s.Id)
+                    .FirstOrDefaultAsync();
+                if (matched != null) targetStaffId = matched.Id;
+            }
+
+            if (targetStaffId == 0 && !string.IsNullOrWhiteSpace(dto.Mobile))
+            {
+                var cleanMobile = dto.Mobile.Trim().TrimStart('0');
+                var matched = await _db.Staffs.AsNoTracking()
+                    .Where(s => !s.IsDeleted && (s.Mobile == dto.Mobile.Trim() || s.Mobile.EndsWith(cleanMobile)))
+                    .OrderByDescending(s => s.Id)
+                    .FirstOrDefaultAsync();
+                if (matched != null) targetStaffId = matched.Id;
+            }
+
+            if (targetStaffId == 0)
+            {
+                return NotFound(new { message = $"Staff record with ID '{id}' was not found. Please ensure the staff basic details were saved successfully first." });
+            }
+
+            var result = await _staffService.SendProfileLinkAsync(targetStaffId, dto);
             return Ok(result);
         }
 
@@ -386,6 +421,7 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================================
 
         [HttpGet("lookup/blood-groups")]
+        [HttpGet("blood-groups")]
         [AllowAnonymous]
         public IActionResult GetBloodGroups()
         {
@@ -394,6 +430,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("lookup/boards")]
+        [HttpGet("boards")]
         [AllowAnonymous]
         public async Task<IActionResult> GetBoards(CancellationToken ct = default)
         {
@@ -401,54 +438,116 @@ namespace CollegeManagement.API.Controllers.V1
                 .AsNoTracking()
                 .Where(b => b.IsActive)
                 .OrderBy(b => b.BoardName)
-                .Select(b => new { id = b.BoardId, name = b.BoardName, code = b.BoardCode })
+                .Select(b => new { id = b.BoardId, name = b.BoardName, code = b.BoardCode, boardName = b.BoardName, boardCode = b.BoardCode })
                 .ToListAsync(ct);
 
             return Ok(boards);
         }
 
         [HttpGet("lookup/departments")]
+        [HttpGet("departments")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetDepartments([FromQuery] string? staffType = null, CancellationToken ct = default)
+        public async Task<IActionResult> GetDepartments(
+            [FromQuery] string? staffType = null,
+            [FromQuery] string? type = null,
+            [FromQuery] string? facultyType = null,
+            [FromQuery] string? staff_type = null,
+            CancellationToken ct = default)
         {
+            var effectiveStaffType = !string.IsNullOrWhiteSpace(staffType)
+                ? staffType
+                : (!string.IsNullOrWhiteSpace(type) ? type : (!string.IsNullOrWhiteSpace(facultyType) ? facultyType : staff_type));
+
             var query = _db.Departments.AsNoTracking().Where(d => d.IsActive);
-            if (!string.IsNullOrWhiteSpace(staffType))
+            if (!string.IsNullOrWhiteSpace(effectiveStaffType) && !effectiveStaffType.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
-                query = query.Where(d => d.StaffType == null || d.StaffType == staffType || d.StaffType == "Both");
+                var cleanType = effectiveStaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
+                if (cleanType == "teaching" || cleanType == "teachingstaff" || cleanType == "faculty")
+                {
+                    query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == "teaching");
+                }
+                else if (cleanType == "nonteaching" || cleanType == "nonteachingstaff")
+                {
+                    query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == "nonteaching");
+                }
+                else
+                {
+                    query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == cleanType);
+                }
             }
 
             var list = await query
                 .OrderBy(d => d.DepartmentName)
-                .Select(d => new { id = d.DepartmentId, name = d.DepartmentName, code = d.DepartmentCode })
+                .Select(d => new { id = d.DepartmentId, name = d.DepartmentName, departmentName = d.DepartmentName, code = d.DepartmentCode, departmentCode = d.DepartmentCode, staffType = d.StaffType })
                 .ToListAsync(ct);
 
             if (!list.Any())
             {
-                var fallback = (staffType?.Equals("Non-Teaching", StringComparison.OrdinalIgnoreCase) == true)
-                    ? new[] { "Administration", "Accounts & Finance", "Admissions", "Examinations", "Library", "Transport", "Hostel", "Security", "Maintenance" }
-                    : new[] { "Mathematics", "Physics", "Chemistry", "Botany", "Zoology", "English", "Telugu", "Hindi", "Sanskrit", "Commerce", "Economics", "Civics", "Computer Science" };
+                var isNonTeaching = string.Equals(effectiveStaffType?.Replace("-", "").Replace("_", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+                var fallback = isNonTeaching
+                    ? new[] { "Administration", "Accounts & Finance", "Admissions", "Examinations", "Library", "Transport", "Hostel", "Security", "Maintenance", "Student Support Services", "Campus Operations", "IT & Technical Support" }
+                    : new[] { "Accountancy", "Biology", "Botany", "Business Studies", "Chemistry", "Civics", "Commerce", "Computer Applications", "Computer Science", "Data Science", "Economics", "English", "Environmental Studies", "Hindi", "History", "Languages", "Mathematics", "Physical Education", "Physics", "Political Science", "Sanskrit", "Science", "Statistics", "Telugu", "Urdu", "Zoology" };
 
-                return Ok(fallback.Select((name, i) => new { id = i + 1, name, code = name.ToUpperInvariant() }));
+                var fallbackStaffType = isNonTeaching ? "Non-Teaching" : "Teaching";
+                return Ok(fallback.Select((name, i) => new { id = i + 1, name, departmentName = name, code = name.ToUpperInvariant(), departmentCode = name.ToUpperInvariant(), staffType = fallbackStaffType }));
             }
 
             return Ok(list);
         }
 
         [HttpGet("lookup/designations")]
+        [HttpGet("designations")]
         [AllowAnonymous]
-        public async Task<IActionResult> GetDesignations([FromQuery] string? staffType = null, CancellationToken ct = default)
+        public async Task<IActionResult> GetDesignations(
+            [FromQuery] string? staffType = null,
+            [FromQuery] string? type = null,
+            [FromQuery] string? facultyType = null,
+            [FromQuery] string? staff_type = null,
+            [FromQuery] int? departmentId = null,
+            [FromQuery] string? department = null,
+            CancellationToken ct = default)
         {
+            var effectiveStaffType = !string.IsNullOrWhiteSpace(staffType)
+                ? staffType
+                : (!string.IsNullOrWhiteSpace(type) ? type : (!string.IsNullOrWhiteSpace(facultyType) ? facultyType : staff_type));
+
             try
             {
                 var query = _db.Designations.AsNoTracking().Where(d => d.IsActive);
-                if (!string.IsNullOrWhiteSpace(staffType))
+                if (departmentId.HasValue && departmentId.Value > 0)
                 {
-                    query = query.Where(d => d.StaffType == null || d.StaffType == staffType || d.StaffType == "Both");
+                    query = query.Where(d => d.DepartmentId == departmentId.Value);
+                }
+                else if (!string.IsNullOrWhiteSpace(department))
+                {
+                    var deptName = department.Trim().ToLower();
+                    var matchedDept = await _db.Departments.AsNoTracking().FirstOrDefaultAsync(dep => dep.DepartmentName.ToLower() == deptName, ct);
+                    if (matchedDept != null)
+                    {
+                        query = query.Where(d => d.DepartmentId == matchedDept.DepartmentId || d.DepartmentId == null || d.DepartmentId == 0);
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(effectiveStaffType) && !effectiveStaffType.Equals("All", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cleanType = effectiveStaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
+                    if (cleanType == "teaching" || cleanType == "teachingstaff" || cleanType == "faculty")
+                    {
+                        query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == "teaching");
+                    }
+                    else if (cleanType == "nonteaching" || cleanType == "nonteachingstaff")
+                    {
+                        query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == "nonteaching");
+                    }
+                    else
+                    {
+                        query = query.Where(d => d.StaffType != null && d.StaffType.ToLower().Replace("-", "").Replace("_", "") == cleanType);
+                    }
                 }
 
                 var list = await query
                     .OrderBy(d => d.Name)
-                    .Select(d => new { id = d.Id, name = d.Name, code = d.Name.ToUpper() })
+                    .Select(d => new { id = d.Id, name = d.Name, designationName = d.Name, code = d.Name.ToUpper(), designationCode = d.Name.ToUpper(), staffType = d.StaffType, departmentId = d.DepartmentId })
                     .ToListAsync(ct);
 
                 if (list.Any())
@@ -458,11 +557,13 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch { }
 
-            var fallback = (staffType?.Equals("Non-Teaching", StringComparison.OrdinalIgnoreCase) == true)
-                ? new[] { "Administrative Officer", "Accountant", "Librarian", "Lab Assistant", "Office Assistant", "Clerk", "Receptionist" }
-                : new[] { "Junior Lecturer", "Lecturer", "Senior Lecturer", "Subject Teacher", "Head of Department (HOD)", "Academic Coordinator", "Vice Principal", "Principal" };
+            var isNonTeachingFallback = string.Equals(effectiveStaffType?.Replace("-", "").Replace("_", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+            var fallback = isNonTeachingFallback
+                ? new[] { "Administrative Officer", "Accountant", "Librarian", "Office Assistant", "Clerk", "Receptionist", "System Administrator", "Network Engineer", "Attender / Peon" }
+                : new[] { "Junior Lecturer", "Lecturer", "Senior Lecturer", "Subject Teacher", "Head of Department (HOD)", "Academic Coordinator", "Vice Principal", "Professor", "Associate Professor", "Assistant Professor" };
 
-            return Ok(fallback.Select((name, i) => new { id = i + 1, name, code = name.ToUpperInvariant() }));
+            var desigStaffType = isNonTeachingFallback ? "Non-Teaching" : "Teaching";
+            return Ok(fallback.Select((name, i) => new { id = i + 1, name, designationName = name, code = name.ToUpperInvariant(), designationCode = name.ToUpperInvariant(), staffType = desigStaffType }));
         }
     }
 }

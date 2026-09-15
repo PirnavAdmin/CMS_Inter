@@ -22,6 +22,7 @@ import {
   FileText
 } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./ResultProcessingPage.css";
 
 const PAGE_SIZE = 6;
@@ -88,6 +89,13 @@ function Toast({ message, type = "success", onClose }) {
 }
 
 export default function ResultProcessingPage() {
+  const {
+    selectedBoard,
+    selectedBoardId,
+    selectedAcademicYear,
+    selectedAcademicYearId,
+  } = useAcademicContext();
+
   const emptyFilters = { board: "", year: "", level: "", group: "", program: "", exam: "" };
   const [filters, setFilters] = useState(emptyFilters);
   const [applied, setApplied] = useState(emptyFilters);
@@ -109,6 +117,7 @@ export default function ResultProcessingPage() {
   const [resultsGenerated, setResultsGenerated] = useState(false);
   const [sectionSummaries, setSectionSummaries] = useState([]);
   const [publishedGroups, setPublishedGroups] = useState([]);
+  const [loadingPublished, setLoadingPublished] = useState(false);
 
   // Drilldown states for Published Results Tab
   const [selectedPublishedGroup, setSelectedPublishedGroup] = useState(null);
@@ -155,6 +164,93 @@ export default function ResultProcessingPage() {
 
   useEffect(() => () => toastRef.current && clearTimeout(toastRef.current), []);
 
+  const matchesBoard = useCallback((item, targetId, targetBoard) => {
+    if (!item) return false;
+    const itemId = String(item.boardId || item.id || "");
+    const itemCode = String(item.boardCode || item.code || "").trim().toLowerCase();
+    const itemName = String(item.boardName || item.name || "").trim().toLowerCase();
+    if (targetId && itemId === String(targetId)) return true;
+    if (targetBoard) {
+      const tgtId = String(targetBoard.id || targetBoard.boardId || "");
+      const tgtCode = String(targetBoard.code || targetBoard.boardCode || "").trim().toLowerCase();
+      const tgtName = String(targetBoard.name || targetBoard.boardName || "").trim().toLowerCase();
+      if (tgtId && itemId === tgtId) return true;
+      if (tgtCode && itemCode && tgtCode === itemCode) return true;
+      if (tgtName && itemName && tgtName === itemName) return true;
+    }
+    return false;
+  }, []);
+
+  const matchesYear = useCallback((item, targetId, targetYear) => {
+    if (!item) return false;
+    const itemId = String(item.academicYearId || item.id || "");
+    const itemName = String(item.academicYearName || item.name || item.code || item.label || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "");
+
+    const tgtName = String(targetYear?.academicYearName || targetYear?.name || targetYear?.code || targetYear?.label || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "");
+    const tgtId = String(targetId || targetYear?.academicYearId || targetYear?.id || "");
+
+    // Prioritize name match because academicYearId can differ across boards for the same academic year
+    if (tgtName && itemName) {
+      if (tgtName === itemName) return true;
+      return false;
+    }
+
+    // Fallback to ID match if name is not available
+    if (tgtId && itemId === tgtId) return true;
+
+    return false;
+  }, []);
+
+  const isYearForBoard = useCallback((y, targetBoardId, boardObj) => {
+    if (!y || !targetBoardId) return true;
+
+    // 1. Direct boardId / BoardId check
+    const yBoardId = y.boardId ?? y.BoardId ?? (typeof y.board === "object" ? (y.board?.boardId || y.board?.id) : null);
+    if (yBoardId !== undefined && yBoardId !== null && String(yBoardId).trim() !== "") {
+      return String(yBoardId).trim() === String(targetBoardId).trim();
+    }
+
+    // 2. Check boardIds array if present
+    const yBoardIds = y.boardIds || y.BoardIds || (Array.isArray(y.boards) ? y.boards : null);
+    if (Array.isArray(yBoardIds) && yBoardIds.length > 0) {
+      return yBoardIds.some((id) => {
+        const val = typeof id === "object" ? (id?.boardId ?? id?.id) : id;
+        return String(val).trim() === String(targetBoardId).trim();
+      });
+    }
+
+    // 3. Check boardCode / boardName match against board object
+    if (boardObj) {
+      const targetCode = String(boardObj.boardCode || boardObj.code || "").trim().toLowerCase();
+      const targetName = String(boardObj.boardName || boardObj.name || "").trim().toLowerCase();
+
+      const yCode = String(y.boardCode || y.BoardCode || (typeof y.board === "object" ? y.board?.code : "")).trim().toLowerCase();
+      if (targetCode && yCode && targetCode === yCode) return true;
+
+      const yName = String(y.boardName || y.BoardName || (typeof y.board === "string" ? y.board : y.board?.name || "")).trim().toLowerCase();
+      if (targetName && yName && targetName === yName) return true;
+
+      if (Array.isArray(y.boardNames) && targetName) {
+        if (y.boardNames.some((n) => String(n).trim().toLowerCase() === targetName)) return true;
+      }
+    }
+
+    // Fallback: If year object has no board properties at all, allow it
+    const hasAnyBoardProp = (
+      (y.boardId !== undefined && y.boardId !== null) ||
+      (y.BoardId !== undefined && y.BoardId !== null) ||
+      Boolean(y.boardCode) ||
+      Boolean(y.BoardCode) ||
+      Boolean(y.boardName) ||
+      Boolean(y.BoardName) ||
+      (Array.isArray(y.boardNames) && y.boardNames.length > 0) ||
+      (Array.isArray(y.boardIds) && y.boardIds.length > 0) ||
+      (y.board !== undefined && y.board !== null)
+    );
+
+    return !hasAnyBoardProp;
+  }, []);
+
   /* ============================================================
      1. CASCADING DATA FETCHING & HIERARCHY FLOW
      ============================================================ */
@@ -166,48 +262,78 @@ export default function ResultProcessingPage() {
         const res = await apiClient.get("/api/v1/boards");
         const items = res.data?.items || res.data || [];
         const activeBoards = items.filter((b) => b.status === true || b.isActive === true);
-        setBoards(activeBoards);
-        if (activeBoards.length > 0) {
-          setFilters((f) => ({ ...f, board: String(activeBoards[0].boardId || activeBoards[0].id) }));
+        const resolvedBoards = activeBoards.length > 0 ? activeBoards : (selectedBoard ? [{ boardId: selectedBoard.id, boardName: selectedBoard.name || selectedBoard.boardName, isActive: true }] : []);
+        setBoards(resolvedBoards);
+        const matched = resolvedBoards.find((b) => matchesBoard(b, selectedBoardId, selectedBoard)) || resolvedBoards[0];
+        if (matched) {
+          setFilters((f) => ({ ...f, board: String(matched.boardId || matched.id) }));
         }
       } catch (err) {
         showToast("Failed to load active academic boards.", "error");
       }
     };
     fetchActiveBoards();
-  }, [showToast]);
+  }, [showToast, selectedBoardId, selectedBoard, matchesBoard]);
+
+  // Sync board when navbar selected board changes
+  useEffect(() => {
+    if (!boards.length) return;
+    const matched = boards.find((b) => matchesBoard(b, selectedBoardId, selectedBoard));
+    if (matched) {
+      const bId = String(matched.boardId || matched.id);
+      setFilters((f) => (f.board === bId ? f : { ...f, board: bId }));
+    }
+  }, [boards, selectedBoardId, selectedBoard, matchesBoard]);
 
   // 2. Cascading Board Dependencies (Board -> Years, Levels, Groups)
   useEffect(() => {
     if (!filters.board) return;
     const fetchBoardDependencies = async () => {
       try {
+        const targetBoardObj = boards.find((b) => String(b.boardId || b.id) === String(filters.board)) || selectedBoard;
         const [yearsRes, levelsRes, groupsRes] = await Promise.all([
-          apiClient.get(`/api/v1/academic-years`, { params: { boardId: filters.board } }),
-          apiClient.get(`/api/v1/academic-levels`, { params: { boardId: filters.board } }),
-          apiClient.get(`/api/v1/groups`, { params: { boardId: filters.board } }),
+          apiClient.get(`/api/v1/academic-years`, { params: { boardId: filters.board, BoardId: filters.board } }),
+          apiClient.get(`/api/v1/academic-levels`, { params: { boardId: filters.board, BoardId: filters.board } }),
+          apiClient.get(`/api/v1/groups`, { params: { boardId: filters.board, BoardId: filters.board } }),
         ]);
 
         const yearsData = yearsRes.data?.data || yearsRes.data?.items || yearsRes.data || [];
         const levelsData = levelsRes.data?.data || levelsRes.data?.items || levelsRes.data || [];
         const groupsData = groupsRes.data?.items || groupsRes.data || [];
 
-        // Filter active years
-        const activeYears = yearsData.filter((y) => y.isActive === true || y.status === "Active" || y.status === true);
+        // STRICT FILTER: Filter active years belonging strictly to the selected board
+        const rawYearsList = Array.isArray(yearsData) ? yearsData : [];
+        const activeYears = rawYearsList
+          .filter((y) => y.isActive === true || y.status === "Active" || y.status === true)
+          .filter((y) => isYearForBoard(y, filters.board, targetBoardObj));
+
         setAcademicYears(activeYears);
         setAcademicLevels(levelsData);
         setGroups(groupsData.filter((g) => g.isActive === true || g.status === "Active"));
 
-        // Auto-select first active year if available
-        if (activeYears.length > 0) {
-          setFilters((f) => ({ ...f, year: String(activeYears[0].academicYearId || activeYears[0].id) }));
+        // Auto-select active year matched from navbar or first active
+        const matchedYear = activeYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) || activeYears[0];
+        if (matchedYear) {
+          setFilters((f) => ({ ...f, year: String(matchedYear.academicYearId || matchedYear.id) }));
+        } else {
+          setFilters((f) => ({ ...f, year: "" }));
         }
       } catch (err) {
         showToast("Failed to load board academic hierarchy.", "error");
       }
     };
     fetchBoardDependencies();
-  }, [filters.board, showToast]);
+  }, [filters.board, boards, selectedBoard, showToast, selectedAcademicYearId, selectedAcademicYear, matchesYear, isYearForBoard]);
+
+  // Sync year when navbar selected academic year changes or when academicYears changes
+  useEffect(() => {
+    if (!academicYears.length) return;
+    const matched = academicYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) || academicYears[0];
+    if (matched) {
+      const yId = String(matched.academicYearId || matched.id);
+      setFilters((f) => (f.year === yId ? f : { ...f, year: yId }));
+    }
+  }, [academicYears, selectedAcademicYearId, selectedAcademicYear, matchesYear]);
 
   // 3. Group -> Program Dependency (NEW)
   useEffect(() => {
@@ -247,6 +373,13 @@ export default function ResultProcessingPage() {
 
   // Auto-sync child filter selections if they no longer exist in updated parent data lists
   useEffect(() => {
+    if (filters.year && academicYears.length > 0 && !academicYears.some((y) => String(y.academicYearId || y.id) === String(filters.year))) {
+      const fallback = academicYears.find((y) => matchesYear(y, selectedAcademicYearId, selectedAcademicYear)) || academicYears[0];
+      setFilters((f) => ({ ...f, year: fallback ? String(fallback.academicYearId || fallback.id) : "", exam: "" }));
+    }
+  }, [academicYears, filters.year, selectedAcademicYearId, selectedAcademicYear, matchesYear]);
+
+  useEffect(() => {
     if (filters.group && groups.length > 0 && !groups.some((g) => String(g.groupId || g.id) === String(filters.group))) {
       setFilters((f) => ({ ...f, group: "", program: "", exam: "" }));
     }
@@ -283,12 +416,19 @@ export default function ResultProcessingPage() {
         });
         const raw = unwrap(res);
         const items = Array.isArray(raw) ? raw : (res.data?.items || res.data || []);
+        const matchingItems = items.filter((e) => {
+          const examBoardId = e.boardId ?? e.BoardId;
+          if (examBoardId && String(examBoardId) !== String(filters.board)) return false;
+          const examYearId = e.academicYearId ?? e.AcademicYearId ?? e.yearId;
+          if (examYearId && String(examYearId) !== String(filters.year)) return false;
+          return true;
+        });
         // STRICT FILTER: Completed Examinations
-        const completedOnly = items.filter((e) => {
+        const completedOnly = matchingItems.filter((e) => {
           const s = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
           return s === "COMPLETED" || s === "FINISHED" || s === "PUBLISHED" || e.isCompleted === true;
         });
-        const finalExams = (completedOnly.length > 0 ? completedOnly : items).map((e) => ({
+        const finalExams = (completedOnly.length > 0 ? completedOnly : matchingItems).map((e) => ({
           ...e,
           id: e.examinationId ?? e.id ?? e.examId,
           examinationId: e.examinationId ?? e.id ?? e.examId,
@@ -421,12 +561,12 @@ export default function ResultProcessingPage() {
     !isProgramRequired ||
     Boolean(
       filters.program &&
-        (!programs.length ||
-          programs.some(
-            (p) =>
-              String(p.programId ?? p.id) === String(filters.program) ||
-              String(p.programName ?? p.name).trim().toLowerCase() === String(filters.program).trim().toLowerCase(),
-          )),
+      (!programs.length ||
+        programs.some(
+          (p) =>
+            String(p.programId ?? p.id) === String(filters.program) ||
+            String(p.programName ?? p.name).trim().toLowerCase() === String(filters.program).trim().toLowerCase(),
+        )),
     );
   const isExamValid = Boolean(
     filters.exam && (!examinations.length || examinations.some((e) => String(e.examinationId ?? e.id ?? e.examId) === String(filters.exam)))
@@ -518,6 +658,14 @@ export default function ResultProcessingPage() {
       setSelectedStudentMemo(null);
       setPage(1);
 
+      // If any returned section is already published, immediately sync to Published Results
+      const anyPublished = mappedSections.some(
+        (s) => s.resultStatus === "PUBLISHED" || s.isPublished
+      );
+      if (anyPublished) {
+        syncPublishedGroup(mappedSections);
+      }
+
       const selGroup = groups.find((g) => String(g.groupId || g.id) === String(filters.group));
       showToast(`Approved marks fetched from Marks Evaluation. ${selGroup ? selGroup.groupName || selGroup.name : "Group"} section-wise results generated successfully!`);
     } catch (err) {
@@ -538,47 +686,109 @@ export default function ResultProcessingPage() {
     setConfirmPublish({ type: "group", data: sectionSummaries });
   };
 
+  // Helper to sync published records into Tab 2 (Published Groups) in-memory state
+  const syncPublishedGroup = (updatedSections) => {
+    const targetExamId = applied.exam || filters.exam;
+    const targetGroupId = applied.group || filters.group;
+    const targetProgramId = applied.program || filters.program;
+    const targetBoardId = applied.board || filters.board;
+    const targetYearId = applied.year || filters.year;
+
+    const examObj = examinations.find((e) => String(e.examinationId ?? e.id ?? e.examId) === String(targetExamId));
+    const groupObj = groups.find((g) => String(g.groupId || g.id) === String(targetGroupId));
+    const programObj = programs.find((p) => String(p.programId || p.id) === String(targetProgramId));
+    const boardObj = boards.find((b) => String(b.boardId || b.id) === String(targetBoardId));
+    const yearObj = academicYears.find((y) => String(y.academicYearId || y.id) === String(targetYearId));
+
+    const publishedSecs = (updatedSections || sectionSummaries).filter(
+      (s) => s.resultStatus === "PUBLISHED" || s.isPublished
+    );
+    if (!publishedSecs.length) return;
+
+    const totalStudents = publishedSecs.reduce((sum, s) => sum + Number(s.studentCount || 0), 0);
+    const passed = publishedSecs.reduce((sum, s) => sum + Number(s.passed || 0), 0);
+    const failed = publishedSecs.reduce((sum, s) => sum + Number(s.failed || 0), 0);
+    const passRate = totalStudents > 0 ? (passed / totalStudents) * 100 : 0;
+
+    const newGroupItem = {
+      publishedId: Number(targetExamId) || Date.now(),
+      examId: Number(targetExamId),
+      examName: examObj?.examName || examObj?.examinationName || examObj?.name || "Published Examination",
+      groupName: groupObj?.groupName || groupObj?.name || "Group",
+      programName: programObj?.programName || programObj?.name || `${groupObj?.groupName || "General"} Stream`,
+      boardName: boardObj?.boardName || boardObj?.name || "Board",
+      academicYear: yearObj?.academicYearName || yearObj?.name || "—",
+      totalStudents,
+      passed,
+      failed,
+      passRate,
+      resultStatus: "PUBLISHED",
+      publishedDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+      sections: publishedSecs
+    };
+
+    setPublishedGroups((prev) => {
+      const existingIdx = prev.findIndex((p) => String(p.examId) === String(targetExamId));
+      if (existingIdx >= 0) {
+        const nextList = [...prev];
+        nextList[existingIdx] = { ...nextList[existingIdx], ...newGroupItem };
+        return nextList;
+      }
+      return [newGroupItem, ...prev];
+    });
+  };
+
   const confirmActionPublish = async () => {
     if (!confirmPublish) return;
     setActionLoading("PUBLISH");
     try {
       if (confirmPublish.type === "section") {
         const section = confirmPublish.data;
-        const secId = section.sectionId;
-        const examId = applied.exam || filters.exam;
+        const secId = Number(section.sectionId);
+        const examId = Number(applied.exam || filters.exam);
+        const boardId = Number(applied.board || filters.board) || undefined;
+        const academicYearId = Number(applied.year || filters.year) || undefined;
+        const academicLevelId = Number(applied.level || filters.level) || undefined;
+        const groupId = Number(applied.group || filters.group) || undefined;
+        const programId = String(applied.program || filters.program || "");
 
-        await apiClient.post("/api/v1/results/publish-section", {
-          boardId: applied.board || filters.board,
-          academicYearId: applied.year || filters.year,
-          academicLevelId: applied.level || filters.level,
-          groupId: applied.group || filters.group,
+        const publishPayload = {
+          boardId: boardId || 1,
+          academicYearId: academicYearId || 1,
+          academicLevelId: academicLevelId || 1,
+          groupId: groupId || 1,
+          ...(programId ? { programId: String(programId) } : {}),
           sectionId: secId,
+          examinationId: examId,
           examId: examId,
           publishDate: new Date().toISOString()
-        }, {
-          params: { sectionId: secId, examId }
-        });
+        };
 
-        setSectionSummaries((prev) =>
-          prev.map((sec) =>
-            sec.sectionId === secId
-              ? {
-                ...sec,
-                resultStatus: "PUBLISHED",
-                studentRows: (sec.studentRows || []).map((st) => ({
-                  ...st,
-                  publicationStatus: "PUBLISHED",
-                  status: "PUBLISHED"
-                }))
-              }
-              : sec
-          )
+        // Single Publishing API: Use ONLY POST /api/v1/results/publish
+        await apiClient.post("/api/v1/results/publish", publishPayload);
+
+        const updatedSections = sectionSummaries.map((sec) =>
+          sec.sectionId === secId
+            ? {
+              ...sec,
+              resultStatus: "PUBLISHED",
+              isPublished: true,
+              studentRows: (sec.studentRows || []).map((st) => ({
+                ...st,
+                publicationStatus: "PUBLISHED",
+                status: "PUBLISHED"
+              }))
+            }
+            : sec
         );
+
+        setSectionSummaries(updatedSections);
 
         if (selectedSectionDetails && selectedSectionDetails.sectionId === secId) {
           setSelectedSectionDetails((prev) => ({
             ...prev,
             resultStatus: "PUBLISHED",
+            isPublished: true,
             studentRows: (prev.studentRows || []).map((st) => ({
               ...st,
               publicationStatus: "PUBLISHED",
@@ -587,30 +797,58 @@ export default function ResultProcessingPage() {
           }));
         }
 
+        syncPublishedGroup(updatedSections);
+        fetchPublishedGroups();
         showToast(`Results for ${section.sectionName} published successfully! Students can now view their marks.`);
       } else if (confirmPublish.type === "group") {
-        const examId = applied.exam || filters.exam;
-        await apiClient.post("/api/v1/results/publish-group", {
-          boardId: applied.board || filters.board,
-          academicYearId: applied.year || filters.year,
-          academicLevelId: applied.level || filters.level,
-          groupId: applied.group || filters.group,
-          examinationId: examId,
-          publishDate: new Date().toISOString()
-        });
+        const examId = Number(applied.exam || filters.exam);
+        const boardId = Number(applied.board || filters.board) || undefined;
+        const academicYearId = Number(applied.year || filters.year) || undefined;
+        const academicLevelId = Number(applied.level || filters.level) || undefined;
+        const groupId = Number(applied.group || filters.group) || undefined;
+        const programId = String(applied.program || filters.program || "");
 
-        setSectionSummaries((prev) =>
-          prev.map((sec) => ({
-            ...sec,
+        const groupPublishPayload = {
+          boardId: boardId || 1,
+          academicYearId: academicYearId || 1,
+          academicLevelId: academicLevelId || 1,
+          groupId: groupId || 1,
+          ...(programId ? { programId: String(programId) } : {}),
+          examinationId: examId,
+          examId: examId,
+          publishDate: new Date().toISOString()
+        };
+
+        // Single Publishing API: Use ONLY POST /api/v1/results/publish (omits sectionId)
+        await apiClient.post("/api/v1/results/publish", groupPublishPayload);
+
+        const updatedSections = sectionSummaries.map((sec) => ({
+          ...sec,
+          resultStatus: "PUBLISHED",
+          isPublished: true,
+          studentRows: (sec.studentRows || []).map((st) => ({
+            ...st,
+            publicationStatus: "PUBLISHED",
+            status: "PUBLISHED"
+          }))
+        }));
+
+        setSectionSummaries(updatedSections);
+
+        if (selectedSectionDetails) {
+          setSelectedSectionDetails((prev) => ({
+            ...prev,
             resultStatus: "PUBLISHED",
-            studentRows: (sec.studentRows || []).map((st) => ({
+            isPublished: true,
+            studentRows: (prev.studentRows || []).map((st) => ({
               ...st,
               publicationStatus: "PUBLISHED",
               status: "PUBLISHED"
             }))
-          }))
-        );
+          }));
+        }
 
+        syncPublishedGroup(updatedSections);
         fetchPublishedGroups();
         showToast("Group results published successfully to all students!");
       }
@@ -627,52 +865,287 @@ export default function ResultProcessingPage() {
      TAB 2: PUBLISHED RESULTS & SECTION STUDENT BREAKDOWN
      ============================================================ */
   const fetchPublishedGroups = useCallback(async () => {
+    setLoadingPublished(true);
+    const bId = Number(selectedBoardId || filters.board || applied.board);
+    const yId = Number(selectedAcademicYearId || filters.year || applied.year);
+
     try {
-      const res = await apiClient.get("/api/v1/results/published", {
-        params: {
-          boardId: filters.board || undefined,
-          academicYearId: filters.year || undefined,
-          groupId: filters.group || undefined,
-          programId: filters.program || undefined,
-          examId: filters.exam || undefined
+      // 1. Discover completed/published examinations directly from database for the active board
+      let examList = [];
+      try {
+        const examRes = await apiClient.get("/api/v1/examinations", {
+          params: {
+            BoardId: bId || undefined,
+          },
+        });
+        const rawEx = unwrap(examRes);
+        const exItems = Array.isArray(rawEx) ? rawEx : (examRes.data?.items || examRes.data || []);
+        const completed = exItems.filter((e) => {
+          const s = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
+          return s === "COMPLETED" || s === "FINISHED" || s === "PUBLISHED" || e.isCompleted === true;
+        });
+        examList = (completed.length > 0 ? completed : exItems).map((e) => ({
+          ...e,
+          id: e.examinationId ?? e.id ?? e.examId,
+          examinationId: e.examinationId ?? e.id ?? e.examId,
+          examName: e.examName || e.examinationName || e.name || e.title || e.examCode || "Examination",
+          examCode: e.examCode || e.code || "",
+        }));
+      } catch (e) {
+        console.warn("Notice: fetch examinations in fetchPublishedGroups:", e);
+      }
+
+      // Collect all fetched published group objects from backend database
+      const fetchedGroupsMap = new Map();
+
+      // Helper to build sections from individual student records if not pre-grouped
+      const groupRecordsIntoSections = (records, fallbackExamId, examName) => {
+        const sectionsMap = new Map();
+        records.forEach((rec, idx) => {
+          const sId = rec.sectionId || rec.section_id || 1;
+          const sName = rec.sectionName || rec.section || `Section ${sId}`;
+          if (!sectionsMap.has(sId)) {
+            sectionsMap.set(sId, {
+              sectionId: sId,
+              sectionName: sName,
+              inChargeName: rec.inChargeName || rec.facultyName || rec.inCharge || "—",
+              examId: fallbackExamId,
+              examName: examName,
+              studentRows: [],
+              subjectDefinitions: rec.subjectDefinitions || rec.subjects || [],
+            });
+          }
+          const sec = sectionsMap.get(sId);
+          sec.studentRows.push({
+            studentId: rec.studentId || rec.id || idx + 1,
+            rollNo: rec.rollNo || rec.rollNumber || "—",
+            studentName: rec.studentName || rec.name || "—",
+            examinationName: rec.examinationName || rec.examName || examName,
+            examinationId: fallbackExamId,
+            examId: fallbackExamId,
+            sectionName: sName,
+            sectionId: sId,
+            total: rec.totalMarks ?? rec.total ?? 0,
+            maximum: rec.maximumMarks ?? rec.maximum ?? 500,
+            percentage: Number(rec.percentage ?? (rec.maximumMarks ? (rec.totalMarks / rec.maximumMarks) * 100 : 0)),
+            grade: rec.grade || "—",
+            result: String(rec.resultStatus || rec.result || "PASS").toUpperCase(),
+            sectionRank: rec.sectionRank || rec.rank || sec.studentRows.length + 1,
+            groupRank: rec.groupRank || rec.rank || idx + 1,
+            publicationStatus: "PUBLISHED",
+            status: "PUBLISHED",
+            subjects: rec.subjects || [],
+          });
+        });
+
+        return Array.from(sectionsMap.values()).map((sec) => {
+          const total = sec.studentRows.length;
+          const passed = sec.studentRows.filter((st) => String(st.result).toUpperCase() === "PASS").length;
+          const failed = total - passed;
+          const passRate = total > 0 ? (passed / total) * 100 : 0;
+          const avgScore = total > 0 ? (sec.studentRows.reduce((sum, st) => sum + Number(st.percentage || 0), 0) / total) : 0;
+          return {
+            ...sec,
+            studentCount: total,
+            passed,
+            failed,
+            passRate,
+            average: avgScore,
+            resultStatus: "PUBLISHED",
+            isPublished: true,
+          };
+        });
+      };
+
+      // 2. Query /api/v1/results/published endpoint from backend database (fetches ALL previous published results)
+      try {
+        const pubRes = await apiClient.get("/api/v1/results/published", {
+          params: {
+            boardId: bId || undefined,
+          },
+        });
+        const pubData = unwrapPayload(pubRes);
+        const pubItems = Array.isArray(pubData) ? pubData : (pubData?.items || pubData?.groups || []);
+        if (pubItems.length > 0) {
+          pubItems.forEach((item) => {
+            const itemExamId = Number(item.examId ?? item.examinationId ?? item.publishedId);
+            const uniqueKey = item.publishedId || `${itemExamId}_${item.groupId || item.groupName || ""}`;
+            if (itemExamId > 0) {
+              fetchedGroupsMap.set(uniqueKey, {
+                publishedId: item.publishedId || itemExamId,
+                examId: itemExamId,
+                examName: item.examName || item.examinationName || item.name || "Published Examination",
+                groupName: item.groupName || item.name || "Group",
+                programName: item.programName || `${item.groupName || "General"} Stream`,
+                boardName: item.boardName || "Board",
+                academicYear: item.academicYearName || item.academicYear || "—",
+                totalStudents: item.totalStudents ?? (item.sections?.reduce((acc, s) => acc + (s.studentCount || 0), 0) ?? 0),
+                passed: item.passed ?? (item.sections?.reduce((acc, s) => acc + (s.passed || 0), 0) ?? 0),
+                failed: item.failed ?? (item.sections?.reduce((acc, s) => acc + (s.failed || 0), 0) ?? 0),
+                passRate: Number(item.passRate ?? item.passPercentage ?? 0),
+                resultStatus: "PUBLISHED",
+                publishedDate: item.publishedDate
+                  ? new Date(item.publishedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                  : new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+                boardId: item.boardId || bId,
+                academicYearId: item.academicYearId || yId,
+                academicLevelId: item.academicLevelId,
+                groupId: item.groupId,
+                programId: item.programId,
+                sections: Array.isArray(item.sections)
+                  ? item.sections.map((sec, sIdx) => ({
+                    sectionId: sec.sectionId || sec.id || sIdx + 1,
+                    sectionName: sec.sectionName || sec.name || `Section ${sIdx + 1}`,
+                    inChargeName: sec.inChargeName || sec.facultyName || sec.inCharge || "—",
+                    studentCount: sec.studentCount ?? (sec.studentRows?.length || 0),
+                    passed: sec.passed ?? 0,
+                    failed: sec.failed ?? 0,
+                    passRate: Number(sec.passRate ?? 0),
+                    average: Number(sec.average ?? 0),
+                    resultStatus: "PUBLISHED",
+                    isPublished: true,
+                    examId: itemExamId,
+                    examName: item.examName || item.examinationName,
+                    studentRows: sec.studentRows || [],
+                    subjectDefinitions: sec.subjectDefinitions || [],
+                  }))
+                  : [],
+              });
+            }
+          });
         }
-      });
-      const rawList = unwrap(res);
-      const mapped = rawList.map((item, idx) => ({
-        publishedId: item.publishedId || item.id || idx + 1,
-        examId: item.examId || item.examinationId,
-        examName: item.examName || item.examinationName || "Published Examination",
-        groupName: item.groupName || item.name || "Group",
-        programName: item.programName || `${item.groupCode || item.groupName || "General"} Stream`,
-        boardName: item.boardName || "Board",
-        academicYear: item.academicYear || item.academicYearName || "—",
-        totalStudents: item.totalStudents ?? item.studentCount ?? 0,
-        passed: item.passed ?? item.passedCount ?? 0,
-        failed: item.failed ?? item.failedCount ?? 0,
-        passRate: Number(item.passRate ?? item.passPercentage ?? 0),
-        resultStatus: "PUBLISHED",
-        publishedDate: item.publishedDate
-          ? new Date(item.publishedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
-          : "Published",
-        sections: (item.sections || []).map((sec, sIdx) => ({
-          sectionId: sec.sectionId || sec.id || sIdx + 1,
-          sectionName: sec.sectionName || sec.name || `Section ${sIdx + 1}`,
-          inChargeName: sec.inChargeName || sec.facultyName || "—",
-          studentCount: sec.studentCount ?? sec.totalStudents ?? 0,
-          passed: sec.passed ?? sec.passedCount ?? 0,
-          failed: sec.failed ?? sec.failedCount ?? 0,
-          passRate: Number(sec.passRate ?? sec.passPercentage ?? 0),
-          average: Number(sec.average ?? sec.averageScore ?? 0),
-          resultStatus: "PUBLISHED",
-          studentRows: sec.studentRows || sec.students || [],
-          subjectDefinitions: sec.subjectDefinitions || sec.subjects || []
-        }))
-      }));
-      setPublishedGroups(mapped);
-    } catch (err) {
-      setPublishedGroups([]);
+      } catch (e) {
+        // Fallback continues to /generate and /results
+      }
+
+      // 3. Inspect candidate exams in database via /api/v1/results/generate and /api/v1/results for previous results
+      const examQueue = (examList || []).map((e) => Number(e.examinationId ?? e.id ?? e.examId)).filter((id) => id > 0);
+
+      for (const currentExamId of examQueue) {
+        let detectedSections = [];
+        const targetExamObj = examList.find((e) => String(e.examinationId ?? e.id ?? e.examId) === String(currentExamId));
+        const examName = targetExamObj?.examName || targetExamObj?.examinationName || targetExamObj?.name || "Published Examination";
+
+        // 3a. Check backend database generate response for published sections
+        try {
+          const genRes = await apiClient.post("/api/v1/results/generate", {
+            boardId: bId || undefined,
+            examId: currentExamId,
+          });
+          const rawData = unwrapPayload(genRes);
+          const rawSections = Array.isArray(rawData)
+            ? rawData
+            : Array.isArray(rawData?.sections)
+              ? rawData.sections
+              : Array.isArray(rawData?.sectionSummaries)
+                ? rawData.sectionSummaries
+                : [];
+
+          const pubSecs = rawSections
+            .filter((s) => s.isPublished || String(s.resultStatus || s.status).toUpperCase() === "PUBLISHED")
+            .map((s, idx) => ({
+              sectionId: s.sectionId || s.id || idx + 1,
+              sectionName: s.sectionName || s.name || `Section ${idx + 1}`,
+              inChargeName: s.inChargeName || s.facultyName || s.inCharge || "—",
+              studentCount: s.studentCount ?? s.totalStudents ?? s.studentsCount ?? (s.studentRows?.length || 0),
+              passed: s.passed ?? s.passedCount ?? s.passCount ?? 0,
+              failed: s.failed ?? s.failedCount ?? s.failCount ?? 0,
+              passRate: Number(s.passRate ?? s.passPercentage ?? (s.studentCount ? ((s.passed / s.studentCount) * 100) : 0)),
+              average: Number(s.average ?? s.averagePercentage ?? s.averageScore ?? 0),
+              resultStatus: "PUBLISHED",
+              isPublished: true,
+              examId: currentExamId,
+              examName: examName,
+              studentRows: (s.studentRows || s.students || []).map((st) => ({
+                ...st,
+                examinationId: currentExamId,
+                examId: currentExamId,
+                examinationName: examName,
+              })),
+              subjectDefinitions: s.subjectDefinitions || s.subjects || [],
+            }));
+
+          if (pubSecs.length > 0) {
+            detectedSections = pubSecs;
+          }
+        } catch (err) {
+          // Silent fallback
+        }
+
+        // 3b. Query /api/v1/results from database
+        let resultsApiStudents = [];
+        try {
+          const res = await apiClient.get("/api/v1/results", {
+            params: {
+              boardId: bId || undefined,
+              examId: currentExamId,
+              pageNumber: 1,
+              pageSize: 100,
+            },
+          });
+          const payload = unwrapPayload(res) || {};
+          const records = Array.isArray(payload)
+            ? payload
+            : Array.isArray(payload.results)
+              ? payload.results
+              : Array.isArray(payload.items)
+                ? payload.items
+                : [];
+
+          if (records.length > 0) {
+            resultsApiStudents = records;
+            if (detectedSections.length === 0) {
+              detectedSections = groupRecordsIntoSections(records, currentExamId, examName);
+            }
+          }
+        } catch (err) {
+          // Silent fallback
+        }
+
+        // If we have published sections or student records for this exam, build or update group item
+        if (detectedSections.length > 0 || resultsApiStudents.length > 0) {
+          const targetGroup = groups.find((g) => String(g.groupId || g.id) === String(targetExamObj?.groupId || detectedSections[0]?.groupId));
+          const targetBoard = boards.find((b) => String(b.boardId || b.id) === String(bId || targetExamObj?.boardId));
+          const targetYear = academicYears.find((y) => String(y.academicYearId || y.id) === String(yId || targetExamObj?.academicYearId));
+
+          const totalStudents = detectedSections.reduce((sum, s) => sum + Number(s.studentCount || 0), 0) || resultsApiStudents.length;
+          const passed = detectedSections.reduce((sum, s) => sum + Number(s.passed || 0), 0) || resultsApiStudents.filter((r) => String(r.resultStatus || "").toLowerCase() === "pass").length;
+          const failed = totalStudents >= passed ? (totalStudents - passed) : 0;
+          const passRate = totalStudents > 0 ? (passed / totalStudents) * 100 : 0;
+
+          const uniqueKey = `${currentExamId}_${targetGroup?.groupId || detectedSections[0]?.groupId || "default"}`;
+          if (!fetchedGroupsMap.has(uniqueKey)) {
+            const groupItem = {
+              publishedId: currentExamId,
+              examId: currentExamId,
+              examName,
+              groupName: targetGroup?.groupName || targetGroup?.name || detectedSections[0]?.groupName || "Group",
+              programName: targetGroup ? `${targetGroup.groupName || targetGroup.name} Stream` : (detectedSections[0]?.groupName ? `${detectedSections[0].groupName} Stream` : "General Stream"),
+              boardName: targetBoard?.boardName || targetBoard?.name || "Board",
+              academicYear: targetYear?.academicYearName || targetYear?.name || "—",
+              totalStudents,
+              passed,
+              failed,
+              passRate,
+              resultStatus: "PUBLISHED",
+              publishedDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+              boardId: bId,
+              academicYearId: yId,
+              sections: detectedSections,
+            };
+
+            fetchedGroupsMap.set(uniqueKey, groupItem);
+          }
+        }
+      }
+
+      // Convert Map to Array and update state from database
+      const finalPublishedList = Array.from(fetchedGroupsMap.values());
+      setPublishedGroups(finalPublishedList);
+    } finally {
+      setLoadingPublished(false);
     }
-  }, [filters.board, filters.year, filters.group, filters.program, filters.exam]);
+  }, [groups, boards, academicYears, selectedBoardId, selectedAcademicYearId]);
 
   useEffect(() => {
     if (viewMode === "published") {
@@ -681,10 +1154,10 @@ export default function ResultProcessingPage() {
   }, [viewMode, fetchPublishedGroups]);
 
   const handleViewSection = async (sec, isPublished = false) => {
-    const targetExamId = applied.exam || filters.exam || sec.examId || (isPublished && selectedPublishedGroup?.examId);
+    const targetExamId = sec.examId || (isPublished ? selectedPublishedGroup?.examId : undefined) || applied.exam || filters.exam;
     try {
       const res = await apiClient.get(`/api/v1/results/sections/${sec.sectionId}`, {
-        params: { examId: targetExamId }
+        params: { examId: targetExamId },
       });
       const payload = unwrapPayload(res) || {};
       const studentsList = Array.isArray(payload)
@@ -695,14 +1168,24 @@ export default function ResultProcessingPage() {
             ? payload.students
             : Array.isArray(payload.items)
               ? payload.items
-              : sec.studentRows || [];
+              : (sec.studentRows?.length ? sec.studentRows : []);
 
-      const subjectDefs = payload.subjectDefinitions || payload.subjects || sec.subjectDefinitions || [];
+      const subjectDefs = (payload.subjectDefinitions?.length && payload.subjectDefinitions) ||
+        (payload.subjects?.length && payload.subjects) ||
+        (sec.subjectDefinitions?.length && sec.subjectDefinitions) || [];
 
       const enrichedSection = {
         ...sec,
-        studentRows: studentsList,
-        subjectDefinitions: subjectDefs
+        examId: targetExamId,
+        studentRows: (studentsList.length > 0 ? studentsList : (sec.studentRows || [])).map((st) => ({
+          ...st,
+          examinationId: targetExamId,
+          examId: targetExamId,
+          examinationName: st.examinationName || sec.examName || selectedPublishedGroup?.examName || currentExamObj.name,
+          sectionName: st.sectionName || sec.sectionName,
+          sectionId: st.sectionId || sec.sectionId,
+        })),
+        subjectDefinitions: subjectDefs,
       };
 
       if (isPublished) {
@@ -711,10 +1194,22 @@ export default function ResultProcessingPage() {
         setSelectedSectionDetails(enrichedSection);
       }
     } catch (err) {
+      const fallbackSection = {
+        ...sec,
+        examId: targetExamId,
+        studentRows: (sec.studentRows || []).map((st) => ({
+          ...st,
+          examinationId: targetExamId,
+          examId: targetExamId,
+          examinationName: st.examinationName || sec.examName || selectedPublishedGroup?.examName || currentExamObj.name,
+          sectionName: st.sectionName || sec.sectionName,
+          sectionId: st.sectionId || sec.sectionId,
+        })),
+      };
       if (isPublished) {
-        setSelectedPublishedSection(sec);
+        setSelectedPublishedSection(fallbackSection);
       } else {
-        setSelectedSectionDetails(sec);
+        setSelectedSectionDetails(fallbackSection);
       }
     }
   };
@@ -725,30 +1220,44 @@ export default function ResultProcessingPage() {
   const handleViewStudentMemo = async (student) => {
     try {
       const studentId = student.studentId || student.id;
-      const examId = student.examinationId || student.examId || applied.exam || filters.exam;
+      const examId = student.examinationId || student.examId || selectedPublishedGroup?.examId || applied.exam || filters.exam;
+      const bId = student.boardId || selectedPublishedGroup?.boardId || applied.board || filters.board;
+      const yId = student.academicYearId || selectedPublishedGroup?.academicYearId || applied.year || filters.year;
+      const lId = student.academicLevelId || selectedPublishedGroup?.academicLevelId || applied.level || filters.level;
+      const gId = student.groupId || selectedPublishedGroup?.groupId || applied.group || filters.group;
+      const pId = student.programId || selectedPublishedGroup?.programId || applied.program || filters.program || undefined;
+
       const res = await apiClient.get("/api/v1/results/student-result", {
         params: {
           studentId,
           examId,
-          boardId: applied.board || filters.board,
-          academicYearId: applied.year || filters.year,
-          academicLevelId: applied.level || filters.level,
-          groupId: applied.group || filters.group,
-          programId: applied.program || filters.program || undefined
-        }
+          boardId: bId || undefined,
+          academicYearId: yId || undefined,
+          academicLevelId: lId || undefined,
+          groupId: gId || undefined,
+          programId: pId || undefined,
+        },
       });
       const memoData = unwrapPayload(res);
+      const examTitle = memoData?.examinationName || student.examinationName || selectedPublishedGroup?.examName || currentExamObj.name;
       if (memoData && typeof memoData === "object" && (memoData.studentId || memoData.studentName)) {
         setSelectedStudentMemo({
           ...student,
           ...memoData,
-          subjects: memoData.subjects || student.subjects || []
+          examinationName: examTitle,
+          subjects: memoData.subjects || student.subjects || [],
         });
       } else {
-        setSelectedStudentMemo(student);
+        setSelectedStudentMemo({
+          ...student,
+          examinationName: examTitle,
+        });
       }
     } catch (err) {
-      setSelectedStudentMemo(student);
+      setSelectedStudentMemo({
+        ...student,
+        examinationName: student.examinationName || selectedPublishedGroup?.examName || currentExamObj.name,
+      });
     }
   };
 
@@ -758,18 +1267,35 @@ export default function ResultProcessingPage() {
     const examId = student.examinationId || student.examId || applied.exam || filters.exam;
     try {
       showToast("Downloading student marks memo PDF...");
-      const res = await apiClient.get("/api/v1/results/students/memo", {
-        params: {
-          studentId,
-          examId,
-          boardId: applied.board || filters.board,
-          academicYearId: applied.year || filters.year,
-          academicLevelId: applied.level || filters.level,
-          groupId: applied.group || filters.group,
-          programId: applied.program || filters.program || undefined
-        },
-        responseType: "blob"
-      });
+      let res;
+      try {
+        res = await apiClient.get("/api/v1/results/students/memo", {
+          params: {
+            studentId,
+            examId,
+            boardId: bId || undefined,
+            academicYearId: yId || undefined,
+            academicLevelId: lId || undefined,
+            groupId: gId || undefined,
+            programId: pId || undefined,
+          },
+          responseType: "blob",
+        });
+      } catch (firstErr) {
+        // Fallback to /api/v1/results/download-pdf
+        res = await apiClient.get("/api/v1/results/download-pdf", {
+          params: {
+            studentId,
+            examId,
+            boardId: bId || undefined,
+            academicYearId: yId || undefined,
+            academicLevelId: lId || undefined,
+            groupId: gId || undefined,
+            programId: pId || undefined,
+          },
+          responseType: "blob",
+        });
+      }
       downloadBlob(res.data, `ResultMemo_${student.rollNo || studentId}.pdf`);
       showToast("Marks memo downloaded successfully!");
     } catch (err) {
@@ -808,7 +1334,7 @@ export default function ResultProcessingPage() {
   }, [applied, filters, rankSearch]);
 
   useEffect(() => {
-    if (viewMode === "rankList" && (resultsGenerated || applied.exam || filters.exam)) {
+    if (viewMode === "rankList" && resultsGenerated) {
       fetchRankList();
     }
   }, [viewMode, resultsGenerated, fetchRankList]);
@@ -901,7 +1427,7 @@ export default function ResultProcessingPage() {
   }, [applied, filters]);
 
   useEffect(() => {
-    if (viewMode === "analytics" && (resultsGenerated || applied.exam || filters.exam)) {
+    if (viewMode === "analytics" && resultsGenerated) {
       fetchAnalyticsData();
     }
   }, [viewMode, resultsGenerated, fetchAnalyticsData]);
@@ -994,11 +1520,17 @@ export default function ResultProcessingPage() {
     try {
       showToast("Downloading Results Excel file...");
       const res = await apiClient.get("/api/v1/results/export-excel", {
-        params: { boardId, academicYearId, academicLevelId, groupId, examId },
-        responseType: "blob"
+        params: {
+          boardId: boardId || undefined,
+          academicYearId: academicYearId || undefined,
+          academicLevelId: academicLevelId || undefined,
+          groupId: groupId || undefined,
+          examId: examId || undefined,
+        },
+        responseType: "blob",
       });
       if (res.data && res.data.size > 0) {
-        downloadBlob(res.data, `Results_${Date.now()}.xlsx`);
+        downloadBlob(res.data, `${filename || "Results"}_${Date.now()}.xlsx`);
         showToast("Results exported to Excel successfully!");
         return;
       }
@@ -1147,6 +1679,7 @@ export default function ResultProcessingPage() {
                 setSelectedPublishedGroup(null);
                 setSelectedPublishedSection(null);
                 setSelectedStudentMemo(null);
+                fetchPublishedGroups();
               }}
             >
               <Globe size={16} style={{ marginRight: 6 }} />
@@ -1191,6 +1724,7 @@ export default function ResultProcessingPage() {
                     <Select
                       label="Board"
                       value={filters.board}
+                      disabled={true}
                       onChange={(v) => changeFilter("board", v)}
                     >
                       <option value="">Select Board</option>
@@ -1207,7 +1741,7 @@ export default function ResultProcessingPage() {
                     <Select
                       label="Academic Year"
                       value={filters.year}
-                      disabled={!filters.board}
+                      disabled={true}
                       onChange={(v) => changeFilter("year", v)}
                     >
                       <option value="">Select Academic Year</option>
@@ -1354,6 +1888,7 @@ export default function ResultProcessingPage() {
             {!selectedPublishedGroup && (
               <PublishedGroupsList
                 groups={publishedGroups}
+                loading={loadingPublished}
                 search={publishedSearch}
                 setSearch={setPublishedSearch}
                 statusFilter={publishedStatusFilter}
@@ -1394,7 +1929,7 @@ export default function ResultProcessingPage() {
 
         {/* TAB 3: RANK LIST (With Pass/Fail Filter) */}
         {viewMode === "rankList" && !selectedStudentMemo && (
-          !resultsGenerated && !apiRankRecords.length ? (
+          !resultsGenerated ? (
             <PreGenerateNotice mode="rank" onGoToGenerate={() => setViewMode("table")} />
           ) : (
             <RankListView
@@ -1416,7 +1951,7 @@ export default function ResultProcessingPage() {
 
         {/* TAB 4: ANALYTICS (Subject Analysis & Passed/Failed Modals) */}
         {viewMode === "analytics" && !selectedStudentMemo && (
-          !resultsGenerated && !apiAnalytics ? (
+          !resultsGenerated ? (
             <PreGenerateNotice mode="analytics" onGoToGenerate={() => setViewMode("table")} />
           ) : (
             <AnalyticsView
@@ -1736,6 +2271,7 @@ function SectionsTable({
 /* Published Groups List (Previous Published Results) */
 function PublishedGroupsList({
   groups,
+  loading = false,
   search,
   setSearch,
   statusFilter,
@@ -1839,7 +2375,7 @@ function PublishedGroupsList({
               onChange={(e) => setExamFilter(e.target.value)}
               aria-label="Filter by Examination"
             >
-              <option value="all">All Subjects</option>
+              <option value="all">All Examinations</option>
               {examOptions.map((ex) => (
                 <option key={ex} value={ex}>
                   {ex}
@@ -1909,7 +2445,7 @@ function PublishedGroupsList({
               ) : (
                 <tr>
                   <td colSpan={10} className="cms-empty-td">
-                    No published exam results match your filter.
+                    {loading ? "Loading published examination results from database..." : "No published exam results match your filter."}
                   </td>
                 </tr>
               )}

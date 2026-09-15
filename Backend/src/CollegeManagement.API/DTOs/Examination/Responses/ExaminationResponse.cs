@@ -6,6 +6,7 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
     public class ExaminationResponse
     {
         public int ExaminationId { get; set; }
+        public int ExamId { get => ExaminationId; set => ExaminationId = value; }
         public string ExamCode { get; set; } = string.Empty;
         public string ExamName { get; set; } = string.Empty;
 
@@ -14,9 +15,11 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
 
         public int AcademicYearId { get; set; }
         public string AcademicYear { get; set; } = string.Empty;
+        public string AcademicYearName { get => AcademicYear; set => AcademicYear = value; }
 
         public int AcademicLevelId { get; set; }
         public string AcademicLevel { get; set; } = string.Empty;
+        public string AcademicLevelName { get => AcademicLevel; set => AcademicLevel = value; }
 
         public int GroupId { get; set; }
         public string GroupName { get; set; } = string.Empty;

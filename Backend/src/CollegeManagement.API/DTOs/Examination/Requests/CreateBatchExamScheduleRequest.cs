@@ -8,6 +8,17 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
         public int ExaminationId { get; set; }
         public List<int> SubjectIds { get; set; } = new List<int>();
         public DateOnly ExamDate { get; set; }
+        public string? Date
+        {
+            get => ExamDate.ToString("yyyy-MM-dd");
+            set
+            {
+                if (!string.IsNullOrWhiteSpace(value) && DateOnly.TryParse(value, out var d))
+                {
+                    ExamDate = d;
+                }
+            }
+        }
         public TimeOnly StartTime { get; set; }
         public TimeOnly EndTime { get; set; }
         public string? SessionId { get; set; }
@@ -32,7 +43,25 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
             set => Invigilator = value;
         }
         public string ExamMode { get; set; } = "Objective";
+        public string? Mode
+        {
+            get => ExamMode;
+            set
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                    ExamMode = value;
+            }
+        }
         public decimal MaxMarks { get; set; } = 100.00m;
+        public decimal? TotalMarks
+        {
+            get => MaxMarks;
+            set
+            {
+                if (value.HasValue && value.Value > 0)
+                    MaxMarks = value.Value;
+            }
+        }
         public decimal PassingMarks { get; set; } = 35.00m;
     }
 }

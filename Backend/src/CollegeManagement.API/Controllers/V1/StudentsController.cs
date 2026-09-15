@@ -1,4 +1,4 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
 using CollegeManagement.API.DTOs.Students.Responses;
@@ -25,29 +25,31 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IStudentService _service;
         private readonly IStudentExportService _exportService;
         private readonly IStudentImportService _importService;
+        private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
+        private readonly IAuthService _authService;
 
         public StudentsController(
             IStudentService service,
             IStudentExportService exportService,
-            IStudentImportService importService)
+            IStudentImportService importService,
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
+            IAuthService? authService = null)
         {
             _service = service;
             _exportService = exportService;
             _importService = importService;
+            _jwtTokenHelper = jwtTokenHelper;
+            _authService = authService!;
         }
 
         private int GetCurrentStudentId()
         {
-            var studentIdClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User?.FindFirst("sub")?.Value
-                ?? User?.FindFirst("StudentId")?.Value
-                ?? User?.FindFirst("UserId")?.Value;
-
-            if (string.IsNullOrEmpty(studentIdClaim) || !int.TryParse(studentIdClaim, out var studentId) || studentId <= 0)
+            var studentId = _jwtTokenHelper.GetStudentId(User);
+            if (!studentId.HasValue || studentId.Value <= 0)
             {
                 throw new UnauthorizedException("User is not authenticated or student identifier claim is missing/invalid.");
             }
-            return studentId;
+            return studentId.Value;
         }
 
 
@@ -167,20 +169,28 @@ namespace CollegeManagement.API.Controllers.V1
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
 
-            var studentId = GetCurrentStudentId();
-            try
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
             {
-                var success = await _service.ChangePasswordAsync(studentId, request);
-                return Ok(new
-                {
-                    status = true,
-                    message = "Password changed successfully. Initial login credential is now consumed."
-                });
+                throw new UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
             }
-            catch (ArgumentException ex)
+
+            var (success, message) = await _authService.ChangePasswordAsync(
+                userId.Value,
+                request.OldPassword,
+                request.NewPassword,
+                request.ConfirmPassword);
+
+            if (!success)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(new { message = message });
             }
+
+            return Ok(new
+            {
+                status = true,
+                message = "Password changed successfully. Initial login credential is now consumed."
+            });
         }
 
 

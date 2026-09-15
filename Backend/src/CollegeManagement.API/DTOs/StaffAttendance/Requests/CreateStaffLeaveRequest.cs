@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using CollegeManagement.API.Enums;
 
 namespace CollegeManagement.API.DTOs.StaffAttendance.Requests
@@ -7,6 +7,7 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Requests
     {
         public int StaffId { get; set; }
         public LeaveType LeaveType { get; set; }
+        public int? LeaveCategoryId { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
         public string? Reason { get; set; }

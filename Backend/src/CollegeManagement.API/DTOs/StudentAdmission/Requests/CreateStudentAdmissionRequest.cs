@@ -57,7 +57,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? BloodGroup { get; set; }
         [FromForm(Name = "Email")]
-        [EmailAddress]
         public string? StudentEmail { get; set; }
         [FromForm(Name = "Student Mobile")]
         public string? StudentMobileNumber { get; set; }
@@ -84,7 +83,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? FatherMobile { get; set; }
 
-        [EmailAddress]
         public string? FatherEmail { get; set; }
 
 
@@ -95,7 +93,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? MotherMobile { get; set; }
 
-        [EmailAddress]
         public string? MotherEmail { get; set; }
 
 
@@ -104,7 +101,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? GuardianMobile { get; set; }
 
-        [EmailAddress]
         public string? GuardianEmail { get; set; }
 
 

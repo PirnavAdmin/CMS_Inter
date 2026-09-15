@@ -10,6 +10,40 @@
     <link rel="shortcut icon" type="image/png" href="/favicon.png?v=pirnav-crest-2026" />
     <link rel="apple-touch-icon" href="/favicon.png?v=pirnav-crest-2026" />
     <script>
+      // Global safety handler to prevent third-party extension/content-script crashes (e.g., reportAllChanges, startTime errors)
+      window.addEventListener('error', function (event) {
+        try {
+          var msg = (event && event.message) ? String(event.message).toLowerCase() : '';
+          var filename = (event && event.filename) ? String(event.filename) : '';
+          var stack = (event && event.error && event.error.stack) ? String(event.error.stack).toLowerCase() : '';
+
+          var isExtensionError =
+            (msg.indexOf('starttime') !== -1 && (msg.indexOf('undefined') !== -1 || msg.indexOf('null') !== -1)) ||
+            msg.indexOf('reportallchanges') !== -1 ||
+            stack.indexOf('reportallchanges') !== -1 ||
+            filename.indexOf('extensions::') !== -1 ||
+            filename.indexOf('chrome-extension://') !== -1 ||
+            filename.indexOf('moz-extension://') !== -1;
+
+          if (isExtensionError) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return true;
+          }
+        } catch (e) {}
+      }, true);
+
+      window.addEventListener('unhandledrejection', function (event) {
+        try {
+          var reason = event && event.reason;
+          var msg = reason ? (reason.message || String(reason)).toLowerCase() : '';
+          if (msg.indexOf('starttime') !== -1 || msg.indexOf('reportallchanges') !== -1) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        } catch (e) {}
+      });
+
       try {
         var theme = localStorage.getItem('pirnav-theme') || 'light';
         document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');

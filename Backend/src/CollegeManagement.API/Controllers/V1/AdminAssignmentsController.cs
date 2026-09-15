@@ -1,5 +1,6 @@
 ﻿using CollegeManagement.API.DTOs.Assignment.Admin;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CollegeManagement.API.Controllers
@@ -7,6 +8,7 @@ namespace CollegeManagement.API.Controllers
     [ApiController]
     [Route("api/admin/assignments")]
     [Produces("application/json")]
+    [Authorize]
 
 
     public class AdminAssignmentsController : ControllerBase

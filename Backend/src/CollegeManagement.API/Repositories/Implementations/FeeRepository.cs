@@ -404,20 +404,51 @@ public class FeeRepository : IFeeRepository
     // =========================================================
     // STUDENT FEES
     // =========================================================
-
     public async Task<StudentFeeResponse?> AssignStudentFeeAsync(
-        AssignStudentFeeRequest request)
+    AssignStudentFeeRequest request)
     {
         using var c = Connection();
 
-        return await c.QueryFirstOrDefaultAsync<StudentFeeResponse>(
+        using var multi = await c.QueryMultipleAsync(
             "sp_AssignStudentFee",
             new
             {
                 p_StudentId = request.StudentId,
-                p_FeeStructureId = request.FeeStructureId
+                p_FeeStructureId = request.FeeStructureId,
+                p_PlanName = request.PlanName,
+                p_NumberOfInstallments = request.NumberOfInstallments
             },
             commandType: CommandType.StoredProcedure);
+
+        // Result Set 1:
+        // sp_AutoCreatePaymentPlan -> FeePaymentPlans
+        var paymentPlan =
+            await multi.ReadFirstOrDefaultAsync<PaymentPlanResponse>();
+
+        // Result Set 2:
+        // sp_AutoCreatePaymentPlan -> FeeInstallments
+        var schedules =
+            (await multi.ReadAsync<FeeScheduleResponse>())
+            .ToList();
+
+        // Result Set 3:
+        // sp_AssignStudentFee -> StudentFees
+        var studentFee =
+            await multi.ReadFirstOrDefaultAsync<StudentFeeResponse>();
+
+        if (studentFee == null)
+            return null;
+
+        // Attach payment plan information to response
+        if (paymentPlan != null)
+        {
+            studentFee.PaymentPlan = paymentPlan.PlanName;
+        }
+
+        // Attach installments/schedules
+        studentFee.Schedules = schedules;
+
+        return studentFee;
     }
 
 
@@ -425,8 +456,7 @@ public class FeeRepository : IFeeRepository
     // STUDENT FEE BY STUDENT FEE ID
     // =========================================================
 
-    public async Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(
-    int id)
+    public async Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id)
     {
         using var c = Connection();
 
@@ -440,17 +470,23 @@ public class FeeRepository : IFeeRepository
             new
             {
                 p_StudentId = id
-            },
-            commandType: CommandType.Text);
+            });
 
+        // Result Set 1: Student Fee Summary
         var result =
             await multi.ReadFirstOrDefaultAsync<StudentFeeDetailsResponse>();
 
         if (result == null)
             return null;
 
+        // Result Set 2: Fee Breakdown
         result.Breakdown =
             (await multi.ReadAsync<StudentFeeBreakdownResponse>())
+            .ToList();
+
+        // Result Set 3: Payment Schedules
+        result.Schedules =
+            (await multi.ReadAsync<FeeScheduleResponse>())
             .ToList();
 
         return result;
@@ -467,9 +503,8 @@ public class FeeRepository : IFeeRepository
     // 2. Student fee components
     //
     // =========================================================
-
     public async Task<StudentFeeDetailsResponse?>
-        GetStudentFeeDetailsByStudentAsync(int studentId)
+    GetStudentFeeDetailsByStudentAsync(int studentId)
     {
         using var c = Connection();
 
@@ -481,19 +516,25 @@ public class FeeRepository : IFeeRepository
             },
             commandType: CommandType.StoredProcedure);
 
+        // Result Set 1: Student Fee Summary
         var studentDetails =
             await multi.ReadFirstOrDefaultAsync<StudentFeeDetailsResponse>();
 
         if (studentDetails == null)
             return null;
 
+        // Result Set 2: Fee Breakdown
         studentDetails.Breakdown =
             (await multi.ReadAsync<StudentFeeBreakdownResponse>())
             .ToList();
 
+        // Result Set 3: Payment Schedules
+        studentDetails.Schedules =
+            (await multi.ReadAsync<FeeScheduleResponse>())
+            .ToList();
+
         return studentDetails;
     }
-
 
     // =========================================================
     // COMMON STUDENT FEE READER
@@ -625,25 +666,7 @@ public class FeeRepository : IFeeRepository
                 return null;
             }
 
-            foreach (var i in request.Installments)
-            {
-                await c.ExecuteAsync(
-                    "sp_AddPaymentPlanInstallment",
-                    new
-                    {
-                        p_FeePaymentPlanId =
-                            plan.FeePaymentPlanId,
-
-                        p_InstallmentNumber =
-                            i.InstallmentNumber,
-
-                        p_Amount = i.Amount,
-
-                        p_DueDate = i.DueDate
-                    },
-                    tx,
-                    commandType: CommandType.StoredProcedure);
-            }
+           
 
             tx.Commit();
 

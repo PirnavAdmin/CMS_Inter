@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Result
 {
@@ -9,6 +9,8 @@ namespace CollegeManagement.API.DTOs.Result
 
         [Required]
         public int StudentId { get; set; }
+
+        public int? SubjectId { get; set; }
 
         [Required]
         [MaxLength(500)]

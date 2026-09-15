@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { CalendarDays, ChevronDown, Copy, Download, Eye, FileSpreadsheet, FileText, Pencil, Power, Search, Trash2, UserPlus, UsersRound } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronDown, Copy, Download, Eye, FileSpreadsheet, FileText, Pencil, Power, Search, Trash2, UserPlus, UsersRound } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./TimetablePage.css";
 
 const EMPTY = {
@@ -27,7 +29,7 @@ const list = (x) => {
   // Unwrap response envelopes until the collection is reached.
   for (let depth = 0; depth < 4 && value && !Array.isArray(value); depth += 1) {
     if (Array.isArray(value?.$values)) return value.$values;
-    const next = value?.data ?? value?.items ?? value?.result ?? value?.results
+    const next = value?.data ?? value?.Data ?? value?.items ?? value?.Items ?? value?.result ?? value?.results
       ?? value?.timetableSlots ?? value?.slots ?? value?.generatedSlots
       ?? value?.programs ?? value?.sections;
     if (next === undefined || next === value) break;
@@ -95,6 +97,27 @@ const optionize = (x, ids, labels) =>
       raw,
     }))
     .filter((item) => item.id && item.name);
+const facultyOptionLabel = (entry) => {
+  const source = entry?.raw ?? entry;
+  const identifier = pick(
+    source,
+    "staffCode", "StaffCode", "facultyCode", "FacultyCode", "employeeId", "EmployeeId",
+    "staffId", "StaffId", "facultyId", "FacultyId", "id", "Id",
+  ) ?? entry?.id;
+  return identifier ? `${identifier} - ${entry?.name ?? ""}` : (entry?.name ?? "");
+};
+const studentOptionLabel = (entry) => {
+  const admissionNumber = pick(
+    entry?.raw ?? entry,
+    "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo",
+    "admissionId", "AdmissionId",
+  );
+  return admissionNumber ? `${admissionNumber} - ${entry?.name ?? ""}` : (entry?.name ?? "");
+};
+const allocateWeeklyPeriods = (subjects, periodsPerDay) => {
+  const initialPeriods = Math.max(0, Math.floor(Number(periodsPerDay) || 0));
+  return Object.fromEntries(subjects.map((subject) => [subject.id, initialPeriods]));
+};
 const sectionsForProgramme = (payload, program, groupId, academicLevelId) => {
   if (!program) return [];
   const programId = String(pick(program.raw, "programId", "ProgramId", "id", "Id") ?? "");
@@ -165,25 +188,6 @@ const slotSubjectName = (slot, subjects) =>
   ?? "Untitled subject";
 const slotFacultyName = (slot) => pick(slot, "facultyName", "FacultyName", "staffName", "StaffName") ?? pick(slot?.faculty, "facultyName", "FacultyName", "staffName", "StaffName", "fullName", "FullName", "name", "Name") ?? "Unassigned";
 const slotRoomName = (slot) => pick(slot, "roomName", "RoomName", "roomCode", "RoomCode") ?? pick(slot?.room, "roomName", "RoomName", "roomCode", "RoomCode", "name", "Name") ?? "—";
-const facultyOptionLabel = (entry) => {
-  const raw = entry?.raw ?? entry;
-  const code = pick(raw, "staffCode", "StaffCode", "facultyCode", "FacultyCode", "employeeId", "EmployeeId", "staffId", "StaffId", "facultyId", "FacultyId", "id", "Id");
-  const name = entry?.name ?? pick(raw, "facultyName", "FacultyName", "staffName", "StaffName", "fullName", "FullName", "name", "Name");
-  return code && name ? `${code} - ${name}` : String(name || "");
-};
-const previewSubstitution = (entry) => {
-  const start = pick(entry, "startTime", "StartTime");
-  const end = pick(entry, "endTime", "EndTime");
-  return {
-    id: pick(entry, "substitutionId", "SubstitutionId", "id", "Id", "timetableId", "TimetableId"),
-    period: pick(entry, "periodName", "PeriodName", "periodNumber", "PeriodNumber") ?? "—",
-    time: pick(entry, "time", "Time") ?? (start && end ? `${String(start).slice(0, 5)} - ${String(end).slice(0, 5)}` : "—"),
-    subject: pick(entry, "subjectName", "SubjectName") ?? "—",
-    section: pick(entry, "sectionName", "SectionName") ?? "—",
-    originalFaculty: pick(entry, "originalStaffName", "OriginalStaffName", "originalFacultyName", "OriginalFacultyName") ?? "—",
-    substituteFaculty: pick(entry, "existingSubstituteStaffName", "ExistingSubstituteStaffName", "substituteStaffName", "SubstituteStaffName", "substituteFacultyName", "SubstituteFacultyName") ?? "",
-  };
-};
 const isBreakPeriod = (period) => {
   const raw = period?.raw ?? period;
   const isBreak = pick(raw, "isBreak", "IsBreak", "isBreakPeriod", "IsBreakPeriod");
@@ -246,10 +250,10 @@ function Field({ label, children }) {
     </label>
   );
 }
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, className = "" }) {
   return (
     <div className="ttm-overlay">
-      <section className="ttm-modal">
+      <section className={`ttm-modal ${className}`.trim()}>
         <header>
           <h2>{title}</h2>
           <button type="button" onClick={onClose}>
@@ -405,14 +409,16 @@ function useLookups(initial = {}) {
   }, [value.boardId, data.allYears, data.boards]);
   useEffect(() => {
     if (!value.boardId) return;
-    apiClient
-      .get(apiEndpoints.groups.list, {
+    Promise.allSettled([
+      apiClient.get(apiEndpoints.groups.list, {
         params: {
           boardId: value.boardId,
           isActive: true,
         },
-      })
-      .then((r) =>
+      }),
+      apiClient.get(apiEndpoints.boards.academicLevels, { params: { boardId: value.boardId } }),
+    ])
+      .then(([groupsResult, levelsResult]) =>
         setData((current) => ({
           ...current,
           years: uniqueAcademicYearsByName(boardMappedOptions(
@@ -422,17 +428,26 @@ function useLookups(initial = {}) {
             ["academicYearIds", "AcademicYearIds", "yearIds", "YearIds"],
             ["academicYearNames", "AcademicYearNames", "yearNames", "YearNames"],
           ), (item) => item.name),
-          levels: boardMappedOptions(
-            current.allLevels,
-            current.boards,
-            value.boardId,
-            ["academicLevelIds", "AcademicLevelIds", "levelIds", "LevelIds"],
-            ["academicLevelNames", "AcademicLevelNames", "levelNames", "LevelNames"],
-          ),
-          groups: optionize(r.data, ["groupId", "id", "Id"], ["groupName", "name", "Name"]),
+          levels:
+            levelsResult.status === "fulfilled"
+              ? optionize(
+                  levelsResult.value.data,
+                  ["academicLevelId", "levelId", "id", "Id"],
+                  ["academicLevelName", "levelName", "name", "Name"],
+                )
+              : boardMappedOptions(
+                  current.allLevels,
+                  current.boards,
+                  value.boardId,
+                  ["academicLevelIds", "AcademicLevelIds", "levelIds", "LevelIds"],
+                  ["academicLevelNames", "AcademicLevelNames", "levelNames", "LevelNames"],
+                ),
+          groups: groupsResult.status === "fulfilled"
+            ? optionize(groupsResult.value.data, ["groupId", "id", "Id"], ["groupName", "name", "Name"])
+            : [],
         })),
       )
-      .catch(() => setData((current) => ({ ...current, groups: [] })));
+      .catch(() => setData((current) => ({ ...current, groups: [], levels: [] })));
   }, [
     value.boardId,
     data.allYears,
@@ -573,7 +588,7 @@ function useLookups(initial = {}) {
   };
   return { value, data, change, setValue, reloadSections };
 }
-function Context({ state, section = true, compact = false }) {
+function Context({ state, section = true, compact = false, hideGlobalContext = false }) {
   const { value, data, change } = state;
   const select = (label, key, values, disabled, emptyLabel = `Select ${label}`) => (
     <Field label={label}>
@@ -588,9 +603,9 @@ function Context({ state, section = true, compact = false }) {
     </Field>
   );
   return (
-    <div className={`ttm-context${compact ? " ttm-draft-context" : ""}`}>
-      {select("Board", "boardId", data.boards)}
-      {select("Academic Year", "academicYearId", data.years, !value.boardId)}
+    <div className={`ttm-context${compact ? " ttm-draft-context" : ""}${hideGlobalContext ? " ttm-global-context" : ""}`}>
+      {!hideGlobalContext && select("Board", "boardId", data.boards)}
+      {!hideGlobalContext && select("Academic Year", "academicYearId", data.years, !value.boardId)}
       {select("Academic Level", "academicLevelId", data.levels, !value.academicYearId)}
       {select("Group", "groupId", data.groups, !value.academicLevelId)}
       {select(
@@ -640,6 +655,7 @@ function StructureForm({ item, close, saved }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [breakTypes, setBreakTypes] = useState([]);
+  const [previewRequested, setPreviewRequested] = useState(Boolean(structureId(item)));
   useEffect(() => {
     apiClient
       .get(apiEndpoints.breakTypes.list)
@@ -660,13 +676,51 @@ function StructureForm({ item, close, saved }) {
       })
       .catch((requestError) => setError(getApiErrorMessage(requestError)));
   }, [item]);
+  const validationMessage = useCallback(() => {
+    if (!form.name.trim()) return "Structure Name is required.";
+    if (!/^\d{2}:\d{2}/.test(form.dayStartTime)) return "Day Start Time is required.";
+    const periods = Number(form.totalTeachingPeriods), duration = Number(form.periodDurationMinutes);
+    if (!Number.isInteger(periods) || periods < 1 || periods > 15) return "Teaching Periods must be between 1 and 15.";
+    if (!Number.isFinite(duration) || duration < 20 || duration > 120) return "Period Duration must be between 20 and 120 minutes.";
+    const positions = new Set();
+    for (const entry of form.breaks) {
+      if (!entry.breakTypeId || !entry.afterPeriod || !entry.durationMinutes) return "Complete every break configuration row.";
+      const after = Number(entry.afterPeriod), breakDuration = Number(entry.durationMinutes);
+      if (!Number.isInteger(after) || after < 1 || after >= periods) return "A break must be after a valid teaching period, before the final period.";
+      if (!Number.isFinite(breakDuration) || breakDuration <= 0) return "Break duration must be greater than zero.";
+      if (positions.has(after)) return "Only one break can be configured after each period.";
+      positions.add(after);
+    }
+    return "";
+  }, [form]);
+  const preview = useMemo(() => {
+    if (validationMessage()) return [];
+    const [hour, minute] = form.dayStartTime.slice(0, 5).split(":").map(Number);
+    let cursor = hour * 60 + minute;
+    const format = (total) => {
+      const normalized = ((total % 1440) + 1440) % 1440, h = Math.floor(normalized / 60), m = normalized % 60;
+      const suffix = h >= 12 ? "PM" : "AM", displayHour = h % 12 || 12;
+      return `${String(displayHour).padStart(2, "0")}:${String(m).padStart(2, "0")} ${suffix}`;
+    };
+    const breaksByPeriod = new Map(form.breaks.map((entry) => [Number(entry.afterPeriod), entry]));
+    return Array.from({ length: Number(form.totalTeachingPeriods) }, (_, index) => {
+      const period = index + 1, start = cursor; cursor += Number(form.periodDurationMinutes);
+      const rows = [{ kind: "period", label: `P${period}`, start: format(start), end: format(cursor) }];
+      const breakItem = breaksByPeriod.get(period);
+      if (breakItem) { const breakStart = cursor; cursor += Number(breakItem.durationMinutes); rows.push({ kind: "break", label: breakTypes.find((type) => String(type.id) === String(breakItem.breakTypeId))?.name || "Break", start: format(breakStart), end: format(cursor) }); }
+      return rows;
+    }).flat();
+  }, [form, breakTypes, validationMessage]);
   const save = async () => {
     if (saving) return;
+    const message = validationMessage();
+    if (message) { setError(message); return; }
     setSaving(true);
     setError("");
     try {
       const payload = {
         ...form,
+        name: form.name.trim(),
         dayStartTime: /^\d{2}:\d{2}$/.test(form.dayStartTime)
           ? `${form.dayStartTime}:00`
           : form.dayStartTime,
@@ -689,39 +743,42 @@ function StructureForm({ item, close, saved }) {
       setSaving(false);
     }
   };
-  const set = (key) => (e) => setForm((x) => ({ ...x, [key]: e.target.value }));
+  const set = (key) => (e) => { setPreviewRequested(false); setForm((x) => ({ ...x, [key]: e.target.value })); };
+  const updateBreak = (index, key, next) => { setPreviewRequested(false); setForm((current) => ({ ...current, breaks: current.breaks.map((entry, entryIndex) => entryIndex === index ? { ...entry, [key]: next } : entry) })); };
   return (
     <Modal
       title={structureId(item) ? "Edit Period Structure" : "Create Period Structure"}
       onClose={close}
     >
       <div className="ttm-modal-body">
-        <div className="ttm-form-grid">
+        <div className="ttm-period-structure-main-fields">
           <Field label="Structure Name">
             <input value={form.name} onChange={set("name")} />
           </Field>
           <Field label="Day Start Time">
             <input type="time" value={form.dayStartTime} onChange={set("dayStartTime")} />
           </Field>
-          <Field label="Period Duration (minutes)">
-            <input
-              type="number"
-              min="1"
-              value={form.periodDurationMinutes}
-              onChange={set("periodDurationMinutes")}
-            />
-          </Field>
           <Field label="Teaching Periods">
             <input
               type="number"
               min="1"
+              max="15"
               value={form.totalTeachingPeriods}
               onChange={set("totalTeachingPeriods")}
             />
           </Field>
+          <Field label="Period Duration (minutes)">
+            <input
+              type="number"
+              min="20"
+              max="120"
+              value={form.periodDurationMinutes}
+              onChange={set("periodDurationMinutes")}
+            />
+          </Field>
         </div>
         <div className="ttm-break-head">
-          <b>Break configuration</b>
+          <b>Break Configuration</b>
           <Btn
             className="cms-btn cms-btn-ghost"
             disabled={!breakTypes.length}
@@ -742,31 +799,17 @@ function StructureForm({ item, close, saved }) {
           <div className="ttm-break-row" key={`${breakItem.breakTypeId}-${index}`}>
             <select
               value={breakItem.breakTypeId}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  breaks: current.breaks.map((entry, entryIndex) =>
-                    entryIndex === index ? { ...entry, breakTypeId: event.target.value } : entry,
-                  ),
-                }))
-              }
+              onChange={(event) => updateBreak(index, "breakTypeId", event.target.value)}
             >
               <option value="">Select break type</option>
               {breakTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
             </select>
             <select
               value={breakItem.afterPeriod}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  breaks: current.breaks.map((entry, entryIndex) =>
-                    entryIndex === index ? { ...entry, afterPeriod: event.target.value } : entry,
-                  ),
-                }))
-              }
+              onChange={(event) => updateBreak(index, "afterPeriod", event.target.value)}
             >
               <option value="">After period</option>
-              {Array.from({ length: Number(form.totalTeachingPeriods) || 0 }, (_, number) => (
+              {Array.from({ length: Math.max((Number(form.totalTeachingPeriods) || 0) - 1, 0) }, (_, number) => (
                 <option key={number + 1} value={number + 1}>After P{number + 1}</option>
               ))}
             </select>
@@ -776,14 +819,7 @@ function StructureForm({ item, close, saved }) {
               aria-label="Break duration in minutes"
               placeholder="Minutes"
               value={breakItem.durationMinutes}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  breaks: current.breaks.map((entry, entryIndex) =>
-                    entryIndex === index ? { ...entry, durationMinutes: event.target.value } : entry,
-                  ),
-                }))
-              }
+              onChange={(event) => updateBreak(index, "durationMinutes", event.target.value)}
             />
             <button
               type="button"
@@ -791,10 +827,12 @@ function StructureForm({ item, close, saved }) {
                 setForm((current) => ({ ...current, breaks: current.breaks.filter((_, entryIndex) => entryIndex !== index) }))
               }
             >
-              Remove
+              Delete
             </button>
           </div>
         ))}
+        <Btn className="cms-btn cms-btn-ghost ttm-preview-button" onClick={() => { const message = validationMessage(); setError(message); setPreviewRequested(!message); }}>Generate Preview</Btn>
+        {previewRequested && preview.length ? <section className="ttm-structure-preview"><h3>Generated Period Structure</h3>{preview.map((entry, index) => <div key={`${entry.label}-${index}`} className={entry.kind === "break" ? "break" : ""}><b>{entry.label}</b><span>{entry.start} - {entry.end}</span></div>)}</section> : null}
         {error && <p className="ttm-validation-error">{error}</p>}
         <footer>
           <Btn className="cms-btn cms-btn-ghost" disabled={saving} onClick={close}>
@@ -904,8 +942,6 @@ function AssignStructureForm({ item, close, assigned, notify, initial }) {
     <Modal title="Assign Structure to Group" onClose={saving ? () => {} : close}>
       <div className="ttm-modal-body">
         <div className="ttm-form-grid">
-          {select("Board", "boardId", data.boards)}
-          {select("Academic Year", "academicYearId", data.years, true)}
           {select("Academic Level", "academicLevelId", data.levels, !value.academicYearId)}
           {select("Group", "groupId", data.groups, !value.academicLevelId)}
         </div>
@@ -959,16 +995,25 @@ function Structures({ notify, initial }) {
   };
   return (
     <Page
-      title="Period Structures"
-      subtitle="Manage reusable schedules for groups."
-      action={
-        <div className="ttm-page-actions">
-          <Btn onClick={() => { setItem(null); setModal("form"); }}>+ Create Structure</Btn>
-          <Link className="cms-btn cms-btn-ghost" to="/dashboard/timetable" state={{ timetableContext: initial }}>Back to Timetable</Link>
-        </div>
-      }
+  title="Period Structures"
+  subtitle="Manage reusable schedules for groups."
+>
+  <div className="ttm-period-structure-toolbar">
+    <Link
+      className="ttm-back-link"
+      to="/dashboard/timetable"
+      state={{ timetableContext: initial }}
     >
-      <section className="ttm-card">
+      <ArrowLeft size={15} />
+      Back to Timetable
+    </Link>
+
+    <Btn onClick={() => { setItem(null); setModal("form"); }}>
+      + Create Structure
+    </Btn>
+  </div>
+
+  <section className="ttm-card">
         {loading ? (
           <p className="ttm-empty">Loading period structures…</p>
         ) : !items.length ? (
@@ -1100,7 +1145,12 @@ function Structures({ notify, initial }) {
 }
 
 function Generate({ goDraft, notify, initial }) {
-  const state = useLookups(initial);
+  const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
+  const state = useLookups({
+    ...initial,
+    boardId: selectedBoardId || initial?.boardId || "",
+    academicYearId: selectedAcademicYearId || initial?.academicYearId || "",
+  });
   const { value, data } = state;
   const [requirements, setRequirements] = useState({});
   const [workingDays, setWorkingDays] = useState(() =>
@@ -1108,6 +1158,11 @@ function Generate({ goDraft, notify, initial }) {
   );
   const [capacityError, setCapacityError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [selectedSectionId, setSelectedSectionId] = useState(initial?.sectionId ?? "");
+  const [inputErrors, setInputErrors] = useState({});
+  const allocationContextRef = useRef("");
+  const allocationStateRef = useRef("");
+  const manuallyEditedRef = useRef(false);
   // The periods endpoint can include break slots. Capacity is based on actual
   // teaching periods, not every timeline entry returned by the API.
   const periodsPerDay = data.periods.filter((period) => !isBreakPeriod(period)).length;
@@ -1116,6 +1171,10 @@ function Generate({ goDraft, notify, initial }) {
     (total, weeklyPeriods) => total + (Number(weeklyPeriods) || 0),
     0,
   );
+  const selectedSection = data.sections.find((section) => String(section.id) === String(selectedSectionId)) ?? data.sections[0];
+  const remainingCapacity = weeklyCapacity - totalRequiredPeriods;
+  const allocationContext = [value.boardId, value.academicYearId, value.academicLevelId, value.groupId, value.programId].join(":");
+  const allocationState = `${allocationContext}:${periodsPerDay}:${data.subjects.map((subject) => subject.id).join(",")}`;
   const ready =
     value.boardId &&
     value.academicYearId &&
@@ -1130,6 +1189,52 @@ function Generate({ goDraft, notify, initial }) {
       current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort((a, b) => a - b),
     );
     setCapacityError("");
+  };
+  useEffect(() => {
+    setSelectedSectionId((current) =>
+      data.sections.some((section) => String(section.id) === String(current))
+        ? current
+        : (data.sections[0]?.id ?? ""),
+    );
+  }, [data.sections]);
+  useEffect(() => {
+    const contextChanged = allocationContextRef.current !== allocationContext;
+    if (contextChanged) {
+      allocationContextRef.current = allocationContext;
+      manuallyEditedRef.current = false;
+      setInputErrors({});
+    }
+    if (!data.subjects.length || (!contextChanged && (manuallyEditedRef.current || allocationStateRef.current === allocationState))) return;
+    setRequirements(allocateWeeklyPeriods(data.subjects, periodsPerDay));
+    allocationStateRef.current = allocationState;
+    setCapacityError("");
+  }, [allocationContext, allocationState, data.subjects, periodsPerDay]);
+  const updateRequirement = (subjectId, rawValue) => {
+    const text = String(rawValue ?? "");
+    if (text !== "" && !/^\d+$/.test(text)) {
+      setInputErrors((current) => ({ ...current, [subjectId]: "Enter a whole number." }));
+      return;
+    }
+    const value = text === "" ? 0 : Number(text);
+    if (!Number.isInteger(value) || value < 0 || value > weeklyCapacity) {
+      setInputErrors((current) => ({ ...current, [subjectId]: `Enter a whole number from 0 to ${weeklyCapacity}.` }));
+      return;
+    }
+    manuallyEditedRef.current = true;
+    setInputErrors((current) => {
+      const { [subjectId]: _error, ...rest } = current;
+      return rest;
+    });
+    setRequirements((current) => ({ ...current, [subjectId]: value }));
+    setCapacityError("");
+  };
+  const resetRequirements = () => {
+    manuallyEditedRef.current = false;
+    setRequirements(allocateWeeklyPeriods(data.subjects, periodsPerDay));
+    allocationStateRef.current = allocationState;
+    setWorkingDays(DEFAULT_WORKING_DAYS.map(Number));
+    setCapacityError("");
+    setInputErrors({});
   };
   const generate = async () => {
     if (busy) return;
@@ -1147,7 +1252,15 @@ function Generate({ goDraft, notify, initial }) {
       return;
     }
     if (totalRequiredPeriods > weeklyCapacity) {
-      setCapacityError(`Subject requirements total ${totalRequiredPeriods} periods, but the selected working days allow only ${weeklyCapacity} periods.`);
+      setCapacityError(`Allocated subject periods exceed weekly capacity by ${totalRequiredPeriods - weeklyCapacity} periods.`);
+      return;
+    }
+    const invalidSubject = data.subjects.find((subject) => {
+      const value = Number(requirements[subject.id]);
+      return !Number.isInteger(value) || value < 0 || value > weeklyCapacity;
+    });
+    if (invalidSubject) {
+      setCapacityError("Weekly Periods must be whole numbers from 0 to the weekly capacity.");
       return;
     }
     try {
@@ -1211,55 +1324,50 @@ function Generate({ goDraft, notify, initial }) {
       action={<div className="ttm-page-actions"><Link className="cms-btn cms-btn-ghost" to="/dashboard/timetable/setup" state={{ timetableContext: value }}>Create Period Structure</Link></div>}
     >
       <section className="ttm-card">
-        <Context state={state} section={false} />
+        <Context state={state} section={false} hideGlobalContext />
         {value.programId ? (
           <div className="ttm-generation-content">
-            <ProgrammeSections data={data} onRetry={state.reloadSections} />
-            <section className="ttm-working-days" aria-labelledby="working-days-label">
-              <header className="ttm-working-days-head">
-                <span id="working-days-label">Working Days</span>
-                <span className="ttm-capacity">Weekly Capacity: {weeklyCapacity} periods</span>
-              </header>
-              <div className="ttm-day-toggles">
-                {WORKING_DAY_OPTIONS.map((day) => (
-                  <button
-                    type="button"
-                    key={day.value}
-                    className={workingDays.includes(day.value) ? "active" : ""}
-                    aria-pressed={workingDays.includes(day.value)}
-                    onClick={() => toggleWorkingDay(day.value)}
-                  >
-                    {day.shortLabel}
-                  </button>
-                ))}
+            <section className="ttm-generate-overview">
+              <div className="ttm-generate-working-days" aria-labelledby="working-days-label">
+                <b id="working-days-label">Working Days</b>
+                <div className="ttm-day-toggles">
+                  {WORKING_DAY_OPTIONS.map((day) => (
+                    <button type="button" key={day.value} className={workingDays.includes(day.value) ? "active" : ""} aria-pressed={workingDays.includes(day.value)} onClick={() => toggleWorkingDay(day.value)}>
+                      {day.shortLabel}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <p className="ttm-generation-help">
-                Set the weekly teaching periods for each subject. These values tell the generator how many slots to create for every loaded section.
-              </p>
+              <div className="ttm-generate-sections">
+                <b>Sections ({data.sections.length})</b>
+                {data.sectionsLoading ? <span className="ttm-generate-state">Loading sections…</span> : data.sectionsError ? <button type="button" className="cms-btn cms-btn-ghost" onClick={state.reloadSections}>Retry sections</button> : <div className="ttm-generate-section-chips">
+                  {data.sections.map((section) => <button type="button" key={section.id} className={String(section.id) === String(selectedSection?.id) ? "active" : ""} aria-pressed={String(section.id) === String(selectedSection?.id)} onClick={() => setSelectedSectionId(section.id)}>{section.name}</button>)}
+                </div>}
+              </div>
+              <aside className={`ttm-generate-capacity${remainingCapacity < 0 ? " is-exceeded" : ""}`} aria-label="Weekly period capacity">
+                <b>Weekly Period Capacity</b>
+                <span>Allocated Periods <strong>{totalRequiredPeriods} / {weeklyCapacity}</strong></span>
+                <span>{remainingCapacity < 0 ? "Exceeded By" : "Periods Remaining"} <strong>{Math.abs(remainingCapacity)}</strong></span>
+                <small>{periodsPerDay} teaching periods × {workingDays.length} working days</small>
+              </aside>
             </section>
-            <section className="ttm-subject-period-section">
-              <div className="ttm-subject-period-grid">
-                {data.subjects.map((subject) => (
-                  <div className="ttm-subject-card" key={subject.id}>
-                    <Field label={`${subject.name} weekly periods`}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={requirements[subject.id] ?? ""}
-                        onChange={(e) => {
-                          setRequirements((current) => ({ ...current, [subject.id]: e.target.value }));
-                          setCapacityError("");
-                        }}
-                      />
-                    </Field>
-                  </div>
-                ))}
+            <section className="ttm-generate-subjects">
+              <div className="ttm-generate-subject-table-wrap">
+                <table className="ttm-generate-subject-table">
+                  <thead><tr><th>#</th><th>Subject Code</th><th>Subject Name</th><th>Type</th><th>Weekly Periods</th></tr></thead>
+                  <tbody>{data.subjects.length ? data.subjects.map((subject, index) => {
+                    const type = pick(subject.raw, "subjectType", "SubjectType", "type", "Type") ?? "Subject";
+                    const code = pick(subject.raw, "subjectCode", "SubjectCode", "code", "Code") ?? "—";
+                    return <tr key={subject.id}><td>{index + 1}</td><td>{code}</td><td>{subject.name}</td><td><span className={`ttm-subject-type ${String(type).toLowerCase().replace(/[^a-z]+/g, "-")}`}>{type}</span></td><td><input type="number" min="0" max={weeklyCapacity} step="1" value={requirements[subject.id] ?? 0} onChange={(event) => updateRequirement(subject.id, event.target.value)} aria-invalid={Boolean(inputErrors[subject.id])} aria-label={`${subject.name} weekly periods`} />{inputErrors[subject.id] ? <small className="ttm-weekly-period-error">{inputErrors[subject.id]}</small> : null}</td></tr>;
+                  }) : <tr><td colSpan="5" className="ttm-generate-no-subjects">No subjects are available for this timetable context.</td></tr>}</tbody>
+                </table>
               </div>
             </section>
             {capacityError ? <p className="ttm-validation-error ttm-capacity-error">{capacityError}</p> : null}
           </div>
         ) : null}
         <footer className={`ttm-screen-actions${value.programId ? " ttm-generation-footer" : ""}`}>
+          {value.programId ? <button type="button" className="cms-btn cms-btn-ghost" onClick={resetRequirements}>Reset</button> : null}
           <Btn disabled={!ready || busy} onClick={generate}>
             {busy ? "Generating…" : "Generate Timetable"}
           </Btn>
@@ -1286,11 +1394,12 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
       .get(apiEndpoints.timetable.getAllocatedFaculties, {
         params: { ...context, subjectId: form.subjectId },
       })
-      .then((r) => setFaculty(
-        optionize(r.data, ["facultyId", "FacultyId", "staffId", "StaffId", "id", "Id"], ["facultyName", "FacultyName", "staffName", "StaffName", "name", "Name"])
-          .filter((entry) => isActiveRecord(entry.raw))
-          .map((entry) => ({ ...entry, name: facultyOptionLabel(entry) })),
-      ))
+      .then((r) =>
+        setFaculty(
+          optionize(r.data, ["facultyId", "FacultyId", "staffId", "StaffId", "id", "Id"], ["facultyName", "FacultyName", "staffName", "StaffName", "name", "Name"])
+            .filter((entry) => isActiveRecord(entry.raw)),
+        ),
+      )
       .catch((e) => notify(getApiErrorMessage(e)));
   }, [context, form.subjectId, notify]);
   const set = (key) => (e) => setForm((x) => ({ ...x, [key]: e.target.value }));
@@ -1345,20 +1454,20 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
       setSaving(false);
     }
   };
-  const select = (label, key, values) => (
+  const select = (label, key, values, optionLabel = (entry) => entry.name ?? entry.label) => (
     <Field label={label}>
       <select value={form[key]} onChange={set(key)}>
         <option value="">Select {label}</option>
         {values.map((entry) => (
           <option key={entry.id ?? entry.value} value={entry.id ?? entry.value}>
-            {entry.name ?? entry.label}
+            {optionLabel(entry)}
           </option>
         ))}
       </select>
     </Field>
   );
   return (
-    <Modal title={lab ? "Add Lab / Practical" : timetableId(slot) ? "Edit Timetable Slot" : "Add Timetable Slot"} onClose={close}>
+    <Modal title={lab ? "Add Lab / Practical" : timetableId(slot) ? "Edit Timetable Slot" : "Add Timetable Slot"} className="ttm-slot-editor-modal" onClose={close}>
       <div className="ttm-modal-body">
         <div className="ttm-form-grid">
           {select(
@@ -1368,7 +1477,7 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
           )}
           {select("Period", "periodId", data.periods.filter((period) => !isBreakPeriod(period)))}
           {select("Subject", "subjectId", data.subjects)}
-          {select("Staff", "facultyId", faculty)}
+          {select("Staff", "facultyId", faculty, facultyOptionLabel)}
           {select("Room", "roomId", data.rooms)}
           <Field label="Remarks">
             <input value={form.remarks} onChange={set("remarks")} />
@@ -1390,6 +1499,97 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
     </Modal>
   );
 }
+function SubstitutionPreview({ context, close, notify }) {
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const sectionId = Number(context.sectionId);
+  const academicYearId = Number(context.academicYearId);
+
+  useEffect(() => {
+    if (!sectionId || !academicYearId) {
+      setRows([]);
+      setLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setRows([]);
+    setLoading(true);
+    setError("");
+    const params = { date, sectionId, academicYearId };
+    Promise.all([
+      apiClient.get(apiEndpoints.timetable.substitutions, { params }),
+      apiClient.get(apiEndpoints.timetable.effective, { params }),
+    ]).then(([substitutionsResponse, effectiveResponse]) => {
+      if (cancelled) return;
+      const effectiveByTimetableId = new Map(
+        list(effectiveResponse.data).map((slot) => [String(pick(slot, "timetableId", "TimetableId")), slot]),
+      );
+      setRows(list(substitutionsResponse.data).map((substitution) => {
+        const effective = effectiveByTimetableId.get(String(pick(substitution, "timetableId", "TimetableId")));
+        const substituteName = effective && pick(effective, "isSubstituted", "IsSubstituted")
+          ? pick(effective, "effectiveStaffName", "EffectiveStaffName")
+          : pick(substitution, "substituteStaffName", "SubstituteStaffName");
+        return {
+          id: pick(substitution, "substitutionId", "SubstitutionId", "id", "Id"),
+          period: pick(substitution, "periodName", "PeriodName") || `Period ${pick(substitution, "periodNumber", "PeriodNumber") || ""}`,
+          time: [pick(substitution, "startTime", "StartTime"), pick(substitution, "endTime", "EndTime")]
+            .filter(Boolean)
+            .map((time) => String(time).slice(0, 5))
+            .join(" - "),
+          subject: pick(substitution, "subjectName", "SubjectName"),
+          className: pick(substitution, "programName", "ProgramName", "groupName", "GroupName") || "—",
+          section: pick(substitution, "sectionName", "SectionName") || "—",
+          originalFaculty: pick(effective, "originalStaffName", "OriginalStaffName")
+            || pick(substitution, "originalStaffName", "OriginalStaffName"),
+          substituteFaculty: substituteName || "Not Assigned",
+          assigned: Boolean(substituteName),
+        };
+      }));
+    }).catch((requestError) => {
+      if (cancelled) return;
+      const message = getApiErrorMessage(requestError);
+      setRows([]);
+      setError(message);
+      notify(message);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [academicYearId, date, notify, sectionId]);
+
+  return (
+    <Modal title="Faculty Leave / Substitution Preview" className="ttm-substitution-modal" onClose={close}>
+      <div className="ttm-modal-body">
+        <div className="ttm-substitution-toolbar">
+          <Field label="Date">
+            <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          </Field>
+        </div>
+        {loading ? <p className="ttm-empty">Loading faculty substitutions...</p> : null}
+        {!loading && error ? <p className="ttm-validation-error">{error}</p> : null}
+        {!loading && !error && !rows.length ? <p className="ttm-empty">No faculty substitutions for this date.</p> : null}
+        {!loading && !error && rows.length ? (
+          <div className="ttm-substitution-table-wrap">
+            <table className="ttm-substitution-table">
+              <thead><tr><th>Period</th><th>Time</th><th>Subject</th><th>Class / Section</th><th>Original Faculty</th><th>Substitute Faculty</th><th>Status</th></tr></thead>
+              <tbody>{rows.map((row) => (
+                <tr key={row.id}>
+                  <td>{row.period}</td><td>{row.time || "—"}</td><td>{row.subject || "—"}</td>
+                  <td>{row.className} - {row.section}</td><td>{row.originalFaculty || "—"}</td>
+                  <td>{row.substituteFaculty}</td>
+                  <td><span className={`ttm-substitution-status${row.assigned ? " assigned" : ""}`}>{row.assigned ? "Substitute Assigned" : "Pending Substitute"}</span></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : null}
+        <footer><Btn className="cms-btn cms-btn-ghost" onClick={close}>Close</Btn></footer>
+      </div>
+    </Modal>
+  );
+}
 function Draft({ initial, notify }) {
   const state = useLookups(initial);
   const { value, data, setValue } = state;
@@ -1397,6 +1597,8 @@ function Draft({ initial, notify }) {
   const [slots, setSlots] = useState([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [publishedSlotDetails, setPublishedSlotDetails] = useState(null);
+  const [substitutionPreviewOpen, setSubstitutionPreviewOpen] = useState(false);
   const [copying, setCopying] = useState(false);
   const [copyTarget, setCopyTarget] = useState({ academicYearId: "", sectionId: "" });
   const [actionBusy, setActionBusy] = useState(false);
@@ -1404,19 +1606,13 @@ function Draft({ initial, notify }) {
   const [exportBusy, setExportBusy] = useState("");
   const [exportOpen, setExportOpen] = useState(false);
   const exportMenuRef = useRef(null);
-  const publishedPopoverRef = useRef(null);
-  const [publishedPopover, setPublishedPopover] = useState(null);
-  const [substitutionOpen, setSubstitutionOpen] = useState(false);
-  const [substitutionDate, setSubstitutionDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [substitutionRows, setSubstitutionRows] = useState([]);
-  const [substitutionsLoading, setSubstitutionsLoading] = useState(false);
-  const [substitutionsError, setSubstitutionsError] = useState("");
   const [workflowStatus, setWorkflowStatus] = useState(() => timetableWorkflowStatus(initial));
   const firstSection = useRef(true);
   const [validation, setValidation] = useState(null);
   const [validationOpen, setValidationOpen] = useState(false);
   const [studentChoices, setStudentChoices] = useState([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
   const [staffChoices, setStaffChoices] = useState([]);
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [publishedFilter, setPublishedFilter] = useState(
@@ -1439,13 +1635,6 @@ function Draft({ initial, notify }) {
       document.removeEventListener("mousedown", closeWhenOutside);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, []);
-  useEffect(() => {
-    const closePopover = (event) => {
-      if (publishedPopoverRef.current && !publishedPopoverRef.current.contains(event.target)) setPublishedPopover(null);
-    };
-    document.addEventListener("mousedown", closePopover);
-    return () => document.removeEventListener("mousedown", closePopover);
   }, []);
   useEffect(() => {
     if (!value.programId || !data.sections.length) return;
@@ -1488,27 +1677,6 @@ function Draft({ initial, notify }) {
   useEffect(() => {
     load();
   }, [load]);
-  const loadSubstitutions = useCallback(async () => {
-    if (!value.sectionId || !value.academicYearId) return;
-    setSubstitutionsLoading(true);
-    setSubstitutionsError("");
-    setSubstitutionRows([]);
-    try {
-      const response = await apiClient.get("/api/v1/timetable/substitutions", {
-        params: { date: substitutionDate, sectionId: value.sectionId, academicYearId: value.academicYearId },
-      });
-      setSubstitutionRows(list(response.data).map(previewSubstitution));
-    } catch (error) {
-      const message = getApiErrorMessage(error);
-      setSubstitutionsError(message);
-      notify(message);
-    } finally {
-      setSubstitutionsLoading(false);
-    }
-  }, [notify, substitutionDate, value.academicYearId, value.sectionId]);
-  useEffect(() => {
-    if (substitutionOpen) loadSubstitutions();
-  }, [loadSubstitutions, substitutionOpen]);
   useEffect(() => {
     if (firstSection.current) {
       firstSection.current = false;
@@ -1519,10 +1687,30 @@ function Draft({ initial, notify }) {
   const published = workflowStatus === "published";
   const approved = workflowStatus === "approved";
   useEffect(() => {
+    if (!publishedSlotDetails) return undefined;
+    const closeOnOutsideClick = (event) => {
+      if (event.target.closest(".ttm-published-slot-details, .ttm-published-slot")) return;
+      setPublishedSlotDetails(null);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setPublishedSlotDetails(null);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [publishedSlotDetails]);
+  useEffect(() => {
+    setPublishedSlotDetails(null);
+  }, [published, publishedFilter, value.sectionId]);
+  useEffect(() => {
     if (!published || !value.sectionId) {
       setStudentChoices([]);
       setStaffChoices([]);
       setSelectedStudentId("");
+      setStudentSearch("");
       setSelectedStaffId("");
       return undefined;
     }
@@ -1539,7 +1727,7 @@ function Draft({ initial, notify }) {
             staffResult.value.data,
             ["facultyId", "FacultyId", "staffId", "StaffId", "id", "Id"],
             ["facultyName", "FacultyName", "staffName", "StaffName", "fullName", "FullName", "name", "Name"],
-          ).filter((entry) => isActiveRecord(entry.raw)).map((entry) => ({ ...entry, name: facultyOptionLabel(entry) }))
+          ).filter((entry) => isActiveRecord(entry.raw))
         : []);
       setStudentChoices(studentsResult.status === "fulfilled"
         ? optionize(
@@ -1549,6 +1737,7 @@ function Draft({ initial, notify }) {
           )
         : []);
       setSelectedStudentId("");
+      setStudentSearch("");
       setSelectedStaffId("");
     });
     return () => { cancelled = true; };
@@ -1560,7 +1749,30 @@ function Draft({ initial, notify }) {
           || String(pick(slot, "day", "Day")).toLowerCase() === String(DAYS[day]).toLowerCase()) &&
         String(pick(slot, "periodId", "PeriodId", "periodNumber", "PeriodNumber")) === String(periodId),
     );
-  const openSlotEditor = async (slot) => {
+  const openPublishedSlotDetails = (event, slot, period, dayOfWeek, interaction = "click") => {
+    const currentId = `${timetableId(slot) ?? "slot"}:${dayOfWeek}:${period.id}`;
+    if (interaction === "click" && publishedSlotDetails?.id === currentId && publishedSlotDetails.pinned) {
+      setPublishedSlotDetails(null);
+      return;
+    }
+    if (interaction === "hover" && publishedSlotDetails?.id === currentId && publishedSlotDetails.pinned) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const width = 190;
+    const height = 88;
+    const left = bounds.right + width + 8 <= window.innerWidth
+      ? bounds.right + 8
+      : Math.max(8, bounds.left - width - 8);
+    const top = Math.max(8, Math.min(bounds.top, window.innerHeight - height - 8));
+    setPublishedSlotDetails({ id: currentId, slot, style: { left, top }, pinned: interaction === "click" });
+  };
+  const openSlotEditor = async (slot, pendingSlot) => {
+    if (!slot) {
+      if (!pendingSlot || actionBusy) return;
+      // Reuse the existing SlotEditor in create mode, prefilled with the
+      // empty grid cell's day and teaching period.
+      setEditing(pendingSlot);
+      return;
+    }
     const id = timetableId(slot);
     if (!id || actionBusy) return;
     setActionBusy(true);
@@ -1574,18 +1786,6 @@ function Draft({ initial, notify }) {
       setActionBusy(false);
       setActiveAction("");
     }
-  };
-  const togglePublishedPopover = (slot, event) => {
-    const id = timetableId(slot) ?? `${pick(slot, "dayOfWeek", "DayOfWeek")}-${pick(slot, "periodId", "PeriodId")}`;
-    if (publishedPopover?.id === id) {
-      setPublishedPopover(null);
-      return;
-    }
-    const rect = event.currentTarget.getBoundingClientRect();
-    const width = 230;
-    const x = rect.right + 8 + width > window.innerWidth ? Math.max(8, rect.left - width - 8) : rect.right + 8;
-    const y = Math.max(8, Math.min(rect.top, window.innerHeight - 118));
-    setPublishedPopover({ id, slot, x, y });
   };
   const action = async (path, method = "post", body) => {
     if (actionBusy) return;
@@ -1741,31 +1941,37 @@ function Draft({ initial, notify }) {
     <Page
       title="Generated Draft Grid"
       subtitle="Review, validate, approve and publish the section timetable."
-      action={
-        <Link className="cms-btn cms-btn-ghost" to="/dashboard/timetable">
-          Back to Timetable
-        </Link>
-      }
     >
+      <Link className="cms-back-link" to="/dashboard/timetable">
+        <ArrowLeft size={15} /> Back to Timetable
+      </Link>
       <section className="ttm-card">
-        <Context state={state} compact />
+        <Context state={state} compact hideGlobalContext />
         {value.sectionId && (
           <>
             <div className="ttm-grid-head">
-              <div className="ttm-section-toolbar-head">
-                <div className="ttm-section-title"><span><CalendarDays size={18} /></span><div><b>Section timetable</b><small>View the timetable for the selected section.</small></div></div>
-                <Btn className="cms-btn cms-btn-ghost ttm-leave-preview-btn" onClick={() => setSubstitutionOpen(true)}><UsersRound size={16} /> Faculty Leave / Substitutions</Btn>
+              <div className="ttm-grid-title">
+                <div className="ttm-toolbar-heading">
+                  <i><CalendarDays size={20} aria-hidden="true" /></i>
+                  <div>
+                    <b>Section timetable</b>
+                    <span>View the published timetable for the selected section.</span>
+                  </div>
+                </div>
+                <Btn className="cms-btn cms-btn-ghost ttm-substitution-trigger" onClick={() => setSubstitutionPreviewOpen(true)}>
+                  <UsersRound size={17} aria-hidden="true" /> Faculty Leave / Substitutions
+                </Btn>
               </div>
-              <div className="ttm-section-toolbar-controls">
-                <div className="ttm-section-workflow-controls">
-                <label className="ttm-inline-filter">
-                  <span>Status</span>
-                  <select value={publishedFilter} onChange={(e) => setPublishedFilter(e.target.value)} disabled={actionBusy}>
-                    <option value="">All</option>
-                    <option value="false">Draft</option>
-                    <option value="true">Published</option>
-                  </select>
-                </label>
+              <div className="ttm-grid-workflow">
+                <div className="ttm-toolbar-workflow-actions">
+                  <label className="ttm-inline-filter">
+                    <span>Status</span>
+                    <select value={publishedFilter} onChange={(e) => setPublishedFilter(e.target.value)} disabled={actionBusy}>
+                      <option value="">All</option>
+                      <option value="false">Draft</option>
+                      <option value="true">Published</option>
+                    </select>
+                  </label>
                 <div ref={exportMenuRef} className={`ttm-export-menu${exportBusy ? " is-busy" : ""}`}>
                   <button type="button" className="cms-btn cms-btn-ghost" aria-haspopup="menu" aria-expanded={exportOpen} disabled={Boolean(exportBusy)} onClick={() => setExportOpen((open) => !open)}>
                     <Download size={15} aria-hidden="true" /> {exportBusy ? "Exporting…" : "Export"} <ChevronDown size={14} aria-hidden="true" />
@@ -1818,40 +2024,64 @@ function Draft({ initial, notify }) {
                 </Btn>}
                 </div>
                 {published && (
-                  <div className="ttm-section-person-controls">
+                  <div className="ttm-toolbar-searches">
                     <label className="ttm-inline-filter ttm-staff-select">
-                      <Search size={15} aria-hidden="true" />
-                      <select
+                      <Search size={18} aria-hidden="true" />
+                      <input
+                        type="search"
+                        list="ttm-staff-options"
                         aria-label="Select staff"
                         value={selectedStaffId}
                         disabled={actionBusy || !staffChoices.length}
                         onChange={(event) => {
-                          const staffId = event.target.value;
-                          setSelectedStaffId(staffId);
-                          if (staffId) viewPublished("faculty", staffId);
-                          else load();
+                          const search = event.target.value;
+                          setStaffSearch(search);
+                          const staff = staffChoices.find(
+                            (entry) => facultyOptionLabel(entry).toLowerCase() === search.trim().toLowerCase(),
+                          );
+                          if (staff) {
+                            setSelectedStaffId(staff.id);
+                            setSelectedStudentId("");
+                            viewPublished("faculty", staff.id);
+                          } else if (!search) {
+                            setSelectedStaffId("");
+                            load();
+                          }
                         }}
-                      >
-                        <option value="">Select staff</option>
-                        {staffChoices.map((staff) => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
-                      </select>
+                      />
+                      <datalist id="ttm-staff-options">
+                        {staffChoices.map((staff) => <option key={staff.id} value={facultyOptionLabel(staff)} />)}
+                      </datalist>
                     </label>
                     <label className="ttm-inline-filter ttm-person-select">
-                      <Search size={15} aria-hidden="true" />
-                      <select
+                      <Search size={18} aria-hidden="true" />
+                      <input
+                        type="search"
+                        list="ttm-student-options"
                         aria-label="Select student"
-                        value={selectedStudentId}
+                        placeholder="Search student"
+                        autoComplete="off"
+                        value={studentSearch}
                         disabled={actionBusy || !studentChoices.length}
                         onChange={(event) => {
-                          const studentId = event.target.value;
-                          setSelectedStudentId(studentId);
-                          if (studentId) viewPublished("student", studentId);
-                          else load();
+                          const search = event.target.value;
+                          setStudentSearch(search);
+                          const student = studentChoices.find(
+                            (entry) => studentOptionLabel(entry).toLowerCase() === search.trim().toLowerCase(),
+                          );
+                          if (student) {
+                            setSelectedStudentId(student.id);
+                            setSelectedStaffId("");
+                            viewPublished("student", student.id);
+                          } else if (!search) {
+                            setSelectedStudentId("");
+                            load();
+                          }
                         }}
-                      >
-                        <option value="">Select student</option>
-                        {studentChoices.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}
-                      </select>
+                      />
+                      <datalist id="ttm-student-options">
+                        {studentChoices.map((student) => <option key={student.id} value={studentOptionLabel(student)} />)}
+                      </datalist>
                     </label>
                   </div>
                 )}
@@ -1887,29 +2117,39 @@ function Draft({ initial, notify }) {
                         return (
                           <td className="slot" key={period.id}>
                             <button
-                              onClick={(event) => published && slot ? togglePublishedPopover(slot, event) : openSlotEditor(slot)}
-                              disabled={!slot || published || (actionBusy && activeAction === "slot")}
+                              className={published && slot ? "ttm-published-slot" : ""}
+                              onMouseEnter={(event) => {
+                                if (published && slot) openPublishedSlotDetails(event, slot, period, dayOfWeek, "hover");
+                              }}
+                              onMouseLeave={() => {
+                                setPublishedSlotDetails((current) => current && !current.pinned ? null : current);
+                              }}
+                              onClick={(event) => {
+                                if (published) {
+                                  if (slot) openPublishedSlotDetails(event, slot, period, dayOfWeek);
+                                  return;
+                                }
+                                openSlotEditor(slot, { dayOfWeek, periodId: period.id });
+                              }}
+                              disabled={published ? !slot : Boolean(selectedStaffId) || (actionBusy && activeAction === "slot")}
                             >
                               {slot ? (
                                 published ? <b>{slotSubjectName(slot, data.subjects)}</b> : (
-                                <>
-                                  <b>{slotSubjectName(slot, data.subjects)}</b>
-                                  <span>{slotFacultyName(slot)}</span>
-                                  <small>{slotRoomName(slot)}</small>
-                                  <i className="ttm-slot-edit">Edit</i>
-                                </>
+                                  <>
+                                    <b>{slotSubjectName(slot, data.subjects)}</b>
+                                    <span>{slotFacultyName(slot)}</span>
+                                    <small>{slotRoomName(slot)}</small>
+                                    <i className="ttm-slot-edit">Edit</i>
+                                  </>
                                 )
                               ) : (
-                                slotsLoading ? "Loading…" : "No generated subject"
+                                slotsLoading
+                                  ? "Loading…"
+                                  : selectedStaffId
+                                    ? <span className="ttm-empty-slot" aria-label="No class assigned">—</span>
+                                    : <span className="ttm-slot-add">+ Add Slot</span>
                               )}
                             </button>
-                            {publishedPopover?.id === (timetableId(slot) ?? `${pick(slot, "dayOfWeek", "DayOfWeek")}-${pick(slot, "periodId", "PeriodId")}`) && (
-                              <div ref={publishedPopoverRef} className="ttm-published-slot-popover" style={{ left: publishedPopover.x, top: publishedPopover.y }}>
-                                <b>{slotSubjectName(slot, data.subjects)}</b>
-                                <span>{slotFacultyName(slot)}</span>
-                                <small>{slotRoomName(slot)}</small>
-                              </div>
-                            )}
                           </td>
                         );
                       })}
@@ -1920,25 +2160,20 @@ function Draft({ initial, notify }) {
                 </tbody>
               </table>
             </div>
+            {publishedSlotDetails && createPortal((() => {
+              const { slot, style } = publishedSlotDetails;
+              return (
+                <aside className="ttm-published-slot-details" style={style} aria-label="Published timetable slot details">
+                  <button type="button" className="ttm-published-slot-close" aria-label="Close slot details" onClick={() => setPublishedSlotDetails(null)}>×</button>
+                  <h3>{slotSubjectName(slot, data.subjects)}</h3>
+                  <p>{slotFacultyName(slot)}</p>
+                  <p>{slotRoomName(slot)}</p>
+                </aside>
+              );
+            })(), document.body)}
           </>
         )}
       </section>
-      {substitutionOpen && (
-        <Modal title="Faculty Leave / Substitution Preview" onClose={() => setSubstitutionOpen(false)}>
-          <div className="ttm-modal-body ttm-substitution-preview">
-            <Field label="Date">
-              <input type="date" value={substitutionDate} onChange={(event) => setSubstitutionDate(event.target.value)} />
-            </Field>
-            {substitutionsLoading ? <p>Loading faculty substitutions…</p> : substitutionsError ? <p className="ttm-substitution-error">Unable to load faculty substitutions. Please try again.</p> : substitutionRows.length ? (
-              <div className="ttm-grid-wrap"><table className="ttm-table ttm-substitution-table"><thead><tr><th>Period</th><th>Time</th><th>Subject</th><th>Section</th><th>Original Faculty</th><th>Substitute Faculty</th><th>Status</th></tr></thead><tbody>{substitutionRows.map((row, index) => {
-                const assigned = Boolean(row.substituteFaculty);
-                return <tr key={row.id ?? `${row.period}-${index}`}><td>{row.period}</td><td>{row.time}</td><td>{row.subject}</td><td>{row.section}</td><td>{row.originalFaculty}</td><td>{row.substituteFaculty || "Not Assigned"}</td><td><span className={`ttm-badge ${assigned ? "approved" : "draft"}`}>{assigned ? "Substitute Assigned" : "Pending Substitute"}</span></td></tr>;
-              })}</tbody></table></div>
-            ) : <p>No faculty substitutions for this date.</p>}
-            <footer><Btn className="cms-btn cms-btn-ghost" onClick={() => setSubstitutionOpen(false)}>Close</Btn></footer>
-          </div>
-        </Modal>
-      )}
       {validationOpen && validation && (
         <Modal title="Validate Timetable" onClose={() => setValidationOpen(false)}>
           <div className="ttm-modal-body">
@@ -1969,6 +2204,9 @@ function Draft({ initial, notify }) {
             load();
           }}
         />
+      )}
+      {substitutionPreviewOpen && (
+        <SubstitutionPreview context={value} close={() => setSubstitutionPreviewOpen(false)} notify={notify} />
       )}
       {copying && (
         <Modal title="Copy Timetable" onClose={() => setCopying(false)}>
@@ -2002,7 +2240,12 @@ function Draft({ initial, notify }) {
 }
 function MainTimetable({ notify }) {
   const location = useLocation();
-  const state = useLookups(location.state?.timetableContext);
+  const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
+  const state = useLookups({
+    ...location.state?.timetableContext,
+    boardId: selectedBoardId || location.state?.timetableContext?.boardId || "",
+    academicYearId: selectedAcademicYearId || location.state?.timetableContext?.academicYearId || "",
+  });
   const { value } = state;
   const navigate = useNavigate();
   const [opening, setOpening] = useState(false);
@@ -2042,11 +2285,11 @@ function MainTimetable({ notify }) {
     <Page title="Timetable" subtitle="Choose a timetable context to create or view a generated timetable.">
       <section className="ttm-card">
         <div className="ttm-main-row">
-          <Context state={state} />
-          <footer className="ttm-view-tabs ttm-main-actions" aria-label="Timetable view options">
-            <Btn className="ttm-view-tab active" disabled={!completeContext} onClick={() => navigate("/dashboard/timetable/setup", { state: { timetableContext: value } })}>Create Timetable</Btn>
-            <Btn className="ttm-view-tab" disabled={!completeContext || opening} onClick={openGenerated}>{opening ? "Opening…" : "Generated Timetable"}</Btn>
-          </footer>
+          <Context state={state} hideGlobalContext />
+          <div className="ttm-view-tabs" role="group" aria-label="Timetable view actions">
+            <Btn className="ttm-view-tab is-active" aria-pressed="true" disabled={!completeContext} onClick={() => navigate("/dashboard/timetable/setup", { state: { timetableContext: value } })}>Create Timetable</Btn>
+            <Btn className="ttm-view-tab" aria-pressed="false" disabled={!completeContext || opening} onClick={openGenerated}>{opening ? "Opening…" : "Generated Timetable"}</Btn>
+          </div>
         </div>
       </section>
     </Page>

@@ -18,14 +18,12 @@ namespace CollegeManagement.API.Validators.StaffModuleValidators
                 .MaximumLength(100).WithMessage("Last name cannot exceed 100 characters.");
 
             RuleFor(x => x.Gender)
-                .NotEmpty().WithMessage("Gender is required.")
-                .Must(g => g == "Male" || g == "Female" || g == "Other")
-                .WithMessage("Gender must be 'Male', 'Female', or 'Other'.");
+                .Must(g => string.IsNullOrWhiteSpace(g) || g == "Male" || g == "Female" || g == "Other")
+                .WithMessage("Gender must be 'Male', 'Female', or 'Other' if specified.");
 
             RuleFor(x => x.DateOfBirth)
-                .NotEmpty().WithMessage("Date of birth is required.")
-                .Must(dob => dob < DateTime.UtcNow)
-                .WithMessage("Date of birth must be in the past.");
+                .Must(dob => !dob.HasValue || dob.Value < DateTime.UtcNow)
+                .WithMessage("Date of birth must be in the past if specified.");
 
             RuleFor(x => x.Mobile)
                 .NotEmpty().WithMessage("Mobile number is required.")
@@ -37,11 +35,7 @@ namespace CollegeManagement.API.Validators.StaffModuleValidators
                 .MaximumLength(150).WithMessage("Email cannot exceed 150 characters.");
 
             RuleFor(x => x.Qualification)
-                .NotEmpty().WithMessage("Qualification is required.")
                 .MaximumLength(100).WithMessage("Qualification cannot exceed 100 characters.");
-
-            RuleFor(x => x.JoiningDate)
-                .NotEmpty().WithMessage("Joining date is required.");
 
             RuleFor(x => x.Experience)
                 .GreaterThanOrEqualTo(0).WithMessage("Experience cannot be negative.");

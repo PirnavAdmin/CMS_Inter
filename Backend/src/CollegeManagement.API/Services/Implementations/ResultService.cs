@@ -998,10 +998,16 @@ namespace CollegeManagement.API.Services.Implementations
             return analytics;
         }
 
-        public async Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync()
+        public async Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            string? programId = null,
+            int? examId = null)
         {
-            var analytics = await GetResultAnalyticsAsync(null, null, null, null, null, null);
-            if (analytics.FailedStudents.Any())
+            var analytics = await GetResultAnalyticsAsync(boardId, academicYearId, academicLevelId, groupId, programId, examId);
+            if (analytics.FailedStudents != null && analytics.FailedStudents.Any())
             {
                 return analytics.FailedStudents.Select(f => new StudentResultDto
                 {
@@ -1011,17 +1017,24 @@ namespace CollegeManagement.API.Services.Implementations
                     SectionName = f.SectionName,
                     GrandTotal = f.TotalMarks,
                     Percentage = f.Percentage,
-                    FinalResult = "FAIL"
+                    FinalResult = "FAIL",
+                    ResultStatus = "Fail"
                 }).ToList();
             }
 
-            var students = await _resultRepository.GetFailedStudentsAsync();
+            var students = await _resultRepository.GetFailedStudentsAsync(boardId, academicYearId, academicLevelId, groupId, examId);
             return _mapper.Map<IEnumerable<StudentResultDto>>(students);
         }
 
-        public async Task<ResultStatisticsDto> GetResultStatisticsAsync()
+        public async Task<ResultStatisticsDto> GetResultStatisticsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null)
         {
-            var statistics = await _resultRepository.GetResultStatisticsAsync();
+            var statistics = await _resultRepository.GetResultStatisticsAsync(
+                boardId, academicYearId, academicLevelId, groupId, examId);
             return _mapper.Map<ResultStatisticsDto>(statistics);
         }
 
@@ -1179,9 +1192,15 @@ namespace CollegeManagement.API.Services.Implementations
             return res;
         }
 
-        public async Task<ResultDashboardDto> GetResultDashboardAsync()
+        public async Task<ResultDashboardDto> GetResultDashboardAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null)
         {
-            return await _resultRepository.GetResultDashboardAsync();
+            return await _resultRepository.GetResultDashboardAsync(
+                boardId, academicYearId, academicLevelId, groupId, examId);
         }
 
         public async Task<ResultReadinessDto> GetResultReadinessAsync(

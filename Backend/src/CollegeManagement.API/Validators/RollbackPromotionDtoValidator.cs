@@ -11,6 +11,10 @@ namespace CollegeManagement.API.Validators.PromotionModuleValidators
             RuleFor(x => x.PromotionId)
                 .GreaterThan(0)
                 .WithMessage("Valid Promotion ID is required.");
+
+            RuleFor(x => x.Reason)
+                .NotEmpty()
+                .MaximumLength(500);
         }
     }
 }

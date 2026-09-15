@@ -1,6 +1,7 @@
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Models.Staff;
+using CollegeManagement.API.Models.Settings;
 using CollegeManagement.API.Data.Configurations;
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Models.Fee;
@@ -36,6 +37,7 @@ namespace CollegeManagement.API.Data
         public DbSet<StaffAttendance> StaffAttendances { get; set; }
         public DbSet<StaffLeaveRequest> StaffLeaveRequests { get; set; }
         public DbSet<StaffLeaveBalance> StaffLeaveBalances { get; set; }
+        public DbSet<LeaveCategory> LeaveCategories { get; set; }
         public DbSet<AttendanceAuditHistory> AttendanceAuditHistories { get; set; }
         public DbSet<GradingSystem> GradingSystems { get; set; }
         public DbSet<AssessmentType> AssessmentTypes { get; set; }
@@ -56,8 +58,6 @@ namespace CollegeManagement.API.Data
         public DbSet<Examination> Examinations { get; set; }
         public DbSet<ExamCodeSequence> ExamCodeSequences { get; set; }
         public DbSet<ExamSchedule> ExamSchedules { get; set; }
-        public DbSet<ExaminationScheduleHall> ExaminationScheduleHalls { get; set; }
-        public DbSet<ScheduleInvigilator> ScheduleInvigilators { get; set; }
         public DbSet<HallTicket> HallTickets { get; set; }
         public DbSet<InvigilatorAssignment> InvigilatorAssignments { get; set; }
         public DbSet<Mark> Marks { get; set; }
@@ -109,6 +109,8 @@ namespace CollegeManagement.API.Data
         public DbSet<TimetableSubstitution> TimetableSubstitutions { get; set; }
         public DbSet<Certificate> Certificates { get; set; }
         public DbSet<AuditLog> AuditLogs { get; set; }
+        public DbSet<Template> Templates { get; set; }
+        public DbSet<NumberSeriesConfiguration> NumberSeriesConfigurations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -121,26 +123,68 @@ namespace CollegeManagement.API.Data
             modelBuilder.ApplyConfiguration(new AttendanceSessionConfiguration());
             modelBuilder.ApplyConfiguration(new StaffLeaveRequestConfiguration());
             modelBuilder.ApplyConfiguration(new StaffLeaveBalanceConfiguration());
+            modelBuilder.ApplyConfiguration(new LeaveCategoryConfiguration());
             modelBuilder.ApplyConfiguration(new TimetableSubstitutionConfiguration());
             modelBuilder.ApplyConfiguration(new AttendanceAuditHistoryConfiguration());
             #endregion
 
             #region User
-            modelBuilder.Entity<User>()
-                .HasIndex(u => u.Email)
-                .IsUnique();
+            modelBuilder.Entity<User>(entity =>
+            {
+                entity.ToTable("Users");
+                entity.HasKey(u => u.UserId);
+
+                entity.HasIndex(u => u.Email)
+                    .IsUnique();
+
+                entity.Property(u => u.IsFirstLogin)
+                    .HasDefaultValue(true);
+
+                entity.Property(u => u.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.Property(u => u.CreatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(u => u.UpdatedAt)
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+                    .ValueGeneratedOnAddOrUpdate();
+
+                entity.HasOne(u => u.Role)
+                    .WithMany(r => r.Users)
+                    .HasForeignKey(u => u.RoleId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(u => u.Student)
+                    .WithOne()
+                    .HasForeignKey<User>(u => u.StudentId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(u => u.StudentId)
+                    .IsUnique();
+
+                entity.HasOne(u => u.Staff)
+                    .WithOne()
+                    .HasForeignKey<User>(u => u.StaffId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(u => u.StaffId)
+                    .IsUnique();
+
+                entity.HasOne(u => u.Admin)
+                    .WithOne()
+                    .HasForeignKey<User>(u => u.AdminId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                entity.HasIndex(u => u.AdminId)
+                    .IsUnique();
+            });
             #endregion
 
             #region Role
             modelBuilder.Entity<Role>()
                 .HasIndex(r => r.RoleName)
                 .IsUnique();
-
-            modelBuilder.Entity<User>()
-                .HasOne(u => u.Role)
-                .WithMany(r => r.Users)
-                .HasForeignKey(u => u.RoleId)
-                .OnDelete(DeleteBehavior.Restrict);
             #endregion
             #region Subject
 
@@ -363,34 +407,7 @@ namespace CollegeManagement.API.Data
                 entity.HasOne(es => es.Subject)
                       .WithMany()
                       .HasForeignKey(es => es.SubjectId)
-                      .IsRequired(false)
                       .OnDelete(DeleteBehavior.Restrict);
-                entity.HasMany(es => es.HallAllocations)
-                      .WithOne(h => h.ExamSchedule)
-                      .HasForeignKey(h => h.ScheduleId)
-                      .OnDelete(DeleteBehavior.Cascade);
-            });
-
-            modelBuilder.Entity<ExaminationScheduleHall>(entity =>
-            {
-                entity.HasKey(h => h.ScheduleHallId);
-                entity.HasOne(h => h.ExamSchedule)
-                      .WithMany(es => es.HallAllocations)
-                      .HasForeignKey(h => h.ScheduleId)
-                      .OnDelete(DeleteBehavior.Cascade);
-                entity.HasMany(h => h.Invigilators)
-                      .WithOne(i => i.ScheduleHall)
-                      .HasForeignKey(i => i.ScheduleHallId)
-                      .OnDelete(DeleteBehavior.Cascade);
-            });
-
-            modelBuilder.Entity<ScheduleInvigilator>(entity =>
-            {
-                entity.HasKey(i => i.Id);
-                entity.HasOne(i => i.ScheduleHall)
-                      .WithMany(h => h.Invigilators)
-                      .HasForeignKey(i => i.ScheduleHallId)
-                      .OnDelete(DeleteBehavior.Cascade);
             });
           
 
@@ -983,12 +1000,13 @@ namespace CollegeManagement.API.Data
             #region Certificate
             modelBuilder.Entity<Certificate>(entity =>
             {
+                entity.ToTable("certificates");
                 entity.HasKey(x => x.CertificateId);
-                entity.Property(x => x.CertificateNumber).IsRequired().HasMaxLength(40);
+                entity.Property(x => x.CertificateId).HasColumnName("Id");
+                entity.Property(x => x.CertificateNumber).HasColumnName("CertificateNo").IsRequired().HasMaxLength(40);
                 entity.Property(x => x.CertificateType).IsRequired().HasMaxLength(100);
                 entity.Property(x => x.Purpose).IsRequired().HasMaxLength(250);
                 entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
-                entity.Property(x => x.GeneratedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
                 entity.Property(x => x.IsActive).HasDefaultValue(true);
                 entity.HasIndex(x => x.CertificateNumber).IsUnique();
                 entity.HasIndex(x => x.StudentId);
@@ -1160,6 +1178,24 @@ namespace CollegeManagement.API.Data
             {
                 entity.HasKey(e => e.AcademicYear);
                 entity.Property(e => e.AcademicYear).HasMaxLength(20);
+            });
+            #endregion
+
+            #region Settings Templates & Number Series
+            modelBuilder.Entity<Template>(entity =>
+            {
+                entity.ToTable("templates");
+                entity.HasKey(t => t.Id);
+                entity.HasIndex(t => t.TemplateCode).IsUnique();
+                entity.HasIndex(t => t.Category);
+                entity.HasIndex(t => t.IsActive);
+            });
+
+            modelBuilder.Entity<NumberSeriesConfiguration>(entity =>
+            {
+                entity.ToTable("NumberSeriesConfigurations");
+                entity.HasKey(n => n.Id);
+                entity.HasIndex(n => n.SeriesCode).IsUnique();
             });
             #endregion
         }

@@ -208,27 +208,33 @@
   color: var(--cms-primary);
   font-weight: 700;
 }
+.promotion-table th,
 .promotion-table td {
+  padding: 11px 14px;
   vertical-align: middle;
   white-space: nowrap;
+  text-align: left;
+}
+.promotion-table th:first-child,
+.promotion-table td:first-child {
+  width: 52px;
+  text-align: center;
+}
+.promotion-table th:first-child input,
+.promotion-table td:first-child input {
+  margin: 0 auto;
+  display: block;
+  cursor: pointer;
+}
+.promotion-table th:last-child,
+.promotion-table td:last-child {
+  width: 90px;
+  text-align: center;
 }
 .promotion-table td small {
   display: block;
   margin-top: 2px;
   color: var(--cms-muted);
-}
-.promotion-table td:last-child {
-  max-width: 250px;
-  white-space: normal;
-  color: var(--cms-muted);
-  font-size: 12px;
-}
-.promotion-table th:last-child,
-.promotion-table td:last-child {
-  text-align: right;
-}
-.promotion-table td:last-child .cms-action-link + .cms-action-link {
-  margin-left: 12px;
 }
 .cms-action-link {
   border: 0;

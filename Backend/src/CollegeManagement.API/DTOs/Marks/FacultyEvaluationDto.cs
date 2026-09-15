@@ -70,7 +70,27 @@ namespace CollegeManagement.API.DTOs.Marks
     public class SaveFacultyMarksRequestDto
     {
         public int RowVersion { get; set; }
+        public string? EvaluationId { get; set; }
+        public string? Remarks { get; set; }
         public List<FacultyStudentMarkInputDto> Students { get; set; } = new();
+
+        public List<FacultyStudentMarkInputDto> Marks
+        {
+            get => Students;
+            set => Students = (value != null && value.Any()) ? value : Students;
+        }
+
+        public List<FacultyStudentMarkInputDto> MarksList
+        {
+            get => Students;
+            set => Students = (value != null && value.Any()) ? value : Students;
+        }
+
+        public List<FacultyStudentMarkInputDto> StudentMarks
+        {
+            get => Students;
+            set => Students = (value != null && value.Any()) ? value : Students;
+        }
     }
 
     public class FacultyStudentMarkInputDto
@@ -79,6 +99,13 @@ namespace CollegeManagement.API.DTOs.Marks
         public int InternalMarks { get; set; }
         public int PracticalMarks { get; set; }
         public int TheoryMarks { get; set; }
+        public int? Internal { get => InternalMarks; set => InternalMarks = value ?? InternalMarks; }
+        public int? Practical { get => PracticalMarks; set => PracticalMarks = value ?? PracticalMarks; }
+        public int? Theory { get => TheoryMarks; set => TheoryMarks = value ?? TheoryMarks; }
+        public int? TotalMarks { get; set; }
+        public int? ObtainedMarks { get; set; }
+        public int? MaxMarks { get; set; }
+        public string? Status { get; set; }
         public bool IsAbsent { get; set; }
         public string? Remarks { get; set; }
     }

@@ -71,7 +71,7 @@ namespace CollegeManagement.API.Middleware
             {
                 statusCode = context.Response.StatusCode,
                 message = message,
-                details = exception.Message,
+                details = exception.InnerException != null ? $"{exception.Message} --> {exception.InnerException.Message}" : exception.Message,
                 stackTrace = exception.StackTrace,
                 path = context.Request.Path.Value,
                 timestamp = DateTime.UtcNow

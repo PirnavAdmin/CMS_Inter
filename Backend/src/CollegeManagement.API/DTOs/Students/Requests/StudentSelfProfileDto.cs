@@ -7,7 +7,6 @@ namespace CollegeManagement.API.DTOs.Students.Requests
         // Contact / Address
         public string? MobileNumber { get; set; }
 
-        [EmailAddress]
         public string? Email { get; set; }
 
         public string? Address { get; set; }
@@ -32,17 +31,14 @@ namespace CollegeManagement.API.DTOs.Students.Requests
         // Parent / Guardian Contact
         public string? FatherMobile { get; set; }
 
-        [EmailAddress]
         public string? FatherEmail { get; set; }
 
         public string? MotherMobile { get; set; }
 
-        [EmailAddress]
         public string? MotherEmail { get; set; }
 
         public string? GuardianMobile { get; set; }
 
-        [EmailAddress]
         public string? GuardianEmail { get; set; }
     }
 }

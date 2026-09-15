@@ -13,28 +13,30 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/staff-attendance")]
     [EnableCors("AllowFrontend")]
-    [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,HOD")]
+    [Authorize(Roles = "Faculty,Admin,Super Admin,HOD")]
     [Produces("application/json")]
+    
     public class LeaveManagementController : ControllerBase
     {
         private readonly ILeaveManagementService _service;
+        private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
 
-        public LeaveManagementController(ILeaveManagementService service)
+        public LeaveManagementController(
+            ILeaveManagementService service,
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
         {
             _service = service;
+            _jwtTokenHelper = jwtTokenHelper;
         }
 
         private int GetCurrentUserId()
         {
-            var userIdClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
-                ?? User?.FindFirst("sub")?.Value
-                ?? User?.FindFirst("id")?.Value
-                ?? User?.FindFirst("UserId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
             {
-                return 0;
+                throw new CollegeManagement.API.Exceptions.UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
             }
-            return userId;
+            return userId.Value;
         }
 
         [HttpPost("leave")]

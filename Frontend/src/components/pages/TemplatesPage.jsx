@@ -43,6 +43,7 @@ import {
   Lock,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Toast } from "@/components/common/Ui.jsx";
 import "./TemplatesPage.css";
 
@@ -100,7 +101,7 @@ export function renderWithDemoData(text, template = {}, overrideDemo = {}) {
   });
 }
 
-// 9 DEFAULT BUILT-IN CERTIFICATE TEMPLATES
+// 5 DEFAULT BUILT-IN CERTIFICATE TEMPLATES (Matching Certificate Types)
 export const DEFAULT_CERTIFICATE_TEMPLATES = [
   {
     id: "certificate-bonafide",
@@ -197,7 +198,7 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
   },
   {
     id: "certificate-transfer",
-    name: "Transfer Certificate (TC)",
+    name: "Transfer Certificate",
     type: "Certificate",
     category: "Student Certificate",
     status: "Active",
@@ -228,133 +229,8 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     ],
   },
   {
-    id: "certificate-migration",
-    name: "Migration Certificate",
-    type: "Certificate",
-    category: "Student Certificate",
-    status: "Active",
-    format: "PDF",
-    version: "1.0",
-    lastModified: "05 Sep 2026",
-    description: "Official migration document for university or board transfer.",
-    orientation: "Landscape",
-    pageSize: "A4",
-    borderStyle: "Royal Blue Ornate",
-    borderColor: "#2563eb",
-    badgeBgColor: "#2563eb",
-    badgeTextColor: "#ffffff",
-    seal: "Board Seal",
-    sealColor: "#2563eb",
-    qrEnabled: true,
-    signatureType: "Principal",
-    builtIn: true,
-    accent: "royal",
-    refPrefix: "MC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has passed the Intermediate Public Examination from this college during the academic year {{academic_year}} and is eligible for migration to another Board/University as per the rules.",
-    purpose: "University Transfer / Board Migration",
-    dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
-      "{{academic_year}}", "{{board_name}}", "{{migration_reason}}",
-      "{{certificate_number}}", "{{issue_date}}", "{{place}}"
-    ],
-  },
-  {
-    id: "certificate-no-dues",
-    name: "No Dues Certificate",
-    type: "Certificate",
-    category: "Student Certificate",
-    status: "Active",
-    format: "PDF",
-    version: "1.0",
-    lastModified: "05 Sep 2026",
-    description: "Clearance certificate confirming all institutional dues are settled.",
-    orientation: "Landscape",
-    pageSize: "A4",
-    borderStyle: "Forest Green Ornate",
-    borderColor: "#166534",
-    badgeBgColor: "#166534",
-    badgeTextColor: "#ffffff",
-    seal: "Accounts Seal",
-    sealColor: "#166534",
-    qrEnabled: true,
-    signatureType: "Principal",
-    builtIn: true,
-    accent: "forest",
-    refPrefix: "NDC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has cleared all the dues towards tuition fees, examination fees, library, hostel, transport and other charges to the college up to {{academic_year}}.",
-    purpose: "Certificate Release / Relieving Clearance",
-    dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
-      "{{tuition_dues}}", "{{lib_dues}}", "{{hostel_dues}}", "{{transport_dues}}",
-      "{{overall_dues_status}}", "{{certificate_number}}", "{{issue_date}}", "{{place}}"
-    ],
-  },
-  {
-    id: "certificate-medium",
-    name: "Medium of Instruction Certificate",
-    type: "Certificate",
-    category: "Student Certificate",
-    status: "Active",
-    format: "PDF",
-    version: "1.0",
-    lastModified: "05 Sep 2026",
-    description: "Official document certifying English medium of instruction during study.",
-    orientation: "Landscape",
-    pageSize: "A4",
-    borderStyle: "Purple Ornate",
-    borderColor: "#7e22ce",
-    badgeBgColor: "#7e22ce",
-    badgeTextColor: "#ffffff",
-    seal: "Principal Seal",
-    sealColor: "#7e22ce",
-    qrEnabled: true,
-    signatureType: "Principal",
-    builtIn: true,
-    accent: "purple",
-    refPrefix: "MIC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied during the academic year(s) {{academic_year}} in this college.\nThe medium of instruction for the Intermediate course in this institution is {{medium}}.",
-    purpose: "Foreign University Admission / Visa Requirement",
-    dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
-      "{{academic_year}}", "{{course_name}}", "{{medium}}",
-      "{{certificate_number}}", "{{issue_date}}", "{{place}}"
-    ],
-  },
-  {
-    id: "certificate-fee-paid",
-    name: "Fee Paid Certificate",
-    type: "Certificate",
-    category: "Student Certificate",
-    status: "Active",
-    format: "PDF",
-    version: "1.0",
-    lastModified: "05 Sep 2026",
-    description: "Breakdown and proof of fee amounts paid for scholarships and tax claims.",
-    orientation: "Landscape",
-    pageSize: "A4",
-    borderStyle: "Bronze Ornate",
-    borderColor: "#9a3412",
-    badgeBgColor: "#9a3412",
-    badgeTextColor: "#ffffff",
-    seal: "Accounts Seal",
-    sealColor: "#9a3412",
-    qrEnabled: true,
-    signatureType: "Principal",
-    builtIn: true,
-    accent: "bronze",
-    refPrefix: "FPC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has paid an amount of ₹ {{amount_paid}} (Rupees {{amount_in_words}}) towards tuition fees / examination fees for the academic year {{academic_year}}.",
-    purpose: "Scholarship / Income Tax Claim / Employer Reimbursement",
-    dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
-      "{{amount_paid}}", "{{amount_in_words}}", "{{fee_type}}", "{{academic_year}}",
-      "{{payment_date}}", "{{receipt_number}}", "{{certificate_number}}",
-      "{{issue_date}}", "{{place}}"
-    ],
-  },
-  {
     id: "certificate-custom",
-    name: "Custom / Other Certificate",
+    name: "Others",
     type: "Certificate",
     category: "Student Certificate",
     status: "Draft",
@@ -385,172 +261,27 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
   },
 ];
 
+export const TEMPLATES_STORAGE_KEY = "cms_certificate_templates_v1";
+
+export function getStoredCertificateTemplates() {
+  try {
+    const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {}
+  return DEFAULT_CERTIFICATE_TEMPLATES;
+}
+
+export function saveCertificateTemplates(templatesList) {
+  try {
+    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templatesList));
+  } catch {}
+}
+
 const INITIAL_TEMPLATES = [
   ...DEFAULT_CERTIFICATE_TEMPLATES,
-  // Reports
-  {
-    id: "student-strength-report",
-    name: "Student Strength Report",
-    type: "Report",
-    category: "Report",
-    status: "Active",
-    format: "Excel",
-    version: "1.0",
-    lastModified: "13 May 2026",
-    description: "Comprehensive breakdown of enrolled student counts by group, section, and gender.",
-    columns: ["Admission No", "Student Name", "Academic Year", "Board", "Group", "Section", "Gender", "Status"],
-  },
-  {
-    id: "attendance-summary-report",
-    name: "Attendance Summary Report",
-    type: "Report",
-    category: "Report",
-    status: "Active",
-    format: "Excel",
-    version: "1.0",
-    lastModified: "12 May 2026",
-    description: "Monthly attendance percentages, total working days, present, absent and leave summary.",
-    columns: ["Roll No", "Student Name", "Group", "Section", "Total Days", "Present", "Absent", "Percentage"],
-  },
-  {
-    id: "exam-result-report",
-    name: "Examination Result Report",
-    type: "Report",
-    category: "Report",
-    status: "Active",
-    format: "PDF",
-    version: "1.1",
-    lastModified: "11 May 2026",
-    description: "Detailed subject marks, grades, CGPA, pass/fail status and class ranks.",
-    columns: ["Hall Ticket No", "Student Name", "Subject", "Marks Obtained", "Max Marks", "Grade", "Status"],
-  },
-  {
-    id: "staff-report",
-    name: "Staff Report",
-    type: "Report",
-    category: "Report",
-    status: "Active",
-    format: "Excel",
-    version: "1.0",
-    lastModified: "10 May 2026",
-    description: "List of active teaching and non-teaching faculty, designations and departments.",
-    columns: ["Employee ID", "Staff Name", "Department", "Designation", "Joining Date", "Status"],
-  },
-  {
-    id: "timetable-report",
-    name: "Timetable Report",
-    type: "Report",
-    category: "Report",
-    status: "Active",
-    format: "PDF",
-    version: "1.0",
-    lastModified: "09 May 2026",
-    description: "Master weekly timetable schedules for all sections and faculty allocations.",
-    columns: ["Day", "Period", "Subject", "Teacher", "Group", "Section", "Room No"],
-  },
-  {
-    id: "admission-summary-report",
-    name: "Admission Summary",
-    type: "Report",
-    category: "Report",
-    status: "Active",
-    format: "Excel",
-    version: "1.0",
-    lastModified: "08 May 2026",
-    description: "New student admissions breakdown by academic stream and application status.",
-    columns: ["App No", "Student Name", "Board", "Group Chosen", "Application Date", "Status"],
-  },
-  // Letters
-  {
-    id: "bonafide-request-letter",
-    name: "Bonafide Request Letter",
-    type: "Letter",
-    category: "Letter",
-    status: "Active",
-    format: "Word",
-    version: "1.0",
-    lastModified: "12 May 2026",
-    description: "Formal letter requesting bonafide certificate for passport / loan purposes.",
-    subject: "Application for Issuance of Bonafide Certificate",
-    greeting: "Respected Principal,",
-    body: "I am {{student_name}}, studying in {{course}}, Section {{section}} (Admission No: {{admission_no}}). I request you to issue a Bonafide Certificate for the purpose of {{reason}}.",
-    closing: "Thanking you,",
-  },
-  {
-    id: "admission-confirmation-letter",
-    name: "Admission Confirmation Letter",
-    type: "Letter",
-    category: "Letter",
-    status: "Active",
-    format: "Word",
-    version: "1.0",
-    lastModified: "11 May 2026",
-    description: "Official confirmation letter sent to newly admitted students.",
-    subject: "Confirmation of Admission for Academic Year {{academic_year}}",
-    greeting: "Dear {{student_name}},",
-    body: "We are pleased to inform you that your admission to {{course}} has been confirmed for the academic year {{academic_year}}. Your Roll Number is {{roll_no}}.",
-    closing: "Best regards, Admissions Cell",
-  },
-  {
-    id: "fee-reminder-letter",
-    name: "Fee Reminder Letter",
-    type: "Letter",
-    category: "Letter",
-    status: "Active",
-    format: "Word",
-    version: "1.0",
-    lastModified: "10 May 2026",
-    description: "Notice sent to parents regarding pending term fee dues.",
-    subject: "Reminder: Outstanding Tuition Fee Payment",
-    greeting: "Dear Parent / Guardian of {{student_name}},",
-    body: "This is a gentle reminder that the tuition fee amount of ₹{{amount}} for {{course}} is due on {{due_date}}. Kindly settle the dues at the earliest.",
-    closing: "Regards, Accounts Dept.",
-  },
-  {
-    id: "leave-approval-letter",
-    name: "Leave Approval Letter",
-    type: "Letter",
-    category: "Letter",
-    status: "Active",
-    format: "Word",
-    version: "1.0",
-    lastModified: "09 May 2026",
-    description: "Official approval letter for staff or student leave requests.",
-    subject: "Sanction of Leave Request",
-    greeting: "Dear {{staff_name}},",
-    body: "Your leave application for {{reason}} has been sanctioned for the requested duration. Please ensure your workload is covered.",
-    closing: "Approved by Principal",
-  },
-  {
-    id: "warning-letter",
-    name: "Warning Letter",
-    type: "Letter",
-    category: "Letter",
-    status: "Active",
-    format: "Word",
-    version: "1.0",
-    lastModified: "08 May 2026",
-    description: "Notice regarding attendance shortage or disciplinary warning.",
-    subject: "Official Notice: Low Attendance Warning",
-    greeting: "Dear {{student_name}},",
-    body: "It has been observed that your overall attendance in {{course}} is below the required 75% threshold. Please attend all classes regularly to avoid exam debarment.",
-    closing: "Issued by Discipline Committee",
-  },
-  {
-    id: "transfer-request-letter",
-    name: "Transfer Request Letter",
-    type: "Letter",
-    category: "Letter",
-    status: "Active",
-    format: "Word",
-    version: "1.0",
-    lastModified: "07 May 2026",
-    description: "Application letter for requesting Transfer Certificate.",
-    subject: "Request for Transfer Certificate",
-    greeting: "To the Principal,",
-    body: "I am writing to request a Transfer Certificate for {{student_name}} (Admission No: {{admission_no}}) due to {{reason}}.",
-    closing: "Yours faithfully,",
-  },
 ];
 
 const DYNAMIC_FIELD_TOKENS = [
@@ -585,15 +316,20 @@ export default function TemplatesPage() {
   const location = useLocation();
   const { id } = useParams();
 
-  // Primary mock templates state initialized with the 9 default certificates
-  const [templates, setTemplates] = useState(INITIAL_TEMPLATES);
+  // Primary templates state loaded from localStorage or built-in defaults
+  const [templates, setTemplates] = useState(() => getStoredCertificateTemplates());
   const [toastMessage, setToastMessage] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
-  // Active Main Tab: "all" | "certificates" | "reports" | "letters" | "upload"
+  // Sync templates to localStorage whenever modified
+  useEffect(() => {
+    saveCertificateTemplates(templates);
+  }, [templates]);
+
+  // Active Main Tab: "certificates" | "upload"
   const [activeTab, setActiveTab] = useState(() => {
     if (location.pathname.includes("/upload")) return "upload";
-    return "all";
+    return "certificates";
   });
 
   // Common filters
@@ -811,31 +547,10 @@ export default function TemplatesPage() {
         <nav className="templates-tabs-bar" aria-label="Template Categories">
           <button
             type="button"
-            className={`templates-tab-btn ${activeTab === "all" ? "active" : ""}`}
-            onClick={() => setActiveTab("all")}
-          >
-            <FolderKanban size={15} /> All Templates
-          </button>
-          <button
-            type="button"
             className={`templates-tab-btn ${activeTab === "certificates" ? "active" : ""}`}
             onClick={() => setActiveTab("certificates")}
           >
             <Award size={15} /> Certificates
-          </button>
-          <button
-            type="button"
-            className={`templates-tab-btn ${activeTab === "reports" ? "active" : ""}`}
-            onClick={() => setActiveTab("reports")}
-          >
-            <FileSpreadsheet size={15} /> Reports
-          </button>
-          <button
-            type="button"
-            className={`templates-tab-btn ${activeTab === "letters" ? "active" : ""}`}
-            onClick={() => setActiveTab("letters")}
-          >
-            <FileText size={15} /> Letters
           </button>
           <button
             type="button"
@@ -846,13 +561,13 @@ export default function TemplatesPage() {
           </button>
         </nav>
 
-        {/* Tab 5: Upload Templates Screen when activeTab is upload */}
+        {/* Upload Templates Screen when activeTab is upload */}
         {activeTab === "upload" ? (
           <UploadTemplateTabSection
             onUploaded={(newTemp) => {
               setTemplates((prev) => [...prev, newTemp]);
               notify(`Uploaded new template "${newTemp.name}".`);
-              setActiveTab("all");
+              setActiveTab("certificates");
             }}
             notify={notify}
           />
@@ -861,7 +576,7 @@ export default function TemplatesPage() {
             {/* Common Top Toolbar */}
             <div className="templates-toolbar">
               <div className="templates-search-box">
-                <Search size={15} className="templates-search-icon" />
+                <Search3DIcon size={15} className="templates-search-icon" />
                 <input
                   type="text"
                   placeholder="Search templates..."
@@ -884,8 +599,6 @@ export default function TemplatesPage() {
                   <option value="All Categories">All Categories</option>
                   <option value="Student Certificate">Student Certificate</option>
                   <option value="Academic">Academic</option>
-                  <option value="Report">Report</option>
-                  <option value="Letter">Letter</option>
                   <option value="HR">HR</option>
                   <option value="Finance">Finance</option>
                   <option value="Admission">Admission</option>
@@ -902,11 +615,7 @@ export default function TemplatesPage() {
                     <option value="Study">Study</option>
                     <option value="Conduct">Conduct</option>
                     <option value="Transfer">Transfer</option>
-                    <option value="Migration">Migration</option>
-                    <option value="No Dues">No Dues</option>
-                    <option value="Medium of Instruction">Medium of Instruction</option>
-                    <option value="Fee Paid">Fee Paid</option>
-                    <option value="Custom">Custom / Other</option>
+                    <option value="Others">Others</option>
                   </select>
                 )}
 
@@ -1033,18 +742,66 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
   return (
     <article className={`templates-card accent-${template.accent || 'default'}`}>
       <div className="templates-card-thumb">
-        <div className={`mock-thumb-bg ${template.type.toLowerCase()}`} style={{ borderColor: template.borderColor || '#cbd5e1' }}>
+        <div
+          className={`mock-thumb-bg ${template.type.toLowerCase()}`}
+          style={{
+            borderColor: template.borderColor || '#1e3a8a',
+            borderStyle: 'double',
+            borderWidth: '2px',
+          }}
+        >
           <div className="thumb-watermark-logo">PIRNAV</div>
-          <div className="thumb-mini-header" style={{ color: template.borderColor || '#1e293b' }}>
-            {template.name}
+
+          {/* Mini College Header */}
+          <div className="thumb-header-area">
+            <div className="thumb-college-title" style={{ color: template.borderColor || '#1e3a8a' }}>
+              PIRNAV COLLEGE
+            </div>
+            <div className="thumb-college-sub">
+              (Intermediate / Junior College)
+            </div>
+            <div className="thumb-ref-line">
+              <span>Ref: {template.refPrefix || "BC"}/2026/001</span>
+              <span>05 Sep 2026</span>
+            </div>
           </div>
-          <div className="thumb-mini-lines">
-            <span />
-            <span />
-            <span />
+
+          {/* Mini Title Badge */}
+          <div className="thumb-title-badge-wrap">
+            <span
+              className="thumb-title-badge"
+              style={{
+                backgroundColor: template.badgeBgColor || template.borderColor || '#1e3a8a',
+                color: template.badgeTextColor || '#ffffff',
+              }}
+            >
+              {template.name.toUpperCase()}
+            </span>
           </div>
-          {template.qrEnabled && <div className="thumb-mini-qr">QR</div>}
+
+          {/* Mini Document Content Body */}
+          <div className="thumb-mini-body-text">
+            This is to certify that <strong>Rahul Kumar</strong> (ADM-2026-0017) is a bonafide student of Pirnav College.
+          </div>
+
+          {/* Mini Footer: Place, QR, Seal, Signature */}
+          <div className="thumb-mini-footer">
+            <div className="thumb-footer-left">
+              <div className="thumb-mini-place">Vijayawada</div>
+              {template.qrEnabled !== false && <span className="thumb-mini-qr">QR</span>}
+            </div>
+            <div className="thumb-footer-center">
+              <div className="thumb-mini-seal" style={{ borderColor: template.borderColor || '#1e3a8a', color: template.borderColor || '#1e3a8a' }}>
+                <span>SEAL</span>
+              </div>
+            </div>
+            <div className="thumb-footer-right">
+              <span className="thumb-mini-sig-script">{template.signatureType || "Principal"}</span>
+              <span className="thumb-mini-sig-label">Pirnav College</span>
+            </div>
+          </div>
         </div>
+
         <div className="thumb-badges-wrap">
           {template.builtIn && <span className="templates-builtin-badge">Default</span>}
           <span className={`templates-status-badge status-${template.status.toLowerCase()}`}>

@@ -26,10 +26,10 @@ namespace CollegeManagement.API.Validators.StaffValidators
                 .Matches(@"^[0-9+\-\s]{7,15}$").WithMessage("Mobile number must be a valid contact format.");
 
             RuleFor(x => x.Gender)
-                .NotEmpty().WithMessage("Gender is required.");
+                .Must(g => string.IsNullOrWhiteSpace(g) || g == "Male" || g == "Female" || g == "Other")
+                .WithMessage("Gender must be 'Male', 'Female', or 'Other' if specified.");
 
             RuleFor(x => x.Qualification)
-                .NotEmpty().WithMessage("Qualification is required.")
                 .MaximumLength(100);
 
             RuleFor(x => x.StaffType)

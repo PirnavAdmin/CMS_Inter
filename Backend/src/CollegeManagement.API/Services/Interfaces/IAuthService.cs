@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Authentication;
+using CollegeManagement.API.DTOs.Authentication;
 using CollegeManagement.API.DTOs.AcademicYear;
 
 namespace CollegeManagement.API.Services.Interfaces
@@ -10,6 +10,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request);
         Task<AuthResult> VerifyOtpAsync(VerifyOtpRequest request);
         Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request);
+        Task<(bool Success, string Message)> ChangePasswordAsync(int userId, string oldPassword, string newPassword, string confirmPassword);
         Task<List<UserDto>> GetAllUsersAsync();
         Task<UserDto?> GetUserByIdAsync(int id);
     }

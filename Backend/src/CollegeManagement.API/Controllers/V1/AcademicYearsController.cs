@@ -24,6 +24,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves academic years with search, status filtering, and pagination support.
         /// </summary>
         [HttpGet]
+        [AllowAnonymous]
         public async Task<ActionResult> GetPaged([FromQuery] AcademicYearSearchRequestDto request)
         {
             var result = await _service.GetPagedAsync(request);
@@ -46,6 +47,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves all currently active academic years.
         /// </summary>
         [HttpGet("active")]
+        [AllowAnonymous]
         public async Task<ActionResult> GetActive()
         {
             var result = await _service.GetActiveAsync();
@@ -61,6 +63,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves an academic year by its unique identifier.
         /// </summary>
         [HttpGet("{id}")]
+        [AllowAnonymous]
         public async Task<ActionResult> GetById(int id)
         {
             var result = await _service.GetByIdAsync(id);

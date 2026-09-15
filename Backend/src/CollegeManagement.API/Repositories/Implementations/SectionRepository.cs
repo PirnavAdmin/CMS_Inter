@@ -326,25 +326,40 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<SectionResponse?> GetActiveSectionAssignedToRoomAsync(int? roomId, string? roomCode, int? excludeSectionId = null)
         {
-            var sql = @"
-                SELECT SectionId, SectionName, RoomId, IsActive
-                FROM `Sections`
-                WHERE IsActive = 1
-                  AND (
-                      (@RoomId IS NOT NULL AND @RoomId > 0 AND RoomId = @RoomId)
-                      OR (@RoomCode IS NOT NULL AND @RoomCode <> '' AND RoomId IN (SELECT RoomId FROM Rooms WHERE RoomCode = @RoomCode OR RoomNumber = @RoomCode))
-                  )
-                  AND (@ExcludeSectionId IS NULL OR SectionId <> @ExcludeSectionId)
-                LIMIT 1;";
+            try
+            {
+                return await Connection.QueryFirstOrDefaultAsync<SectionResponse>(
+                    "sp_GetActiveSectionAssignedToRoom",
+                    new
+                    {
+                        p_RoomId = roomId,
+                        p_RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim(),
+                        p_ExcludeSectionId = excludeSectionId
+                    },
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch (MySqlConnector.MySqlException ex) when (ex.Number == 1305)
+            {
+                var sql = @"
+                    SELECT SectionId, SectionName, RoomId, IsActive
+                    FROM `Sections`
+                    WHERE IsActive = 1
+                      AND (
+                          (@RoomId IS NOT NULL AND @RoomId > 0 AND RoomId = @RoomId)
+                          OR (@RoomCode IS NOT NULL AND @RoomCode <> '' AND RoomId IN (SELECT RoomId FROM Rooms WHERE RoomCode = @RoomCode OR RoomNumber = @RoomCode))
+                      )
+                      AND (@ExcludeSectionId IS NULL OR SectionId <> @ExcludeSectionId)
+                    LIMIT 1;";
 
-            return await Connection.QueryFirstOrDefaultAsync<SectionResponse>(
-                sql,
-                new
-                {
-                    RoomId = roomId,
-                    RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim(),
-                    ExcludeSectionId = excludeSectionId
-                });
+                return await Connection.QueryFirstOrDefaultAsync<SectionResponse>(
+                    sql,
+                    new
+                    {
+                        RoomId = roomId,
+                        RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim(),
+                        ExcludeSectionId = excludeSectionId
+                    });
+            }
         }
 
         public async Task<int?> ResolveBoardIdAsync(int? boardId, string? boardName)

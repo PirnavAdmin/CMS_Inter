@@ -48,7 +48,6 @@ namespace CollegeManagement.API.DTOs.Students
         [MaxLength(10)]
         public string? BloodGroup { get; set; }
 
-        [EmailAddress]
         [MaxLength(150)]
         public string? Email { get; set; }
 
@@ -135,7 +134,6 @@ namespace CollegeManagement.API.DTOs.Students
         [MaxLength(20)]
         public string? FatherMobile { get; set; }
 
-        [EmailAddress]
         [MaxLength(150)]
         public string? FatherEmail { get; set; }
 
@@ -149,7 +147,6 @@ namespace CollegeManagement.API.DTOs.Students
         [MaxLength(20)]
         public string? MotherMobile { get; set; }
 
-        [EmailAddress]
         [MaxLength(150)]
         public string? MotherEmail { get; set; }
 
@@ -160,7 +157,6 @@ namespace CollegeManagement.API.DTOs.Students
         [MaxLength(20)]
         public string? GuardianMobile { get; set; }
 
-        [EmailAddress]
         [MaxLength(150)]
         public string? GuardianEmail { get; set; }
 

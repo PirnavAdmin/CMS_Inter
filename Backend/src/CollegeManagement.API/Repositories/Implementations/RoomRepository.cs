@@ -76,12 +76,22 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (filter.OnlyAvailable == true || filter.ExcludeAssigned == true)
             {
-                var assignedSql = @"
-                    SELECT DISTINCT RoomId FROM `Sections` WHERE IsActive = 1 AND RoomId IS NOT NULL
-                    UNION
-                    SELECT DISTINCT r.RoomId FROM `Sections` s JOIN Rooms r ON (s.RoomNumber = r.RoomCode OR s.RoomNumber = r.RoomNumber) WHERE s.IsActive = 1;";
-                var assignedRoomIds = (await Connection.QueryAsync<int>(assignedSql)).ToHashSet();
-                query = query.Where(r => !assignedRoomIds.Contains(r.RoomId));
+                IEnumerable<int> assignedRoomIds;
+                try
+                {
+                    assignedRoomIds = await Connection.QueryAsync<int>(
+                        "sp_GetAssignedRoomIds",
+                        commandType: CommandType.StoredProcedure);
+                }
+                catch (MySqlConnector.MySqlException ex) when (ex.Number == 1305)
+                {
+                    var assignedSql = @"
+                        SELECT DISTINCT RoomId FROM `Sections` WHERE IsActive = 1 AND RoomId IS NOT NULL;";
+                    assignedRoomIds = await Connection.QueryAsync<int>(assignedSql);
+                }
+
+                var assignedSet = assignedRoomIds.ToHashSet();
+                query = query.Where(r => !assignedSet.Contains(r.RoomId));
             }
 
             return query;
@@ -89,22 +99,36 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<SectionAssignedDto>> GetAssignedActiveSectionsByRoomAsync(int roomId, string? roomCode)
         {
-            var sql = @"
-                SELECT SectionId, SectionName, MaximumStrength, IsActive
-                FROM Sections
-                WHERE IsActive = 1
-                  AND (
-                      RoomId = @RoomId
-                      OR (@RoomCode IS NOT NULL AND @RoomCode <> '' AND RoomNumber = @RoomCode)
-                  )";
+            try
+            {
+                return await Connection.QueryAsync<SectionAssignedDto>(
+                    "sp_GetAssignedSectionsByRoom",
+                    new
+                    {
+                        p_RoomId = roomId,
+                        p_RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim()
+                    },
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch (MySqlConnector.MySqlException ex) when (ex.Number == 1305)
+            {
+                var sql = @"
+                    SELECT SectionId, SectionName, MaximumStrength, IsActive
+                    FROM `Sections`
+                    WHERE IsActive = 1
+                      AND (
+                          (@RoomId > 0 AND RoomId = @RoomId)
+                          OR (@RoomCode IS NOT NULL AND @RoomCode <> '' AND RoomId IN (SELECT RoomId FROM `Rooms` WHERE RoomCode = @RoomCode OR RoomNumber = @RoomCode))
+                      )";
 
-            return await Connection.QueryAsync<SectionAssignedDto>(
-                sql,
-                new
-                {
-                    RoomId = roomId,
-                    RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim()
-                });
+                return await Connection.QueryAsync<SectionAssignedDto>(
+                    sql,
+                    new
+                    {
+                        RoomId = roomId,
+                        RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim()
+                    });
+            }
         }
 
         public async Task<Room?> GetByIdAsync(int id)

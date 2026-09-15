@@ -9,7 +9,6 @@ const quickLinks = [
   { label: "Home", to: "/" },
   { label: "Login", to: "/login" },
   { label: "Register", to: "/register" },
-  { label: "Dashboard", to: "/dashboard" },
 ];
 
 const modules = ["Admissions", "Attendance", "Exams", "Fees", "Reports"];
@@ -19,7 +18,7 @@ export default function LandingPage() {
     <div className="cms-landing">
       <header className="cms-landing-nav">
         <div className="cms-landing-brand">
-          <span className="cms-brand-mark logo-mark"><img src={logo} alt="Pirnav College logo" /></span>
+          <span className="landing-brand-logo"><img src={logo} alt="Pirnav College logo" /></span>
         </div>
         <div className="landing-header-actions"><ThemeToggle /><Link to="/login" className="landing-login-btn">Login</Link></div>
       </header>
@@ -45,7 +44,7 @@ export default function LandingPage() {
       <footer className="landing-footer">
         <div className="landing-footer-inner">
           <div className="landing-footer-brand">
-            <span className="cms-brand-mark logo-mark"><img src={logo} alt="Pirnav College logo" /></span>
+            <span className="landing-footer-logo"><img src={logo} alt="Pirnav College logo" /></span>
             <div>
               <p>One connected platform for academics, admissions, administration and student success.</p>
             </div>

@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ListOrdered, Settings2, Users, ShieldCheck, ArrowRight, Landmark, GraduationCap, FileText, KeyRound } from "lucide-react";
+import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import boardAcademicYearImage from "@/assets/settings-3d/board-academic-year.png";
+import numberSeriesImage from "@/assets/settings-3d/number-series.png";
+import templatesImage from "@/assets/settings-3d/templates.png";
+import auditLogsImage from "@/assets/settings-3d/audit-logs.png";
 import "./SettingsPage.css";
 
 export default function SettingsPage() {
@@ -13,6 +17,7 @@ export default function SettingsPage() {
       title: "Board & Academic Year Management",
       description: "Create, edit and manage education boards, board codes, academic years, date ranges and status.",
       icon: Landmark,
+      image: boardAcademicYearImage,
       to: "/dashboard/board-academic-year",
       buttonText: "Manage Board & Academic Year",
       primary: true,
@@ -22,6 +27,7 @@ export default function SettingsPage() {
       title: "ID & Number Series",
       description: "Configure Employee IDs, Admission Numbers and Roll Number formats.",
       icon: ListOrdered,
+      image: numberSeriesImage,
       to: "/dashboard/settings/number-series",
       buttonText: "Manage Number Series",
       primary: true,
@@ -31,42 +37,26 @@ export default function SettingsPage() {
       title: "Templates",
       description: "Manage certificate templates, document templates and downloadable bulk-upload templates.",
       icon: FileText,
+      image: templatesImage,
       to: "/dashboard/settings/templates",
       buttonText: "Manage Templates",
       primary: true,
     },
     {
-      id: "credentials",
-      title: "Credentials Generator",
-      description: "Generate, manage, preview and send login credentials for faculty and students in bulk.",
-      icon: KeyRound,
-      to: "/dashboard/settings/credentials",
-      buttonText: "Manage Credentials",
+      id: "leave-types",
+      title: "Leave Types & Policy Configuration",
+      description: "Define annual leave quotas, staff eligibility, carry-forward policies, and proof requirements.",
+      icon: CalendarDays,
+      to: "/dashboard/settings/leave-types",
+      buttonText: "Manage Leave Types",
       primary: true,
-    },
-    {
-      id: "general",
-      title: "General Settings",
-      description: "Configure institution details, academic defaults and system preferences.",
-      icon: Settings2,
-      to: "/dashboard/settings/general",
-      buttonText: "Manage General Settings",
-      primary: false,
-    },
-    {
-      id: "users",
-      title: "User Management",
-      description: "Manage admin accounts, role permissions and system access controls.",
-      icon: Users,
-      to: "/dashboard/settings/user-management",
-      buttonText: "Manage User Roles",
-      primary: false,
     },
     {
       id: "audit",
       title: "Audit Logs",
       description: "View system audit trail, security events and administrator activity logs.",
       icon: ShieldCheck,
+      image: auditLogsImage,
       to: "/dashboard/settings/audit-logs",
       buttonText: "View Audit Logs",
       primary: false,
@@ -87,7 +77,7 @@ export default function SettingsPage() {
               <article key={card.id} className={`settings-card ${card.primary ? "is-featured" : ""}`}>
                 <div className="settings-card-header">
                   <div className="settings-card-icon">
-                    <Icon size={20} />
+                    {card.image ? <img className="settings-card-image" src={card.image} alt="" aria-hidden="true" /> : <Icon size={20} />}
                   </div>
                   <h3>{card.title}</h3>
                 </div>
@@ -109,4 +99,3 @@ export default function SettingsPage() {
     </DashboardLayout>
   );
 }
-

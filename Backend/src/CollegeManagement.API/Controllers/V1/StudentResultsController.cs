@@ -1,30 +1,35 @@
+using Asp.Versioning;
+using CollegeManagement.API.DTOs.Result;
+using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using Asp.Versioning;
-using CollegeManagement.API.DTOs.Result;
-using CollegeManagement.API.Services.Interfaces;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/students/me/results")]
+    [Authorize]
     public class StudentResultsController : ControllerBase
     {
         private readonly IResultService _resultService;
         private readonly ILogger<StudentResultsController> _logger;
+        private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
 
         public StudentResultsController(
             IResultService resultService,
-            ILogger<StudentResultsController> logger)
+            ILogger<StudentResultsController> logger,
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
         {
             _resultService = resultService;
             _logger = logger;
+            _jwtTokenHelper = jwtTokenHelper;
         }
 
         /// <summary>
@@ -34,7 +39,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(IEnumerable<StudentSelfResultDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetMyResults([FromQuery] int? studentId)
         {
-            var effectiveStudentId = studentId ?? GetCurrentUserId() ?? 1;
+            var effectiveStudentId = studentId ?? GetCurrentStudentId() ?? 1;
             var results = await _resultService.GetStudentSelfResultsAsync(effectiveStudentId);
             return Ok(results);
         }
@@ -49,7 +54,7 @@ namespace CollegeManagement.API.Controllers.V1
             [FromRoute] int examinationId,
             [FromQuery] int? studentId)
         {
-            var effectiveStudentId = studentId ?? GetCurrentUserId() ?? 1;
+            var effectiveStudentId = studentId ?? GetCurrentStudentId() ?? 1;
             var memo = await _resultService.GetStudentSelfResultMemoAsync(effectiveStudentId, examinationId);
             if (memo == null)
             {
@@ -58,14 +63,9 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(memo);
         }
 
-        private int? GetCurrentUserId()
+        private int? GetCurrentStudentId()
         {
-            var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id") ?? User.FindFirst("sub");
-            if (claim != null && int.TryParse(claim.Value, out int id))
-            {
-                return id;
-            }
-            return null;
+            return _jwtTokenHelper.GetStudentId(User);
         }
     }
 }

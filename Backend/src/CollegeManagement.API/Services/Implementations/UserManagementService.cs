@@ -86,9 +86,10 @@ namespace CollegeManagement.API.Services.Implementations
             var user = await _userRepository.GetByIdAsync(id);
             if (user == null) return null;
 
-            if (user.Email != request.Email)
+            var normalizedEmail = request.Email.Trim().ToUpperInvariant();
+            if (!string.Equals(user.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase))
             {
-                var existingUser = await _userRepository.GetByEmailAsync(request.Email);
+                var existingUser = await _userRepository.GetByEmailAsync(normalizedEmail);
                 if (existingUser != null && existingUser.UserId != id)
                 {
                     throw new Exception("Email is already in use by another user.");
@@ -96,7 +97,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             user.FullName = request.FullName;
-            user.Email = request.Email;
+            user.Email = normalizedEmail;
             user.PhoneNumber = request.PhoneNumber;
             user.RoleId = request.RoleId;
 

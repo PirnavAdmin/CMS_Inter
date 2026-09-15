@@ -29,7 +29,7 @@ BEGIN
             END
         ) AS FailedStudents,
 
-        ROUND(
+        COALESCE(ROUND(
             COUNT(DISTINCT
                 CASE
                     WHEN ResultStatus = 'Pass'
@@ -42,16 +42,16 @@ BEGIN
                 0
             ),
             2
-        ) AS PassPercentage,
+        ), 0.00) AS PassPercentage,
 
-        ROUND(
+        COALESCE(ROUND(
             AVG(TotalMarks),
             2
-        ) AS AverageMarks,
+        ), 0.00) AS AverageMarks,
 
-        MAX(TotalMarks) AS HighestMarks,
+        COALESCE(MAX(TotalMarks), 0.00) AS HighestMarks,
 
-        MIN(TotalMarks) AS LowestMarks,
+        COALESCE(MIN(TotalMarks), 0.00) AS LowestMarks,
 
         COUNT(DISTINCT
             CASE

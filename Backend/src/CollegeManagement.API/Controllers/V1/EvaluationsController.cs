@@ -1,23 +1,29 @@
+using CollegeManagement.API.DTOs.Evaluations;
+using CollegeManagement.API.Models.Enums;
+using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using CollegeManagement.API.DTOs.Evaluations;
-using CollegeManagement.API.Models.Enums;
-using CollegeManagement.API.Services.Interfaces;
-using Microsoft.AspNetCore.Mvc;
 
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
+    [Authorize]
     public class EvaluationsController : ControllerBase
     {
         private readonly IEvaluationService _evaluationService;
+        private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
 
-        public EvaluationsController(IEvaluationService evaluationService)
+        public EvaluationsController(
+            IEvaluationService evaluationService,
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
         {
             _evaluationService = evaluationService;
+            _jwtTokenHelper = jwtTokenHelper;
         }
 
         // =========================================================================
@@ -106,7 +112,7 @@ namespace CollegeManagement.API.Controllers
         [HttpPost("api/v1/evaluations/{evaluationId}/verify")]
         public async Task<IActionResult> VerifyEvaluation(
             [FromRoute] string evaluationId,
-            [FromBody] VerifyEvaluationRequestDto? requestDto = null,
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyEvaluationRequestDto? requestDto = null,
             [FromQuery] string? message = null)
         {
             var effectiveMessage = !string.IsNullOrWhiteSpace(requestDto?.Message)
@@ -142,7 +148,7 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> RejectEvaluation(
             [FromRoute] string evaluationId,
             [FromQuery] string? remarks,
-            [FromBody] RejectEvaluationRequestDto? requestDto = null)
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] RejectEvaluationRequestDto? requestDto = null)
         {
             var effectiveRemarks = !string.IsNullOrWhiteSpace(requestDto?.Reason)
                 ? requestDto.Reason
@@ -334,15 +340,12 @@ namespace CollegeManagement.API.Controllers
         // =========================================================================
         private int GetCurrentUserId()
         {
-            var subClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                        ?? User?.FindFirst("sub")?.Value
-                        ?? User?.FindFirst("id")?.Value;
-
-            if (int.TryParse(subClaim, out int id))
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
             {
-                return id;
+                throw new CollegeManagement.API.Exceptions.UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
             }
-            return 1; // Default Administrator ID
+            return userId.Value;
         }
     }
 }

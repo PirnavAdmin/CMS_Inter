@@ -41,6 +41,12 @@ namespace CollegeManagement.API.Data.Configurations
                 .HasForeignKey(lb => lb.AcademicYearId)
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_StaffLeaveBalances_AcademicYears_AcademicYearId");
+
+            builder.HasOne(lb => lb.LeaveCategory)
+                .WithMany()
+                .HasForeignKey(lb => lb.LeaveCategoryId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("FK_StaffLeaveBalances_LeaveCategories_LeaveCategoryId");
         }
     }
 }

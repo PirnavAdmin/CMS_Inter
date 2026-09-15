@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Toast } from "@/components/common/Ui.jsx";
 import "./BoardAcademicYearManagementPage.css";
 
@@ -221,7 +222,7 @@ function SearchableApiSelect({ value, options, idKey, nameKey, placeholder, onCh
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
     }}>
       <div className="bay-api-picker-input">
-        <Search size={16} />
+        <Search3DIcon size={16} />
         <input
           role="combobox"
           aria-expanded={open}
@@ -282,7 +283,7 @@ function ApiLevelMultiSelect({ value, options, onChange }) {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
     }}>
       <div className="bay-level-combobox">
-        <Search size={16} />
+        <Search3DIcon size={16} />
         <input role="combobox" aria-expanded={open} value={open ? query : selectedNames} placeholder={selected.length ? "Search another level" : "Search academic level"}
           title={!open ? selectedNames : undefined}
           onFocus={() => { setQuery(""); setOpen(true); }} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
@@ -616,7 +617,7 @@ function AcademicYearWorkspace() {
       <section className="bay-card ay-list-card">
         <div className="bay-toolbar">
           <label className="bay-search">
-            <Search size={16} />
+            <Search3DIcon size={16} />
             <input
               value={query}
               onChange={(event) => {
@@ -1454,7 +1455,7 @@ export default function BoardAcademicYearManagementPage() {
           <section className="bay-card bay-board-list-card">
             <div className="bay-toolbar">
               <label className="bay-search">
-                <Search size={17} />
+                <Search3DIcon size={16} />
                 <input
                   value={query}
                   onChange={(e) => {

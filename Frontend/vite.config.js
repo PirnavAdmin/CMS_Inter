@@ -5,7 +5,7 @@ import path from "node:path";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || "https://chance-sulfide-blaming.ngrok-free.dev/";
+  const apiBaseUrl = env.VITE_API_BASE_URL || "https://sterile-retorted-tightness.ngrok-free.dev";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -33,13 +33,6 @@ export default defineConfig(({ mode }) => {
           timeout: 30000,
           headers: {
             "ngrok-skip-browser-warning": "true",
-          },
-          configure: (proxy) => {
-            proxy.on("error", (err, req, res) => {
-              if (res.headersSent) return;
-              res.writeHead(200, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ data: [], message: "Local backend offline - using mock mode" }));
-            });
           },
         },
       },

@@ -6,6 +6,7 @@ import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import DataTable from "@/components/common/DataTable.jsx";
 import { Field, Modal, StatusBadge, Toast, useForm } from "@/components/common/Ui.jsx";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./CourseGroupPage.css";
 
 const MODULE_SLUG = "courses";
@@ -46,6 +47,11 @@ const getCollection = (payload) => {
 const read = (item, ...keys) => {
   const key = keys.find((candidate) => item?.[candidate] !== undefined && item?.[candidate] !== null);
   return key ? item[key] : undefined;
+};
+
+const validId = (value) => {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0;
 };
 
 const responseData = (response) => response?.data?.data || response?.data?.Data || response?.data;
@@ -190,6 +196,17 @@ const groupFormFields = [
 
 const optionLabel = (options, value, fallback = "-") => (
   options.find((option) => String(option.value) === String(value))?.label || fallback
+);
+
+const selectedContextOption = (item, id, labelKeys) => {
+  if (!validId(id)) return null;
+  const label = read(item, ...labelKeys) || id;
+  return { ...(item || {}), value: String(id), label: String(label) };
+};
+
+const groupMatchesAcademicContext = (row, { boardId, academicYearId } = {}) => (
+  (!validId(boardId) || String(row.boardId || "") === String(boardId))
+  && (!validId(academicYearId) || String(row.year || "") === String(academicYearId))
 );
 
 const backendProgramIdFor = (programId) => {
@@ -425,12 +442,19 @@ const loadGroupMasters = async () => {
 };
 
 const groupApi = {
-  fetchRows: async ({ search = "" } = {}) => {
+  fetchRows: async ({ search = "", boardId = "", academicYearId = "" } = {}) => {
+    if (!validId(boardId) || !validId(academicYearId)) return [];
     const masters = await loadGroupMasters();
-    const response = await apiClient.get(apiEndpoints.groups.getAll);
+    const response = await apiClient.get(apiEndpoints.groups.getAll, {
+      params: {
+        boardId: Number(boardId),
+        academicYearId: Number(academicYearId),
+      },
+    });
     return getCollection(response.data)
       .map((item) => normalizeGroup(item, masters))
       .filter((row) => row.id)
+      .filter((row) => groupMatchesAcademicContext(row, { boardId, academicYearId }))
       .filter((row) => matchesSearch(row, search));
   },
   fetchRow: async (groupId) => {
@@ -629,6 +653,12 @@ function ProgramsPanel({ groupId, groupCode, groupName, selectedProgramIds, onCh
 function CourseGroupFormPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const {
+    selectedBoard,
+    selectedBoardId,
+    selectedAcademicYear,
+    selectedAcademicYearId,
+  } = useAcademicContext();
   const [contextOptions, setContextOptions] = useState({ boards: [], years: [], levels: [] });
   const [toast, setToast] = useState("");
   const [toastType, setToastType] = useState("success");
@@ -638,13 +668,23 @@ function CourseGroupFormPage() {
   const [selectedProgramIds, setSelectedProgramIds] = useState([]);
   const mode = id ? "Edit" : "Add";
   const listPath = "/dashboard/courses";
+  const navbarBoardOption = useMemo(() => selectedContextOption(
+    selectedBoard,
+    selectedBoardId,
+    ["boardName", "BoardName", "name", "Name", "boardCode", "BoardCode", "code", "Code"],
+  ), [selectedBoard, selectedBoardId]);
+  const navbarYearOption = useMemo(() => selectedContextOption(
+    selectedAcademicYear,
+    selectedAcademicYearId,
+    ["academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "label", "Label", "code", "Code"],
+  ), [selectedAcademicYear, selectedAcademicYearId]);
   const mappedYearOptions = values.board ? getMappedYearsForBoard(contextOptions, values.board) : [];
   const yearOptions = values.board && mappedYearOptions.length
     ? mappedYearOptions
     : uniqueAcademicYearsByName(contextOptions.years, (year) => year.label);
   const fields = groupFormFields.map((field) => {
-    if (field.name === "board") return { ...field, options: contextOptions.boards };
-    if (field.name === "year") return { ...field, options: yearOptions };
+    if (field.name === "board") return { ...field, options: navbarBoardOption ? [navbarBoardOption] : contextOptions.boards, disabled: true };
+    if (field.name === "year") return { ...field, options: navbarYearOption ? [navbarYearOption] : yearOptions, disabled: true };
     return field;
   });
   const showProgramError = useCallback((message) => {
@@ -653,11 +693,7 @@ function CourseGroupFormPage() {
   }, []);
 
   const setGroupValue = (name, value) => {
-    if (name === "board") {
-      setValues((current) => ({ ...current, board: value, year: "", level: defaultLevelForBoard(contextOptions, value, current.level) }));
-      setErrors((current) => ({ ...current, board: undefined, year: undefined }));
-      return;
-    }
+    if (name === "board" || name === "year") return;
     setValue(name, value);
   };
 
@@ -671,12 +707,23 @@ function CourseGroupFormPage() {
           id ? groupApi.fetchRow(id) : null,
         ]);
         if (ignore) return;
-        setContextOptions(masters);
+        setContextOptions({
+          ...masters,
+          boards: navbarBoardOption ? uniqueByValue([navbarBoardOption, ...masters.boards]) : masters.boards,
+          years: navbarYearOption ? uniqueByValue([navbarYearOption, ...masters.years]) : masters.years,
+        });
         if (loadedGroup) {
           setValues(loadedGroup);
           const availablePrograms = await loadProgramMaster().catch(() => getProgramMaster());
           const mappedProgramIds = await fetchProgramIdsForGroup(id, availablePrograms);
           if (!ignore) setSelectedProgramIds(mappedProgramIds);
+        } else {
+          setValues((current) => ({
+            ...current,
+            board: validId(selectedBoardId) ? String(selectedBoardId) : "",
+            year: validId(selectedAcademicYearId) ? String(selectedAcademicYearId) : "",
+            level: defaultLevelForBoard(masters, selectedBoardId, current.level),
+          }));
         }
       } catch (error) {
         if (!ignore) {
@@ -689,7 +736,23 @@ function CourseGroupFormPage() {
     };
     load();
     return () => { ignore = true; };
-  }, [id, setValues]);
+  }, [id, navbarBoardOption, navbarYearOption, selectedAcademicYearId, selectedBoardId, setValues]);
+
+  useEffect(() => {
+    if (id) return;
+    setValues((current) => {
+      const board = validId(selectedBoardId) ? String(selectedBoardId) : "";
+      const year = validId(selectedAcademicYearId) ? String(selectedAcademicYearId) : "";
+      if (current.board === board && current.year === year) return current;
+      return {
+        ...current,
+        board,
+        year,
+        level: defaultLevelForBoard(contextOptions, board, current.level),
+      };
+    });
+    setErrors((current) => ({ ...current, board: undefined, year: undefined }));
+  }, [contextOptions, id, selectedAcademicYearId, selectedBoardId, setErrors, setValues]);
 
   useEffect(() => {
     setSelectedProgramIds([]);
@@ -698,9 +761,19 @@ function CourseGroupFormPage() {
   const submit = async (event) => {
     event.preventDefault();
     if (!validate()) return;
+    if (!id && (!validId(selectedBoardId) || !validId(selectedAcademicYearId))) {
+      setToastType("error");
+      setToast("Select a Board and Academic Year in the top navbar before saving a group.");
+      return;
+    }
     setSaving(true);
     try {
-      const saveValues = { ...values, level: values.level || defaultLevelForBoard(contextOptions, values.board) };
+      const saveValues = {
+        ...values,
+        board: id ? values.board : String(selectedBoardId),
+        year: id ? values.year : String(selectedAcademicYearId),
+        level: values.level || defaultLevelForBoard(contextOptions, id ? values.board : selectedBoardId),
+      };
       saveValues.boardName = optionLabel(contextOptions.boards, saveValues.board, saveValues.board);
       saveValues.levelName = optionLabel(contextOptions.levels, saveValues.level, saveValues.level);
       const validationErrors = await groupApi.validateValues(saveValues, id);
@@ -759,14 +832,16 @@ function CourseGroupFormPage() {
 
 function CourseGroupListPage() {
   const navigate = useNavigate();
+  const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
   const [rows, setRows] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState("");
   const [toastType, setToastType] = useState("success");
   const [error, setError] = useState("");
-  const initialLoadStarted = useRef(false);
   const requestId = useRef(0);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingId, setDeletingId] = useState("");
 
   const loadRows = useCallback(async (nextSearch = search) => {
     const currentRequest = requestId.current + 1;
@@ -774,7 +849,11 @@ function CourseGroupListPage() {
     setLoading(true);
     setError("");
     try {
-      const loadedRows = await groupApi.fetchRows({ search: nextSearch });
+      const loadedRows = await groupApi.fetchRows({
+        search: nextSearch,
+        boardId: selectedBoardId,
+        academicYearId: selectedAcademicYearId,
+      });
       if (requestId.current === currentRequest) setRows(loadedRows);
     } catch (err) {
       if (requestId.current === currentRequest) {
@@ -784,29 +863,36 @@ function CourseGroupListPage() {
     } finally {
       if (requestId.current === currentRequest) setLoading(false);
     }
-  }, [search]);
+  }, [search, selectedAcademicYearId, selectedBoardId]);
 
   useEffect(() => {
-    if (initialLoadStarted.current) return;
-    initialLoadStarted.current = true;
-    loadRows("");
-  }, [loadRows]);
+    loadRows(search);
+  }, [loadRows, search]);
 
   const handleSearch = (value) => {
     if (value === search) return;
     setSearch(value);
-    loadRows(value);
   };
 
-  const deleteGroup = async (row) => {
+  const requestDeleteGroup = (row) => {
+    if (deletingId) return;
+    setDeleteTarget(row);
+  };
+
+  const deleteGroup = async () => {
+    if (!deleteTarget?.id || deletingId) return;
+    setDeletingId(deleteTarget.id);
     try {
-      await groupApi.deleteRow(row.id);
+      await groupApi.deleteRow(deleteTarget.id);
       setToastType("success");
       setToast("Group deleted successfully");
+      setDeleteTarget(null);
       await loadRows(search);
     } catch (err) {
       setToastType("error");
       setToast(getApiErrorMessage(err));
+    } finally {
+      setDeletingId("");
     }
   };
 
@@ -840,9 +926,26 @@ function CourseGroupListPage() {
           onAdd={addGroup}
           enableExport={false}
           onEdit={(row) => navigate(`/dashboard/courses/${row.id}/edit`)}
-          onDelete={deleteGroup}
+          onDelete={requestDeleteGroup}
         />
       </div>
+      {deleteTarget ? (
+        <Modal
+          title="Delete Group"
+          size="sm"
+          onClose={deletingId ? () => {} : () => setDeleteTarget(null)}
+          footer={(
+            <>
+              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setDeleteTarget(null)} disabled={Boolean(deletingId)}>Cancel</button>
+              <button type="button" className="cms-btn cms-btn-danger" onClick={deleteGroup} disabled={Boolean(deletingId)}>
+                {deletingId ? "Deleting..." : "Delete"}
+              </button>
+            </>
+          )}
+        >
+          <p>Are you sure you want to delete this group?</p>
+        </Modal>
+      ) : null}
       <Toast message={toast} type={toastType} onClose={() => setToast("")} />
     </DashboardLayout>
   );

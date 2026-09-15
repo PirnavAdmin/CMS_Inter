@@ -2,40 +2,34 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../layout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import * as XLSX from "xlsx";
 import "./MarksEntryPage.css";
 
 const PAGE_SIZE = 5;
-const DELAY = 250;
 const normalizeId = (value) => String(value ?? "");
 const isActiveRecord = (item) => item?.isActive !== false && item?.status !== false;
 const evaluationKey = (item) => `${item.examinationId}:${item.sectionId}:${item.subjectId}`;
 const eq = (a, b) => normalizeId(a) === normalizeId(b);
-const grade = (value) => value >= 90 ? "A+" : value >= 80 ? "A" : value >= 70 ? "B+" : value >= 60 ? "B" : value >= 50 ? "C" : value >= 40 ? "D" : "F";
+const grade = (value) =>
+  value >= 90 ? "A+" : value >= 80 ? "A" : value >= 70 ? "B+" : value >= 60 ? "B" : value >= 50 ? "C" : value >= 40 ? "D" : "F";
 const editableStatuses = ["NOT STARTED", "DRAFT", "REJECTED"];
-
-const isValidEvaluationId = (value) => {
-  if (value == null) return false;
-  const s = String(value).trim();
-  if (!s || s === "undefined" || s === "null") return false;
-  if (Number.isSafeInteger(Number(s)) && Number(s) > 0) return true;
-  return /^\d+_\d+_\d+$/.test(s);
-};
 
 const buildMarksPayload = (workspace, evalId) => {
   const formattedMarks = (workspace?.rows || []).map((row) => {
-    const internal = row.absent || workspace?.mode === "OBJECTIVE" ? 0 : Number(row.internal || 0);
-    const practical = row.absent || workspace?.mode === "OBJECTIVE" ? 0 : Number(row.practical || 0);
-    const theory = row.absent
+    const isAbsent = Boolean(row.absent);
+    const internal = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Math.round(Number(row.internal || 0));
+    const practical = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Math.round(Number(row.practical || 0));
+    const theory = isAbsent
       ? 0
       : workspace?.mode === "OBJECTIVE"
-      ? Number(row.obtainedMarks || 0)
-      : Number(row.theory || 0);
-    const total = row.absent
+      ? Math.round(Number(row.obtainedMarks || 0))
+      : Math.round(Number(row.theory || 0));
+    const total = isAbsent
       ? 0
       : workspace?.mode === "OBJECTIVE"
-      ? Number(row.obtainedMarks || 0)
-      : Number(row.total || 0);
+      ? Math.round(Number(row.obtainedMarks || 0))
+      : Math.round(Number(row.total || 0));
 
     return {
       studentId: Number(row.studentId),
@@ -47,10 +41,10 @@ const buildMarksPayload = (workspace, evalId) => {
       theory,
       obtainedMarks: total,
       totalMarks: total,
-      maxMarks: Number(workspace?.maxMarks || 100),
-      status: row.absent ? "ABSENT" : "PRESENT",
-      isAbsent: Boolean(row.absent),
-      remarks: (row.remarks || "").trim(),
+      maxMarks: Math.round(Number(workspace?.maxMarks || 100)),
+      status: isAbsent ? "ABSENT" : "PRESENT",
+      isAbsent,
+      remarks: String(row.remarks || "").trim(),
     };
   });
 
@@ -62,6 +56,41 @@ const buildMarksPayload = (workspace, evalId) => {
     marks: formattedMarks,
     marksList: formattedMarks,
     studentMarks: formattedMarks,
+  };
+};
+
+const buildAdminMarksPayload = (workspace) => {
+  const studentMarks = (workspace?.rows || []).map((row) => {
+    const isAbsent = Boolean(row.absent);
+    const internal = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Number(row.internal || 0);
+    const practical = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Number(row.practical || 0);
+    const theory = isAbsent
+      ? 0
+      : workspace?.mode === "OBJECTIVE"
+      ? Number(row.obtainedMarks || 0)
+      : Number(row.theory || 0);
+    const total = isAbsent
+      ? 0
+      : workspace?.mode === "OBJECTIVE"
+      ? Number(row.obtainedMarks || 0)
+      : Number(row.total || 0);
+
+    return {
+      ...(row.markId ? { markId: Number(row.markId) } : {}),
+      studentId: Number(row.studentId),
+      internal,
+      practical,
+      theory,
+      obtainedMarks: total,
+      maxMarks: Number(workspace?.maxMarks || 100),
+      isAbsent,
+      remarks: String(row.remarks || "").trim(),
+    };
+  });
+
+  return {
+    studentMarks,
+    students: studentMarks,
   };
 };
 
@@ -78,12 +107,17 @@ const unwrapRecords = (response) => {
 
 const validateMarksConfiguration = (config) =>
   config?.mode === "REGULAR" &&
-  (Number(config.internalMax || 0) + Number(config.practicalMax || 0) + Number(config.theoryMax || 0) !== Number(config.maxMarks || 0))
+  Number(config.internalMax || 0) + Number(config.practicalMax || 0) + Number(config.theoryMax || 0) !==
+    Number(config.maxMarks || 0)
     ? "Configured component maxima do not equal Total Maximum Marks."
     : "";
 
 const numericMark = (value) =>
-  value !== "" && value !== null && value !== undefined && /^(?:\d+|\d+\.\d{1,2})$/.test(String(value)) && Number.isFinite(Number(value));
+  value !== "" &&
+  value !== null &&
+  value !== undefined &&
+  /^(?:\d+|\d+\.\d{1,2})$/.test(String(value)) &&
+  Number.isFinite(Number(value));
 
 const validateMarksRows = (workspace, complete) => {
   const errors = {};
@@ -126,7 +160,25 @@ const calculateStudentSubjectResult = (row, workspace) => {
 
 const calculateEvaluationStatistics = (workspace) => {
   if (!workspace?.rows?.length) {
-    return { studentsCount: 0, average: "—", highest: "—", lowest: "—" };
+    const totalCount = Number(workspace?.totalStudents ?? workspace?.studentsCount ?? 0);
+    const avg =
+      workspace?.averageMarks !== undefined && workspace?.averageMarks !== null
+        ? String(workspace.averageMarks)
+        : workspace?.average ?? "—";
+    const high =
+      workspace?.highestMarks !== undefined && workspace?.highestMarks !== null
+        ? String(workspace.highestMarks)
+        : workspace?.highest ?? "—";
+    const low =
+      workspace?.lowestMarks !== undefined && workspace?.lowestMarks !== null
+        ? String(workspace.lowestMarks)
+        : workspace?.lowest ?? "—";
+    return {
+      studentsCount: totalCount,
+      average: avg,
+      highest: high,
+      lowest: low,
+    };
   }
   const values = workspace.rows
     .filter((row) => !row.absent)
@@ -134,17 +186,29 @@ const calculateEvaluationStatistics = (workspace) => {
     .filter(Number.isFinite);
   return {
     studentsCount: workspace.rows.length,
-    average: values.length ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2) : "—",
-    highest: values.length ? Math.max(...values) : "—",
-    lowest: values.length ? Math.min(...values) : "—",
+    average: values.length
+      ? (values.reduce((a, b) => a + b, 0) / values.length).toFixed(2)
+      : workspace?.averageMarks !== undefined && workspace?.averageMarks !== null
+      ? String(workspace.averageMarks)
+      : workspace?.average ?? "—",
+    highest: values.length
+      ? Math.max(...values)
+      : workspace?.highestMarks !== undefined && workspace?.highestMarks !== null
+      ? String(workspace.highestMarks)
+      : workspace?.highest ?? "—",
+    lowest: values.length
+      ? Math.min(...values)
+      : workspace?.lowestMarks !== undefined && workspace?.lowestMarks !== null
+      ? String(workspace.lowestMarks)
+      : workspace?.lowest ?? "—",
   };
 };
 
 const calculateReadiness = (configs = [], workspaces = {}) => {
   const statuses = configs.map(
     (config) =>
-      workspaces[evaluationKey({ examinationId: config.examinationId, sectionId: config.sectionId, subjectId: config.subjectId })]?.status ||
-      "NOT STARTED"
+      workspaces[evaluationKey({ examinationId: config.examinationId, sectionId: config.sectionId, subjectId: config.subjectId })]
+        ?.status || "NOT STARTED"
   );
   const count = (status) => statuses.filter((item) => item === status).length;
   const requiredSubjectCount = configs.length;
@@ -172,22 +236,15 @@ const isLegalStatusTransition = (from, to) =>
     APPROVED: [],
   }[from] || []).includes(to);
 
-export default function MarksEntryPage() {
-  // Cascading Academic Masters
-  const [boards, setBoards] = useState([]);
-  const [years, setYears] = useState([]);
-  const [levels, setLevels] = useState([]);
-  const [groups, setGroups] = useState([]);
-  const [programs, setPrograms] = useState([]);
-  const [sections, setSections] = useState([]);
+// Reusable Hook for Independent Academic Cascading Filters
+function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => {}) {
+  const {
+    selectedBoard,
+    selectedBoardId,
+    selectedAcademicYear,
+    selectedAcademicYearId,
+  } = useAcademicContext();
 
-  // Students & Exams for selected context
-  const [sectionStudents, setSectionStudents] = useState([]);
-  const [exams, setExams] = useState([]);
-  const [examConfigs, setExamConfigs] = useState([]);
-
-  // Tab & Filters
-  const [tab, setTab] = useState("entry");
   const [filters, setFilters] = useState({
     board: "",
     year: "",
@@ -195,141 +252,32 @@ export default function MarksEntryPage() {
     group: "",
     program: "",
     section: "",
+    exam: "",
   });
-  const [applied, setApplied] = useState(null);
+  const [years, setYears] = useState([]);
+  const [levels, setLevels] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [programs, setPrograms] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [exams, setExams] = useState([]);
 
-  // Selected Exam & Subject in Entry Tab
-  const [examId, setExamId] = useState("");
-  const [subjectId, setSubjectId] = useState("");
-  const [workspaces, setWorkspaces] = useState({});
-  const [editingKey, setEditingKey] = useState("");
-  const [processing, setProcessing] = useState("");
-  const [toast, setToast] = useState(null);
-  const [pending, setPending] = useState(null);
-
-  // Evaluation & Student Analysis Modals / Views
-  const [selectedEvaluation, setSelectedEvaluation] = useState(null);
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [modal, setModal] = useState(null);
-  const [message, setMessage] = useState("");
-  const [backendAnalysis, setBackendAnalysis] = useState([]);
-
-  // Pagination & Search
-  const [entryPage, setEntryPage] = useState(1);
-  const [evaluationPage, setEvaluationPage] = useState(1);
-  const [studentPage, setStudentPage] = useState(1);
-  const [detailPage, setDetailPage] = useState(1);
-  const [evaluationSearch, setEvaluationSearch] = useState("");
-  const [studentSearch, setStudentSearch] = useState("");
-
-  const snapshots = useRef({});
-  const timer = useRef(null);
-  const fileInputRef = useRef(null);
-
-  const notify = (text, type = "success") => {
-    clearTimeout(timer.current);
-    setToast({ text, type });
-    timer.current = setTimeout(() => setToast(null), 3500);
-  };
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  const dirty = Object.values(workspaces).some((item) => item.dirty);
-  const guard = (action) => (dirty ? setPending(() => action) : action());
-
-  const clearContext = () => {
-    setApplied(null);
-    setExamId("");
-    setSubjectId("");
-    setSelectedEvaluation(null);
-    setSelectedStudent(null);
-    setSectionStudents([]);
-    setExams([]);
-    setExamConfigs([]);
-    setBackendAnalysis([]);
-  };
-
-  // 1. Initial Load: Fetch and Auto-Select Active Board and Academic Year
+  // Auto-select board when allBoards loads or navbar board changes
   useEffect(() => {
-    let isMounted = true;
-    const loadInitialAcademicContext = async () => {
-      try {
-        const [boardsRes, yearsRes] = await Promise.allSettled([
-          apiClient.get(apiEndpoints.boards.active).catch(() => apiClient.get(apiEndpoints.boards.list)),
-          apiClient.get(apiEndpoints.academicYears.active).catch(() => apiClient.get(apiEndpoints.academicYears.getAll)),
-        ]);
+    if (allBoards.length > 0) {
+      const targetBoard = allBoards.find(
+        (b) =>
+          eq(b.id, selectedBoardId) ||
+          (selectedBoard?.code && String(b.code || "").trim().toLowerCase() === String(selectedBoard.code).trim().toLowerCase()) ||
+          (selectedBoard?.name && String(b.name || "").trim().toLowerCase() === String(selectedBoard.name).trim().toLowerCase())
+      ) || allBoards.find((b) => b.isActive) || allBoards[0];
 
-        let loadedBoards = [];
-        if (boardsRes.status === "fulfilled") {
-          const raw = unwrapRecords(boardsRes.value);
-          loadedBoards = raw
-            .map((b) => ({
-              id: normalizeId(b.boardId ?? b.id),
-              name: b.boardName ?? b.name,
-              code: b.boardCode ?? b.code,
-              isActive: b.status !== false && b.isActive !== false,
-              academicLevelIds: b.academicLevelIds,
-              academicLevelNames: b.academicLevelNames,
-            }))
-            .filter((b) => b.isActive);
-        } else {
-          console.error("Error fetching active boards:", boardsRes.reason);
-        }
-
-        let loadedYears = [];
-        if (yearsRes.status === "fulfilled") {
-          const rawYears = unwrapRecords(yearsRes.value);
-          loadedYears = rawYears
-            .map((y) => ({
-              id: normalizeId(y.academicYearId ?? y.id),
-              name: y.academicYearName ?? y.name,
-              boardId: normalizeId(y.boardId),
-              isActive: y.isActive !== false,
-              isCurrent: Boolean(y.isCurrent),
-            }))
-            .filter((y) => y.isActive);
-        } else {
-          console.error("Error fetching active academic years:", yearsRes.reason);
-        }
-
-        if (!isMounted) return;
-
-        setBoards(loadedBoards);
-
-        const activeBoard = loadedBoards.find((b) => b.isActive) || loadedBoards[0];
-        const selectedBoardId = activeBoard ? activeBoard.id : "";
-
-        const relevantYears = selectedBoardId
-          ? loadedYears.filter((y) => !y.boardId || eq(y.boardId, selectedBoardId))
-          : loadedYears;
-
-        setYears(relevantYears.length ? relevantYears : loadedYears);
-
-        const activeYear = (relevantYears.length ? relevantYears : loadedYears).find((y) => y.isCurrent)
-          || (relevantYears.length ? relevantYears : loadedYears)[0];
-        const selectedYearId = activeYear ? activeYear.id : "";
-
-        setFilters((prev) => ({
-          ...prev,
-          board: prev.board || selectedBoardId,
-          year: prev.year || selectedYearId,
-        }));
-      } catch (err) {
-        console.error("Error during initial academic context load:", err);
-        if (isMounted) {
-          setBoards([]);
-          setYears([]);
-        }
+      if (targetBoard && !eq(filters.board, targetBoard.id)) {
+        setFilters((prev) => ({ ...prev, board: targetBoard.id }));
       }
-    };
+    }
+  }, [allBoards, selectedBoardId, selectedBoard, filters.board]);
 
-    loadInitialAcademicContext();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // 2. When Board changes: Fetch Academic Years, Academic Levels, Groups
+  // Load Years, Levels, Groups when Board changes
   useEffect(() => {
     if (!filters.board) {
       setYears([]);
@@ -339,15 +287,16 @@ export default function MarksEntryPage() {
     }
 
     let isMounted = true;
-    const loadBoardDependencies = async () => {
-      const selectedBoard = boards.find((b) => eq(b.id, filters.board));
+    const loadBoardDeps = async () => {
+      const selectedBoard = allBoards.find((b) => eq(b.id, filters.board));
 
-      // 2a. Fetch Academic Years for the selected Board
+      // Fetch Years
       try {
-        const yearsRes = await apiClient.get(apiEndpoints.academicYears.active, {
-          params: { boardId: filters.board, isActive: true },
-        }).catch(() => apiClient.get(apiEndpoints.academicYears.getAll));
-
+        const yearsRes = await apiClient
+          .get(apiEndpoints.academicYears.active, {
+            params: { boardId: filters.board, isActive: true },
+          })
+          .catch(() => apiClient.get(apiEndpoints.academicYears.getAll));
         const rawYears = unwrapRecords(yearsRes);
         const listYears = rawYears
           .map((y) => ({
@@ -361,27 +310,38 @@ export default function MarksEntryPage() {
 
         if (isMounted) {
           setYears(listYears);
-          setFilters((prev) => {
-            const hasValidYear = listYears.some((y) => eq(y.id, prev.year));
-            if (hasValidYear) return prev;
-            const currentYear = listYears.find((y) => y.isCurrent) || listYears[0];
-            return { ...prev, year: currentYear ? currentYear.id : "" };
-          });
+          const targetYear = listYears.find(
+            (y) =>
+              eq(y.id, selectedAcademicYearId) ||
+              (selectedAcademicYear?.name && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.name).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "")) ||
+              (selectedAcademicYear?.code && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.code).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, ""))
+          ) || listYears.find((y) => y.isCurrent) || listYears[0];
+
+          setFilters((prev) => ({
+            ...prev,
+            year: targetYear ? targetYear.id : "",
+          }));
         }
       } catch (err) {
         console.error("Error fetching academic years:", err);
         if (isMounted) setYears([]);
       }
 
-      // 2b. Fetch Academic Levels for the selected Board
+      // Fetch Levels
       try {
         let levelItems = [];
-        const levelsRes = await apiClient.get(
-          apiEndpoints.academicLevels?.getByBoard
-            ? apiEndpoints.academicLevels.getByBoard(filters.board)
-            : `/api/v1/academic-levels?boardId=${filters.board}`
-        ).catch(() => apiClient.get(apiEndpoints.academicLevels?.getAll || "/api/v1/academic-levels", { params: { boardId: filters.board } }))
-         .catch(() => apiClient.get(`/api/v1/boards/${encodeURIComponent(filters.board)}/academic-levels`));
+        const levelsRes = await apiClient
+          .get(
+            apiEndpoints.academicLevels?.getByBoard
+              ? apiEndpoints.academicLevels.getByBoard(filters.board)
+              : `/api/v1/academic-levels?boardId=${filters.board}`
+          )
+          .catch(() =>
+            apiClient.get(apiEndpoints.academicLevels?.getAll || "/api/v1/academic-levels", {
+              params: { boardId: filters.board },
+            })
+          )
+          .catch(() => apiClient.get(`/api/v1/boards/${encodeURIComponent(filters.board)}/academic-levels`));
 
         const rawLevels = unwrapRecords(levelsRes);
         if (rawLevels.length) {
@@ -404,15 +364,19 @@ export default function MarksEntryPage() {
         if (isMounted) setLevels([]);
       }
 
-      // 2c. Fetch Groups for the selected Board
+      // Fetch Groups
       try {
-        const groupsRes = await apiClient.get(
-          apiEndpoints.groups?.getByBoard
-            ? apiEndpoints.groups.getByBoard(filters.board)
-            : `/api/v1/groups?boardId=${filters.board}`
-        ).catch(() => apiClient.get(apiEndpoints.groups.list, {
-          params: { boardId: filters.board, isActive: true },
-        }));
+        const groupsRes = await apiClient
+          .get(
+            apiEndpoints.groups?.getByBoard
+              ? apiEndpoints.groups.getByBoard(filters.board)
+              : `/api/v1/groups?boardId=${filters.board}`
+          )
+          .catch(() =>
+            apiClient.get(apiEndpoints.groups.list, {
+              params: { boardId: filters.board, isActive: true },
+            })
+          );
 
         const rawGroups = unwrapRecords(groupsRes);
         const listGroups = rawGroups
@@ -434,13 +398,13 @@ export default function MarksEntryPage() {
       }
     };
 
-    loadBoardDependencies();
+    loadBoardDeps();
     return () => {
       isMounted = false;
     };
-  }, [filters.board, boards]);
+  }, [filters.board, allBoards]);
 
-  // 3. When Group changes: Fetch Programs
+  // Load Programs when Group changes
   useEffect(() => {
     if (!filters.group) {
       setPrograms([]);
@@ -492,15 +456,17 @@ export default function MarksEntryPage() {
     };
   }, [filters.group, groups]);
 
-  // 4. When Academic Scope (Board, Year, Level, Group, Program) is set: Fetch Sections
+  // Load Sections and Exams when Board, Year, Level, Group, Program are set
   useEffect(() => {
     if (!filters.board || !filters.year || !filters.level || !filters.group || !filters.program) {
       setSections([]);
+      setExams([]);
       return;
     }
 
     let isMounted = true;
-    const loadSections = async () => {
+    const loadSectionsAndExams = async () => {
+      // 1. Fetch Sections
       try {
         const res = await apiClient.get(apiEndpoints.sections.getAll, {
           params: {
@@ -533,48 +499,317 @@ export default function MarksEntryPage() {
         console.error("Error fetching sections:", err);
         if (isMounted) setSections([]);
       }
+
+      // 2. Fetch Completed Examinations strictly matching academic scope
+      try {
+        const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
+          params: {
+            boardId: filters.board,
+            academicYearId: filters.year,
+            academicLevelId: filters.level,
+            groupId: filters.group,
+            programId: filters.program || undefined,
+            status: "COMPLETED",
+          },
+        });
+        const rawExams = unwrapRecords(examsRes);
+        const examList = (rawExams.length ? rawExams : [])
+          .map((e) => {
+            const rawStatus = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
+            const examCode = e.examCode ?? e.code ?? "";
+            const examName = e.examName ?? e.examinationName ?? e.name ?? "Examination";
+            return {
+              id: normalizeId(e.examinationId ?? e.id ?? e.examId),
+              code: examCode,
+              examCode: examCode,
+              name: examName,
+              examName: examName,
+              status: rawStatus || (e.isCompleted ? "COMPLETED" : "DRAFT"),
+              boardId: normalizeId(e.boardId ?? e.BoardId),
+              academicYearId: normalizeId(e.academicYearId ?? e.AcademicYearId ?? e.yearId),
+              academicLevelId: normalizeId(e.academicLevelId ?? e.AcademicLevelId),
+              groupId: normalizeId(e.groupId ?? e.GroupId),
+              programId: normalizeId(e.programId ?? e.ProgramId),
+              schedules: e.schedules || e.examinationSchedules || [],
+              isActive: e.isActive !== false,
+              isCompleted: Boolean(e.isCompleted),
+            };
+          })
+          .filter((e) => {
+            if (!e.isActive) return false;
+            // STRICT FILTER: Only Completed Examinations
+            const isCompleted =
+              e.status === "COMPLETED" ||
+              e.status === "FINISHED" ||
+              e.status === "PUBLISHED" ||
+              e.isCompleted === true;
+            if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT") return false;
+
+            // Strict matching of academic scope when fields exist on exam
+            if (filters.board && e.boardId && !eq(e.boardId, filters.board)) return false;
+            if (filters.year && e.academicYearId && !eq(e.academicYearId, filters.year)) return false;
+            if (filters.level && e.academicLevelId && !eq(e.academicLevelId, filters.level)) return false;
+            if (filters.group && e.groupId && !eq(e.groupId, filters.group)) return false;
+            if (filters.program && e.programId && !eq(e.programId, filters.program)) return false;
+
+            return true;
+          });
+
+        if (isMounted) {
+          setExams(examList);
+          setFilters((prev) => {
+            if (prev.exam && examList.some((e) => eq(e.id, prev.exam))) return prev;
+            return { ...prev, exam: examList[0]?.id || "" };
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching examinations:", err);
+        if (isMounted) setExams([]);
+      }
     };
 
-    loadSections();
+    loadSectionsAndExams();
     return () => {
       isMounted = false;
     };
   }, [filters.board, filters.year, filters.level, filters.group, filters.program]);
 
-  // Filter Cascade Change Handler
+  // Sync year when navbar selected academic year changes
+  useEffect(() => {
+    if (years.length > 0) {
+      const targetYear = years.find(
+        (y) =>
+          eq(y.id, selectedAcademicYearId) ||
+          (selectedAcademicYear?.name && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.name).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "")) ||
+          (selectedAcademicYear?.code && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.code).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, ""))
+      );
+      if (targetYear && !eq(filters.year, targetYear.id)) {
+        setFilters((prev) => ({ ...prev, year: targetYear.id }));
+      }
+    }
+  }, [years, selectedAcademicYearId, selectedAcademicYear, filters.year]);
+
+  // Change filter handler with cascading resets and invalidating applied state
   const changeFilter = (key, value) =>
     guard(() => {
-      const next = { ...filters, [key]: value };
-      const children = {
-        board: ["group", "program", "section"],
-        level: ["section"],
-        group: ["program", "section"],
-        program: ["section"],
-        year: ["section"],
-        section: [],
-      };
-      (children[key] || []).forEach((child) => {
-        next[child] = "";
+      onReset();
+      setFilters((prev) => {
+        const next = { ...prev, [key]: value };
+        const children = {
+          board: ["group", "program", "section", "exam"],
+          year: ["section", "exam"],
+          level: ["section", "exam"],
+          group: ["program", "section", "exam"],
+          program: ["section", "exam"],
+          section: [],
+          exam: [],
+        };
+        (children[key] || []).forEach((child) => {
+          next[child] = "";
+        });
+        return next;
       });
-      setFilters(next);
-      clearContext();
     });
 
-  // 5. Apply Academic Context (Click "Enter Marks")
-  const applyContext = async () => {
-    if (processing) return;
-    if (!Object.values(filters).every(Boolean)) {
-      return notify("Select Board, Academic Year, Academic Level, Group, Program, and Section.", "error");
+  return {
+    filters,
+    setFilters,
+    years,
+    levels,
+    groups,
+    programs,
+    sections,
+    exams,
+    setExams,
+    changeFilter,
+  };
+}
+
+export default function MarksEntryPage() {
+  // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
+  const [tab, setTab] = useState("entry");
+
+  // Initial Master Boards (Loaded once on mount)
+  const [allBoards, setAllBoards] = useState([]);
+
+  // Shared UI Notifications and Unsaved Modals
+  const [toast, setToast] = useState(null);
+  const [pending, setPending] = useState(null);
+  const [processing, setProcessing] = useState("");
+  const [editingKey, setEditingKey] = useState("");
+  const snapshots = useRef({});
+  const timer = useRef(null);
+  const fileInputRef = useRef(null);
+
+  // Central in-memory workspaces store for subject marks and evaluations
+  const [workspaces, setWorkspaces] = useState({});
+
+  const notify = (text, type = "success") => {
+    clearTimeout(timer.current);
+    setToast({ text, type });
+    timer.current = setTimeout(() => setToast(null), 3500);
+  };
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const dirty = Object.values(workspaces).some((item) => item.dirty);
+  const guard = (action) => (dirty ? setPending(() => action) : action());
+
+  // 1. Initial Load: Fetch All Active Boards
+  useEffect(() => {
+    let isMounted = true;
+    const loadBoards = async () => {
+      try {
+        const boardsRes = await apiClient
+          .get(apiEndpoints.boards.active)
+          .catch(() => apiClient.get(apiEndpoints.boards.list));
+        const raw = unwrapRecords(boardsRes);
+        const loadedBoards = raw
+          .map((b) => ({
+            id: normalizeId(b.boardId ?? b.id),
+            name: b.boardName ?? b.name,
+            code: b.boardCode ?? b.code,
+            isActive: b.status !== false && b.isActive !== false,
+            academicLevelIds: b.academicLevelIds,
+            academicLevelNames: b.academicLevelNames,
+          }))
+          .filter((b) => b.isActive);
+
+        if (isMounted) setAllBoards(loadedBoards);
+      } catch (err) {
+        console.error("Error loading boards:", err);
+      }
+    };
+    loadBoards();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // ==========================================
+  // TAB 1: MARKS ENTRY STATE & WORKFLOW
+  // ==========================================
+  const [entryApplied, setEntryApplied] = useState(false);
+  const [entryStudents, setEntryStudents] = useState([]);
+  const [entryConfigs, setEntryConfigs] = useState([]);
+  const [entryExamId, setEntryExamId] = useState("");
+  const [entrySubjectId, setEntrySubjectId] = useState("");
+  const [entryPage, setEntryPage] = useState(1);
+
+  const entry = useAcademicFilterState(allBoards, guard, () => setEntryApplied(false));
+
+  // Helper to load schedules & search evaluations for an examination in Marks Entry
+  const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
+    if (!examId || !sectionId) return;
+    const selectedExam = examList.find((e) => eq(e.id, examId));
+    let schedules = selectedExam?.schedules || [];
+
+    if (!schedules.length) {
+      try {
+        const detailRes = await apiClient.get(`/api/v1/examinations/${examId}`).catch(() => null);
+        const detail = detailRes?.data || detailRes;
+        if (detail?.schedules?.length) {
+          schedules = detail.schedules;
+        }
+      } catch (e) {
+        console.warn("Could not fetch exam schedules:", e);
+      }
     }
 
-    setProcessing("Loading...");
+    const configs = schedules.map((s) => ({
+      id: `cfg-${examId}-${s.subjectId}`,
+      examinationId: examId,
+      sectionId: sectionId,
+      subjectId: normalizeId(s.subjectId),
+      subjectName: s.subjectName || `Subject ${s.subjectId}`,
+      subjectCode: s.subjectCode || "",
+      mode: s.scheduleMode === "COMBINED" ? "OBJECTIVE" : "REGULAR",
+      maxMarks: Number(s.maxMarks || 100),
+      passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
+      internalMax: Number(s.internalMax ?? 20),
+      practicalMax: Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
+      theoryMax: Number(s.theoryMax ?? (Number(s.maxMarks || 100) - 20)),
+      facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
+      facultyId: s.invigilatorId || s.facultyId || "",
+    }));
+
+    setEntryConfigs(configs);
+    setEntrySubjectId((prev) => (configs.some((c) => eq(c.subjectId, prev)) ? prev : configs[0]?.subjectId || ""));
+
+    // Search existing evaluations
     try {
-      // 5a. Fetch Students for the selected section
+      const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
+      const evalSearchRes = await apiClient
+        .post(evalSearchUrl, {
+          boardId: Number(entry.filters.board),
+          academicYearId: Number(entry.filters.year),
+          academicLevelId: Number(entry.filters.level),
+          groupId: Number(entry.filters.group),
+          sectionId: Number(sectionId),
+          examinationId: Number(examId),
+        })
+        .catch(() => apiClient.get("/api/v1/faculty/evaluations"));
+
+      const existingEvals = unwrapRecords(evalSearchRes);
+      const evalMap = {};
+      existingEvals.forEach((ev) => {
+        const parts = String(ev.evaluationId || "").split("_");
+        const evSubId = normalizeId(ev.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
+        const evSecId = normalizeId(ev.sectionId ?? (parts.length >= 3 ? parts[1] : sectionId));
+        const evExamId = normalizeId(ev.examinationId ?? ev.examId ?? (parts.length >= 3 ? parts[2] : examId));
+        const key = evaluationKey({ examinationId: evExamId, sectionId: evSecId, subjectId: evSubId });
+        evalMap[key] = {
+          evaluationId: ev.evaluationId || `${evSubId}_${evSecId}_${evExamId}`,
+          examinationId: evExamId,
+          sectionId: evSecId,
+          subjectId: evSubId,
+          facultyId: ev.facultyId,
+          faculty: { name: ev.facultyName || "Assigned Faculty", employeeCode: ev.facultyCode || "" },
+          subject: { id: evSubId, name: ev.subjectName || `Subject ${evSubId}`, code: ev.subjectCode || "" },
+          status: String(ev.status || "DRAFT").trim().toUpperCase(),
+          mode: ev.examPattern === "OBJECTIVE" || ev.mode === "OBJECTIVE" ? "OBJECTIVE" : "REGULAR",
+          maxMarks: Number(ev.subjectMaxMarks || ev.totalMarks || ev.maxMarks || 100),
+          internalMax: Number(ev.internalMax ?? 20),
+          practicalMax: Number(ev.practicalMax ?? (ev.isPractical ? 30 : 0)),
+          theoryMax: Number(ev.theoryMax ?? (ev.isPractical ? 50 : 80)),
+          passPercentage: Number(ev.examPassPercentage || ev.passPercentage || 35),
+          rejectionReason: ev.rejectionReason || "",
+          adminReviewMessage: ev.adminReviewMessage || "",
+          remarks: ev.remarks || "",
+          averageMarks: ev.averageMarks,
+          average: ev.averageMarks !== undefined && ev.averageMarks !== null ? String(ev.averageMarks) : "—",
+          highestMarks: ev.highestMarks,
+          highest: ev.highestMarks !== undefined && ev.highestMarks !== null ? String(ev.highestMarks) : "—",
+          lowestMarks: ev.lowestMarks,
+          lowest: ev.lowestMarks !== undefined && ev.lowestMarks !== null ? String(ev.lowestMarks) : "—",
+          totalStudents: ev.totalStudents ?? studentList.length,
+          presentStudents: ev.presentStudents ?? 0,
+          absentStudents: ev.absentStudents ?? 0,
+          studentsCount: ev.totalStudents || studentList.length,
+          rows: ev.rows || [],
+          dirty: false,
+          validationErrors: {},
+          updatedAt: ev.lastSubmittedAt || ev.updatedAt || new Date().toISOString(),
+        };
+      });
+
+      setWorkspaces((prev) => ({ ...prev, ...evalMap }));
+    } catch (err) {
+      console.warn("Notice: evaluation search:", err);
+    }
+  };
+
+  // Button Click Action: "Enter Marks" (Enabled when 6 filters selected)
+  const applyEntryContext = async () => {
+    if (!entry.filters.section || processing) return;
+    setProcessing("ENTER_MARKS");
+    try {
+      // 1. Fetch Students for the selected section
       const studentsRes = await apiClient
-        .get(apiEndpoints.students.getBySection(filters.section))
-        .catch(() => apiClient.get(`/api/v1/students/section/${filters.section}`));
+        .get(apiEndpoints.students.getBySection(entry.filters.section))
+        .catch(() => apiClient.get(`/api/v1/students/section/${entry.filters.section}`));
       const rawStudents = unwrapRecords(studentsRes);
-      const studentList = (rawStudents.length ? rawStudents : [])
+      const studentList = (rawStudents || [])
         .map((s) => ({
           studentId: s.studentId ?? s.id,
           admissionNo: s.admissionNo ?? "",
@@ -585,96 +820,74 @@ export default function MarksEntryPage() {
         .filter((s) => s.isActive)
         .sort((a, b) => a.rollNo.localeCompare(b.rollNo, undefined, { numeric: true }));
 
-      setSectionStudents(studentList);
+      setEntryStudents(studentList);
 
-      // 5b. Fetch Examinations for this context
+      // 2. Fetch Completed Examinations strictly matching academic scope
       const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
         params: {
-          boardId: filters.board,
-          academicYearId: filters.year,
-          academicLevelId: filters.level,
-          groupId: filters.group,
+          boardId: entry.filters.board,
+          academicYearId: entry.filters.year,
+          academicLevelId: entry.filters.level,
+          groupId: entry.filters.group,
+          programId: entry.filters.program || undefined,
+          status: "COMPLETED",
         },
       });
       const rawExams = unwrapRecords(examsRes);
-      const examList = (rawExams.length ? rawExams : [])
-        .map((e) => ({
-          id: normalizeId(e.examinationId ?? e.id),
-          code: e.examCode ?? "",
-          name: e.examName ?? e.name ?? "Examination",
-          status: e.status ?? "COMPLETED",
-          boardId: normalizeId(e.boardId),
-          academicYearId: normalizeId(e.academicYearId),
-          academicLevelId: normalizeId(e.academicLevelId),
-          groupId: normalizeId(e.groupId),
-          programId: normalizeId(e.programId),
-          schedules: e.schedules || [],
-          isActive: e.isActive !== false,
-        }))
-        .filter(
-          (e) =>
-            e.isActive &&
-            (e.status === "COMPLETED" || e.status === "SCHEDULED" || e.status === "APPROVED") &&
-            (!e.programId || eq(e.programId, filters.program))
-        );
-
-      setExams(examList);
-
-      // 5c. Fetch Existing Evaluations for this Section
-      try {
-        const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
-        const evalSearchRes = await apiClient.post(
-          evalSearchUrl,
-          {
-            boardId: Number(filters.board),
-            academicYearId: Number(filters.year),
-            academicLevelId: Number(filters.level),
-            groupId: Number(filters.group),
-            sectionId: Number(filters.section),
-          }
-        ).catch(() => apiClient.get("/api/v1/faculty/evaluations"));
-
-        const existingEvals = unwrapRecords(evalSearchRes);
-        const evalMap = {};
-        existingEvals.forEach((ev) => {
-          const key = `${ev.examinationId}:${ev.sectionId || filters.section}:${ev.subjectId}`;
-          evalMap[key] = {
-            evaluationId: ev.evaluationId || `${ev.subjectId}_${ev.sectionId || filters.section}_${ev.examinationId}`,
-            examinationId: normalizeId(ev.examinationId),
-            sectionId: normalizeId(ev.sectionId || filters.section),
-            subjectId: normalizeId(ev.subjectId),
-            facultyId: ev.facultyId,
-            faculty: { name: ev.facultyName || "Assigned Faculty", employeeCode: ev.facultyCode || "" },
-            subject: { id: normalizeId(ev.subjectId), name: ev.subjectName, code: ev.subjectCode },
-            status: ev.status || "DRAFT",
-            mode: ev.examPattern === "OBJECTIVE" || ev.mode === "OBJECTIVE" ? "OBJECTIVE" : "REGULAR",
-            maxMarks: Number(ev.subjectMaxMarks || ev.totalMarks || ev.maxMarks || 100),
-            internalMax: Number(ev.internalMax ?? 20),
-            practicalMax: Number(ev.practicalMax ?? (ev.isPractical ? 30 : 0)),
-            theoryMax: Number(ev.theoryMax ?? (ev.isPractical ? 50 : 80)),
-            passPercentage: Number(ev.examPassPercentage || ev.passPercentage || 35),
-            rejectionReason: ev.rejectionReason || "",
-            average: ev.averageMarks ? String(ev.averageMarks) : "—",
-            highest: ev.highestMarks !== undefined ? String(ev.highestMarks) : "—",
-            lowest: ev.lowestMarks !== undefined ? String(ev.lowestMarks) : "—",
-            studentsCount: ev.totalStudents || studentList.length,
-            rows: [],
-            dirty: false,
-            validationErrors: {},
-            updatedAt: ev.lastSubmittedAt || new Date().toISOString(),
+      const examList = (rawExams || [])
+        .map((e) => {
+          const rawStatus = String(e.status ?? e.examStatus ?? e.examinationStatus ?? "").trim().toUpperCase();
+          const examCode = e.examCode ?? e.code ?? "";
+          const examName = e.examName ?? e.examinationName ?? e.name ?? "Examination";
+          return {
+            id: normalizeId(e.examinationId ?? e.id ?? e.examId),
+            code: examCode,
+            examCode: examCode,
+            name: examName,
+            examName: examName,
+            status: rawStatus || (e.isCompleted ? "COMPLETED" : "DRAFT"),
+            boardId: normalizeId(e.boardId ?? e.BoardId),
+            academicYearId: normalizeId(e.academicYearId ?? e.AcademicYearId ?? e.yearId),
+            academicLevelId: normalizeId(e.academicLevelId ?? e.AcademicLevelId),
+            groupId: normalizeId(e.groupId ?? e.GroupId),
+            programId: normalizeId(e.programId ?? e.ProgramId),
+            schedules: e.schedules || e.examinationSchedules || [],
+            isActive: e.isActive !== false,
+            isCompleted: Boolean(e.isCompleted),
           };
+        })
+        .filter((e) => {
+          if (!e.isActive) return false;
+          const isCompleted =
+            e.status === "COMPLETED" ||
+            e.status === "FINISHED" ||
+            e.status === "PUBLISHED" ||
+            e.isCompleted === true;
+          if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT") return false;
+
+          if (entry.filters.board && e.boardId && !eq(e.boardId, entry.filters.board)) return false;
+          if (entry.filters.year && e.academicYearId && !eq(e.academicYearId, entry.filters.year)) return false;
+          if (entry.filters.level && e.academicLevelId && !eq(e.academicLevelId, entry.filters.level)) return false;
+          if (entry.filters.group && e.groupId && !eq(e.groupId, entry.filters.group)) return false;
+          if (entry.filters.program && e.programId && !eq(e.programId, entry.filters.program)) return false;
+
+          return true;
         });
 
-        setWorkspaces(evalMap);
-      } catch (err) {
-        console.warn("Error fetching evaluations search:", err);
+      const chosenExamId = entryExamId && examList.some((e) => eq(e.id, entryExamId))
+        ? entryExamId
+        : examList[0]?.id || "";
+      setEntryExamId(chosenExamId);
+      if (entry.setExams) entry.setExams(examList);
+
+      // 3. Load configs and search evaluations
+      if (chosenExamId) {
+        await loadExamConfigsAndEvaluations(chosenExamId, entry.filters.section, examList, studentList);
       }
 
-      setApplied({ ...filters });
-      setTab("entry");
-      if (examList.length > 0) {
-        setExamId(examList[0].id);
-      }
+      setEntryApplied(true);
+      setEntryPage(1);
+      notify("Marks Entry workspace loaded.");
     } catch (err) {
       notify(getApiErrorMessage(err), "error");
     } finally {
@@ -682,229 +895,111 @@ export default function MarksEntryPage() {
     }
   };
 
-  // 6. When Examination is selected: derive subject configs
-  useEffect(() => {
-    if (!applied || !examId) {
-      setExamConfigs([]);
-      setSubjectId("");
-      return;
-    }
-
-    const selectedExam = exams.find((e) => eq(e.id, examId));
-    let configs = [];
-    if (selectedExam?.schedules?.length) {
-      configs = selectedExam.schedules.map((s) => ({
-        id: `cfg-${examId}-${s.subjectId}`,
-        examinationId: examId,
-        sectionId: applied.section,
-        subjectId: normalizeId(s.subjectId),
-        subjectName: s.subjectName || `Subject ${s.subjectId}`,
-        subjectCode: s.subjectCode || "",
-        mode: s.scheduleMode === "COMBINED" ? "OBJECTIVE" : "REGULAR",
-        maxMarks: Number(s.maxMarks || 100),
-        passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
-        internalMax: 20,
-        practicalMax: 0,
-        theoryMax: Number(s.maxMarks || 100) - 20,
-        facultyName: s.invigilatorName || s.invigilator || "",
-        facultyId: s.invigilatorId || "",
-      }));
-    } else {
-      configs = [];
-    }
-
-    setExamConfigs(configs);
-    if (configs.length > 0) {
-      setSubjectId(configs[0].subjectId);
-    }
-  }, [applied, examId, exams]);
-
-  // Helper to find name from master collections
-  const getMasterName = (list, id, fallback = "") => {
-    if (!id) return fallback;
-    const item = list.find((x) => eq(x.id, id) || eq(x.boardId, id) || eq(x.academicYearId, id) || eq(x.academicLevelId, id) || eq(x.groupId, id) || eq(x.sectionId, id));
-    return item?.name || item?.boardName || item?.yearName || item?.levelName || item?.groupName || item?.sectionName || fallback;
+  // Change Examination inside Marks Entry Workspace
+  const changeEntryExam = (newExamId) => {
+    guard(async () => {
+      setEntryExamId(newExamId);
+      setEntrySubjectId("");
+      setEntryPage(1);
+      if (newExamId && entry.filters.section) {
+        await loadExamConfigsAndEvaluations(newExamId, entry.filters.section, entry.exams, entryStudents);
+      }
+    });
   };
 
-  // Helper to ensure mark records are created/persisted in the backend DB without stopping
-  const ensurePersistedMarks = async (ws) => {
-    if (!ws || !ws.rows?.length) return ws?.evaluationId;
-    const examIdNum = Number(ws.examinationId || examId);
-    const subjectIdNum = Number(ws.subjectId);
-    const sectionIdNum = Number(ws.sectionId || applied?.section);
-    const compositeId = `${subjectIdNum}_${sectionIdNum}_${examIdNum}`;
-
-    if (!examIdNum || !subjectIdNum || !sectionIdNum) {
-      return ws.evaluationId || compositeId;
-    }
-
-    try {
-      // 1. Check if marks already exist for this exam/subject/section
-      let existingMarks = [];
-      try {
-        const res = await apiClient.get(`/api/v1/marks/exam/${examIdNum}`);
-        const raw = unwrapRecords(res);
-        existingMarks = raw.filter(
-          (m) => eq(m.subjectId, subjectIdNum) && eq(m.sectionId, sectionIdNum) && m.isActive !== false
-        );
-      } catch (e) {
-        console.warn("Could not query existing exam marks:", e);
-      }
-
-      // 2. Identify student rows missing from backend database
-      const missingRows = ws.rows.filter(
-        (row) => !existingMarks.some((m) => eq(m.studentId, row.studentId))
-      );
-
-      // 3. Initialize missing marks via POST /api/v1/marks/bulk
-      if (missingRows.length > 0) {
-        const boardName = getMasterName(boards, applied?.board, "Board");
-        const levelName = getMasterName(levels, applied?.level, "Academic Level");
-        const yearName = getMasterName(years, applied?.year, "Academic Year");
-
-        const bulkPayload = {
-          marks: missingRows.map((row) => {
-            const intMarks = row.absent ? 0 : Number(row.internal || 0);
-            const pracMarks = row.absent ? 0 : Number(row.practical || 0);
-            const theoMarks = row.absent
-              ? 0
-              : ws.mode === "OBJECTIVE"
-              ? Number(row.obtainedMarks || 0)
-              : Number(row.theory || 0);
-            const totalMarks = row.absent
-              ? 0
-              : ws.mode === "OBJECTIVE"
-              ? Number(row.obtainedMarks || 0)
-              : Number(row.total || 0);
-
-            return {
-              studentId: Number(row.studentId),
-              examinationId: examIdNum,
-              subjectId: subjectIdNum,
-              sectionId: sectionIdNum,
-              boardId: Number(applied?.board || 1),
-              academicYearId: Number(applied?.year || 1),
-              academicLevelId: Number(applied?.level || 1),
-              groupId: Number(applied?.group || 1),
-              facultyId: Number(ws.facultyId || 1),
-              board: boardName,
-              academicLevel: levelName,
-              academicYear: yearName,
-              rollNo: String(row.rollNo || "").trim(),
-              studentName: String(row.studentName || "Student").trim(),
-              maxMarks: Number(ws.maxMarks || 100),
-              passingMarks: Math.ceil((Number(ws.maxMarks || 100) * Number(ws.passPercentage || 35)) / 100),
-              theoryMarks: theoMarks,
-              practicalMarks: pracMarks,
-              internalMarks: intMarks,
-              obtainedMarks: totalMarks,
-              totalMarks: totalMarks,
-              isAbsent: Boolean(row.absent),
-              remarks: (row.remarks || "").trim(),
-            };
-          }),
-        };
-
-        await apiClient.post("/api/v1/marks/bulk", bulkPayload).catch((bulkErr) => {
-          console.warn("Notice: bulk mark initialization response:", bulkErr);
-        });
-      }
-
-      return compositeId;
-    } catch (err) {
-      console.warn("ensurePersistedMarks notice:", err);
-      return compositeId;
-    }
-  };
-
-  // 7. Initialize or fetch subject evaluation workspace
-  const workspaceKey = subjectId && applied ? evaluationKey({ examinationId: examId, sectionId: applied.section, subjectId }) : "";
+  // Current Workspace for Marks Entry
+  const workspaceKey =
+    entrySubjectId && entry.filters.section && entryExamId
+      ? evaluationKey({ examinationId: entryExamId, sectionId: entry.filters.section, subjectId: entrySubjectId })
+      : "";
   const workspace = workspaces[workspaceKey];
 
+  // Load subject workspace student marks rows
   useEffect(() => {
-    if (!applied || !examId || !subjectId) return;
-    const config = examConfigs.find((c) => eq(c.subjectId, subjectId));
+    if (!entryApplied || !entry.filters.section || !entryExamId || !entrySubjectId) return;
+    const config = entryConfigs.find((c) => eq(c.subjectId, entrySubjectId));
     if (!config) return;
 
     const currentWs = workspaces[workspaceKey];
-    if (currentWs && currentWs.rows?.length) return; // already loaded with rows
+    if (currentWs && currentWs.rows?.length) return; // already loaded
 
-    // Fetch existing students marks if evaluation exists
     let isMounted = true;
     const loadWorkspaceMarks = async () => {
       let loadedRows = [];
       let evalStatus = currentWs?.status || "NOT STARTED";
-      const compositeEvalId = `${config.subjectId}_${applied.section}_${examId}`;
+      const compositeEvalId = `${config.subjectId}_${entry.filters.section}_${entryExamId}`;
       let evalId = currentWs?.evaluationId || compositeEvalId;
       let rowVer = 0;
 
-      // 1. Try to fetch students from evaluation endpoint
+      // 1. Authoritative: Fetch student marks directly from /api/v1/marks/exam/{examId} (always 200 OK)
       try {
-        const evalStudentsUrl = apiEndpoints.evaluations?.students
-          ? apiEndpoints.evaluations.students(evalId)
-          : `/api/v1/evaluations/${evalId}/students`;
-        const evalStudentsRes = await apiClient
-          .get(evalStudentsUrl)
-          .catch(() => apiClient.get(`/api/v1/faculty/evaluations/${evalId}/students`));
-
-        const resData = evalStudentsRes?.data || {};
-        evalStatus = resData.status || evalStatus;
-        rowVer = resData.rowVersion || 0;
-        const markItems = resData.students || resData.marksList || [];
-        if (markItems.length) {
-          loadedRows = markItems.map((m) => ({
-            studentId: m.studentId,
-            rollNo: String(m.rollNo || ""),
-            studentName: m.studentName || "",
-            internal: m.internalMarks ?? m.internal ?? "",
-            practical: m.practicalMarks ?? m.practical ?? 0,
-            theory: m.theoryMarks ?? m.theory ?? "",
-            obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
-            total: m.totalMarks ?? m.total ?? "",
-            absent: Boolean(m.isAbsent || m.absent),
-            remarks: m.remarks || "",
-            autoAbsentRemark: false,
-          }));
+        const marksRes = await apiClient.get(`/api/v1/marks/exam/${entryExamId}`);
+        const allExamMarks = unwrapRecords(marksRes);
+        const subjMarks = allExamMarks.filter(
+          (m) => eq(m.subjectId, config.subjectId) && eq(m.sectionId, entry.filters.section) && m.isActive !== false
+        );
+        if (subjMarks.length) {
+          evalStatus =
+            subjMarks[0].evaluationStatus ||
+            currentWs?.status ||
+            (subjMarks[0].status === 1 ? "SUBMITTED" : "DRAFT");
+          loadedRows = subjMarks.map((m) => {
+            const secStudent = entryStudents.find((s) => eq(s.studentId, m.studentId));
+            return {
+              markId: m.markId,
+              studentId: m.studentId,
+              rollNo: String(m.rollNo || secStudent?.rollNo || ""),
+              studentName: m.studentName || secStudent?.studentName || "Student",
+              internal: m.internalMarks ?? m.internal ?? "",
+              practical: m.practicalMarks ?? m.practical ?? 0,
+              theory: m.theoryMarks ?? m.theory ?? "",
+              obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
+              total: m.totalMarks ?? m.total ?? "",
+              absent: Boolean(m.isAbsent || m.absent),
+              remarks: m.remarks || "",
+              autoAbsentRemark: false,
+            };
+          });
         }
       } catch (err) {
-        console.warn("Could not fetch evaluation students:", err);
+        console.warn("Could not query exam marks:", err);
       }
 
-      // 2. If no rows from evaluation students, try GET /api/v1/marks/exam/{examId}
-      if (!loadedRows.length) {
+      // 2. Only if marks table has no rows and an existing evaluation is confirmed by search, query evaluation students
+      if (!loadedRows.length && currentWs?.evaluationId && currentWs.status !== "NOT STARTED") {
         try {
-          const marksRes = await apiClient.get(`/api/v1/marks/exam/${examId}`);
-          const allExamMarks = unwrapRecords(marksRes);
-          const subjMarks = allExamMarks.filter(
-            (m) => eq(m.subjectId, config.subjectId) && eq(m.sectionId, applied.section) && m.isActive !== false
-          );
-          if (subjMarks.length) {
-            evalStatus = subjMarks[0].evaluationStatus || evalStatus;
-            loadedRows = subjMarks.map((m) => {
-              const secStudent = sectionStudents.find((s) => eq(s.studentId, m.studentId));
-              return {
-                studentId: m.studentId,
-                rollNo: String(m.rollNo || secStudent?.rollNo || ""),
-                studentName: m.studentName || secStudent?.studentName || "Student",
-                internal: m.internalMarks ?? m.internal ?? "",
-                practical: m.practicalMarks ?? m.practical ?? 0,
-                theory: m.theoryMarks ?? m.theory ?? "",
-                obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
-                total: m.totalMarks ?? m.total ?? "",
-                absent: Boolean(m.isAbsent || m.absent),
-                remarks: m.remarks || "",
-                autoAbsentRemark: false,
-              };
-            });
+          const evalStudentsUrl = apiEndpoints.evaluations?.students
+            ? apiEndpoints.evaluations.students(evalId)
+            : `/api/v1/evaluations/${evalId}/students`;
+          const evalStudentsRes = await apiClient.get(evalStudentsUrl);
+          const resData = evalStudentsRes?.data || {};
+          evalStatus = resData.status || evalStatus;
+          rowVer = resData.rowVersion || rowVer;
+          const markItems = resData.students || resData.marksList || [];
+          if (markItems.length) {
+            loadedRows = markItems.map((m) => ({
+              markId: m.markId,
+              studentId: m.studentId,
+              rollNo: String(m.rollNo || ""),
+              studentName: m.studentName || "",
+              internal: m.internalMarks ?? m.internal ?? "",
+              practical: m.practicalMarks ?? m.practical ?? 0,
+              theory: m.theoryMarks ?? m.theory ?? "",
+              obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
+              total: m.totalMarks ?? m.total ?? "",
+              absent: Boolean(m.isAbsent || m.absent),
+              remarks: m.remarks || "",
+              autoAbsentRemark: false,
+            }));
           }
-        } catch (err) {
-          console.warn("Could not fetch exam marks:", err);
+        } catch {
+          // Evaluation records not yet initialized; proceed to entryStudents fallback cleanly
         }
       }
 
-      // 3. Fallback to sectionStudents if not yet loaded
+      // 3. Fallback to entryStudents
       if (!loadedRows.length) {
-        loadedRows = sectionStudents.map((s) => ({
+        loadedRows = entryStudents.map((s) => ({
           studentId: s.studentId,
           rollNo: s.rollNo,
           studentName: s.studentName,
@@ -918,8 +1013,7 @@ export default function MarksEntryPage() {
           autoAbsentRemark: false,
         }));
       } else {
-        // Ensure any new section students not in loadedRows are also included
-        const missingStudents = sectionStudents.filter((s) => !loadedRows.some((r) => eq(r.studentId, s.studentId)));
+        const missingStudents = entryStudents.filter((s) => !loadedRows.some((r) => eq(r.studentId, s.studentId)));
         if (missingStudents.length > 0) {
           const extraRows = missingStudents.map((s) => ({
             studentId: s.studentId,
@@ -945,8 +1039,8 @@ export default function MarksEntryPage() {
         ...all,
         [workspaceKey]: {
           evaluationId: evalId,
-          examinationId: examId,
-          sectionId: applied.section,
+          examinationId: entryExamId,
+          sectionId: entry.filters.section,
           subjectId: config.subjectId,
           facultyId: config.facultyId || "1",
           faculty: { name: config.facultyName || "Assigned Faculty", employeeCode: "" },
@@ -972,61 +1066,187 @@ export default function MarksEntryPage() {
     return () => {
       isMounted = false;
     };
-  }, [applied, examId, subjectId, examConfigs, sectionStudents, workspaceKey, boards, years, levels]);
+  }, [entryApplied, entry.filters.section, entryExamId, entrySubjectId, entryConfigs, entryStudents, workspaceKey]);
 
-  // Workspace Row Updater
-  const setWorkspace = (key, updater) => setWorkspaces((all) => ({ ...all, [key]: updater(all[key]) }));
-
-  const updateRow = (studentId, field, value) => {
-    if (!workspace || (!editableStatuses.includes(workspace.status) && editingKey !== workspaceKey)) return;
-    setWorkspace(workspaceKey, (current) => ({
-      ...current,
-      dirty: true,
-      validationErrors: {},
-      rows: current.rows.map((row) => {
-        if (!eq(row.studentId, studentId)) return row;
-        if (field === "absent") {
-          return value
-            ? {
-                ...row,
-                absent: true,
-                internal: 0,
-                practical: 0,
-                theory: 0,
-                obtainedMarks: 0,
-                total: 0,
-                remarks: row.remarks || "Absent",
-                autoAbsentRemark: !row.remarks,
-              }
-            : {
-                ...row,
-                absent: false,
-                internal: "",
-                practical: current.practicalMax ? "" : 0,
-                theory: "",
-                obtainedMarks: "",
-                total: "",
-                remarks: row.autoAbsentRemark ? "" : row.remarks,
-                autoAbsentRemark: false,
-              };
-        }
-        const next = { ...row, [field]: field === "remarks" ? value.slice(0, 250) : value };
-        if (field === "remarks") next.autoAbsentRemark = false;
-        if (current.mode === "REGULAR") {
-          const fields = ["internal", ...(current.practicalMax ? ["practical"] : []), "theory"];
-          next.total = fields.every((name) => numericMark(next[name]))
-            ? fields.reduce((sum, name) => sum + Number(next[name]), 0)
-            : "";
-          next.obtainedMarks = next.total;
-        } else if (field === "obtainedMarks") {
-          next.total = value;
-        }
-        return next;
-      }),
-    }));
+  // Master lookup helper
+  const getMasterName = (list, id, fallback = "") => {
+    if (!id) return fallback;
+    const item = list.find(
+      (x) =>
+        eq(x.id, id) ||
+        eq(x.boardId, id) ||
+        eq(x.academicYearId, id) ||
+        eq(x.academicLevelId, id) ||
+        eq(x.groupId, id) ||
+        eq(x.sectionId, id)
+    );
+    return (
+      item?.name ||
+      item?.boardName ||
+      item?.yearName ||
+      item?.levelName ||
+      item?.groupName ||
+      item?.sectionName ||
+      fallback
+    );
   };
 
-  // 8. Excel Bulk Import Feature
+  // Ensure mark records are created/persisted in backend DB
+  const ensurePersistedMarks = async (ws) => {
+    if (!ws || !ws.rows?.length) return ws?.evaluationId;
+    const examIdNum = Number(ws.examinationId || entryExamId);
+    const subjectIdNum = Number(ws.subjectId);
+    const sectionIdNum = Number(ws.sectionId || entry.filters.section);
+    const compositeId = `${subjectIdNum}_${sectionIdNum}_${examIdNum}`;
+
+    if (!examIdNum || !subjectIdNum || !sectionIdNum) {
+      return ws.evaluationId || compositeId;
+    }
+
+    try {
+      let existingMarks = [];
+      try {
+        const res = await apiClient.get(`/api/v1/marks/exam/${examIdNum}`);
+        const raw = unwrapRecords(res);
+        existingMarks = raw.filter(
+          (m) => eq(m.subjectId, subjectIdNum) && eq(m.sectionId, sectionIdNum) && m.isActive !== false
+        );
+      } catch (e) {
+        console.warn("Could not query existing marks:", e);
+      }
+
+      const missingRows = ws.rows.filter((row) => !existingMarks.some((m) => eq(m.studentId, row.studentId)));
+
+      if (missingRows.length > 0) {
+        const selectedExam = (entry.exams || []).find((e) => eq(e.id, examIdNum));
+        const selectedSec = (entry.sections || []).find((s) => eq(s.id, sectionIdNum));
+
+        const boardId = Number(selectedExam?.boardId || selectedSec?.boardId || entry.filters.board || 1);
+        const academicYearId = Number(
+          selectedExam?.academicYearId || selectedSec?.academicYearId || entry.filters.year || 9
+        );
+        const academicLevelId = Number(
+          selectedExam?.academicLevelId || selectedSec?.academicLevelId || entry.filters.level || 1
+        );
+        const groupId = Number(selectedExam?.groupId || selectedSec?.groupId || entry.filters.group || 1);
+        const facultyId = Number(ws.facultyId || 1);
+
+        const boardName = getMasterName(allBoards, boardId, "Board");
+        const levelName = getMasterName(entry.levels, academicLevelId, "Academic Level");
+        const yearName = getMasterName(entry.years, academicYearId, "Academic Year");
+
+        const bulkPayload = {
+          marks: missingRows.map((row) => {
+            const isAbsent = Boolean(row.absent);
+            const intMarks = isAbsent ? 0 : Math.round(Number(row.internal || 0));
+            const pracMarks = isAbsent ? 0 : Math.round(Number(row.practical || 0));
+            const theoMarks = isAbsent
+              ? 0
+              : ws.mode === "OBJECTIVE"
+              ? Math.round(Number(row.obtainedMarks || 0))
+              : Math.round(Number(row.theory || 0));
+            const totalMarks = isAbsent
+              ? 0
+              : ws.mode === "OBJECTIVE"
+              ? Math.round(Number(row.obtainedMarks || 0))
+              : Math.round(Number(row.total || 0));
+
+            return {
+              studentId: Number(row.studentId),
+              examinationId: examIdNum,
+              subjectId: subjectIdNum,
+              sectionId: sectionIdNum,
+              boardId,
+              academicYearId,
+              academicLevelId,
+              groupId,
+              facultyId,
+              board: boardName,
+              academicLevel: levelName,
+              academicYear: yearName,
+              rollNo: String(row.rollNo || "").trim(),
+              studentName: String(row.studentName || "Student").trim(),
+              maxMarks: Math.round(Number(ws.maxMarks || 100)),
+              passingMarks: Math.ceil((Number(ws.maxMarks || 100) * Number(ws.passPercentage || 35)) / 100),
+              theoryMarks: theoMarks,
+              practicalMarks: pracMarks,
+              internalMarks: intMarks,
+              obtainedMarks: totalMarks,
+              totalMarks: totalMarks,
+              isAbsent,
+              remarks: String(row.remarks || "").trim(),
+            };
+          }),
+        };
+
+        await apiClient.post("/api/v1/marks/bulk", bulkPayload);
+      }
+
+      return compositeId;
+    } catch (err) {
+      console.error("ensurePersistedMarks error:", err);
+      throw err;
+    }
+  };
+
+  // Update cell in Marks Entry
+  const updateRow = (studentId, field, value) => {
+    if (!workspace || (!editableStatuses.includes(workspace.status) && editingKey !== workspaceKey)) return;
+    setWorkspaces((all) => {
+      const current = all[workspaceKey];
+      if (!current) return all;
+      return {
+        ...all,
+        [workspaceKey]: {
+          ...current,
+          dirty: true,
+          validationErrors: {},
+          rows: current.rows.map((row) => {
+            if (!eq(row.studentId, studentId)) return row;
+            if (field === "absent") {
+              return value
+                ? {
+                    ...row,
+                    absent: true,
+                    internal: 0,
+                    practical: 0,
+                    theory: 0,
+                    obtainedMarks: 0,
+                    total: 0,
+                    remarks: row.remarks || "Absent",
+                    autoAbsentRemark: !row.remarks,
+                  }
+                : {
+                    ...row,
+                    absent: false,
+                    internal: "",
+                    practical: current.practicalMax ? "" : 0,
+                    theory: "",
+                    obtainedMarks: "",
+                    total: "",
+                    remarks: row.autoAbsentRemark ? "" : row.remarks,
+                    autoAbsentRemark: false,
+                  };
+            }
+            const next = { ...row, [field]: field === "remarks" ? value.slice(0, 250) : value };
+            if (field === "remarks") next.autoAbsentRemark = false;
+            if (current.mode === "REGULAR") {
+              const fields = ["internal", ...(current.practicalMax ? ["practical"] : []), "theory"];
+              next.total = fields.every((name) => numericMark(next[name]))
+                ? fields.reduce((sum, name) => sum + Number(next[name]), 0)
+                : "";
+              next.obtainedMarks = next.total;
+            } else if (field === "obtainedMarks") {
+              next.total = value;
+            }
+            return next;
+          }),
+        },
+      };
+    });
+  };
+
+  // Excel Bulk Import
   const handleExcelImport = (event) => {
     const file = event.target.files?.[0];
     if (!file || !workspace) return;
@@ -1047,22 +1267,27 @@ export default function MarksEntryPage() {
 
         let matchedCount = 0;
         const updatedRows = workspace.rows.map((studentRow) => {
-          // Flexible match by rollNo, admissionNo, or studentName
           const matchedItem = jsonRows.find((excelRow) => {
             const rollKey = Object.keys(excelRow).find((k) => /^(roll\s*no|roll|rollnumber|roll_no)$/i.test(k.trim()));
-            const admKey = Object.keys(excelRow).find((k) => /^(adm\s*no|admission|admission_no|admissionno)$/i.test(k.trim()));
+            const admKey = Object.keys(excelRow).find((k) =>
+              /^(adm\s*no|admission|admission_no|admissionno)$/i.test(k.trim())
+            );
             const nameKey = Object.keys(excelRow).find((k) => /^(name|student\s*name|studentname)$/i.test(k.trim()));
 
             if (rollKey && excelRow[rollKey] && eq(excelRow[rollKey], studentRow.rollNo)) return true;
             if (admKey && excelRow[admKey] && eq(excelRow[admKey], studentRow.admissionNo)) return true;
-            if (nameKey && excelRow[nameKey] && String(excelRow[nameKey]).trim().toLowerCase() === studentRow.studentName.trim().toLowerCase()) return true;
+            if (
+              nameKey &&
+              excelRow[nameKey] &&
+              String(excelRow[nameKey]).trim().toLowerCase() === studentRow.studentName.trim().toLowerCase()
+            )
+              return true;
             return false;
           });
 
           if (!matchedItem) return studentRow;
           matchedCount += 1;
 
-          // Find column values in matchedItem
           const findVal = (regex) => {
             const k = Object.keys(matchedItem).find((key) => regex.test(key.trim()));
             return k !== undefined ? matchedItem[k] : undefined;
@@ -1075,7 +1300,11 @@ export default function MarksEntryPage() {
           const absVal = findVal(/^(absent|is\s*absent|isabsent)$/i);
           const remVal = findVal(/^(remarks|remark|comments)$/i);
 
-          const isAbsent = absVal === true || String(absVal).toLowerCase() === "yes" || String(absVal).toLowerCase() === "true" || String(totVal).toLowerCase() === "abs";
+          const isAbsent =
+            absVal === true ||
+            String(absVal).toLowerCase() === "yes" ||
+            String(absVal).toLowerCase() === "true" ||
+            String(totVal).toLowerCase() === "abs";
 
           if (isAbsent) {
             return {
@@ -1092,7 +1321,9 @@ export default function MarksEntryPage() {
 
           const internal = intVal !== undefined && intVal !== "" ? String(intVal) : studentRow.internal;
           const practical = workspace.practicalMax
-            ? (pracVal !== undefined && pracVal !== "" ? String(pracVal) : studentRow.practical)
+            ? pracVal !== undefined && pracVal !== ""
+              ? String(pracVal)
+              : studentRow.practical
             : 0;
           const theory = theoVal !== undefined && theoVal !== "" ? String(theoVal) : studentRow.theory;
 
@@ -1116,11 +1347,14 @@ export default function MarksEntryPage() {
           };
         });
 
-        setWorkspace(workspaceKey, (cur) => ({
-          ...cur,
-          dirty: true,
-          validationErrors: {},
-          rows: updatedRows,
+        setWorkspaces((all) => ({
+          ...all,
+          [workspaceKey]: {
+            ...all[workspaceKey],
+            dirty: true,
+            validationErrors: {},
+            rows: updatedRows,
+          },
         }));
 
         notify(`Imported marks for ${matchedCount} student(s) from Excel.`);
@@ -1134,38 +1368,50 @@ export default function MarksEntryPage() {
     reader.readAsArrayBuffer(file);
   };
 
-  // 9. Save Draft Handler
+  // Save Draft Handler
   const saveSingleDraft = async () => {
     if (!workspace || processing || !editableStatuses.includes(workspace.status)) return;
     const configError = validateMarksConfiguration(workspace);
     const errors = validateMarksRows(workspace, false);
     if (configError || !workspace.rows.length || Object.keys(errors).length) {
-      setWorkspace(workspaceKey, (item) => ({ ...item, validationErrors: errors }));
+      setWorkspaces((all) => ({
+        ...all,
+        [workspaceKey]: { ...all[workspaceKey], validationErrors: errors },
+      }));
       return notify(
-        configError || (!workspace.rows.length ? "No active students are available for the selected section." : "Complete and correct all marks before continuing."),
+        configError ||
+          (!workspace.rows.length
+            ? "No active students are available for the selected section."
+            : "Complete and correct all marks before continuing."),
         "error"
       );
     }
 
     setProcessing("SAVE_DRAFT");
     try {
-      // 1. Ensure mark records exist in backend database without stopping
       const resolvedEvalId = await ensurePersistedMarks(workspace);
-      const evalId = resolvedEvalId || workspace.evaluationId || `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
+      const evalId =
+        resolvedEvalId ||
+        workspace.evaluationId ||
+        `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
 
-      // 2. Dual-compatible DTO marks payload
       const payload = buildMarksPayload(workspace, evalId);
 
       const saveMarksUrl = apiEndpoints.evaluations?.saveMarks
         ? apiEndpoints.evaluations.saveMarks(evalId)
         : `/api/v1/faculty/evaluations/${evalId}/marks`;
 
-      await apiClient.put(saveMarksUrl, payload).catch(() => {
-        return apiClient.put(`/api/v1/evaluations/${evalId}/marks`, payload).catch(() => null);
-      });
+      try {
+        await apiClient.put(saveMarksUrl, payload);
+      } catch (putErr) {
+        // If faculty endpoint fails (e.g. backend LINQ ExamId bug on SaveFacultyDraftMarksAsync), persist via evaluation marks editor
+        const adminPayload = buildAdminMarksPayload(workspace);
+        await apiClient.put(`/api/v1/evaluations/${evalId}/marks`, adminPayload);
+      }
 
       const nextStatus = workspace.status === "NOT STARTED" ? "DRAFT" : workspace.status;
-      setWorkspace(workspaceKey, (item) => {
+      setWorkspaces((all) => {
+        const item = all[workspaceKey];
         const next = {
           ...item,
           evaluationId: evalId,
@@ -1175,60 +1421,67 @@ export default function MarksEntryPage() {
           updatedAt: new Date().toISOString(),
         };
         snapshots.current[workspaceKey] = next;
-        return next;
+        return { ...all, [workspaceKey]: next };
       });
 
       notify("Subject draft saved.");
     } catch (err) {
+      console.error("Save draft error:", err);
       notify(getApiErrorMessage(err), "error");
     } finally {
       setProcessing("");
     }
   };
 
-  // 10. Submit Marks Handler
+  // Submit Subject Handler
   const submitSingleSubject = async () => {
     if (!workspace || processing || !editableStatuses.includes(workspace.status)) return;
     const configError = validateMarksConfiguration(workspace);
     const errors = validateMarksRows(workspace, true);
     if (configError || !workspace.rows.length || Object.keys(errors).length) {
-      setWorkspace(workspaceKey, (item) => ({ ...item, validationErrors: errors }));
+      setWorkspaces((all) => ({
+        ...all,
+        [workspaceKey]: { ...all[workspaceKey], validationErrors: errors },
+      }));
       return notify(
-        configError || (!workspace.rows.length ? "No active students are available for the selected section." : "Complete and correct all marks before continuing."),
+        configError ||
+          (!workspace.rows.length
+            ? "No active students are available for the selected section."
+            : "Complete and correct all marks before continuing."),
         "error"
       );
     }
 
     setProcessing("SUBMIT");
     try {
-      // 1. Ensure mark records exist in backend database
       const resolvedEvalId = await ensurePersistedMarks(workspace);
-      const evalId = resolvedEvalId || workspace.evaluationId || `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
+      const evalId =
+        resolvedEvalId ||
+        workspace.evaluationId ||
+        `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
 
-      // 2. Dual-compatible DTO marks payload
       const marksPayload = buildMarksPayload(workspace, evalId);
 
       const saveMarksUrl = apiEndpoints.evaluations?.saveMarks
         ? apiEndpoints.evaluations.saveMarks(evalId)
         : `/api/v1/faculty/evaluations/${evalId}/marks`;
 
-      await apiClient.put(saveMarksUrl, marksPayload).catch(() => {
-        return apiClient.put(`/api/v1/evaluations/${evalId}/marks`, marksPayload).catch(() => null);
-      });
+      try {
+        await apiClient.put(saveMarksUrl, marksPayload);
+      } catch (putErr) {
+        // If faculty endpoint fails (e.g. backend LINQ ExamId bug), persist via evaluation marks editor
+        const adminPayload = buildAdminMarksPayload(workspace);
+        await apiClient.put(`/api/v1/evaluations/${evalId}/marks`, adminPayload);
+      }
 
-      // 3. Transition to SUBMITTED
       const submitUrl = apiEndpoints.evaluations?.submit
         ? apiEndpoints.evaluations.submit(evalId)
         : `/api/v1/faculty/evaluations/${evalId}/submit`;
 
-      await apiClient
-        .post(submitUrl)
-        .catch(() => {
-          // If rejected previously, backend supports /resubmit
-          return apiClient.post(`/api/v1/faculty/evaluations/${evalId}/resubmit`).catch(() => null);
-        });
+      await apiClient.post(submitUrl);
 
-      setWorkspace(workspaceKey, (item) => {
+      setWorkspaces((all) => {
+        const item = all[workspaceKey];
         const next = {
           ...item,
           evaluationId: evalId,
@@ -1238,18 +1491,19 @@ export default function MarksEntryPage() {
           updatedAt: new Date().toISOString(),
         };
         snapshots.current[workspaceKey] = next;
-        return next;
+        return { ...all, [workspaceKey]: next };
       });
 
       notify("Subject marks submitted.");
     } catch (err) {
+      console.error("Submit subject error:", err);
       notify(getApiErrorMessage(err), "error");
     } finally {
       setProcessing("");
     }
   };
 
-  // 11. Admin Edit Submitted Marks
+  // Admin Edit Submitted Marks
   const startSubmittedEdit = () => {
     if (workspace?.status !== "SUBMITTED") return;
     snapshots.current[workspaceKey] = structuredClone(workspace);
@@ -1265,33 +1519,233 @@ export default function MarksEntryPage() {
     if (editingKey !== workspaceKey || processing) return;
     const errors = validateMarksRows(workspace, true);
     if (Object.keys(errors).length) {
-      setWorkspace(workspaceKey, (item) => ({ ...item, validationErrors: errors }));
+      setWorkspaces((all) => ({ ...all, [workspaceKey]: { ...all[workspaceKey], validationErrors: errors } }));
       return notify("Complete and correct all marks before continuing.", "error");
     }
 
     setProcessing("SAVE_EDIT");
     try {
       const resolvedEvalId = await ensurePersistedMarks(workspace);
-      const evalId = resolvedEvalId || workspace.evaluationId || `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
+      const evalId =
+        resolvedEvalId ||
+        workspace.evaluationId ||
+        `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
 
-      const payload = buildMarksPayload(workspace, evalId);
-
+      const adminPayload = buildAdminMarksPayload(workspace);
       const adminSaveUrl = `/api/v1/evaluations/${evalId}/marks`;
-      const facultySaveUrl = apiEndpoints.evaluations?.saveMarks
-        ? apiEndpoints.evaluations.saveMarks(evalId)
-        : `/api/v1/faculty/evaluations/${evalId}/marks`;
 
-      await apiClient.put(adminSaveUrl, payload).catch(() => {
-        return apiClient.put(facultySaveUrl, payload).catch(() => null);
-      });
+      await apiClient.put(adminSaveUrl, adminPayload);
 
-      setWorkspace(workspaceKey, (item) => {
-        const next = { ...item, evaluationId: evalId, status: "SUBMITTED", dirty: false, updatedAt: new Date().toISOString() };
+      setWorkspaces((all) => {
+        const next = {
+          ...all[workspaceKey],
+          evaluationId: evalId,
+          status: "SUBMITTED",
+          dirty: false,
+          updatedAt: new Date().toISOString(),
+        };
         snapshots.current[workspaceKey] = next;
-        return next;
+        return { ...all, [workspaceKey]: next };
       });
       setEditingKey("");
       notify("Submitted marks updated successfully.");
+    } catch (err) {
+      console.error("Save edit error:", err);
+      notify(getApiErrorMessage(err), "error");
+    } finally {
+      setProcessing("");
+    }
+  };
+
+  // ==========================================
+  // TAB 2 & 3: MARKS EVALUATION & STUDENT ANALYSIS
+  // ==========================================
+  const [evalApplied, setEvalApplied] = useState(false);
+  const [evalConfigs, setEvalConfigs] = useState([]);
+  const [evalStudents, setEvalStudents] = useState([]);
+  const [selectedEvaluation, setSelectedEvaluation] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [modal, setModal] = useState(null);
+  const [message, setMessage] = useState("");
+  const [backendAnalysis, setBackendAnalysis] = useState([]);
+
+  const [evaluationPage, setEvaluationPage] = useState(1);
+  const [studentPage, setStudentPage] = useState(1);
+  const [detailPage, setDetailPage] = useState(1);
+  const [evaluationSearch, setEvaluationSearch] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
+
+  const evalState = useAcademicFilterState(allBoards, guard, () => setEvalApplied(false));
+
+  // Button Click Action: "Check Evaluations" (Enabled when all 7 filters selected)
+  const applyEvalContext = async () => {
+    if (!evalState.filters.section || !evalState.filters.exam || processing) return;
+    setProcessing("CHECK_EVALUATIONS");
+    try {
+      // 1. Fetch Students
+      const studRes = await apiClient
+        .get(apiEndpoints.students.getBySection(evalState.filters.section))
+        .catch(() => apiClient.get(`/api/v1/students/section/${evalState.filters.section}`));
+      const rawStudents = unwrapRecords(studRes);
+      const studentList = (rawStudents || [])
+        .map((s) => ({
+          studentId: s.studentId ?? s.id,
+          admissionNo: s.admissionNo ?? "",
+          rollNo: String(s.rollNo ?? s.rollNumber ?? ""),
+          studentName: s.studentName ?? s.fullName ?? s.name ?? "Student",
+          isActive: s.isActive !== false,
+        }))
+        .filter((s) => s.isActive)
+        .sort((a, b) => a.rollNo.localeCompare(b.rollNo, undefined, { numeric: true }));
+
+      setEvalStudents(studentList);
+
+      // 2. Fetch Exam details & schedules/configs
+      const selectedExam = evalState.exams.find((e) => eq(e.id, evalState.filters.exam));
+      let schedules = selectedExam?.schedules || [];
+      if (!schedules.length) {
+        try {
+          const detailRes = await apiClient.get(`/api/v1/examinations/${evalState.filters.exam}`).catch(() => null);
+          const detail = detailRes?.data || detailRes;
+          if (detail?.schedules?.length) {
+            schedules = detail.schedules;
+          }
+        } catch (e) {
+          console.warn("Could not fetch schedules for evaluation:", e);
+        }
+      }
+
+      const configs = schedules.map((s) => ({
+        id: `cfg-${evalState.filters.exam}-${s.subjectId}`,
+        examinationId: evalState.filters.exam,
+        sectionId: evalState.filters.section,
+        subjectId: normalizeId(s.subjectId),
+        subjectName: s.subjectName || `Subject ${s.subjectId}`,
+        subjectCode: s.subjectCode || "",
+        mode: s.scheduleMode === "COMBINED" ? "OBJECTIVE" : "REGULAR",
+        maxMarks: Number(s.maxMarks || 100),
+        passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
+        internalMax: Number(s.internalMax ?? 20),
+        practicalMax: Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
+        theoryMax: Number(s.theoryMax ?? (Number(s.maxMarks || 100) - 20)),
+        facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
+        facultyId: s.invigilatorId || s.facultyId || "",
+      }));
+
+      setEvalConfigs(configs);
+
+      // 3. Search evaluations
+      const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
+      const evalSearchRes = await apiClient
+        .post(evalSearchUrl, {
+          boardId: Number(evalState.filters.board),
+          academicYearId: Number(evalState.filters.year),
+          academicLevelId: Number(evalState.filters.level),
+          groupId: Number(evalState.filters.group),
+          sectionId: Number(evalState.filters.section),
+          examinationId: Number(evalState.filters.exam),
+        })
+        .catch(() => apiClient.get("/api/v1/faculty/evaluations"));
+
+      const existingEvals = unwrapRecords(evalSearchRes);
+      const evalMap = {};
+      existingEvals.forEach((ev) => {
+        const parts = String(ev.evaluationId || "").split("_");
+        const evSubId = normalizeId(ev.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
+        const evSecId = normalizeId(ev.sectionId ?? (parts.length >= 3 ? parts[1] : evalState.filters.section));
+        const evExamId = normalizeId(ev.examinationId ?? ev.examId ?? (parts.length >= 3 ? parts[2] : evalState.filters.exam));
+        const key = evaluationKey({ examinationId: evExamId, sectionId: evSecId, subjectId: evSubId });
+
+        evalMap[key] = {
+          evaluationId:
+            ev.evaluationId || `${evSubId}_${evSecId}_${evExamId}`,
+          examinationId: evExamId,
+          sectionId: evSecId,
+          subjectId: evSubId,
+          facultyId: ev.facultyId,
+          faculty: { name: ev.facultyName || "Assigned Faculty", employeeCode: ev.facultyCode || "" },
+          subject: { id: evSubId, name: ev.subjectName || `Subject ${evSubId}`, code: ev.subjectCode || "" },
+          status: String(ev.status || "DRAFT").trim().toUpperCase(),
+          mode: ev.examPattern === "OBJECTIVE" || ev.mode === "OBJECTIVE" ? "OBJECTIVE" : "REGULAR",
+          maxMarks: Number(ev.subjectMaxMarks || ev.totalMarks || ev.maxMarks || 100),
+          internalMax: Number(ev.internalMax ?? 20),
+          practicalMax: Number(ev.practicalMax ?? (ev.isPractical ? 30 : 0)),
+          theoryMax: Number(ev.theoryMax ?? (ev.isPractical ? 50 : 80)),
+          passPercentage: Number(ev.examPassPercentage || ev.passPercentage || 35),
+          rejectionReason: ev.rejectionReason || "",
+          adminReviewMessage: ev.adminReviewMessage || "",
+          remarks: ev.remarks || "",
+          averageMarks: ev.averageMarks,
+          average: ev.averageMarks !== undefined && ev.averageMarks !== null ? String(ev.averageMarks) : "—",
+          highestMarks: ev.highestMarks,
+          highest: ev.highestMarks !== undefined && ev.highestMarks !== null ? String(ev.highestMarks) : "—",
+          lowestMarks: ev.lowestMarks,
+          lowest: ev.lowestMarks !== undefined && ev.lowestMarks !== null ? String(ev.lowestMarks) : "—",
+          totalStudents: ev.totalStudents ?? studentList.length,
+          presentStudents: ev.presentStudents ?? 0,
+          absentStudents: ev.absentStudents ?? 0,
+          studentsCount: ev.totalStudents || studentList.length,
+          rows: ev.rows || [],
+          dirty: false,
+          validationErrors: {},
+          updatedAt: ev.lastSubmittedAt || ev.updatedAt || new Date().toISOString(),
+        };
+      });
+
+      // Synchronize evalConfigs with any returned evaluations not present in schedules
+      const updatedConfigs = [...configs];
+      existingEvals.forEach((ev) => {
+        const parts = String(ev.evaluationId || "").split("_");
+        const evSubId = normalizeId(ev.subjectId ?? (parts.length >= 3 ? parts[0] : ""));
+        if (evSubId && !updatedConfigs.some((c) => eq(c.subjectId, evSubId))) {
+          updatedConfigs.push({
+            id: `cfg-${evalState.filters.exam}-${evSubId}`,
+            examinationId: evalState.filters.exam,
+            sectionId: evalState.filters.section,
+            subjectId: evSubId,
+            subjectName: ev.subjectName || `Subject ${evSubId}`,
+            subjectCode: ev.subjectCode || "",
+            mode: ev.examPattern === "OBJECTIVE" || ev.mode === "OBJECTIVE" ? "OBJECTIVE" : "REGULAR",
+            maxMarks: Number(ev.subjectMaxMarks || ev.totalMarks || ev.maxMarks || 100),
+            passPercentage: Number(ev.examPassPercentage || ev.passPercentage || 35),
+            internalMax: Number(ev.internalMax ?? 20),
+            practicalMax: Number(ev.practicalMax ?? (ev.isPractical ? 30 : 0)),
+            theoryMax: Number(ev.theoryMax ?? (ev.isPractical ? 50 : 80)),
+            facultyName: ev.facultyName || "",
+            facultyId: ev.facultyId || "",
+          });
+        }
+      });
+      setEvalConfigs(updatedConfigs);
+      setWorkspaces((prev) => ({ ...prev, ...evalMap }));
+
+      // 4. Fetch Student Analysis if available
+      try {
+        const analysisUrl = apiEndpoints.studentAnalysis?.getAll || "/api/v1/student-analysis";
+        const analysisRes = await apiClient.get(analysisUrl, {
+          params: {
+            boardId: evalState.filters.board,
+            academicYearId: evalState.filters.year,
+            academicLevelId: evalState.filters.level,
+            groupId: evalState.filters.group,
+            sectionId: evalState.filters.section,
+            examinationId: evalState.filters.exam,
+          },
+        });
+        const rawAnalysis = unwrapRecords(analysisRes);
+        if (rawAnalysis.length) {
+          setBackendAnalysis(rawAnalysis);
+        }
+      } catch (err) {
+        console.warn("Student analysis fetch note:", err);
+      }
+
+      setEvalApplied(true);
+      setSelectedEvaluation(null);
+      setSelectedStudent(null);
+      setEvaluationPage(1);
+      setStudentPage(1);
+      notify("Evaluations loaded for selected examination.");
     } catch (err) {
       notify(getApiErrorMessage(err), "error");
     } finally {
@@ -1299,14 +1753,51 @@ export default function MarksEntryPage() {
     }
   };
 
-  // 12. Evaluation Transitions (Verify, Approve, Reject)
-  const evaluations = examConfigs
-    .map((config) => workspaces[evaluationKey({ examinationId: examId, sectionId: applied?.section, subjectId: config.subjectId })])
-    .filter((item) => item && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(item.status))
-    .map((item) => ({ ...item, ...calculateEvaluationStatistics(item) }));
+  // Derived evaluations for current evaluation context
+  const evalReadiness = calculateReadiness(evalConfigs, workspaces);
 
-  const readiness = calculateReadiness(examConfigs, workspaces);
+  const evaluationItems = useMemo(() => {
+    if (!evalApplied || !evalState.filters.section || !evalState.filters.exam) return [];
+    const items = [];
+    const seenSubjects = new Set();
 
+    (evalConfigs || []).forEach((config) => {
+      const key = evaluationKey({
+        examinationId: evalState.filters.exam,
+        sectionId: evalState.filters.section,
+        subjectId: config.subjectId,
+      });
+      const ws = workspaces[key];
+      if (ws && ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())) {
+        items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
+        seenSubjects.add(normalizeId(config.subjectId));
+      }
+    });
+
+    // Also collect any evaluations in workspaces for this exam & section not in evalConfigs
+    Object.values(workspaces || {}).forEach((ws) => {
+      if (
+        ws &&
+        eq(ws.examinationId, evalState.filters.exam) &&
+        eq(ws.sectionId, evalState.filters.section) &&
+        !seenSubjects.has(normalizeId(ws.subjectId)) &&
+        ["SUBMITTED", "VERIFIED", "APPROVED", "REJECTED"].includes(String(ws.status || "").toUpperCase())
+      ) {
+        items.push({ ...ws, ...calculateEvaluationStatistics(ws) });
+        seenSubjects.add(normalizeId(ws.subjectId));
+      }
+    });
+
+    return items;
+  }, [evalApplied, evalState.filters.section, evalState.filters.exam, evalConfigs, workspaces]);
+
+  const evalFilteredEvaluations = evaluationItems.filter((item) =>
+    `${item.subject?.name || item.subjectName || ""} ${item.subject?.code || item.subjectCode || ""} ${item.faculty?.name || item.facultyName || ""} ${item.status || ""}`
+      .toLowerCase()
+      .includes(evaluationSearch.trim().toLowerCase())
+  );
+
+  // Single Evaluation Transition (Verify, Approve, Reject)
   const transition = async (action) => {
     const item = selectedEvaluation;
     if (!item || processing) return;
@@ -1318,17 +1809,19 @@ export default function MarksEntryPage() {
 
     setProcessing(action);
     try {
-      const evalId = item.evaluationId || `${item.subjectId}_${item.sectionId || applied.section}_${item.examinationId || examId}`;
+      const evalId =
+        item.evaluationId ||
+        `${item.subjectId}_${item.sectionId || evalState.filters.section}_${item.examinationId || evalState.filters.exam}`;
       if (action === "VERIFY") {
         const verifyUrl = apiEndpoints.evaluations?.verify
           ? apiEndpoints.evaluations.verify(evalId)
           : `/api/v1/evaluations/${evalId}/verify`;
-        await apiClient.post(verifyUrl, null, { params: { message } }).catch(() => null);
+        await apiClient.post(verifyUrl, null, { params: { message } });
       } else if (action === "APPROVE") {
         const approveUrl = apiEndpoints.evaluations?.approve
           ? apiEndpoints.evaluations.approve(evalId)
           : `/api/v1/evaluations/${evalId}/approve`;
-        await apiClient.post(approveUrl).catch(() => null);
+        await apiClient.post(approveUrl);
       } else if (action === "REJECT") {
         const rejectUrl = apiEndpoints.evaluations?.reject
           ? apiEndpoints.evaluations.reject(evalId)
@@ -1338,7 +1831,7 @@ export default function MarksEntryPage() {
           reason: message.trim(),
           message: message.trim(),
           notifyFaculty: true,
-        }).catch(() => null);
+        });
       }
 
       const key = evaluationKey(item);
@@ -1360,15 +1853,17 @@ export default function MarksEntryPage() {
       setMessage("");
       notify(`Evaluation ${nextStatus.toLowerCase()}.`);
     } catch (err) {
+      console.error("Evaluation transition error:", err);
       notify(getApiErrorMessage(err), "error");
     } finally {
       setProcessing("");
     }
   };
 
+  // Bulk Transitions (Verify All, Approve All)
   const bulkTransition = async (from, to) => {
     if (processing) return;
-    const targetEvaluations = evaluations.filter((item) => item.status === from);
+    const targetEvaluations = evalFilteredEvaluations.filter((item) => item.status === from);
     const keys = targetEvaluations.map(evaluationKey);
     setProcessing(to === "VERIFIED" ? "VERIFY_ALL" : "APPROVE_ALL");
 
@@ -1376,23 +1871,23 @@ export default function MarksEntryPage() {
       if (to === "VERIFIED") {
         const verifyAllUrl = apiEndpoints.evaluations?.verifyAll || "/api/v1/evaluations/verify-all";
         await apiClient.post(verifyAllUrl, {
-          boardId: Number(applied.board),
-          academicYearId: Number(applied.year),
-          academicLevelId: Number(applied.level),
-          groupId: Number(applied.group),
-          sectionId: Number(applied.section),
-          examinationId: Number(examId),
-        }).catch(() => null);
+          boardId: Number(evalState.filters.board),
+          academicYearId: Number(evalState.filters.year),
+          academicLevelId: Number(evalState.filters.level),
+          groupId: Number(evalState.filters.group),
+          sectionId: Number(evalState.filters.section),
+          examinationId: Number(evalState.filters.exam),
+        });
       } else if (to === "APPROVED") {
         const approveAllUrl = apiEndpoints.evaluations?.approveAll || "/api/v1/evaluations/approve-all";
         await apiClient.post(approveAllUrl, {
-          boardId: Number(applied.board),
-          academicYearId: Number(applied.year),
-          academicLevelId: Number(applied.level),
-          groupId: Number(applied.group),
-          sectionId: Number(applied.section),
-          examinationId: Number(examId),
-        }).catch(() => null);
+          boardId: Number(evalState.filters.board),
+          academicYearId: Number(evalState.filters.year),
+          academicLevelId: Number(evalState.filters.level),
+          groupId: Number(evalState.filters.group),
+          sectionId: Number(evalState.filters.section),
+          examinationId: Number(evalState.filters.exam),
+        });
       }
 
       setWorkspaces((all) => {
@@ -1411,43 +1906,19 @@ export default function MarksEntryPage() {
     }
   };
 
-  // 13. Student Analysis Data Fetch
-  useEffect(() => {
-    if (!applied || !examId || tab !== "students" || !readiness.readyForResults) return;
-
-    let isMounted = true;
-    const loadAnalysis = async () => {
-      try {
-        const analysisUrl = apiEndpoints.studentAnalysis?.getAll || "/api/v1/student-analysis";
-        const res = await apiClient.get(analysisUrl, {
-          params: {
-            boardId: applied.board,
-            academicYearId: applied.year,
-            academicLevelId: applied.level,
-            groupId: applied.group,
-            sectionId: applied.section,
-            examinationId: examId,
-          },
-        });
-        const raw = unwrapRecords(res);
-        if (isMounted && raw.length) {
-          setBackendAnalysis(raw);
-        }
-      } catch (err) {
-        console.warn("Student analysis fetch note:", err);
-      }
-    };
-    loadAnalysis();
-    return () => {
-      isMounted = false;
-    };
-  }, [applied, examId, tab, readiness.readyForResults]);
-
+  // Fallback Student Analysis from in-memory workspaces & students
   const fallbackAnalysis = useMemo(() => {
-    if (!readiness.readyForResults || !applied) return [];
-    return sectionStudents.map((student) => {
-      const subjectResults = examConfigs.map((config) => {
-        const ws = workspaces[evaluationKey({ examinationId: examId, sectionId: applied.section, subjectId: config.subjectId })];
+    if (!evalApplied || !evalState.filters.section || !evalState.filters.exam) return [];
+    return evalStudents.map((student) => {
+      const subjectResults = evalConfigs.map((config) => {
+        const ws =
+          workspaces[
+            evaluationKey({
+              examinationId: evalState.filters.exam,
+              sectionId: evalState.filters.section,
+              subjectId: config.subjectId,
+            })
+          ];
         const row = ws?.rows?.find((item) => eq(item.studentId, student.studentId));
         const res = calculateStudentSubjectResult(row, ws);
         return {
@@ -1463,7 +1934,7 @@ export default function MarksEntryPage() {
       });
 
       const totalObtained = subjectResults.reduce((sum, item) => sum + item.obtained, 0);
-      const totalMaximum = examConfigs.reduce((sum, item) => sum + item.maxMarks, 0);
+      const totalMaximum = evalConfigs.reduce((sum, item) => sum + item.maxMarks, 0);
       const percentage = totalMaximum ? (totalObtained / totalMaximum) * 100 : 0;
       const pass = subjectResults.every((item) => item.result === "PASS");
 
@@ -1479,7 +1950,7 @@ export default function MarksEntryPage() {
         result: pass ? "PASS" : "FAIL",
       };
     });
-  }, [readiness.readyForResults, applied, sectionStudents, examConfigs, workspaces, examId]);
+  }, [evalApplied, evalState.filters.section, evalState.filters.exam, evalStudents, evalConfigs, workspaces]);
 
   const analysis = backendAnalysis.length
     ? backendAnalysis.map((item) => ({
@@ -1507,7 +1978,7 @@ export default function MarksEntryPage() {
       }))
     : fallbackAnalysis;
 
-  // View Student Analysis Details from API
+  // View Detailed Student Analysis Report
   const handleViewStudentDetails = async (student) => {
     try {
       const detailsUrl = apiEndpoints.studentAnalysis?.details
@@ -1515,12 +1986,12 @@ export default function MarksEntryPage() {
         : `/api/v1/student-analysis/${student.studentId}/details`;
       const res = await apiClient.get(detailsUrl, {
         params: {
-          examinationId: examId,
-          academicYearId: applied.year,
-          groupId: applied.group,
-          sectionId: applied.section,
-          boardId: applied.board,
-          academicLevelId: applied.level,
+          examinationId: evalState.filters.exam,
+          academicYearId: evalState.filters.year,
+          groupId: evalState.filters.group,
+          sectionId: evalState.filters.section,
+          boardId: evalState.filters.board,
+          academicLevelId: evalState.filters.level,
         },
       });
       const data = res.data || {};
@@ -1534,8 +2005,12 @@ export default function MarksEntryPage() {
           percentage: data.percentage ?? student.percentage,
           grade: data.grade ?? student.grade,
           result: data.result ?? student.result,
-          examinationName: data.examName || exams.find((e) => eq(e.id, examId))?.name || "Examination",
-          sectionName: data.sectionName || sections.find((s) => eq(s.id, applied.section))?.name || "Section",
+          examinationName:
+            data.examName || evalState.exams.find((e) => eq(e.id, evalState.filters.exam))?.name || "Examination",
+          sectionName:
+            data.sectionName ||
+            evalState.sections.find((s) => eq(s.id, evalState.filters.section))?.name ||
+            "Section",
           subjectResults: data.subjects.map((sub) => ({
             subjectId: sub.subjectId,
             subjectName: sub.subjectName,
@@ -1557,20 +2032,13 @@ export default function MarksEntryPage() {
       console.warn("Could not fetch detailed student analysis from API, using local breakdown:", err);
     }
 
-    // Fallback to local
     setSelectedStudent({
       ...student,
-      examinationName: exams.find((item) => eq(item.id, examId))?.name,
-      sectionName: sections.find((item) => eq(item.id, applied.section))?.name,
+      examinationName: evalState.exams.find((item) => eq(item.id, evalState.filters.exam))?.name,
+      sectionName: evalState.sections.find((item) => eq(item.id, evalState.filters.section))?.name,
     });
     setDetailPage(1);
   };
-
-  const filteredEvaluations = evaluations.filter((item) =>
-    `${item.subject?.name} ${item.subject?.code} ${item.faculty?.name} ${item.status}`
-      .toLowerCase()
-      .includes(evaluationSearch.trim().toLowerCase())
-  );
 
   const filteredStudents = analysis.filter((item) =>
     `${item.rollNo} ${item.studentName} ${item.result} ${item.grade}`
@@ -1578,13 +2046,23 @@ export default function MarksEntryPage() {
       .includes(studentSearch.trim().toLowerCase())
   );
 
-  const subjectOptions = examConfigs.map((config) => {
-    const status =
-      workspaces[evaluationKey({ examinationId: examId, sectionId: applied.section, subjectId: config.subjectId })]?.status ||
-      "NOT STARTED";
+  // Subject options in Marks Entry Workspace with Faculty Name & Faculty ID
+  const entrySubjectOptions = entryConfigs.map((config) => {
+    const ws =
+      workspaces[
+        evaluationKey({
+          examinationId: entryExamId,
+          sectionId: entry.filters.section,
+          subjectId: config.subjectId,
+        })
+      ];
+    const status = ws?.status || "NOT STARTED";
+    const facultyInfo = config.facultyName
+      ? ` — Faculty: ${config.facultyName}${config.facultyId ? ` (ID: ${config.facultyId})` : ""}`
+      : "";
     return {
       id: config.subjectId,
-      name: `${config.subjectName} (${config.subjectCode}) — ${status}`,
+      name: `${config.subjectName} (${config.subjectCode})${facultyInfo} — ${status}`,
     };
   });
 
@@ -1613,175 +2091,281 @@ export default function MarksEntryPage() {
           style={{ display: "none" }}
         />
 
-        {/* Academic Context Card */}
-        <FilterCard
-          filters={filters}
-          boards={boards}
-          years={years}
-          levels={levels}
-          groups={groups}
-          programs={programs}
-          sections={sections}
-          changeFilter={changeFilter}
-          applyContext={applyContext}
-          processing={processing}
-        />
+        {/* ======================================================== */}
+        {/* MAIN NAVIGATION TABS (Ref Screenshots 1, 2, 5)           */}
+        {/* ======================================================== */}
+        <div className="cms-tabs-row">
+          <div className="cms-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "entry"}
+              className={tab === "entry" ? "active" : ""}
+              onClick={() => guard(() => setTab("entry"))}
+            >
+              Marks Entry
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "evaluation"}
+              className={tab === "evaluation" ? "active" : ""}
+              onClick={() => guard(() => setTab("evaluation"))}
+            >
+              Marks Evaluation
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "students"}
+              className={tab === "students" ? "active" : ""}
+              onClick={() => guard(() => setTab("students"))}
+            >
+              Student Analysis
+            </button>
+          </div>
+        </div>
 
-        {!applied ? (
-          <Empty text="Select all academic filters and click Enter Marks." />
-        ) : (
+        {/* ======================================================== */}
+        {/* TAB 1: MARKS ENTRY WORKFLOW                              */}
+        {/* ======================================================== */}
+        {tab === "entry" && (
           <>
-            {/* 3 Main Navigation Tabs */}
-            <div className="cms-independent-tab-bar" role="tablist">
-              {[
-                ["entry", "Marks Entry"],
-                ["evaluation", "Marks Evaluation"],
-                ["students", "Student Analysis"],
-              ].map(([id, label]) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === id}
-                  className={`cms-independent-tab-btn ${tab === id ? "cms-active" : ""}`}
-                  onClick={() => guard(() => setTab(id))}
-                  key={id}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Context Summary Box */}
-            <Context
-              context={{ ...applied, exam: examId }}
-              masters={{ groups, programs, sections, exams }}
+            {/* Filter Card (6 Dropdowns + Enter Marks Action Button) */}
+            <FilterCard
+              mode="entry"
+              filters={entry.filters}
+              boards={allBoards}
+              years={entry.years}
+              levels={entry.levels}
+              groups={entry.groups}
+              programs={entry.programs}
+              sections={entry.sections}
+              changeFilter={entry.changeFilter}
+              actionLabel="Enter Marks"
+              onAction={applyEntryContext}
+              actionDisabled={
+                !entry.filters.board ||
+                !entry.filters.year ||
+                !entry.filters.level ||
+                !entry.filters.group ||
+                !entry.filters.program ||
+                !entry.filters.section
+              }
+              processing={processing === "ENTER_MARKS"}
+              title="Academic Context"
+              subtitle="Select the academic scope before opening Marks Entry."
             />
 
-            {tab === "entry" && (
-              <Entry
-                exams={exams}
-                examId={examId}
-                changeExam={(value) =>
-                  guard(() => {
-                    setExamId(value);
-                    setSubjectId("");
-                    setEntryPage(1);
-                    setSelectedEvaluation(null);
-                    setSelectedStudent(null);
-                  })
-                }
-                subjectOptions={subjectOptions}
-                subjectId={subjectId}
-                changeSubject={(value) =>
-                  guard(() => {
-                    setSubjectId(value);
-                    setEntryPage(1);
-                  })
-                }
-                workspace={workspace}
-                editing={editingKey === workspaceKey}
-                entryPage={entryPage}
-                setEntryPage={setEntryPage}
-                updateRow={updateRow}
-                processing={processing}
-                onBulkImport={() => fileInputRef.current?.click()}
-                onEdit={startSubmittedEdit}
-                onCancelEdit={cancelSubmittedEdit}
-                onSaveChanges={saveSubmittedEdit}
-                onSave={saveSingleDraft}
-                onSubmit={submitSingleSubject}
-              />
+            {!entryApplied ? (
+              <Empty text="Select all academic filters and click Enter Marks." />
+            ) : (
+              <>
+                <Context
+                  context={{ ...entry.filters, exam: entryExamId }}
+                  masters={{
+                    groups: entry.groups,
+                    programs: entry.programs,
+                    sections: entry.sections,
+                    exams: entry.exams,
+                  }}
+                />
+
+                {/* Marks Entry Workspace (Ref Screenshot 5) */}
+                <Entry
+                  exams={entry.exams}
+                  examId={entryExamId}
+                  changeExam={changeEntryExam}
+                  subjectOptions={entrySubjectOptions}
+                  subjectId={entrySubjectId}
+                  changeSubject={(value) =>
+                    guard(() => {
+                      setEntrySubjectId(value);
+                      setEntryPage(1);
+                    })
+                  }
+                  workspace={workspace}
+                  editing={editingKey === workspaceKey}
+                  entryPage={entryPage}
+                  setEntryPage={setEntryPage}
+                  updateRow={updateRow}
+                  processing={processing}
+                  onBulkImport={() => fileInputRef.current?.click()}
+                  onEdit={startSubmittedEdit}
+                  onCancelEdit={cancelSubmittedEdit}
+                  onSaveChanges={saveSubmittedEdit}
+                  onSave={saveSingleDraft}
+                  onSubmit={submitSingleSubject}
+                />
+              </>
             )}
-
-            {tab === "evaluation" &&
-              (selectedEvaluation ? (
-                <EvaluationDetails
-                  item={selectedEvaluation}
-                  page={detailPage}
-                  setPage={setDetailPage}
-                  onBack={() => setSelectedEvaluation(null)}
-                  onAction={(action) => (action === "APPROVE" ? transition(action) : (setModal(action), setMessage("")))}
-                  processing={processing}
-                />
-              ) : (
-                <EvaluationList
-                  rows={filteredEvaluations}
-                  search={evaluationSearch}
-                  setSearch={(value) => {
-                    setEvaluationSearch(value);
-                    setEvaluationPage(1);
-                  }}
-                  page={evaluationPage}
-                  setPage={setEvaluationPage}
-                  onView={async (item) => {
-                    let targetItem = item;
-                    if (!item.rows?.length) {
-                      const evalId = item.evaluationId || `${item.subjectId}_${item.sectionId || applied.section}_${item.examinationId || examId}`;
-                      try {
-                        const evalStudentsUrl = apiEndpoints.evaluations?.students
-                          ? apiEndpoints.evaluations.students(evalId)
-                          : `/api/v1/evaluations/${evalId}/students`;
-                        const res = await apiClient.get(evalStudentsUrl).catch(() =>
-                          apiClient.get(`/api/v1/faculty/evaluations/${evalId}/students`)
-                        );
-                        const markItems = res.data?.students || res.data?.marksList || [];
-                        if (markItems.length) {
-                          const rows = markItems.map((m) => ({
-                            studentId: m.studentId,
-                            rollNo: String(m.rollNo || ""),
-                            studentName: m.studentName || "",
-                            internal: m.internalMarks ?? m.internal ?? "",
-                            practical: m.practicalMarks ?? m.practical ?? 0,
-                            theory: m.theoryMarks ?? m.theory ?? "",
-                            obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
-                            total: m.totalMarks ?? m.total ?? "",
-                            absent: Boolean(m.isAbsent || m.absent),
-                            remarks: m.remarks || "",
-                          }));
-                          targetItem = { ...item, rows };
-                          const key = evaluationKey(item);
-                          setWorkspaces((all) => ({ ...all, [key]: { ...all[key], rows } }));
-                        }
-                      } catch (err) {
-                        console.warn("Could not fetch evaluation student details:", err);
-                      }
-                    }
-                    setSelectedEvaluation(targetItem);
-                    setDetailPage(1);
-                  }}
-                  readiness={readiness}
-                  onBulk={setModal}
-                  processing={processing}
-                />
-              ))}
-
-            {tab === "students" &&
-              (!readiness.readyForResults ? (
-                <Empty text="Student analysis will be available after all required subject evaluations are approved." />
-              ) : selectedStudent ? (
-                <StudentDetails
-                  student={selectedStudent}
-                  page={detailPage}
-                  setPage={setDetailPage}
-                  onBack={() => setSelectedStudent(null)}
-                />
-              ) : (
-                <StudentList
-                  rows={filteredStudents}
-                  subjects={examConfigs}
-                  search={studentSearch}
-                  setSearch={(value) => {
-                    setStudentSearch(value);
-                    setStudentPage(1);
-                  }}
-                  page={studentPage}
-                  setPage={setStudentPage}
-                  onView={handleViewStudentDetails}
-                />
-              ))}
           </>
         )}
 
+        {/* ======================================================== */}
+        {/* TAB 2 & 3: MARKS EVALUATION & STUDENT ANALYSIS WORKFLOWS */}
+        {/* ======================================================== */}
+        {(tab === "evaluation" || tab === "students") && (
+          <>
+            {/* Filter Card (7 Dropdowns + Check Evaluations Action Button) */}
+            <FilterCard
+              mode="evaluation"
+              filters={evalState.filters}
+              boards={allBoards}
+              years={evalState.years}
+              levels={evalState.levels}
+              groups={evalState.groups}
+              programs={evalState.programs}
+              sections={evalState.sections}
+              exams={evalState.exams}
+              changeFilter={evalState.changeFilter}
+              actionLabel="Check Evaluations"
+              onAction={applyEvalContext}
+              actionDisabled={
+                !evalState.filters.board ||
+                !evalState.filters.year ||
+                !evalState.filters.level ||
+                !evalState.filters.group ||
+                !evalState.filters.program ||
+                !evalState.filters.section ||
+                !evalState.filters.exam
+              }
+              processing={processing === "CHECK_EVALUATIONS"}
+              title="Academic Context & Examination"
+              subtitle="Select the academic scope and completed examination to check evaluations."
+            />
+
+            {!evalApplied ? (
+              <Empty text="Select all 7 filters and click Check Evaluations to view submitted marks." />
+            ) : (
+              <>
+                <Context
+                  context={evalState.filters}
+                  masters={{
+                    groups: evalState.groups,
+                    programs: evalState.programs,
+                    sections: evalState.sections,
+                    exams: evalState.exams,
+                  }}
+                />
+
+                {/* Sub-Tab 1: Faculty Evaluations (Ref Screenshots 1 & 3) */}
+                {tab === "evaluation" &&
+                  (selectedEvaluation ? (
+                    <EvaluationDetails
+                      item={selectedEvaluation}
+                      page={detailPage}
+                      setPage={setDetailPage}
+                      onBack={() => setSelectedEvaluation(null)}
+                      onAction={(action) =>
+                        action === "APPROVE" ? transition(action) : (setModal(action), setMessage(""))
+                      }
+                      processing={processing}
+                    />
+                  ) : (
+                    <EvaluationList
+                      rows={evalFilteredEvaluations}
+                      search={evaluationSearch}
+                      setSearch={(value) => {
+                        setEvaluationSearch(value);
+                        setEvaluationPage(1);
+                      }}
+                      page={evaluationPage}
+                      setPage={setEvaluationPage}
+                      onView={async (item) => {
+                        let targetItem = item;
+                        if (!item.rows?.length) {
+                          const evalId =
+                            item.evaluationId ||
+                            `${item.subjectId}_${item.sectionId || evalState.filters.section}_${
+                              item.examinationId || evalState.filters.exam
+                            }`;
+                          try {
+                            const evalStudentsUrl = apiEndpoints.evaluations?.students
+                              ? apiEndpoints.evaluations.students(evalId)
+                              : `/api/v1/evaluations/${evalId}/students`;
+                            let markItems = [];
+                            try {
+                              const res = await apiClient.get(evalStudentsUrl);
+                              markItems = res.data?.students || res.data?.marksList || [];
+                            } catch {
+                              // If evaluation endpoint records not ready, load from marks table
+                              const marksRes = await apiClient.get(
+                                `/api/v1/marks/exam/${item.examinationId || evalState.filters.exam}`
+                              );
+                              const allExamMarks = unwrapRecords(marksRes);
+                              markItems = allExamMarks.filter(
+                                (m) =>
+                                  eq(m.subjectId, item.subjectId) &&
+                                  eq(m.sectionId, item.sectionId || evalState.filters.section) &&
+                                  m.isActive !== false
+                              );
+                            }
+
+                            if (markItems.length) {
+                              const rows = markItems.map((m) => ({
+                                markId: m.markId,
+                                studentId: m.studentId,
+                                rollNo: String(m.rollNo || ""),
+                                studentName: m.studentName || "",
+                                internal: m.internalMarks ?? m.internal ?? "",
+                                practical: m.practicalMarks ?? m.practical ?? 0,
+                                theory: m.theoryMarks ?? m.theory ?? "",
+                                obtainedMarks: m.obtainedMarks ?? m.totalMarks ?? m.total ?? "",
+                                total: m.totalMarks ?? m.total ?? "",
+                                absent: Boolean(m.isAbsent || m.absent),
+                                remarks: m.remarks || "",
+                              }));
+                              targetItem = { ...item, rows };
+                              const key = evaluationKey(item);
+                              setWorkspaces((all) => ({ ...all, [key]: { ...all[key], rows } }));
+                            }
+                          } catch (err) {
+                            console.warn("Notice: could not fetch evaluation student details:", err);
+                          }
+                        }
+                        setSelectedEvaluation(targetItem);
+                        setDetailPage(1);
+                      }}
+                      readiness={evalReadiness}
+                      onBulk={setModal}
+                      processing={processing}
+                    />
+                  ))}
+
+                {/* Sub-Tab 2: Student Analysis (Ref Screenshots 2 & 4) */}
+                {tab === "students" &&
+                  (selectedStudent ? (
+                    <StudentDetails
+                      student={selectedStudent}
+                      page={detailPage}
+                      setPage={setDetailPage}
+                      onBack={() => setSelectedStudent(null)}
+                    />
+                  ) : evalReadiness.readyForResults || backendAnalysis.length > 0 ? (
+                    <StudentList
+                      rows={filteredStudents}
+                      subjects={evalConfigs}
+                      search={studentSearch}
+                      setSearch={(value) => {
+                        setStudentSearch(value);
+                        setStudentPage(1);
+                      }}
+                      page={studentPage}
+                      setPage={setStudentPage}
+                      onView={handleViewStudentDetails}
+                    />
+                  ) : (
+                    <Empty text="Student analysis will be available after all required subject evaluations are approved (or once generated in the backend)." />
+                  ))}
+              </>
+            )}
+          </>
+        )}
+
+        {/* ======================================================== */}
+        {/* MODALS & OVERLAYS                                        */}
+        {/* ======================================================== */}
         {pending && (
           <Confirm
             title="Unsaved Marks"
@@ -1835,7 +2419,9 @@ export default function MarksEntryPage() {
   );
 }
 
+// FilterCard with Dynamic Action Button (Enter Marks / Check Evaluations)
 function FilterCard({
+  mode = "entry",
   filters,
   boards,
   years,
@@ -1843,34 +2429,56 @@ function FilterCard({
   groups,
   programs,
   sections,
+  exams,
   changeFilter,
-  applyContext,
+  actionLabel,
+  onAction,
+  actionDisabled,
   processing,
+  title,
+  subtitle,
 }) {
   const fields = [
-    { key: "board", label: "Board", options: boards },
-    { key: "year", label: "Academic Year", options: years, disabled: !filters.board },
+    { key: "board", label: "Board", options: boards, disabled: true },
+    { key: "year", label: "Academic Year", options: years, disabled: true },
     { key: "level", label: "Academic Level", options: levels, disabled: !filters.board },
     { key: "group", label: "Group", options: groups, disabled: !filters.board },
     { key: "program", label: "Program", options: programs, disabled: !filters.group },
     { key: "section", label: "Section", options: sections, disabled: !filters.program },
+    ...(mode === "evaluation"
+      ? [
+          {
+            key: "exam",
+            label: "Completed Examination",
+            options: (exams || []).map((exam) => {
+              const code = exam.code || exam.examCode || "";
+              const baseName = exam.name || exam.examName || "Examination";
+              const displayName = code && !baseName.includes(code) ? `${baseName} (${code})` : baseName;
+              return { ...exam, name: displayName };
+            }),
+            disabled: !filters.program,
+          },
+        ]
+      : []),
   ];
 
   return (
     <section className="cms-card cms-card-filter">
       <div className="cms-section-heading">
         <div>
-          <h2>Academic Context</h2>
-          <p>Select the academic scope before opening Marks Entry.</p>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
         </div>
-        <button
-          type="button"
-          className="cms-btn cms-btn-primary"
-          disabled={Boolean(processing)}
-          onClick={applyContext}
-        >
-          {processing === "Loading..." ? "Loading..." : "Enter Marks"}
-        </button>
+        {onAction && (
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary"
+            disabled={Boolean(actionDisabled || processing)}
+            onClick={onAction}
+          >
+            {processing ? "Loading..." : actionLabel}
+          </button>
+        )}
       </div>
       <div className="cms-filter-grid">
         {fields.map((field) => (
@@ -1889,25 +2497,41 @@ function FilterCard({
   );
 }
 
+// Context summary banner (Ref Screenshots 1-5)
 function Context({ context, masters }) {
-  const find = (key, id) => (masters[key] || []).find((item) => eq(item.id, id))?.name || "—";
+  const group = (masters.groups || []).find((g) => eq(g.id, context.group));
+  const program = (masters.programs || []).find((p) => eq(p.id, context.program));
+  const section = (masters.sections || []).find((s) => eq(s.id, context.section));
+  const exam = (masters.exams || []).find((e) => eq(e.id, context.exam));
+
+  const groupTitle = group?.name || group?.groupName || "Academic Group";
+  const examCode = exam?.code || exam?.examCode || "";
+  const examBaseName = exam?.name || exam?.examName || "";
+  const examLabel = examCode && !examBaseName.includes(examCode) ? `${examBaseName} (${examCode})` : examBaseName;
+  const subtitle = [
+    program?.name || program?.programName,
+    section?.name || section?.sectionName,
+    examLabel,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <section className="cms-context-summary">
-      <div>
-        <strong>{find("groups", context.group)}</strong>
-        <span>
-          {find("programs", context.program)} · {find("sections", context.section)} · {find("exams", context.exam)}
-        </span>
+      <div className="cms-context-content">
+        <strong className="cms-context-title">{groupTitle}</strong>
+        <span className="cms-context-subtitle">{subtitle || "—"}</span>
       </div>
     </section>
   );
 }
 
+// Marks Entry Workspace (Ref Screenshot 5)
 function Entry({
-  exams,
+  exams = [],
   examId,
   changeExam,
-  subjectOptions,
+  subjectOptions = [],
   subjectId,
   changeSubject,
   workspace,
@@ -1934,30 +2558,31 @@ function Entry({
         <div className="cms-entry-selects">
           <SearchableSelect
             id="marks-examination"
-            label="Examination"
-            hideLabel={true}
-            compact={true}
+            label="EXAMINATION"
             value={examId}
-            options={exams.map((exam) => ({ ...exam, name: `${exam.name} (${exam.code})` }))}
+            options={exams.map((exam) => {
+              const code = exam.code || exam.examCode || "";
+              const baseName = exam.name || exam.examName || "Examination";
+              const displayName = code && !baseName.includes(code) ? `${baseName} (${code})` : baseName;
+              return { ...exam, name: displayName };
+            })}
             onChange={changeExam}
           />
           <SearchableSelect
             id="marks-subject"
-            label="Subject"
-            hideLabel={true}
-            compact={true}
+            label="SUBJECT"
             value={subjectId}
             options={subjectOptions}
-            disabled={!examId}
+            disabled={!subjectOptions?.length}
             onChange={changeSubject}
-            emptyText="No subjects are configured for the selected examination."
+            emptyText="No subjects configured for selected examination."
           />
         </div>
         <div className="cms-bulk-actions">
           <button
             type="button"
             className="cms-btn cms-btn-secondary cms-btn-bulk-import"
-            disabled={Boolean(processing) || !examId || !subjectId || locked}
+            disabled={Boolean(processing) || !subjectId || locked}
             onClick={onBulkImport}
             title="Import student marks from an Excel (.xlsx, .xls) file"
           >
@@ -1966,7 +2591,7 @@ function Entry({
           <button
             type="button"
             className="cms-btn cms-btn-secondary"
-            disabled={Boolean(processing) || !examId || !subjectId || blocked || !editableStatuses.includes(workspace?.status)}
+            disabled={Boolean(processing) || !subjectId || blocked || !editableStatuses.includes(workspace?.status)}
             onClick={onSave}
           >
             {processing === "SAVE_DRAFT" ? "Saving..." : "Save Draft"}
@@ -1974,16 +2599,22 @@ function Entry({
           <button
             type="button"
             className="cms-btn cms-btn-primary"
-            disabled={Boolean(processing) || !examId || !subjectId || blocked || !editableStatuses.includes(workspace?.status)}
+            disabled={Boolean(processing) || !subjectId || blocked || !editableStatuses.includes(workspace?.status)}
             onClick={onSubmit}
           >
-            {processing === "SUBMIT" ? "Submitting..." : "Submit"}
+            {processing === "SUBMIT" ? "Submitting..." : "Submit Subject"}
           </button>
         </div>
       </div>
 
       {!workspace ? (
-        <Empty text={examId ? "Select a Subject to load its marks workspace." : "Select a completed Examination."} />
+        <Empty
+          text={
+            subjectOptions.length
+              ? "Select a Subject to load its marks workspace."
+              : "No subjects are configured for the selected examination."
+          }
+        />
       ) : (
         <>
           {validateMarksConfiguration(workspace) && (
@@ -1997,12 +2628,19 @@ function Entry({
             <div className="cms-config-summary">
               <Badge status={workspace.status} />
               <span>
-                {workspace.faculty?.name || "Faculty"} · {workspace.mode} · Maximum {workspace.maxMarks} · Pass {workspace.passPercentage}%
+                {workspace.faculty?.name || "Faculty"}
+                {workspace.facultyId ? ` (EMP-${workspace.facultyId})` : ""} · {workspace.mode} · Maximum{" "}
+                {workspace.maxMarks} · Pass {workspace.passPercentage}%
               </span>
             </div>
             {workspace.status === "SUBMITTED" && !editing && !blocked && (
               <div className="cms-entry-edit-action">
-                <button type="button" className="cms-btn cms-btn-secondary" disabled={Boolean(processing)} onClick={onEdit}>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-secondary"
+                  disabled={Boolean(processing)}
+                  onClick={onEdit}
+                >
                   Edit Submitted Marks
                 </button>
               </div>
@@ -2041,10 +2679,20 @@ function Entry({
 
           {editing && (
             <div className="cms-marks-actions">
-              <button type="button" className="cms-btn cms-btn-secondary" disabled={Boolean(processing)} onClick={onCancelEdit}>
+              <button
+                type="button"
+                className="cms-btn cms-btn-secondary"
+                disabled={Boolean(processing)}
+                onClick={onCancelEdit}
+              >
                 Cancel Edit
               </button>
-              <button type="button" className="cms-btn cms-btn-primary" disabled={Boolean(processing) || blocked} onClick={onSaveChanges}>
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                disabled={Boolean(processing) || blocked}
+                onClick={onSaveChanges}
+              >
                 {processing === "SAVE_EDIT" ? "Saving..." : "Save Changes"}
               </button>
             </div>
@@ -2072,14 +2720,22 @@ function MarkRow({ row, workspace, locked, update }) {
         <>
           <Num value={row.internal} disabled={locked || row.absent} onChange={(value) => update("internal", value)} />
           {workspace.practicalMax > 0 && (
-            <Num value={row.practical} disabled={locked || row.absent} onChange={(value) => update("practical", value)} />
+            <Num
+              value={row.practical}
+              disabled={locked || row.absent}
+              onChange={(value) => update("practical", value)}
+            />
           )}
           <Num value={row.theory} disabled={locked || row.absent} onChange={(value) => update("theory", value)} />
           <td>{row.absent ? "ABS" : row.total === "" ? "—" : row.total}</td>
         </>
       ) : (
         <>
-          <Num value={row.obtainedMarks} disabled={locked || row.absent} onChange={(value) => update("obtainedMarks", value)} />
+          <Num
+            value={row.obtainedMarks}
+            disabled={locked || row.absent}
+            onChange={(value) => update("obtainedMarks", value)}
+          />
           <td>{workspace.maxMarks}</td>
         </>
       )}
@@ -2106,6 +2762,7 @@ function MarkRow({ row, workspace, locked, update }) {
   );
 }
 
+// Sub-Tab 1: Faculty Evaluations (Ref Screenshot 1)
 function EvaluationList({ rows, search, setSearch, page, setPage, onView, readiness, onBulk, processing }) {
   const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalCount = rows.length;
@@ -2148,7 +2805,12 @@ function EvaluationList({ rows, search, setSearch, page, setPage, onView, readin
                 {item.subject?.name}
                 <small className="cms-row-subtitle">{item.subject?.code}</small>
               </td>
-              <td>{item.faculty?.name || "—"}</td>
+              <td>
+                {item.faculty?.name || "—"}
+                {item.facultyId ? (
+                  <span className="cms-faculty-id"> (ID: {item.facultyId})</span>
+                ) : null}
+              </td>
               <td>{item.studentsCount}</td>
               <td>
                 {item.average} / {item.maxMarks}
@@ -2159,7 +2821,12 @@ function EvaluationList({ rows, search, setSearch, page, setPage, onView, readin
                 <Badge status={item.status} />
               </td>
               <td>
-                <button type="button" className="cms-action-btn" onClick={() => onView(item)} aria-label="View Evaluation">
+                <button
+                  type="button"
+                  className="cms-action-btn"
+                  onClick={() => onView(item)}
+                  aria-label="View Evaluation"
+                >
                   <IconEye />
                 </button>
               </td>
@@ -2169,11 +2836,17 @@ function EvaluationList({ rows, search, setSearch, page, setPage, onView, readin
           <EmptyRow span={8} text="No submitted evaluations are available for this context." />
         )}
       </Table>
-      <Pagination page={page} total={Math.ceil(rows.length / PAGE_SIZE)} setPage={setPage} summaryText={summaryText} />
+      <Pagination
+        page={page}
+        total={Math.ceil(rows.length / PAGE_SIZE)}
+        setPage={setPage}
+        summaryText={summaryText}
+      />
     </section>
   );
 }
 
+// Subject Marks Breakdown (Ref Screenshot 3)
 function EvaluationDetails({ item, page, setPage, onBack, onAction, processing }) {
   const rows = item.rows?.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) || [];
   return (
@@ -2254,6 +2927,7 @@ function EvaluationDetails({ item, page, setPage, onBack, onAction, processing }
   );
 }
 
+// Sub-Tab 2: Student Analysis Table (Ref Screenshot 2)
 function StudentList({ rows, subjects = [], search, setSearch, page, setPage, onView }) {
   const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return (
@@ -2316,6 +2990,7 @@ function StudentList({ rows, subjects = [], search, setSearch, page, setPage, on
   );
 }
 
+// Detailed Student Performance Report (Ref Screenshot 4)
 function StudentDetails({ student, page, setPage, onBack }) {
   const rows = (student.subjectResults || []).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return (

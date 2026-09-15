@@ -1,5 +1,6 @@
 ﻿import axios from "axios";
 import { env } from "@/config/env.js";
+import { clearAuthSession, getAuthToken } from "@/features/authStorage.js";
 
 let activeApiRequests = 0;
 const apiLoadingListeners = new Set();
@@ -33,7 +34,7 @@ const isHtmlResponse = (data) =>
   typeof data === "string" && /^\s*(<!doctype html|<html)/i.test(data);
 
 const getStoredAccessToken = () => {
-  const stored = localStorage.getItem("token");
+  const stored = getAuthToken();
   if (!stored) return "";
   return stored.replace(/^Bearer\s+/i, "").trim();
 };
@@ -138,9 +139,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       const expiry = getJwtExpiryState(getStoredAccessToken());
       if (expiry.isJwt && expiry.isExpired) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        localStorage.removeItem("role");
+        clearAuthSession();
         if (window.location.pathname !== "/login") window.location.assign("/login");
       }
     }

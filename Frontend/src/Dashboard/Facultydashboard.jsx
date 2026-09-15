@@ -9,8 +9,10 @@ import {
 } from "lucide-react";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis } from "recharts";
 import { useNavigate } from "react-router-dom";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { getLeaveRequests, submitLeaveRequest } from "@/features/leave/services/leaveStore.js";
+import { clearAuthSession } from "@/features/authStorage.js";
 import "./facultydashboard.css";
 
 // ==========================================================================
@@ -282,9 +284,7 @@ function FacultyDashboard() {
   // Logout Handler
   const handleLogout = () => {
     try {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      localStorage.removeItem("role");
+      clearAuthSession();
     } catch {
       /* storage unavailable */
     }
@@ -2101,7 +2101,7 @@ function FacultyDashboard() {
               </button>
 
               <div className="faculty-search-box">
-                <Search size={15} style={{ color: "var(--faculty-muted)" }} />
+                <Search3DIcon size={15} />
                 <input
                   type="text"
                   placeholder="Search classes, students, notices, payslips..."

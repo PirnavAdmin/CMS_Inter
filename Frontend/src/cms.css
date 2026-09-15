@@ -536,7 +536,7 @@ body {
   color: var(--cms-muted);
 }
 .cms-search:focus-within { border-color: var(--cms-primary-border); box-shadow: 0 0 0 3px var(--cms-primary-soft); }
-.cms-search > svg { width: 16px; height: 16px; flex: 0 0 16px; }
+.cms-search > :is(svg, .cms-search-3d-icon) { width: 16px; height: 16px; flex: 0 0 16px; }
 .cms-search input { min-width: 0; height: 100%; padding: 0; border: 0; outline: none; width: 100%; font-size: 13px; background: transparent; color: var(--cms-text); }
 .cms-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 
@@ -1034,9 +1034,10 @@ html, body { max-width: 100%; overflow-x: hidden; }
 }
 .cms-nav-caret:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
 .cms-nav-caret.is-open { transform: rotate(180deg); }
-.cms-nav-sub { margin-left: 0; padding-left: 32px; font-size: 13px; opacity: 0.92; }
-.cms-shell.nav-closed .cms-sidebar { transform: translateX(-100%); }
-.cms-shell.nav-closed .cms-main { margin-left: 0; }
+@media (max-width: 992px) {
+  .cms-shell.nav-closed .cms-sidebar { transform: translateX(-100%); }
+  .cms-shell.nav-closed .cms-main { margin-left: 0; }
+}
 .cms-main { transition: margin-left 0.25s ease; }
 
 /* ---------- Dark mode contrast fixes ---------- */
@@ -1368,9 +1369,9 @@ textarea:focus {
 
 /* Pirnav logo/auth integration polish */
 .logo-mark {
-  background: #ffffff !important;
+  background: transparent;
   overflow: hidden;
-  border: 1px solid rgba(123, 34, 206, 0.14);
+  border: none;
 }
 .logo-mark img {
   width: 100%;
@@ -1517,11 +1518,22 @@ body,
   backdrop-filter: blur(5px);
 }
 
-:where([class$="-card"], [class$="-panel"], [class$="-drawer"]) {
+:where([class$="-card"], [class$="-panel"]:not(.cms-academic-dropdown-panel), [class$="-drawer"]) {
   background: var(--cms-surface) !important;
   border-color: var(--cms-border) !important;
   -webkit-backdrop-filter: blur(16px) saturate(116%);
   backdrop-filter: blur(16px) saturate(116%);
+}
+
+.cms-academic-dropdown-panel {
+  background: #ffffff !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  opacity: 1 !important;
+}
+
+[data-theme="dark"] .cms-academic-dropdown-panel {
+  background: #171d15 !important;
 }
 
 input,

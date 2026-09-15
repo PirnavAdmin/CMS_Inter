@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import DataTable from "@/components/common/DataTable.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import {
@@ -456,7 +457,7 @@ function SalaryStructureListScreen({ store, navigate, setModal, setToast }) {
             </div>
 
             <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-              <Search size={14} style={{ color: "var(--cms-muted)" }} />
+              <Search3DIcon size={14} />
               <input
                 type="text"
                 placeholder="Search structure name / designation..."
@@ -527,7 +528,7 @@ function SearchableInputPicker({ label, placeholder, value, onChange, options = 
         }}
       >
         <div className="salary-search-input-wrap">
-          <Search size={14} />
+          <Search3DIcon size={14} />
           <input
             type="text"
             placeholder={placeholder}
@@ -916,7 +917,7 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
         }}
       >
         <div className="salary-search-input-wrap">
-          <Search size={14} />
+          <Search3DIcon size={14} />
           <input
             type="text"
             placeholder="Search staff by name, ID, or department..."

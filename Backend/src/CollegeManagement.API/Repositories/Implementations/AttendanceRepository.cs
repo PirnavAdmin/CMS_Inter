@@ -264,12 +264,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             // Base query for students matching the criteria
             var studentsQuery = _context.Students.Where(s => s.IsActive);
 
-            if (request.BoardId.HasValue) studentsQuery = studentsQuery.Where(s => s.BoardId == request.BoardId);
-            if (request.AcademicYearId.HasValue) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == request.AcademicYearId);
-            if (request.GroupId.HasValue) studentsQuery = studentsQuery.Where(s => s.GroupId == request.GroupId);
-            if (request.ProgramId.HasValue) studentsQuery = studentsQuery.Where(s => s.ProgramId == request.ProgramId);
-            if (request.SectionId.HasValue) studentsQuery = studentsQuery.Where(s => s.SectionId == request.SectionId);
-            if (request.StudentId.HasValue) studentsQuery = studentsQuery.Where(s => s.StudentId == request.StudentId);
+            if (request.BoardId.HasValue && request.BoardId.Value > 0) studentsQuery = studentsQuery.Where(s => s.BoardId == request.BoardId);
+            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == request.AcademicYearId);
+            if (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0) studentsQuery = studentsQuery.Where(s => s.AcademicLevelId == request.AcademicLevelId);
+            if (request.GroupId.HasValue && request.GroupId.Value > 0) studentsQuery = studentsQuery.Where(s => s.GroupId == request.GroupId);
+            if (request.ProgramId.HasValue && request.ProgramId.Value > 0) studentsQuery = studentsQuery.Where(s => s.ProgramId == request.ProgramId);
+            if (request.SectionId.HasValue && request.SectionId.Value > 0) studentsQuery = studentsQuery.Where(s => s.SectionId == request.SectionId);
+            if (request.StudentId.HasValue && request.StudentId.Value > 0) studentsQuery = studentsQuery.Where(s => s.StudentId == request.StudentId);
             
             if (!string.IsNullOrEmpty(request.SearchText))
             {
@@ -658,6 +659,26 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.SectionNavigation)
                 .Where(s => s.IsActive);
 
+            if (request.BoardId.HasValue && request.BoardId.Value > 0)
+            {
+                studentQuery = studentQuery.Where(s => s.BoardId == request.BoardId.Value);
+            }
+
+            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value > 0)
+            {
+                studentQuery = studentQuery.Where(s => s.AcademicYearId == request.AcademicYearId.Value);
+            }
+
+            if (request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0)
+            {
+                studentQuery = studentQuery.Where(s => s.AcademicLevelId == request.AcademicLevelId.Value);
+            }
+
+            if (request.ProgramId.HasValue && request.ProgramId.Value > 0)
+            {
+                studentQuery = studentQuery.Where(s => s.ProgramId == request.ProgramId.Value);
+            }
+
             if (request.GroupId.HasValue && request.GroupId.Value > 0)
             {
                 studentQuery = studentQuery.Where(s => s.GroupId == request.GroupId.Value);
@@ -678,11 +699,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             var startDate = new DateTime(targetYear, targetMonth, 1);
             var endDate = new DateTime(targetYear, targetMonth, daysInMonth);
 
-            // Fetch attendance records for this month
+            var studentIds = studentList.Select(s => s.StudentId).ToList();
+
+            // Fetch attendance records for this month for the selected students
             var monthAttendancesQuery = _context.Attendances
                 .Where(a => a.AttendanceDate.Date >= startDate
                             && a.AttendanceDate.Date <= endDate
-                            && a.IsActive);
+                            && a.IsActive
+                            && studentIds.Contains(a.StudentId));
 
             if (request.GroupId.HasValue && request.GroupId.Value > 0)
             {
@@ -703,7 +727,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             foreach (var student in studentList)
             {
                 var dailyStatus = new List<string>();
-                int presentCount = 0, absentCount = 0, lateCount = 0, leaveCount = 0;
+                int presentCount = 0, absentCount = 0, halfDayCount = 0;
 
                 for (int day = 1; day <= daysInMonth; day++)
                 {
@@ -724,31 +748,58 @@ namespace CollegeManagement.API.Repositories.Implementations
                     }
                     else
                     {
-                        if (dayRecords.Any(r => r.Status == Enums.AttendanceStatus.Absent))
+                        var morning = dayRecords.FirstOrDefault(r => (int?)r.Session == 1);
+                        var afternoon = dayRecords.FirstOrDefault(r => (int?)r.Session == 2);
+
+                        if (morning != null && afternoon != null)
                         {
-                            dailyStatus.Add("A");
-                            absentCount++;
-                        }
-                        else if (dayRecords.Any(r => r.Status == Enums.AttendanceStatus.Leave))
-                        {
-                            dailyStatus.Add("LV");
-                            leaveCount++;
-                        }
-                        else if (dayRecords.Any(r => r.Status == Enums.AttendanceStatus.Late))
-                        {
-                            dailyStatus.Add("L");
-                            lateCount++;
+                            bool morningPresent = morning.Status == Enums.AttendanceStatus.Present;
+                            bool afternoonPresent = afternoon.Status == Enums.AttendanceStatus.Present;
+                            bool morningAbsent = morning.Status == Enums.AttendanceStatus.Absent;
+                            bool afternoonAbsent = afternoon.Status == Enums.AttendanceStatus.Absent;
+
+                            if (morningPresent && afternoonPresent)
+                            {
+                                dailyStatus.Add("P");
+                                presentCount++;
+                            }
+                            else if (morningAbsent && afternoonAbsent)
+                            {
+                                dailyStatus.Add("A");
+                                absentCount++;
+                            }
+                            else
+                            {
+                                // One present & one absent/other, or partial -> Half Day
+                                dailyStatus.Add("HD");
+                                halfDayCount++;
+                            }
                         }
                         else
                         {
-                            dailyStatus.Add("P");
-                            presentCount++;
+                            // Only 1 session record found for the day
+                            var single = dayRecords.First();
+                            if (single.Status == Enums.AttendanceStatus.Present)
+                            {
+                                dailyStatus.Add("P");
+                                presentCount++;
+                            }
+                            else if (single.Status == Enums.AttendanceStatus.Absent)
+                            {
+                                dailyStatus.Add("A");
+                                absentCount++;
+                            }
+                            else
+                            {
+                                dailyStatus.Add("HD");
+                                halfDayCount++;
+                            }
                         }
                     }
                 }
 
-                int markedCount = presentCount + absentCount + lateCount + leaveCount;
-                double percentage = markedCount > 0 ? Math.Round((double)(presentCount + lateCount) / markedCount * 100, 1) : 0;
+                int markedCount = presentCount + absentCount + halfDayCount;
+                double percentage = markedCount > 0 ? Math.Round((double)(presentCount + 0.5 * halfDayCount) / markedCount * 100, 1) : 0;
 
                 studentRows.Add(new StudentMonthlyGridRowDto
                 {
@@ -760,8 +811,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                     DailyStatus = dailyStatus,
                     PresentCount = presentCount,
                     AbsentCount = absentCount,
-                    LateCount = lateCount,
-                    LeaveCount = leaveCount,
+                    HalfDayCount = halfDayCount,
+                    LateCount = 0,
+                    LeaveCount = 0,
                     Percentage = percentage
                 });
 
@@ -770,9 +822,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             int totalStudents = studentRows.Count;
-            int totalMarkedAll = totalPresentAll + totalAbsentAll + studentRows.Sum(r => r.LateCount + r.LeaveCount);
+            int totalHalfDayAll = studentRows.Sum(r => r.HalfDayCount);
+            int totalMarkedAll = totalPresentAll + totalAbsentAll + totalHalfDayAll;
             double overallPercentage = totalMarkedAll > 0
-                ? Math.Round((double)(totalPresentAll + studentRows.Sum(r => r.LateCount)) / totalMarkedAll * 100, 1)
+                ? Math.Round((double)(totalPresentAll + 0.5 * totalHalfDayAll) / totalMarkedAll * 100, 1)
                 : 0;
 
             string groupName = "All Groups";

@@ -17,6 +17,15 @@ namespace CollegeManagement.API.Validators.PromotionModuleValidators
 
             RuleFor(x => x.TargetAcademicLevel)
                 .NotEmpty();
+
+            RuleFor(x => x.TargetGroupId)
+                .GreaterThan(0);
+
+            RuleFor(x => x.TargetSection)
+                .MaximumLength(50);
+
+            RuleFor(x => x.TargetMedium)
+                .MaximumLength(50);
         }
     }
 }

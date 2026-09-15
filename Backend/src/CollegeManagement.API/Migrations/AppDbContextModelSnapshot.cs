@@ -825,7 +825,8 @@ namespace CollegeManagement.API.Migrations
                 {
                     b.Property<int>("CertificateId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("Id");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("CertificateId"));
 
@@ -838,7 +839,6 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("varchar(50)");
 
                     b.Property<string>("AdmissionNo")
-                        .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
 
@@ -848,22 +848,34 @@ namespace CollegeManagement.API.Migrations
                     b.Property<string>("CertificateNumber")
                         .IsRequired()
                         .HasMaxLength(40)
-                        .HasColumnType("varchar(40)");
+                        .HasColumnType("varchar(40)")
+                        .HasColumnName("CertificateNo");
 
                     b.Property<string>("CertificateType")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
 
-                    b.Property<DateTime>("GeneratedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime(6)")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+                    b.Property<DateTime?>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime?>("GeneratedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("GroupName")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
+
+                    b.Property<bool?>("IsVerified")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("IssueDate")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<DateTime?>("IssuedAt")
                         .HasColumnType("datetime(6)");
@@ -881,6 +893,9 @@ namespace CollegeManagement.API.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("varchar(1000)");
 
+                    b.Property<DateTime?>("RequestDate")
+                        .HasColumnType("datetime(6)");
+
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("datetime(6)");
 
@@ -893,9 +908,11 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("StudentName")
-                        .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("varchar(150)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("CertificateId");
 
@@ -906,7 +923,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("StudentId");
 
-                    b.ToTable("Certificates");
+                    b.ToTable("certificates", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Country", b =>
@@ -1200,6 +1217,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)");
 
@@ -1217,6 +1237,8 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("Name")
                         .IsUnique();
@@ -2538,6 +2560,129 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("Sections", (string)null);
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.Settings.NumberSeriesConfiguration", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("CurrentSequence")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("FormatPattern")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<int>("NumberLength")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<string>("SeriesCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("SeriesName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<int>("StartNumber")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesCode")
+                        .IsUnique();
+
+                    b.ToTable("NumberSeriesConfigurations", (string)null);
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Settings.Template", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("Id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("Category");
+
+                    b.Property<string>("ContentBody")
+                        .IsRequired()
+                        .HasColumnType("longtext")
+                        .HasColumnName("ContentBody");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("CreatedAt");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("IsActive");
+
+                    b.Property<string>("PlaceholdersJson")
+                        .IsRequired()
+                        .HasColumnType("longtext")
+                        .HasColumnName("PlaceholdersJson");
+
+                    b.Property<string>("TemplateCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("TemplateCode");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("Title");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("UpdatedAt");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("int")
+                        .HasColumnName("Version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Category");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("TemplateCode")
+                        .IsUnique();
+
+                    b.ToTable("templates", (string)null);
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.Staff.Staff", b =>
                 {
                     b.Property<int>("Id")
@@ -3090,6 +3235,10 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("StudentId"));
 
+                    b.Property<string>("AadhaarDocument")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("AadhaarNumber")
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
@@ -3106,6 +3255,9 @@ namespace CollegeManagement.API.Migrations
 
                     b.Property<DateTime>("AdmissionDate")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("AdmissionId")
+                        .HasColumnType("int");
 
                     b.Property<string>("AdmissionNo")
                         .IsRequired()
@@ -3126,6 +3278,10 @@ namespace CollegeManagement.API.Migrations
                     b.Property<decimal>("AttendancePercentage")
                         .HasColumnType("decimal(5,2)");
 
+                    b.Property<string>("BirthCertificate")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("BloodGroup")
                         .HasMaxLength(10)
                         .HasColumnType("varchar(10)");
@@ -3136,6 +3292,10 @@ namespace CollegeManagement.API.Migrations
                     b.Property<decimal?>("CGPA")
                         .HasColumnType("decimal(5,2)");
 
+                    b.Property<string>("CasteCertificate")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<string>("Category")
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
@@ -3143,6 +3303,10 @@ namespace CollegeManagement.API.Migrations
                     b.Property<string>("City")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<string>("CommunityCertificate")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -3184,6 +3348,9 @@ namespace CollegeManagement.API.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("varchar(30)");
 
+                    b.Property<int?>("FeeStructureId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Gender")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -3204,6 +3371,10 @@ namespace CollegeManagement.API.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("varchar(150)");
 
+                    b.Property<string>("IncomeCertificate")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("tinyint(1)");
 
@@ -3212,6 +3383,10 @@ namespace CollegeManagement.API.Migrations
 
                     b.Property<DateTime?>("LastLogin")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<string>("MarksMemo")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<string>("Medium")
                         .HasMaxLength(50)
@@ -3245,6 +3420,10 @@ namespace CollegeManagement.API.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)");
+
+                    b.Property<string>("PaymentPlan")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
 
                     b.Property<string>("PerformanceGrade")
                         .HasMaxLength(20)
@@ -3325,6 +3504,18 @@ namespace CollegeManagement.API.Migrations
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("varchar(150)");
+
+                    b.Property<string>("StudyCertificate")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("TenthCertificate")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("TransferCertificate")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
@@ -3493,6 +3684,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<string>("Nationality")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<string>("PaymentPlan")
+                        .HasColumnType("longtext");
 
                     b.Property<string>("Pincode")
                         .HasMaxLength(10)
@@ -4271,6 +4465,14 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("UserId"));
 
+                    b.Property<int?>("AdminId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -4280,6 +4482,19 @@ namespace CollegeManagement.API.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsFirstLogin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("tinyint(1)")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime?>("LastLogin")
+                        .HasColumnType("datetime(6)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -4294,12 +4509,34 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int>("RoleId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("StaffId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("StudentId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("datetime(6)")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlComputedColumn(b.Property<DateTime>("UpdatedAt"));
+
                     b.HasKey("UserId");
+
+                    b.HasIndex("AdminId")
+                        .IsUnique();
 
                     b.HasIndex("Email")
                         .IsUnique();
 
                     b.HasIndex("RoleId");
+
+                    b.HasIndex("StaffId")
+                        .IsUnique();
+
+                    b.HasIndex("StudentId")
+                        .IsUnique();
 
                     b.ToTable("Users");
                 });
@@ -4593,6 +4830,15 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("Group");
 
                     b.Navigation("Program");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Faculty.Designation", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId");
+
+                    b.Navigation("Department");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Faculty.Faculty", b =>
@@ -5631,13 +5877,34 @@ namespace CollegeManagement.API.Migrations
 
             modelBuilder.Entity("CollegeManagement.API.Models.User", b =>
                 {
+                    b.HasOne("CollegeManagement.API.Models.Admin", "Admin")
+                        .WithOne()
+                        .HasForeignKey("CollegeManagement.API.Models.User", "AdminId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("CollegeManagement.API.Models.Role", "Role")
                         .WithMany("Users")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
+                        .WithOne()
+                        .HasForeignKey("CollegeManagement.API.Models.User", "StaffId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("CollegeManagement.API.Models.Student", "Student")
+                        .WithOne()
+                        .HasForeignKey("CollegeManagement.API.Models.User", "StudentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Admin");
+
                     b.Navigation("Role");
+
+                    b.Navigation("Staff");
+
+                    b.Navigation("Student");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.AcademicLevel", b =>

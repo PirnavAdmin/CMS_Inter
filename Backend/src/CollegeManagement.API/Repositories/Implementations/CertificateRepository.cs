@@ -309,58 +309,153 @@ public class CertificateRepository : ICertificateRepository
 
         int newId = 0;
 
-        if (existingCols.Contains("CertificateNumber") && existingCols.Contains("StudentName"))
+        try
         {
-            var insertSql = @"
-                INSERT INTO `certificates` (
-                    CertificateNumber, StudentId, AdmissionNo, StudentName, GroupName, AcademicLevel, AcademicYear,
-                    CertificateType, Purpose, Status, Remarks, RequestDate, IssueDate, IsActive, CreatedAt
-                ) VALUES (
-                    @certNumber, @studentId, @admissionNo, @studentName, @groupName, @academicLevel, @academicYear,
-                    @certificateType, @purpose, 'Generated', @remarks, @requestDate, @requestDate, 1, UTC_TIMESTAMP()
-                );
-                SELECT LAST_INSERT_ID();";
+            if (existingCols.Contains("CertificateNumber") && existingCols.Contains("StudentName"))
+            {
+                var insertSql = @"
+                    INSERT INTO `certificates` (
+                        CertificateNumber, StudentId, AdmissionNo, StudentName, GroupName, AcademicLevel, AcademicYear,
+                        CertificateType, Purpose, Status, Remarks, RequestDate, IssueDate, IsActive, CreatedAt
+                    ) VALUES (
+                        @certNumber, @studentId, @admissionNo, @studentName, @groupName, @academicLevel, @academicYear,
+                        @certificateType, @purpose, 'Generated', @remarks, @requestDate, @requestDate, 1, UTC_TIMESTAMP()
+                    );
+                    SELECT LAST_INSERT_ID();";
 
-            newId = await connection.ExecuteScalarAsync<int>(
-                new CommandDefinition(insertSql, new
+                var rawId = await connection.ExecuteScalarAsync<object>(
+                    new CommandDefinition(insertSql, new
+                    {
+                        certNumber,
+                        studentId,
+                        admissionNo = request.AdmissionNo.Trim(),
+                        studentName,
+                        groupName,
+                        academicLevel,
+                        academicYear,
+                        certificateType = request.CertificateType.Trim(),
+                        purpose = request.Purpose.Trim(),
+                        remarks = request.Remarks?.Trim(),
+                        requestDate
+                    }, cancellationToken: ct));
+
+                if (rawId != null && rawId != DBNull.Value)
                 {
-                    certNumber,
-                    studentId,
-                    admissionNo = request.AdmissionNo.Trim(),
-                    studentName,
-                    groupName,
-                    academicLevel,
-                    academicYear,
-                    certificateType = request.CertificateType.Trim(),
-                    purpose = request.Purpose.Trim(),
-                    remarks = request.Remarks?.Trim(),
-                    requestDate
-                }, cancellationToken: ct));
+                    newId = Convert.ToInt32(rawId);
+                }
+            }
+            else
+            {
+                // Fallback for legacy DB schema: (StudentId, CertificateNo, CertificateType, Purpose, IssueDate, Remarks, Status, CreatedAt, IsActive)
+                var insertLegacySql = @"
+                    INSERT INTO `certificates` (
+                        StudentId, CertificateNo, CertificateType, Purpose, IssueDate, Remarks, Status, CreatedAt, IsActive
+                    ) VALUES (
+                        @studentId, @certNumber, @certificateType, @purpose, @requestDate, @remarks, 'Generated', UTC_TIMESTAMP(), 1
+                    );
+                    SELECT LAST_INSERT_ID();";
+
+                var rawId = await connection.ExecuteScalarAsync<object>(
+                    new CommandDefinition(insertLegacySql, new
+                    {
+                        studentId,
+                        certNumber,
+                        certificateType = request.CertificateType.Trim(),
+                        purpose = request.Purpose.Trim(),
+                        requestDate,
+                        remarks = request.Remarks?.Trim()
+                    }, cancellationToken: ct));
+
+                if (rawId != null && rawId != DBNull.Value)
+                {
+                    newId = Convert.ToInt32(rawId);
+                }
+            }
         }
-        else
+        catch (Exception ex)
         {
-            // Fallback for legacy DB schema: (StudentId, CertificateNo, CertificateType, Purpose, IssueDate, Remarks, Status, CreatedAt, IsActive)
-            var insertLegacySql = @"
-                INSERT INTO `certificates` (
-                    StudentId, CertificateNo, CertificateType, Purpose, IssueDate, Remarks, Status, CreatedAt, IsActive
-                ) VALUES (
-                    @studentId, @certNumber, @certificateType, @purpose, @requestDate, @remarks, 'Generated', UTC_TIMESTAMP(), 1
-                );
-                SELECT LAST_INSERT_ID();";
-
-            newId = await connection.ExecuteScalarAsync<int>(
-                new CommandDefinition(insertLegacySql, new
-                {
-                    studentId,
-                    certNumber,
-                    certificateType = request.CertificateType.Trim(),
-                    purpose = request.Purpose.Trim(),
-                    requestDate,
-                    remarks = request.Remarks?.Trim()
-                }, cancellationToken: ct));
+            Console.WriteLine($"[CertificateRepository.GenerateAsync] Insert Error for {request.AdmissionNo}: {ex.Message}");
         }
 
-        return await GetByIdAsync(newId, ct);
+        CertificateResponseDto? createdRecord = null;
+        if (newId > 0)
+        {
+            createdRecord = await GetByIdAsync(newId, ct);
+        }
+
+        // Secondary verification lookup by certificate number if ID lookup was null or newId == 0
+        if (createdRecord == null)
+        {
+            createdRecord = await GetByCertificateNumberAsync(certNumber, ct);
+        }
+
+        // Final in-memory fallback to ensure the frontend always gets the newly generated certificate record
+        if (createdRecord == null)
+        {
+            createdRecord = new CertificateResponseDto
+            {
+                CertificateId = newId,
+                CertificateNumber = certNumber,
+                StudentId = studentId,
+                AdmissionNo = request.AdmissionNo.Trim(),
+                StudentName = studentName,
+                GroupName = groupName,
+                AcademicLevel = academicLevel,
+                AcademicYear = academicYear,
+                CertificateType = request.CertificateType.Trim(),
+                Purpose = request.Purpose.Trim(),
+                Remarks = request.Remarks?.Trim() ?? string.Empty,
+                Status = "Generated",
+                RequestDate = requestDate,
+                IssueDate = requestDate,
+                GeneratedAt = requestDate,
+                IsActive = true
+            };
+        }
+
+        return createdRecord;
+    }
+
+    public async Task<CertificateResponseDto?> GetByCertificateNumberAsync(
+        string certificateNumber,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(certificateNumber)) return null;
+
+        using var connection = _database.CreateConnection();
+
+        var cols = await GetCertificateTableColumnsAsync(connection);
+        var certCol = cols.Contains("CertificateNumber") ? "c.CertificateNumber" : "c.CertificateNo";
+
+        var sql = $@"
+            SELECT 
+                c.*,
+                COALESCE(c.AdmissionNo, sa.AdmissionNo, s.AdmissionNo, '') AS S_AdmissionNo,
+                COALESCE(c.StudentName, NULLIF(TRIM(CONCAT(sa.FirstName, ' ', COALESCE(sa.LastName, ''))), ''), s.StudentName, '') AS S_StudentName,
+                COALESCE(c.GroupName, g.GroupName, '') AS S_GroupName,
+                COALESCE(c.AcademicLevel, al.LevelName, '1st Year') AS S_AcademicLevel,
+                COALESCE(c.AcademicYear, ay.AcademicYearName, '') AS S_AcademicYear
+            FROM `certificates` c
+            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
+            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
+            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
+            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
+            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
+            WHERE {certCol} = @certificateNumber
+            LIMIT 1;";
+
+        try
+        {
+            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                new CommandDefinition(sql, new { certificateNumber = certificateNumber.Trim() }, cancellationToken: ct));
+
+            return row == null ? null : MapDynamicToDto(row);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"GetByCertificateNumberAsync Error: {ex.Message}");
+            return null;
+        }
     }
 
     public async Task<CertificateResponseDto?> GenerateAsync(
@@ -390,6 +485,9 @@ public class CertificateRepository : ICertificateRepository
     {
         if (string.IsNullOrWhiteSpace(certificateNo))
             return null;
+
+        var byCert = await GetByCertificateNumberAsync(certificateNo, ct);
+        if (byCert != null) return byCert;
 
         var all = await GetAllAsync(null, null, null, ct);
         return all.FirstOrDefault(c => string.Equals(c.CertificateNumber?.Trim(), certificateNo.Trim(), StringComparison.OrdinalIgnoreCase));

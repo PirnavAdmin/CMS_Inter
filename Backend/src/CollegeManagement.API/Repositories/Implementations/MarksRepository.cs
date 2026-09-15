@@ -97,6 +97,17 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<Mark> CreateAsync(Mark mark)
         {
+            // Disconnect entity navigation graph to prevent EF Core from trying to re-insert/update related tables
+            mark.Student = null;
+            mark.Subject = null;
+            mark.Faculty = null;
+            mark.SectionNavigation = null;
+            mark.BoardNavigation = null;
+            mark.AcademicYear = null;
+            mark.AcademicLevelNavigation = null;
+            mark.GroupNavigation = null;
+            mark.Examination = null;
+
             await _context.Marks.AddAsync(mark);
             await _context.SaveChangesAsync();
             return mark;
@@ -157,7 +168,55 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     existing.FacultyId = mark.FacultyId;
                 }
+                if (mark.BoardId.HasValue && mark.BoardId.Value > 0)
+                {
+                    existing.BoardId = mark.BoardId;
+                }
+                if (!string.IsNullOrWhiteSpace(mark.Board))
+                {
+                    existing.Board = mark.Board;
+                }
+                if (mark.AcademicYearId > 0)
+                {
+                    existing.AcademicYearId = mark.AcademicYearId;
+                }
+                if (mark.AcademicLevelId.HasValue && mark.AcademicLevelId.Value > 0)
+                {
+                    existing.AcademicLevelId = mark.AcademicLevelId;
+                }
+                if (!string.IsNullOrWhiteSpace(mark.AcademicLevel))
+                {
+                    existing.AcademicLevel = mark.AcademicLevel;
+                }
+                if (mark.GroupId > 0)
+                {
+                    existing.GroupId = mark.GroupId;
+                }
+                if (mark.SectionId > 0)
+                {
+                    existing.SectionId = mark.SectionId;
+                }
+                if (!string.IsNullOrWhiteSpace(mark.RollNo))
+                {
+                    existing.RollNo = mark.RollNo;
+                }
+                if (!string.IsNullOrWhiteSpace(mark.StudentName))
+                {
+                    existing.StudentName = mark.StudentName;
+                }
+                existing.IsActive = true;
                 existing.UpdatedAt = DateTime.UtcNow;
+
+                existing.Student = null;
+                existing.Subject = null;
+                existing.Faculty = null;
+                existing.SectionNavigation = null;
+                existing.BoardNavigation = null;
+                existing.AcademicYear = null;
+                existing.AcademicLevelNavigation = null;
+                existing.GroupNavigation = null;
+                existing.Examination = null;
+
                 _context.Marks.Update(existing);
                 await _context.SaveChangesAsync();
                 return existing;
@@ -795,9 +854,19 @@ namespace CollegeManagement.API.Repositories.Implementations
                 if (conn.State != ConnectionState.Open)
                     await conn.OpenAsync();
 
-                return await conn.QueryAsync(
-                    "SELECT SectionId AS sectionId, SectionName AS sectionName FROM Sections WHERE GroupId = @groupId AND IsActive = 1 ORDER BY SectionName;",
-                    new { groupId });
+                try
+                {
+                    return await conn.QueryAsync(
+                        "sp_GetActiveSectionsByGroup",
+                        new { p_GroupId = groupId },
+                        commandType: CommandType.StoredProcedure);
+                }
+                catch (MySqlConnector.MySqlException ex) when (ex.Number == 1305)
+                {
+                    return await conn.QueryAsync(
+                        "SELECT SectionId AS sectionId, SectionName AS sectionName FROM Sections WHERE GroupId = @groupId AND IsActive = 1 ORDER BY SectionName;",
+                        new { groupId });
+                }
             }
             catch
             {
@@ -813,9 +882,19 @@ namespace CollegeManagement.API.Repositories.Implementations
                 if (conn.State != ConnectionState.Open)
                     await conn.OpenAsync();
 
-                return await conn.QueryAsync(
-                    "SELECT SubjectId AS subjectId, SubjectName AS subjectName, SubjectCode AS subjectCode FROM Subjects WHERE GroupId = @groupId AND IsActive = 1 ORDER BY SubjectName;",
-                    new { groupId });
+                try
+                {
+                    return await conn.QueryAsync(
+                        "sp_GetActiveSubjectsByGroup",
+                        new { p_GroupId = groupId },
+                        commandType: CommandType.StoredProcedure);
+                }
+                catch (MySqlConnector.MySqlException ex) when (ex.Number == 1305)
+                {
+                    return await conn.QueryAsync(
+                        "SELECT SubjectId AS subjectId, SubjectName AS subjectName, SubjectCode AS subjectCode FROM Subjects WHERE GroupId = @groupId AND IsActive = 1 ORDER BY SubjectName;",
+                        new { groupId });
+                }
             }
             catch
             {

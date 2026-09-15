@@ -2,24 +2,45 @@ const NUMBER_SERIES_STORAGE_KEY = "pirnav_number_series_settings";
 
 export const FIXED_NUMBER_SERIES = [
   {
-    id: "employee-id",
-    key: "employee-id",
-    name: "Employee ID",
+    id: "teaching-staff-id",
+    key: "teaching-staff-id",
+    name: "Teaching Staff ID",
     category: "Staff Management",
     prefix: "PCTCH",
     format: "PCTCH{SEQ}",
     numberLength: 4,
     startNumber: 1,
-    currentNumber: 39,
-    totalGenerated: 39,
-    currentExample: "PCTCH0039",
-    description: "Configure employee ID format for teaching and non-teaching staff.",
+    currentNumber: 0,
+    totalGenerated: 0,
+    currentExample: "PCTCH0001",
+    description: "Configure ID series for Teaching faculty and academic staff.",
     status: "Active",
     allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}"],
     sampleFormats: [
       { format: "PCTCH{SEQ}", example: "PCTCH0001" },
-      { format: "EMP-{YYYY}-{SEQ}", example: "EMP-2026-0001" },
+      { format: "TCH-{YYYY}-{SEQ}", example: "TCH-2026-0001" },
       { format: "FAC-{DEPT}-{SEQ}", example: "FAC-MATH-0001" },
+    ],
+  },
+  {
+    id: "non-teaching-staff-id",
+    key: "non-teaching-staff-id",
+    name: "Non-Teaching Staff ID",
+    category: "Staff Management",
+    prefix: "PCNT",
+    format: "PCNT{SEQ}",
+    numberLength: 4,
+    startNumber: 1,
+    currentNumber: 0,
+    totalGenerated: 0,
+    currentExample: "PCNT0001",
+    description: "Configure ID series for Administrative, Technical and Support staff.",
+    status: "Active",
+    allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}"],
+    sampleFormats: [
+      { format: "PCNT{SEQ}", example: "PCNT0001" },
+      { format: "NT-{YYYY}-{SEQ}", example: "NT-2026-0001" },
+      { format: "ADM-{DEPT}-{SEQ}", example: "ADM-OFFICE-0001" },
     ],
   },
   {
@@ -47,28 +68,27 @@ export const FIXED_NUMBER_SERIES = [
     id: "roll-no",
     key: "roll-no",
     name: "Roll No.",
-    category: "Academics",
+    category: "Student Management",
     prefix: "",
     format: "{SEQ}",
     numberLength: 1,
     startNumber: 1,
     currentNumber: 1,
-    totalGenerated: 2,
+    totalGenerated: 1,
     currentExample: "1",
-    description: "Configure roll number format for students based on academic allocation.",
+    description: "Configure roll number sequence for student class rosters.",
     status: "Active",
-    allowedTokens: ["{SEQ}", "{GROUP}", "{LEVEL}", "{SECTION}"],
+    allowedTokens: ["{SEQ}", "{GROUP}", "{SECTION}"],
     sampleFormats: [
       { format: "{SEQ}", example: "1" },
-      { format: "{GROUP}-{SECTION}-{SEQ}", example: "MPC-A-01" },
-      { format: "{LEVEL}-{SEQ}", example: "BTECH-001" },
+      { format: "{GROUP}-{SEQ}", example: "MPC-1" },
     ],
   },
   {
     id: "student-id",
     key: "student-id",
     name: "Student ID",
-    category: "Student Records",
+    category: "Student Management",
     prefix: "",
     format: "{SEQ}",
     numberLength: 3,
@@ -76,34 +96,32 @@ export const FIXED_NUMBER_SERIES = [
     currentNumber: 518,
     totalGenerated: 518,
     currentExample: "518",
-    description: "Configure internal student ID format for student records.",
+    description: "Configure global unique system student ID format.",
     status: "Active",
-    allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}"],
+    allowedTokens: ["{SEQ}", "{YYYY}", "{YY}"],
     sampleFormats: [
       { format: "{SEQ}", example: "518" },
       { format: "STU-{SEQ}", example: "STU-001" },
-      { format: "STU-{YYYY}-{SEQ}", example: "STU-2026-0001" },
     ],
   },
   {
     id: "section-name",
     key: "section-name",
     name: "Section Name",
-    category: "Academic Architecture",
+    category: "Academic Structure",
     prefix: "",
     format: "{GROUP}-Section {SECTION}",
     numberLength: 1,
     startNumber: 1,
-    currentNumber: 2,
-    totalGenerated: 5,
+    currentNumber: 1,
+    totalGenerated: 1,
     currentExample: "MPC-Section A",
-    description: "Configure section naming format for academic sections.",
+    description: "Configure naming format pattern for classroom sections.",
     status: "Active",
     allowedTokens: ["{GROUP}", "{SECTION}", "{LEVEL}", "{BOARD}"],
     sampleFormats: [
       { format: "{GROUP}-Section {SECTION}", example: "MPC-Section A" },
-      { format: "{GROUP}-{SECTION}", example: "MPC-A" },
-      { format: "{BOARD}-{GROUP}-{SECTION}", example: "BIEAP-MPC-A" },
+      { format: "{GROUP}-{LEVEL}-{SECTION}", example: "MPC-SR-A" },
     ],
   },
   {
@@ -115,16 +133,15 @@ export const FIXED_NUMBER_SERIES = [
     format: "{GROUP}-{TYPE}-{YEAR}",
     numberLength: 4,
     startNumber: 1,
-    currentNumber: 19,
-    totalGenerated: 19,
+    currentNumber: 1,
+    totalGenerated: 1,
     currentExample: "MPC-FINAL-2025",
-    description: "Configure examination code format for internal and final exams.",
+    description: "Configure code format for examination schedules and assessments.",
     status: "Active",
-    allowedTokens: ["{EXAM}", "{GROUP}", "{YEAR}", "{SEQ}", "{TYPE}"],
+    allowedTokens: ["{GROUP}", "{TYPE}", "{YEAR}", "{SEQ}", "{EXAM}"],
     sampleFormats: [
       { format: "{GROUP}-{TYPE}-{YEAR}", example: "MPC-FINAL-2025" },
-      { format: "EXAM-{YEAR}-{SEQ}", example: "EXAM-2026-0019" },
-      { format: "EXAM-{GROUP}-{TYPE}", example: "EXAM-MPC-MID1" },
+      { format: "EXAM-{YEAR}-{SEQ}", example: "EXAM-2026-0001" },
     ],
   },
   {
@@ -171,16 +188,74 @@ export const FIXED_NUMBER_SERIES = [
   },
 ];
 
+export function normalizeNumberSeriesItem(item = {}) {
+  const code = item.seriesCode || item.slug || item.key || item.id || "";
+  const name = item.seriesName || item.name || code;
+  const format = item.formatPattern || item.format || "{SEQ}";
+  const prefix = item.prefix || "";
+  const numberLength = Number(item.numberLength ?? 4);
+  const startNumber = Number(item.startNumber ?? 1);
+  const currentSequence = Number(item.currentSequence ?? item.currentNumber ?? 0);
+  const allowedTokens = item.availablePlaceholders || item.allowedTokens || ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}"];
+  const sampleFormats = (item.sampleFormats || []).map((sf) => ({
+    format: sf.pattern || sf.format || "",
+    pattern: sf.pattern || sf.format || "",
+    example: sf.example || "",
+  }));
+  const description = item.description || "";
+  const isActive = item.isActive ?? true;
+  const dynamicPreview = buildNumberFromFormat(format, currentSequence + 1, numberLength);
+  const currentExample = item.currentExample || dynamicPreview;
+  const livePreview = item.livePreview || dynamicPreview;
+
+  return {
+    ...item,
+    id: code,
+    key: code,
+    seriesCode: code,
+    slug: item.slug || code,
+    name,
+    seriesName: name,
+    prefix,
+    format,
+    formatPattern: format,
+    numberLength,
+    startNumber,
+    currentSequence,
+    currentNumber: currentSequence,
+    totalGenerated: item.totalGenerated ?? currentSequence,
+    allowedTokens,
+    availablePlaceholders: allowedTokens,
+    sampleFormats,
+    description,
+    isActive,
+    status: isActive ? "Active" : "Inactive",
+    currentExample: currentExample || dynamicPreview,
+    livePreview: livePreview || dynamicPreview,
+  };
+}
+
 // --- MOCK GENERATED HISTORY DATA FOR EACH FIXED TYPE ---
 export const MOCK_GENERATED_HISTORY = {
+  "teaching-staff-id": [
+    { id: 1, val: "PCTCH0007", name: "Dr. S. Ramesh", staffType: "Teaching", dept: "Mathematics", desig: "HOD", date: "12 May 2026" },
+    { id: 2, val: "PCTCH0006", name: "Ms. Priya Sharma", staffType: "Teaching", dept: "Physics", desig: "Lecturer", date: "10 May 2026" },
+    { id: 3, val: "PCTCH0005", name: "Mr. Kiran Kumar", staffType: "Teaching", dept: "Chemistry", desig: "Senior Lecturer", date: "09 May 2026" },
+    { id: 4, val: "PCTCH0004", name: "Mrs. Anitha Rao", staffType: "Teaching", dept: "English", desig: "Lecturer", date: "08 May 2026" },
+    { id: 5, val: "PCTCH0002", name: "Dr. Kavita Reddy", staffType: "Teaching", dept: "Computer Science", desig: "Professor", date: "05 May 2026" },
+  ],
+  "non-teaching-staff-id": [
+    { id: 1, val: "PCNT0003", name: "Mr. Imran Khan", staffType: "Non-Teaching", dept: "Computer Science", desig: "Lab Technician", date: "07 May 2026" },
+    { id: 2, val: "PCNT0001", name: "Mr. Rajesh Varma", staffType: "Non-Teaching", dept: "Administration", desig: "Office Assistant", date: "02 May 2026" },
+  ],
   "employee-id": [
-    { id: 1, val: "PCTCH0039", name: "Dr. S. Ramesh", staffType: "Teaching", dept: "Mathematics", desig: "HOD", date: "12 May 2026" },
-    { id: 2, val: "PCTCH0038", name: "Ms. Priya Sharma", staffType: "Teaching", dept: "Physics", desig: "Lecturer", date: "10 May 2026" },
-    { id: 3, val: "PCTCH0037", name: "Mr. Kiran Kumar", staffType: "Teaching", dept: "Chemistry", desig: "Senior Lecturer", date: "09 May 2026" },
-    { id: 4, val: "PCTCH0036", name: "Mrs. Anitha Rao", staffType: "Teaching", dept: "English", desig: "Lecturer", date: "08 May 2026" },
-    { id: 5, val: "PCTCH0035", name: "Mr. Imran Khan", staffType: "Non-Teaching", dept: "Computer Science", desig: "Lab Technician", date: "07 May 2026" },
-    { id: 6, val: "PCTCH0034", name: "Dr. Kavita Reddy", staffType: "Teaching", dept: "Computer Science", desig: "Professor", date: "05 May 2026" },
-    { id: 7, val: "PCTCH0033", name: "Mr. Rajesh Varma", staffType: "Non-Teaching", dept: "Administration", desig: "Office Assistant", date: "02 May 2026" },
+    { id: 1, val: "PCTCH0007", name: "Dr. S. Ramesh", staffType: "Teaching", dept: "Mathematics", desig: "HOD", date: "12 May 2026" },
+    { id: 2, val: "PCTCH0006", name: "Ms. Priya Sharma", staffType: "Teaching", dept: "Physics", desig: "Lecturer", date: "10 May 2026" },
+    { id: 3, val: "PCTCH0005", name: "Mr. Kiran Kumar", staffType: "Teaching", dept: "Chemistry", desig: "Senior Lecturer", date: "09 May 2026" },
+    { id: 4, val: "PCTCH0004", name: "Mrs. Anitha Rao", staffType: "Teaching", dept: "English", desig: "Lecturer", date: "08 May 2026" },
+    { id: 5, val: "PCNT0003", name: "Mr. Imran Khan", staffType: "Non-Teaching", dept: "Computer Science", desig: "Lab Technician", date: "07 May 2026" },
+    { id: 6, val: "PCTCH0002", name: "Dr. Kavita Reddy", staffType: "Teaching", dept: "Computer Science", desig: "Professor", date: "05 May 2026" },
+    { id: 7, val: "PCNT0001", name: "Mr. Rajesh Varma", staffType: "Non-Teaching", dept: "Administration", desig: "Office Assistant", date: "02 May 2026" },
   ],
   "admission-no": [
     { id: 1, val: "ADM-17", name: "Rahul Kumar", year: "2026-2027", board: "BIEAP", group: "MPC", date: "12 May 2026" },
@@ -233,6 +308,13 @@ export const MOCK_GENERATED_HISTORY = {
 
 // --- MOCK CONFIGURATION HISTORY LOGS ---
 export const MOCK_CONFIG_HISTORY = {
+  "teaching-staff-id": [
+    { version: "v1.0", format: "PCTCH{SEQ}", prefix: "PCTCH", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
+    { version: "v0.9", format: "PCTCH-{SEQ}", prefix: "PCTCH", length: 4, startNum: 1, changedBy: "Admin", date: "15 Mar 2026", status: "Previous" },
+  ],
+  "non-teaching-staff-id": [
+    { version: "v1.0", format: "PCNT{SEQ}", prefix: "PCNT", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
+  ],
   "employee-id": [
     { version: "v1.0", format: "PCTCH{SEQ}", prefix: "PCTCH", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
     { version: "v0.9", format: "PCTCH-{SEQ}", prefix: "PCTCH", length: 4, startNum: 1, changedBy: "Admin", date: "15 Mar 2026", status: "Previous" },
@@ -267,11 +349,14 @@ export function readNumberSeriesSettings() {
     if (!raw) return FIXED_NUMBER_SERIES;
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return FIXED_NUMBER_SERIES;
-    // Merge saved settings with FIXED structure to maintain non-deletable guarantees
-    return FIXED_NUMBER_SERIES.map((fixed) => {
+    
+    // Map parsed array onto FIXED_NUMBER_SERIES to ensure all 9 cards are always present
+    const result = FIXED_NUMBER_SERIES.map((fixed) => {
       const found = parsed.find((p) => p.id === fixed.id || p.key === fixed.key);
-      return found ? { ...fixed, ...found } : fixed;
+      if (!found) return fixed;
+      return { ...fixed, ...found };
     });
+    return result;
   } catch {
     return FIXED_NUMBER_SERIES;
   }
@@ -373,23 +458,63 @@ export function formatSeriesNumber(series, sequenceNum = null, customTokens = {}
   return buildNumberFromFormat(series.format || "ID{SEQ}", num, series.numberLength || 4, customTokens);
 }
 
-export function generateNextNumber(seriesKey, customTokens = {}) {
+export function findSeriesConfig(seriesKey) {
   const seriesList = readNumberSeriesSettings();
-  const series = seriesList.find((s) => s.key === seriesKey || s.id === seriesKey);
+  const normalizedKey = String(seriesKey || "").trim().toLowerCase();
+  let series = seriesList.find((s) =>
+    s.key === seriesKey ||
+    s.id === seriesKey ||
+    String(s.slug || "").toLowerCase() === normalizedKey ||
+    String(s.seriesCode || "").toLowerCase() === normalizedKey
+  );
   if (!series) {
-    if (seriesKey === "teaching-staff" || seriesKey === "employee-id") return "PCTCH0040";
-    if (seriesKey === "non-teaching-staff") return "NT011";
-    if (seriesKey === "student-admission" || seriesKey === "admission-no") return "ADM-18";
-    if (seriesKey === "student-roll" || seriesKey === "roll-no") return "2";
+    if (normalizedKey.includes("non-teaching") || normalizedKey.includes("pcnt") || normalizedKey.includes("non_teaching")) {
+      series = seriesList.find((s) => s.id === "non-teaching-staff-id" || s.key === "non-teaching-staff-id");
+    } else if (normalizedKey.includes("teaching") || normalizedKey.includes("pctch") || normalizedKey.includes("employee") || normalizedKey.includes("staff")) {
+      series = seriesList.find((s) => s.id === "teaching-staff-id" || s.key === "teaching-staff-id");
+    } else if (normalizedKey.includes("student")) {
+      series = seriesList.find((s) => s.id === "student-id" || s.key === "student-id");
+    } else if (normalizedKey.includes("admission")) {
+      series = seriesList.find((s) => s.id === "admission-no" || s.key === "admission-no");
+    } else if (normalizedKey.includes("roll")) {
+      series = seriesList.find((s) => s.id === "roll-no" || s.key === "roll-no");
+    } else if (normalizedKey.includes("section")) {
+      series = seriesList.find((s) => s.id === "section-name" || s.key === "section-name");
+    } else if (normalizedKey.includes("exam")) {
+      series = seriesList.find((s) => s.id === "exam-code" || s.key === "exam-code");
+    } else if (normalizedKey.includes("cert")) {
+      series = seriesList.find((s) => s.id === "certificate-number" || s.key === "certificate-number");
+    } else if (normalizedKey.includes("fee") || normalizedKey.includes("receipt")) {
+      series = seriesList.find((s) => s.id === "receipt-no" || s.key === "receipt-no");
+    }
+  }
+  return series;
+}
+
+export function generateNextNumber(seriesKey, customTokens = {}) {
+  const series = findSeriesConfig(seriesKey);
+  if (!series) {
+    const norm = String(seriesKey || "").toLowerCase();
+    if (norm.includes("non-teaching") || norm.includes("pcnt")) return "PCNT0001";
+    if (norm.includes("staff") || norm.includes("employee") || norm.includes("teaching")) return "PCTCH0001";
+    if (norm.includes("admission")) return "ADM-18";
+    if (norm.includes("roll")) return "2";
+    if (norm.includes("student")) return "519";
+    if (norm.includes("section")) return "MPC-Section A";
+    if (norm.includes("exam")) return "MPC-FINAL-2025";
+    if (norm.includes("cert")) return "CND-2026-82FC40";
+    if (norm.includes("receipt") || norm.includes("fee")) return "FEE-20260904-000012";
     return "ID001";
   }
   return formatSeriesNumber(series, Number(series.currentNumber || 0) + 1, customTokens);
 }
 
 export function incrementSeriesSequence(seriesKey) {
+  const series = findSeriesConfig(seriesKey);
+  const targetId = series?.id || series?.key || seriesKey;
   const seriesList = readNumberSeriesSettings();
   const updated = seriesList.map((s) => {
-    if (s.key === seriesKey || s.id === seriesKey) {
+    if (s.id === targetId || s.key === targetId) {
       return { ...s, currentNumber: Number(s.currentNumber || 0) + 1, totalGenerated: Number(s.totalGenerated || 0) + 1 };
     }
     return s;
@@ -398,9 +523,11 @@ export function incrementSeriesSequence(seriesKey) {
 }
 
 export function resetNumberSeriesSequence(id, newCurrentNumber = 0) {
+  const series = findSeriesConfig(id);
+  const targetId = series?.id || series?.key || id;
   const seriesList = readNumberSeriesSettings();
   const updated = seriesList.map((s) => {
-    if (s.id === id || s.key === id) {
+    if (s.id === targetId || s.key === targetId) {
       return { ...s, currentNumber: Number(newCurrentNumber) };
     }
     return s;

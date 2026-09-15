@@ -1,3 +1,4 @@
+﻿using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -19,11 +20,12 @@ namespace CollegeManagement.API.Models
         // ADMISSION DETAILS
         // =========================================================
 
+        public int? AdmissionId { get; set; }
+
         [Required]
         [MaxLength(50)]
         public string AdmissionNo { get; set; } = string.Empty;
 
-        
         [MaxLength(50)]
         public string? RollNo { get; set; }
 
@@ -139,6 +141,16 @@ namespace CollegeManagement.API.Models
 
 
         // =========================================================
+        // FEE CONFIGURATION REFERENCE
+        // =========================================================
+
+        public int? FeeStructureId { get; set; }
+
+        [MaxLength(50)]
+        public string? PaymentPlan { get; set; }
+
+
+        // =========================================================
         // SECTION
         // =========================================================
 
@@ -225,7 +237,7 @@ namespace CollegeManagement.API.Models
 
 
         // =========================================================
-        // FEES
+        // FEES (FINANCIAL SNAPSHOT)
         // =========================================================
 
         [Column(TypeName = "decimal(10,2)")]
@@ -252,6 +264,38 @@ namespace CollegeManagement.API.Models
         public decimal? CGPA { get; set; }
 
         public int? Rank { get; set; }
+
+
+        // =========================================================
+        // DOCUMENT CERTIFICATES
+        // =========================================================
+
+        [MaxLength(500)]
+        public string? BirthCertificate { get; set; }
+
+        [MaxLength(500)]
+        public string? TransferCertificate { get; set; }
+
+        [MaxLength(500)]
+        public string? StudyCertificate { get; set; }
+
+        [MaxLength(500)]
+        public string? AadhaarDocument { get; set; }
+
+        [MaxLength(500)]
+        public string? CommunityCertificate { get; set; }
+
+        [MaxLength(500)]
+        public string? IncomeCertificate { get; set; }
+
+        [MaxLength(500)]
+        public string? CasteCertificate { get; set; }
+
+        [MaxLength(500)]
+        public string? TenthCertificate { get; set; }
+
+        [MaxLength(500)]
+        public string? MarksMemo { get; set; }
 
 
         // =========================================================

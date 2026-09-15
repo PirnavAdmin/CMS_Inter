@@ -10,7 +10,72 @@
   box-sizing: border-box;
 }
 
-/* ---------- Main Navigation Tabs Styling (Floating Below Filter Card - Ref Screenshot) ---------- */
+/* ---------- Main Navigation Tabs Styling (Ref Screenshots 1, 2, 5) ---------- */
+.cms-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 16px;
+}
+
+.cms-tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  width: max-content;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.cms-tabs button {
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 18px;
+  background: transparent;
+  color: var(--cms-muted, #555e54);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.cms-tabs button:hover:not(.active) {
+  color: var(--cms-text, #171a17);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.cms-tabs button.active {
+  background: var(--cms-primary, #6f8400);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(111, 132, 0, 0.25);
+}
+
+.cms-subtabs-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+
+.cms-subtabs {
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.cms-subtabs button {
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
 .cms-independent-tab-bar {
   display: flex;
   align-items: center;
@@ -143,7 +208,7 @@
 /* ---------- Toast Banners ---------- */
 .cms-toast-banner {
   position: fixed;
-  top: 20px;
+  top: 60px;
   right: 20px;
   padding: 11px 18px;
   border-radius: 10px;
@@ -162,6 +227,7 @@
     opacity: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -222,7 +288,7 @@
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
   overflow: visible !important;
 }
@@ -373,43 +439,44 @@
   text-align: center;
 }
 
-/* ---------- Context Summary Box ---------- */
+/* ---------- Context Summary Box (Ref Screenshots 1-5) ---------- */
 .cms-context-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 18px;
-  border: 1px solid var(--cms-primary-border, #d9dccb);
-  border-radius: 12px;
-  background: var(--cms-primary-soft, #f1f4e2);
-  font-size: 13px;
-}
-
-.cms-context-summary > div {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  padding: 14px 20px;
+  border: 1px solid var(--cms-primary-border, #e2e8d0);
+  border-radius: 12px;
+  background: var(--cms-surface-card, #f4f6ec);
+  margin-bottom: 12px;
 }
 
-.cms-context-summary strong {
-  font-size: 0.92rem;
+.cms-context-summary strong,
+.cms-context-summary .cms-context-title {
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--cms-text, #171a17);
 }
 
-.cms-context-summary span {
-  color: var(--cms-muted, #7b8275);
-  font-size: 0.81rem;
+.cms-context-summary span,
+.cms-context-summary .cms-context-subtitle {
+  color: var(--cms-muted, #687261);
+  font-size: 0.82rem;
 }
 
-/* ---------- Compact Selects in Entry Tab ---------- */
+/* ---------- Selects in Entry Tab (Ref Screenshot 5) ---------- */
 .cms-entry-selects {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 0 1 auto;
-  min-width: 0;
+  align-items: flex-end;
+  gap: 16px;
+  flex: 1;
+  max-width: 720px;
+}
+
+.cms-entry-selects .cms-field-group {
+  flex: 1;
+  min-width: 220px;
+  max-width: 350px;
 }
 
 .cms-entry-select-compact {
@@ -943,6 +1010,7 @@
   .cms-filter-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+
   .cms-detail-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -952,30 +1020,37 @@
   .cms-filter-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .cms-detail-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .cms-table-container {
     overflow-x: auto;
   }
 }
 
 @media (max-width: 720px) {
+
   .cms-filter-grid,
   .cms-detail-grid {
     grid-template-columns: 1fr;
   }
+
   .cms-independent-tab-bar {
     flex-wrap: wrap;
   }
+
   .cms-workspace-actions {
     flex-direction: column;
     align-items: stretch;
   }
+
   .cms-entry-selects {
     flex-direction: column;
     width: 100%;
   }
+
   .cms-context-summary,
   .cms-entry-toolbar,
   .cms-table-toolbar,
@@ -983,32 +1058,39 @@
     align-items: stretch;
     flex-direction: column;
   }
+
   .cms-search-wrap {
     width: 100%;
     max-width: none;
     min-width: 0;
   }
+
   .cms-bulk-actions,
   .cms-marks-actions,
   .cms-modal-foot {
     width: 100%;
   }
+
   .cms-bulk-actions .cms-btn,
   .cms-marks-actions .cms-btn,
   .cms-modal-foot .cms-btn {
     flex: 1 1 auto;
   }
+
   .cms-pagination-controls {
     justify-content: space-between;
     margin-left: 0;
   }
+
   .cms-toast-banner {
     right: 12px;
     left: 12px;
   }
+
   .cms-modal {
     max-height: calc(100vh - 32px);
   }
+
   .cms-modal-body {
     overflow-y: auto;
   }

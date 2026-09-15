@@ -96,7 +96,7 @@ export const buildInstallmentSchedule = (courseFee, count, startDate) => {
   return amounts.map((amount, index) => ({
     no: index + 1,
     amount,
-    dueDate: addMonthsISO(startDate || todayISO(), index * 2),
+    dueDate: addMonthsISO(startDate || todayISO(), index),
     paid: 0,
   }));
 };

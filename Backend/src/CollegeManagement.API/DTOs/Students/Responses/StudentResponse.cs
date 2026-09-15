@@ -9,6 +9,8 @@ namespace CollegeManagement.API.DTOs.Students
     {
         public int StudentId { get; set; }
 
+        public int? AdmissionId { get; set; }
+
         public string AdmissionNo { get; set; } = string.Empty;
         public string AdmissionNumber { get => AdmissionNo; set => AdmissionNo = value; }
 
@@ -72,6 +74,13 @@ namespace CollegeManagement.API.DTOs.Students
 
         public string? SectionName { get; set; }
 
+        // Fee Configuration Reference
+        public int? FeeStructureId { get; set; }
+
+        public string? FeeStructureName { get; set; }
+
+        public string? PaymentPlan { get; set; }
+
         // Address
         public string? Address { get; set; }
 
@@ -126,6 +135,25 @@ namespace CollegeManagement.API.DTOs.Students
 
         public decimal? AnnualIncome { get; set; }
 
+        // Documents
+        public string? BirthCertificate { get; set; }
+
+        public string? TransferCertificate { get; set; }
+
+        public string? StudyCertificate { get; set; }
+
+        public string? AadhaarDocument { get; set; }
+
+        public string? CommunityCertificate { get; set; }
+
+        public string? IncomeCertificate { get; set; }
+
+        public string? CasteCertificate { get; set; }
+
+        public string? TenthCertificate { get; set; }
+
+        public string? MarksMemo { get; set; }
+
         // Fees
         public decimal FeeAmount { get; set; }
 
@@ -158,3 +186,4 @@ namespace CollegeManagement.API.DTOs.Students
         public string? Remarks { get; set; }
     }
 }
+

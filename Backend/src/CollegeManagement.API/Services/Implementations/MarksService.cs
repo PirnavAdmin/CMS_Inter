@@ -41,15 +41,88 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<MarkResponseDto> SaveMarkAsync(SaveMarkDto dto)
         {
-            var markEntity = _mapper.Map<Mark>(dto);
-            var created = await _marksRepository.CreateAsync(markEntity);
-            if (created == null) throw new ValidationException("Failed to save mark entry.");
-            return _mapper.Map<MarkResponseDto>(created);
+            var existing = await _marksRepository.GetByExamSubjectStudentAsync(dto.ExaminationId, dto.SubjectId, dto.StudentId);
+            if (existing != null)
+            {
+                var total = (dto.TotalMarks.HasValue && dto.TotalMarks.Value > 0)
+                    ? dto.TotalMarks.Value
+                    : (dto.ObtainedMarks.HasValue && dto.ObtainedMarks.Value > 0)
+                        ? dto.ObtainedMarks.Value
+                        : (dto.InternalMarks + dto.PracticalMarks + dto.TheoryMarks);
+
+                existing.InternalMarks = dto.InternalMarks;
+                existing.PracticalMarks = dto.PracticalMarks;
+                existing.TheoryMarks = dto.TheoryMarks;
+                existing.TotalMarks = total;
+                if (dto.PassingMarks > 0)
+                {
+                    existing.PassingMarks = dto.PassingMarks;
+                }
+                existing.IsAbsent = dto.IsAbsent;
+                existing.Remarks = dto.Remarks;
+                if (dto.FacultyId.HasValue && dto.FacultyId.Value > 0)
+                {
+                    existing.FacultyId = dto.FacultyId.Value;
+                }
+                if (dto.BoardId.HasValue && dto.BoardId.Value > 0)
+                {
+                    existing.BoardId = dto.BoardId.Value;
+                }
+                if (!string.IsNullOrWhiteSpace(dto.Board))
+                {
+                    existing.Board = dto.Board;
+                }
+                if (dto.AcademicYearId > 0)
+                {
+                    existing.AcademicYearId = dto.AcademicYearId;
+                }
+                if (dto.AcademicLevelId.HasValue && dto.AcademicLevelId.Value > 0)
+                {
+                    existing.AcademicLevelId = dto.AcademicLevelId.Value;
+                }
+                if (!string.IsNullOrWhiteSpace(dto.AcademicLevel))
+                {
+                    existing.AcademicLevel = dto.AcademicLevel;
+                }
+                if (dto.GroupId > 0)
+                {
+                    existing.GroupId = dto.GroupId;
+                }
+                if (dto.SectionId > 0)
+                {
+                    existing.SectionId = dto.SectionId;
+                }
+                if (!string.IsNullOrWhiteSpace(dto.RollNo))
+                {
+                    existing.RollNo = dto.RollNo;
+                }
+                if (!string.IsNullOrWhiteSpace(dto.StudentName))
+                {
+                    existing.StudentName = dto.StudentName;
+                }
+                existing.IsActive = true;
+                existing.UpdatedAt = DateTime.UtcNow;
+
+                var updated = await _marksRepository.UpdateAsync(existing);
+                return _mapper.Map<MarkResponseDto>(updated ?? existing);
+            }
+            else
+            {
+                var markEntity = _mapper.Map<Mark>(dto);
+                var created = await _marksRepository.CreateAsync(markEntity);
+                if (created == null) throw new ValidationException("Failed to save mark entry.");
+                return _mapper.Map<MarkResponseDto>(created);
+            }
         }
 
         public async Task<List<MarkResponseDto>> BulkSaveMarksAsync(BulkUploadMarksDto dto)
         {
             var result = new List<MarkResponseDto>();
+            if (dto?.Marks == null || dto.Marks.Count == 0)
+            {
+                return result;
+            }
+
             foreach (var item in dto.Marks)
             {
                 var saved = await SaveMarkAsync(item);

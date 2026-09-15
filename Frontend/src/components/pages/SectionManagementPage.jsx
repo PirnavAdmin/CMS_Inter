@@ -16,7 +16,9 @@ import {
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import "./SectionManagementPage.css";
 
 const PAGE_SIZE = 5;
@@ -513,7 +515,7 @@ function SearchableSelect({
         <div className="cms-searchable-select-menu">
           {showSearch && (
             <div className="cms-searchable-select-search">
-              <Search size={14} />
+              <Search3DIcon size={14} />
               <input
                 type="text"
                 autoFocus
@@ -634,6 +636,13 @@ function BulkRoomAllocationPreview({ allocations, requested, errors, onChange, p
 }
 
 export default function SectionManagementPage() {
+  const {
+    selectedBoard,
+    selectedBoardId,
+    selectedAcademicYear,
+    selectedAcademicYearId,
+  } = useAcademicContext();
+
   // First Tab is Room Management ("rooms"), Second Tab is Section Management ("sections")
   const [activeTab, setActiveTab] = useState("rooms");
 
@@ -675,6 +684,42 @@ export default function SectionManagementPage() {
   const [filters, setFilters] = useState({ boardId: "", academicYearId: "", groupId: "", programId: "", academicLevelId: "" });
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  const effectiveNavbarBoard = useMemo(() => {
+    if (!boardsList.length) return null;
+    return boardsList.find(
+      (b) =>
+        normalizeId(b.id) === normalizeId(selectedBoardId) ||
+        (selectedBoard?.code && String(b.code || "").trim().toLowerCase() === String(selectedBoard.code).trim().toLowerCase()) ||
+        (selectedBoard?.name && String(b.name || "").trim().toLowerCase() === String(selectedBoard.name).trim().toLowerCase())
+    ) || boardsList[0] || null;
+  }, [boardsList, selectedBoardId, selectedBoard]);
+
+  const effectiveNavbarYear = useMemo(() => {
+    if (!academicYearsList.length || !effectiveNavbarBoard) return null;
+    const boardYears = academicYearsList.filter((y) => yearBelongsToBoard(y, effectiveNavbarBoard.id));
+    return boardYears.find(
+      (y) =>
+        normalizeId(y.id) === normalizeId(selectedAcademicYearId) ||
+        (selectedAcademicYear?.name && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.name).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "")) ||
+        (selectedAcademicYear?.code && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.code).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, ""))
+    ) || boardYears.find((y) => y.isCurrent) || boardYears[0] || null;
+  }, [academicYearsList, effectiveNavbarBoard, selectedAcademicYearId, selectedAcademicYear]);
+
+  // Sync navbar selection with list filters
+  useEffect(() => {
+    if (effectiveNavbarBoard) {
+      const bId = normalizeId(effectiveNavbarBoard.id);
+      setFilters((current) => (normalizeId(current.boardId) === bId ? current : { ...current, boardId: bId }));
+    }
+  }, [effectiveNavbarBoard]);
+
+  useEffect(() => {
+    if (effectiveNavbarYear) {
+      const yId = normalizeId(effectiveNavbarYear.id);
+      setFilters((current) => (normalizeId(current.academicYearId) === yId ? current : { ...current, academicYearId: yId }));
+    }
+  }, [effectiveNavbarYear]);
 
   const [roomFilters, setRoomFilters] = useState({ building: "", floor: "", roomType: "" });
   const [roomSearch, setRoomSearch] = useState("");
@@ -810,7 +855,11 @@ export default function SectionManagementPage() {
       if (staffResult.status === "fulfilled") {
         const staffData = unwrapList(staffResult.value).map(normalizeTeacher);
         const teachingStaff = staffData.filter(
-          (item) => item.isActive && String(item.staffType || "Teaching").toLowerCase() === "teaching"
+          (item) =>
+            item.isActive &&
+            String(item.staffType || "Teaching")
+              .trim()
+              .toLowerCase() === "teaching"
         );
         setTeachersList(teachingStaff.filter((item) => item.id));
       }
@@ -950,9 +999,23 @@ export default function SectionManagementPage() {
   const roomAllowed = (room, row, otherRows = []) => Boolean(room?.id && room.isActive && room.roomType === "Classroom" &&
     (row.status !== "Active" || (![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
       .some((section) => section.status === "Active" && normalizeId(section.roomId) === normalizeId(room.id)))));
-  const teacherAllowed = (teacher, row, otherRows = []) => isTeachingStaff(teacher) &&
-    (row.status !== "Active" || ![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
-      .some((section) => section.status === "Active" && normalizeId(section.classTeacherId) === normalizeId(teacher.id)));
+  const teacherAssignmentConflict = (teacherId, row, otherRows = []) =>
+    row.status === "Active" &&
+    [
+      ...sections.filter(
+        (section) =>
+          normalizeId(section.id) !== normalizeId(selectedSectionId)
+      ),
+      ...otherRows,
+    ].some(
+      (section) =>
+        section.status === "Active" &&
+        normalizeId(section.classTeacherId) === normalizeId(teacherId)
+    );
+
+  const teacherAllowed = (teacher, row, otherRows = []) =>
+    isTeachingStaff(teacher) &&
+    !teacherAssignmentConflict(teacher.id, row, otherRows);
   const roomOptionsFor = (row, others = []) => rooms.filter((room) => roomAllowed(room, row, others))
     .map((room) => ({ value: normalizeId(room.id), label: room.roomNo + " (Cap: " + room.capacity + ")" }));
   const teacherOptionsFor = (row, others = []) => teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
@@ -1081,8 +1144,8 @@ export default function SectionManagementPage() {
     setSectionFormMode("add");
     setSectionCreationType("single");
     setFieldErrors({});
-    const boardId = boardsList.some((item) => item.id === normalizeId(filters.boardId)) ? normalizeId(filters.boardId) : "";
-    const academicYearId = academicYearsList.some((item) => item.id === normalizeId(filters.academicYearId) && yearBelongsToBoard(item, boardId)) ? normalizeId(filters.academicYearId) : "";
+    const boardId = effectiveNavbarBoard ? normalizeId(effectiveNavbarBoard.id) : (boardsList.some((item) => item.id === normalizeId(filters.boardId)) ? normalizeId(filters.boardId) : "");
+    const academicYearId = effectiveNavbarYear ? normalizeId(effectiveNavbarYear.id) : (academicYearsList.some((item) => item.id === normalizeId(filters.academicYearId) && yearBelongsToBoard(item, boardId)) ? normalizeId(filters.academicYearId) : "");
     const academicLevelId = embeddedBoardLevels(boardsList.find((item) => item.id === boardId)).some((item) => item.id === normalizeId(filters.academicLevelId)) || sections.some((item) => item.boardId === boardId && item.academicLevelId === normalizeId(filters.academicLevelId)) ? normalizeId(filters.academicLevelId) : "";
     const groupId = boardId && sections.some((item) => item.boardId === boardId && item.groupId === normalizeId(filters.groupId)) ? normalizeId(filters.groupId) : "";
     const programId = groupId && sections.some((item) => item.groupId === groupId && item.programId === normalizeId(filters.programId)) ? normalizeId(filters.programId) : "";
@@ -1104,6 +1167,19 @@ export default function SectionManagementPage() {
     setSectionView("form");
     loadBoardDependencies(boardId, { groupId, programId, academicLevelId });
   };
+
+  useEffect(() => {
+    if (sectionView === "form" && sectionFormMode === "add") {
+      const bId = effectiveNavbarBoard ? normalizeId(effectiveNavbarBoard.id) : "";
+      const yId = effectiveNavbarYear ? normalizeId(effectiveNavbarYear.id) : "";
+      if (bId && normalizeId(sectionForm.boardId) !== bId) {
+        setSectionForm((f) => ({ ...f, boardId: bId, academicYearId: yId || f.academicYearId }));
+        loadBoardDependencies(bId);
+      } else if (yId && normalizeId(sectionForm.academicYearId) !== yId) {
+        setSectionForm((f) => ({ ...f, academicYearId: yId }));
+      }
+    }
+  }, [sectionView, sectionFormMode, effectiveNavbarBoard, effectiveNavbarYear, sectionForm.boardId, sectionForm.academicYearId, loadBoardDependencies]);
 
   const openEditSection = (sec, isPreview = false) => {
     if (operationRef.current) return;
@@ -1249,8 +1325,20 @@ export default function SectionManagementPage() {
       const roomObj = roomsById.get(String(sectionForm.roomId));
       const strengthNum = Number(sectionForm.strength);
       if (!roomAllowed(roomObj, sectionForm)) errs.roomId = "Room is not available for Section allocation";
-      if (!sectionForm.classTeacherId) errs.classTeacherId = "Incharge is required";
-      else if (!teacherAllowed(teachersById.get(normalizeId(sectionForm.classTeacherId)), sectionForm)) errs.classTeacherId = "Select an available active Teaching Incharge";
+      const selectedTeacher = teachersById.get(
+        normalizeId(sectionForm.classTeacherId)
+      );
+
+      if (!sectionForm.classTeacherId) {
+        errs.classTeacherId = "Incharge is required";
+      } else if (!isTeachingStaff(selectedTeacher)) {
+        errs.classTeacherId = "Select an active Teaching Staff member";
+      } else if (
+        teacherAssignmentConflict(selectedTeacher.id, sectionForm)
+      ) {
+        errs.classTeacherId =
+          "This faculty member is already assigned to another active section";
+      }
       if (sections.some((item) => normalizeId(item.id) !== normalizeId(selectedSectionId) && sameText(item.name, sectionForm.name) && normalizeId(item.boardId) === normalizeId(boardId) && normalizeId(item.academicYearId) === normalizeId(academicYearId) && normalizeId(item.groupId) === normalizeId(groupId) && normalizeId(item.programId) === normalizeId(programId) && normalizeId(item.academicLevelId) === normalizeId(academicLevelId))) errs.name = "Section Name already exists for this academic scope";
 
       if (!String(sectionForm.strength).trim()) {
@@ -1304,8 +1392,21 @@ export default function SectionManagementPage() {
         const roomObj = roomsById.get(normalizeId(sec.roomId));
         const others = bulkSections.filter((_, index) => index !== i);
         if (!roomAllowed(roomObj, sec, others)) errs[`room_${i}`] = "Room is not available for Section allocation";
-        if (!sec.classTeacherId) errs[`teacher_${i}`] = "Incharge is required";
-        else if (!teacherAllowed(teachersById.get(normalizeId(sec.classTeacherId)), sec, others)) errs[`teacher_${i}`] = "Select an available active Teaching Incharge";
+
+        const selectedTeacher = teachersById.get(
+          normalizeId(sec.classTeacherId)
+        );
+
+        if (!sec.classTeacherId) {
+          errs[`teacher_${i}`] = "Incharge is required";
+        } else if (!isTeachingStaff(selectedTeacher)) {
+          errs[`teacher_${i}`] = "Select an active Teaching Staff member";
+        } else if (
+          teacherAssignmentConflict(selectedTeacher.id, sec, others)
+        ) {
+          errs[`teacher_${i}`] =
+            "This faculty member is already assigned to another active section";
+        }
         const strengthNum = Number(sec.strength);
         if (!String(sec.strength).trim() || !Number.isInteger(strengthNum) || strengthNum <= 0 || strengthNum > 150) {
           errs[`strength_${i}`] = "Section capacity must be an integer from 1 to 150";
@@ -1484,7 +1585,7 @@ export default function SectionManagementPage() {
               <div className="cms-card">
                 <div className="cms-toolbar cms-sec-toolbar">
                   <div className="cms-search cms-sec-search">
-                    <Search size={16} />
+                    <Search3DIcon size={16} />
                     <input
                       type="search"
                       placeholder="Search by Room No, block, floor..."
@@ -1986,7 +2087,7 @@ export default function SectionManagementPage() {
               <div className="cms-card">
                 <div className="cms-toolbar cms-sec-toolbar">
                   <div className="cms-search cms-sec-search">
-                    <Search size={16} />
+                    <Search3DIcon size={16} />
                     <input
                       type="search"
                       placeholder="Search by section, group, program..."
@@ -1996,12 +2097,6 @@ export default function SectionManagementPage() {
                   </div>
                   <div className="cms-sec-toolbar-filters">
                     <div className="cms-field">
-                    <SearchableSelect value={filters.boardId} onChange={(boardId) => setFilters((current) => ({ ...current, boardId, academicYearId: "", academicLevelId: "", groupId: "", programId: "" }))} options={sectionBoardFilterOptions} placeholder="All Boards" showSearch={true} />
-                  </div>
-                  <div className="cms-field">
-                    <SearchableSelect value={filters.academicYearId} onChange={(academicYearId) => setFilters((current) => ({ ...current, academicYearId }))} options={sectionYearFilterOptions} placeholder="All Academic Years" showSearch={true} />
-                  </div>
-                  <div className="cms-field">
                       <SearchableSelect
                         value={filters.groupId}
                         onChange={(groupId) => {
@@ -2242,9 +2337,9 @@ export default function SectionManagementPage() {
                             loadBoardDependencies(val);
                           }}
                           options={boardOptions}
-                          disabled={sectionFormMode === "preview" || dependentLoading.board}
+                          disabled={true}
                           placeholder="Select Board"
-                          showSearch={true}
+                          showSearch={false}
                           hasError={Boolean(fieldErrors.boardId)}
                         />
                         {fieldErrors.boardId && <span className="cms-field-error">{fieldErrors.boardId}</span>}
@@ -2260,9 +2355,9 @@ export default function SectionManagementPage() {
                             changeAcademicScope("academicYearId", val);
                           }}
                           options={filteredYearOptions}
-                          disabled={sectionFormMode === "preview" || !sectionForm.boardId}
+                          disabled={true}
                           placeholder="Select Academic Year"
-                          showSearch={true}
+                          showSearch={false}
                           hasError={Boolean(fieldErrors.academicYearId)}
                         />
                         {fieldErrors.academicYearId && <span className="cms-field-error">{fieldErrors.academicYearId}</span>}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import {
-  FiSearch,
   FiPlus,
   FiDownload,
   FiEye,
@@ -689,7 +689,7 @@ const StaffList = () => {
         <div className="staff-toolbar">
           {/* Search */}
           <div className="staff-search-box">
-            <FiSearch className="staff-search-icon" />
+            <Search3DIcon className="staff-search-icon" size={16} />
             <input
               type="text"
               className="staff-search-input"

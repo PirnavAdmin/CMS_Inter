@@ -67,10 +67,37 @@ if (args.Contains("--test-certificates-module"))
     return;
 }
 
+if (args.Contains("--inspect-dashboard-db"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var inspector = new DashboardDbInspector(connStr!);
+    await inspector.InspectAsync();
+    Environment.Exit(0);
+    return;
+}
+
+if (args.Contains("--inspect-duplicates"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var inspector = new DuplicateDataInspector(connStr!);
+    await inspector.InspectAsync();
+    Environment.Exit(0);
+    return;
+}
+
 if (args.Contains("--test-dashboard-module"))
 {
     var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
     var tester = new DashboardModuleBackendTester(connStr!);
+    var success = await tester.RunAllTestsAsync();
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-master-data"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var tester = new MasterDataBackendTester(connStr!);
     var success = await tester.RunAllTestsAsync();
     Environment.Exit(success ? 0 : 1);
     return;
@@ -85,38 +112,16 @@ if (args.Contains("--test-reports-module"))
     return;
 }
 
-if (args.Contains("--test-staff-attendance-module"))
+if (args.Contains("--test-number-series"))
 {
     var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    builder.Services.AddDbContext<AppDbContext>(opt =>
-        opt.UseMySql(connStr, ServerVersion.AutoDetect(connStr)));
-    builder.Services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
-    builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
-    var testApp = builder.Build();
-    var success = await StaffAttendanceModuleBackendTester.RunAsync(testApp.Services);
-    Environment.Exit(success ? 0 : 1);
-    return;
-}
-
-if (args.Contains("--test-sections-module"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var tester = new SectionModuleBackendTester(connStr!);
+    var tester = new NumberSeriesBackendTester(connStr!);
     var success = await tester.RunAllTestsAsync();
     Environment.Exit(success ? 0 : 1);
     return;
 }
 
-if (args.Contains("--test-db-all"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    builder.Services.AddDbContext<AppDbContext>(opt =>
-        opt.UseMySql(connStr, ServerVersion.AutoDetect(connStr)));
-    var testApp = builder.Build();
-    var exitCode = await DbSchemaAndSpTester.RunAsync(testApp.Services);
-    Environment.Exit(exitCode);
-    return;
-}
+
 
 if (args.Contains("--validate-certificates-sql"))
 {
@@ -147,6 +152,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
     });
 
 #endregion
@@ -217,8 +224,7 @@ builder.Services.AddAutoMapper(
     typeof(MarksMappingProfile),
     typeof(AttendanceProfile),
     typeof(CollegeManagement.API.Profiles.TimetableMappingProfile),
-    typeof(SectionMappingProfile),
-    typeof(ExaminationMappingProfile));
+    typeof(SectionMappingProfile));
 
 builder.Services.AddValidatorsFromAssemblyContaining<CreateStaffDtoValidator>();
 
@@ -281,16 +287,24 @@ builder.Services.AddScoped<IRoomRepository, RoomRepository>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddScoped<IStudyMaterialRepository, StudyMaterialRepository>();
 builder.Services.AddScoped<ICertificateRepository, CertificateRepository>();
+builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
+builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
+builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
 
 #endregion
 
 #region Services
 
+builder.Services.AddScoped<IJwtTokenHelper, JwtTokenHelper>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRoleManagementService, RoleManagementService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
+builder.Services.AddScoped<ITemplateService, TemplateService>();
 
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 
@@ -316,6 +330,7 @@ builder.Services.AddSingleton<IAttendanceCacheService, AttendanceCacheService>()
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
+builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
 
 // Student & Student Admissions
 builder.Services.AddScoped<IStudentService, StudentService>();
@@ -326,7 +341,7 @@ builder.Services.AddScoped<IAssignmentService, AssignmentService>();
 builder.Services.AddScoped<IAssignmentSubmissionService, AssignmentSubmissionService>();
 builder.Services.AddScoped<IExaminationService, ExaminationService>();
 builder.Services.AddScoped<IExaminationExportService, ExaminationExportService>();
-builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
+// builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 builder.Services.AddScoped<IMarksService, MarksService>();
 builder.Services.AddScoped<IEvaluationService, EvaluationService>();
 builder.Services.AddScoped<IResultService, ResultService>();
@@ -496,6 +511,104 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+if (args.Contains("--test-staff-attendance-module"))
+{
+    var pass = await StaffAttendanceModuleBackendTester.RunAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-db-all"))
+{
+    var exitCode = await DbSchemaAndSpTester.RunAsync(app.Services);
+    Environment.Exit(exitCode);
+    return;
+}
+
+if (args.Contains("--test-user-provisioning"))
+{
+    var pass = await UserProvisioningFoundationTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-student-provisioning"))
+{
+    var pass = await StudentUserProvisioningTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-staff-provisioning"))
+{
+    var pass = await StaffUserProvisioningTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-admin-provisioning"))
+{
+    var pass = await AdminUserProvisioningTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-jwt-claims") || args.Contains("--test-phase6a-jwt"))
+{
+    var pass = await JwtClaimsFoundationTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-auth-harmonization"))
+{
+    var pass = await AuthorizationHarmonizationTester.RunTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-centralized-login"))
+{
+    var pass = await CentralizedLoginTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-claim-consumers"))
+{
+    var pass = await ClaimConsumerMigrationTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-password-change"))
+{
+    var pass = await CentralizedPasswordChangeTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-forgot-reset"))
+{
+    var pass = await ForgotResetPasswordTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-admin-adapter") || args.Contains("--test-admin-login-adapter"))
+{
+    var pass = await AdminLoginAdapterTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-email-status-sync"))
+{
+    var pass = await EmailAndStatusSyncTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
 #region Database Schema Initialization
 using (var scope = app.Services.CreateScope())
 {
@@ -626,6 +739,22 @@ app.Use(async (context, next) =>
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
     else if (path.StartsWith("/api/staff", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/staff", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/staff-attendance", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Path = "/api/v1" + path.Substring(4);
+    }
+    else if (path.StartsWith("/api/dashboard", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/dashboard", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Path = "/api/v1" + path.Substring(4);
+    }
+    else if (path.StartsWith("/api/departments", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/departments", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Path = "/api/v1" + path.Substring(4);
+    }
+    else if (path.StartsWith("/api/designations", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/designations", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Path = "/api/v1" + path.Substring(4);
+    }
+    else if (path.StartsWith("/api/certificates", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/certificates", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }

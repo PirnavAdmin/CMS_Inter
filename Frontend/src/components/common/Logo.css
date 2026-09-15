@@ -1,7 +1,7 @@
 .logo-mark {
-  background: #ffffff !important;
+  background: transparent;
   overflow: hidden;
-  border: 1px solid rgba(123, 34, 206, 0.14);
+  border: none;
 }
 .logo-mark img {
   width: 100%;

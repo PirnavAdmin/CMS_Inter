@@ -59,8 +59,19 @@ namespace CollegeManagement.API.Services.Interfaces
             string? programId,
             int? examId);
 
-        Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync();
-        Task<ResultStatisticsDto> GetResultStatisticsAsync();
+        Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            string? programId = null,
+            int? examId = null);
+        Task<ResultStatisticsDto> GetResultStatisticsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null);
         Task<ResultAnalysisDto> GetResultAnalysisAsync(
             int boardId,
             int academicYearId,
@@ -95,6 +106,11 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> RequestRevaluationAsync(RevaluationRequestDto request);
         Task<RevaluationStatusDto?> GetRevaluationStatusAsync(int revaluationId);
         Task<bool> UpdateResultAsync(int resultId, UpdateResultRequestDto request);
-        Task<ResultDashboardDto> GetResultDashboardAsync();
+        Task<ResultDashboardDto> GetResultDashboardAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null);
     }
 }

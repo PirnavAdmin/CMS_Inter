@@ -4,9 +4,6 @@ import {
   Users,
   GraduationCap,
   Hash,
-  User,
-  Layers,
-  BookOpen,
   Award,
   Receipt,
   Search,
@@ -18,12 +15,17 @@ import {
   Sparkles,
   Info,
   AlertTriangle,
-  CheckCircle2,
   X,
   ChevronRight,
   RefreshCw,
+  Play,
+  UserRound,
+  BookOpen,
+  FileText,
+  UserCheck,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import {
   readNumberSeriesSettings,
@@ -33,17 +35,20 @@ import {
   buildNumberFromFormat,
   getNextNumberPreview,
   validateNumberSeries,
+  normalizeNumberSeriesItem,
   MOCK_GENERATED_HISTORY,
 } from "@/data/numberSeriesData.js";
 import "./NumberSeriesPage.css";
 
 const SERIES_ICONS = {
+  "teaching-staff-id": Users,
   "employee-id": Users,
+  "non-teaching-staff-id": UserCheck,
   "admission-no": GraduationCap,
   "roll-no": Hash,
-  "student-id": User,
-  "section-name": Layers,
-  "exam-code": BookOpen,
+  "student-id": UserRound,
+  "section-name": BookOpen,
+  "exam-code": FileText,
   "certificate-number": Award,
   "receipt-no": Receipt,
 };
@@ -53,13 +58,41 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const { seriesId, id } = useParams();
   const activeId = seriesId || id;
 
-  const [seriesList, setSeriesList] = useState(readNumberSeriesSettings);
+  const [seriesList, setSeriesList] = useState(() =>
+    readNumberSeriesSettings().map(normalizeNumberSeriesItem)
+  );
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [previewModalSeries, setPreviewModalSeries] = useState(null);
 
+  const fetchSeries = () => {
+    setLoading(true);
+    try {
+      const data = readNumberSeriesSettings().map(normalizeNumberSeriesItem);
+      setSeriesList(data);
+    } catch (err) {
+      console.warn("Using local settings fallback:", err?.message || err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSeries();
+  }, []);
+
   const activeSeries = useMemo(() => {
     if (!activeId) return null;
-    return seriesList.find((s) => s.id === activeId || s.key === activeId) || null;
+    return (
+      seriesList.find(
+        (s) =>
+          s.id === activeId ||
+          s.seriesCode === activeId ||
+          s.slug === activeId ||
+          s.key === activeId
+      ) || null
+    );
   }, [activeId, seriesList]);
 
   const updateSeriesList = (newList) => {
@@ -68,16 +101,46 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   };
 
   const handleSaveConfig = (updatedSeries) => {
-    const newList = seriesList.map((s) => (s.id === updatedSeries.id ? updatedSeries : s));
+    setSaving(true);
+    const code = updatedSeries.seriesCode || updatedSeries.slug || updatedSeries.id;
+    const normalized = normalizeNumberSeriesItem(updatedSeries);
+
+    const newList = seriesList.map((s) =>
+      (s.id === code || s.seriesCode === code) ? normalized : s
+    );
     updateSeriesList(newList);
-    appendConfigHistory(updatedSeries.id, updatedSeries);
-    setToast({ message: "Number series updated successfully.", type: "success" });
+    appendConfigHistory(code, normalized);
+    setToast({ message: `${normalized.name} updated successfully.`, type: "success" });
+    setSaving(false);
+    return true;
+  };
+
+  const handleSequenceGenerated = (code, nextNumber) => {
+    setSeriesList((prev) =>
+      prev.map((s) => {
+        if (s.id === code || s.seriesCode === code) {
+          const nextSeq = (s.currentSequence || s.currentNumber || 0) + 1;
+          return {
+            ...s,
+            currentSequence: nextSeq,
+            currentNumber: nextSeq,
+            totalGenerated: nextSeq,
+            currentExample: nextNumber || s.currentExample,
+            livePreview: nextNumber || s.livePreview,
+          };
+        }
+        return s;
+      })
+    );
   };
 
   if (mode === "edit") {
     if (!activeSeries) {
       return (
-        <DashboardLayout title="ID & Number Series" subtitle="Configure Employee IDs, Admission Numbers and various document number formats.">
+        <DashboardLayout
+          title="ID & Number Series"
+          subtitle="Configure Employee IDs, Admission Numbers and various document number formats."
+        >
           <div className="ns-not-found">
             <h3>Series Not Found</h3>
             <p>The requested number series configuration does not exist.</p>
@@ -91,9 +154,12 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     return (
       <NumberSeriesEditView
         series={activeSeries}
-        onSave={(updated) => {
-          handleSaveConfig(updated);
-          setTimeout(() => navigate(`/dashboard/settings/number-series/${updated.id}`), 400);
+        saving={saving}
+        onSave={async (updated) => {
+          const ok = await handleSaveConfig(updated);
+          if (ok) {
+            setTimeout(() => navigate(`/dashboard/settings/number-series/${updated.id}`), 400);
+          }
         }}
         onPreviewModal={(s) => setPreviewModalSeries(s)}
         toast={toast}
@@ -105,7 +171,10 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   if (mode === "detail" || mode === "view") {
     if (!activeSeries) {
       return (
-        <DashboardLayout title="ID & Number Series" subtitle="Configure Employee IDs, Admission Numbers and various document number formats.">
+        <DashboardLayout
+          title="ID & Number Series"
+          subtitle="Configure Employee IDs, Admission Numbers and various document number formats."
+        >
           <div className="ns-not-found">
             <h3>Series Not Found</h3>
             <p>The requested number series configuration does not exist.</p>
@@ -125,7 +194,12 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           setToast={setToast}
         />
         {previewModalSeries && (
-          <PreviewNextModal series={previewModalSeries} onClose={() => setPreviewModalSeries(null)} />
+          <PreviewNextModal
+            series={previewModalSeries}
+            onClose={() => setPreviewModalSeries(null)}
+            onSequenceGenerated={handleSequenceGenerated}
+            setToast={setToast}
+          />
         )}
       </>
     );
@@ -135,12 +209,19 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     <>
       <NumberSeriesDashboardView
         seriesList={seriesList}
+        loading={loading}
+        onRefresh={fetchSeries}
         onPreviewModal={(s) => setPreviewModalSeries(s)}
         toast={toast}
         setToast={setToast}
       />
       {previewModalSeries && (
-        <PreviewNextModal series={previewModalSeries} onClose={() => setPreviewModalSeries(null)} />
+        <PreviewNextModal
+          series={previewModalSeries}
+          onClose={() => setPreviewModalSeries(null)}
+          onSequenceGenerated={handleSequenceGenerated}
+          setToast={setToast}
+        />
       )}
     </>
   );
@@ -149,7 +230,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
 // ======================================================================
 // 1. DASHBOARD VIEW (MAIN CARD GRID)
 // ======================================================================
-function NumberSeriesDashboardView({ seriesList, onPreviewModal, toast, setToast }) {
+function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setToast }) {
   const navigate = useNavigate();
 
   return (
@@ -163,20 +244,31 @@ function NumberSeriesDashboardView({ seriesList, onPreviewModal, toast, setToast
       <div className="ns-dashboard-container">
         {/* TOP NOTICE BANNER */}
         <div className="ns-info-banner">
-          <Info size={18} className="ns-info-icon" />
-          <div>
+          <Info size={15} className="ns-info-icon" />
+          <div style={{ flex: 1 }}>
             <strong>Fixed System Series</strong>
             <p>
               Numbering categories are fixed system configurations. You can edit formats, preview next sequence values, and view generation logs.
             </p>
           </div>
+          <button
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            onClick={onRefresh}
+            disabled={loading}
+            style={{ alignSelf: "center", marginLeft: "auto" }}
+            title="Refresh series"
+          >
+            <RefreshCw size={13} className={loading ? "spin" : ""} />
+            <span>{loading ? "Loading..." : "Refresh"}</span>
+          </button>
         </div>
 
-        {/* 8 FIXED CARDS GRID (4 PER ROW DESKTOP, 2 TABLET, 1 MOBILE) */}
+        {/* 4 FIXED CARDS GRID */}
         <div className="ns-card-grid">
           {seriesList.map((series) => {
             const IconComponent = SERIES_ICONS[series.id] || Hash;
-            const nextVal = getNextNumberPreview(series);
+            const nextVal = series.livePreview || getNextNumberPreview(series);
 
             return (
               <div key={series.id} className="ns-card">
@@ -184,10 +276,12 @@ function NumberSeriesDashboardView({ seriesList, onPreviewModal, toast, setToast
                   <div className="ns-card-icon-box">
                     <IconComponent size={22} />
                   </div>
-                  <div className="ns-card-badge">Active</div>
+                  <div className={`ns-card-badge ${series.isActive ? "" : "ns-card-badge-inactive"}`}>
+                    {series.isActive ? "Active" : "Inactive"}
+                  </div>
                 </div>
 
-                <h3 className="ns-card-title">{series.name}</h3>
+                <h3 className="ns-card-title">{series.name || series.seriesName}</h3>
 
                 <div className="ns-card-example-box">
                   <span className="ns-card-example-lbl">Current / Next Example:</span>
@@ -231,17 +325,12 @@ function NumberSeriesDashboardView({ seriesList, onPreviewModal, toast, setToast
 // ======================================================================
 function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("generated");
   const [searchQuery, setSearchQuery] = useState("");
   const [pageSize, setPageSize] = useState(5);
   const [currentPage, setCurrentPage] = useState(1);
 
   const historyList = useMemo(() => {
     return MOCK_GENERATED_HISTORY[series.id] || [];
-  }, [series.id]);
-
-  const configHistory = useMemo(() => {
-    return readConfigHistory(series.id);
   }, [series.id]);
 
   // Filter history rows by search query
@@ -260,7 +349,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
     return filteredHistory.slice(start, start + pageSize);
   }, [filteredHistory, currentPage, pageSize]);
 
-  const nextNumberVal = getNextNumberPreview(series);
+  const nextNumberVal = series.livePreview || getNextNumberPreview(series);
 
   return (
     <DashboardLayout
@@ -315,7 +404,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
         <div className="ns-summary-strip">
           <div className="ns-summary-item">
             <span className="ns-summary-lbl">Current Format</span>
-            <span className="ns-summary-val font-mono">{series.format}</span>
+            <span className="ns-summary-val font-mono">{series.format || series.formatPattern}</span>
           </div>
 
           <div className="ns-summary-item highlight">
@@ -330,7 +419,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
 
           <div className="ns-summary-item">
             <span className="ns-summary-lbl">Total Generated</span>
-            <span className="ns-summary-val">{series.totalGenerated || series.currentNumber}</span>
+            <span className="ns-summary-val">{series.totalGenerated || series.currentSequence || series.currentNumber}</span>
           </div>
         </div>
 
@@ -344,7 +433,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
             {/* SEARCH & PAGE SIZE BAR */}
             <div className="ns-table-tools">
               <div className="ns-search-box">
-                <Search size={16} className="ns-search-icon" />
+                <Search3DIcon size={16} className="ns-search-icon" />
                 <input
                   type="text"
                   placeholder={`Search generated ${series.name.toLowerCase()} history...`}
@@ -443,11 +532,24 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
 // Helper: Custom Table Headers per Series Type
 function RenderTableHead({ seriesId }) {
   switch (seriesId) {
+    case "teaching-staff-id":
     case "employee-id":
       return (
         <tr>
           <th>#</th>
-          <th>Employee ID</th>
+          <th>Teaching Staff ID</th>
+          <th>Employee Name</th>
+          <th>Staff Type</th>
+          <th>Department</th>
+          <th>Designation</th>
+          <th>Created On</th>
+        </tr>
+      );
+    case "non-teaching-staff-id":
+      return (
+        <tr>
+          <th>#</th>
+          <th>Non-Teaching Staff ID</th>
           <th>Employee Name</th>
           <th>Staff Type</th>
           <th>Department</th>
@@ -556,7 +658,20 @@ function RenderTableHead({ seriesId }) {
 // Helper: Custom Table Row per Series Type
 function RenderTableRow({ seriesId, row, index }) {
   switch (seriesId) {
+    case "teaching-staff-id":
     case "employee-id":
+      return (
+        <tr>
+          <td>{index}</td>
+          <td><span className="ns-code-badge font-bold">{row.val}</span></td>
+          <td><strong>{row.name}</strong></td>
+          <td>{row.staffType}</td>
+          <td>{row.dept}</td>
+          <td>{row.desig}</td>
+          <td>{row.date}</td>
+        </tr>
+      );
+    case "non-teaching-staff-id":
       return (
         <tr>
           <td>{index}</td>
@@ -675,16 +790,16 @@ function RenderTableRow({ seriesId, row, index }) {
 // ======================================================================
 // 3. EDIT VIEW (2-COLUMN CONFIGURATION FORM)
 // ======================================================================
-function NumberSeriesEditView({ series, onSave, onPreviewModal, toast, setToast }) {
+function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
   const navigate = useNavigate();
 
   const [formState, setFormState] = useState({
     prefix: series.prefix || "",
-    format: series.format || "",
+    format: series.format || series.formatPattern || "",
     numberLength: series.numberLength || 4,
     startNumber: series.startNumber || 1,
     description: series.description || "",
-    status: series.status || "Active",
+    status: series.isActive ? "Active" : "Inactive",
   });
 
   const [validationError, setValidationError] = useState("");
@@ -694,16 +809,16 @@ function NumberSeriesEditView({ series, onSave, onPreviewModal, toast, setToast 
     return validateNumberSeries(
       formState.format,
       formState.numberLength,
-      series.currentNumber,
-      series.allowedTokens || []
+      series.currentSequence || series.currentNumber,
+      series.allowedTokens || series.availablePlaceholders || []
     );
-  }, [formState.format, formState.numberLength, series.currentNumber, series.allowedTokens]);
+  }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, series.allowedTokens, series.availablePlaceholders]);
 
   const livePreviewVal = useMemo(() => {
     if (!liveValidation.valid) return null;
-    const nextSeqNum = Number(series.currentNumber || 0) + 1;
+    const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
     return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength);
-  }, [formState.format, formState.numberLength, series.currentNumber, liveValidation]);
+  }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, liveValidation]);
 
   const handleTokenClick = (token) => {
     setFormState((prev) => ({
@@ -730,11 +845,14 @@ function NumberSeriesEditView({ series, onSave, onPreviewModal, toast, setToast 
       ...series,
       prefix: formState.prefix,
       format: formState.format,
+      formatPattern: formState.format,
       numberLength: Number(formState.numberLength),
       startNumber: Number(formState.startNumber),
       description: formState.description,
       status: formState.status,
+      isActive: formState.status === "Active",
       currentExample: livePreviewVal || series.currentExample,
+      livePreview: livePreviewVal || series.livePreview,
     };
 
     onSave(updated);
@@ -778,7 +896,7 @@ function NumberSeriesEditView({ series, onSave, onPreviewModal, toast, setToast 
                     <label>Series Name (Read Only)</label>
                     <input
                       type="text"
-                      value={series.name}
+                      value={series.name || series.seriesName}
                       disabled
                       className="ns-input-readonly"
                     />
@@ -875,9 +993,9 @@ function NumberSeriesEditView({ series, onSave, onPreviewModal, toast, setToast 
                   <button
                     type="submit"
                     className="cms-btn cms-btn-primary"
-                    disabled={!liveValidation.valid}
+                    disabled={!liveValidation.valid || saving}
                   >
-                    Save Changes
+                    {saving ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
               </form>
@@ -891,7 +1009,7 @@ function NumberSeriesEditView({ series, onSave, onPreviewModal, toast, setToast 
               <h4>Available Placeholders</h4>
               <p>Click any token below to insert it into your format string:</p>
               <div className="ns-token-grid">
-                {(series.allowedTokens || ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}"]).map((token) => (
+                {(series.allowedTokens || series.availablePlaceholders || ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}"]).map((token) => (
                   <button
                     key={token}
                     type="button"
@@ -915,9 +1033,9 @@ function NumberSeriesEditView({ series, onSave, onPreviewModal, toast, setToast 
                     <div
                       key={i}
                       className="ns-sample-card"
-                      onClick={() => handleApplySample(sample.format)}
+                      onClick={() => handleApplySample(sample.pattern || sample.format)}
                     >
-                      <code className="ns-sample-code">{sample.format}</code>
+                      <code className="ns-sample-code">{sample.pattern || sample.format}</code>
                       <span className="ns-sample-arrow">→</span>
                       <span className="ns-sample-ex">{sample.example}</span>
                     </div>
@@ -946,17 +1064,34 @@ function NumberSeriesEditView({ series, onSave, onPreviewModal, toast, setToast 
 }
 
 // ======================================================================
-// 4. PREVIEW NEXT NUMBER MODAL (NON-MUTATING)
+// 4. PREVIEW NEXT NUMBER MODAL (NON-MUTATING & TEST GENERATE)
 // ======================================================================
-function PreviewNextModal({ series, onClose }) {
+function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast }) {
   const [copied, setCopied] = useState(false);
-  const nextVal = getNextNumberPreview(series);
-  const nextSeqNum = Number(series.currentNumber || 0) + 1;
+  const [generating, setGenerating] = useState(false);
+  const [liveGeneratedNumber, setLiveGeneratedNumber] = useState(null);
+
+  const nextVal = liveGeneratedNumber || series.livePreview || getNextNumberPreview(series);
+  const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(nextVal);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleTestGenerate = () => {
+    const code = series.seriesCode || series.slug || series.id;
+    setGenerating(true);
+    const simulated = getNextNumberPreview(series);
+    setLiveGeneratedNumber(simulated);
+    if (onSequenceGenerated) {
+      onSequenceGenerated(code, simulated);
+    }
+    if (setToast) {
+      setToast({ message: `Successfully generated: ${simulated}`, type: "success" });
+    }
+    setGenerating(false);
   };
 
   return (
@@ -968,6 +1103,16 @@ function PreviewNextModal({ series, onClose }) {
           <button type="button" className="cms-btn cms-btn-ghost" onClick={handleCopy}>
             {copied ? <Check size={16} /> : <Copy size={16} />}
             <span>{copied ? "Copied to Clipboard!" : "Copy Preview"}</span>
+          </button>
+          <button
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            onClick={handleTestGenerate}
+            disabled={generating}
+            title="Atomically increments the counter and generates the real next ID"
+          >
+            <Play size={15} />
+            <span>{generating ? "Generating..." : "Generate Next (Live)"}</span>
           </button>
           <button type="button" className="cms-btn cms-btn-primary" onClick={onClose}>
             Close
@@ -994,15 +1139,15 @@ function PreviewNextModal({ series, onClose }) {
           </div>
           <div className="ns-modal-row">
             <span>Format Pattern:</span>
-            <code>{series.format}</code>
+            <code>{series.format || series.formatPattern}</code>
           </div>
           <div className="ns-modal-row">
             <span>Prefix:</span>
             <strong>{series.prefix || "—"}</strong>
           </div>
           <div className="ns-modal-row">
-            <span>Current Last Number:</span>
-            <strong>{String(series.currentNumber).padStart(series.numberLength, "0")}</strong>
+            <span>Current Last Sequence:</span>
+            <strong>{String(series.currentSequence || series.currentNumber || 0).padStart(series.numberLength, "0")}</strong>
           </div>
           <div className="ns-modal-row">
             <span>Next Sequence Number:</span>
@@ -1016,7 +1161,7 @@ function PreviewNextModal({ series, onClose }) {
 
         <div className="ns-modal-note">
           <Info size={14} />
-          <span>This is a preview only. Previewing does NOT increment the sequence counter in settings.</span>
+          <span>Previewing is read-only. Clicking "Generate Next (Live)" will increment the sequence counter in the database.</span>
         </div>
       </div>
     </Modal>

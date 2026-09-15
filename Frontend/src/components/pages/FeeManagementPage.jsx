@@ -23,6 +23,7 @@ import {
   Tooltip,
 } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
@@ -105,6 +106,42 @@ const optionalNumberValue = (item, ...keys) => {
 };
 
 const normalizeKey = (value) => String(value || "").trim().toLowerCase();
+
+const normalizeBackendPaymentPlan = (...sources) => {
+  const normalizeSource = (source, depth = 0) => {
+    if (depth > 2 || source === undefined || source === null || source === "") return "";
+    if (typeof source === "object") {
+      const nested = read(
+        source,
+        "planName",
+        "PlanName",
+        "paymentPlanName",
+        "PaymentPlanName",
+        "name",
+        "Name",
+        "paymentPlan",
+        "PaymentPlan",
+        "plan",
+        "Plan",
+      );
+      return nested === source ? "" : normalizeSource(nested, depth + 1);
+    }
+    const value = normalizeKey(source);
+    if (value === "installment payment" || value === "installment" || value === "course fee schedule" || value === "schedule payment") {
+      return "Installment Payment";
+    }
+    if (value === "full payment" || value === "full" || value === "full course payment") {
+      return "Full Payment";
+    }
+    return "";
+  };
+
+  for (const source of sources) {
+    const plan = normalizeSource(source);
+    if (plan) return plan;
+  }
+  return "";
+};
 
 const optionLabel = (list, value) => list?.find((option) => String(option.value) === String(value))?.label || "";
 
@@ -325,6 +362,14 @@ const feeDetailScheduleRows = (detail) => getCollection(read(detail, "schedules"
 
 const feeDetailPaymentRows = (detail) => getCollection(read(detail, "paymentHistory", "PaymentHistory", "payments", "Payments", "transactions", "Transactions", "history", "History"));
 
+const readStudentFeeId = (...items) => {
+  for (const item of items) {
+    const id = read(item, "studentFeeAssignmentId", "StudentFeeAssignmentId", "studentFeeId", "StudentFeeId", "feeAccountId", "FeeAccountId", "assignmentId", "AssignmentId");
+    if (id !== undefined && id !== null && id !== "") return id;
+  }
+  return undefined;
+};
+
 const feePaymentRows = (item, detail) => {
   const sources = [
     feeDetailPaymentRows(detail),
@@ -332,8 +377,6 @@ const feePaymentRows = (item, detail) => {
   ];
   return sources.find((rows) => rows.length) || [];
 };
-
-const mergeFeeDetailPayloads = (...payloads) => Object.assign({}, ...payloads.filter(Boolean).map(getObject));
 
 const toSelectOptions = (rows, idKeys, labelKeys) => rows
   .map((item) => {
@@ -458,6 +501,49 @@ const feeItemsWithMasterRows = (feeTypes = [], configuredItems = []) => {
 const hasBackendFeeTypeIds = (feeTypes) => feeTypes.some((item) => Number(item.id) > 0);
 
 const pageItems = (items, page, pageSize = PAGE_SIZE) => items.slice((page - 1) * pageSize, page * pageSize);
+
+const feeAccountKey = (account = {}) => {
+  const studentFeeId = account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId;
+  if (studentFeeId) return `student-fee:${studentFeeId}`;
+  if (account.studentId) return `student:${account.studentId}`;
+  if (account.admissionNo && account.admissionNo !== "-") return `admission:${normalizeKey(account.admissionNo)}`;
+  return "";
+};
+
+const admissionNumberParts = (value) => {
+  const text = String(value || "").trim();
+  const match = text.match(/^(.*?)(\d+)\D*$/);
+  return match ? { prefix: normalizeKey(match[1]), number: Number(match[2]) } : { prefix: normalizeKey(text), number: null };
+};
+
+const compareAdmissionNumbersDesc = (left, right) => {
+  const a = admissionNumberParts(left?.admissionNo);
+  const b = admissionNumberParts(right?.admissionNo);
+  if (a.number !== null && b.number !== null && a.prefix === b.prefix && a.number !== b.number) {
+    return b.number - a.number;
+  }
+  return 0;
+};
+
+const normalizeFeeAccountDataset = (accounts = []) => {
+  const keyed = new Map();
+  const ordered = [];
+  accounts.forEach((account) => {
+    const key = feeAccountKey(account);
+    if (!key) {
+      ordered.push(account);
+      return;
+    }
+    if (!keyed.has(key)) ordered.push(account);
+    keyed.set(key, { ...keyed.get(key), ...account });
+  });
+  return ordered
+    .map((account) => {
+      const key = feeAccountKey(account);
+      return key ? keyed.get(key) : account;
+    })
+    .sort(compareAdmissionNumbersDesc);
+};
 
 const scholarshipValueLabel = (item) => (
   item.discountType === "Percentage" ? `${Number(item.discountValue || 0)}%` : formatCurrency(item.discountValue || 0)
@@ -600,6 +686,22 @@ const normalizeTransactionRows = (rows, account = {}) => rows.map((item, index) 
     balance: optionalNumberValue(item, "balance", "Balance", "remainingBalance", "RemainingBalance", "outstandingBalance", "OutstandingBalance"),
   };
 });
+
+const paymentHistoryIdentity = (row = {}) => {
+  const paymentId = row.feePaymentId || row.paymentId;
+  if (paymentId) return `payment-${paymentId}`;
+  if (row.receiptNo && row.receiptNo !== "-") return `receipt-${row.receiptNo}`;
+  return [
+    "transaction",
+    row.studentId,
+    row.admissionNo,
+    row.date,
+    row.amount,
+    row.method,
+    row.reference,
+    row.type,
+  ].map((value) => String(value ?? "").trim()).join("|");
+};
 
 const normalizeReceiptBreakdownRows = (rows) => rows
   .map((item, index) => {
@@ -748,19 +850,20 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
   const studentsById = context.studentsById || new Map();
   const admissions = context.admissions || [];
   const feeDetailsByStudentId = context.feeDetailsByStudentId || new Map();
+  const feeDetailsByAccountId = context.feeDetailsByAccountId || new Map();
   const student = read(item, "student", "Student");
   const studentFee = read(item, "studentFee", "StudentFee", "feeAccount", "FeeAccount", "assignment", "Assignment");
   const studentId = read(item, "studentId", "StudentId") ?? read(student, "studentId", "StudentId", "id", "Id");
   const studentRecord = studentsById.get(String(studentId)) || {};
   const admissionRecord = findMatchingAdmission(admissions, item, studentRecord);
-  const detail = feeDetailsByStudentId.get(String(studentId)) || {};
+  const ledgerAssignmentId = readStudentFeeId(item, studentFee);
+  const detail = feeDetailsByStudentId.get(String(studentId)) || feeDetailsByAccountId.get(String(ledgerAssignmentId)) || {};
+  const detailStudentFee = read(detail, "studentFee", "StudentFee", "feeAccount", "FeeAccount", "assignment", "Assignment");
   const group = read(item, "group", "Group");
   const section = read(item, "section", "Section");
   const program = read(item, "program", "Program");
   const academicYear = read(item, "academicYear", "AcademicYear", "year", "Year");
-  const assignmentId = read(item, "studentFeeAssignmentId", "StudentFeeAssignmentId", "studentFeeId", "StudentFeeId", "feeAccountId", "FeeAccountId", "assignmentId", "AssignmentId", "id", "Id")
-    ?? read(studentFee, "studentFeeAssignmentId", "StudentFeeAssignmentId", "studentFeeId", "StudentFeeId", "feeAccountId", "FeeAccountId", "assignmentId", "AssignmentId", "id", "Id")
-    ?? read(detail, "studentFeeAssignmentId", "StudentFeeAssignmentId", "studentFeeId", "StudentFeeId", "feeAccountId", "FeeAccountId", "id", "Id");
+  const assignmentId = readStudentFeeId(item, studentFee, detail);
   const feeItems = feeDetailPayloadRows(detail).length ? feeDetailPayloadRows(detail) : getCollection(read(item, "feeItems", "FeeItems", "items", "Items", "breakdown", "Breakdown"));
   const normalizedItems = feeItems.map((feeItem, feeIndex) => {
     const originalAmount = numberValue(feeItem, "originalAmount", "OriginalAmount", "amount", "Amount", "feeAmount", "FeeAmount", "baseAmount", "BaseAmount");
@@ -778,9 +881,32 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     };
   });
   const detailTotal = normalizedItems.reduce((sum, feeItem) => sum + Number(feeItem.payableAmount || feeItem.originalAmount || 0), 0);
-  const schedules = feeDetailScheduleRows(detail).length
+  const detailSchedules = feeDetailScheduleRows(detail).length
     ? feeDetailScheduleRows(detail)
+    : feeDetailScheduleRows(detailStudentFee);
+  const schedules = detailSchedules.length
+    ? detailSchedules
     : getCollection(read(item, "installments", "Installments", "schedules", "Schedules", "feeSchedules", "FeeSchedules"));
+  const explicitPaymentPlan = normalizeBackendPaymentPlan(
+    read(detail, "paymentPlan", "PaymentPlan"),
+    read(detail, "planName", "PlanName", "plan", "Plan"),
+    read(detailStudentFee, "paymentPlan", "PaymentPlan"),
+    read(detailStudentFee, "planName", "PlanName", "plan", "Plan"),
+    read(item, "paymentPlan", "PaymentPlan"),
+    read(item, "planName", "PlanName", "plan", "Plan"),
+    read(studentFee, "paymentPlan", "PaymentPlan"),
+    read(studentFee, "planName", "PlanName", "plan", "Plan"),
+  );
+  const schedulePaymentPlan = schedules.length > 1
+    ? "Installment Payment"
+    : schedules.length === 1 ? normalizeBackendPaymentPlan(schedules[0]) : "";
+  const paymentPlan = explicitPaymentPlan || schedulePaymentPlan;
+  const paymentPlanObject = read(detail, "paymentPlan", "PaymentPlan")
+    || read(detailStudentFee, "paymentPlan", "PaymentPlan")
+    || read(studentFee, "paymentPlan", "PaymentPlan");
+  const numberOfInstallments = optionalNumberValue(detail, "numberOfInstallments", "NumberOfInstallments", "installmentCount", "InstallmentCount")
+    ?? optionalNumberValue(paymentPlanObject, "numberOfInstallments", "NumberOfInstallments", "installmentCount", "InstallmentCount")
+    ?? (schedules.length || undefined);
   const rawTotalPayable = optionalNumberValue(item, "totalPayable", "TotalPayable", "payable", "Payable", "netPayable", "NetPayable", "totalAmount", "TotalAmount", "assignedAmount", "AssignedAmount")
     ?? optionalNumberValue(detail, "totalPayable", "TotalPayable", "payable", "Payable", "originalFee", "OriginalFee", "scheduledFees", "ScheduledFees", "totalAmount", "TotalAmount", "assignedAmount", "AssignedAmount")
     ?? detailTotal;
@@ -798,7 +924,7 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     ? rawBalance
     : Math.max(totalPayable - totalPaid, 0);
   const account = {
-    id: String(assignmentId ?? read(item, "studentId", "StudentId") ?? `fee-account-${index + 1}`),
+    id: String(assignmentId ?? read(item, "studentId", "StudentId") ?? read(item, "id", "Id") ?? `fee-account-${index + 1}`),
     assignmentId,
     studentFeeAssignmentId: assignmentId,
     studentFeeId: assignmentId,
@@ -824,7 +950,8 @@ const normalizeFeeAccountRows = (rows, context = {}) => rows.map((item, index) =
     sectionId: textValue(item, "sectionId", "SectionId") || textValue(section, "sectionId", "SectionId", "id", "Id") || textValue(studentRecord, "sectionId", "SectionId"),
     section: textValue(item, "sectionName", "SectionName", "section", "Section") || textValue(detail, "sectionName", "SectionName") || textValue(section, "sectionName", "SectionName", "name", "Name") || textValue(admissionRecord, "sectionName", "SectionName") || textValue(admissionRecord, "programName", "ProgramName"),
     admissionDate: textValue(item, "admissionDate", "AdmissionDate", "createdAt", "CreatedAt") || textValue(detail, "admissionDate", "AdmissionDate") || textValue(admissionRecord, "admissionDate", "AdmissionDate"),
-    paymentPlan: textValue(item, "paymentPlan", "PaymentPlan", "plan", "Plan") || "Full Payment",
+    paymentPlan,
+    numberOfInstallments,
     admissionFee: numberValue(item, "admissionFee", "AdmissionFee"),
     courseFee: numberValue(item, "courseFee", "CourseFee", "totalPayable", "TotalPayable", "payable", "Payable", "totalAmount", "TotalAmount"),
     totalPayable,
@@ -1084,7 +1211,7 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
   const overdueStudents = hasDueScheduleData ? overdueStudentCount : totals.overdueStudents || 0;
   const recent = dashboardData?.recent?.length ? dashboardData.recent : [];
   const collectedPercent = totals.collectedPercent ?? fallbackTotals.collectedPercent;
-  const groupOptions = chartData.map((row) => row.group).filter(Boolean);
+  const groupOptions = Array.from(new Set(chartData.map((row) => row.group).filter(Boolean))).sort();
   const selectedChartRows = selectedGroup ? chartData.filter((row) => row.group === selectedGroup) : chartData;
   const selectedChartTotals = selectedChartRows.reduce((sum, row) => ({
     expected: sum.expected + Number(row.expected || 0),
@@ -1152,7 +1279,7 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
             <span>Group</span>
             <select value={selectedGroup} onChange={(event) => setSelectedGroup(event.target.value)}>
               <option value="">All Groups</option>
-              {groupOptions.map((group) => <option key={group} value={group}>{group}</option>)}
+              {groupOptions.map((group, index) => <option key={`${group}-${index}`} value={group}>{group}</option>)}
             </select>
           </label>
         </div>
@@ -1206,7 +1333,16 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
           <div className="cms-fee-overview-content">
             {overviewTab === "overdue" ? (
               <div className="cms-table-wrap">
-                <table className="cms-table">
+                <table className="cms-table cms-fee-schedule-list-table">
+                  <colgroup>
+                    <col className="cms-fee-schedule-student-col" />
+                    <col className="cms-fee-schedule-admission-col" />
+                    <col className="cms-fee-schedule-group-col" />
+                    <col className="cms-fee-schedule-label-col" />
+                    <col className="cms-fee-schedule-date-col" />
+                    <col className="cms-fee-schedule-money-col" />
+                    <col className="cms-fee-schedule-status-col" />
+                  </colgroup>
                   <thead>
                     <tr><th>Student</th><th>Admission No</th><th>Group / Section</th><th>Fee Schedule</th><th>Due Date</th><th className="num">Amount</th><th>Status</th></tr>
                   </thead>
@@ -1232,7 +1368,16 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
 
             {overviewTab === "upcoming" ? (
               <div className="cms-table-wrap">
-                <table className="cms-table">
+                <table className="cms-table cms-fee-schedule-list-table">
+                  <colgroup>
+                    <col className="cms-fee-schedule-student-col" />
+                    <col className="cms-fee-schedule-admission-col" />
+                    <col className="cms-fee-schedule-group-col" />
+                    <col className="cms-fee-schedule-label-col" />
+                    <col className="cms-fee-schedule-date-col" />
+                    <col className="cms-fee-schedule-money-col" />
+                    <col className="cms-fee-schedule-status-col" />
+                  </colgroup>
                   <thead>
                     <tr><th>Student</th><th>Admission No</th><th>Group / Section</th><th>Fee Schedule</th><th>Due Date</th><th className="num">Amount</th><th>Status</th></tr>
                   </thead>
@@ -1258,7 +1403,15 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
 
             {overviewTab === "recent" ? (
               <div className="cms-table-wrap">
-                <table className="cms-table">
+                <table className="cms-table cms-fee-recent-payments-table">
+                  <colgroup>
+                    <col className="cms-fee-recent-receipt-col" />
+                    <col className="cms-fee-recent-student-col" />
+                    <col className="cms-fee-recent-type-col" />
+                    <col className="cms-fee-recent-money-col" />
+                    <col className="cms-fee-recent-method-col" />
+                    <col className="cms-fee-recent-date-col" />
+                  </colgroup>
                   <thead>
                     <tr><th>Receipt No</th><th>Student</th><th>Payment Type</th><th className="num">Amount</th><th>Payment Method</th><th>Date</th></tr>
                   </thead>
@@ -1649,7 +1802,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
               <div><span>Total Payable</span><strong>{formatCurrency(account.totalPayable)}</strong></div>
               <div><span>Total Paid</span><strong>{formatCurrency(account.totalPaid)}</strong></div>
               <div><span>Outstanding Balance</span><strong>{formatCurrency(account.balance)}</strong></div>
-              <div><span>Payment Plan</span><strong>{feeScheduleLabel(account.paymentPlan)}</strong></div>
+              <div><span>Payment Plan</span><strong>{account.paymentPlan ? feeScheduleLabel(account.paymentPlan) : "-"}</strong></div>
               <div><span>Fee Status</span><strong><StatusBadge status={account.feeStatus} /></strong></div>
             </div>
           </section>
@@ -1781,7 +1934,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
     && matchesAnyNormalized(filters.group, selectedGroupLabel, item.groupId, item.groupName)
   ));
   const paymentPlanOptions = PAYMENT_PLANS.map((plan) => ({ value: plan, label: feeScheduleLabel(plan) }));
-  const rows = accounts.filter((item) => {
+  const rows = normalizeFeeAccountDataset(accounts.filter((item) => {
     const term = search.trim().toLowerCase();
     const selectedSectionLabel = optionLabel(sectionOptions, filters.section);
     const matchesSearch = !term
@@ -1793,7 +1946,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
       && matchesAnyNormalized(filters.section, selectedSectionLabel, item.sectionId, item.section, `${item.group || ""} / ${item.section || ""}`)
       && matchesAnyNormalized(filters.paymentPlan, feeScheduleLabel(filters.paymentPlan), item.paymentPlan, feeScheduleLabel(item.paymentPlan))
       && matchesAnyNormalized(filters.feeStatus, filters.feeStatus, item.feeStatus);
-  });
+  }));
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginatedRows = pageItems(rows, page);
   useEffect(() => {
@@ -1808,7 +1961,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls">
         <div className="cms-fee-search">
-          <Search size={15} />
+          <Search3DIcon size={15} />
           <input value={search} placeholder="Search by student name or admission number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
         <div className="cms-fee-filter-row">
@@ -1841,7 +1994,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
                 <td>{item.studentName}</td>
                 <td>{item.group}</td>
                 <td>{item.section}</td>
-                <td>{feeScheduleLabel(item.paymentPlan)}</td>
+                <td>{item.paymentPlan ? feeScheduleLabel(item.paymentPlan) : "-"}</td>
                 <td className="num">{formatCurrency(item.totalPayable)}</td>
                 <td className="num">{formatCurrency(item.totalPaid)}</td>
                 <td className="num">{formatCurrency(item.balance)}</td>
@@ -1874,12 +2027,12 @@ function FeeCollectionTab({ accounts, onCollect, loading = false, error = "" }) 
     setSearch(value);
     setPage(1);
   };
-  const rows = accounts.filter((item) => {
+  const rows = normalizeFeeAccountDataset(accounts.filter((item) => {
     const term = search.trim().toLowerCase();
     return !term
       || item.studentName.toLowerCase().includes(term)
       || item.admissionNo.toLowerCase().includes(term);
-  });
+  }));
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginatedRows = pageItems(rows, page);
 
@@ -1895,7 +2048,7 @@ function FeeCollectionTab({ accounts, onCollect, loading = false, error = "" }) 
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls cms-fee-search-only">
         <div className="cms-fee-search">
-          <Search size={15} />
+          <Search3DIcon size={15} />
           <input value={search} placeholder="Search by student name or admission number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
       </div>
@@ -2844,7 +2997,14 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
       || String(row.receiptNo || "").toLowerCase().includes(term);
   });
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const paginatedRows = pageItems(rows, page);
+  const keyedRows = rows.map((row) => ({ ...row, reactKey: paymentHistoryIdentity(row) }))
+    .reduce((items, row) => {
+      const count = items.counts.get(row.reactKey) || 0;
+      items.counts.set(row.reactKey, count + 1);
+      items.rows.push({ ...row, reactKey: count ? `${row.reactKey}-${count + 1}` : row.reactKey });
+      return items;
+    }, { counts: new Map(), rows: [] }).rows;
+  const paginatedRows = pageItems(keyedRows, page);
   const historyColumns = [
     { label: "Receipt Number", value: (row) => row.receiptNo },
     { label: "Date", value: (row) => formatFeeDate(row.date) },
@@ -2895,7 +3055,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls cms-fee-search-only">
         <div className="cms-fee-search">
-          <Search size={15} />
+          <Search3DIcon size={15} />
           <input value={search} placeholder="Search by student, admission number or receipt number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
       </div>
@@ -2915,7 +3075,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
             ) : rows.length === 0 ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">No payments match the current search and filters.</td></tr>
             ) : paginatedRows.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.reactKey}>
                 <td><strong>{row.receiptNo}</strong></td>
                 <td>{formatDate(row.date)}</td>
                 <td>{row.admissionNo}</td>
@@ -2980,6 +3140,7 @@ export default function FeeManagementPage() {
   const structureRequestRef = useRef(0);
   const paymentHistoryRequestRef = useRef(0);
   const loadedTabsRef = useRef(new Set());
+  const feeDetailCacheRef = useRef(new Map());
 
   const contextBoardOptions = useMemo(() => (
     toSelectOptions(
@@ -3067,7 +3228,44 @@ export default function FeeManagementPage() {
       const rows = getCollection(response.data);
       const context = await loadAccountContext(rows);
       if (accountRequestRef.current[source] !== requestId) return;
-      const accounts = normalizeFeeAccountRows(rows, context);
+      const initialAccounts = normalizeFeeAccountRows(rows, context);
+      const unresolvedAccounts = initialAccounts.filter((account) => (
+        (!account.paymentPlan || (account.paymentPlan === "Installment Payment" && !account.installments?.length))
+        && (account.studentId || account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId)
+      ));
+      const detailRequests = new Map();
+      unresolvedAccounts.forEach((account) => {
+        const endpoint = account.studentId
+          ? apiEndpoints.fee.studentFeeDetailsByStudent(account.studentId)
+          : apiEndpoints.fee.studentFeeDetails(account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId);
+        if (!detailRequests.has(endpoint)) detailRequests.set(endpoint, account);
+      });
+      const detailEntries = await Promise.all(Array.from(detailRequests.entries()).map(async ([endpoint, account]) => {
+        let detailRequest = feeDetailCacheRef.current.get(endpoint);
+        if (!detailRequest) {
+          detailRequest = apiClient.get(endpoint)
+            .then((detailResponse) => getObject(detailResponse.data))
+            .catch(() => {
+              feeDetailCacheRef.current.delete(endpoint);
+              return {};
+            });
+          feeDetailCacheRef.current.set(endpoint, detailRequest);
+        }
+        const detail = await detailRequest;
+        return { account, detail };
+      }));
+      if (accountRequestRef.current[source] !== requestId) return;
+      const feeDetailsByStudentId = new Map();
+      const feeDetailsByAccountId = new Map();
+      detailEntries.forEach(({ account, detail }) => {
+        if (!Object.keys(detail).length) return;
+        if (account.studentId) feeDetailsByStudentId.set(String(account.studentId), detail);
+        const accountId = account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId;
+        if (accountId) feeDetailsByAccountId.set(String(accountId), detail);
+      });
+      const accounts = normalizeFeeAccountDataset(detailEntries.length
+        ? normalizeFeeAccountRows(rows, { ...context, feeDetailsByStudentId, feeDetailsByAccountId })
+        : initialAccounts);
       if (source === "collection") {
         setCollectionAccounts(accounts);
       } else {
@@ -3247,16 +3445,12 @@ export default function FeeManagementPage() {
     setSelectedDetail(null);
     if (!selectedId || !selectedBase?.studentId) return undefined;
     const loadSelectedDetail = async () => {
-      const [studentDetailResult, feeDetailResult] = await Promise.allSettled([
-        apiClient.get(apiEndpoints.fee.studentFeeDetailsByStudent(selectedBase.studentId)),
-        selectedBase.studentFeeId || selectedBase.studentFeeAssignmentId || selectedBase.assignmentId
-          ? apiClient.get(apiEndpoints.fee.studentFeeDetails(selectedBase.studentFeeId || selectedBase.studentFeeAssignmentId || selectedBase.assignmentId))
-          : Promise.resolve(null),
-      ]);
+      const studentDetailResult = await apiClient.get(apiEndpoints.fee.studentFeeDetailsByStudent(selectedBase.studentId)).then(
+        (response) => ({ status: "fulfilled", response }),
+        (error) => ({ status: "rejected", error }),
+      );
       if (ignore) return;
-      const studentDetail = studentDetailResult.status === "fulfilled" ? getObject(studentDetailResult.value?.data) : {};
-      const feeDetail = feeDetailResult.status === "fulfilled" && feeDetailResult.value ? getObject(feeDetailResult.value.data) : {};
-      let detail = mergeFeeDetailPayloads(studentDetail, feeDetail);
+      let detail = studentDetailResult.status === "fulfilled" ? getObject(studentDetailResult.response?.data) : {};
       const hasPayments = feeDetailPaymentRows(detail).length > 0;
       if (!hasPayments && Number(selectedBase.totalPaid || 0) > 0) {
         const historyResult = await apiClient.get(apiEndpoints.fee.getHistory(selectedBase.studentId)).then(
@@ -3277,8 +3471,8 @@ export default function FeeManagementPage() {
         });
         setSelectedDetail(normalized || selectedBase);
       }
-      const primaryError = studentDetailResult.status === "rejected" ? studentDetailResult.reason : null;
-      if (primaryError && feeDetailResult.status === "rejected") {
+      const primaryError = studentDetailResult.status === "rejected" ? studentDetailResult.error : null;
+      if (primaryError) {
         setAccountErrors((current) => ({ ...current, ledger: current.ledger || getApiErrorMessage(primaryError) }));
       }
     };

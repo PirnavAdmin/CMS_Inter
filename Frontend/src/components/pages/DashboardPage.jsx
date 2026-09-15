@@ -15,7 +15,6 @@ import {
   Users,
   AlertTriangle,
   CheckCircle2,
-  UserX,
   UserCheck,
   ShieldAlert,
   BarChart3,
@@ -59,12 +58,17 @@ const DASHBOARD_API = {
   filters: "/api/v1/dashboard/filters",
   summary: "/api/v1/dashboard/summary",
   studentsOverview: "/api/v1/dashboard/students-overview",
+  admissionTrend: "/api/v1/dashboard/admission-trend",
   groupDistribution: "/api/v1/dashboard/group-distribution",
   studentsAttendanceToday: "/api/v1/dashboard/students-attendance-today",
   staffAttendanceToday: "/api/v1/dashboard/staff-attendance-today",
   certificateRequests: "/api/v1/dashboard/certificate-requests",
   upcomingExaminations: "/api/v1/dashboard/upcoming-examinations",
   todaysHighlights: "/api/v1/dashboard/todays-highlights",
+  weeklyAttendance: "/api/v1/dashboard/weekly-attendance",
+  recentActivity: "/api/v1/dashboard/recent-activity",
+  facultyWorkload: "/api/v1/dashboard/faculty-workload",
+  testVerifyAll: "/api/v1/dashboard/test-verify-all",
 };
 
 const QUICK_ACTIONS = [
@@ -224,7 +228,6 @@ export default function DashboardPage() {
   const [staffAttState, setStaffAttState] = useState({ loading: true, error: null, data: null, timestamp: formattedTimestamp() });
   const [certState, setCertState] = useState({ loading: true, error: null, data: null });
   const [examState, setExamState] = useState({ loading: true, error: null, data: null });
-  const [highlightsState, setHighlightsState] = useState({ loading: true, error: null, data: null });
 
   // Sequence ref counters for race condition protection
   const summarySeq = useRef(0);
@@ -234,7 +237,6 @@ export default function DashboardPage() {
   const staffAttSeq = useRef(0);
   const certSeq = useRef(0);
   const examSeq = useRef(0);
-  const highlightsSeq = useRef(0);
 
   // Hourly time trigger
   useEffect(() => {
@@ -263,7 +265,7 @@ export default function DashboardPage() {
     }
   }, [boardId, academicYearId, todayDate]);
 
-  // 2. GET /api/v1/dashboard/students-overview
+  // 2. GET /api/v1/dashboard/students-overview & GET /api/v1/dashboard/admission-trend
   const fetchStudentsOverview = useCallback(async () => {
     const seq = ++overviewSeq.current;
     setOverviewState((prev) => ({ ...prev, loading: true, error: null }));
@@ -273,9 +275,25 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         date: todayDate,
       };
-      const res = await apiClient.get(DASHBOARD_API.studentsOverview, { params });
+      const trendParams = {
+        ...(academicYearId ? { academicYearId } : {}),
+        ...(boardId ? { boardId } : {}),
+      };
+
+      const [overviewRes, trendRes] = await Promise.allSettled([
+        apiClient.get(DASHBOARD_API.studentsOverview, { params }),
+        apiClient.get(DASHBOARD_API.admissionTrend, { params: trendParams }),
+      ]);
+
       if (overviewSeq.current === seq) {
-        setOverviewState({ loading: false, error: null, data: unwrap(res.data) });
+        const overviewData = overviewRes.status === "fulfilled" ? unwrap(overviewRes.value?.data) : null;
+        const trendData = trendRes.status === "fulfilled" ? unwrap(trendRes.value?.data) : null;
+
+        const mergedData = {
+          ...(overviewData && typeof overviewData === "object" ? overviewData : {}),
+          trend: trendData?.trend || trendData?.items || trendData?.admissionTrend || overviewData?.trend || overviewData?.items || [],
+        };
+        setOverviewState({ loading: false, error: null, data: mergedData });
       }
     } catch (err) {
       if (overviewSeq.current === seq) {
@@ -309,10 +327,21 @@ export default function DashboardPage() {
     const seq = ++studentAttSeq.current;
     setStudentAttState((prev) => ({ ...prev, loading: true, error: null }));
     try {
+      const viewByVal =
+        studentView === "all" || studentView === "Overall"
+          ? "Overall"
+          : studentView === "academic-level" || studentView === "Academic Level"
+            ? "Academic Level"
+            : studentView === "group" || studentView === "Group"
+              ? "Group"
+              : studentView === "section" || studentView === "Section"
+                ? "Section"
+                : studentView || "Overall";
+
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
-        viewBy: studentView,
+        viewBy: viewByVal,
       };
       const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
       if (studentAttSeq.current === seq) {
@@ -332,9 +361,18 @@ export default function DashboardPage() {
     const seq = ++staffAttSeq.current;
     setStaffAttState((prev) => ({ ...prev, loading: true, error: null }));
     try {
+      const staffTypeVal =
+        staffType === "all" || staffType === "All Staff"
+          ? "All Staff"
+          : staffType === "teaching" || staffType === "Teaching" || staffType === "Teaching Staff"
+            ? "Teaching Staff"
+            : staffType === "non-teaching" || staffType === "Non-Teaching" || staffType === "Non-Teaching Staff"
+              ? "Non-Teaching Staff"
+              : staffType || "All Staff";
+
       const params = {
         ...(boardId ? { boardId } : {}),
-        staffType: staffType,
+        staffType: staffTypeVal,
       };
       const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
       if (staffAttSeq.current === seq) {
@@ -390,22 +428,6 @@ export default function DashboardPage() {
     }
   }, [boardId, academicYearId]);
 
-  // 8. GET /api/v1/dashboard/todays-highlights
-  const fetchTodaysHighlights = useCallback(async () => {
-    const seq = ++highlightsSeq.current;
-    setHighlightsState((prev) => ({ ...prev, loading: true, error: null }));
-    try {
-      const res = await apiClient.get(DASHBOARD_API.todaysHighlights);
-      if (highlightsSeq.current === seq) {
-        setHighlightsState({ loading: false, error: null, data: unwrap(res.data) });
-      }
-    } catch (err) {
-      if (highlightsSeq.current === seq) {
-        setHighlightsState({ loading: false, error: getApiErrorMessage(err, "Failed to load highlights"), data: null });
-      }
-    }
-  }, []);
-
   // Board & Academic Year Context change effect -> Refresh all applicable cards
   useEffect(() => {
     fetchSummary();
@@ -413,8 +435,7 @@ export default function DashboardPage() {
     fetchGroupDistribution();
     fetchCertificateRequests();
     fetchUpcomingExaminations();
-    fetchTodaysHighlights();
-  }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchCertificateRequests, fetchUpcomingExaminations, fetchTodaysHighlights]);
+  }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchCertificateRequests, fetchUpcomingExaminations]);
 
   // Student View-By dropdown change effect -> Refresh ONLY Student Attendance card
   useEffect(() => {
@@ -437,14 +458,13 @@ export default function DashboardPage() {
       fetchStaffAttendance(),
       fetchCertificateRequests(),
       fetchUpcomingExaminations(),
-      fetchTodaysHighlights(),
     ]);
     setIsRefreshing(false);
     const now = new Date();
     const formattedNow = formattedTimestamp(now);
     setLastUpdated(formattedNow);
     setToastMessage(`Dashboard refreshed with latest data (${formattedNow})`);
-  }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchStudentAttendance, fetchStaffAttendance, fetchCertificateRequests, fetchUpcomingExaminations, fetchTodaysHighlights]);
+  }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchStudentAttendance, fetchStaffAttendance, fetchCertificateRequests, fetchUpcomingExaminations]);
 
   // Extracted KPI Values from Summary API
   const totalStudentsVal = metric(summaryState.data, ["totalStudents", "totalStudentCount", "studentCount"]);
@@ -587,12 +607,6 @@ export default function DashboardPage() {
       badge: item.badge || item.daysLeft || item.status || "",
     }));
   }, [examState.data]);
-
-  // Highlights Normalized Values
-  const absentStudentsHighlight = metric(highlightsState.data, ["absentStudents", "studentsAbsentToday", "absentStudentsCount"]);
-  const lateStaffHighlight = metric(highlightsState.data, ["lateStaff", "staffLateToday", "lateStaffCount"]);
-  const pendingCertsHighlight = metric(highlightsState.data, ["pendingCertificates", "pendingCertificatesCount", "certificateRequestsPending"]);
-  const upcomingExamsHighlight = metric(highlightsState.data, ["upcomingExams", "upcomingExamsCount", "examsNext7Days"]);
 
   const greeting = greetingForHour(currentHour);
 
@@ -1047,8 +1061,8 @@ export default function DashboardPage() {
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">
-                  {certRequests.map((item) => (
-                    <div key={item.id} className="dashboard-info-item">
+                  {certRequests.map((item, index) => (
+                    <div key={`certificate-${item.id}-${index}`} className="dashboard-info-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
                         <FileText size={15} />
                       </span>
@@ -1081,8 +1095,8 @@ export default function DashboardPage() {
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">
-                  {examsList.map((item) => (
-                    <div key={item.id} className="dashboard-info-item">
+                  {examsList.map((item, index) => (
+                    <div key={`exam-${item.id}-${index}`} className="dashboard-info-item">
                       <span className="dashboard-activity-marker">
                         <CalendarDays size={15} />
                       </span>
@@ -1097,44 +1111,6 @@ export default function DashboardPage() {
               </div>
             )}
           </article>
-        </section>
-
-        {/* Bottom Strip: Today's Highlights */}
-        <section className="dashboard-highlights-strip" aria-label="Today's Highlights">
-          <div className="highlights-header">
-            <span className="highlights-icon">💡</span>
-            <h3>Today's Highlights</h3>
-          </div>
-          <div className="highlights-cards">
-            <div className="highlight-card">
-              <span className="highlight-badge badge-red"><UserX size={13} /></span>
-              <div>
-                <strong>{formatNumber(absentStudentsHighlight)}</strong>
-                <small>Students absent today</small>
-              </div>
-            </div>
-            <div className="highlight-card">
-              <span className="highlight-badge badge-orange"><Clock size={13} /></span>
-              <div>
-                <strong>{formatNumber(lateStaffHighlight)}</strong>
-                <small>Staff are late today</small>
-              </div>
-            </div>
-            <div className="highlight-card">
-              <span className="highlight-badge badge-violet"><FileText size={13} /></span>
-              <div>
-                <strong>{formatNumber(pendingCertsHighlight)}</strong>
-                <small>Certificate requests pending</small>
-              </div>
-            </div>
-            <div className="highlight-card">
-              <span className="highlight-badge badge-blue"><CalendarDays size={13} /></span>
-              <div>
-                <strong>{formatNumber(upcomingExamsHighlight)}</strong>
-                <small>Exams in next 7 days</small>
-              </div>
-            </div>
-          </div>
         </section>
       </main>
       <Toast message={toastMessage} onClose={() => setToastMessage("")} />

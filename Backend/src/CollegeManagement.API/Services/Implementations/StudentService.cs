@@ -403,25 +403,5 @@ namespace CollegeManagement.API.Services
 
             return await _repository.UpdateSelfProfileAsync(studentId, request);
         }
-
-        public async Task<bool> ChangePasswordAsync(int studentId, StudentChangePasswordRequest request)
-        {
-            if (studentId <= 0)
-                throw new ArgumentException("Invalid student ID.");
-
-            if (request == null)
-                throw new ArgumentNullException(nameof(request));
-
-            if (string.IsNullOrWhiteSpace(request.OldPassword))
-                throw new ArgumentException("Old password is required.");
-
-            if (string.IsNullOrWhiteSpace(request.NewPassword))
-                throw new ArgumentException("New password is required.");
-
-            if (request.NewPassword != request.ConfirmPassword)
-                throw new ArgumentException("New password and confirmation password do not match.");
-
-            return await _repository.ChangePasswordAsync(studentId, request.OldPassword, request.NewPassword);
-        }
     }
-}
+}

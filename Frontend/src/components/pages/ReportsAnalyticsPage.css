@@ -310,6 +310,13 @@
   border-radius: 12px;
 }
 
+.reports-summary-image {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
 .reports-summary-icon-blue {
   color: #2758e8;
   background: #edf2ff;

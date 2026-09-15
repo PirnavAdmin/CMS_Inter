@@ -264,7 +264,14 @@ public class ReportService : IReportService
                 currentRow++;
             }
 
-            worksheet.Columns().AdjustToContents();
+            try
+            {
+                worksheet.Columns().AdjustToContents(1, 100);
+            }
+            catch
+            {
+                worksheet.Columns().Width = 18;
+            }
 
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);

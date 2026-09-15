@@ -13,9 +13,15 @@ BEGIN
 
     SELECT
 
-        COUNT(DISTINCT m.StudentId)
-            AS TotalStudents,
+        COUNT(DISTINCT m.StudentId) AS TotalResults,
+        COUNT(DISTINCT m.StudentId) AS TotalStudents,
 
+        COUNT(DISTINCT
+            CASE
+                WHEN r.ResultId IS NOT NULL
+                THEN m.StudentId
+            END
+        ) AS ProcessedResults,
         COUNT(DISTINCT
             CASE
                 WHEN r.ResultId IS NOT NULL
@@ -28,8 +34,20 @@ BEGIN
                 WHEN r.ResultId IS NULL
                 THEN m.StudentId
             END
+        ) AS PendingResults,
+        COUNT(DISTINCT
+            CASE
+                WHEN r.ResultId IS NULL
+                THEN m.StudentId
+            END
         ) AS PendingStudents,
 
+        COUNT(DISTINCT
+            CASE
+                WHEN r.IsPublished = 1
+                THEN r.StudentId
+            END
+        ) AS PublishedResults,
         COUNT(DISTINCT
             CASE
                 WHEN r.IsPublished = 1
@@ -51,7 +69,7 @@ BEGIN
             END
         ) AS FailedStudents,
 
-        ROUND(
+        COALESCE(ROUND(
             COUNT(DISTINCT
                 CASE
                     WHEN r.ResultStatus = 'Pass'
@@ -64,16 +82,16 @@ BEGIN
                 0
             ),
             2
-        ) AS PassPercentage,
+        ), 0.00) AS PassPercentage,
 
-        ROUND(
+        COALESCE(ROUND(
             AVG(r.TotalMarks),
             2
-        ) AS AverageMarks,
+        ), 0.00) AS AverageMarks,
 
-        MAX(r.TotalMarks) AS HighestMarks,
+        COALESCE(MAX(r.TotalMarks), 0.00) AS HighestMarks,
 
-        MIN(r.TotalMarks) AS LowestMarks
+        COALESCE(MIN(r.TotalMarks), 0.00) AS LowestMarks
 
     FROM Marks m
 
@@ -86,11 +104,11 @@ BEGIN
         AND r.ExamId = m.ExaminationId
         AND r.SubjectId = m.SubjectId
 
-    WHERE m.BoardId = p_BoardId
-      AND m.AcademicYearId = p_AcademicYearId
-      AND m.AcademicLevelId = p_AcademicLevelId
-      AND m.GroupId = p_GroupId
-      AND m.ExaminationId = p_ExamId
+    WHERE (p_BoardId IS NULL OR m.BoardId = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR m.AcademicYearId = p_AcademicYearId)
+      AND (p_AcademicLevelId IS NULL OR m.AcademicLevelId = p_AcademicLevelId)
+      AND (p_GroupId IS NULL OR m.GroupId = p_GroupId)
+      AND (p_ExamId IS NULL OR m.ExaminationId = p_ExamId)
       AND m.IsActive = 1;
 
 END //

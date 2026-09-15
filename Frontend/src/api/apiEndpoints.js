@@ -1,6 +1,9 @@
 export const apiEndpoints = {
   admin: {
     login: "/api/Admin/login",
+    forgotPassword: "/api/Admin/forgot-password",
+    verifyOtp: "/api/Admin/verify-otp",
+    resetPassword: "/api/Admin/reset-password",
     create: "/api/Admin",
     getAll: "/api/Admin",
     getById: (adminId) => `/api/Admin/${adminId}`,
@@ -39,10 +42,12 @@ export const apiEndpoints = {
     lookupBoards: "/api/v1/staff/lookup/boards",
     lookupDepartments: "/api/v1/staff/lookup/departments",
     lookupDesignations: "/api/v1/staff/lookup/designations",
+    availableSubjects: "/api/v1/staff/available-subjects",
     assignSubject: "/api/v1/staff/assign-subject",
     updateSubjectAssignment: (id) => `/api/v1/staff/assign-subject/${id}`,
     deleteSubjectAssignment: (id) => `/api/v1/staff/assign-subject/${id}`,
-    getWorkload: (facultyId) => `/api/v1/staff/workload/${facultyId}`,
+    getSubjectAllocations: (staffId) => `/api/v1/staff/${staffId}/subject-allocations`,
+    getWorkload: (staffId) => `/api/v1/staff/workload/${staffId}`,
   },
   boards: {
     list: "/api/v1/boards",
@@ -156,15 +161,15 @@ export const apiEndpoints = {
     monthlyReport: "/api/v1/fees/reports/monthly",
     outstandingReport: "/api/fees/report/outstanding",
   },
-  auth: {
-    login: "/api/Auth/login",
-    register: "/api/Auth/register",
-    forgotPassword: "/api/Auth/forgot-password",
-    verifyOtp: "/api/Auth/verify-otp",
-    resetPassword: "/api/Auth/reset-password",
-    users: "/api/Auth/users",
-    userById: (id) => `/api/Auth/user/${id}`,
-  },
+  // auth: {
+  //   login: "/api/Auth/login",
+  //   register: "/api/Auth/register",
+  //   forgotPassword: "/api/Auth/forgot-password",
+  //   verifyOtp: "/api/Auth/verify-otp",
+  //   resetPassword: "/api/Auth/reset-password",
+  //   users: "/api/Auth/users",
+  //   userById: (id) => `/api/Auth/user/${id}`,
+  // },
   results: {
     list: "/api/v1/results",
     process: "/api/v1/results/process",
@@ -203,7 +208,16 @@ export const apiEndpoints = {
   },
   departments: {
     getAll: "/api/v1/departments",
+    getById: (id) => `/api/v1/departments/${id}`,
     create: "/api/v1/departments",
+    update: (id) => `/api/v1/departments/${id}`,
+    delete: (id) => `/api/v1/departments/${id}`,
+    validateCode: "/api/v1/departments/validate-code",
+    validateName: "/api/v1/departments/validate-name",
+    summary: "/api/v1/departments/summary",
+    importExcel: "/api/v1/departments/import-excel",
+    exportExcel: "/api/v1/departments/export-excel",
+    template: "/api/v1/departments/template",
   },
   designations: {
     getAll: "/api/v1/designations",
@@ -222,13 +236,6 @@ export const apiEndpoints = {
     byGroup: (groupId) => `/api/v1/Sections/group/${groupId}`,
     getById: (sectionId) => `/api/v1/Sections/${sectionId}`,
     search: "/api/v1/Sections",
-  },
-  sectionRollAllocation: {
-    sectionPreview: "/api/v1/section-roll-allocation/section/preview",
-    sectionConfirm: "/api/v1/section-roll-allocation/section/confirm",
-    rollPreview: "/api/v1/section-roll-allocation/roll/preview",
-    rollConfirm: "/api/v1/section-roll-allocation/roll/confirm",
-    updateStudent: (studentId) => `/api/v1/section-roll-allocation/students/${studentId}`,
   },
   periods: {
     getAll: "/api/v1/periods",
@@ -272,6 +279,9 @@ export const apiEndpoints = {
     summary: "/api/v1/attendance/summary",
     percentage: "/api/v1/attendance/percentage",
     report: "/api/v1/attendance/report",
+    yearlyOverview: (studentId, academicYearId) => `/api/v1/attendance/student/${studentId}/yearly-overview?academicYearId=${academicYearId}`,
+    importTemplate: "/api/v1/attendance/import/template",
+    importExcel: "/api/v1/attendance/import/excel",
     updateStatus: (attendanceId) => `/api/v1/attendance/${attendanceId}/status`,
     lockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/lock`,
     unlockSession: (sessionId) => `/api/v1/attendance/session/${sessionId}/unlock`,
@@ -284,8 +294,20 @@ export const apiEndpoints = {
     monthlyReport: "/api/v1/staff-attendance/monthly-report",
     monthlyExportCsv: "/api/v1/staff-attendance/monthly-report/export/csv",
     monthlyExport: "/api/v1/staff-attendance/monthly-report/export/excel",
+    yearlyOverview: (staffId, academicYearId) => `/api/v1/staff-attendance/staff/${staffId}/yearly-overview?academicYearId=${academicYearId}`,
     leave: "/api/v1/staff-attendance/leave",
     leaveAction: (id) => `/api/v1/staff-attendance/leave/${id}/action`,
+    importTemplate: "/api/v1/staff-attendance/import/template",
+    importExcel: "/api/v1/staff-attendance/import/excel",
+  },
+  leaveCategories: {
+    getAll: "/api/v1/leave-categories",
+    getSummary: "/api/v1/leave-categories/summary",
+    getById: (id) => `/api/v1/leave-categories/${id}`,
+    create: "/api/v1/leave-categories",
+    update: (id) => `/api/v1/leave-categories/${id}`,
+    delete: (id) => `/api/v1/leave-categories/${id}`,
+    reset: "/api/v1/leave-categories/reset",
   },
   students: {
     getAll: "/api/v1/students",
@@ -395,6 +417,8 @@ export const apiEndpoints = {
     approveSection: (sectionId) => `/api/v1/timetable/section/${sectionId}/approve`,
     validateSection: (sectionId) => `/api/v1/timetable/section/${sectionId}/validate`,
     generate: "/api/v1/timetable/generate",
+    substitutions: "/api/v1/timetable/substitutions",
+    effective: "/api/v1/timetable/effective",
     exportSectionPdf: "/api/v1/timetable/export/section-pdf",
     exportGroupExcel: "/api/v1/timetable/export/group-excel",
   },
@@ -448,6 +472,13 @@ export const apiEndpoints = {
     getAll: "/api/v1/student-analysis",
     details: (studentId) => `/api/v1/student-analysis/${studentId}/details`,
   },
+  numberSeries: {
+    getAll: "/api/v1/settings/number-series",
+    getByCode: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
+    update: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}`,
+    generateNext: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/generate-next`,
+    preview: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/preview`,
+  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
@@ -469,3 +500,5 @@ export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
     return true;
   });
 };
+
+export default apiEndpoints;

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Search, Upload } from "lucide-react";
+import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -16,6 +17,15 @@ const list = (payload) => {
 };
 const value = (record, ...keys) => keys.map((key) => record?.[key]).find((item) => item != null && item !== "");
 const normalizedName = (item) => String(item ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+const hasAssignedValue = (item) => item != null && String(item).trim() !== "" && String(item).trim() !== "—";
+const isAdmissionApproved = (admission) => {
+  const approval = value(admission, "isApproved", "IsApproved", "approved", "Approved", "approvalStatus", "ApprovalStatus");
+  const status = String(value(admission, "status", "Status", "admissionStatus", "AdmissionStatus") ?? "").trim().toLowerCase();
+  return approval === true
+    || approval === 1
+    || String(approval).toLowerCase() === "true"
+    || ["approved", "active", "completed"].includes(status);
+};
 const nameFor = (items, id, idKeys, labelKeys) => value(items.find((item) => String(value(item, ...idKeys)) === String(id)), ...labelKeys) ?? "";
 const saveDownload = (data, filename) => {
   const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
@@ -89,11 +99,10 @@ export default function StudentManagementPage() {
           level: x.academicLevelName ?? x.academicLevel ?? x.levelName ?? "",
           group: x.groupName ?? x.group ?? "",
           programme: x.programmeName ?? x.programName ?? x.programme ?? x.program ?? "",
-          section: x.sectionName ?? x.section ?? "",
-          roll: x.rollNumber ?? x.rollNo ?? x.roll ?? "",
+          section: value(x, "sectionName", "SectionName", "section", "Section", "allocatedSectionName", "AllocatedSectionName", "assignedSectionName", "AssignedSectionName") ?? "",
+          roll: value(x, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll", "Roll") ?? "",
           status: x.status ?? x.studentStatus ?? "Pending assignment",
         }));
-        if (active) setStudents(mapped.filter((student) => Boolean(student.roll)));
         return Promise.allSettled([
           apiClient.get(apiEndpoints.admissions.getAll), apiClient.get(apiEndpoints.academicYears.list),
           apiClient.get(apiEndpoints.academicLevels.list), apiClient.get(apiEndpoints.groups.list),
@@ -116,7 +125,14 @@ export default function StudentManagementPage() {
             const levelId = value(student, "academicLevelId", "AcademicLevelId") ?? value(admission, "academicLevelId", "AcademicLevelId");
             const groupId = value(student, "groupId", "GroupId") ?? value(admission, "groupId", "GroupId");
             const programId = value(student, "programId", "ProgramId", "programmeId", "ProgrammeId") ?? value(admission, "programId", "ProgramId", "programmeId", "ProgrammeId");
-            const sectionId = value(student, "sectionId", "SectionId") ?? value(admission, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId");
+            const sectionId = value(student, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId")
+              ?? value(admission, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId")
+              ?? value(admission?.section ?? admission?.Section, "sectionId", "SectionId", "id", "Id");
+            const section = student.section || value(admission, "sectionName", "SectionName", "allocatedSectionName", "AllocatedSectionName", "assignedSectionName", "AssignedSectionName") || value(admission?.section ?? admission?.Section, "sectionName", "SectionName", "name", "Name") || nameFor(sections, sectionId, ["sectionId", "SectionId", "id"], ["sectionName", "SectionName", "name"]);
+            const roll = student.roll || value(admission, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll");
+            const admissionApproved = isAdmissionApproved(admission);
+            const hasSection = hasAssignedValue(sectionId) || hasAssignedValue(section);
+            const hasRollNumber = hasAssignedValue(roll);
             return {
               ...student,
               boardId,
@@ -130,16 +146,17 @@ export default function StudentManagementPage() {
               level: student.level || value(admission, "academicLevelName", "AcademicLevelName") || nameFor(levels, levelId, ["academicLevelId", "AcademicLevelId", "id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name"]),
               group: student.group || value(admission, "groupName", "GroupName") || nameFor(groups, groupId, ["groupId", "GroupId", "id"], ["groupName", "GroupName", "name"]),
               programme: student.programme || value(admission, "programName", "ProgramName", "programmeName", "ProgrammeName") || nameFor(programs, programId, ["programId", "ProgramId", "programmeId", "ProgrammeId", "id"], ["programName", "ProgramName", "programmeName", "ProgrammeName", "name"]),
-              section: student.section || value(admission, "sectionName", "SectionName") || nameFor(sections, sectionId, ["sectionId", "SectionId", "id"], ["sectionName", "SectionName", "name"]),
+              section,
+              roll,
               mobile: student.mobileNumber ?? student.mobile ?? "",
-              // The students endpoint does not expose an approval flag. A
-              // linked admission is preferred; a generated roll number is a
-              // reliable completed-placement fallback for this API.
-              approved: Boolean(admission) || Boolean(student.roll),
+              admissionApproved,
+              hasSection,
+              hasRollNumber,
+              isEligibleForStudentManagement: admissionApproved && hasSection && hasRollNumber,
             };
           });
-          const visibleStudents = enriched.filter((student) => student.approved);
-          if (active && visibleStudents.length) setStudents(visibleStudents);
+          const visibleStudents = enriched.filter((student) => student.isEligibleForStudentManagement);
+          if (active) setStudents(visibleStudents);
         });
       })
       .catch((e) => active && setError(getApiErrorMessage(e)))
@@ -409,17 +426,8 @@ export default function StudentManagementPage() {
       breadcrumb={["People"]}
     >
       <section className="cms-card">
-        <div className="cms-card-body student-management-toolbar">
-          <label className="student-management-search">
-            <Search size={18} />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search student, ID, admission no, roll no or mobile"
-            />
-          </label>
-        </div>
-        <div className="student-management-filters">
+        <div className="student-management-filter-row">
+          <div className="student-management-filters">
           {[
             ["Academic Level", "level", levelOptions, !selectedBoardId],
             ["Group", "group", groupOptions, !filters.level],
@@ -441,11 +449,24 @@ export default function StudentManagementPage() {
               </select>
             </label>
           ))}
+          </div>
         </div>
-        <div className="student-management-actions">
-          <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(exporting)} onClick={() => exportStudents("excel")}><Download size={16} /> {exporting === "excel" ? "Exporting..." : "Export Excel"}</button>
-          <button className="cms-btn cms-btn-primary" type="button" onClick={() => { setError(""); setImportFile(null); setValidationResult(null); setImportSuccess(false); setImportOpen(true); }}><FileUp size={16} /> Import Students</button>
-          <button className="cms-btn cms-btn-ghost" type="button" onClick={() => { setError(""); setCredentialsOpen(true); }}>Credentials</button>
+        <div className="student-management-search-row">
+          <div className="cms-card-body student-management-toolbar">
+            <label className="student-management-search">
+              <Search3DIcon size={18} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search student, ID, admission no, roll no or mobile"
+              />
+            </label>
+          </div>
+          <div className="student-management-actions">
+            <button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(exporting)} onClick={() => exportStudents("excel")}><Download size={16} /> {exporting === "excel" ? "Exporting..." : "Export Excel"}</button>
+            <button className="cms-btn cms-btn-primary" type="button" onClick={() => { setError(""); setImportFile(null); setValidationResult(null); setImportSuccess(false); setImportOpen(true); }}><FileUp size={16} /> Import Students</button>
+            <button className="cms-btn cms-btn-ghost" type="button" onClick={() => { setError(""); setCredentialsOpen(true); }}>Credentials</button>
+          </div>
         </div>
         <div className="cms-table-wrap student-management-table-wrap">
           <table className="cms-table student-management-table">

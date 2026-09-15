@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Examination.Requests;
+using CollegeManagement.API.DTOs.Examination.Responses;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -20,6 +23,8 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             _context = context;
         }
+
+        private IDbConnection Connection => _context.Database.GetDbConnection();
 
         #region Examination Methods
 
@@ -141,6 +146,8 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<Examination>> GetExaminationsAsync(ExaminationSearchRequestDto filter)
         {
             var query = _context.Examinations
+                .AsNoTracking()
+                .AsSplitQuery()
                 .Include(e => e.Board)
                 .Include(e => e.AcademicYear)
                 .Include(e => e.AcademicLevel)
@@ -189,6 +196,139 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await query.OrderByDescending(e => e.ExaminationId).ToListAsync();
         }
 
+        public async Task<IEnumerable<ExaminationResponse>> GetExaminationResponsesAsync(ExaminationSearchRequestDto filter)
+        {
+            // 1. Try Stored Procedure sp_GetExaminations with parameters
+            try
+            {
+                var p = new DynamicParameters();
+                p.Add("p_BoardId", filter.BoardId > 0 ? filter.BoardId : null);
+                p.Add("p_AcademicYearId", filter.AcademicYearId > 0 ? filter.AcademicYearId : null);
+                p.Add("p_AcademicLevelId", filter.AcademicLevelId > 0 ? filter.AcademicLevelId : null);
+                p.Add("p_GroupId", filter.GroupId > 0 ? filter.GroupId : null);
+                p.Add("p_ProgramId", filter.ProgramId > 0 ? filter.ProgramId : null);
+                p.Add("p_AssessmentTypeId", filter.AssessmentTypeId > 0 ? filter.AssessmentTypeId : null);
+                p.Add("p_Status", string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status);
+                p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter.SearchTerm) ? null : filter.SearchTerm);
+
+                var spResults = await Connection.QueryAsync<ExaminationResponse>(
+                    "sp_GetExaminations",
+                    p,
+                    commandType: CommandType.StoredProcedure);
+
+                if (spResults != null && spResults.Any())
+                {
+                    return spResults.ToList();
+                }
+            }
+            catch
+            {
+                // If sp_GetExaminations in DB has 0 parameters, try calling without parameters
+                try
+                {
+                    var spResults = await Connection.QueryAsync<ExaminationResponse>(
+                        "sp_GetExaminations",
+                        commandType: CommandType.StoredProcedure);
+
+                    if (spResults != null && spResults.Any())
+                    {
+                        var filtered = spResults.AsEnumerable();
+                        if (filter.BoardId.HasValue && filter.BoardId > 0)
+                            filtered = filtered.Where(x => x.BoardId == filter.BoardId.Value);
+                        if (filter.AcademicYearId.HasValue && filter.AcademicYearId > 0)
+                            filtered = filtered.Where(x => x.AcademicYearId == filter.AcademicYearId.Value);
+                        if (filter.AcademicLevelId.HasValue && filter.AcademicLevelId > 0)
+                            filtered = filtered.Where(x => x.AcademicLevelId == filter.AcademicLevelId.Value);
+                        if (filter.GroupId.HasValue && filter.GroupId > 0)
+                            filtered = filtered.Where(x => x.GroupId == filter.GroupId.Value);
+                        if (filter.ProgramId.HasValue && filter.ProgramId > 0)
+                            filtered = filtered.Where(x => x.ProgramId == filter.ProgramId.Value);
+                        if (filter.AssessmentTypeId.HasValue && filter.AssessmentTypeId > 0)
+                            filtered = filtered.Where(x => x.AssessmentTypeId == filter.AssessmentTypeId.Value);
+                        if (!string.IsNullOrWhiteSpace(filter.Status))
+                            filtered = filtered.Where(x => string.Equals(x.Status, filter.Status, StringComparison.OrdinalIgnoreCase));
+                        if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
+                        {
+                            var s = filter.SearchTerm.Trim().ToLower();
+                            filtered = filtered.Where(x => (x.ExamName != null && x.ExamName.ToLower().Contains(s)) ||
+                                                           (x.ExamCode != null && x.ExamCode.ToLower().Contains(s)) ||
+                                                           (x.GroupName != null && x.GroupName.ToLower().Contains(s)) ||
+                                                           (x.ProgramName != null && x.ProgramName.ToLower().Contains(s)));
+                        }
+                        return filtered.ToList();
+                    }
+                }
+                catch
+                {
+                    // Fallback to EF Core below
+                }
+            }
+
+            // 2. Fallback to EF Core with pre-aggregated counts (eliminates N+1 queries)
+            var exams = await GetExaminationsAsync(filter);
+
+            var subjectCounts = await _context.Subjects
+                .AsNoTracking()
+                .Where(s => s.IsActive)
+                .GroupBy(s => new { s.BoardId, s.AcademicLevelId, s.GroupId })
+                .Select(g => new { g.Key.BoardId, g.Key.AcademicLevelId, g.Key.GroupId, Count = g.Count() })
+                .ToListAsync();
+
+            var countDict = subjectCounts.ToDictionary(
+                x => (x.BoardId, x.AcademicLevelId, x.GroupId),
+                x => x.Count);
+
+            var resultList = new List<ExaminationResponse>();
+            foreach (var exam in exams)
+            {
+                var resp = new ExaminationResponse
+                {
+                    ExaminationId = exam.ExaminationId,
+                    ExamCode = exam.ExamCode ?? string.Empty,
+                    ExamName = exam.ExamName,
+                    BoardId = exam.BoardId,
+                    BoardName = exam.Board?.BoardName ?? string.Empty,
+                    AcademicYearId = exam.AcademicYearId,
+                    AcademicYear = exam.AcademicYear?.AcademicYearName ?? string.Empty,
+                    AcademicLevelId = exam.AcademicLevelId,
+                    AcademicLevel = exam.AcademicLevel?.LevelName ?? string.Empty,
+                    GroupId = exam.GroupId,
+                    GroupName = exam.Group?.GroupName ?? string.Empty,
+                    ProgramId = exam.ProgramId,
+                    ProgramName = exam.Program?.ProgramName ?? "All Programs",
+                    AssessmentTypeId = exam.AssessmentTypeId,
+                    ExamType = exam.AssessmentType?.AssessmentTypeName ?? string.Empty,
+                    ExamPattern = !string.IsNullOrEmpty(exam.ExamPattern) ? exam.ExamPattern : "REGULAR_ACADEMIC",
+                    StartDate = exam.StartDate,
+                    EndDate = exam.EndDate,
+                    TotalMarks = exam.TotalMarks,
+                    PassPercentage = exam.PassPercentage,
+                    Description = exam.Description,
+                    Status = exam.Status,
+                    TotalEligibleSubjects = countDict.GetValueOrDefault((exam.BoardId, exam.AcademicLevelId, exam.GroupId), 0),
+                    ScheduledSubjectsCount = exam.ExamSchedules?.Count(s => s.IsActive) ?? 0,
+                    CreatedAt = exam.CreatedAt,
+                    UpdatedAt = exam.UpdatedAt,
+                    Schedules = exam.ExamSchedules?.Select(s => new ExamScheduleResponse
+                    {
+                        ExamScheduleId = s.ExamScheduleId,
+                        ExaminationId = s.ExaminationId,
+                        SubjectId = s.SubjectId,
+                        SubjectName = s.Subject?.SubjectName ?? string.Empty,
+                        SubjectCode = s.Subject?.SubjectCode ?? string.Empty,
+                        ExamDate = s.ExamDate,
+                        StartTime = s.StartTime,
+                        EndTime = s.EndTime,
+                        Hall = s.Hall ?? string.Empty,
+                        Status = s.IsActive ? "Scheduled" : "Cancelled"
+                    }).ToList() ?? new List<ExamScheduleResponse>()
+                };
+                resultList.Add(resp);
+            }
+
+            return resultList;
+        }
+
         public async Task UpdateExaminationAsync(Examination examination)
         {
             examination.UpdatedAt = DateTime.UtcNow;
@@ -211,10 +351,58 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<ExamSchedule> CreateExamScheduleAsync(ExamSchedule schedule)
         {
-            if (schedule.SubjectId.HasValue && schedule.SubjectId.Value <= 0)
+            if (string.IsNullOrWhiteSpace(schedule.Invigilator) && schedule.InvigilatorId.HasValue && schedule.InvigilatorId.Value > 0)
             {
-                schedule.SubjectId = null;
+                var fac = await _context.Faculties.AsNoTracking().FirstOrDefaultAsync(f => f.Id == schedule.InvigilatorId.Value);
+                if (fac != null)
+                {
+                    schedule.Invigilator = $"{fac.FirstName} {fac.LastName}".Trim();
+                }
             }
+
+            if (string.IsNullOrWhiteSpace(schedule.Hall) && schedule.RoomId.HasValue && schedule.RoomId.Value > 0)
+            {
+                var rm = await _context.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == schedule.RoomId.Value);
+                if (rm != null)
+                {
+                    schedule.Hall = !string.IsNullOrWhiteSpace(rm.RoomNumber) ? rm.RoomNumber : rm.RoomName;
+                }
+            }
+
+            try
+            {
+                var newId = await Connection.ExecuteScalarAsync<int>(
+                    "sp_CreateExamSchedule",
+                    new
+                    {
+                        p_ExamId = schedule.ExaminationId,
+                        p_SubjectId = schedule.SubjectId,
+                        p_ExamDate = schedule.ExamDate.ToDateTime(TimeOnly.MinValue),
+                        p_StartTime = schedule.StartTime.ToTimeSpan(),
+                        p_EndTime = schedule.EndTime.ToTimeSpan(),
+                        p_SessionId = schedule.SessionId,
+                        p_ScheduleMode = schedule.ScheduleMode,
+                        p_RoomId = schedule.RoomId,
+                        p_InvigilatorId = schedule.InvigilatorId,
+                        p_Hall = schedule.Hall,
+                        p_Invigilator = schedule.Invigilator,
+                        p_ExamMode = schedule.ExamMode,
+                        p_MaxMarks = schedule.MaxMarks,
+                        p_PassingMarks = schedule.PassingMarks
+                    },
+                    commandType: CommandType.StoredProcedure);
+
+                if (newId > 0)
+                {
+                    schedule.ExamScheduleId = newId;
+                    return schedule;
+                }
+            }
+            catch
+            {
+                // Fallback to EF Core if SP has not yet been executed in database
+            }
+
             schedule.CreatedAt = DateTime.UtcNow;
             _context.ExamSchedules.Add(schedule);
             await _context.SaveChangesAsync();
@@ -224,20 +412,18 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<ExamSchedule?> GetExamScheduleByIdAsync(int examScheduleId)
         {
             return await _context.ExamSchedules
+                .AsNoTracking()
                 .Include(s => s.Examination)
                 .Include(s => s.Subject)
-                .Include(s => s.HallAllocations)
-                    .ThenInclude(h => h.Invigilators)
                 .FirstOrDefaultAsync(s => s.ExamScheduleId == examScheduleId);
         }
 
         public async Task<IEnumerable<ExamSchedule>> GetExamSchedulesAsync(int? examinationId)
         {
             var query = _context.ExamSchedules
+                .AsNoTracking()
                 .Include(s => s.Examination)
                 .Include(s => s.Subject)
-                .Include(s => s.HallAllocations)
-                    .ThenInclude(h => h.Invigilators)
                 .Where(s => s.IsActive)
                 .AsQueryable();
 
@@ -249,78 +435,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await query.OrderBy(s => s.ExamDate).ThenBy(s => s.StartTime).ToListAsync();
         }
 
-        public async Task<IEnumerable<ExamSchedule>> BulkSaveSchedulesAsync(int examinationId, IEnumerable<ExamSchedule> schedules)
-        {
-            var scheduleList = schedules.ToList();
-            foreach (var s in scheduleList)
-            {
-                s.ExaminationId = examinationId;
-                if (s.SubjectId.HasValue && s.SubjectId.Value <= 0)
-                {
-                    s.SubjectId = null;
-                }
-
-                if (s.ExamScheduleId > 0)
-                {
-                    var existing = await _context.ExamSchedules
-                        .Include(x => x.HallAllocations)
-                        .ThenInclude(h => h.Invigilators)
-                        .FirstOrDefaultAsync(x => x.ExamScheduleId == s.ExamScheduleId);
-
-                    if (existing != null)
-                    {
-                        existing.GroupId = s.GroupId;
-                        existing.SubjectId = s.SubjectId;
-                        existing.PatternName = s.PatternName;
-                        existing.ExamDate = s.ExamDate;
-                        existing.StartTime = s.StartTime;
-                        existing.EndTime = s.EndTime;
-                        existing.MaxMarks = s.MaxMarks;
-                        existing.PassingMarks = s.PassingMarks;
-                        existing.PassPercentage = s.PassPercentage;
-                        existing.ExamMode = s.ExamMode;
-                        existing.ScheduleMode = s.ScheduleMode;
-                        existing.Hall = s.Hall;
-                        existing.Invigilator = s.Invigilator;
-                        existing.UpdatedAt = DateTime.UtcNow;
-                        existing.IsActive = true;
-
-                        if (existing.HallAllocations.Any())
-                        {
-                            _context.ExaminationScheduleHalls.RemoveRange(existing.HallAllocations);
-                        }
-
-                        foreach (var hall in s.HallAllocations)
-                        {
-                            hall.ScheduleId = existing.ExamScheduleId;
-                            _context.ExaminationScheduleHalls.Add(hall);
-                        }
-                    }
-                    else
-                    {
-                        s.CreatedAt = DateTime.UtcNow;
-                        s.IsActive = true;
-                        _context.ExamSchedules.Add(s);
-                    }
-                }
-                else
-                {
-                    s.CreatedAt = DateTime.UtcNow;
-                    s.IsActive = true;
-                    _context.ExamSchedules.Add(s);
-                }
-            }
-
-            await _context.SaveChangesAsync();
-            return await GetExamSchedulesAsync(examinationId);
-        }
-
         public async Task UpdateExamScheduleAsync(ExamSchedule schedule)
         {
-            if (schedule.SubjectId.HasValue && schedule.SubjectId.Value <= 0)
-            {
-                schedule.SubjectId = null;
-            }
             schedule.UpdatedAt = DateTime.UtcNow;
             _context.ExamSchedules.Update(schedule);
             await _context.SaveChangesAsync();
@@ -351,10 +467,30 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<Subject>> GetEligibleSubjectsForExamAsync(int examinationId)
         {
-            var exam = await _context.Examinations.FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
+            try
+            {
+                var spSubjects = await Connection.QueryAsync<Subject>(
+                    "sp_GetEligibleSubjectsForExam",
+                    new { p_ExaminationId = examinationId },
+                    commandType: CommandType.StoredProcedure);
+
+                if (spSubjects != null && spSubjects.Any())
+                {
+                    return spSubjects;
+                }
+            }
+            catch
+            {
+                // Fallback to EF Core if SP does not exist yet
+            }
+
+            var exam = await _context.Examinations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
             if (exam == null) return Enumerable.Empty<Subject>();
 
             return await _context.Subjects
+                .AsNoTracking()
                 .Where(s => s.IsActive
                     && s.BoardId == exam.BoardId
                     && s.AcademicLevelId == exam.AcademicLevelId

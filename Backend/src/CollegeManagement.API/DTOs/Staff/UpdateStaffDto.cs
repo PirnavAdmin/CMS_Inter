@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Staff
@@ -19,6 +20,12 @@ namespace CollegeManagement.API.DTOs.Staff
         [StringLength(150)]
         public string? FatherOrHusbandName { get; set; }
 
+        public string? GuardianName
+        {
+            get => FatherOrHusbandName;
+            set => FatherOrHusbandName = value;
+        }
+
         [Required(ErrorMessage = "Gender is required.")]
         [StringLength(20)]
         public string Gender { get; set; } = string.Empty;
@@ -37,6 +44,12 @@ namespace CollegeManagement.API.DTOs.Staff
 
         [StringLength(20)]
         public string? PanNumber { get; set; }
+
+        public string? Pan
+        {
+            get => PanNumber;
+            set => PanNumber = value;
+        }
 
         [Required(ErrorMessage = "Mobile number is required.")]
         [StringLength(15, ErrorMessage = "Mobile number cannot exceed 15 digits.")]
@@ -71,6 +84,12 @@ namespace CollegeManagement.API.DTOs.Staff
         [StringLength(20)]
         public string? Pincode { get; set; }
 
+        public string? Pin
+        {
+            get => Pincode;
+            set => Pincode = value;
+        }
+
         [StringLength(100)]
         public string? Country { get; set; } = "India";
 
@@ -84,6 +103,7 @@ namespace CollegeManagement.API.DTOs.Staff
 
         [StringLength(20)]
         public string StaffType { get; set; } = "Teaching";
+        public string FacultyType => StaffType;
 
         public int? DepartmentId { get; set; }
 
@@ -92,16 +112,25 @@ namespace CollegeManagement.API.DTOs.Staff
 
         public int? BoardId { get; set; }
 
+        [StringLength(50)]
+        public string? BoardCode { get; set; }
+
         [StringLength(100)]
         public string? BoardName { get; set; }
 
         public string? Board
         {
-            get => BoardName;
+            get => !string.IsNullOrWhiteSpace(BoardCode) ? BoardCode : BoardName;
             set => BoardName = value;
         }
 
         public DateTime? JoiningDate { get; set; }
+
+        public DateTime? DateOfJoining
+        {
+            get => JoiningDate;
+            set => JoiningDate = value;
+        }
 
         public decimal Experience { get; set; } = 0.0m;
 
@@ -117,7 +146,86 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? ProfileStatus { get; set; }
         public int? ProfileCompletionPercentage { get; set; }
         public string? CorrectionNotes { get; set; }
+        public string? CorrectionNote
+        {
+            get => CorrectionNotes;
+            set => CorrectionNotes = value;
+        }
 
+        // Subject Allocation Lists
+        public List<string>? AllocatedSubjects { get; set; } = new();
+        public List<string>? Subjects
+        {
+            get => AllocatedSubjects;
+            set => AllocatedSubjects = value;
+        }
+
+        // Flattened Bank Details
+        public string? SalaryStructure { get; set; }
+        public decimal? BasicSalary { get; set; }
+        public decimal? GrossSalary { get; set; }
+        public string? BankName { get; set; }
+        public string? AccountHolder { get; set; }
+        public string? AccountHolderName
+        {
+            get => AccountHolder;
+            set => AccountHolder = value;
+        }
+        public string? AccountNumber { get; set; }
+        public string? Ifsc { get; set; }
+        public string? IfscCode
+        {
+            get => Ifsc;
+            set => Ifsc = value;
+        }
+        public string? Branch { get; set; }
+        public string? AccountType { get; set; }
+        public string? PfNumber { get; set; }
+        public string? EsiNumber { get; set; }
+        public string? UanNumber { get; set; }
+
+        // Flattened Emergency Details
+        public string? EmergencyName { get; set; }
+        public string? ContactName
+        {
+            get => EmergencyName;
+            set => EmergencyName = value;
+        }
+        public string? EmergencyRelationship { get; set; }
+        public string? Relationship
+        {
+            get => EmergencyRelationship;
+            set => EmergencyRelationship = value;
+        }
+        public string? EmergencyMobile { get; set; }
+        public string? EmergencyAlternate { get; set; }
+        public string? EmergencyAddress { get; set; }
+
+        // Flattened Academic & Experience
+        public string? HighestQualification { get; set; }
+        public string? University { get; set; }
+        public string? Specialization { get; set; }
+        public string? PassingYear { get; set; }
+        public string? Percentage { get; set; }
+        public string? TotalExperience { get; set; }
+        public string? PreviousInstitution { get; set; }
+        public string? PreviousDesignation { get; set; }
+        public string? ExperienceFrom { get; set; }
+        public string? ExperienceTo { get; set; }
+
+        // Flattened Documents
+        public string? AadhaarDocument { get; set; }
+        public string? PanDocument { get; set; }
+        public string? QualificationCertificate { get; set; }
+        public string? ExperienceCertificate { get; set; }
+        public string? Resume { get; set; }
+        public string? BankProof { get; set; }
+        public string? DrivingLicence { get; set; }
+        public string? OtherDocuments { get; set; }
+        public string? Photo { get; set; }
+        public string? Signature { get; set; }
+
+        // Optional Raw JSON Columns
         public string? EducationJson { get; set; }
         public string? ExperienceJson { get; set; }
         public string? DocumentsJson { get; set; }

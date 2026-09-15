@@ -57,12 +57,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  border-radius: 8px;
-  background: var(--cms-primary-soft);
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 12px;
+  background: transparent;
   color: var(--cms-primary);
+}
+
+.settings-card-image {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
 }
 
 .settings-card-header h3 {
@@ -95,4 +102,3 @@
   font-weight: 600;
   border-radius: 6px;
 }
-

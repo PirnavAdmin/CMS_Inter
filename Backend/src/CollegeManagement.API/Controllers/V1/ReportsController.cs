@@ -18,10 +18,8 @@ namespace CollegeManagement.API.Controllers.V1;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/reports")]
-[Route("api/v1/reports")]
-[Route("api/reports")]
 [EnableCors("AllowFrontend")]
-[AllowAnonymous]
+[Authorize]
 [Produces("application/json")]
 public class ReportsController : ControllerBase
 {
@@ -371,6 +369,7 @@ public class ReportsController : ControllerBase
 
     // 5. Due Fees Details
     [HttpGet("details/due-fees")]
+    [HttpGet("details/outstanding-fees")]
     public async Task<IActionResult> DueFeesDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
         var data = await _reportService.OutstandingFeesAsync(filter, ct);
@@ -393,10 +392,18 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> ExaminationsDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
         var data = await _reportService.ExaminationsAsync(filter, ct);
+        var completed = data.Count(x => string.Equals(x.Status, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(x.Status, "Published", StringComparison.OrdinalIgnoreCase));
+        var upcoming = data.Count(x => string.Equals(x.Status, "Upcoming", StringComparison.OrdinalIgnoreCase) || string.Equals(x.Status, "Scheduled", StringComparison.OrdinalIgnoreCase));
+        var pendingEvaluation = data.Count(x => string.Equals(x.Status, "Pending Evaluation", StringComparison.OrdinalIgnoreCase) || string.Equals(x.Status, "Ongoing", StringComparison.OrdinalIgnoreCase));
         return Ok(new
         {
             totalExams = data.Count,
-            details = data
+            total = data.Count,
+            completed,
+            upcoming,
+            pendingEvaluation,
+            details = data,
+            items = data
         });
     }
 
@@ -411,6 +418,7 @@ public class ReportsController : ControllerBase
         return Ok(new
         {
             total = data.Count,
+            totalResults = data.Count,
             passed,
             failed,
             passPercentage = pct,
@@ -430,6 +438,7 @@ public class ReportsController : ControllerBase
         var totalPeriods = data.Sum(x => x.PeriodCount);
         return Ok(new
         {
+            faculty = totalStaff,
             totalFaculty = totalStaff,
             totalHours,
             totalPeriods,
@@ -482,9 +491,14 @@ public class ReportsController : ControllerBase
     public async Task<IActionResult> TopperDetails([FromQuery] ReportFilterDto filter, CancellationToken ct = default)
     {
         var data = await _reportService.ToppersAsync(filter, ct);
+        var highestMarks = data.Any() ? data.Max(x => x.TotalMarks) : 0;
+        var avgMarks = data.Any() ? Math.Round(data.Average(x => (double)x.TotalMarks), 2) : 0;
         return Ok(new
         {
+            totalToppers = data.Count,
             identified = data.Count,
+            highestMarks,
+            averageMarks = avgMarks,
             toppers = data,
             details = data
         });
@@ -509,6 +523,19 @@ public class ReportsController : ControllerBase
     // =========================================================================
     // 5. EXPORT (PDF & EXCEL)
     // =========================================================================
+
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportUnified(
+        [FromQuery] string reportType = "dashboard",
+        [FromQuery] string format = "pdf",
+        [FromQuery] ReportFilterDto? filter = null,
+        CancellationToken ct = default)
+    {
+        bool isPdf = !string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase) 
+                  && !string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase);
+        var result = await _reportService.ExportAsync(reportType, filter ?? new ReportFilterDto(), isPdf, ct);
+        return File(result.Content, result.ContentType, result.FileName);
+    }
 
     [HttpGet("export/pdf")]
     public async Task<IActionResult> ExportPdf(

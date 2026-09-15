@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using AutoMapper;
 using CollegeManagement.API.DTOs.Staff;
@@ -16,38 +17,58 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.StaffType, opt => opt.MapFrom(src => string.IsNullOrWhiteSpace(src.StaffType) ? "Teaching" : src.StaffType))
                 .ForMember(dest => dest.FacultyType, opt => opt.MapFrom(src => string.IsNullOrWhiteSpace(src.StaffType) ? "Teaching" : src.StaffType))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(src => string.IsNullOrWhiteSpace(src.Status) ? "Active" : src.Status))
-                .ForMember(dest => dest.ProfileStatus, opt => opt.MapFrom(_ => "PendingLink"))
-                .ForMember(dest => dest.ProfileCompletionPercentage, opt => opt.MapFrom(_ => 30))
-                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => System.DateTime.UtcNow))
+                .ForMember(dest => dest.ProfileStatus, opt => opt.MapFrom(src => string.IsNullOrWhiteSpace(src.ProfileStatus) ? "PendingLink" : src.ProfileStatus))
+                .ForMember(dest => dest.ProfileCompletionPercentage, opt => opt.MapFrom(src => src.ProfileCompletionPercentage ?? 30))
+                .ForMember(dest => dest.JoiningDate, opt => opt.MapFrom(src => src.JoiningDate ?? (src.DateOfJoining ?? DateTime.UtcNow)))
+                .ForMember(dest => dest.FatherOrHusbandName, opt => opt.MapFrom(src => src.FatherOrHusbandName ?? src.GuardianName))
+                .ForMember(dest => dest.PanNumber, opt => opt.MapFrom(src => src.PanNumber ?? src.Pan))
+                .ForMember(dest => dest.Pincode, opt => opt.MapFrom(src => src.Pincode ?? src.Pin))
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
                 .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(_ => false))
-                .ForMember(dest => dest.PhotoPath, opt => opt.Ignore())
+                .ForMember(dest => dest.PhotoPath, opt => opt.MapFrom(src => src.PhotoPath ?? src.Photo))
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
-                .ForMember(dest => dest.DesignationRef, opt => opt.Ignore());
+                .ForMember(dest => dest.DesignationRef, opt => opt.Ignore())
+                .ForMember(dest => dest.DepartmentRef, opt => opt.Ignore())
+                .ForMember(dest => dest.BoardRef, opt => opt.Ignore());
 
             // UpdateStaffDto -> Staff Entity
             CreateMap<UpdateStaffDto, Staff>()
                 .ForMember(dest => dest.StaffType, opt => opt.MapFrom(src => string.IsNullOrWhiteSpace(src.StaffType) ? "Teaching" : src.StaffType))
                 .ForMember(dest => dest.FacultyType, opt => opt.MapFrom(src => string.IsNullOrWhiteSpace(src.StaffType) ? "Teaching" : src.StaffType))
-                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => System.DateTime.UtcNow))
+                .ForMember(dest => dest.FatherOrHusbandName, opt => opt.MapFrom(src => src.FatherOrHusbandName ?? src.GuardianName))
+                .ForMember(dest => dest.PanNumber, opt => opt.MapFrom(src => src.PanNumber ?? src.Pan))
+                .ForMember(dest => dest.Pincode, opt => opt.MapFrom(src => src.Pincode ?? src.Pin))
+                .ForMember(dest => dest.JoiningDate, opt => opt.MapFrom(src => src.JoiningDate ?? (src.DateOfJoining ?? DateTime.UtcNow)))
+                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
                 .ForMember(dest => dest.IsDeleted, opt => opt.Ignore())
                 .ForMember(dest => dest.EmployeeId, opt => opt.Ignore())
-                .ForMember(dest => dest.PhotoPath, opt => opt.Ignore())
+                .ForMember(dest => dest.PhotoPath, opt => opt.MapFrom(src => src.PhotoPath ?? src.Photo))
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
-                .ForMember(dest => dest.DesignationRef, opt => opt.Ignore());
+                .ForMember(dest => dest.DesignationRef, opt => opt.Ignore())
+                .ForMember(dest => dest.DepartmentRef, opt => opt.Ignore())
+                .ForMember(dest => dest.BoardRef, opt => opt.Ignore());
 
             // Staff Entity -> StaffResponseDto
             CreateMap<Staff, StaffResponseDto>()
                 .ForMember(dest => dest.Department, opt => opt.MapFrom(src => src.DepartmentRef != null ? src.DepartmentRef.DepartmentName : src.Department))
                 .ForMember(dest => dest.BoardName, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardName : src.BoardName))
-                .ForMember(dest => dest.Designation, opt => opt.MapFrom(src => src.DesignationRef != null ? src.DesignationRef.Name : src.Designation));
+                .ForMember(dest => dest.BoardCode, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardCode : (src.BoardName ?? string.Empty)))
+                .ForMember(dest => dest.Designation, opt => opt.MapFrom(src => src.DesignationRef != null ? src.DesignationRef.Name : src.Designation))
+                .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => src.StaffSubjectAllocations != null
+                    ? src.StaffSubjectAllocations.Select(a => a.Subject != null ? a.Subject.SubjectName : string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList()
+                    : new List<string>()));
 
             // Staff Entity -> StaffProfileFullDto
             CreateMap<Staff, StaffProfileFullDto>()
                 .ForMember(dest => dest.Department, opt => opt.MapFrom(src => src.DepartmentRef != null ? src.DepartmentRef.DepartmentName : src.Department))
                 .ForMember(dest => dest.BoardName, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardName : src.BoardName))
+                .ForMember(dest => dest.BoardCode, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardCode : src.BoardName))
                 .ForMember(dest => dest.Designation, opt => opt.MapFrom(src => src.DesignationRef != null ? src.DesignationRef.Name : src.Designation))
+                .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => src.StaffSubjectAllocations != null
+                    ? src.StaffSubjectAllocations.Select(a => a.Subject != null ? a.Subject.SubjectName : string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList()
+                    : new List<string>()))
                 .ForMember(dest => dest.EducationList, opt => opt.MapFrom(src => DeserializeList<StaffEducationItem>(src.EducationJson)))
                 .ForMember(dest => dest.ExperienceList, opt => opt.MapFrom(src => DeserializeList<StaffExperienceItem>(src.ExperienceJson)))
                 .ForMember(dest => dest.DocumentsList, opt => opt.MapFrom(src => DeserializeList<StaffDocumentItem>(src.DocumentsJson)))
@@ -56,12 +77,12 @@ namespace CollegeManagement.API.Profiles
 
             // AssignStaffSubjectDto -> StaffSubjectAllocation Entity
             CreateMap<AssignStaffSubjectDto, StaffSubjectAllocation>()
-                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => System.DateTime.UtcNow))
+                .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.Id, opt => opt.Ignore());
 
             // UpdateStaffSubjectAllocationDto -> StaffSubjectAllocation Entity
             CreateMap<UpdateStaffSubjectAllocationDto, StaffSubjectAllocation>()
-                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => System.DateTime.UtcNow))
+                .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
                 .ForMember(dest => dest.StaffId, opt => opt.Ignore());
 

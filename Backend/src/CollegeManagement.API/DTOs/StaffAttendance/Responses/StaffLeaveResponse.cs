@@ -11,6 +11,8 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public string Department { get; set; } = string.Empty;
         public string StaffType { get; set; } = string.Empty;
         public LeaveType LeaveType { get; set; }
+        public int? LeaveCategoryId { get; set; }
+        public string? LeaveCategoryName { get; set; }
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
         public decimal TotalDays { get; set; }

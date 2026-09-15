@@ -126,6 +126,11 @@ public class AssignStudentFeeRequest
 {
     [Range(1, int.MaxValue)] public int StudentId { get; set; }
     [Range(1, int.MaxValue)] public int FeeStructureId { get; set; }
+    [Required, StringLength(100)]
+    public string PlanName { get; set; } = "Full Payment";
+
+    [Range(1, 24)]
+    public int NumberOfInstallments { get; set; } = 1;
 }
 
 public class StudentFeeResponse
@@ -195,10 +200,14 @@ public class FeeConcessionResponse
 // ========================= PAYMENT PLAN / SCHEDULE =========================
 public class CreatePaymentPlanRequest
 {
-    [Range(1, int.MaxValue)] public int StudentFeeId { get; set; }
-    [Required, StringLength(100)] public string PlanName { get; set; } = "Fee Schedule Payment";
-    [Range(1, 24)] public int NumberOfInstallments { get; set; }
-    public List<CreateInstallmentRequest> Installments { get; set; } = new();
+    [Range(1, int.MaxValue)]
+    public int StudentFeeId { get; set; }
+
+    [Required, StringLength(100)]
+    public string PlanName { get; set; } = "Full Payment";
+
+    [Range(1, 24)]
+    public int NumberOfInstallments { get; set; }
 }
 
 public class CreateInstallmentRequest

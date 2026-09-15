@@ -78,7 +78,7 @@ const getMasterFailureMessage = (responses, names) => {
   if (!failures.length) return "";
   const statuses = failures.map(({ error }) => error?.response?.status);
   if (statuses.some((status) => status === 502) || failures.some(({ error }) => !error?.response)) {
-    return "The backend API is unavailable. Start the API service on localhost:5167, then retry master data.";
+    return "Unable to connect to the server. Please check your network connection and try again.";
   }
   if (statuses.some((status) => status === 401)) return "Your session has expired. Please sign in again.";
   if (statuses.some((status) => status === 403)) return "Your account is not permitted to load Promotion master data.";
@@ -132,7 +132,11 @@ const normalizeHistory = (item) => ({
   canRollback: read(item, "canRollback", "CanRollback") !== false && !read(item, "isRolledBack", "IsRolledBack", "rollbackStatus", "RollbackStatus"),
 });
 
-const isEligible = (student) => student?.eligibleFlag !== false && !/not\s*eligible|ineligible|failed|blocked/i.test(student?.eligibility || "");
+const isEligible = (student) => {
+  if (!student) return false;
+  const status = (student.eligibilityStatus || "").toLowerCase();
+  return status === "eligible" || status === "";
+};
 
 export default function PromotionPage({ screen = "promotion" }) {
   const navigate = useNavigate();
@@ -323,18 +327,33 @@ export default function PromotionPage({ screen = "promotion" }) {
     setError("");
   }, [selectedBoardId, selectedAcademicYearId, nextAcademicYearObj]);
 
+  // Resolve academic levels associated with the active board
+  const boardLevels = useMemo(() => {
+    const boardValue = setup.board || asString(selectedBoardId);
+    const activeBoard = masters.boards.find((b) => String(b.value) === String(boardValue) || String(b.id) === String(boardValue));
+    if (!activeBoard) return masters.levels;
+    const matched = masters.levels.filter((level) => {
+      if (level.board && String(level.board) === String(boardValue)) return true;
+      if (activeBoard.academicLevelIds?.length && activeBoard.academicLevelIds.includes(String(level.value))) return true;
+      if (activeBoard.academicLevelNames?.length && activeBoard.academicLevelNames.some((n) => n.toLowerCase() === level.label.toLowerCase())) return true;
+      return false;
+    });
+    return matched.length ? matched : masters.levels;
+  }, [masters.boards, masters.levels, selectedBoardId, setup.board]);
+
   // Filter levels for the active navbar board & academic year
   const levelsFor = useCallback((prefix) => {
-    const boardValue = setup.board || asString(selectedBoardId);
-    const yearValue = setup.fromYear || asString(selectedAcademicYearId);
-    if (!boardValue || !yearValue) return masters.levels;
-    const contextGroups = masters.groups.filter((group) => group.board === asString(boardValue) && group.year === asString(yearValue));
-    if (contextGroups.length > 0) {
-      const matched = masters.levels.filter((level) => contextGroups.some((group) => group.levelId === level.value || group.level === level.label));
-      if (matched.length > 0) return matched;
+    if (prefix === "to") {
+      const sourceObj = boardLevels.find((l) => String(l.value) === String(setup.fromLevel));
+      const sourceLabel = sourceObj?.label || "";
+      if (/1st|first|\b1\b/i.test(sourceLabel)) {
+        const secondYearLevels = boardLevels.filter((l) => /2nd|second|\b2\b/i.test(l.label));
+        if (secondYearLevels.length > 0) return secondYearLevels;
+      }
+      return boardLevels.filter((l) => String(l.value) !== String(setup.fromLevel));
     }
-    return masters.levels;
-  }, [masters.groups, masters.levels, selectedAcademicYearId, selectedBoardId, setup.board, setup.fromYear]);
+    return boardLevels;
+  }, [boardLevels, setup.fromLevel]);
 
   // Filter groups for the active navbar board, academic year, and chosen level
   const groupsFor = useCallback((prefix) => masters.groups.filter((group) => {
@@ -408,12 +427,12 @@ export default function PromotionPage({ screen = "promotion" }) {
         ...(name === "program" ? { toProgram: value } : {}),
       };
 
-      // Automatically suggest next academic level when fromLevel is selected
+      // Automatically suggest next academic level for this board when fromLevel is selected
       if (name === "fromLevel") {
-        const sourceLevelObj = masters.levels.find((l) => l.value === asString(value));
+        const sourceLevelObj = boardLevels.find((l) => String(l.value) === String(value));
         const sourceLabel = sourceLevelObj?.label || value;
-        if (/1st\s+year/i.test(sourceLabel)) {
-          const secondYear = masters.levels.find((l) => /2nd\s+year/i.test(l.label));
+        if (/1st|first|\b1\b/i.test(sourceLabel)) {
+          const secondYear = boardLevels.find((l) => /2nd|second|\b2\b/i.test(l.label)) || boardLevels[1];
           if (secondYear) {
             updated.toLevel = secondYear.value;
           }
@@ -911,22 +930,12 @@ export default function PromotionPage({ screen = "promotion" }) {
                 <button className="cms-btn cms-btn-ghost" onClick={loadStudents} disabled={studentsLoading}>
                   Search
                 </button>
-                <select
-                  aria-label="Eligibility status"
-                  value={eligibilityFilter}
-                  onChange={(event) => setEligibilityFilter(event.target.value)}
-                >
-                  <option value="">All statuses</option>
-                  {unique(students.map((student) => student.eligibility)).map((status) => (
-                    <option key={status}>{status}</option>
-                  ))}
-                </select>
                 <button
                   className="cms-btn cms-btn-ghost"
-                  onClick={() => setSelectedIds((current) => [...new Set([...current, ...eligibleStudents.map((student) => student.id)])])}
-                  disabled={!eligibleStudents.length}
+                  onClick={() => setSelectedIds(visibleStudents.map((student) => student.id))}
+                  disabled={!visibleStudents.length}
                 >
-                  Select All Eligible
+                  Select All
                 </button>
                 <button className="cms-btn cms-btn-ghost" onClick={() => setSelectedIds([])}>
                   Clear
@@ -948,8 +957,6 @@ export default function PromotionPage({ screen = "promotion" }) {
                         <th>Group</th>
                         <th>Section</th>
                         <th>Medium</th>
-                        <th>Eligibility</th>
-                        <th>Reason</th>
                         {!isFinalYear ? <th>Action</th> : null}
                       </tr>
                     </thead>
@@ -961,7 +968,6 @@ export default function PromotionPage({ screen = "promotion" }) {
                               <input
                                 type="checkbox"
                                 checked={selectedIds.includes(student.id)}
-                                disabled={!isEligible(student)}
                                 onChange={() =>
                                   setSelectedIds((current) =>
                                     current.includes(student.id)
@@ -979,17 +985,10 @@ export default function PromotionPage({ screen = "promotion" }) {
                             <td>{student.group}</td>
                             <td>{student.section}</td>
                             <td>{student.medium}</td>
-                            <td>
-                              <span className={`promotion-status ${isEligible(student) ? "eligible" : "not-eligible"}`}>
-                                {student.eligibility}
-                              </span>
-                            </td>
-                            <td>{student.reason || "-"}</td>
                             {!isFinalYear ? (
                               <td>
                                 <button
                                   className="cms-action-link"
-                                  disabled={!isEligible(student)}
                                   onClick={() => setIndividualStudent(student)}
                                 >
                                   Promote
@@ -1000,7 +999,7 @@ export default function PromotionPage({ screen = "promotion" }) {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={isFinalYear ? 11 : 12} className="promotion-empty">
+                          <td colSpan={isFinalYear ? 9 : 10} className="promotion-empty">
                             No students found for the selected filters.
                           </td>
                         </tr>
@@ -1014,10 +1013,8 @@ export default function PromotionPage({ screen = "promotion" }) {
             </section>
 
             {studentsLoaded ? (
-              <section className="promotion-summary">
+              <section className="promotion-summary" style={{ gridTemplateColumns: "repeat(2, minmax(100px, 1fr))" }}>
                 <div><span>Total Students</span><strong>{students.length}</strong></div>
-                <div><span>Eligible</span><strong>{summary.eligible}</strong></div>
-                <div><span>Not Eligible</span><strong>{summary.ineligible}</strong></div>
                 <div><span>Selected</span><strong>{selectedIds.length}</strong></div>
               </section>
             ) : null}
@@ -1424,31 +1421,38 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
         <div className="promotion-flow-panel">
           <h3>Current Details</h3>
           <div style={{ marginBottom: "14px" }}>
-            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--cms-muted)", display: "block", marginBottom: "4px" }}>
-              Find Student (from loaded cohort)
+            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--cms-muted)", display: "block", marginBottom: "6px" }}>
+              Select Student (from loaded cohort)
             </label>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input
-                type="text"
-                placeholder="Search by name or admission no..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ flex: 1, padding: "8px 12px", borderRadius: "6px", border: "1px solid var(--cms-border)" }}
-              />
-            </div>
-            {matchingStudents.length > 0 && (
-              <div style={{ background: "var(--cms-surface)", border: "1px solid var(--cms-border)", borderRadius: "6px", marginTop: "4px", maxHeight: "150px", overflowY: "auto" }}>
-                {matchingStudents.map((s) => (
-                  <div
-                    key={s.id}
-                    onClick={() => handleSearchSelect(s)}
-                    style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid var(--cms-subtle)", fontSize: "13px" }}
-                  >
-                    <strong>{s.name}</strong> ({s.admissionNo}) — {s.group} / {s.section}
-                  </div>
-                ))}
-              </div>
-            )}
+            <select
+              value={currentStudent?.id || ""}
+              onChange={(e) => {
+                const selected = allStudents.find((s) => String(s.id) === String(e.target.value));
+                setCurrentStudent(selected || null);
+                setError("");
+              }}
+              style={{
+                width: "100%",
+                padding: "9px 12px",
+                borderRadius: "6px",
+                border: "1px solid var(--cms-border)",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                fontSize: "13.5px",
+                outline: "none"
+              }}
+            >
+              <option value="">
+                {allStudents.length
+                  ? `-- Select Student (${allStudents.length} available) --`
+                  : "-- No students loaded. Please load students in Student Promotion tab first --"}
+              </option>
+              {allStudents.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {currentStudent ? (
@@ -1461,15 +1465,9 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
               <div><strong>Group:</strong> {currentStudent.group}</div>
               <div><strong>Program:</strong> {currentStudent.program}</div>
               <div><strong>Section:</strong> {currentStudent.section}</div>
-              <div>
-                <strong>Eligibility:</strong>{" "}
-                <span className={`promotion-status ${isEligible(currentStudent) ? "eligible" : "not-eligible"}`}>
-                  {currentStudent.eligibility}
-                </span>
-              </div>
             </div>
           ) : (
-            <p className="promotion-empty">No student selected. Search above or load students in Student Promotion tab.</p>
+            <p className="promotion-empty">No student selected. Select a student from the dropdown above.</p>
           )}
         </div>
 
@@ -1582,9 +1580,15 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
     setMessage("");
 
     try {
-      const targetYearId = numericId(setup.toYear || defaultNextYearId || selectedAcademicYearId) || 9;
-      const targetAcademicLevel = masters.levels.find((l) => l.value === asString(setup.toLevel || setup.fromLevel))?.label || "Intermediate 1st Year";
-      const targetGroupId = numericId(setup.toGroup || setup.group) || 37;
+      const targetYearId = numericId(setup.toYear || defaultNextYearId || selectedAcademicYearId);
+      const targetAcademicLevel = masters.levels.find((l) => l.value === asString(setup.toLevel || setup.fromLevel))?.label;
+      const targetGroupId = numericId(setup.toGroup || setup.group);
+
+      if (!targetYearId || !targetAcademicLevel || !targetGroupId) {
+        setMessage("Missing required target configuration. Please select Year, Level, and Group.");
+        setSaving(false);
+        return;
+      }
 
       if (isProgram) {
         const byProgram = {};
@@ -1644,12 +1648,16 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
     <section className="cms-card promotion-card">
       <div className="promotion-tabs" role="tablist" style={{ marginBottom: "14px" }}>
         <button
+          role="tab"
+          aria-selected={isProgram}
           className={isProgram ? "is-active" : ""}
           onClick={() => { setActiveTab("program"); setMessage(""); }}
         >
           Program Allocation (Track Change)
         </button>
         <button
+          role="tab"
+          aria-selected={!isProgram}
           className={!isProgram ? "is-active" : ""}
           onClick={() => { setActiveTab("section"); setMessage(""); }}
         >

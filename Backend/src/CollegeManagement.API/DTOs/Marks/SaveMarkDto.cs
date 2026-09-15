@@ -18,6 +18,10 @@ namespace CollegeManagement.API.DTOs.Marks
         public int InternalMarks { get; set; }
         public int PracticalMarks { get; set; }
         public int TheoryMarks { get; set; }
+        public string? AcademicYear { get; set; }
+        public int? MaxMarks { get; set; }
+        public int? TotalMarks { get; set; }
+        public int? ObtainedMarks { get; set; }
         public int PassingMarks { get; set; } = 35;
         public bool IsAbsent { get; set; } = false;
         public string? Remarks { get; set; }

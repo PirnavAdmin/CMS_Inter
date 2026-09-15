@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Data;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Result;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
@@ -297,25 +297,161 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// <summary>
         /// Retrieves failed students.
         /// </summary>
-        public async Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync()
+        public async Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null)
         {
-            var result = await Connection.QueryAsync<StudentResultDto>(
-                "sp_GetFailedStudents",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("p_BoardId", boardId, DbType.Int32);
+                parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+                parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
+                parameters.Add("p_GroupId", groupId, DbType.Int32);
+                parameters.Add("p_ExamId", examId, DbType.Int32);
 
-            return result.ToList();
+                var result = await Connection.QueryAsync<StudentResultDto>(
+                    "sp_GetFailedStudents",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+
+                var list = result.ToList();
+                if (list.Any())
+                {
+                    return list;
+                }
+            }
+            catch (Exception)
+            {
+                // Fallback to EF Core if stored procedure fails or parameter mismatch
+            }
+
+            try
+            {
+                var query = _context.Results
+                    .Include(r => r.Student)
+                    .Include(r => r.Subject)
+                    .Include(r => r.Examination)
+                    .Include(r => r.Group)
+                    .AsNoTracking()
+                    .Where(r => r.IsPublished && (r.ResultStatus == "Fail" || r.ResultStatus == "FAIL"));
+
+                if (boardId.HasValue && boardId.Value > 0) query = query.Where(r => r.BoardId == boardId.Value);
+                if (academicYearId.HasValue && academicYearId.Value > 0) query = query.Where(r => r.AcademicYearId == academicYearId.Value);
+                if (academicLevelId.HasValue && academicLevelId.Value > 0) query = query.Where(r => r.AcademicLevelId == academicLevelId.Value);
+                if (groupId.HasValue && groupId.Value > 0) query = query.Where(r => r.GroupId == groupId.Value);
+                if (examId.HasValue && examId.Value > 0) query = query.Where(r => r.ExamId == examId.Value);
+
+                var results = await query.ToListAsync();
+                return results.Select(r => new StudentResultDto
+                {
+                    StudentId = r.StudentId,
+                    StudentName = r.Student?.StudentName ?? string.Empty,
+                    RollNumber = r.Student?.RollNo ?? string.Empty,
+                    GroupName = r.Group?.GroupName ?? string.Empty,
+                    ExamId = r.ExamId,
+                    ExamName = r.Examination?.ExamName ?? string.Empty,
+                    GrandTotal = r.TotalMarks,
+                    FinalResult = "FAIL",
+                    ResultStatus = "Fail",
+                    IsPublished = r.IsPublished,
+                    PublishedDate = r.PublishedDate
+                }).ToList();
+            }
+            catch
+            {
+                return new List<StudentResultDto>();
+            }
         }
 
         /// <summary>
         /// Retrieves result statistics.
         /// </summary>
-        public async Task<ResultStatisticsDto> GetResultStatisticsAsync()
+        public async Task<ResultStatisticsDto> GetResultStatisticsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null)
         {
-            var result = await Connection.QueryFirstOrDefaultAsync<ResultStatisticsDto>(
-                "sp_GetResultStatistics",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("p_BoardId", boardId, DbType.Int32);
+                parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+                parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
+                parameters.Add("p_GroupId", groupId, DbType.Int32);
+                parameters.Add("p_ExamId", examId, DbType.Int32);
 
-            return result ?? new ResultStatisticsDto();
+                var result = await Connection.QueryFirstOrDefaultAsync<ResultStatisticsDto>(
+                    "sp_GetResultStatistics",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+            catch (Exception)
+            {
+                // Fallback to EF Core if stored procedure fails or parameters mismatch
+                var query = _context.Results.AsNoTracking().Where(r => r.IsPublished);
+
+                if (boardId.HasValue && boardId.Value > 0)
+                    query = query.Where(r => r.BoardId == boardId.Value);
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                    query = query.Where(r => r.AcademicYearId == academicYearId.Value);
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    query = query.Where(r => r.AcademicLevelId == academicLevelId.Value);
+                if (groupId.HasValue && groupId.Value > 0)
+                    query = query.Where(r => r.GroupId == groupId.Value);
+                if (examId.HasValue && examId.Value > 0)
+                    query = query.Where(r => r.ExamId == examId.Value);
+
+                var resultsList = await query.ToListAsync();
+                if (!resultsList.Any())
+                {
+                    return new ResultStatisticsDto();
+                }
+
+                var distinctStudents = resultsList.Select(r => r.StudentId).Distinct().ToList();
+                var totalStudents = distinctStudents.Count;
+                var passedStudents = resultsList.Where(r => string.Equals(r.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase))
+                    .Select(r => r.StudentId).Distinct().Count();
+                var failedStudents = resultsList.Where(r => string.Equals(r.ResultStatus, "Fail", StringComparison.OrdinalIgnoreCase))
+                    .Select(r => r.StudentId).Distinct().Count();
+
+                var passPercentage = totalStudents > 0 ? Math.Round((decimal)passedStudents * 100m / totalStudents, 2) : 0m;
+                var averageMarks = resultsList.Any() ? Math.Round(resultsList.Average(r => r.TotalMarks), 2) : 0m;
+                var highestMarks = resultsList.Any() ? resultsList.Max(r => r.TotalMarks) : 0m;
+                var lowestMarks = resultsList.Any() ? resultsList.Min(r => r.TotalMarks) : 0m;
+
+                var distinctionCount = resultsList.Where(r => r.TotalMarks >= 75).Select(r => r.StudentId).Distinct().Count();
+                var firstClassCount = resultsList.Where(r => r.TotalMarks >= 60 && r.TotalMarks < 75).Select(r => r.StudentId).Distinct().Count();
+                var secondClassCount = resultsList.Where(r => r.TotalMarks >= 50 && r.TotalMarks < 60).Select(r => r.StudentId).Distinct().Count();
+                var thirdClassCount = resultsList.Where(r => r.TotalMarks >= 35 && r.TotalMarks < 50).Select(r => r.StudentId).Distinct().Count();
+
+                return new ResultStatisticsDto
+                {
+                    TotalStudents = totalStudents,
+                    PassedStudents = passedStudents,
+                    FailedStudents = failedStudents,
+                    PassPercentage = passPercentage,
+                    AverageMarks = averageMarks,
+                    HighestMarks = highestMarks,
+                    LowestMarks = lowestMarks,
+                    DistinctionCount = distinctionCount,
+                    FirstClassCount = firstClassCount,
+                    SecondClassCount = secondClassCount,
+                    ThirdClassCount = thirdClassCount
+                };
+            }
+
+            return new ResultStatisticsDto();
         }
 
         /// <summary>
@@ -409,12 +545,22 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<bool> RequestRevaluationAsync(
             RevaluationRequestDto request)
         {
+            int? subjectId = request.SubjectId;
+            if (!subjectId.HasValue || subjectId.Value <= 0)
+            {
+                subjectId = await _context.Results
+                    .Where(r => r.ResultId == request.ResultId)
+                    .Select(r => (int?)r.SubjectId)
+                    .FirstOrDefaultAsync();
+            }
+
             var affected = await Connection.ExecuteScalarAsync<int>(
                 "sp_RequestRevaluation",
                 new
                 {
                     p_ResultId = request.ResultId,
                     p_StudentId = request.StudentId,
+                    p_SubjectId = subjectId ?? 0,
                     p_Reason = request.Reason
                 },
                 commandType: CommandType.StoredProcedure);
@@ -440,14 +586,85 @@ namespace CollegeManagement.API.Repositories.Implementations
             return result;
         }
 
-       
-        public async Task<ResultDashboardDto> GetResultDashboardAsync()
+        public async Task<ResultDashboardDto> GetResultDashboardAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null)
         {
-            var result = await Connection.QuerySingleOrDefaultAsync<ResultDashboardDto>(
-                "sp_GetResultDashboard",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var parameters = new DynamicParameters();
+                parameters.Add("p_BoardId", boardId, DbType.Int32);
+                parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+                parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
+                parameters.Add("p_GroupId", groupId, DbType.Int32);
+                parameters.Add("p_ExamId", examId, DbType.Int32);
 
-            return result ?? new ResultDashboardDto();
+                var result = await Connection.QuerySingleOrDefaultAsync<ResultDashboardDto>(
+                    "sp_GetResultDashboard",
+                    parameters,
+                    commandType: CommandType.StoredProcedure);
+
+                if (result != null)
+                {
+                    return result;
+                }
+            }
+            catch (Exception)
+            {
+                // Fallback to EF Core if stored procedure fails or parameters mismatch
+                var mQuery = _context.Marks.AsNoTracking().Where(m => m.IsActive);
+                if (boardId.HasValue && boardId.Value > 0)
+                    mQuery = mQuery.Where(m => m.BoardId == boardId.Value);
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                    mQuery = mQuery.Where(m => m.AcademicYearId == academicYearId.Value);
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    mQuery = mQuery.Where(m => m.AcademicLevelId == academicLevelId.Value);
+                if (groupId.HasValue && groupId.Value > 0)
+                    mQuery = mQuery.Where(m => m.GroupId == groupId.Value);
+                if (examId.HasValue && examId.Value > 0)
+                    mQuery = mQuery.Where(m => m.ExaminationId == examId.Value);
+
+                var totalStudents = await mQuery.Select(m => m.StudentId).Distinct().CountAsync();
+
+                var rQuery = _context.Results.AsNoTracking();
+                if (boardId.HasValue && boardId.Value > 0)
+                    rQuery = rQuery.Where(r => r.BoardId == boardId.Value);
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                    rQuery = rQuery.Where(r => r.AcademicYearId == academicYearId.Value);
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    rQuery = rQuery.Where(r => r.AcademicLevelId == academicLevelId.Value);
+                if (groupId.HasValue && groupId.Value > 0)
+                    rQuery = rQuery.Where(r => r.GroupId == groupId.Value);
+                if (examId.HasValue && examId.Value > 0)
+                    rQuery = rQuery.Where(r => r.ExamId == examId.Value);
+
+                var resultsList = await rQuery.ToListAsync();
+                var processedStudents = resultsList.Select(r => r.StudentId).Distinct().Count();
+                var publishedResults = resultsList.Where(r => r.IsPublished).ToList();
+                var publishedStudents = publishedResults.Select(r => r.StudentId).Distinct().Count();
+                var passedStudents = publishedResults.Where(r => string.Equals(r.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase))
+                    .Select(r => r.StudentId).Distinct().Count();
+                var failedStudents = publishedResults.Where(r => string.Equals(r.ResultStatus, "Fail", StringComparison.OrdinalIgnoreCase))
+                    .Select(r => r.StudentId).Distinct().Count();
+
+                var passPercentage = publishedStudents > 0 ? Math.Round((decimal)passedStudents * 100m / publishedStudents, 2) : 0m;
+
+                return new ResultDashboardDto
+                {
+                    TotalResults = totalStudents,
+                    ProcessedResults = processedStudents,
+                    PendingResults = Math.Max(0, totalStudents - processedStudents),
+                    PublishedResults = publishedStudents,
+                    PassedStudents = passedStudents,
+                    FailedStudents = failedStudents,
+                    PassPercentage = passPercentage
+                };
+            }
+
+            return new ResultDashboardDto();
         }
 
         

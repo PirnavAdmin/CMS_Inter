@@ -1,6 +1,7 @@
 import { BookOpen, CalendarCheck, FileText, Megaphone, User, Wallet, LogOut } from "lucide-react";
 import "./StudentDashboard.css";
 import logo from "@/assets/P_LOGO.png";
+import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 
 const cards = [
   { title: "My Profile", icon: User },
@@ -11,19 +12,13 @@ const cards = [
 ];
 
 function readUser() {
-  try {
-    return JSON.parse(localStorage.getItem("user") || "null");
-  } catch {
-    return null;
-  }
+  return getAuthUser();
 }
 
 export default function StudentDashboard() {
   const user = readUser();
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
+    clearAuthSession();
     window.location.assign("/login");
   };
 

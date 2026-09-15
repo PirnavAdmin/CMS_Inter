@@ -1,13 +1,10 @@
 using System;
-using System.Collections.Generic;
 
 namespace CollegeManagement.API.DTOs.Examination.Requests
 {
     public class UpdateExamScheduleRequest
     {
-        public int? GroupId { get; set; }
         public int? SubjectId { get; set; }
-        public string? PatternName { get; set; }
         public DateOnly? ExamDate { get; set; }
         public TimeOnly? StartTime { get; set; }
         public TimeOnly? EndTime { get; set; }
@@ -35,7 +32,5 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
         public string? ExamMode { get; set; }
         public decimal? MaxMarks { get; set; }
         public decimal? PassingMarks { get; set; }
-        public decimal? PassPercentage { get; set; }
-        public List<HallAssignmentDto>? HallAssignments { get; set; }
     }
 }

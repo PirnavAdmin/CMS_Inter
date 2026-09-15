@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Result;
+using CollegeManagement.API.DTOs.Result;
 
 namespace CollegeManagement.API.Repositories.Interfaces
 {
@@ -30,9 +30,19 @@ namespace CollegeManagement.API.Repositories.Interfaces
     int groupId,
     int examId);
 
-        Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync();
+        Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null);
 
-        Task<ResultStatisticsDto> GetResultStatisticsAsync();
+        Task<ResultStatisticsDto> GetResultStatisticsAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null);
 
         Task<ResultAnalysisDto> GetResultAnalysisAsync(
     int boardId,
@@ -55,7 +65,12 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<RevaluationStatusDto?> GetRevaluationStatusAsync(
             int revaluationId);
 
-        Task<ResultDashboardDto> GetResultDashboardAsync();
+        Task<ResultDashboardDto> GetResultDashboardAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? examId = null);
 
         
 

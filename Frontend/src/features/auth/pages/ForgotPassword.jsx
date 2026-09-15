@@ -1,18 +1,27 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthLayout from "@/layouts/AuthLayout.jsx";
 import { Field, useForm } from "@/components/common/Ui.jsx";
-import { forgotPassword } from "@/features/auth/services/authService.js";
-import { getApiErrorMessage } from "@/api/axios.js";
+import {
+  clearPasswordResetContext,
+  getPasswordRecoveryErrorMessage,
+  requestPasswordReset,
+  savePasswordResetContext,
+} from "@/features/auth/services/authService.js";
 
 const fields = [{ name: "email", label: "Registered Email", type: "email", required: true, full: true }];
 
 export default function ForgotPassword() {
-  const { values, errors, setValue, validate } = useForm(fields, {});
+  const location = useLocation();
+  const { values, errors, setValue, validate } = useForm(fields, { email: location.state?.email || "" });
   const [sent, setSent] = useState(false);
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    clearPasswordResetContext();
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -21,12 +30,12 @@ export default function ForgotPassword() {
     setBusy(true);
     try {
       const email = String(values.email || "").trim();
-      await forgotPassword({ email });
-      sessionStorage.setItem("password-reset-email", email);
+      const result = await requestPasswordReset({ email });
+      savePasswordResetContext({ email, accountType: result.accountType });
       setSent(true);
-      navigate("/verify-otp", { state: { email } });
+      navigate("/verify-otp", { state: { email, accountType: result.accountType } });
     } catch (error) {
-      setFormError(getApiErrorMessage(error));
+      setFormError(getPasswordRecoveryErrorMessage(error, "Unable to send OTP. Please try again."));
     } finally {
       setBusy(false);
     }

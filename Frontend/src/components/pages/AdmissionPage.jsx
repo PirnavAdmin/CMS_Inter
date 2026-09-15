@@ -22,7 +22,9 @@ import {
 } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
+import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
@@ -40,7 +42,7 @@ const formatAmount = (value) => {
   const amount = Number(value || 0);
   return `\u20b9${(Number.isFinite(amount) ? amount : 0).toLocaleString("en-IN")}`;
 };
-const MOBILE_FIELDS = new Set(["mobile", "fatherMobile", "motherMobile", "guardianMobile"]);
+const MOBILE_FIELDS = new Set(["studentMobileNumber", "mobile", "fatherMobile", "motherMobile", "guardianMobile"]);
 const DIGIT_LIMITS = { aadhaar: 12, pincode: 6, passYear: 4 };
 const AMOUNT_FIELDS = new Set(["feeAmount", "totalFee", "discount", "fine", "netPayable", "amountPaid", "balanceAmount"]);
 const ALPHA_FIELDS = new Set([
@@ -57,6 +59,7 @@ const ALPHA_FIELDS = new Set([
   "prevSchool",
 ]);
 const ADMISSION_GENDER_OPTIONS = ["Male", "Female", "Other"];
+const DEFAULT_BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((group) => ({ value: group, label: group }));
 const newAdmissionValues = (values = {}) => {
   const next = normalizeAdmissionMobileState(values);
   if (!next.admissionDate) next.admissionDate = todayISO();
@@ -117,10 +120,10 @@ const readId = (item, ...keys) => {
 const studentMobileValue = (values = {}) => {
   const value = read(
     values,
-    "mobile",
-    "studentMobile",
     "studentMobileNumber",
     "StudentMobileNumber",
+    "studentMobile",
+    "mobile",
     "mobileNumber",
     "MobileNumber",
     "StudentMobile",
@@ -130,30 +133,61 @@ const studentMobileValue = (values = {}) => {
 
 const normalizeAdmissionMobileState = (values = {}) => {
   const mobile = studentMobileValue(values);
-  return mobile && mobile !== values.mobile ? { ...values, mobile } : { ...values };
+  const houseDoorNumber = values.houseDoorNumber ?? values.HouseDoorNumber ?? values.address1;
+  const streetVillage = values.streetVillage ?? values.StreetVillage ?? values.address2;
+  return {
+    ...values,
+    ...(mobile ? { studentMobileNumber: mobile, mobile } : {}),
+    ...(houseDoorNumber !== undefined && houseDoorNumber !== null ? { houseDoorNumber, address1: houseDoorNumber } : {}),
+    ...(streetVillage !== undefined && streetVillage !== null ? { streetVillage, address2: streetVillage } : {}),
+  };
 };
 
-const isRenderableImageSource = (value) => {
-  const text = String(value || "").trim();
-  return Boolean(text) && (
-    text.startsWith("blob:")
-    || text.startsWith("data:image/")
-    || /^https?:\/\//i.test(text)
-    || text.startsWith("/")
-  );
+const getBackendOrigin = () => {
+  const configuredBaseUrl = String(env.apiBaseUrl || "").trim();
+  if (!configuredBaseUrl) return "";
+  try {
+    return new URL(configuredBaseUrl).origin;
+  } catch {
+    return configuredBaseUrl.replace(/\/+$/, "");
+  }
 };
 
-const normalizeImageSource = (value) => {
+const resolveStudentPhotoUrl = (value) => {
   const text = String(value || "").trim();
   if (!text || isSchemaPlaceholder(text)) return "";
-  if (isRenderableImageSource(text)) return text;
-  if (/[\\/]/.test(text) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(text)) {
-    const baseUrl = String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
-    const path = text.replace(/\\/g, "/").replace(/^\/?/, "/");
+  const cleanText = text.replace(/\\/g, "/");
+  if (/^https?:\/\//i.test(cleanText)) {
+    try {
+      const url = new URL(cleanText);
+      const baseUrl = getBackendOrigin();
+      if (baseUrl && url.pathname.includes("/uploads/")) {
+        return `${baseUrl}${url.pathname}${url.search}`;
+      }
+    } catch {
+      return cleanText;
+    }
+    return cleanText;
+  }
+  if (cleanText.startsWith("blob:") || cleanText.startsWith("data:image/")) return cleanText;
+  if (cleanText.startsWith("~") || cleanText.includes("/uploads/") || /\.(png|jpe?g|gif|webp|bmp)$/i.test(cleanText)) {
+    const baseUrl = getBackendOrigin();
+    const normalizedPath = cleanText.replace(/^~?\/?/, "/").replace(/^\/?wwwroot\//i, "/");
+    const path = normalizedPath.startsWith("/student-photos/")
+      ? `/uploads${normalizedPath}`
+      : !normalizedPath.includes("/") && /\.(png|jpe?g|gif|webp|bmp)$/i.test(normalizedPath)
+        ? `/uploads/student-photos/${normalizedPath}`
+        : normalizedPath;
     return baseUrl ? `${baseUrl}${path}` : path;
   }
   return "";
 };
+
+const normalizeImageSource = resolveStudentPhotoUrl;
+
+const studentPhotoSource = (values = {}, previewUrl = "") => (
+  previewUrl || values.photoUrl || values.studentPhoto || ""
+);
 
 const isLooseId = (value) => {
   const text = String(value ?? "").trim();
@@ -222,6 +256,19 @@ const lookupLabel = (options = [], value, currentLabel = "") => {
   const label = String(currentLabel || "").trim();
   if (label && !isRawIdDisplay(label, value)) return label;
   return optionLabel(options, value) || (label && !isRawIdDisplay(label) ? label : "");
+};
+
+const resolveOptionValue = (options = [], value, label = "") => {
+  const valueText = String(value ?? "").trim();
+  const labelText = String(label ?? "").trim();
+  const normalizedLabel = normalizeMatchText(labelText);
+  if (normalizedLabel) {
+    const byLabel = options.find((option) => normalizeMatchText(option.label) === normalizedLabel);
+    if (byLabel) return String(byLabel.value);
+  }
+  const byValue = valueText ? options.find((option) => String(option.value) === valueText) : null;
+  if (byValue) return String(byValue.value);
+  return valueText;
 };
 
 const formatFeeDate = (value) => {
@@ -426,6 +473,13 @@ const toOption = (item, idKeys, labelKeys) => {
   return { value: String(value), label: String(label) };
 };
 
+const normalizeBloodGroupOption = (item) => {
+  if (typeof item === "string") return item.trim() ? { value: item, label: item } : null;
+  const label = readText(item, "bloodGroupName", "BloodGroupName", "bloodGroup", "BloodGroup", "name", "Name", "value", "Value", "label", "Label", "code", "Code");
+  if (!label) return null;
+  return { value: label, label };
+};
+
 const compactIds = (values = []) => (
   Array.isArray(values)
     ? values.map((value) => String(value ?? "").trim()).filter(Boolean)
@@ -453,6 +507,7 @@ const normalizeLevelOption = (item) => {
   return option ? {
     ...option,
     boardId: readId(item, "boardId", "BoardId"),
+    academicYearId: readId(item, "academicYearId", "AcademicYearId"),
   } : null;
 };
 
@@ -493,13 +548,38 @@ const COURSE_PAYMENT_PLAN_LABELS = {
   "Full Payment": "Full Course Payment",
   "Installment Payment": "Course Fee Schedule",
 };
-const normalizeCoursePaymentPlan = (value, hasInstallments = false) => {
-  const text = String(value || "").trim();
+const normalizeCoursePaymentPlan = (source, hasInstallments = false) => {
+  const value = typeof source === "object" && source !== null
+    ? read(
+      source,
+      "planName",
+      "PlanName",
+      "name",
+      "Name",
+      "paymentPlanName",
+      "PaymentPlanName",
+      "paymentPlan",
+      "PaymentPlan",
+    )
+    : source;
+  const text = typeof value === "object" ? "" : String(value || "").trim();
   const normalized = text.toLowerCase();
   if (normalized.includes("installment") || normalized.includes("schedule")) return "Installment Payment";
   if (normalized.includes("full")) return "Full Payment";
   if (COURSE_PAYMENT_PLANS.includes(text)) return text;
-  return hasInstallments ? "Installment Payment" : text;
+  return hasInstallments ? "Installment Payment" : "";
+};
+const toAdmissionPaymentPlan = (plan) => {
+  const normalized = normalizeCoursePaymentPlan(plan);
+  if (normalized === "Full Payment") return "Full Payment";
+  if (normalized === "Installment Payment") return "Schedule Payment";
+  return "";
+};
+const toFeeAssignmentPlanName = (plan) => {
+  const normalized = normalizeCoursePaymentPlan(plan);
+  if (normalized === "Full Payment") return "Full Payment";
+  if (normalized === "Installment Payment") return "Installment Payment";
+  return "";
 };
 const PAGE_SIZE = 6;
 const ADMISSION_EXPORT_COLUMNS = [
@@ -546,7 +626,7 @@ const steps = [
       { name: "dob", label: "Date of Birth", type: "date", required: true },
       { name: "bloodGroup", label: "Blood Group", type: "select", options: [], required: true },
       { name: "aadhaar", label: "Aadhaar Number", required: true },
-      { name: "mobile", label: "StudentMobile" },
+      { name: "studentMobileNumber", label: "Student Mobile", type: "tel" },
       { name: "email", label: "Email", type: "email" },
       { name: "religion", label: "Religion" },
       { name: "caste", label: "Caste Category", type: "select", options: ["General", "OBC", "SC", "ST", "EWS"] },
@@ -569,8 +649,8 @@ const steps = [
   {
     title: "Address",
     fields: [
-      { name: "address1", label: "House / Door Number", required: true },
-      { name: "address2", label: "Street / Village" },
+      { name: "houseDoorNumber", label: "House / Door Number", required: true },
+      { name: "streetVillage", label: "Street / Village" },
       { name: "city", label: "Town", required: true },
       { name: "district", label: "District", required: true },
       { name: "state", label: "State", type: "select", options: ["Andhra Pradesh", "Telangana", "Karnataka", "Maharashtra", "Delhi"], required: true },
@@ -633,6 +713,8 @@ const stepIcons = {
 
 const buildAdmissionFormData = (values) => {
   const formData = new FormData();
+  const houseDoorNumber = values.houseDoorNumber ?? values.address1 ?? "";
+  const streetVillage = values.streetVillage ?? values.address2 ?? "";
   appendIfPresent(formData, "AdmissionNo", values.admissionNo);
   appendIfPresent(formData, "AdmissionDate", toDateTime(values.admissionDate));
   appendIfPresent(formData, "AdmissionQuota", values.quota === "Other" ? values.quotaOther : values.quota);
@@ -645,7 +727,7 @@ const buildAdmissionFormData = (values) => {
     formData.append("StudentPhoto", values.photo);
   }
   appendIfPresent(formData, "Email", values.email);
-  appendIfPresent(formData, "StudentMobileNumber", studentMobileValue(values));
+  appendIfPresent(formData, "Student Mobile", studentMobileValue(values));
   appendIfPresent(formData, "HallTicketNumber", values.hallTicket);
   appendIfPresent(formData, "AadhaarNumber", values.aadhaar);
   appendIfPresent(formData, "Nationality", values.nationality);
@@ -663,9 +745,9 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "GuardianMobile", values.guardianMobile);
   appendIfPresent(formData, "GuardianEmail", values.guardianEmail);
   appendIfPresent(formData, "AnnualIncome", values.annualIncome);
-  appendIfPresent(formData, "Address", [values.address1, values.address2, values.city, values.district, values.state, values.pincode].filter(Boolean).join(", "));
-  appendIfPresent(formData, "AddressLine1", values.address1);
-  appendIfPresent(formData, "AddressLine2", values.address2);
+  appendIfPresent(formData, "Address", [houseDoorNumber, streetVillage, values.city, values.district, values.state, values.pincode].filter(Boolean).join(", "));
+  appendIfPresent(formData, "HouseDoorNumber", houseDoorNumber);
+  appendIfPresent(formData, "StreetVillage", streetVillage);
   appendIfPresent(formData, "City", values.city);
   appendIfPresent(formData, "District", values.district);
   appendIfPresent(formData, "State", values.state);
@@ -677,6 +759,14 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "GroupId", values.group);
   appendIfPresent(formData, "ProgramId", values.program);
   appendIfPresent(formData, "FeeStructureId", numericId(values.feeStructureId));
+  const admissionPaymentPlan = toAdmissionPaymentPlan(values.paymentPlan);
+  appendIfPresent(formData, "PaymentPlan", admissionPaymentPlan);
+  if (import.meta.env.DEV) {
+    console.log("Student Admission payment plan payload:", {
+      uiPaymentPlan: values.paymentPlan,
+      admissionPaymentPlan,
+    });
+  }
   appendIfPresent(formData, "Medium", values.medium);
   appendIfPresent(formData, "SecondLanguage", values.secondLanguage);
   appendIfPresent(formData, "AdmissionType", values.admissionType);
@@ -690,20 +780,16 @@ const buildAdmissionFormData = (values) => {
 
 const debugAdmissionSubmitPayload = ({ endpoint, method, formData, values }) => {
   if (!import.meta.env.DEV) return;
-  const entries = Array.from(formData.entries()).map(([key, value]) => [
-    key,
-    typeof File !== "undefined" && value instanceof File
-      ? `[File: ${value.name || "unnamed"}, ${value.size} bytes]`
-      : value,
-  ]);
+  const keys = Array.from(formData.keys());
   console.log("Student Admission submit payload", {
     endpoint,
     method,
-    stateMobile: values.mobile,
-    normalizedStudentMobileNumber: studentMobileValue(values),
-    hasStudentMobileNumber: formData.has("StudentMobileNumber"),
-    studentMobileNumberEntry: formData.get("StudentMobileNumber"),
-    formDataEntries: Object.fromEntries(entries),
+    keys,
+    hasStudentMobileNumber: formData.has("Student Mobile"),
+    hasHouseDoorNumber: formData.has("HouseDoorNumber"),
+    hasStreetVillage: formData.has("StreetVillage"),
+    hasExistingStudentPhoto: Boolean(values.studentPhoto),
+    hasNewStudentPhoto: typeof File !== "undefined" && values.photo instanceof File,
   });
 };
 
@@ -812,27 +898,28 @@ const normalizeAdmissionStatus = (value, fallback = "Pending") => {
   return fallback;
 };
 
-const readPhotoUrl = (item, student) => readText(
-  item,
-  "studentPhotoUrl",
-  "StudentPhotoUrl",
-  "photoUrl",
-  "PhotoUrl",
-  "studentPhoto",
-  "StudentPhoto",
-  "photo",
-  "Photo",
-) || readText(
-  student,
-  "studentPhotoUrl",
-  "StudentPhotoUrl",
-  "photoUrl",
-  "PhotoUrl",
-  "studentPhoto",
-  "StudentPhoto",
-  "photo",
-  "Photo",
-);
+const readPhotoUrl = (...sources) => {
+  const keys = [
+    "studentPhotoUrl",
+    "StudentPhotoUrl",
+    "photoUrl",
+    "PhotoUrl",
+    "studentPhoto",
+    "StudentPhoto",
+    "photo",
+    "Photo",
+    "photoPath",
+    "PhotoPath",
+    "profilePhoto",
+    "ProfilePhoto",
+    "passportPhoto",
+    "PassportPhoto",
+  ];
+  return sources
+    .filter((source) => source && typeof source === "object")
+    .map((source) => readText(source, ...keys))
+    .find(Boolean) || "";
+};
 
 const readFeeStructureId = (item) => {
   const feeStructure = read(item, "feeStructure", "FeeStructure", "structure", "Structure");
@@ -892,9 +979,92 @@ const readAdmissionInstallments = (item) => getNestedRows(
   dueDate: readText(row, "dueDate", "DueDate", "date", "Date").slice(0, 10),
 }));
 
+const persistedFeeSources = (payload) => {
+  const root = getObject(payload);
+  return [
+    root,
+    read(
+      root,
+      "studentFee",
+      "StudentFee",
+      "feeDetails",
+      "FeeDetails",
+      "feeAccount",
+      "FeeAccount",
+      "admissionFeeSelection",
+      "AdmissionFeeSelection",
+      "feeSelection",
+      "FeeSelection",
+      "assignment",
+      "Assignment",
+    ),
+  ].filter((source) => source && typeof source === "object");
+};
+
+const readPersistedFeeState = (payload, currentValues = {}) => {
+  const sources = persistedFeeSources(payload);
+  const planSource = sources
+    .map((source) => read(
+      source,
+      "paymentPlan",
+      "PaymentPlan",
+      "planName",
+      "PlanName",
+      "paymentPlanName",
+      "PaymentPlanName",
+      "feePaymentPlan",
+      "FeePaymentPlan",
+      "plan",
+      "Plan",
+    ))
+    .find((source) => source !== undefined && source !== null && source !== "");
+  const planObject = planSource && typeof planSource === "object" ? planSource : {};
+  const schedules = [planObject, ...sources].map(readAdmissionInstallments).find((rows) => rows.length) || [];
+  const explicitCount = sources.map((source) => readNumber(
+    source,
+    "numberOfInstallments",
+    "NumberOfInstallments",
+    "installmentCount",
+    "InstallmentCount",
+    "scheduleCount",
+    "ScheduleCount",
+  )).find((count) => count !== null) ?? readNumber(
+    planObject,
+    "numberOfInstallments",
+    "NumberOfInstallments",
+    "installmentCount",
+    "InstallmentCount",
+    "scheduleCount",
+    "ScheduleCount",
+  );
+  const paymentPlan = normalizeCoursePaymentPlan(planSource, schedules.length > 0);
+  const installmentCount = paymentPlan === "Installment Payment"
+    ? explicitCount || schedules.length || Number(currentValues.installmentCount) || DEFAULT_INSTALLMENT_COUNT
+    : paymentPlan === "Full Payment" ? 1 : currentValues.installmentCount || "";
+
+  return {
+    paymentPlan,
+    installmentCount,
+    installments: schedules.length ? schedules : (currentValues.installments || []),
+    rawPaymentPlan: planSource,
+  };
+};
+
+const hydratePersistedFeeState = (currentValues, payload) => {
+  const persisted = readPersistedFeeState(payload, currentValues);
+  if (!persisted.paymentPlan) return currentValues;
+  return {
+    ...currentValues,
+    paymentPlan: persisted.paymentPlan,
+    installmentCount: persisted.installmentCount,
+    installments: persisted.paymentPlan === "Installment Payment" ? persisted.installments : [],
+  };
+};
+
 const normalizeAdmissionRow = (item) => {
   const admissionId = readId(item, "admissionId", "AdmissionId", "id", "Id");
-  const student = read(item, "student", "Student");
+  const student = read(item, "student", "Student", "studentDetails", "StudentDetails", "approvedStudent", "ApprovedStudent", "createdStudent", "CreatedStudent");
+  const admission = read(item, "admission", "Admission", "studentAdmission", "StudentAdmission", "admissionDetails", "AdmissionDetails");
   const firstName = readText(item, "firstName", "FirstName");
   const lastName = readText(item, "lastName", "LastName");
   const board = read(item, "board", "Board");
@@ -908,24 +1078,31 @@ const normalizeAdmissionRow = (item) => {
   const status = normalizeAdmissionStatus(readText(item, "status", "Status", "admissionStatus", "AdmissionStatus"));
   const programName = readText(item, "programName", "ProgramName")
     || (typeof program === "string" ? program : readText(program, "programName", "ProgramName", "name", "Name", "programCode", "ProgramCode"));
+  const boardId = readId(item, "boardId", "BoardId") || readId(board, "boardId", "BoardId", "id", "Id");
+  const rawBoardName = readText(item, "boardName", "BoardName")
+    || (typeof board === "string" ? board : readText(board, "boardName", "BoardName", "name", "Name", "boardCode", "BoardCode"));
+  const boardName = !isRawIdDisplay(rawBoardName, boardId) ? rawBoardName : "";
+  const academicYearId = readId(item, "academicYearId", "AcademicYearId") || readId(academicYear, "academicYearId", "AcademicYearId", "id", "Id");
+  const rawAcademicYearName = readText(item, "academicYearName", "AcademicYearName")
+    || (typeof academicYear === "string" ? academicYear : readText(academicYear, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name"));
+  const academicYearName = !isRawIdDisplay(rawAcademicYearName, academicYearId) ? rawAcademicYearName : "";
   const groupId = readId(item, "groupId", "GroupId") || readId(group, "groupId", "GroupId", "id", "Id");
   const groupName = readText(item, "groupName", "GroupName") || (typeof group === "string" ? group : readText(group, "groupName", "GroupName", "name", "Name", "groupCode", "GroupCode"));
   const programId = readId(item, "programId", "ProgramId") || readId(program, "programId", "ProgramId", "id", "Id");
   const quotaValue = readText(item, "admissionQuota", "AdmissionQuota", "quota", "Quota");
   const standardQuota = steps[0].fields.find((field) => field.name === "quota")?.options || [];
   const isStandardQuota = standardQuota.some((option) => String(option).toLowerCase() === quotaValue.toLowerCase());
-  const photoUrl = normalizeImageSource(readPhotoUrl(item, student));
+  const studentPhoto = readPhotoUrl(item, student, admission);
+  const photoUrl = resolveStudentPhotoUrl(studentPhoto);
   const feeStructureId = readFeeStructureId(item);
   const savedFeeItems = readAdmissionFeeItems(item, feeStructureId);
   const savedInstallments = readAdmissionInstallments(item);
-  const paymentPlan = normalizeCoursePaymentPlan(
-    readText(item, "paymentPlan", "PaymentPlan", "paymentPlanName", "PaymentPlanName", "feePaymentPlan", "FeePaymentPlan", "planName", "PlanName"),
-    savedInstallments.length > 0,
-  );
+  const persistedFee = readPersistedFeeState(item, { installments: savedInstallments });
+  const paymentPlan = persistedFee.paymentPlan;
   const combinedAddress = readText(item, "address", "Address");
   const combinedAddressParts = combinedAddress.split(",").map((part) => part.trim()).filter(Boolean);
-  const addressLine1 = readText(item, "addressLine1", "AddressLine1") || combinedAddressParts[0] || "";
-  const addressLine2 = readText(item, "addressLine2", "AddressLine2") || combinedAddressParts[1] || "";
+  const houseDoorNumber = readText(item, "houseDoorNumber", "HouseDoorNumber", "addressLine1", "AddressLine1") || combinedAddressParts[0] || "";
+  const streetVillage = readText(item, "streetVillage", "StreetVillage", "addressLine2", "AddressLine2") || combinedAddressParts[1] || "";
   const city = readText(item, "city", "City") || combinedAddressParts[2] || "";
   const district = readText(item, "district", "District") || combinedAddressParts[3] || "";
   const state = readText(item, "state", "State") || combinedAddressParts[4] || "";
@@ -938,10 +1115,14 @@ const normalizeAdmissionRow = (item) => {
     admissionNo,
     studentName,
     admissionDate: readText(item, "admissionDate", "AdmissionDate", "date", "Date"),
-    academicYear: readId(item, "academicYearId", "AcademicYearId") || readId(academicYear, "academicYearId", "AcademicYearId", "id", "Id") || readText(item, "academicYearName", "AcademicYearName"),
-    board: readId(item, "boardId", "BoardId") || readId(board, "boardId", "BoardId", "id", "Id") || readText(item, "boardName", "BoardName"),
+    academicYear: academicYearId || academicYearName,
+    academicYearName,
+    board: boardId || boardName,
+    boardName,
     group: !isRawIdDisplay(groupName, groupId) ? groupName : groupId,
     program: !isRawIdDisplay(programName, programId) ? programName : programId,
+    studentPhoto,
+    photoUrl,
     status,
     currentStep: 0,
     source: "api",
@@ -952,17 +1133,19 @@ const normalizeAdmissionRow = (item) => {
       admissionType: readText(item, "admissionType", "AdmissionType"),
       quota: quotaValue && !isStandardQuota ? "Other" : quotaValue,
       quotaOther: quotaValue && !isStandardQuota ? quotaValue : "",
-      board: readId(item, "boardId", "BoardId") || readId(board, "boardId", "BoardId", "id", "Id"),
-      year: readId(item, "academicYearId", "AcademicYearId") || readId(academicYear, "academicYearId", "AcademicYearId", "id", "Id"),
+      board: boardId,
+      year: academicYearId,
       firstName,
       lastName,
       gender: readText(item, "gender", "Gender"),
       dob: readText(item, "dateOfBirth", "DateOfBirth", "dob", "DOB").slice(0, 10),
       bloodGroup: readText(item, "bloodGroup", "BloodGroup"),
+      studentPhoto,
       photoUrl,
       aadhaar: readText(item, "aadhaarNumber", "AadhaarNumber", "aadhaar", "Aadhaar"),
+      studentMobileNumber: readText(item, "studentMobileNumber", "StudentMobileNumber", "mobileNumber", "MobileNumber", "mobile", "Mobile"),
       mobile: readText(item, "studentMobileNumber", "StudentMobileNumber", "mobileNumber", "MobileNumber", "mobile", "Mobile"),
-      email: readText(item, "email", "Email"),
+      email: readText(item, "studentEmail", "StudentEmail", "email", "Email"),
       religion: readText(item, "religion", "Religion"),
       caste: readText(item, "category", "Category", "caste", "Caste"),
       fatherName: readText(item, "fatherName", "FatherName"),
@@ -977,8 +1160,10 @@ const normalizeAdmissionRow = (item) => {
       guardianMobile: readText(item, "guardianMobile", "GuardianMobile"),
       guardianEmail: readText(item, "guardianEmail", "GuardianEmail"),
       annualIncome: readText(item, "annualIncome", "AnnualIncome"),
-      address1: addressLine1,
-      address2: addressLine2,
+      houseDoorNumber,
+      streetVillage,
+      address1: houseDoorNumber,
+      address2: streetVillage,
       city,
       district,
       state,
@@ -995,8 +1180,8 @@ const normalizeAdmissionRow = (item) => {
       feeStructureId,
       feeItems: savedFeeItems,
       paymentPlan,
-      installmentCount: savedInstallments.length ? savedInstallments.length : "",
-      installments: savedInstallments,
+      installmentCount: persistedFee.installmentCount,
+      installments: persistedFee.installments,
       status,
       level: readId(item, "academicLevelId", "AcademicLevelId") || readId(academicLevel, "academicLevelId", "AcademicLevelId", "id", "Id"),
       levelName: readText(item, "academicLevelName", "AcademicLevelName") || (typeof academicLevel === "string" ? academicLevel : readText(academicLevel, "academicLevelName", "AcademicLevelName", "name", "Name")),
@@ -1048,14 +1233,6 @@ const readStudentFeeAssignmentId = (payload) => {
   return "";
 };
 
-const readPaymentPlanId = (payload) => readId(
-  getObject(payload),
-  "paymentPlanId",
-  "PaymentPlanId",
-  "id",
-  "Id",
-);
-
 const resolveApprovedStudentId = (...sources) => {
   for (const source of sources) {
     const student = read(source, "student", "Student", "approvedStudent", "ApprovedStudent", "createdStudent", "CreatedStudent", "studentDetails", "StudentDetails");
@@ -1102,12 +1279,17 @@ const findApplicableFeeStructure = async ({ boardId, academicYearId, groupId, pr
     throw new Error("Fee account was not created because Board, Academic Year and Group are required to find a fee structure.");
   }
   const response = await apiClient.get(apiEndpoints.fee.getStructures);
-  const summaries = getCollection(response.data)
+  const structureRows = getCollection(response.data);
+  const summaries = structureRows
+    .map(normalizeFeeStructureSummary)
+    .filter(Boolean)
+    .filter((item) => item.status.toLowerCase() !== "inactive");
+  const expandedSummaries = summaries.length ? summaries : structureRows
     .flatMap(expandFeeStructureItems)
     .map(normalizeFeeStructureSummary)
     .filter(Boolean)
     .filter((item) => item.status.toLowerCase() !== "inactive");
-  const matching = summaries.find((item) => feeStructureMatchesSelection(item, { boardId, academicYearId, groupId, programId }));
+  const matching = expandedSummaries.find((item) => feeStructureMatchesSelection(item, { boardId, academicYearId, groupId, programId }));
   if (!matching) throw new Error("No active fee structure is configured for the approved student's academic combination.");
   return matching;
 };
@@ -1242,6 +1424,11 @@ const saveAdmissionFeeSelections = async (admissionId, values) => {
     throw new Error("Selected fee components could not be saved because their backend component IDs were not available.");
   }
 
+  const payload = {
+    admissionId: numericAdmissionId,
+    selectedFeeStructureComponentIds: componentIds,
+  };
+
   if (import.meta.env.DEV) {
     console.log("Student Admission fee selections payload", {
       endpoint: apiEndpoints.studentAdmissions.feeSelections(numericAdmissionId),
@@ -1250,10 +1437,7 @@ const saveAdmissionFeeSelections = async (admissionId, values) => {
     });
   }
 
-  await apiClient.post(apiEndpoints.studentAdmissions.feeSelections(numericAdmissionId), {
-    admissionId: numericAdmissionId,
-    selectedFeeStructureComponentIds: componentIds,
-  });
+  await apiClient.post(apiEndpoints.studentAdmissions.feeSelections(numericAdmissionId), payload);
 };
 
 const feeStepErrors = (values) => {
@@ -1304,14 +1488,50 @@ const previewFieldValue = (field, values) => {
 };
 
 function StudentPhotoPreview({ src, label = "Student photo", emptyLabel = "Upload Photo" }) {
-  const normalizedSrc = normalizeImageSource(src);
+  const normalizedSrc = resolveStudentPhotoUrl(src);
+  const [displaySrc, setDisplaySrc] = useState("");
   const [failed, setFailed] = useState(false);
   useEffect(() => {
+    let active = true;
+    let objectUrl = "";
     setFailed(false);
+    setDisplaySrc("");
+    if (!normalizedSrc) return () => { active = false; };
+    if (/^(?:blob:|data:image\/)/i.test(normalizedSrc)) {
+      setDisplaySrc(normalizedSrc);
+      return () => { active = false; };
+    }
+    apiClient.get(normalizedSrc, {
+      responseType: "blob",
+      headers: { Accept: "image/*" },
+      skipGlobalLoader: true,
+    }).then((response) => {
+      if (!active) return;
+      const contentType = String(response.headers?.["content-type"] ?? response.data?.type ?? "").toLowerCase();
+      if (!contentType.startsWith("image/")) throw new Error("The photo endpoint did not return an image.");
+      objectUrl = URL.createObjectURL(response.data);
+      setDisplaySrc(objectUrl);
+    }).catch(() => {
+      if (!active) return;
+      setFailed(true);
+      if (import.meta.env.DEV) console.error("Student photo failed to load:", normalizedSrc);
+    });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [normalizedSrc]);
   return (
-    <div className={`cms-admission-photo-preview ${!normalizedSrc || failed ? "is-empty" : ""}`}>
-      {normalizedSrc && !failed ? <img src={normalizedSrc} alt={label} onError={() => setFailed(true)} /> : <span>{emptyLabel}</span>}
+    <div className={`cms-admission-photo-preview ${!displaySrc || failed ? "is-empty" : ""}`}>
+      {displaySrc && !failed ? (
+        <img
+          src={displaySrc}
+          alt={label}
+          onError={() => {
+            setFailed(true);
+          }}
+        />
+      ) : <span>{emptyLabel}</span>}
     </div>
   );
 }
@@ -1339,7 +1559,7 @@ function AdmissionPreview({ sections, values, errors, onEdit, feeNode, photoPrev
               return (
                 <div key={field.name} className={`cms-preview-item ${isPhoto ? "cms-preview-photo-item" : ""} ${missingRequired ? "is-missing" : ""}`}>
                   <span>{field.label}</span>
-                  {isPhoto ? <StudentPhotoPreview src={photoPreviewUrl || values.photoUrl} emptyLabel="No Photo" /> : <strong>{formatPreviewValue(field, value)}</strong>}
+                  {isPhoto ? <StudentPhotoPreview src={studentPhotoSource(values, photoPreviewUrl)} emptyLabel="No Photo" /> : <strong>{formatPreviewValue(field, value)}</strong>}
                   {errors[field.name] || missingRequired ? <small>{errors[field.name] || `${field.label} is required`}</small> : null}
                 </div>
               );
@@ -1374,7 +1594,7 @@ function AdmissionFormSections({ sections, values, errors, onChange, onFileChang
                   onFileChange={onFileChange}
                   onFileRemove={onFileRemove}
                   inputRef={(element) => { inputRefs.current[field.name] = element; }}
-                  previewUrl={field.name === "photo" ? photoPreviewUrl || values.photoUrl : ""}
+                  previewUrl={field.name === "photo" ? studentPhotoSource(values, photoPreviewUrl) : ""}
                   extraValue={field.name === "quota" ? values.quotaOther : ""}
                 />
               ))}
@@ -1803,7 +2023,9 @@ export default function AdmissionPage() {
   const {
     boards: contextBoards,
     academicYears: contextAcademicYears,
+    selectedBoard,
     selectedBoardId,
+    selectedAcademicYear,
     selectedAcademicYearId,
   } = useAcademicContext();
   const [initialDraft] = useState(readAdmissionDraft);
@@ -1843,6 +2065,7 @@ export default function AdmissionPage() {
   const feeSelectionInitializedRef = useRef(initialDraft.hasFeeSelection);
   const admissionNumberInFlightRef = useRef(false);
   const pincodeRequestRef = useRef(0);
+  const academicLevelRequestRef = useRef(0);
   const programRequestRef = useRef(0);
   const boardMappingRequestRef = useRef(0);
   const approveInFlightRef = useRef(new Set());
@@ -1875,6 +2098,42 @@ export default function AdmissionPage() {
       return option ? { ...option, boardId: readId(item, "boardId", "BoardId") } : null;
     }).filter(Boolean)
   ), [contextAcademicYears]);
+  const boardOptions = useMemo(() => uniqueOptionsByValue([
+    ...contextBoardOptions,
+    ...(masterOptions.boards || []),
+  ]), [contextBoardOptions, masterOptions.boards]);
+  const yearOptions = useMemo(() => uniqueOptionsByValue([
+    ...contextYearOptions,
+    ...(masterOptions.years || []),
+  ]), [contextYearOptions, masterOptions.years]);
+  const contextBoardLookupOptions = useMemo(() => uniqueOptionsByValue([
+    ...(masterOptions.boards || []),
+    ...contextBoardOptions,
+  ]), [contextBoardOptions, masterOptions.boards]);
+  const contextYearLookupOptions = useMemo(() => uniqueOptionsByValue([
+    ...(masterOptions.years || []),
+    ...contextYearOptions,
+  ]), [contextYearOptions, masterOptions.years]);
+  const selectedContextBoardLabel = selectedBoard?.boardName || selectedBoard?.name || selectedBoard?.label || selectedBoard?.code || "";
+  const selectedContextYearLabel = selectedAcademicYear?.academicYearName || selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || "";
+  const selectedContextBoardValue = useMemo(() => resolveOptionValue(
+    contextBoardLookupOptions,
+    selectedBoardId,
+    selectedContextBoardLabel,
+  ), [contextBoardLookupOptions, selectedBoardId, selectedContextBoardLabel]);
+  const selectedContextYearValue = useMemo(() => resolveOptionValue(
+    contextYearLookupOptions,
+    selectedAcademicYearId,
+    selectedContextYearLabel,
+  ), [contextYearLookupOptions, selectedAcademicYearId, selectedContextYearLabel]);
+  const admissionYearDisplay = useCallback((row) => (
+    lookupLabel(yearOptions, row.academicYear, row.academicYearName)
+    || (!isRawIdDisplay(row.academicYear) ? row.academicYear : "-")
+  ), [yearOptions]);
+  const admissionBoardDisplay = useCallback((row) => (
+    lookupLabel(boardOptions, row.board, row.boardName)
+    || (!isRawIdDisplay(row.board) ? row.board : "-")
+  ), [boardOptions]);
   const groupOptions = useMemo(() => {
     const rows = masterOptions.groups || [];
     return rows.filter((item) => (
@@ -1897,23 +2156,31 @@ export default function AdmissionPage() {
   }, [masterOptions.boards, masterOptions.groups, masterOptions.levels, masterOptions.sections, values.board, values.group, values.groupName, values.level, values.levelName, values.year]);
   const programOptions = useMemo(() => masterOptions.programs || [], [masterOptions.programs]);
   const groupFilterOptions = useMemo(() => masterOptions.groups || [], [masterOptions.groups]);
+  const bloodGroupOptions = useMemo(() => (
+    masterOptions.bloodGroups?.length ? masterOptions.bloodGroups : DEFAULT_BLOOD_GROUP_OPTIONS
+  ), [masterOptions.bloodGroups]);
   const academicYearOptions = useMemo(() => uniqueAcademicYearsByName(
-    (masterOptions.years || []).filter((item) => (
+    (yearOptions || []).filter((item) => (
       !values.board || !item.boardId || String(item.boardId) === String(values.board)
     )),
     (item) => item.label,
-  ), [masterOptions.years, values.board]);
+  ), [values.board, yearOptions]);
   const levelOptions = useMemo(() => {
     if (!values.board) return [];
     const levels = masterOptions.levels || [];
-    const selectedBoard = (masterOptions.boards || []).find((item) => String(item.value) === String(values.board));
+    const selectedBoard = (boardOptions || []).find((item) => String(item.value) === String(values.board));
     if (!selectedBoard) return [];
     const mappedIds = new Set((selectedBoard.academicLevelIds || []).map(String));
     if (mappedIds.size) return levels.filter((item) => mappedIds.has(String(item.value)));
     const mappedNames = new Set((selectedBoard.academicLevelNames || []).map((name) => String(name).trim().toLowerCase()));
     if (mappedNames.size) return levels.filter((item) => mappedNames.has(String(item.label).trim().toLowerCase()));
-    return levels.filter((item) => item.boardId && String(item.boardId) === String(values.board));
-  }, [masterOptions.boards, masterOptions.levels, values.board]);
+    const boardScopedLevels = levels.filter((item) => item.boardId && String(item.boardId) === String(values.board));
+    if (boardScopedLevels.length) return boardScopedLevels;
+    const yearScopedLevels = levels.filter((item) => item.academicYearId && String(item.academicYearId) === String(values.year));
+    if (yearScopedLevels.length) return yearScopedLevels;
+    const unscopedLevels = levels.filter((item) => !item.boardId && !item.academicYearId);
+    return unscopedLevels.length ? unscopedLevels : levels;
+  }, [boardOptions, masterOptions.levels, values.board, values.year]);
   const enhanceField = (field) => {
     if (field.name === "admissionNo" && !editingAdmissionId) {
       return {
@@ -1923,8 +2190,8 @@ export default function AdmissionPage() {
       };
     }
     if (field.name === "dob") return { ...field, max: yesterdayISO() };
-    if (field.name === "board" && masterOptions.boards?.length) return { ...field, options: masterOptions.boards };
-    if (field.name === "year" && masterOptions.years?.length) return { ...field, options: academicYearOptions };
+    if (field.name === "board" && boardOptions?.length) return { ...field, options: boardOptions };
+    if (field.name === "year" && yearOptions?.length) return { ...field, options: academicYearOptions };
     if (field.name === "level") {
       if (!values.board) return { ...field, options: [], selectPlaceholder: "Select Board first", disabled: true };
       return {
@@ -1952,7 +2219,7 @@ export default function AdmissionPage() {
       if (masterStatus.programsError) return { ...field, options: [{ value: "__programs_error", label: "Unable to load programs. Please try again.", disabled: true }] };
       return { ...field, options: programOptions.length ? programOptions : [{ value: "__no_programs", label: "No programs available", disabled: true }] };
     }
-    if (field.name === "bloodGroup" && masterOptions.bloodGroups?.length) return { ...field, options: masterOptions.bloodGroups };
+    if (field.name === "bloodGroup") return { ...field, options: bloodGroupOptions };
     return field;
   };
   const currentFields = current.fields.map(enhanceField);
@@ -1970,14 +2237,17 @@ export default function AdmissionPage() {
       const matchesSearch = !term
         || String(row.studentName || "").toLowerCase().includes(term)
         || String(row.admissionNo || "").toLowerCase().includes(term);
-      const matchesYear = !filters.year || String(row.academicYear) === String(filters.year);
+      const rowYearLabel = admissionYearDisplay(row);
+      const matchesYear = !filters.year
+        || String(row.academicYear) === String(filters.year)
+        || normalizeMatchText(rowYearLabel) === normalizeMatchText(filters.year);
       const matchesGroup = !filters.group
         || String(row.values?.group || "") === String(filters.group)
         || String(row.group || "").trim().toLowerCase() === String(optionLabel(groupFilterOptions, filters.group) || filters.group).trim().toLowerCase();
       const matchesStatus = !filters.status || normalizeAdmissionStatus(row.status) === filters.status;
       return matchesSearch && matchesYear && matchesGroup && matchesStatus;
     });
-  }, [admissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
+  }, [admissionYearDisplay, admissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
   const totalPages = Math.max(1, Math.ceil(displayedAdmissions.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedAdmissions = displayedAdmissions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -1985,12 +2255,12 @@ export default function AdmissionPage() {
     "Admission No": cleanExportValue(row.admissionNo),
     "Student Name": cleanExportValue(row.studentName),
     "Admission Date": cleanExportValue(formatDate(row.admissionDate) || "-"),
-    "Academic Year": cleanExportValue(optionLabel(masterOptions.years, row.academicYear) || row.academicYear),
-    Board: cleanExportValue(optionLabel(masterOptions.boards, row.board) || row.board),
+    "Academic Year": cleanExportValue(admissionYearDisplay(row)),
+    Board: cleanExportValue(admissionBoardDisplay(row)),
     Group: cleanExportValue(row.group),
     Program: cleanExportValue(row.program),
     Status: cleanExportValue(row.status),
-  })), [displayedAdmissions, masterOptions.boards, masterOptions.years]);
+  })), [admissionBoardDisplay, admissionYearDisplay, displayedAdmissions]);
 
   const exportAdmissionsExcel = async () => {
     if (!admissionExportRows.length) {
@@ -2129,9 +2399,9 @@ export default function AdmissionPage() {
       setPhotoPreviewUrl(objectUrl);
       return () => URL.revokeObjectURL(objectUrl);
     }
-    setPhotoPreviewUrl(values.photoUrl || "");
+    setPhotoPreviewUrl(values.photoUrl || values.studentPhoto || "");
     return undefined;
-  }, [values.photo, values.photoUrl]);
+  }, [values.photo, values.photoUrl, values.studentPhoto]);
 
   useEffect(() => {
     const container = stepNavRef.current;
@@ -2167,18 +2437,14 @@ export default function AdmissionPage() {
   const installmentCount = values.installmentCount;
   const admissionDate = values.admissionDate;
 
-  // Keeps the fee step consistent: default plan, and an installment schedule
-  // that always matches the applicable course fee.
+  // Keeps an explicitly selected installment schedule aligned with the course fee.
   useEffect(() => {
+    if (editingAdmissionId) return;
     if (!feeStructureId || !feeItems?.length) return;
     setValues((current) => {
       const courseFeePayable = deriveAdmissionFee(current).courseFeePayable;
       const next = { ...current };
       let changed = false;
-      if (!next.paymentPlan) {
-        next.paymentPlan = "Full Payment";
-        changed = true;
-      }
       if (next.paymentPlan === "Installment Payment") {
         const count = Number(next.installmentCount) || DEFAULT_INSTALLMENT_COUNT;
         const schedule = Array.isArray(next.installments) ? next.installments : [];
@@ -2191,7 +2457,7 @@ export default function AdmissionPage() {
       }
       return changed ? next : current;
     });
-  }, [admissionDate, feeItems, feeStructureId, installmentCount, paymentPlan]);
+  }, [admissionDate, editingAdmissionId, feeItems, feeStructureId, installmentCount, paymentPlan]);
 
   useEffect(() => {
     if (!isFeeStep) return;
@@ -2200,8 +2466,16 @@ export default function AdmissionPage() {
     });
   }, [isFeeStep]);
 
+  const mastersLoadedRef = useRef(false);
+  const loadedAcademicLevelsRef = useRef(new Set());
+  const loadedBoardLevelsRef = useRef(new Set());
+
   useEffect(() => {
+    if (viewMode !== "form" && viewMode !== "list") return;
+    if (mastersLoadedRef.current) return;
+
     let ignore = false;
+    mastersLoadedRef.current = true;
 
     const loadAdmissionMasters = async () => {
       setMasterStatus((current) => ({ ...current, groupsLoading: true, groupsError: "", sectionsError: "" }));
@@ -2210,9 +2484,10 @@ export default function AdmissionPage() {
           console.error("Unable to load group dropdown endpoint, falling back to groups list", dropdownError);
           return apiClient.get(apiEndpoints.groups.getAll, { params: { isActive: true } });
         });
+      const selectedBoardForLevels = selectedContextBoardValue || values.board;
       const [yearsResult, levelsResult, groupsResult, sectionsResult, bloodGroupsResult, scholarshipsResult] = await Promise.allSettled([
         apiClient.get(apiEndpoints.academicYears.getAll),
-        apiClient.get(apiEndpoints.boards.getAcademicLevels),
+        apiClient.get(apiEndpoints.boards.getAcademicLevels, selectedBoardForLevels ? { params: { boardId: selectedBoardForLevels } } : undefined),
         fetchGroups(),
         apiClient.get(apiEndpoints.sections.getAll),
         apiClient.get(apiEndpoints.admissions.bloodGroups),
@@ -2235,14 +2510,23 @@ export default function AdmissionPage() {
           })
           .filter(Boolean)
         : [];
-      setMasterOptions({
-        boards: contextBoardOptions,
+      
+      const loadedBloodGroups = bloodGroupsResult.status === "fulfilled"
+        ? getCollection(bloodGroupsResult.value.data).map(normalizeBloodGroupOption).filter(Boolean)
+        : [];
+      if (levelsResult.status === "fulfilled" && selectedBoardForLevels) {
+        loadedAcademicLevelsRef.current.add(String(selectedBoardForLevels));
+      }
+
+      setMasterOptions((current) => ({
+        ...current,
+        boards: contextBoardOptions.length ? contextBoardOptions : current.boards || [],
         years: uniqueOptionsByValue([...contextYearOptions, ...allYearOptions]),
         levels: levelsResult.status === "fulfilled"
           ? getCollection(levelsResult.value.data)
             .map(normalizeLevelOption)
             .filter(Boolean)
-          : [],
+          : (current.levels || []),
         groups: groupsResult.status === "fulfilled"
           ? getCollection(groupsResult.value.data)
             .map((item) => {
@@ -2255,7 +2539,7 @@ export default function AdmissionPage() {
               } : null;
             })
             .filter((item) => item?.value)
-          : [],
+          : (current.groups || []),
         sections: sectionsResult.status === "fulfilled"
           ? getCollection(sectionsResult.value.data)
             .map((item) => {
@@ -2275,15 +2559,9 @@ export default function AdmissionPage() {
               } : null;
             })
             .filter((item) => item?.value)
-          : [],
-        bloodGroups: bloodGroupsResult.status === "fulfilled"
-          ? getCollection(bloodGroupsResult.value.data).map((item) => (
-            typeof item === "string"
-              ? { value: item, label: item }
-              : toOption(item, ["bloodGroupId", "BloodGroupId", "id", "Id", "name", "Name", "value", "Value"], ["bloodGroupName", "BloodGroupName", "name", "Name", "value", "Value"])
-          )).filter(Boolean)
-          : [],
-      });
+          : (current.sections || []),
+        bloodGroups: loadedBloodGroups.length ? loadedBloodGroups : DEFAULT_BLOOD_GROUP_OPTIONS,
+      }));
       setMasterStatus((current) => ({
         ...current,
         groupsLoading: false,
@@ -2297,21 +2575,48 @@ export default function AdmissionPage() {
       ignore = true;
       setMasterStatus((current) => ({ ...current, groupsLoading: false }));
     };
-  }, [contextBoardOptions, contextYearOptions, viewMode]);
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "form" || !values.board) return undefined;
+    const boardId = String(values.board);
+    if (loadedAcademicLevelsRef.current.has(boardId)) return undefined;
+
+    const requestId = academicLevelRequestRef.current + 1;
+    academicLevelRequestRef.current = requestId;
+    apiClient.get(apiEndpoints.boards.getAcademicLevels, { params: { boardId } })
+      .then((response) => {
+        if (academicLevelRequestRef.current !== requestId) return;
+        const levels = getCollection(response.data).map(normalizeLevelOption).filter(Boolean);
+        if (!levels.length) return;
+        loadedAcademicLevelsRef.current.add(boardId);
+        setMasterOptions((current) => ({
+          ...current,
+          levels,
+        }));
+      })
+      .catch((err) => {
+        if (academicLevelRequestRef.current === requestId) {
+          console.error("Unable to load academic levels for selected board", err);
+        }
+      });
+    return undefined;
+  }, [values.board, viewMode]);
 
   useEffect(() => {
     if (viewMode !== "form" || editingAdmissionId) return;
-    if (!selectedBoardId && !selectedAcademicYearId) return;
+    if (!selectedContextBoardValue && !selectedContextYearValue) return;
     setValues((current) => {
-      const nextBoard = selectedBoardId ? String(selectedBoardId) : current.board || "";
-      const nextYear = selectedAcademicYearId ? String(selectedAcademicYearId) : current.year || "";
-      if (String(current.board || "") === nextBoard && String(current.year || "") === nextYear) return current;
+      const nextBoard = selectedContextBoardValue ? String(selectedContextBoardValue) : current.board || "";
+      const nextYear = selectedContextYearValue ? String(selectedContextYearValue) : current.year || "";
+      const boardChanged = String(current.board || "") !== nextBoard;
+      const yearChanged = String(current.year || "") !== nextYear;
+      if (!boardChanged && !yearChanged) return current;
       return {
         ...current,
         board: nextBoard,
         year: nextYear,
-        level: "",
-        levelName: "",
+        ...(boardChanged ? { level: "", levelName: "" } : {}),
         group: "",
         groupName: "",
         program: "",
@@ -2324,7 +2629,7 @@ export default function AdmissionPage() {
         collectFirstInstallment: false,
       };
     });
-  }, [editingAdmissionId, selectedAcademicYearId, selectedBoardId, viewMode]);
+  }, [editingAdmissionId, selectedContextBoardValue, selectedContextYearValue, viewMode]);
 
   useEffect(() => {
     if (viewMode !== "form") return undefined;
@@ -2373,9 +2678,9 @@ export default function AdmissionPage() {
 
   useEffect(() => {
     if (viewMode !== "form") return undefined;
-    if (!values.board) return undefined;
-    const selectedBoard = (masterOptions.boards || []).find((item) => String(item.value) === String(values.board));
-    if (!selectedBoard || selectedBoard.levelMappingLoaded) return undefined;
+    if (!values.board || loadedBoardLevelsRef.current.has(String(values.board))) return undefined;
+    loadedBoardLevelsRef.current.add(String(values.board));
+
     const requestId = boardMappingRequestRef.current + 1;
     boardMappingRequestRef.current = requestId;
     apiClient.get(apiEndpoints.boards.getById(values.board))
@@ -2404,7 +2709,7 @@ export default function AdmissionPage() {
         }));
       });
     return undefined;
-  }, [masterOptions.boards, values.board, viewMode]);
+  }, [values.board, viewMode]);
 
   useEffect(() => {
     if (viewMode !== "form") return;
@@ -2505,6 +2810,8 @@ export default function AdmissionPage() {
     }
     setMasterStatus((current) => ({ ...current, programsLoading: true }));
     apiClient.get(apiEndpoints.programs.byGroup(groupId))
+      .catch(() => apiClient.get(apiEndpoints.programs.mappedByGroup(groupId)))
+      .catch(() => apiClient.get(apiEndpoints.programs.list, { params: { groupId, GroupId: groupId, isActive: true } }))
       .then((response) => {
         if (programRequestRef.current !== requestId) return;
         const programs = getCollection(response.data)
@@ -2550,8 +2857,7 @@ export default function AdmissionPage() {
         ...current,
         feeStructureId: "",
         feeItems: [],
-        installments: [],
-        paymentPlan: "",
+        ...(editingAdmissionId ? {} : { installments: [], paymentPlan: "" }),
         collectFirstInstallment: false,
       }));
       return undefined;
@@ -2562,21 +2868,26 @@ export default function AdmissionPage() {
     apiClient.get(apiEndpoints.fee.getStructures)
       .then(async (response) => {
         if (ignore) return;
-        const summaries = getCollection(response.data)
+        const structureRows = getCollection(response.data);
+        const summaries = structureRows
+          .map(normalizeFeeStructureSummary)
+          .filter(Boolean)
+          .filter((item) => item.status.toLowerCase() !== "inactive");
+        const expandedSummaries = summaries.length ? summaries : structureRows
           .flatMap(expandFeeStructureItems)
           .map(normalizeFeeStructureSummary)
           .filter(Boolean)
           .filter((item) => item.status.toLowerCase() !== "inactive");
-        const matching = summaries.find((item) => feeStructureMatchesSelection(item, {
+        const matching = expandedSummaries.find((item) => feeStructureMatchesSelection(item, {
           boardId,
           academicYearId,
           groupId,
           programId,
         }, {
-          boards: masterOptions.boards,
-          years: masterOptions.years,
-          groups: masterOptions.groups,
-          programs: masterOptions.programs,
+          boards: boardOptions,
+          years: yearOptions,
+          groups: groupOptions,
+          programs: programOptions,
         }));
         if (!matching) {
           if (!ignore) {
@@ -2584,8 +2895,7 @@ export default function AdmissionPage() {
               ...current,
               feeStructureId: "",
               feeItems: [],
-              installments: [],
-              paymentPlan: "",
+              ...(editingAdmissionId ? {} : { installments: [], paymentPlan: "" }),
               collectFirstInstallment: false,
             }));
             setFeeStructureError("No fee structure is configured for the selected Academic Year, Group and Program.");
@@ -2603,7 +2913,7 @@ export default function AdmissionPage() {
           ? getCollection(itemsResult.value.data)
           : [
             ...expandFeeStructureItems(detail),
-            ...summaries.filter((item) => item.id === matching.id).map((item) => item.raw),
+            ...expandedSummaries.filter((item) => item.id === matching.id).map((item) => item.raw),
           ];
         const feeItems = itemSource
           .map((item) => normalizeFeeStructureItem({ ...detail, ...item }, { ...matching.raw, ...detail, feeStructureId: matching.id }))
@@ -2613,8 +2923,7 @@ export default function AdmissionPage() {
             ...current,
             feeStructureId: "",
             feeItems: [],
-            installments: [],
-            paymentPlan: "",
+            ...(editingAdmissionId ? {} : { installments: [], paymentPlan: "" }),
             collectFirstInstallment: false,
           }));
           setFeeStructureError("The matched fee structure has no configured fee items.");
@@ -2626,18 +2935,26 @@ export default function AdmissionPage() {
           const selectedByKey = new Map(previousItems.map((item) => [String(item.feeStructureItemId || item.structureItemId || item.feeTypeId || item.id), item]));
           const hydratedFeeItems = feeItems.map((item) => {
             const previous = selectedByKey.get(String(item.feeStructureItemId || item.structureItemId || item.feeTypeId || item.id));
+            const componentId = String(item.feeStructureItemId || item.structureItemId || item.id || "");
+            if (!previous && feeSelectionInitializedRef.current) {
+              return {
+                ...item,
+                selected: item.required || feeSelection.includes(componentId),
+              };
+            }
             if (!previous) return item;
             return {
               ...item,
               selected: item.required || previous.selected !== false,
             };
           });
+          const nextPlan = normalizeCoursePaymentPlan(current.paymentPlan, current.installments?.length > 0);
           return {
             ...current,
             feeStructureId: matching.id,
             feeItems: hydratedFeeItems,
-            paymentPlan: current.paymentPlan || "Full Payment",
-            installments: current.paymentPlan === "Installment Payment" ? current.installments : [],
+            paymentPlan: nextPlan,
+            installments: nextPlan === "Installment Payment" ? current.installments : [],
             collectFirstInstallment: false,
           };
         });
@@ -2648,8 +2965,7 @@ export default function AdmissionPage() {
           ...current,
           feeStructureId: "",
           feeItems: [],
-          installments: [],
-          paymentPlan: "",
+          ...(editingAdmissionId ? {} : { installments: [], paymentPlan: "" }),
           collectFirstInstallment: false,
         }));
         setFeeStructureError(getApiErrorMessage(err));
@@ -2658,7 +2974,7 @@ export default function AdmissionPage() {
         if (!ignore) setFeeStructureLoading(false);
       });
     return () => { ignore = true; };
-  }, [editingAdmissionId, masterOptions.boards, masterOptions.groups, masterOptions.programs, masterOptions.years, values.board, values.group, values.program, values.year, viewMode]);
+  }, [boardOptions, editingAdmissionId, feeSelection, groupOptions, programOptions, values.board, values.group, values.program, values.year, viewMode, yearOptions]);
 
   useEffect(() => {
     if (viewMode !== "form") return undefined;
@@ -2761,11 +3077,22 @@ export default function AdmissionPage() {
   const feeContext = [
     { label: "Student", value: [values.firstName, values.lastName].filter(Boolean).join(" ") },
     { label: "Admission No", value: values.admissionNo },
-    { label: "Academic Year", value: optionLabel(masterOptions.years, values.year) || values.year },
+    { label: "Academic Year", value: lookupLabel(yearOptions, values.year) || values.year },
     { label: "Academic Level", value: optionLabel(masterOptions.levels, values.level) || values.levelName || values.level },
     { label: "Group", value: values.groupName || optionLabel(masterOptions.groups, values.group) || values.group },
     { label: "Program", value: values.programName || optionLabel(programOptions, values.program) || values.program },
   ];
+
+  const applyNewAdmissionAcademicDefaults = useCallback((formValues = {}) => {
+    const next = { ...formValues };
+    if (!String(next.board ?? "").trim() && selectedContextBoardValue) {
+      next.board = String(selectedContextBoardValue);
+    }
+    if (!String(next.year ?? "").trim() && selectedContextYearValue) {
+      next.year = String(selectedContextYearValue);
+    }
+    return next;
+  }, [selectedContextBoardValue, selectedContextYearValue]);
 
   const setValue = (name, val) => {
     const field = fieldByName[name] || {};
@@ -2889,7 +3216,7 @@ export default function AdmissionPage() {
       setErrors((e) => ({ ...e, [field.name]: "File size must not exceed 2 MB." }));
       return;
     }
-    setValues((v) => ({ ...v, [field.name]: file, ...(field.name === "photo" ? { photoUrl: "" } : {}) }));
+    setValues((v) => ({ ...v, [field.name]: file }));
     setErrors((e) => ({ ...e, [field.name]: undefined }));
   };
 
@@ -2898,7 +3225,6 @@ export default function AdmissionPage() {
     setValues((v) => {
       const next = { ...v };
       delete next[name];
-      if (name === "photo") delete next.photoUrl;
       return next;
     });
     setErrors((e) => ({ ...e, [name]: undefined }));
@@ -3033,8 +3359,9 @@ export default function AdmissionPage() {
       ? { admissionId: String(admissionId), admissionNo: formValues.admissionNo || "" }
       : null;
     setValues(admissionId ? formValues : newAdmissionValues(formValues));
-    setFeeSelection(Array.isArray(selection) ? selection : []);
-    feeSelectionInitializedRef.current = Array.isArray(selection);
+    const hasPersistedSelection = Array.isArray(selection);
+    setFeeSelection(hasPersistedSelection ? selection : []);
+    feeSelectionInitializedRef.current = hasPersistedSelection;
     setErrors({});
     setStep(safeStepIndex(targetStep));
     setViewMode("form");
@@ -3042,7 +3369,7 @@ export default function AdmissionPage() {
 
   const addNewAdmission = () => {
     const draft = readAdmissionDraft();
-    const draftValues = { ...(draft.values || {}), admissionNo: "" };
+    const draftValues = applyNewAdmissionAcademicDefaults({ ...(draft.values || {}), admissionNo: "" });
     openAdmissionForm({
       formValues: draftValues,
       targetStep: draft.step || 0,
@@ -3059,11 +3386,61 @@ export default function AdmissionPage() {
     setActionBusy(`Load-${record.id}`);
     try {
       const response = await apiClient.get(apiEndpoints.admissions.getById(admissionId));
-      const detailRow = normalizeAdmissionRow(getObject(response.data));
+      const detail = getObject(response.data);
+      const detailRow = normalizeAdmissionRow(detail);
+      let formValues = detailRow.values || {};
+      const persistedSelection = null;
+
+      let studentId = resolveApprovedStudentId(detail, detailRow.raw, detailRow, record.raw, record);
+      let studentFeeId = readStudentFeeAssignmentId(detail) || readStudentFeeAssignmentId(record.raw || record);
+      if (!studentId && !studentFeeId && detailRow.admissionNo) {
+        try {
+          const ledgerResponse = await apiClient.get(apiEndpoints.fee.ledger);
+          const matchingAccount = getCollection(ledgerResponse.data).find((account) => {
+            const admission = read(account, "admission", "Admission", "studentAdmission", "StudentAdmission");
+            const accountAdmissionNo = readText(account, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")
+              || readText(admission, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber");
+            return accountAdmissionNo.trim().toLowerCase() === detailRow.admissionNo.trim().toLowerCase();
+          });
+          studentId = resolveApprovedStudentId(matchingAccount);
+          studentFeeId = readStudentFeeAssignmentId(matchingAccount);
+        } catch (ledgerError) {
+          if (import.meta.env.DEV) {
+            console.warn("Fee account lookup by admission number was unavailable.", {
+              status: ledgerError?.response?.status,
+            });
+          }
+        }
+      }
+      const feeDetailsEndpoint = studentId
+        ? apiEndpoints.fee.studentFeeDetailsByStudent(studentId)
+        : studentFeeId ? apiEndpoints.fee.studentFeeDetails(studentFeeId) : "";
+
+      if (feeDetailsEndpoint) {
+        try {
+          const feeDetailsResponse = await apiClient.get(feeDetailsEndpoint);
+          const persistedFee = readPersistedFeeState(feeDetailsResponse.data, formValues);
+          formValues = hydratePersistedFeeState(formValues, feeDetailsResponse.data);
+          if (import.meta.env.DEV) {
+            console.log("Payment plan hydration:", {
+              rawBackendPaymentPlan: persistedFee.rawPaymentPlan,
+              normalizedPaymentPlan: persistedFee.paymentPlan,
+              scheduleCount: persistedFee.installments.length,
+              currentMode: "edit",
+            });
+          }
+        } catch (feeDetailsError) {
+          if (feeDetailsError?.response?.status !== 404 && import.meta.env.DEV) {
+            console.warn("Persisted student fee details could not be loaded.", {
+              status: feeDetailsError?.response?.status,
+            });
+          }
+        }
+      }
       openAdmissionForm({
-        formValues: detailRow.values || {},
+        formValues,
         targetStep,
-        selection: [],
+        selection: persistedSelection,
         admissionId,
       });
     } catch (err) {
@@ -3102,7 +3479,7 @@ export default function AdmissionPage() {
     return resolveApprovedStudentId(matchingStudent);
   }, []);
 
-  const ensureApprovedStudentFeeAccount = useCallback(async ({ admissionId, approvedPayload, selectedFeeStructureId = "" }) => {
+  const ensureApprovedStudentFeeAccount = useCallback(async ({ admissionId, approvedPayload, selectedFeeStructureId = "", selectedFeeValues = {} }) => {
     const detailResponse = await apiClient.get(apiEndpoints.admissions.getById(admissionId));
     const detail = getObject(detailResponse.data);
     const detailRow = normalizeAdmissionRow(detail);
@@ -3114,31 +3491,63 @@ export default function AdmissionPage() {
     try {
       const existingResponse = await apiClient.get(apiEndpoints.fee.studentFeeDetailsByStudent(studentId));
       const existingStudentFeeId = readStudentFeeAssignmentId(existingResponse.data);
-      if (existingStudentFeeId) return { studentId, studentFeeId: existingStudentFeeId, reused: true };
+      if (existingStudentFeeId) {
+        return {
+          studentId,
+          studentFeeId: existingStudentFeeId,
+          reused: true,
+          persistedFeeValues: hydratePersistedFeeState(selectedFeeValues, existingResponse.data),
+        };
+      }
     } catch (err) {
       if (err?.response?.status && err.response.status !== 404) throw err;
     }
 
-    const selectedStructureId = numericId(selectedFeeStructureId || detailRow.values.feeStructureId)
-      ? String(selectedFeeStructureId || detailRow.values.feeStructureId)
+    const selectedValues = selectedFeeValues && typeof selectedFeeValues === "object" ? selectedFeeValues : {};
+    const feeValues = {
+      ...detailRow.values,
+      ...selectedValues,
+      feeItems: selectedValues.feeItems?.length ? selectedValues.feeItems : detailRow.values.feeItems,
+      installments: selectedValues.installments?.length ? selectedValues.installments : detailRow.values.installments,
+    };
+    const selectedStructureId = numericId(selectedFeeStructureId || feeValues.feeStructureId)
+      ? String(selectedFeeStructureId || feeValues.feeStructureId)
       : "";
     const feeStructure = selectedStructureId
       ? { id: selectedStructureId }
       : await findApplicableFeeStructure({
-        boardId: detailRow.values.board,
-        academicYearId: detailRow.values.year,
-        groupId: detailRow.values.group,
-        programId: detailRow.values.program,
+        boardId: feeValues.board,
+        academicYearId: feeValues.year,
+        groupId: feeValues.group,
+        programId: feeValues.program,
       });
     const feeStructureId = numericId(feeStructure?.id);
     if (!feeStructureId) {
       throw new Error("Fee account was not created because the selected Fee Structure ID was not available.");
     }
 
+    const fee = deriveAdmissionFee(feeValues);
+    const planName = toFeeAssignmentPlanName(fee.paymentPlan || feeValues.paymentPlan);
+    if (!planName) {
+      throw new Error("Course fee payment plan is missing. Please select and save a payment plan before fee assignment.");
+    }
+    const selectedInstallmentCount = Number(feeValues.installmentCount);
+    const numberOfInstallments = planName === "Installment Payment"
+      ? Math.max(Number.isInteger(selectedInstallmentCount) && selectedInstallmentCount > 0
+        ? selectedInstallmentCount
+        : Number(fee.courseSchedules.length || DEFAULT_INSTALLMENT_COUNT), 1)
+      : 1;
+    if (import.meta.env.DEV) {
+      console.log("FINAL fee assignment request", {
+        planName,
+        numberOfInstallments,
+      });
+    }
     const assignResponse = await apiClient.post(apiEndpoints.fee.assignStudentFee, {
       studentId: Number(studentId),
       feeStructureId,
-      FeeStructureId: feeStructureId,
+      planName,
+      numberOfInstallments,
     });
     const studentFeeId = readStudentFeeAssignmentId(assignResponse.data);
     if (!studentFeeId) throw new Error("Fee structure was assigned, but the student fee assignment ID was not returned.");
@@ -3155,25 +3564,19 @@ export default function AdmissionPage() {
       });
     }
 
-    const fee = deriveAdmissionFee(detailRow.values);
-    if (fee.paymentPlan) {
-      const planResponse = await apiClient.post(apiEndpoints.fee.createPaymentPlan, {
-        studentFeeId: Number(studentFeeId),
-        planName: fee.paymentPlan,
-        numberOfInstallments: fee.paymentPlan === "Installment Payment" ? Math.max(fee.courseSchedules.length, 1) : 1,
-        installments: null,
-      });
-      const paymentPlanId = readPaymentPlanId(planResponse.data);
-      if (paymentPlanId && fee.paymentPlan === "Installment Payment") {
-        await Promise.all(fee.courseSchedules.map((item, index) => apiClient.post(apiEndpoints.fee.addPaymentPlanInstallment(paymentPlanId), {
-          installmentNumber: Number(item.no || index + 1),
-          amount: Number(item.amount || 0),
-          dueDate: toDateTime(item.dueDate || detailRow.values.admissionDate || todayISO()),
-        })));
+    let persistedFeeValues = null;
+    try {
+      const persistedResponse = await apiClient.get(apiEndpoints.fee.studentFeeDetailsByStudent(studentId));
+      persistedFeeValues = hydratePersistedFeeState(feeValues, persistedResponse.data);
+    } catch (readbackError) {
+      if (import.meta.env.DEV) {
+        console.warn("Assigned student fee readback was unavailable.", {
+          status: readbackError?.response?.status,
+        });
       }
     }
 
-    return { studentId, studentFeeId, reused: false };
+    return { studentId, studentFeeId, reused: false, persistedFeeValues };
   }, [resolveApprovedStudentIdFromBackend]);
 
   const updateAdmissionStatus = async (record, status) => {
@@ -3219,11 +3622,15 @@ export default function AdmissionPage() {
         setApproveTarget(null);
         await refreshAdmissions();
         try {
-          await ensureApprovedStudentFeeAccount({
+          const feeAccount = await ensureApprovedStudentFeeAccount({
             admissionId,
             approvedPayload: getObject(response.data),
             selectedFeeStructureId: record.feeStructureId || record.values?.feeStructureId || values.feeStructureId,
+            selectedFeeValues: record.values || values,
           });
+          if (feeAccount.persistedFeeValues && String(editingAdmissionId) === String(admissionId)) {
+            setValues((current) => ({ ...current, ...feeAccount.persistedFeeValues }));
+          }
         } catch (feeErr) {
           setToast(`Admission ${record.admissionNo} was approved, but fee account creation failed: ${getApiErrorMessage(feeErr)}`);
           return;
@@ -3296,11 +3703,11 @@ export default function AdmissionPage() {
     const submitAdmissionId = editingAdmissionId || committedAdmissionId;
     const isUpdate = Boolean(submitAdmissionId);
     const visibleMobile = typeof document !== "undefined"
-      ? studentMobileValue({ mobile: document.getElementById("f-mobile")?.value || "" })
+      ? studentMobileValue({ studentMobileNumber: document.getElementById("f-studentMobileNumber")?.value || "" })
       : "";
     const submitValues = normalizeAdmissionMobileState({
       ...values,
-      mobile: studentMobileValue(values) || visibleMobile,
+      studentMobileNumber: studentMobileValue(values) || visibleMobile,
     });
 
     submitInFlightRef.current = true;
@@ -3322,8 +3729,19 @@ export default function AdmissionPage() {
         }],
       });
       admissionWriteCompleted = true;
+      const savedRow = normalizeAdmissionRow(getObject(response.data));
+      if (savedRow.values?.studentPhoto || savedRow.values?.photoUrl) {
+        setValues((current) => {
+          const next = {
+            ...current,
+            studentPhoto: savedRow.values.studentPhoto || current.studentPhoto || "",
+            photoUrl: savedRow.values.photoUrl || current.photoUrl || "",
+          };
+          delete next.photo;
+          return next;
+        });
+      }
       if (!isUpdate) {
-        const savedRow = normalizeAdmissionRow(getObject(response.data));
         savedAdmissionId = savedRow.admissionId || readId(getObject(response.data), "admissionId", "AdmissionId", "id", "Id");
         if (savedRow.admissionId) {
           committedAdmissionRef.current = {
@@ -3400,7 +3818,7 @@ export default function AdmissionPage() {
         <div className="cms-card cms-admission-list-card">
           <div className="cms-admission-toolbar">
             <div className="cms-search cms-admission-search">
-              <Search size={16} />
+              <Search3DIcon size={16} />
               <input
                 value={search}
                 placeholder="Search by student name or admission number"
@@ -3477,8 +3895,8 @@ export default function AdmissionPage() {
                     <td className="cms-strong">{row.admissionNo}</td>
                     <td>{row.studentName}</td>
                     <td>{formatDate(row.admissionDate) || "-"}</td>
-                    <td>{optionLabel(masterOptions.years, row.academicYear) || row.academicYear || "-"}</td>
-                    <td>{optionLabel(masterOptions.boards, row.board) || row.board || "-"}</td>
+                    <td>{admissionYearDisplay(row)}</td>
+                    <td>{admissionBoardDisplay(row)}</td>
                     <td>{row.group || "-"}</td>
                     <td>{row.program || "-"}</td>
                     <td><span className={`cms-badge ${admissionStatusClass(row.status)}`}>{row.status}</span></td>
@@ -3665,7 +4083,7 @@ export default function AdmissionPage() {
                   onFileChange={setFileValue}
                   onFileRemove={removeFileValue}
                   inputRef={(element) => { fileInputRefs.current[f.name] = element; }}
-                  previewUrl={f.name === "photo" ? photoPreviewUrl || values.photoUrl : ""}
+                  previewUrl={f.name === "photo" ? studentPhotoSource(values, photoPreviewUrl) : ""}
                   extraValue={f.name === "quota" ? values.quotaOther : ""}
                 />
               ))}

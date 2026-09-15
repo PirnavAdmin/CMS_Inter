@@ -416,6 +416,57 @@
   padding: 0 18px;
 }
 
+.auth-field-with-guidance {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.auth-password-requirements {
+  margin-top: 7px;
+  padding: 8px 10px;
+  border: 1px solid var(--cms-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--cms-surface) 88%, transparent);
+  color: var(--cms-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.auth-password-requirements-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.auth-password-requirements-head strong.is-weak { color: var(--cms-red); }
+.auth-password-requirements-head strong.is-medium { color: var(--cms-amber); }
+.auth-password-requirements-head strong.is-strong { color: var(--cms-green); }
+
+.auth-password-requirements ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-password-requirements li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.auth-password-requirements li.is-satisfied {
+  color: var(--cms-green);
+}
+
+@media (max-width: 480px) {
+  .auth-password-requirements ul { grid-template-columns: 1fr; }
+}
+
 .cms-auth-card .cms-auth-links.auth-secondary-actions {
   align-items: center;
   margin-top: 16px;

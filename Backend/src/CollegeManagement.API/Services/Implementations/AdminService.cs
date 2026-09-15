@@ -1,19 +1,21 @@
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces;
+using CollegeManagement.API.Interfaces;
 using CollegeManagement.API.DTOs.Admin;
 using CollegeManagement.API.DTOs.Authentication;
+using CollegeManagement.API.DTOs.Users;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models;
+using CollegeManagement.API.Data;
 using System;
 using System.Collections.Generic;
-using System.IdentityModel.Tokens.Jwt;
+using System.ComponentModel.DataAnnotations;
+using System.Data;
 using System.Linq;
-using System.Security.Claims;
-using System.Text;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Microsoft.IdentityModel.Tokens;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -21,19 +23,34 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly IAdminRepository _adminRepository;
         private readonly IOtpRepository _otpRepository;
+        private readonly IUserRepository _userRepository;
+        private readonly IUserProvisioningService _userProvisioningService;
+        private readonly IEmailService _emailService;
+        private readonly AppDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AdminService> _logger;
+        private readonly IAuthService? _authService;
 
         public AdminService(
             IAdminRepository adminRepository,
             IOtpRepository otpRepository,
+            IUserRepository userRepository,
+            IUserProvisioningService userProvisioningService,
+            IEmailService emailService,
+            AppDbContext context,
             IConfiguration configuration,
-            ILogger<AdminService> logger)
+            ILogger<AdminService> logger,
+            IAuthService? authService = null)
         {
             _adminRepository = adminRepository;
             _otpRepository = otpRepository;
+            _userRepository = userRepository;
+            _userProvisioningService = userProvisioningService;
+            _emailService = emailService;
+            _context = context;
             _configuration = configuration;
             _logger = logger;
+            _authService = authService;
         }
 
         public async Task<IEnumerable<AdminDto>> GetAllAdminsAsync()
@@ -62,80 +79,154 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<AuthResult> LoginAsync(AdminLoginRequest request)
         {
-            var admin = await _adminRepository.GetByEmailAsync(request.Email);
-
-            if (admin == null || !PasswordHasher.VerifyPassword(request.Password, admin.Password))
+            if (request == null)
             {
-                return new AuthResult
-                {
-                    Status = false,
-                    Message = "Invalid Email or Password"
-                };
+                return new AuthResult { Status = false, Message = "Invalid Email or Password" };
             }
 
-            if (!admin.IsActive)
+            // Phase 6G: Admin login is strictly email-only.
+            // Reject phone numbers or any identifier that does not contain '@'.
+            var rawEmail = request.Email?.Trim();
+            if (string.IsNullOrWhiteSpace(rawEmail) || !rawEmail.Contains('@'))
             {
-                return new AuthResult
-                {
-                    Status = false,
-                    Message = "Admin account is deactivated"
-                };
+                return new AuthResult { Status = false, Message = "Invalid Email or Password" };
             }
 
-            // Generate real JWT token
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var keyStr = _configuration["JwtSettings:Key"] ?? "a_very_long_secure_secret_key_of_at_least_32_characters_long";
-            var key = Encoding.UTF8.GetBytes(keyStr);
-            var tokenDescriptor = new SecurityTokenDescriptor
+            if (string.IsNullOrWhiteSpace(request.Password))
             {
-                Subject = new ClaimsIdentity(new[]
-                {
-                    new Claim(ClaimTypes.NameIdentifier, admin.Id.ToString()),
-                    new Claim(ClaimTypes.Email, admin.Email),
-                    new Claim(ClaimTypes.Role, "Admin")
-                }),
-                Expires = DateTime.UtcNow.AddDays(7),
-                Issuer = _configuration["JwtSettings:Issuer"],
-                Audience = _configuration["JwtSettings:Audience"],
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
+                return new AuthResult { Status = false, Message = "Invalid Email or Password" };
+            }
 
-            return new AuthResult
+            // Delegate to the centralized AuthService.LoginAsync.
+            // AuthService handles:
+            //   1. Users-first authentication against Users.PasswordHash
+            //   2. Controlled legacy JIT migration (first-time login without existing Users row)
+            //   3. Canonical JWT generation via JwtTokenHelper (sub = Users.UserId)
+            //   4. Concurrent JIT duplicate-key recovery
+            //   5. Inactive account / inactive linked domain rejection
+            return await _authService!.LoginAsync(new LoginRequest
             {
-                Status = true,
-                Message = "Login successful",
-                AccessToken = tokenString,
-                UserId = admin.Id,
-                Name = admin.Email.Split('@')[0],
-                Role = "Admin"
-            };
+                EmailOrMobile = rawEmail,
+                Password = request.Password
+            });
         }
 
         public async Task<AdminDto> CreateAdminAsync(CreateAdminRequest request)
         {
-            var existing = await _adminRepository.GetByEmailAsync(request.Email);
-            if (existing != null)
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+
+            if (string.IsNullOrWhiteSpace(request.Email))
+                throw new ValidationException("Email address is required for admin creation.");
+
+            if (request.RoleId <= 0)
+                throw new ValidationException("RoleId is required and must be greater than 0.");
+
+            var normalizedEmail = request.Email.Trim();
+
+            // 1. Dynamic Role Validation from Roles table
+            var role = await _userRepository.GetRoleByIdAsync(request.RoleId);
+            if (role == null)
             {
-                throw new InvalidOperationException("Email is already registered.");
+                throw new ValidationException($"Role with ID '{request.RoleId}' was not found in Roles table.");
             }
 
-            var admin = new Admin
+            var adminDomainRoles = new[] { "Super Admin", "Admin" };
+            if (!System.Linq.Enumerable.Any(adminDomainRoles, r => string.Equals(r, role.RoleName, StringComparison.OrdinalIgnoreCase)))
             {
-                Email = request.Email,
-                Password = PasswordHasher.HashPassword(request.Password),
-                IsActive = true
-            };
+                throw new ValidationException($"Role '{role.RoleName}' (RoleId: {role.RoleId}) cannot be assigned to an Administrator account. Please select a valid Admin-domain role.");
+            }
 
-            var id = await _adminRepository.AddAsync(admin);
-            admin.Id = id;
+            // 2. Uniqueness checks in admins and Users
+            var existingAdmin = await _adminRepository.GetByEmailAsync(normalizedEmail);
+            if (existingAdmin != null)
+            {
+                throw new InvalidOperationException($"Email address '{normalizedEmail}' is already registered to an admin account.");
+            }
+
+            var existingUser = await _userRepository.GetByEmailAsync(normalizedEmail);
+            if (existingUser != null)
+            {
+                throw new InvalidOperationException($"Email address '{normalizedEmail}' is already registered to a user account.");
+            }
+
+            // 3. Generate secure random temporary password and BCrypt hash
+            var tempPassword = _userProvisioningService.GenerateSecureTemporaryPassword(14);
+            var passwordHash = PasswordHasher.HashPassword(tempPassword);
+
+            // 4. Atomic Transaction: admins + Users
+            var connection = _context.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open)
+            {
+                await connection.OpenAsync();
+            }
+
+            using var transaction = connection.BeginTransaction();
+            int adminId = 0;
+            UserProvisioningResult provisioningResult;
+
+            try
+            {
+                var admin = new Admin
+                {
+                    Email = normalizedEmail,
+                    Password = passwordHash, // Dual-write for backward compatibility with /api/Admin/login
+                    IsActive = true
+                };
+
+                adminId = await _adminRepository.AddAsync(admin, connection, transaction);
+                admin.Id = adminId;
+
+                var provisioningRequest = new ProvisionAdminUserRequest
+                {
+                    AdminId = admin.Id,
+                    FullName = string.IsNullOrWhiteSpace(request.FullName) ? normalizedEmail.Split('@')[0] : request.FullName.Trim(),
+                    Email = normalizedEmail,
+                    RoleId = role.RoleId
+                };
+
+                provisioningResult = await _userProvisioningService.ProvisionAdminUserAsync(provisioningRequest, connection, transaction);
+                if (!provisioningResult.Success)
+                {
+                    throw new ValidationException(provisioningResult.ErrorMessage ?? "Admin user account provisioning failed.");
+                }
+
+                transaction.Commit();
+            }
+            catch
+            {
+                transaction.Rollback();
+                throw;
+            }
+
+            // 5. Post-Commit: Send initial credentials email
+            var adminDisplayName = string.IsNullOrWhiteSpace(request.FullName) ? normalizedEmail.Split('@')[0] : request.FullName.Trim();
+            try
+            {
+                var emailBody = AdminCredentialHelper.BuildInitialCredentialEmailHtml(
+                    adminDisplayName,
+                    normalizedEmail,
+                    role.RoleName,
+                    tempPassword);
+
+                await _emailService.SendEmailAsync(
+                    normalizedEmail,
+                    "College Management System - Administrator Login Credentials",
+                    emailBody);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Initial credential email delivery failed for admin {Email} after successful commit.", normalizedEmail);
+            }
 
             return new AdminDto
             {
-                Id = admin.Id,
-                Email = admin.Email,
-                IsActive = admin.IsActive
+                Id = adminId,
+                Email = normalizedEmail,
+                FullName = adminDisplayName,
+                RoleId = role.RoleId,
+                RoleName = role.RoleName,
+                IsActive = true
             };
         }
 
@@ -144,41 +235,62 @@ namespace CollegeManagement.API.Services.Implementations
             var admin = await _adminRepository.GetByIdAsync(id);
             if (admin == null) return false;
 
-            await _adminRepository.UpdateStatusAsync(id, isActive);
-            return true;
-        }
-
-        public async Task<bool> ChangePasswordAsync(int currentAdminId, ChangePasswordRequest request)
-        {
-            var admin = await _adminRepository.GetByIdAsync(currentAdminId);
-            if (admin == null) return false;
-
-            if (!PasswordHasher.VerifyPassword(request.OldPassword, admin.Password))
+            var connection = _context.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open)
             {
-                throw new ArgumentException("Old password is incorrect.");
+                await connection.OpenAsync();
             }
 
-            var newPasswordHash = PasswordHasher.HashPassword(request.NewPassword);
-            await _adminRepository.UpdatePasswordAsync(currentAdminId, newPasswordHash);
-            return true;
+            using var transaction = connection.BeginTransaction();
+            try
+            {
+                await _adminRepository.UpdateStatusAsync(id, isActive, connection, transaction);
+                await _userRepository.UpdateStatusByAdminIdAsync(id, isActive, connection, transaction);
+                transaction.Commit();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                try { transaction.Rollback(); } catch { }
+                _logger.LogError(ex, "Failed to update admin status and sync Users for AdminId {AdminId}", id);
+                throw;
+            }
+        }
+
+        public async Task<(bool Success, string Message)> ChangePasswordAsync(int userId, ChangePasswordRequest request)
+        {
+            // Phase 6G: Delegate entirely to centralized AuthService.ChangePasswordAsync.
+            // AuthService verifies OldPassword against Users.PasswordHash (not admins.Password),
+            // performs an atomic dual-write (Users.PasswordHash + admins.Password), and
+            // sets Users.IsFirstLogin = false after success.
+            return await _authService!.ChangePasswordAsync(
+                userId,
+                request.OldPassword,
+                request.NewPassword,
+                request.ConfirmNewPassword);
         }
 
         public async Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request)
         {
+            if (_authService != null)
+            {
+                return await _authService.ForgotPasswordAsync(request);
+            }
+
             var admin = await _adminRepository.GetByEmailAsync(request.Email);
             if (admin == null)
             {
                 return new AuthResult
                 {
-                    Status = false,
-                    Message = "Admin email address is not registered."
+                    Status = true,
+                    Message = "OTP has been sent to your registered email."
                 };
             }
 
-            var otpCode = Random.Shared.Next(100000, 999999).ToString();
+            var otpCode = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
             var otp = new OTP
             {
-                Email = request.Email,
+                Email = request.Email.Trim().ToLowerInvariant(),
                 OTPCode = otpCode,
                 ExpiryTime = DateTime.UtcNow.AddMinutes(5),
                 IsUsed = false
@@ -186,21 +298,25 @@ namespace CollegeManagement.API.Services.Implementations
 
             await _otpRepository.AddAsync(otp);
 
-            _logger.LogInformation("Admin OTP generated for {Email}: {Otp}", request.Email, otpCode);
+            _logger.LogInformation("Admin OTP generated for Email: {Email}", request.Email);
 
             return new AuthResult
             {
                 Status = true,
-                Message = "OTP has been generated successfully.",
-                Otp = otpCode
+                Message = "OTP has been sent to your registered email."
             };
         }
 
         public async Task<AuthResult> VerifyOtpAsync(VerifyOtpRequest request)
         {
-            var otpRecord = await _otpRepository.GetLatestActiveOtpAsync(request.Email, request.Otp);
+            if (_authService != null)
+            {
+                return await _authService.VerifyOtpAsync(request);
+            }
 
-            if (otpRecord == null)
+            var otpRecord = await _otpRepository.GetLatestActiveOtpAsync(request.Email.Trim().ToLowerInvariant(), request.Otp.Trim());
+
+            if (otpRecord == null || otpRecord.IsUsed || otpRecord.ExpiryTime <= DateTime.UtcNow)
             {
                 return new AuthResult
                 {
@@ -218,6 +334,11 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request)
         {
+            if (_authService != null)
+            {
+                return await _authService.ResetPasswordAsync(request);
+            }
+
             if (request.Password != request.ConfirmPassword)
             {
                 return new AuthResult
@@ -227,9 +348,9 @@ namespace CollegeManagement.API.Services.Implementations
                 };
             }
 
-            var otpRecord = await _otpRepository.GetLatestActiveOtpAsync(request.Email, request.OTP);
+            var otpRecord = await _otpRepository.GetLatestActiveOtpAsync(request.Email.Trim().ToLowerInvariant(), request.OTP.Trim());
 
-            if (otpRecord == null)
+            if (otpRecord == null || otpRecord.IsUsed || otpRecord.ExpiryTime <= DateTime.UtcNow)
             {
                 return new AuthResult
                 {
@@ -238,7 +359,7 @@ namespace CollegeManagement.API.Services.Implementations
                 };
             }
 
-            var admin = await _adminRepository.GetByEmailAsync(request.Email);
+            var admin = await _adminRepository.GetByEmailAsync(request.Email.Trim().ToLowerInvariant());
             if (admin == null)
             {
                 return new AuthResult

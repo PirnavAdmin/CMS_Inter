@@ -17,7 +17,11 @@ namespace CollegeManagement.API.Profiles
 
             // 2. SaveMarkDto -> Mark Model Mapping
             CreateMap<SaveMarkDto, Mark>()
-                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => src.InternalMarks + src.PracticalMarks + src.TheoryMarks))
+                .ForMember(dest => dest.TotalMarks, opt => opt.MapFrom(src => (src.TotalMarks.HasValue && src.TotalMarks.Value > 0)
+                    ? src.TotalMarks.Value
+                    : (src.ObtainedMarks.HasValue && src.ObtainedMarks.Value > 0)
+                        ? src.ObtainedMarks.Value
+                        : (src.InternalMarks + src.PracticalMarks + src.TheoryMarks)))
                 .ForMember(dest => dest.Status, opt => opt.MapFrom(_ => EvaluationStatus.SUBMITTED))
                 .ForMember(dest => dest.IsVerified, opt => opt.MapFrom(_ => false))
                 .ForMember(dest => dest.IsPublished, opt => opt.MapFrom(_ => false))
@@ -30,7 +34,16 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.IsActive, opt => opt.MapFrom(_ => true))
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
-                .ForMember(dest => dest.MarkId, opt => opt.Ignore());
+                .ForMember(dest => dest.MarkId, opt => opt.Ignore())
+                .ForMember(dest => dest.AcademicYear, opt => opt.Ignore())
+                .ForMember(dest => dest.BoardNavigation, opt => opt.Ignore())
+                .ForMember(dest => dest.AcademicLevelNavigation, opt => opt.Ignore())
+                .ForMember(dest => dest.GroupNavigation, opt => opt.Ignore())
+                .ForMember(dest => dest.SectionNavigation, opt => opt.Ignore())
+                .ForMember(dest => dest.Examination, opt => opt.Ignore())
+                .ForMember(dest => dest.Subject, opt => opt.Ignore())
+                .ForMember(dest => dest.Student, opt => opt.Ignore())
+                .ForMember(dest => dest.Faculty, opt => opt.Ignore());
 
             // 3. UpdateMarkDto -> Mark Model Mapping
             CreateMap<UpdateMarkDto, Mark>()
@@ -39,9 +52,18 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.MarkId, opt => opt.Ignore())
                 .ForMember(dest => dest.Board, opt => opt.Ignore())
                 .ForMember(dest => dest.BoardId, opt => opt.Ignore())
+                .ForMember(dest => dest.BoardNavigation, opt => opt.Ignore())
+                .ForMember(dest => dest.AcademicYear, opt => opt.Ignore())
                 .ForMember(dest => dest.AcademicYearId, opt => opt.Ignore())
                 .ForMember(dest => dest.AcademicLevel, opt => opt.Ignore())
                 .ForMember(dest => dest.AcademicLevelId, opt => opt.Ignore())
+                .ForMember(dest => dest.AcademicLevelNavigation, opt => opt.Ignore())
+                .ForMember(dest => dest.GroupNavigation, opt => opt.Ignore())
+                .ForMember(dest => dest.SectionNavigation, opt => opt.Ignore())
+                .ForMember(dest => dest.Examination, opt => opt.Ignore())
+                .ForMember(dest => dest.Subject, opt => opt.Ignore())
+                .ForMember(dest => dest.Student, opt => opt.Ignore())
+                .ForMember(dest => dest.Faculty, opt => opt.Ignore())
                 .ForMember(dest => dest.GroupId, opt => opt.Ignore())
                 .ForMember(dest => dest.SectionId, opt => opt.Ignore())
                 .ForMember(dest => dest.ExaminationId, opt => opt.Ignore())

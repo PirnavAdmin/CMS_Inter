@@ -15,6 +15,11 @@ namespace CollegeManagement.API.Models.Faculty
         [StringLength(100)]
         public string Name { get; set; } = string.Empty;
 
+        public int? DepartmentId { get; set; }
+
+        [ForeignKey("DepartmentId")]
+        public Department? Department { get; set; }
+
         [StringLength(20)]
         public string StaffType { get; set; } = "Both";
 
@@ -46,4 +51,3 @@ namespace CollegeManagement.API.Models.Faculty
         public ICollection<CollegeManagement.API.Models.Staff.Staff> Staffs { get; set; } = new List<CollegeManagement.API.Models.Staff.Staff>();
     }
 }
-

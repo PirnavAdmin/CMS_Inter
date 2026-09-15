@@ -1,5 +1,6 @@
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.StudentAdmission;
+using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
@@ -46,6 +47,23 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AdmissionId = admissionId
                 },
                 commandType: CommandType.StoredProcedure);
+        }
+
+        // =========================================================
+        // GET CREATED STUDENT BY ADMISSION ID
+        // =========================================================
+        public async Task<Student?> GetStudentByAdmissionIdAsync(
+            int admissionId,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? _context.Database.GetDbConnection();
+            const string sql = @"
+                SELECT * FROM Students 
+                WHERE AdmissionId = @AdmissionId 
+                ORDER BY StudentId DESC 
+                LIMIT 1";
+            return await conn.QueryFirstOrDefaultAsync<Student>(sql, new { AdmissionId = admissionId }, transaction: transaction);
         }
 
 
@@ -426,12 +444,14 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         public async Task<bool> ApproveAsync(
             ApproveStudentAdmissionRequest request,
-            string? passwordHash = null)
+            string? passwordHash = null,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null)
         {
-            var connection = _context.Database.GetDbConnection();
+            var conn = connection ?? _context.Database.GetDbConnection();
 
             var result =
-                await connection.QuerySingleOrDefaultAsync<int>(
+                await conn.QuerySingleOrDefaultAsync<int>(
                     "sp_ApproveStudentAdmission",
                     new
                     {
@@ -439,6 +459,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                             request.AdmissionId,
                         p_PasswordHash = passwordHash ?? string.Empty
                     },
+                    transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
             return result > 0;
@@ -481,16 +502,26 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var connection = _context.Database.GetDbConnection();
 
-            var result =
-                await connection.QuerySingleOrDefaultAsync<int>(
-                    "sp_DeleteStudentAdmission",
-                    new
-                    {
-                        p_AdmissionId = admissionId
-                    },
-                    commandType: CommandType.StoredProcedure);
+            try
+            {
+                var result =
+                    await connection.QuerySingleOrDefaultAsync<int>(
+                        "sp_DeleteStudentAdmission",
+                        new
+                        {
+                            p_AdmissionId = admissionId
+                        },
+                        commandType: CommandType.StoredProcedure);
 
-            return result > 0;
+                return result > 0;
+            }
+            catch (MySqlConnector.MySqlException ex) when (ex.Message.Contains("does not exist"))
+            {
+                var rows = await connection.ExecuteAsync(
+                    "DELETE FROM StudentAdmissions WHERE AdmissionId = @AdmissionId",
+                    new { AdmissionId = admissionId });
+                return rows > 0;
+            }
         }
 
 

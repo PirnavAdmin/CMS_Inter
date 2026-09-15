@@ -436,8 +436,31 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
   padding: 10px 12px;
   gap: 8px;
+  overflow-y: auto;
+}
+
+.dashboard-card-body::-webkit-scrollbar,
+.dashboard-info-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dashboard-card-body::-webkit-scrollbar-track,
+.dashboard-info-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-card-body::-webkit-scrollbar-thumb,
+.dashboard-info-list::-webkit-scrollbar-thumb {
+  background: var(--cms-border, #cbd5e1);
+  border-radius: 4px;
+}
+
+.dashboard-card-body::-webkit-scrollbar-thumb:hover,
+.dashboard-info-list::-webkit-scrollbar-thumb:hover {
+  background: var(--cms-muted, #94a3b8);
 }
 
 /* Students Overview Card */
@@ -797,6 +820,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 2px;
 }
 
 .dashboard-info-item {

@@ -57,12 +57,16 @@ public class FeeService : IFeeService
         return _repo.ApplyFeeConcessionAsync(r);
     }
 
-    public Task<PaymentPlanResponse?> CreatePaymentPlanAsync(CreatePaymentPlanRequest r)
+    public Task<PaymentPlanResponse?> CreatePaymentPlanAsync(
+     CreatePaymentPlanRequest r)
     {
-        Id(r.StudentFeeId, "StudentFeeId"); Text(r.PlanName, "PlanName");
-        if (r.NumberOfInstallments <= 0) throw new ArgumentException("NumberOfInstallments must be greater than zero.");
-        if (r.Installments.Count > 0 && r.Installments.Count != r.NumberOfInstallments) throw new ArgumentException("Installment count must match NumberOfInstallments.");
-        if (r.Installments.Sum(x => x.Amount) <= 0 && r.Installments.Count > 0) throw new ArgumentException("Installment amounts are required.");
+        Id(r.StudentFeeId, "StudentFeeId");
+        Text(r.PlanName, "PlanName");
+
+        if (r.NumberOfInstallments <= 0)
+            throw new ArgumentException(
+                "NumberOfInstallments must be greater than zero.");
+
         return _repo.CreatePaymentPlanAsync(r);
     }
     public Task<FeeScheduleResponse?> AddPaymentPlanInstallmentAsync(int id, CreateInstallmentRequest r) { Id(id, "PaymentPlanId"); Id(r.InstallmentNumber, "InstallmentNumber"); if (r.Amount <= 0) throw new ArgumentException("Installment amount must be greater than zero."); return _repo.AddPaymentPlanInstallmentAsync(id, r); }

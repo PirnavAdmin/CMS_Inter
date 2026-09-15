@@ -257,7 +257,7 @@
 /* Examination Table */
 .exam-list-table {
   width: 100%;
-  min-width: 1300px;
+  min-width: 1040px;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -284,40 +284,84 @@
 
 /* Explicit column widths for Examinations table ensuring clean 2-line alignment */
 .exam-list-table th:nth-child(1),
-.exam-list-table td:nth-child(1) { width: 115px; max-width: 115px; } /* Exam Code */
+.exam-list-table td:nth-child(1) {
+  width: 110px;
+  max-width: 110px;
+}
+
+/* Exam Code */
 
 .exam-list-table th:nth-child(2),
-.exam-list-table td:nth-child(2) { width: 155px; max-width: 155px; } /* Exam Name (2 lines) */
+.exam-list-table td:nth-child(2) {
+  width: 150px;
+  max-width: 150px;
+}
+
+/* Exam Name (2 lines) */
 
 .exam-list-table th:nth-child(3),
-.exam-list-table td:nth-child(3) { width: 65px; max-width: 65px; } /* Board */
+.exam-list-table td:nth-child(3) {
+  width: 140px;
+  max-width: 140px;
+}
+
+/* Academic Level(s) (2 lines) */
 
 .exam-list-table th:nth-child(4),
-.exam-list-table td:nth-child(4) { width: 95px; max-width: 95px; } /* Academic Year */
+.exam-list-table td:nth-child(4) {
+  width: 115px;
+  max-width: 115px;
+}
+
+/* Group(s) (2 lines) */
 
 .exam-list-table th:nth-child(5),
-.exam-list-table td:nth-child(5) { width: 150px; max-width: 150px; } /* Academic Level(s) (2 lines) */
+.exam-list-table td:nth-child(5) {
+  width: 125px;
+  max-width: 125px;
+}
+
+/* Program(s) (2 lines) */
 
 .exam-list-table th:nth-child(6),
-.exam-list-table td:nth-child(6) { width: 125px; max-width: 125px; } /* Group(s) (2 lines) */
+.exam-list-table td:nth-child(6) {
+  width: 100px;
+  max-width: 100px;
+}
+
+/* Exam Category */
 
 .exam-list-table th:nth-child(7),
-.exam-list-table td:nth-child(7) { width: 135px; max-width: 135px; } /* Program(s) (2 lines) */
+.exam-list-table td:nth-child(7) {
+  width: 125px;
+  max-width: 125px;
+}
+
+/* Exam Pattern(s) (2 lines) */
 
 .exam-list-table th:nth-child(8),
-.exam-list-table td:nth-child(8) { width: 105px; max-width: 105px; } /* Exam Category */
+.exam-list-table td:nth-child(8) {
+  width: 115px;
+  max-width: 115px;
+}
+
+/* Exam Period */
 
 .exam-list-table th:nth-child(9),
-.exam-list-table td:nth-child(9) { width: 135px; max-width: 135px; } /* Exam Pattern(s) (2 lines) */
+.exam-list-table td:nth-child(9) {
+  width: 80px;
+  max-width: 80px;
+}
+
+/* Status */
 
 .exam-list-table th:nth-child(10),
-.exam-list-table td:nth-child(10) { width: 115px; max-width: 115px; } /* Exam Period */
+.exam-list-table td:nth-child(10) {
+  width: 130px;
+  min-width: 125px;
+}
 
-.exam-list-table th:nth-child(11),
-.exam-list-table td:nth-child(11) { width: 95px; max-width: 95px; } /* Status */
-
-.exam-list-table th:nth-child(12),
-.exam-list-table td:nth-child(12) { width: 110px; max-width: 110px; } /* Actions */
+/* Actions */
 
 /* Schedule Inner Table */
 .exam-schedule-inner-table {
@@ -349,34 +393,84 @@
 
 /* Explicit column widths for Schedule table ensuring clean 2-line alignment for halls and invigilators */
 .exam-schedule-inner-table th:nth-child(1),
-.exam-schedule-inner-table td:nth-child(1) { width: 170px; max-width: 170px; } /* Subject / Pattern */
+.exam-schedule-inner-table td:nth-child(1) {
+  width: 170px;
+  max-width: 170px;
+}
+
+/* Subject / Pattern */
 
 .exam-schedule-inner-table th:nth-child(2),
-.exam-schedule-inner-table td:nth-child(2) { width: 95px; max-width: 95px; } /* Group */
+.exam-schedule-inner-table td:nth-child(2) {
+  width: 95px;
+  max-width: 95px;
+}
+
+/* Group */
 
 .exam-schedule-inner-table th:nth-child(3),
-.exam-schedule-inner-table td:nth-child(3) { width: 95px; max-width: 95px; } /* Exam Date */
+.exam-schedule-inner-table td:nth-child(3) {
+  width: 95px;
+  max-width: 95px;
+}
+
+/* Exam Date */
 
 .exam-schedule-inner-table th:nth-child(4),
-.exam-schedule-inner-table td:nth-child(4) { width: 100px; max-width: 100px; } /* Timing */
+.exam-schedule-inner-table td:nth-child(4) {
+  width: 100px;
+  max-width: 100px;
+}
+
+/* Timing */
 
 .exam-schedule-inner-table th:nth-child(5),
-.exam-schedule-inner-table td:nth-child(5) { width: 85px; max-width: 85px; } /* Total Marks */
+.exam-schedule-inner-table td:nth-child(5) {
+  width: 85px;
+  max-width: 85px;
+}
+
+/* Total Marks */
 
 .exam-schedule-inner-table th:nth-child(6),
-.exam-schedule-inner-table td:nth-child(6) { width: 105px; max-width: 105px; } /* Pass Marks */
+.exam-schedule-inner-table td:nth-child(6) {
+  width: 105px;
+  max-width: 105px;
+}
+
+/* Pass Marks */
 
 .exam-schedule-inner-table th:nth-child(7),
-.exam-schedule-inner-table td:nth-child(7) { width: 155px; max-width: 155px; } /* Room / Hall(s) (2 lines) */
+.exam-schedule-inner-table td:nth-child(7) {
+  width: 155px;
+  max-width: 155px;
+}
+
+/* Room / Hall(s) (2 lines) */
 
 .exam-schedule-inner-table th:nth-child(8),
-.exam-schedule-inner-table td:nth-child(8) { width: 210px; max-width: 210px; } /* Invigilator(s) (2 lines) */
+.exam-schedule-inner-table td:nth-child(8) {
+  width: 210px;
+  max-width: 210px;
+}
+
+/* Invigilator(s) (2 lines) */
 
 .exam-schedule-inner-table th:nth-child(9),
-.exam-schedule-inner-table td:nth-child(9) { width: 95px; max-width: 95px; } /* Exam Mode */
+.exam-schedule-inner-table td:nth-child(9) {
+  width: 95px;
+  max-width: 95px;
+}
+
+/* Exam Mode */
 
 .exam-schedule-inner-table th:nth-child(10),
-.exam-schedule-inner-table td:nth-child(10) { width: 110px; max-width: 110px; } /* Actions */
+.exam-schedule-inner-table td:nth-child(10) {
+  width: 110px;
+  max-width: 110px;
+}
+
+/* Actions */
 
 .exam-cell-two-lines {
   display: -webkit-box !important;
@@ -397,6 +491,52 @@
 .exam-list-table .exam-status-cell {
   overflow: visible;
   white-space: nowrap;
+  text-align: center;
+}
+
+.exam-list-table .exam-status-cell .cms-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  gap: 4px;
+  letter-spacing: 0.2px;
+  line-height: 1.25;
+  border-radius: 999px;
+  box-shadow: none;
+}
+
+.exam-list-table .exam-status-cell .cms-badge::before {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+}
+
+.exam-list-table td:last-child,
+.exam-list-table th:last-child {
+  text-align: center;
+}
+
+.exam-list-table .cms-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.exam-list-table .cms-action-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
 }
 
 .exam-list-pagination {
@@ -441,13 +581,13 @@
   border-top: 1px solid var(--cms-border);
 }
 
-.exam-finalize > span {
+.exam-finalize>span {
   color: var(--cms-muted);
   font-size: 13px;
 }
 
-.exam-finalize > .cms-btn,
-.exam-finalize > button {
+.exam-finalize>.cms-btn,
+.exam-finalize>button {
   margin-left: auto;
 }
 
@@ -1070,4 +1210,28 @@
     width: 100%;
     margin-left: 0;
   }
+}
+
+/* Two-line text truncation and alignment for table cells */
+.exam-cell-two-lines {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.35;
+  max-height: 2.7em;
+  word-break: break-word;
+}
+
+.exam-cell-academic-level {
+  max-width: 160px;
+  line-height: 1.35;
+}
+
+.cms-action-btn.warning:hover {
+  color: var(--cms-amber, #b7791f);
+  border-color: #fed7aa;
+  background: var(--cms-amber-soft, #fdf3e0);
 }

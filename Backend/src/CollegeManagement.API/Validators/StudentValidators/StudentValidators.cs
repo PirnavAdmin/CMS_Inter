@@ -174,11 +174,114 @@ namespace CollegeManagement.API.Validators.StudentValidators
                 .EmailAddress()
                 .When(x => !string.IsNullOrWhiteSpace(x.GuardianEmail))
                 .WithMessage("Invalid Guardian Email address.");
-
-            RuleFor(x => x.Remarks)
-                .MaximumLength(1000)
-                .When(x => x.Remarks != null)
-                .WithMessage("Remarks cannot exceed 1000 characters.");
         }
     }
+
+    // =========================================================
+    // STUDENT SELF PROFILE
+    // =========================================================
+
+    public class StudentSelfProfileDtoValidator
+        : AbstractValidator<CollegeManagement.API.DTOs.Students.Requests.StudentSelfProfileDto>
+    {
+        public StudentSelfProfileDtoValidator()
+        {
+            When(x => !string.IsNullOrWhiteSpace(x.Email), () =>
+            {
+                RuleFor(x => x.Email)
+                    .EmailAddress()
+                    .WithMessage("Invalid Email address.")
+                    .MaximumLength(150)
+                    .WithMessage("Email cannot exceed 150 characters.");
+            });
+
+            RuleFor(x => x.FatherEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.FatherEmail))
+                .WithMessage("Invalid Father Email address.");
+
+            RuleFor(x => x.MotherEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
+                .WithMessage("Invalid Mother Email address.");
+
+            RuleFor(x => x.GuardianEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.GuardianEmail))
+                .WithMessage("Invalid Guardian Email address.");
+        }
+    }
+
+    // =========================================================
+    // CREATE STUDENT ADMISSION
+    // =========================================================
+
+    public class CreateStudentAdmissionRequestValidator
+        : AbstractValidator<CollegeManagement.API.DTOs.StudentAdmission.CreateStudentAdmissionRequest>
+    {
+        public CreateStudentAdmissionRequestValidator()
+        {
+            RuleFor(x => x.FirstName)
+                .NotEmpty()
+                .WithMessage("First name is required.")
+                .MaximumLength(100);
+
+            RuleFor(x => x.StudentEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.StudentEmail))
+                .WithMessage("Invalid Student Email address.");
+
+            RuleFor(x => x.FatherEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.FatherEmail))
+                .WithMessage("Invalid Father Email address.");
+
+            RuleFor(x => x.MotherEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
+                .WithMessage("Invalid Mother Email address.");
+
+            RuleFor(x => x.GuardianEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.GuardianEmail))
+                .WithMessage("Invalid Guardian Email address.");
+        }
+    }
+
+    // =========================================================
+    // UPDATE STUDENT ADMISSION
+    // =========================================================
+
+    public class UpdateStudentAdmissionRequestValidator
+        : AbstractValidator<CollegeManagement.API.DTOs.StudentAdmission.UpdateStudentAdmissionRequest>
+    {
+        public UpdateStudentAdmissionRequestValidator()
+        {
+            RuleFor(x => x.FirstName)
+                .NotEmpty()
+                .WithMessage("First name is required.")
+                .MaximumLength(100);
+
+            RuleFor(x => x.StudentEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.StudentEmail))
+                .WithMessage("Invalid Student Email address.");
+
+            RuleFor(x => x.FatherEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.FatherEmail))
+                .WithMessage("Invalid Father Email address.");
+
+            RuleFor(x => x.MotherEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
+                .WithMessage("Invalid Mother Email address.");
+
+            RuleFor(x => x.GuardianEmail)
+                .EmailAddress()
+                .When(x => !string.IsNullOrWhiteSpace(x.GuardianEmail))
+                .WithMessage("Invalid Guardian Email address.");
+        }
+    }
+
 }

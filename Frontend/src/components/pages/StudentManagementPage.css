@@ -14,20 +14,21 @@
 .cms-progress { height: 8px; border-radius: 999px; background: #eef2f7; overflow: hidden; }
 .cms-progress i { display: block; height: 100%; background: linear-gradient(90deg, #6F8400, #9CAF27); border-radius: 999px; }
 [data-theme="dark"] .cms-progress { background: var(--cms-subtle); }
-.student-management-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
-.student-management-search { display:flex; align-items:center; gap:10px; flex:1 1 320px; max-width:520px; border:1px solid var(--cms-border); border-radius:10px; padding:0 13px; color:var(--cms-muted); }
+.student-management-filter-row { padding:18px 26px 8px; }
+.student-management-search-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 26px 10px; }
+.student-management-search-row .cms-card-body.student-management-toolbar { display:flex; align-items:center; flex:0 1 430px; min-width:300px; padding:0; }
+.student-management-search { display:flex; align-items:center; gap:10px; width:100%; border:1px solid var(--cms-border); border-radius:10px; padding:0 13px; color:var(--cms-muted); }
 .student-management-search input { width:100%; border:0; outline:0; padding:12px 0; background:transparent; color:var(--cms-text); font:inherit; }
 .student-management-filters {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 190px));
-  justify-content: start;
-  gap: 16px;
-  padding: 0 26px 22px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
   box-sizing: border-box;
 }
 .student-management-filters .cms-field { min-width: 0; }
 .student-management-filters select { width: 100%; min-width: 0; }
-.student-management-actions { display:flex; justify-content:flex-end; gap:12px; padding:0 24px 22px; }
+.student-management-actions { display:flex; justify-content:flex-end; gap:12px; }
 .student-import-modal { display:grid; gap:16px; }
 .student-import-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
 .student-import-summary { display:grid; grid-template-columns:repeat(3, minmax(120px, 1fr)); gap:10px; }
@@ -46,9 +47,9 @@
 .student-credentials-about li { display: flex; align-items: center; gap: 8px; color: var(--cms-text); font-size: 14px; }
 .student-credentials-about svg { flex: 0 0 auto; color: var(--cms-primary); }
 @media (max-width: 560px) { .student-import-summary { grid-template-columns:1fr; } }
-@media (max-width: 1200px) { .student-management-filters { grid-template-columns:repeat(4,minmax(150px,190px)); } }
-@media (max-width: 900px) { .student-management-filters { grid-template-columns:repeat(2,minmax(150px,190px)); } }
-@media (max-width: 560px) { .student-management-filters { grid-template-columns:1fr; padding:0 16px 18px; } }
+@media (max-width: 1200px) { .student-management-filters { grid-template-columns:repeat(5,minmax(0,1fr)); } }
+@media (max-width: 900px) { .student-management-filters { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (max-width: 560px) { .student-management-filter-row { padding:16px 16px 10px; } .student-management-search-row { align-items:stretch; flex-direction:column; padding:0 16px 18px; } .student-management-toolbar { min-width:0 !important; } .student-management-actions { justify-content:stretch; } .student-management-actions > .cms-btn { flex:1; } .student-management-filters { grid-template-columns:1fr; } }
 @media (max-width: 560px) { .student-credentials-filters, .student-credentials-about ul { grid-template-columns: 1fr; } }
 .student-action-buttons { display:flex; gap:8px; white-space:nowrap; }
 .student-action-buttons a, .student-action-buttons button { display:inline-flex; gap:5px; align-items:center; color:var(--cms-primary); font-weight:600; font-size:13px; }
@@ -88,3 +89,30 @@
 .student-management-pagination button:hover:not(:disabled) { border-color: var(--cms-primary); background: var(--cms-primary-soft); color: var(--cms-primary); }
 .student-management-pagination button:disabled { cursor: not-allowed; opacity: .45; }
 @media (max-width: 640px) { .student-management-pagination { align-items: flex-start; flex-direction: column; } }
+
+/* Profile editing deliberately excludes academic allocation controls. */
+.student-profile-edit { display: grid; gap: 14px; }
+.student-profile-edit-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 16px 20px; background: var(--cms-primary-soft); border-bottom: 1px solid var(--cms-border); }
+.student-profile-edit-summary span { display: grid; gap: 3px; min-width: 0; }
+.student-profile-edit-summary small { color: var(--cms-muted); font-weight: 700; }
+.student-profile-edit-summary b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cms-text); }
+.student-profile-section { padding: 0 20px 18px; }
+.student-profile-section h2 { margin: 0 0 12px; color: var(--cms-primary); font-size: 15px; }
+.student-profile-form-grid { align-items: start; }
+.student-profile-full { grid-column: 1 / -1; }
+.student-profile-full textarea { min-height: 84px; resize: vertical; }
+.student-profile-edit-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 0 20px 20px; }
+.student-profile-photo-upload { display: grid; justify-items: start; gap: 9px; }
+.student-profile-photo-preview { display: grid; place-items: center; width: 132px; height: 132px; overflow: hidden; border: 1px solid var(--cms-border); border-radius: 12px; background: var(--cms-primary-soft); color: var(--cms-primary); font-size: 30px; font-weight: 800; }
+.student-profile-photo-preview img { width: 100%; height: 100%; object-fit: cover; }
+.student-profile-photo-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.student-profile-photo-upload small { color: var(--cms-muted); font-size: 12px; }
+.cms-field-error { color: var(--cms-danger, #b42318); font-size: 12px; font-weight: 600; }
+.student-profile-edit .cms-field.is-invalid input,
+.student-profile-edit .cms-field.is-invalid select,
+.student-profile-edit .cms-field.is-invalid textarea { border-color: var(--cms-danger, #b42318); }
+.student-profile-edit .cms-field.is-invalid input:focus,
+.student-profile-edit .cms-field.is-invalid select:focus,
+.student-profile-edit .cms-field.is-invalid textarea:focus { outline-color: var(--cms-danger, #b42318); }
+.cms-field-counter { justify-self: end; color: var(--cms-muted); font-size: 12px; }
+@media (max-width: 640px) { .student-profile-edit-summary { grid-template-columns: 1fr; } .student-profile-section { padding-inline: 14px; } .student-profile-edit-actions { padding-inline: 14px; } }

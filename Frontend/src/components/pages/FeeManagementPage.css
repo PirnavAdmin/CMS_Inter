@@ -675,26 +675,83 @@
 .cms-fee-kv span { display: block; color: var(--cms-muted); font-size: 11.5px; font-weight: 600; }
 .cms-fee-kv strong { display: block; margin-top: 3px; font-size: 13.5px; overflow-wrap: anywhere; }
 
-.cms-fee-breakdown-table {
+#root .cms-content .cms-fee-breakdown-table {
   width: 100%;
-  min-width: 760px;
+  min-width: min(760px, 100%);
   table-layout: fixed;
 }
-.cms-fee-breakdown-table col.cms-fee-breakdown-type-col { width: 22%; }
-.cms-fee-breakdown-table col.cms-fee-breakdown-money-col { width: 16%; }
-.cms-fee-breakdown-table col.cms-fee-breakdown-concession-col { width: 30%; }
+.cms-fee-breakdown-table col.cms-fee-breakdown-type-col { width: 24%; }
+.cms-fee-breakdown-table col.cms-fee-breakdown-money-col { width: 15%; }
+.cms-fee-breakdown-table col.cms-fee-breakdown-concession-col { width: 31%; }
 .cms-fee-breakdown-table th,
 .cms-fee-breakdown-table td {
   vertical-align: middle;
 }
-.cms-fee-breakdown-table th.num,
-.cms-fee-breakdown-table td.num {
+#root .cms-content .cms-fee-breakdown-table th.num,
+#root .cms-content .cms-fee-breakdown-table td.num,
+#root .cms-content .cms-fee-breakdown-table tfoot td.num {
   text-align: right;
   white-space: nowrap;
 }
+.cms-fee-breakdown-table th:nth-child(2),
+.cms-fee-breakdown-table td:nth-child(2) {
+  padding-right: 18px;
+}
 .cms-fee-breakdown-table th:nth-child(3),
 .cms-fee-breakdown-table td:nth-child(3) {
+  padding-left: 18px;
   text-align: left;
+}
+
+#root .cms-content .cms-fee-schedule-list-table {
+  width: 100%;
+  min-width: min(860px, 100%);
+  table-layout: fixed;
+}
+.cms-fee-schedule-list-table col.cms-fee-schedule-student-col { width: 20%; }
+.cms-fee-schedule-list-table col.cms-fee-schedule-admission-col { width: 15%; }
+.cms-fee-schedule-list-table col.cms-fee-schedule-group-col { width: 17%; }
+.cms-fee-schedule-list-table col.cms-fee-schedule-label-col { width: 16%; }
+.cms-fee-schedule-list-table col.cms-fee-schedule-date-col { width: 13%; }
+.cms-fee-schedule-list-table col.cms-fee-schedule-money-col { width: 11%; }
+.cms-fee-schedule-list-table col.cms-fee-schedule-status-col { width: 8%; }
+.cms-fee-schedule-list-table th,
+.cms-fee-schedule-list-table td {
+  vertical-align: middle;
+}
+#root .cms-content .cms-fee-schedule-list-table th.num,
+#root .cms-content .cms-fee-schedule-list-table td.num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+#root .cms-content .cms-fee-recent-payments-table {
+  width: 100%;
+  min-width: min(760px, 100%);
+  table-layout: fixed;
+}
+.cms-fee-recent-payments-table col.cms-fee-recent-receipt-col { width: 25%; }
+.cms-fee-recent-payments-table col.cms-fee-recent-student-col { width: 16%; }
+.cms-fee-recent-payments-table col.cms-fee-recent-type-col { width: 18%; }
+.cms-fee-recent-payments-table col.cms-fee-recent-money-col { width: 14%; }
+.cms-fee-recent-payments-table col.cms-fee-recent-method-col { width: 16%; }
+.cms-fee-recent-payments-table col.cms-fee-recent-date-col { width: 11%; }
+.cms-fee-recent-payments-table th,
+.cms-fee-recent-payments-table td {
+  vertical-align: middle;
+}
+.cms-fee-recent-payments-table th:nth-child(3),
+.cms-fee-recent-payments-table td:nth-child(3) {
+  padding-right: 16px;
+}
+.cms-fee-recent-payments-table th:nth-child(4),
+.cms-fee-recent-payments-table td:nth-child(4) {
+  padding-left: 16px;
+}
+#root .cms-content .cms-fee-recent-payments-table th.num,
+#root .cms-content .cms-fee-recent-payments-table td.num {
+  text-align: right;
+  white-space: nowrap;
 }
 
 .cms-fee-collect { display: grid; gap: 14px; }

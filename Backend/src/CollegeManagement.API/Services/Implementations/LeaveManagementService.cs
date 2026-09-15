@@ -31,8 +31,16 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 validUserId = await _context.Users.Select(u => (int?)u.UserId).FirstOrDefaultAsync();
             }
+            int? categoryId = request.LeaveCategoryId;
+            if (!categoryId.HasValue && (byte)request.LeaveType > 0)
+            {
+                categoryId = (int)request.LeaveType;
+            }
+
             var balance = await _context.StaffLeaveBalances
-                .FirstOrDefaultAsync(b => b.StaffId == request.StaffId && b.LeaveType == request.LeaveType && b.AcademicYearId == request.AcademicYearId);
+                .FirstOrDefaultAsync(b => b.StaffId == request.StaffId && 
+                                          ((categoryId.HasValue && b.LeaveCategoryId == categoryId) || b.LeaveType == request.LeaveType) && 
+                                          b.AcademicYearId == request.AcademicYearId);
             
             if (balance != null && balance.RemainingDays < requestedDays)
             {
@@ -43,6 +51,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 StaffId = request.StaffId,
                 LeaveType = request.LeaveType,
+                LeaveCategoryId = categoryId,
                 StartDate = request.StartDate,
                 EndDate = request.EndDate,
                 Reason = request.Reason,
@@ -120,6 +129,23 @@ namespace CollegeManagement.API.Services.Implementations
                             ModifiedByUserName = userName,
                             CreatedAt = DateTime.UtcNow
                         });
+
+                        // Revert leave balance if this request was previously approved
+                        if (oldStatus == CollegeManagement.API.Enums.LeaveStatus.Approved)
+                        {
+                            var revBalance = await _context.StaffLeaveBalances
+                                .FirstOrDefaultAsync(b => b.StaffId == leave.StaffId &&
+                                                          ((leave.LeaveCategoryId.HasValue && b.LeaveCategoryId == leave.LeaveCategoryId.Value) || b.LeaveType == leave.LeaveType) &&
+                                                          b.AcademicYearId == leave.AcademicYearId);
+
+                            if (revBalance != null)
+                            {
+                                decimal requestedDays = (decimal)(leave.EndDate.Date - leave.StartDate.Date).TotalDays + 1;
+                                revBalance.UsedDays = Math.Max(0, revBalance.UsedDays - requestedDays);
+                                revBalance.RemainingDays = Math.Max(0, revBalance.TotalDays - revBalance.UsedDays);
+                                revBalance.UpdatedAt = DateTime.UtcNow;
+                            }
+                        }
                     }
                                         // Auto-cancel active timetable substitutions if leave is rejected or revoked
                     if (request.Status != CollegeManagement.API.Enums.LeaveStatus.Approved)
@@ -230,6 +256,20 @@ namespace CollegeManagement.API.Services.Implementations
                                 });
                             }
                         }
+
+                        // Deduct leave balance for approved request
+                        var matchingBalance = await _context.StaffLeaveBalances
+                            .FirstOrDefaultAsync(b => b.StaffId == leave.StaffId &&
+                                                      ((leave.LeaveCategoryId.HasValue && b.LeaveCategoryId == leave.LeaveCategoryId.Value) || b.LeaveType == leave.LeaveType) &&
+                                                      b.AcademicYearId == leave.AcademicYearId);
+
+                        if (matchingBalance != null)
+                        {
+                            decimal requestedDays = (decimal)(leave.EndDate.Date - leave.StartDate.Date).TotalDays + 1;
+                            matchingBalance.UsedDays += requestedDays;
+                            matchingBalance.RemainingDays = Math.Max(0, matchingBalance.TotalDays - matchingBalance.UsedDays);
+                            matchingBalance.UpdatedAt = DateTime.UtcNow;
+                        }
                     }
 
                     await _context.SaveChangesAsync();
@@ -259,6 +299,7 @@ namespace CollegeManagement.API.Services.Implementations
                     .ThenInclude(s => s.DepartmentRef)
                 .Include(l => l.Department)
                 .Include(l => l.ApprovedByUser)
+                .Include(l => l.LeaveCategory)
                 .ToListAsync();
 
             return list.Select(l => new StaffLeaveResponse
@@ -269,6 +310,8 @@ namespace CollegeManagement.API.Services.Implementations
                 Department = l.Staff?.DepartmentRef?.DepartmentName ?? l.Department?.DepartmentName ?? "Mathematics",
                 StaffType = l.Staff?.StaffType == "Teaching" ? "Teaching Staff" : (l.Staff?.StaffType ?? "Teaching Staff"),
                 LeaveType = l.LeaveType,
+                LeaveCategoryId = l.LeaveCategoryId,
+                LeaveCategoryName = l.LeaveCategory != null ? l.LeaveCategory.CategoryName : l.LeaveType.ToString(),
                 StartDate = l.StartDate,
                 EndDate = l.EndDate,
                 TotalDays = (decimal)(l.EndDate.Date - l.StartDate.Date).TotalDays + 1,
@@ -288,6 +331,8 @@ namespace CollegeManagement.API.Services.Implementations
             var leave = await _context.StaffLeaveRequests
                 .Include(l => l.Staff)
                 .Include(l => l.Staff.DepartmentRef)
+                .Include(l => l.LeaveCategory)
+                .Include(l => l.ApprovedByUser)
                 .FirstOrDefaultAsync(l => l.StaffLeaveRequestId == leaveRequestId);
                 
             if (leave == null) throw new CollegeManagement.API.Exceptions.NotFoundException("Leave request not found");
@@ -295,7 +340,9 @@ namespace CollegeManagement.API.Services.Implementations
             decimal totalDays = (decimal)(leave.EndDate.Date - leave.StartDate.Date).TotalDays + 1;
 
             var balance = await _context.StaffLeaveBalances
-                .FirstOrDefaultAsync(b => b.StaffId == leave.StaffId && b.LeaveType == leave.LeaveType && b.AcademicYearId == leave.AcademicYearId);
+                .FirstOrDefaultAsync(b => b.StaffId == leave.StaffId && 
+                                          ((leave.LeaveCategoryId.HasValue && b.LeaveCategoryId == leave.LeaveCategoryId.Value) || b.LeaveType == leave.LeaveType) && 
+                                          b.AcademicYearId == leave.AcademicYearId);
 
             return new LeaveDetailsDto
             {
@@ -306,6 +353,8 @@ namespace CollegeManagement.API.Services.Implementations
                 Department = leave.Staff.DepartmentRef != null ? leave.Staff.DepartmentRef.DepartmentName : "Mathematics",
                 StaffType = leave.Staff.StaffType == "Teaching" ? "Teaching Staff" : (leave.Staff.StaffType ?? "Teaching Staff"),
                 LeaveType = leave.LeaveType,
+                LeaveCategoryId = leave.LeaveCategoryId,
+                LeaveCategoryName = leave.LeaveCategory != null ? leave.LeaveCategory.CategoryName : leave.LeaveType.ToString(),
                 StartDate = leave.StartDate,
                 EndDate = leave.EndDate,
                 TotalDays = totalDays,
@@ -444,6 +493,7 @@ namespace CollegeManagement.API.Services.Implementations
                     .ThenInclude(s => s.DepartmentRef)
                 .Include(r => r.Department)
                 .Include(r => r.ApprovedByUser)
+                .Include(r => r.LeaveCategory)
                 .FirstOrDefaultAsync(r => r.StaffLeaveRequestId == id);
 
             if (l == null) return null!;
@@ -456,6 +506,8 @@ namespace CollegeManagement.API.Services.Implementations
                 Department = l.Staff?.DepartmentRef?.DepartmentName ?? l.Department?.DepartmentName ?? "Mathematics",
                 StaffType = l.Staff?.StaffType == "Teaching" ? "Teaching Staff" : (l.Staff?.StaffType ?? "Teaching Staff"),
                 LeaveType = l.LeaveType,
+                LeaveCategoryId = l.LeaveCategoryId,
+                LeaveCategoryName = l.LeaveCategory != null ? l.LeaveCategory.CategoryName : l.LeaveType.ToString(),
                 StartDate = l.StartDate,
                 EndDate = l.EndDate,
                 TotalDays = (decimal)(l.EndDate.Date - l.StartDate.Date).TotalDays + 1,

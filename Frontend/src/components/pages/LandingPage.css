@@ -32,21 +32,25 @@
   min-width: 0;
 }
 
+.cms-landing-nav .landing-brand-logo,
 .cms-landing-nav .logo-mark {
+  display: inline-flex;
+  align-items: center;
   width: clamp(190px, 18vw, 270px);
   height: 68px;
   flex: 0 0 clamp(190px, 18vw, 270px);
-  border: 0;
-  border-radius: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
   background: transparent !important;
-  box-shadow: none;
+  box-shadow: none !important;
 }
 
-.cms-landing-nav .logo-mark img,
-.landing-footer .logo-mark img {
+.cms-landing-nav .landing-brand-logo img,
+.cms-landing-nav .logo-mark img {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  display: block;
 }
 
 .cms-landing-brand > span:last-child {
@@ -292,13 +296,26 @@
   gap: 15px;
 }
 
+.landing-footer-brand .landing-footer-logo,
 .landing-footer-brand .logo-mark {
-  width: min(220px, 100%);
+  display: inline-flex;
+  align-items: center;
+  width: min(240px, 100%);
   height: 76px;
-  flex: 0 0 min(220px, 100%);
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  flex: 0 0 min(240px, 100%);
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.landing-footer-brand .landing-footer-logo img,
+.landing-footer-brand .logo-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  filter: brightness(1.22) contrast(1.1) drop-shadow(0 0 1px rgba(255, 255, 255, 0.7)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
 }
 
 .landing-footer-brand strong {
@@ -370,16 +387,20 @@
   color: #bcc5b5;
 }
 
-[data-theme="dark"] .cms-landing-nav .logo-mark,
+[data-theme="dark"] .cms-landing-nav .landing-brand-logo,
+[data-theme="dark"] .cms-landing-nav .logo-mark {
+  border-color: transparent !important;
+  background: transparent !important;
+}
+
 [data-theme="dark"] .landing-header-actions .cms-icon-btn {
   border-color: #485440;
   background: rgba(17, 20, 17, 0.52);
 }
 
-[data-theme="dark"] .cms-landing-nav .logo-mark img,
-[data-theme="dark"] .landing-footer-brand .logo-mark img {
-  filter: brightness(1.24) contrast(1.08) saturate(1.16)
-    drop-shadow(0 0 2px rgba(255, 248, 214, 0.45));
+[data-theme="dark"] .cms-landing-nav .landing-brand-logo img,
+[data-theme="dark"] .cms-landing-nav .logo-mark img {
+  filter: brightness(1.15) contrast(1.08) drop-shadow(0 0 1px rgba(255, 248, 214, 0.4));
 }
 
 [data-theme="dark"] .landing-hero-banner {
@@ -428,6 +449,7 @@
     padding: 10px 16px;
   }
 
+  .cms-landing-nav .landing-brand-logo,
   .cms-landing-nav .logo-mark {
     width: 190px;
     height: 52px;
@@ -480,6 +502,7 @@
     overflow: hidden;
   }
 
+  .cms-landing-nav .landing-brand-logo,
   .cms-landing-nav .logo-mark {
     width: 150px;
     height: 46px;

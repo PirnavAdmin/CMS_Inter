@@ -22,13 +22,75 @@ namespace CollegeManagement.API.Controllers.V1;
 [EnableCors("AllowFrontend")]
 [AllowAnonymous]
 [Produces("application/json")]
+[Authorize]
 public class CertificatesController : ControllerBase
 {
     private readonly ICertificateService _service;
+    private readonly ITemplateService _templateService;
 
-    public CertificatesController(ICertificateService service)
+    public CertificatesController(ICertificateService service, ITemplateService templateService)
     {
         _service = service;
+        _templateService = templateService;
+    }
+
+    // =========================================================
+    // 0.1. GET ACTIVE CERTIFICATE TEMPLATES
+    // GET /api/v1/certificates/active-templates
+    // =========================================================
+    [HttpGet("active-templates")]
+    [ProducesResponseType(typeof(IReadOnlyList<CollegeManagement.API.DTOs.Settings.TemplateResponseDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetActiveTemplates(CancellationToken ct = default)
+    {
+        var templates = await _templateService.GetActiveTemplatesByCategoryAsync("Certificate", ct);
+        return Ok(templates);
+    }
+
+    // =========================================================
+    // 0.2. GET CERTIFICATE TEMPLATE BY CODE
+    // GET /api/v1/certificates/template-by-code/{templateCode}
+    // =========================================================
+    [HttpGet("template-by-code/{templateCode}")]
+    [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Settings.TemplateResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTemplateByCode(string templateCode, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(templateCode))
+            return BadRequest(new { message = "Template code is required." });
+
+        var template = await _templateService.GetTemplateByCodeAsync(templateCode, ct);
+        if (template == null)
+            return NotFound(new { message = $"Certificate template with code '{templateCode}' not found." });
+
+        return Ok(template);
+    }
+
+    // =========================================================
+    // 0.3. DYNAMICALLY RENDER / PREVIEW CERTIFICATE TEMPLATE
+    // POST /api/v1/certificates/render-template
+    // POST /api/v1/certificates/preview-template
+    // =========================================================
+    [HttpPost("render-template")]
+    [HttpPost("preview-template")]
+    [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Settings.RenderedTemplateResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RenderTemplate(
+        [FromBody] CollegeManagement.API.DTOs.Settings.RenderCertificateTemplateRequestDto request,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await _templateService.RenderTemplateAsync(request, ct);
+            return Ok(result);
+        }
+        catch (System.ComponentModel.DataAnnotations.ValidationException ex)
+        {
+            return BadRequest(new { status = false, message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { status = false, message = ex.Message });
+        }
     }
 
     // =========================================================
@@ -219,8 +281,15 @@ public class CertificatesController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Purpose))
             return BadRequest(new { message = "Purpose is required." });
 
-        var results = await _service.BulkGenerateAsync(request, ct);
-        return Ok(results);
+        try
+        {
+            var results = await _service.BulkGenerateAsync(request, ct);
+            return Ok(results);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Error during bulk generation: {ex.Message}" });
+        }
     }
 
     // =========================================================

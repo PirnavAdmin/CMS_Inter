@@ -44,6 +44,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="200">Boards searched successfully.</response>
         /// <response code="500">Internal server error.</response>
         [HttpGet]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(PagedResult<BoardListResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<PagedResult<BoardListResponse>>> SearchBoards([FromQuery] BoardSearchRequest request)
@@ -85,6 +86,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="404">Board not found.</response>
         /// <response code="500">Internal server error.</response>
         [HttpGet("{boardId:int}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(BoardResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
