@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2,
+  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building,
+  Building2, LayoutDashboard, Users, BarChart3,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -63,31 +64,43 @@ const PAGE_ICON_ROUTE_ALIASES = [
 ];
 
 function SidebarIcon({ icon, sub = false }) {
+  if (!icon) return null;
   if (typeof icon === "string") {
     return <img className={`cms-nav-3d-icon${sub ? " cms-nav-3d-icon-sub" : ""}`} src={icon} alt="" aria-hidden="true" />;
   }
 
-  return (
-    <span
-      className={`cms-nav-3d-icon cms-nav-generated-icon${sub ? " cms-nav-3d-icon-sub" : ""}`}
-      style={{ backgroundImage: `url(${icon.src})`, backgroundPosition: icon.position }}
-      aria-hidden="true"
-    />
-  );
+  if (icon.src) {
+    return (
+      <span
+        className={`cms-nav-3d-icon cms-nav-generated-icon${sub ? " cms-nav-3d-icon-sub" : ""}`}
+        style={{ backgroundImage: `url(${icon.src})`, backgroundPosition: icon.position }}
+        aria-hidden="true"
+      />
+    );
+  }
+
+  const IconComponent = icon;
+  return <IconComponent className={`cms-nav-3d-icon${sub ? " cms-nav-3d-icon-sub" : ""}`} size={sub ? 15 : 18} aria-hidden="true" />;
 }
 
 function PageTitleIcon({ icon }) {
+  if (!icon) return null;
   if (typeof icon === "string") {
     return <img className="cms-page-title-icon" src={icon} alt="" aria-hidden="true" />;
   }
 
-  return (
-    <span
-      className="cms-page-title-icon cms-nav-generated-icon"
-      style={{ backgroundImage: `url(${icon.src})`, backgroundPosition: icon.position }}
-      aria-hidden="true"
-    />
-  );
+  if (icon.src) {
+    return (
+      <span
+        className="cms-page-title-icon cms-nav-generated-icon"
+        style={{ backgroundImage: `url(${icon.src})`, backgroundPosition: icon.position }}
+        aria-hidden="true"
+      />
+    );
+  }
+
+  const IconComponent = icon;
+  return <IconComponent className="cms-page-title-icon" size={24} aria-hidden="true" />;
 }
 
 function NavbarIcon({ src }) {
@@ -149,6 +162,22 @@ export const menu = [
     items: [
       { to: "/dashboard/certificates", label: "Certificates", icon: certificatesIcon },
       { to: "/dashboard/reports", label: "Reports & Analytics", icon: reportsAnalyticsIcon },
+    ],
+  },
+  {
+    section: "Hostel Management",
+    items: [
+      {
+        to: "/hostel",
+        label: "Hostel Management",
+        icon: Building2,
+        children: [
+          { to: "/hostel", label: "Dashboard", icon: LayoutDashboard },
+          { to: "/hostel/master-setup", label: "Hostel Master Setup", icon: Building2 },
+          { to: "/hostel/students", label: "Student Management", icon: Users },
+          { to: "/hostel/reports", label: "Hostel Reports", icon: BarChart3 },
+        ],
+      },
     ],
   },
   {
@@ -310,6 +339,7 @@ export default function DashboardLayout({
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hostelOpen, setHostelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
@@ -377,6 +407,9 @@ export default function DashboardLayout({
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
   }, [pathname]);
+  useEffect(() => {
+    if (pathname.startsWith("/dashboard/hostel") || pathname.startsWith("/hostel")) setHostelOpen(true);
+  }, [pathname]);
 
   useEffect(() => {
     const onPointer = (e) => {
@@ -436,6 +469,18 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
+    if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
+      return pathname === "/hostel" || pathname === "/dashboard/hostel";
+    }
+    if (basePath === "/hostel/master-setup" || basePath === "/dashboard/hostel/master" || basePath === "/dashboard/hostel/master-setup") {
+      return pathname === "/hostel/master-setup" || pathname === "/dashboard/hostel/master" || pathname === "/dashboard/hostel/master-setup";
+    }
+    if (basePath === "/hostel/students" || basePath === "/dashboard/hostel/students") {
+      return pathname === "/hostel/students" || pathname === "/dashboard/hostel/students";
+    }
+    if (basePath === "/hostel/reports" || basePath === "/dashboard/hostel/reports") {
+      return pathname === "/hostel/reports" || pathname === "/dashboard/hostel/reports";
+    }
     if (searchStr && !location.search.includes(searchStr)) return false;
 
     if (basePath === "/dashboard/attendance" || basePath === "/dashboard/attendance/student") {
@@ -475,11 +520,12 @@ export default function DashboardLayout({
                   const isFacultyMenu = item.to === "/dashboard/faculty";
                   const isAttendanceMenu = item.to === "/dashboard/attendance";
                   const isSettingsMenu = item.to === "/dashboard/settings";
-                  const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : false;
-                  const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : setSettingsOpen;
+                  const isHostelMenu = item.to.startsWith("/dashboard/hostel") || item.to.startsWith("/hostel");
+                  const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : isHostelMenu ? hostelOpen : false;
+                  const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : isHostelMenu ? setHostelOpen : () => {};
                   const childIsActive = (child) => isActive(child.to);
                   return (
-                    <div key={item.to} className={isAttendanceMenu || isSettingsMenu ? "cms-nav-branch cms-attendance-branch" : "cms-nav-branch"}>
+                    <div key={item.to} className={isAttendanceMenu || isSettingsMenu || isHostelMenu ? "cms-nav-branch cms-attendance-branch" : "cms-nav-branch"}>
                       <div className="cms-nav-parent">
                         <Link
                           to={item.to}
@@ -489,6 +535,8 @@ export default function DashboardLayout({
                             if (isAttendanceMenu) {
                               event.preventDefault();
                               setOpen((v) => !v);
+                            } else if (isHostelMenu) {
+                              setHostelOpen(true);
                             } else {
                               setAttendanceOpen(false);
                             }
