@@ -27,6 +27,7 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
+import * as numberSeriesApi from "@/api/numberSeriesApi.js";
 import {
   readNumberSeriesSettings,
   writeNumberSeriesSettings,
@@ -36,18 +37,15 @@ import {
   getNextNumberPreview,
   validateNumberSeries,
   normalizeNumberSeriesItem,
+  isSeriesRemoved,
   MOCK_GENERATED_HISTORY,
 } from "@/data/numberSeriesData.js";
 import "./NumberSeriesPage.css";
 
 const SERIES_ICONS = {
   "teaching-staff-id": Users,
-  "employee-id": Users,
   "non-teaching-staff-id": UserCheck,
   "admission-no": GraduationCap,
-  "roll-no": Hash,
-  "student-id": UserRound,
-  "section-name": BookOpen,
   "exam-code": FileText,
   "certificate-number": Award,
   "receipt-no": Receipt,
@@ -59,23 +57,40 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const activeId = seriesId || id;
 
   const [seriesList, setSeriesList] = useState(() =>
-    readNumberSeriesSettings().map(normalizeNumberSeriesItem)
+    readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem)
   );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [previewModalSeries, setPreviewModalSeries] = useState(null);
 
-  const fetchSeries = () => {
+  const fetchSeries = async () => {
     setLoading(true);
     try {
-      const data = readNumberSeriesSettings().map(normalizeNumberSeriesItem);
-      setSeriesList(data);
+      const serverData = await numberSeriesApi.getNumberSeriesList();
+      const items = Array.isArray(serverData) ? serverData : serverData?.items || serverData?.data || [];
+      if (Array.isArray(items) && items.length > 0) {
+        const normalized = items.filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
+        const localList = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
+        const map = new Map();
+        localList.forEach((s) => map.set(s.id, s));
+        normalized.forEach((s) => {
+          map.set(s.id, s);
+          if (s.seriesCode) map.set(s.seriesCode, s);
+          if (s.slug) map.set(s.slug, s);
+        });
+        const merged = Array.from(new Set(map.values())).filter((s) => !isSeriesRemoved(s));
+        setSeriesList(merged);
+        writeNumberSeriesSettings(merged);
+        return;
+      }
     } catch (err) {
-      console.warn("Using local settings fallback:", err?.message || err);
+      console.warn("GET /api/v1/settings/number-series fallback:", err?.message || err);
     } finally {
       setLoading(false);
     }
+    const data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
+    setSeriesList(data);
   };
 
   useEffect(() => {
@@ -100,13 +115,21 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     writeNumberSeriesSettings(newList);
   };
 
-  const handleSaveConfig = (updatedSeries) => {
+  const handleSaveConfig = async (updatedSeries) => {
     setSaving(true);
     const code = updatedSeries.seriesCode || updatedSeries.slug || updatedSeries.id;
-    const normalized = normalizeNumberSeriesItem(updatedSeries);
+    let savedData = null;
+
+    try {
+      savedData = await numberSeriesApi.updateNumberSeries(code, updatedSeries);
+    } catch (err) {
+      console.warn("PUT /api/v1/settings/number-series/{seriesCode} fallback:", err?.message || err);
+    }
+
+    const normalized = normalizeNumberSeriesItem(savedData ? { ...updatedSeries, ...savedData } : updatedSeries);
 
     const newList = seriesList.map((s) =>
-      (s.id === code || s.seriesCode === code) ? normalized : s
+      (s.id === code || s.seriesCode === code || s.slug === code) ? normalized : s
     );
     updateSeriesList(newList);
     appendConfigHistory(code, normalized);
@@ -118,7 +141,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const handleSequenceGenerated = (code, nextNumber) => {
     setSeriesList((prev) =>
       prev.map((s) => {
-        if (s.id === code || s.seriesCode === code) {
+        if (s.id === code || s.seriesCode === code || s.slug === code) {
           const nextSeq = (s.currentSequence || s.currentNumber || 0) + 1;
           return {
             ...s,
@@ -328,10 +351,32 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [pageSize, setPageSize] = useState(5);
   const [currentPage, setCurrentPage] = useState(1);
+  const [liveSeries, setLiveSeries] = useState(series);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchDetail = async () => {
+      try {
+        const code = series.seriesCode || series.slug || series.id;
+        const res = await numberSeriesApi.getNumberSeriesByCode(code);
+        if (res && mounted) {
+          setLiveSeries(normalizeNumberSeriesItem({ ...series, ...res }));
+        }
+      } catch {
+        // Fallback to prop series
+      }
+    };
+    fetchDetail();
+    return () => {
+      mounted = false;
+    };
+  }, [series]);
+
+  const currentSeries = liveSeries || series;
 
   const historyList = useMemo(() => {
-    return MOCK_GENERATED_HISTORY[series.id] || [];
-  }, [series.id]);
+    return MOCK_GENERATED_HISTORY[currentSeries.id] || [];
+  }, [currentSeries.id]);
 
   // Filter history rows by search query
   const filteredHistory = useMemo(() => {
@@ -349,13 +394,13 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
     return filteredHistory.slice(start, start + pageSize);
   }, [filteredHistory, currentPage, pageSize]);
 
-  const nextNumberVal = series.livePreview || getNextNumberPreview(series);
+  const nextNumberVal = currentSeries.livePreview || getNextNumberPreview(currentSeries);
 
   return (
     <DashboardLayout
-      title={`${series.name} Number Series`}
-      subtitle={`Manage the format and numbering sequence for ${series.name.toLowerCase()}.`}
-      breadcrumb={["Home", "Settings", "ID & Number Series", series.name]}
+      title={`${currentSeries.name} Number Series`}
+      subtitle={`Manage the format and numbering sequence for ${currentSeries.name.toLowerCase()}.`}
+      breadcrumb={["Home", "Settings", "ID & Number Series", currentSeries.name]}
     >
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
@@ -375,15 +420,15 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
         {/* HEADER & ACTION STRIP */}
         <div className="ns-detail-header-card">
           <div className="ns-detail-header-left">
-            <h2>{series.name}</h2>
-            <p>{series.description}</p>
+            <h2>{currentSeries.name}</h2>
+            <p>{currentSeries.description}</p>
           </div>
 
           <div className="ns-detail-header-actions">
             <button
               type="button"
               className="cms-btn cms-btn-ghost"
-              onClick={() => onPreviewModal(series)}
+              onClick={() => onPreviewModal(currentSeries)}
             >
               <Sparkles size={16} />
               <span>Preview Next Number</span>
@@ -392,7 +437,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
             <button
               type="button"
               className="cms-btn cms-btn-primary"
-              onClick={() => navigate(`/dashboard/settings/number-series/${series.id}/edit`)}
+              onClick={() => navigate(`/dashboard/settings/number-series/${currentSeries.id}/edit`)}
             >
               <Edit3 size={16} />
               <span>Edit Series</span>
@@ -404,7 +449,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
         <div className="ns-summary-strip">
           <div className="ns-summary-item">
             <span className="ns-summary-lbl">Current Format</span>
-            <span className="ns-summary-val font-mono">{series.format || series.formatPattern}</span>
+            <span className="ns-summary-val font-mono">{currentSeries.format || currentSeries.formatPattern}</span>
           </div>
 
           <div className="ns-summary-item highlight">
@@ -414,12 +459,12 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
 
           <div className="ns-summary-item">
             <span className="ns-summary-lbl">Prefix</span>
-            <span className="ns-summary-val">{series.prefix || "—"}</span>
+            <span className="ns-summary-val">{currentSeries.prefix || "—"}</span>
           </div>
 
           <div className="ns-summary-item">
             <span className="ns-summary-lbl">Total Generated</span>
-            <span className="ns-summary-val">{series.totalGenerated || series.currentSequence || series.currentNumber}</span>
+            <span className="ns-summary-val">{currentSeries.totalGenerated || currentSeries.currentSequence || currentSeries.currentNumber}</span>
           </div>
         </div>
 
@@ -533,7 +578,6 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
 function RenderTableHead({ seriesId }) {
   switch (seriesId) {
     case "teaching-staff-id":
-    case "employee-id":
       return (
         <tr>
           <th>#</th>
@@ -566,44 +610,6 @@ function RenderTableHead({ seriesId }) {
           <th>Academic Year</th>
           <th>Board</th>
           <th>Group</th>
-          <th>Created On</th>
-        </tr>
-      );
-    case "roll-no":
-      return (
-        <tr>
-          <th>#</th>
-          <th>Roll No.</th>
-          <th>Student Name</th>
-          <th>Admission No.</th>
-          <th>Academic Level</th>
-          <th>Group</th>
-          <th>Section</th>
-          <th>Created On</th>
-        </tr>
-      );
-    case "student-id":
-      return (
-        <tr>
-          <th>#</th>
-          <th>Student ID</th>
-          <th>Student Name</th>
-          <th>Admission No.</th>
-          <th>Academic Year</th>
-          <th>Status</th>
-          <th>Created On</th>
-        </tr>
-      );
-    case "section-name":
-      return (
-        <tr>
-          <th>#</th>
-          <th>Section Name</th>
-          <th>Board</th>
-          <th>Academic Year</th>
-          <th>Academic Level</th>
-          <th>Group</th>
-          <th>Status</th>
           <th>Created On</th>
         </tr>
       );
@@ -659,7 +665,6 @@ function RenderTableHead({ seriesId }) {
 function RenderTableRow({ seriesId, row, index }) {
   switch (seriesId) {
     case "teaching-staff-id":
-    case "employee-id":
       return (
         <tr>
           <td>{index}</td>
@@ -692,50 +697,6 @@ function RenderTableRow({ seriesId, row, index }) {
           <td>{row.year}</td>
           <td>{row.board}</td>
           <td>{row.group}</td>
-          <td>{row.date}</td>
-        </tr>
-      );
-    case "roll-no":
-      return (
-        <tr>
-          <td>{index}</td>
-          <td>
-            {row.val === "Pending" ? (
-              <span className="cms-badge cms-badge-warn">Pending</span>
-            ) : (
-              <span className="ns-code-badge font-bold">{row.val}</span>
-            )}
-          </td>
-          <td><strong>{row.name}</strong></td>
-          <td>{row.admNo}</td>
-          <td>{row.level}</td>
-          <td>{row.group}</td>
-          <td>{row.section}</td>
-          <td>{row.date}</td>
-        </tr>
-      );
-    case "student-id":
-      return (
-        <tr>
-          <td>{index}</td>
-          <td><span className="ns-code-badge font-bold">{row.val}</span></td>
-          <td><strong>{row.name}</strong></td>
-          <td>{row.admNo}</td>
-          <td>{row.year}</td>
-          <td><span className="cms-badge cms-badge-active">{row.status}</span></td>
-          <td>{row.date}</td>
-        </tr>
-      );
-    case "section-name":
-      return (
-        <tr>
-          <td>{index}</td>
-          <td><span className="ns-code-badge font-bold">{row.val}</span></td>
-          <td>{row.board}</td>
-          <td>{row.year}</td>
-          <td>{row.level}</td>
-          <td>{row.group}</td>
-          <td><span className="cms-badge cms-badge-active">{row.status}</span></td>
           <td>{row.date}</td>
         </tr>
       );
@@ -803,6 +764,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
   });
 
   const [validationError, setValidationError] = useState("");
+  const [apiPreview, setApiPreview] = useState(null);
 
   // Re-validate format live when form state changes
   const liveValidation = useMemo(() => {
@@ -814,11 +776,37 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
     );
   }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, series.allowedTokens, series.availablePlaceholders]);
 
-  const livePreviewVal = useMemo(() => {
+  const localLivePreviewVal = useMemo(() => {
     if (!liveValidation.valid) return null;
     const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
     return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength);
   }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, liveValidation]);
+
+  // Dynamic on-the-fly preview calculation for UI typing via GET /api/v1/settings/number-series/{seriesCode}/preview
+  useEffect(() => {
+    if (!liveValidation.valid) {
+      setApiPreview(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const code = series.seriesCode || series.slug || series.id;
+        const res = await numberSeriesApi.previewNumberSeries(code, {
+          pattern: formState.format,
+          numberLength: formState.numberLength,
+          prefix: formState.prefix,
+        });
+        if (typeof res === "string" && res.trim()) {
+          setApiPreview(res.trim());
+        }
+      } catch {
+        // Fallback to local preview calculation
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [formState.format, formState.numberLength, formState.prefix, series, liveValidation.valid]);
+
+  const livePreviewVal = apiPreview || localLivePreviewVal;
 
   const handleTokenClick = (token) => {
     setFormState((prev) => ({
@@ -1080,10 +1068,23 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleTestGenerate = () => {
+  const handleTestGenerate = async () => {
     const code = series.seriesCode || series.slug || series.id;
     setGenerating(true);
-    const simulated = getNextNumberPreview(series);
+    let nextGenerated = null;
+    try {
+      const res = await numberSeriesApi.generateNextNumber(code, {
+        dept: "General",
+        type: "Standard",
+      });
+      if (res?.generatedNumber) {
+        nextGenerated = res.generatedNumber;
+      }
+    } catch (err) {
+      console.warn("POST /api/v1/settings/number-series/{seriesCode}/generate-next fallback:", err?.message || err);
+    }
+
+    const simulated = nextGenerated || getNextNumberPreview(series);
     setLiveGeneratedNumber(simulated);
     if (onSequenceGenerated) {
       onSequenceGenerated(code, simulated);

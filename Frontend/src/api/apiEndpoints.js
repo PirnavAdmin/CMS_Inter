@@ -496,6 +496,17 @@ export const apiEndpoints = {
     generateNext: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/generate-next`,
     preview: (code) => `/api/v1/settings/number-series/${encodeURIComponent(code)}/preview`,
   },
+  settingsTemplates: {
+    list: "/api/v1/settings/templates",
+    categories: "/api/v1/settings/templates/categories",
+    getById: (id) => `/api/v1/settings/templates/${id}`,
+    getByCode: (templateCode) => `/api/v1/settings/templates/by-code/${encodeURIComponent(templateCode)}`,
+    create: "/api/v1/settings/templates",
+    update: (id) => `/api/v1/settings/templates/${id}`,
+    delete: (id) => `/api/v1/settings/templates/${id}`,
+    toggleActive: (id) => `/api/v1/settings/templates/${id}/toggle-active`,
+    preview: "/api/v1/settings/templates/preview",
+  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (

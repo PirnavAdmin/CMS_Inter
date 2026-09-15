@@ -65,66 +65,6 @@ export const FIXED_NUMBER_SERIES = [
     ],
   },
   {
-    id: "roll-no",
-    key: "roll-no",
-    name: "Roll No.",
-    category: "Student Management",
-    prefix: "",
-    format: "{SEQ}",
-    numberLength: 1,
-    startNumber: 1,
-    currentNumber: 1,
-    totalGenerated: 1,
-    currentExample: "1",
-    description: "Configure roll number sequence for student class rosters.",
-    status: "Active",
-    allowedTokens: ["{SEQ}", "{GROUP}", "{SECTION}"],
-    sampleFormats: [
-      { format: "{SEQ}", example: "1" },
-      { format: "{GROUP}-{SEQ}", example: "MPC-1" },
-    ],
-  },
-  {
-    id: "student-id",
-    key: "student-id",
-    name: "Student ID",
-    category: "Student Management",
-    prefix: "",
-    format: "{SEQ}",
-    numberLength: 3,
-    startNumber: 1,
-    currentNumber: 518,
-    totalGenerated: 518,
-    currentExample: "518",
-    description: "Configure global unique system student ID format.",
-    status: "Active",
-    allowedTokens: ["{SEQ}", "{YYYY}", "{YY}"],
-    sampleFormats: [
-      { format: "{SEQ}", example: "518" },
-      { format: "STU-{SEQ}", example: "STU-001" },
-    ],
-  },
-  {
-    id: "section-name",
-    key: "section-name",
-    name: "Section Name",
-    category: "Academic Structure",
-    prefix: "",
-    format: "{GROUP}-Section {SECTION}",
-    numberLength: 1,
-    startNumber: 1,
-    currentNumber: 1,
-    totalGenerated: 1,
-    currentExample: "MPC-Section A",
-    description: "Configure naming format pattern for classroom sections.",
-    status: "Active",
-    allowedTokens: ["{GROUP}", "{SECTION}", "{LEVEL}", "{BOARD}"],
-    sampleFormats: [
-      { format: "{GROUP}-Section {SECTION}", example: "MPC-Section A" },
-      { format: "{GROUP}-{LEVEL}-{SECTION}", example: "MPC-SR-A" },
-    ],
-  },
-  {
     id: "exam-code",
     key: "exam-code",
     name: "Exam Code",
@@ -235,6 +175,39 @@ export function normalizeNumberSeriesItem(item = {}) {
   };
 }
 
+export function isSeriesRemoved(item) {
+  if (!item) return false;
+  const key = String(item.id || item.key || item.seriesCode || item.slug || "").toLowerCase().trim();
+  const name = String(item.name || item.seriesName || "").toLowerCase().trim();
+
+  // Keep teaching-staff-id and non-teaching-staff-id
+  if (key.includes("teaching-staff") || key.includes("non-teaching") || name.includes("teaching staff")) {
+    return false;
+  }
+
+  return (
+    key === "employee-id" ||
+    key === "employee_id" ||
+    key === "employee" ||
+    key === "employeeid" ||
+    key === "roll-no" ||
+    key === "roll_no" ||
+    key === "rollno" ||
+    key === "roll-number" ||
+    key === "student-id" ||
+    key === "student_id" ||
+    key === "studentid" ||
+    key === "section-name" ||
+    key === "section_name" ||
+    key === "sectionname" ||
+    name === "employee id" ||
+    name === "roll no" ||
+    name === "roll no." ||
+    name === "student id" ||
+    name === "section name"
+  );
+}
+
 // --- MOCK GENERATED HISTORY DATA FOR EACH FIXED TYPE ---
 export const MOCK_GENERATED_HISTORY = {
   "teaching-staff-id": [
@@ -248,40 +221,12 @@ export const MOCK_GENERATED_HISTORY = {
     { id: 1, val: "PCNT0003", name: "Mr. Imran Khan", staffType: "Non-Teaching", dept: "Computer Science", desig: "Lab Technician", date: "07 May 2026" },
     { id: 2, val: "PCNT0001", name: "Mr. Rajesh Varma", staffType: "Non-Teaching", dept: "Administration", desig: "Office Assistant", date: "02 May 2026" },
   ],
-  "employee-id": [
-    { id: 1, val: "PCTCH0007", name: "Dr. S. Ramesh", staffType: "Teaching", dept: "Mathematics", desig: "HOD", date: "12 May 2026" },
-    { id: 2, val: "PCTCH0006", name: "Ms. Priya Sharma", staffType: "Teaching", dept: "Physics", desig: "Lecturer", date: "10 May 2026" },
-    { id: 3, val: "PCTCH0005", name: "Mr. Kiran Kumar", staffType: "Teaching", dept: "Chemistry", desig: "Senior Lecturer", date: "09 May 2026" },
-    { id: 4, val: "PCTCH0004", name: "Mrs. Anitha Rao", staffType: "Teaching", dept: "English", desig: "Lecturer", date: "08 May 2026" },
-    { id: 5, val: "PCNT0003", name: "Mr. Imran Khan", staffType: "Non-Teaching", dept: "Computer Science", desig: "Lab Technician", date: "07 May 2026" },
-    { id: 6, val: "PCTCH0002", name: "Dr. Kavita Reddy", staffType: "Teaching", dept: "Computer Science", desig: "Professor", date: "05 May 2026" },
-    { id: 7, val: "PCNT0001", name: "Mr. Rajesh Varma", staffType: "Non-Teaching", dept: "Administration", desig: "Office Assistant", date: "02 May 2026" },
-  ],
   "admission-no": [
     { id: 1, val: "ADM-17", name: "Rahul Kumar", year: "2026-2027", board: "BIEAP", group: "MPC", date: "12 May 2026" },
     { id: 2, val: "ADM-16", name: "Sneha Reddy", year: "2026-2027", board: "BIEAP", group: "BiPC", date: "11 May 2026" },
     { id: 3, val: "ADM-15", name: "Aditya Joshi", year: "2026-2027", board: "CBSE", group: "MPC", date: "10 May 2026" },
     { id: 4, val: "ADM-14", name: "Pooja Hegde", year: "2026-2027", board: "BIEAP", group: "CEC", date: "09 May 2026" },
     { id: 5, val: "ADM-13", name: "Venkatesh Rao", year: "2026-2027", board: "BIEAP", group: "HEC", date: "08 May 2026" },
-  ],
-  "roll-no": [
-    { id: 1, val: "1", name: "Rahul Kumar", admNo: "ADM-17", level: "Senior Intermediate", group: "MPC", section: "Sec A", date: "12 May 2026" },
-    { id: 2, val: "2", name: "Sneha Reddy", admNo: "ADM-16", level: "Senior Intermediate", group: "BiPC", section: "Sec A", date: "11 May 2026" },
-    { id: 3, val: "Pending", name: "Manish Verma", admNo: "ADM-18", level: "Junior Intermediate", group: "MPC", section: "Unassigned", date: "13 May 2026" },
-    { id: 4, val: "3", name: "Pooja Hegde", admNo: "ADM-14", level: "Senior Intermediate", group: "CEC", section: "Sec B", date: "09 May 2026" },
-  ],
-  "student-id": [
-    { id: 1, val: "518", name: "Rahul Kumar", admNo: "ADM-17", year: "2026-2027", status: "Active", date: "12 May 2026" },
-    { id: 2, val: "517", name: "Sneha Reddy", admNo: "ADM-16", year: "2026-2027", status: "Active", date: "11 May 2026" },
-    { id: 3, val: "516", name: "Aditya Joshi", admNo: "ADM-15", year: "2026-2027", status: "Active", date: "10 May 2026" },
-    { id: 4, val: "515", name: "Pooja Hegde", admNo: "ADM-14", year: "2026-2027", status: "Active", date: "09 May 2026" },
-  ],
-  "section-name": [
-    { id: 1, val: "MPC-Section A", board: "BIEAP", year: "2026-2027", level: "Senior Intermediate", group: "MPC", status: "Active", date: "01 Apr 2026" },
-    { id: 2, val: "MPC-Section B", board: "BIEAP", year: "2026-2027", level: "Senior Intermediate", group: "MPC", status: "Active", date: "01 Apr 2026" },
-    { id: 3, val: "BiPC-1A", board: "BIEAP", year: "2026-2027", level: "Junior Intermediate", group: "BiPC", status: "Active", date: "05 Apr 2026" },
-    { id: 4, val: "MPC-2A", board: "BIEAP", year: "2026-2027", level: "Senior Intermediate", group: "MPC", status: "Active", date: "05 Apr 2026" },
-    { id: 5, val: "MPC-A", board: "CBSE", year: "2026-2027", level: "Class XII", group: "MPC", status: "Active", date: "10 Apr 2026" },
   ],
   "exam-code": [
     { id: 1, val: "MPC-FINAL-2025", examName: "MPC Annual Final Exam 2025", year: "2025-2026", board: "BIEAP", type: "Final", date: "15 Dec 2025" },
@@ -315,21 +260,8 @@ export const MOCK_CONFIG_HISTORY = {
   "non-teaching-staff-id": [
     { version: "v1.0", format: "PCNT{SEQ}", prefix: "PCNT", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
   ],
-  "employee-id": [
-    { version: "v1.0", format: "PCTCH{SEQ}", prefix: "PCTCH", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-    { version: "v0.9", format: "PCTCH-{SEQ}", prefix: "PCTCH", length: 4, startNum: 1, changedBy: "Admin", date: "15 Mar 2026", status: "Previous" },
-  ],
   "admission-no": [
     { version: "v1.0", format: "ADM-{SEQ}", prefix: "ADM", length: 2, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-  "roll-no": [
-    { version: "v1.0", format: "{SEQ}", prefix: "", length: 1, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-  "student-id": [
-    { version: "v1.0", format: "{SEQ}", prefix: "", length: 3, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-  "section-name": [
-    { version: "v1.0", format: "{GROUP}-Section {SECTION}", prefix: "", length: 1, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
   ],
   "exam-code": [
     { version: "v1.0", format: "{GROUP}-{TYPE}-{YEAR}", prefix: "EXAM", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
@@ -350,9 +282,12 @@ export function readNumberSeriesSettings() {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || parsed.length === 0) return FIXED_NUMBER_SERIES;
     
-    // Map parsed array onto FIXED_NUMBER_SERIES to ensure all 9 cards are always present
+    // Filter out removed series
+    const cleanParsed = parsed.filter((p) => !isSeriesRemoved(p));
+    
+    // Map parsed array onto FIXED_NUMBER_SERIES to ensure all valid cards are always present
     const result = FIXED_NUMBER_SERIES.map((fixed) => {
-      const found = parsed.find((p) => p.id === fixed.id || p.key === fixed.key);
+      const found = cleanParsed.find((p) => p.id === fixed.id || p.key === fixed.key);
       if (!found) return fixed;
       return { ...fixed, ...found };
     });
@@ -364,7 +299,8 @@ export function readNumberSeriesSettings() {
 
 export function writeNumberSeriesSettings(list) {
   try {
-    const json = JSON.stringify(list);
+    const cleanList = (Array.isArray(list) ? list : []).filter((item) => !isSeriesRemoved(item));
+    const json = JSON.stringify(cleanList);
     localStorage.setItem(NUMBER_SERIES_STORAGE_KEY, json);
     sessionStorage.setItem(NUMBER_SERIES_STORAGE_KEY, json);
   } catch (err) {
