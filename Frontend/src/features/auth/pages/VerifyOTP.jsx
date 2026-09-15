@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthLayout from "@/layouts/AuthLayout.jsx";
-import { Field, useForm } from "@/components/common/Ui.jsx";
+import { Field, Toast, useForm } from "@/components/common/Ui.jsx";
 import {
   clearPasswordResetContext,
   getPasswordRecoveryErrorMessage,
@@ -20,6 +20,7 @@ export default function VerifyOTP() {
   const [busy, setBusy] = useState(false);
   const [resending, setResending] = useState(false);
   const [formError, setFormError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const storedContext = readPasswordResetContext();
@@ -37,6 +38,7 @@ export default function VerifyOTP() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (busy) return;
     setFormError("");
     if (!validate()) return;
     setBusy(true);
@@ -47,6 +49,8 @@ export default function VerifyOTP() {
       }
       const otp = String(values.otp || "").trim();
       await verifyPasswordResetOtp({ email, otp, accountType });
+      setSuccessMessage("OTP verified successfully.");
+      await new Promise((resolve) => window.setTimeout(resolve, 1200));
       navigate("/reset-password", { state: { email, accountType, otp } });
     } catch (error) {
       setFormError(getPasswordRecoveryErrorMessage(error, "Unable to verify OTP. Please try again."));
@@ -81,6 +85,7 @@ export default function VerifyOTP() {
         <button type="submit" className="cms-btn cms-btn-primary" style={{ width: "100%", marginTop: 18 }} disabled={busy}>{busy ? "Verifying..." : "Verify OTP"}</button>
       </form>
       <div className="cms-auth-links auth-secondary-actions"><button type="button" className="cms-btn cms-btn-ghost auth-resend-btn" onClick={resendOtp} disabled={resending}>{resending ? "Resending..." : "Resend OTP"}</button><Link to="/login" onClick={clearPasswordResetContext}>Back to login</Link></div>
+      <Toast message={successMessage} type="success" onClose={() => setSuccessMessage("")} />
     </AuthLayout>
   );
 }

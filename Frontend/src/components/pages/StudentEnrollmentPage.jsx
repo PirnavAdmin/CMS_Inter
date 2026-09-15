@@ -60,7 +60,7 @@ const formFromStudent = (record) => {
   const text = (...keys) => stringValue(valueOf(source, ...keys));
   return {
     admissionId: text("admissionId", "AdmissionId"), admissionNo: text("admissionNo", "AdmissionNo"), admissionNumber: text("admissionNumber", "AdmissionNumber"), admissionDate: asDateInput(valueOf(source, "admissionDate", "AdmissionDate")), admissionType: text("admissionType", "AdmissionType"), admissionQuota: text("admissionQuota", "AdmissionQuota"), medium: text("medium", "Medium"), secondLanguage: text("secondLanguage", "SecondLanguage"),
-    studentName: text("studentName", "StudentName", "fullName", "name"), photo: text("photo", "Photo", "photoPath", "PhotoPath"), gender: text("gender", "Gender"), dateOfBirth: asDateInput(valueOf(source, "dateOfBirth", "DateOfBirth", "dob", "DOB")), bloodGroup: text("bloodGroup", "BloodGroup"), email: text("email", "Email", "studentEmail", "StudentEmail"), mobileNumber: text("mobileNumber", "MobileNumber", "mobile", "Mobile"), aadhaarNumber: text("aadhaarNumber", "AadhaarNumber", "aadhaar", "Aadhaar"), nationality: text("nationality", "Nationality"), religion: text("religion", "Religion"), category: text("category", "Category"), address: text("address", "Address", "addressLine1", "AddressLine1"), city: text("city", "City"), district: text("district", "District"), state: text("state", "State"), pincode: text("pincode", "Pincode", "pinCode", "PinCode"),
+    studentName: text("studentName", "StudentName", "fullName", "FullName", "name", "Name"), photo: text("photoUrl", "PhotoUrl", "profilePhotoUrl", "ProfilePhotoUrl", "photo", "Photo", "photoPath", "PhotoPath", "profilePhoto", "ProfilePhoto"), gender: text("gender", "Gender"), dateOfBirth: asDateInput(valueOf(source, "dateOfBirth", "DateOfBirth", "dob", "DOB")), bloodGroup: text("bloodGroup", "BloodGroup"), email: text("email", "Email", "studentEmail", "StudentEmail"), mobileNumber: text("mobileNumber", "MobileNumber", "studentMobileNumber", "StudentMobileNumber", "mobile", "Mobile"), aadhaarNumber: text("aadhaarNumber", "AadhaarNumber", "aadhaar", "Aadhaar"), nationality: text("nationality", "Nationality"), religion: text("religion", "Religion"), category: text("category", "Category"), address: text("address", "Address", "addressLine1", "AddressLine1"), city: text("city", "City"), district: text("district", "District"), state: text("state", "State"), pincode: text("pincode", "Pincode", "pinCode", "PinCode"),
     boardId: text("boardId", "BoardId"), academicYearId: text("academicYearId", "AcademicYearId"), academicLevelId: text("academicLevelId", "AcademicLevelId"), groupId: text("groupId", "GroupId"), programId: text("programId", "ProgramId"), sectionId: text("sectionId", "SectionId"), rollNo: text("rollNo", "RollNo"), rollNumber: text("rollNumber", "RollNumber"), feeStructureId: text("feeStructureId", "FeeStructureId"), paymentPlan: text("paymentPlan", "PaymentPlan"),
     previousSchool: text("previousSchool", "PreviousSchool"), previousHallTicketNumber: text("previousHallTicketNumber", "PreviousHallTicketNumber"), previousBoard: text("previousBoard", "PreviousBoard"), previousYearOfPassing: text("previousYearOfPassing", "PreviousYearOfPassing"), previousPercentage: text("previousPercentage", "PreviousPercentage"), studentCategory: text("studentCategory", "StudentCategory"), scholarshipStatus: text("scholarshipStatus", "ScholarshipStatus"), scholarshipAmount: text("scholarshipAmount", "ScholarshipAmount"),
     fatherName: text("fatherName", "FatherName"), fatherOccupation: text("fatherOccupation", "FatherOccupation"), fatherMobile: text("fatherMobile", "FatherMobile"), fatherEmail: text("fatherEmail", "FatherEmail"), motherName: text("motherName", "MotherName"), motherOccupation: text("motherOccupation", "MotherOccupation"), motherMobile: text("motherMobile", "MotherMobile"), motherEmail: text("motherEmail", "MotherEmail"), guardianName: text("guardianName", "GuardianName"), guardianMobile: text("guardianMobile", "GuardianMobile"), guardianEmail: text("guardianEmail", "GuardianEmail"), annualIncome: text("annualIncome", "AnnualIncome"), remarks: text("remarks", "Remarks"),
@@ -102,20 +102,34 @@ export default function StudentEnrollmentPage({ id }) {
   const navigate = useNavigate();
   const redirectTimer = useRef(null);
   const photoInputRef = useRef(null);
-  const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] });
+  const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [savedPhotoPreview, setSavedPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] });
   const loadStudent = useCallback(async () => {
     setLoading(true); setLoadError("");
     try {
       if (!/^\d+$/.test(String(id))) throw new Error("Invalid student ID.");
-      const { data } = await apiClient.get(apiEndpoints.students.getById(id));
-      const record = unwrapStudent(data);
+      const [studentResult, profileResult] = await Promise.allSettled([
+        apiClient.get(apiEndpoints.students.getById(id)),
+        apiClient.get(apiEndpoints.students.getProfile(id)),
+      ]);
+      if (studentResult.status === "rejected" && profileResult.status === "rejected") throw studentResult.reason;
+      const studentRecord = studentResult.status === "fulfilled" ? unwrapStudent(studentResult.value.data) : {};
+      const profileRecord = profileResult.status === "fulfilled" ? unwrapStudent(profileResult.value.data) : {};
+      const record = { ...studentRecord };
+      Object.entries(profileRecord || {}).forEach(([key, fieldValue]) => {
+        if (fieldValue !== undefined && fieldValue !== null && fieldValue !== "") record[key] = fieldValue;
+      });
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
       const nested = record.student ?? record.Student ?? record.profile ?? record.Profile ?? {};
       const admission = record.admission ?? record.Admission ?? {};
       const academic = record.academicDetails ?? record.AcademicDetails ?? record.academic ?? record.Academic ?? {};
       const source = { ...record, ...admission, ...academic, ...nested };
       setStudent({ name: stringValue(valueOf(source, "studentName", "StudentName", "fullName", "name")) || "Student", rollNo: stringValue(valueOf(source, "rollNo", "RollNo", "rollNumber", "RollNumber")) || "—", admissionNo: stringValue(valueOf(source, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")) || "-" });
-      setForm(formFromStudent(record)); setErrors({}); setTouched({}); setPhotoFile(null); setPhotoPreview(""); setPhotoError("");
+      const nextForm = formFromStudent(record);
+      try {
+        const uploadedPhoto = sessionStorage.getItem(`cms_student_photo_${id}`);
+        if (uploadedPhoto) nextForm.photo = uploadedPhoto;
+      } catch { /* Storage may be unavailable. */ }
+      setForm(nextForm); setErrors({}); setTouched({}); setPhotoFile(null); setPhotoPreview(""); setPhotoError("");
     } catch (error) { setLoadError(getApiErrorMessage(error) || "Unable to load the student profile."); }
     finally { setLoading(false); }
   }, [id]);
@@ -143,6 +157,32 @@ export default function StudentEnrollmentPage({ id }) {
   }, []);
   useEffect(() => () => window.clearTimeout(redirectTimer.current), []);
   useEffect(() => () => { if (photoPreview) URL.revokeObjectURL(photoPreview); }, [photoPreview]);
+  useEffect(() => {
+    let active = true;
+    let objectUrl = "";
+    setSavedPhotoPreview("");
+    if (!form.photo || photoFile) return () => { active = false; };
+    const resolved = imageUrl(form.photo);
+    if (/^(?:blob:|data:)/i.test(resolved)) {
+      setSavedPhotoPreview(resolved);
+      return () => { active = false; };
+    }
+    apiClient.get(resolved, {
+      responseType: "blob",
+      headers: { Accept: "image/*" },
+      skipGlobalLoader: true,
+    }).then((response) => {
+      if (!active) return;
+      const contentType = String(response.headers?.["content-type"] ?? response.data?.type ?? "").toLowerCase();
+      if (!contentType.startsWith("image/")) return;
+      objectUrl = URL.createObjectURL(response.data);
+      setSavedPhotoPreview(objectUrl);
+    }).catch(() => { /* Keep the initials fallback when a saved photo is unavailable. */ });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [form.photo, photoFile]);
   const updateField = (key, value) => setForm((current) => {
     const next = { ...current, [key]: value };
     if (touched[key]) setErrors((currentErrors) => ({ ...currentErrors, [key]: validate(next)[key] || "" }));
@@ -209,7 +249,7 @@ export default function StudentEnrollmentPage({ id }) {
     </ProfileSection>
     <ProfileSection title="Personal Information">
       <Field label="Student Name *" {...field("studentName")}><input value={form.studentName} onChange={change("studentName")} maxLength="100" /></Field>
-      <Field label="Photo" error={photoError}><div className="student-profile-photo-upload"><div className="student-profile-photo-preview">{photoPreview || imageUrl(form.photo) ? <img src={photoPreview || imageUrl(form.photo)} alt={`${student.name}'s profile`} /> : <span>{initialsOf(student.name)}</span>}</div><input ref={photoInputRef} className="student-profile-photo-input" type="file" accept="image/jpeg,image/jpg,image/png" onChange={choosePhoto} /><button className="cms-btn cms-btn-ghost" type="button" onClick={() => photoInputRef.current?.click()}>{form.photo || photoPreview ? "Replace Photo" : "Upload Photo"}</button><small>JPG, JPEG or PNG</small></div></Field>
+      <Field label="Photo" error={photoError}><div className="student-profile-photo-upload"><div className="student-profile-photo-preview">{photoPreview || savedPhotoPreview ? <img src={photoPreview || savedPhotoPreview} alt={`${student.name}'s profile`} /> : <span>{initialsOf(student.name)}</span>}</div><input ref={photoInputRef} className="student-profile-photo-input" type="file" accept="image/jpeg,image/jpg,image/png" onChange={choosePhoto} /><button className="cms-btn cms-btn-ghost" type="button" onClick={() => photoInputRef.current?.click()}>{form.photo || photoPreview ? "Replace Photo" : "Upload Photo"}</button><small>JPG, JPEG or PNG</small></div></Field>
       <Field label="Gender *" {...field("gender")}><select value={form.gender} onChange={change("gender")}><option value="">Select gender</option>{genderOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field><Field label="Date of Birth *" {...field("dateOfBirth")}><input type="date" value={form.dateOfBirth} onChange={change("dateOfBirth")} /></Field><Field label="Blood Group"><select value={form.bloodGroup} onChange={change("bloodGroup")}><option value="">Select Blood Group</option>{bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select></Field><Field label="Nationality" {...field("nationality")}><input value={form.nationality} onChange={change("nationality")} maxLength="100" /></Field><Field label="Religion"><input value={form.religion} onChange={change("religion")} /></Field><Field label="Category"><select value={form.category} onChange={change("category")}><option value="">Select category</option>{categoryOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field>
     </ProfileSection>
     <ProfileSection title="Contact Information"><Field label="Email" {...field("email")}><input type="email" value={form.email} onChange={change("email")} maxLength="254" /></Field><Field label="Mobile Number" {...field("mobileNumber")}><input type="tel" inputMode="numeric" maxLength="10" value={form.mobileNumber} onChange={numericChange("mobileNumber", 10)} /></Field><Field label="Aadhaar Number" {...field("aadhaarNumber")}><input type="text" inputMode="numeric" maxLength="12" value={form.aadhaarNumber} onChange={numericChange("aadhaarNumber", 12)} /></Field></ProfileSection>

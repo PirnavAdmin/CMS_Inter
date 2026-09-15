@@ -1116,7 +1116,6 @@ public class DashboardRepository : IDashboardRepository
 
         int totalStaff = await conn.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM Staff st
-            LEFT JOIN Departments d ON st.DepartmentId = d.DepartmentId
             WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
               AND (st.Status = 'Active' OR st.Status IS NULL)
               AND (@boardId IS NULL OR st.BoardId = @boardId OR st.BoardId IS NULL OR st.BoardId = 0);",
@@ -1124,7 +1123,6 @@ public class DashboardRepository : IDashboardRepository
 
         int teachingCount = await conn.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM Staff st
-            LEFT JOIN Departments d ON st.DepartmentId = d.DepartmentId
             WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
               AND (st.Status = 'Active' OR st.Status IS NULL)
               AND (st.StaffType = 'Teaching' OR st.FacultyType = 'Teaching' OR st.StaffType IS NULL)
@@ -1186,19 +1184,34 @@ public class DashboardRepository : IDashboardRepository
             filteredTotal = nonTeachingCount;
         }
 
-        decimal presentPct = filteredTotal > 0 ? Math.Round((decimal)present * 100m / filteredTotal, 1) : 0m;
-        decimal absentPct = filteredTotal > 0 ? Math.Round((decimal)absent * 100m / filteredTotal, 1) : 0m;
-        decimal latePct = filteredTotal > 0 ? Math.Round((decimal)late * 100m / filteredTotal, 1) : 0m;
-        decimal leavePct = filteredTotal > 0 ? Math.Round((decimal)onLeave * 100m / filteredTotal, 1) : 0m;
+        int totalSessionMarks = present + absent + late + onLeave;
+        int normalizedPresent = filteredTotal > 0 ? Math.Min(present, filteredTotal) : present;
+        int normalizedAbsent = filteredTotal > 0 ? Math.Min(absent, filteredTotal) : absent;
+        int normalizedLate = filteredTotal > 0 ? Math.Min(late, filteredTotal) : late;
+        int normalizedOnLeave = filteredTotal > 0 ? Math.Min(onLeave, filteredTotal) : onLeave;
+
+        decimal presentPct = 0.0m;
+        if (totalSessionMarks > 0)
+        {
+            presentPct = Math.Min(100.0m, Math.Round((decimal)present * 100m / totalSessionMarks, 1));
+        }
+        else if (filteredTotal > 0 && present > 0)
+        {
+            presentPct = Math.Min(100.0m, Math.Round((decimal)normalizedPresent * 100m / filteredTotal, 1));
+        }
+
+        decimal absentPct = totalSessionMarks > 0 ? Math.Round((decimal)absent * 100m / totalSessionMarks, 1) : (filteredTotal > 0 ? Math.Round((decimal)normalizedAbsent * 100m / filteredTotal, 1) : 0m);
+        decimal latePct = totalSessionMarks > 0 ? Math.Round((decimal)late * 100m / totalSessionMarks, 1) : (filteredTotal > 0 ? Math.Round((decimal)normalizedLate * 100m / filteredTotal, 1) : 0m);
+        decimal leavePct = totalSessionMarks > 0 ? Math.Round((decimal)onLeave * 100m / totalSessionMarks, 1) : (filteredTotal > 0 ? Math.Round((decimal)normalizedOnLeave * 100m / filteredTotal, 1) : 0m);
 
         return new StaffAttendanceTodayResponseDto
         {
             StaffType = selectedType,
             TotalStaff = filteredTotal,
-            Present = present,
-            Absent = absent,
-            Late = late,
-            OnLeave = onLeave,
+            Present = normalizedPresent,
+            Absent = normalizedAbsent,
+            Late = normalizedLate,
+            OnLeave = normalizedOnLeave,
             AttendancePercentage = presentPct,
             PresentPercentage = presentPct,
             AbsentPercentage = absentPct,

@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getAuthToken } from "@/features/authStorage.js";
 
 const AcademicContext = createContext(null);
 const BOARD_STORAGE_KEY = "cms_selected_board";
@@ -78,12 +80,22 @@ const mapYear = (item, index) => {
   const name = valueOf(item, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "code", "Code") ?? id;
   return { ...item, id: String(id), code: String(name), name: String(name), label: String(name) };
 };
+const uniqueById = (items = []) => Array.from(items.reduce((lookup, item) => {
+  const id = String(item?.id ?? "").trim();
+  const identity = id || normalize(item?.code ?? item?.name ?? item?.label);
+  if (identity && !lookup.has(identity)) lookup.set(identity, item);
+  return lookup;
+}, new Map()).values());
 const sameBoard = (left, right) => String(boardIdOf(left) ?? "") === String(boardIdOf(right) ?? "") || normalize(left?.code ?? left?.name ?? left?.boardName) === normalize(right?.code ?? right?.name ?? right?.boardName);
 const sameYear = (left, right) => String(yearIdOf(left) ?? "") === String(yearIdOf(right) ?? "") || normalize(left?.code ?? left?.name ?? left?.label) === normalize(right?.code ?? right?.name ?? right?.label);
 
 export function AcademicProvider({ children }) {
-  const [boards, setBoards] = useState(() => readStored("cms_cached_boards") || DEFAULT_BOARDS);
-  const [academicYears, setAcademicYears] = useState(() => readStored("cms_cached_academic_years") || DEFAULT_ACADEMIC_YEARS);
+  useLocation();
+  // Re-evaluate storage when navigation occurs after login/logout. Academic
+  // masters are private application data and should not load on public pages.
+  const isAuthenticated = Boolean(getAuthToken());
+  const [boards, setBoards] = useState(() => uniqueById(readStored("cms_cached_boards") || DEFAULT_BOARDS));
+  const [academicYears, setAcademicYears] = useState(() => uniqueById(readStored("cms_cached_academic_years") || DEFAULT_ACADEMIC_YEARS));
   const [boardsLoading, setBoardsLoading] = useState(false);
   const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
   const [boardsError, setBoardsError] = useState("");
@@ -113,12 +125,16 @@ export function AcademicProvider({ children }) {
   }, [refreshAcademicContext]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setBoardsLoading(false);
+      return undefined;
+    }
     let active = true;
     setBoardsLoading(true);
     setBoardsError("");
     apiClient.get(apiEndpoints.boards.list, { params: { Status: true, PageNumber: 1, PageSize: 100 } }).then((response) => {
       if (!active) return;
-      const fetched = asList(response).filter(isActive).map(mapBoard);
+      const fetched = uniqueById(asList(response).filter(isActive).map(mapBoard));
       const nextBoards = fetched.length ? fetched : DEFAULT_BOARDS;
       setBoards(nextBoards);
       persist("cms_cached_boards", nextBoards);
@@ -129,7 +145,7 @@ export function AcademicProvider({ children }) {
       });
     }).catch(() => {
       if (!active) return;
-      const fallbackBoards = readStored("cms_cached_boards") || DEFAULT_BOARDS;
+      const fallbackBoards = uniqueById(readStored("cms_cached_boards") || DEFAULT_BOARDS);
       setBoards(fallbackBoards);
       setBoardsError("");
       setSelectedBoardState((current) => {
@@ -139,9 +155,13 @@ export function AcademicProvider({ children }) {
       });
     }).finally(() => active && setBoardsLoading(false));
     return () => { active = false; };
-  }, [refreshToken]);
+  }, [isAuthenticated, refreshToken]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      setAcademicYearsLoading(false);
+      return undefined;
+    }
     let active = true;
     const effectiveBoardId = selectedBoardId || boardIdOf(selectedBoard) || "1";
     setAcademicYearsLoading(true);
@@ -160,10 +180,10 @@ export function AcademicProvider({ children }) {
 
     loadYears().then((response) => {
       if (!active) return;
-      const fetched = asList(response).filter((year) => {
+      const fetched = uniqueById(asList(response).filter((year) => {
         const boardId = valueOf(year, "boardId", "BoardId");
         return (boardId == null || String(boardId) === String(effectiveBoardId)) && isActive(year);
-      }).map(mapYear);
+      }).map(mapYear));
       const nextYears = fetched.length ? fetched : DEFAULT_ACADEMIC_YEARS;
       setAcademicYears(nextYears);
       persist("cms_cached_academic_years", nextYears);
@@ -174,7 +194,7 @@ export function AcademicProvider({ children }) {
       });
     }).catch(() => {
       if (!active) return;
-      const fallbackYears = readStored("cms_cached_academic_years") || DEFAULT_ACADEMIC_YEARS;
+      const fallbackYears = uniqueById(readStored("cms_cached_academic_years") || DEFAULT_ACADEMIC_YEARS);
       setAcademicYears(fallbackYears);
       setAcademicYearsError("");
       setSelectedAcademicYearState((current) => {
@@ -184,7 +204,7 @@ export function AcademicProvider({ children }) {
       });
     }).finally(() => active && setAcademicYearsLoading(false));
     return () => { active = false; };
-  }, [selectedBoardId, selectedBoard, refreshToken]);
+  }, [isAuthenticated, selectedBoardId, selectedBoard, refreshToken]);
 
   const value = useMemo(() => ({
     boards, academicYears, selectedBoard, selectedBoardId, selectedAcademicYear, selectedAcademicYearId,

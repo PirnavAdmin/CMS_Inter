@@ -18,6 +18,7 @@ import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import "./SectionManagementPage.css";
 
 const PAGE_SIZE = 5;
@@ -514,7 +515,7 @@ function SearchableSelect({
         <div className="cms-searchable-select-menu">
           {showSearch && (
             <div className="cms-searchable-select-search">
-              <Search size={14} />
+              <Search3DIcon size={14} />
               <input
                 type="text"
                 autoFocus
@@ -1584,7 +1585,7 @@ export default function SectionManagementPage() {
               <div className="cms-card">
                 <div className="cms-toolbar cms-sec-toolbar">
                   <div className="cms-search cms-sec-search">
-                    <Search size={16} />
+                    <Search3DIcon size={16} />
                     <input
                       type="search"
                       placeholder="Search by Room No, block, floor..."
@@ -2086,7 +2087,7 @@ export default function SectionManagementPage() {
               <div className="cms-card">
                 <div className="cms-toolbar cms-sec-toolbar">
                   <div className="cms-search cms-sec-search">
-                    <Search size={16} />
+                    <Search3DIcon size={16} />
                     <input
                       type="search"
                       placeholder="Search by section, group, program..."

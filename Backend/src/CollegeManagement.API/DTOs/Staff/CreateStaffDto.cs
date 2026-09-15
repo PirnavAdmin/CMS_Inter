@@ -103,6 +103,12 @@ namespace CollegeManagement.API.DTOs.Staff
 
         public int? DesignationId { get; set; }
 
+        /// <summary>
+        /// Frontend-selected Role ID from Roles table (e.g. Faculty, HOD, Accounts, Library, etc.).
+        /// Required for centralized User account provisioning.
+        /// </summary>
+        public int? RoleId { get; set; }
+
         [StringLength(20)]
         public string StaffType { get; set; } = "Teaching";
         public string FacultyType => StaffType;

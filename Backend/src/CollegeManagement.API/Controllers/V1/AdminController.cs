@@ -1,11 +1,13 @@
 using CollegeManagement.API.DTOs.Admin;
 using CollegeManagement.API.DTOs.Authentication;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
@@ -19,11 +21,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IAdminService _adminService;
         private readonly IEmailService _emailService;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public AdminController(IAdminService adminService, IEmailService emailService)
+        public AdminController(
+            IAdminService adminService,
+            IEmailService emailService,
+            IJwtTokenHelper jwtTokenHelper)
         {
             _adminService = adminService;
             _emailService = emailService;
+            _jwtTokenHelper = jwtTokenHelper;
         }
 
         /// <summary>
@@ -73,6 +80,14 @@ namespace CollegeManagement.API.Controllers.V1
                     Status = true,
                     Message = "Admin created successfully.",
                     Data = result
+                });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new
+                {
+                    Status = false,
+                    Message = ex.Message
                 });
             }
             catch (InvalidOperationException ex)
@@ -128,40 +143,38 @@ namespace CollegeManagement.API.Controllers.V1
 
         /// <summary>
         /// Changes the password of the currently authenticated administrator.
+        /// Requires a valid Users.UserId JWT claim (sub / NameIdentifier).
+        /// Verifies old password against Users.PasswordHash (not admins.Password).
+        /// On success, dual-writes both Users.PasswordHash and admins.Password.
         /// </summary>
         [HttpPost("change-password")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var currentAdminId))
+            // Phase 6G: Extract the canonical Users.UserId from the JWT sub claim.
+            // No fallback to AdminId, 1, 15, 0, or any hardcoded value.
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
             {
                 return Unauthorized(new { Status = false, Message = "Invalid authentication token details." });
             }
 
-            try
-            {
-                var success = await _adminService.ChangePasswordAsync(currentAdminId, request);
-                if (!success)
-                {
-                    return NotFound(new { Status = false, Message = "Admin account not found." });
-                }
-
-                return Ok(new
-                {
-                    Status = true,
-                    Message = "Password changed successfully."
-                });
-            }
-            catch (ArgumentException ex)
+            var (success, message) = await _adminService.ChangePasswordAsync(userId.Value, request);
+            if (!success)
             {
                 return BadRequest(new
                 {
                     Status = false,
-                    Message = ex.Message
+                    Message = message
                 });
             }
+
+            return Ok(new
+            {
+                Status = true,
+                Message = message
+            });
         }
 
         /// <summary>
@@ -199,40 +212,10 @@ namespace CollegeManagement.API.Controllers.V1
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
             var result = await _adminService.ForgotPasswordAsync(request);
-            if (!result.Status)
-            {
-                return BadRequest(new
-                {
-                    Status = result.Status,
-                    Message = result.Message
-                });
-            }
-
-            try
-            {
-                await _emailService.SendEmailAsync(
-                    request.Email,
-                    "Admin Password Reset OTP",
-                    $@"
-                    <h2>College Management System - Admin</h2>
-                    <p>Your OTP for admin password reset is:</p>
-                    <h1>{result.Otp}</h1>
-                    <p>This OTP is valid for 5 minutes.</p>");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new
-                {
-                    Status = false,
-                    Message = "Failed to send email: " + ex.Message
-                });
-            }
-
             return Ok(new
             {
-                Status = true,
-                Message = "OTP has been sent to your registered email.",
-                Otp = result.Otp
+                Status = result.Status,
+                Message = result.Message
             });
         }
 
@@ -258,12 +241,13 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(new
             {
                 Status = result.Status,
-                Message = result.Message
+                Message = result.Message,
+                ResetToken = result.ResetToken
             });
         }
 
         /// <summary>
-        /// Resets the admin password using a validated OTP.
+        /// Resets the admin password using a validated OTP / verified reset context.
         /// </summary>
         [HttpPost("reset-password")]
         [AllowAnonymous]

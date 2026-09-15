@@ -138,10 +138,10 @@ namespace CollegeManagement.API.Tests
             }
 
             var duplicatePhones = (await conn.QueryAsync<dynamic>(@"
-                SELECT TRIM(COALESCE(Mobile, Phone)) AS CleanPhone, COUNT(*) AS Cnt, GROUP_CONCAT(Id) AS Ids, GROUP_CONCAT(EmployeeId) AS EmpIds
+                SELECT TRIM(Mobile) AS CleanPhone, COUNT(*) AS Cnt, GROUP_CONCAT(Id) AS Ids, GROUP_CONCAT(EmployeeId) AS EmpIds
                 FROM `Staff`
-                WHERE (IsDeleted = 0 OR IsDeleted IS NULL) AND COALESCE(Mobile, Phone) IS NOT NULL AND TRIM(COALESCE(Mobile, Phone)) != ''
-                GROUP BY TRIM(COALESCE(Mobile, Phone))
+                WHERE (IsDeleted = 0 OR IsDeleted IS NULL) AND Mobile IS NOT NULL AND TRIM(Mobile) != ''
+                GROUP BY TRIM(Mobile)
                 HAVING COUNT(*) > 1
                 ORDER BY Cnt DESC;")).ToList();
 
@@ -182,6 +182,37 @@ namespace CollegeManagement.API.Tests
             foreach (var s in allStaffList)
             {
                 Console.WriteLine($"  ID={s.Id} | EmpId={s.EmployeeId} | Name={s.FirstName} {s.LastName} | Type={s.StaffType} | Status={s.Status} | DeptId={s.DepartmentId} | DesigId={s.DesignationId} | BoardId={s.BoardId} | Phone={s.Mobile} | Email={s.Email}");
+            }
+
+            Console.WriteLine("\n[5] ALL SOFT-DELETED STAFF IN DATABASE:");
+            var deletedStaffList = (await conn.QueryAsync<dynamic>(@"
+                SELECT s.Id, s.EmployeeId, s.FirstName, s.LastName, s.StaffType, s.Status, s.DepartmentId, s.DesignationId, s.BoardId, s.Mobile, s.Email
+                FROM `Staff` s
+                WHERE s.IsDeleted = 1
+                ORDER BY s.Id ASC;")).ToList();
+
+            foreach (var s in deletedStaffList)
+            {
+                Console.WriteLine($"  DELETED ID={s.Id} | EmpId={s.EmployeeId} | Name={s.FirstName} {s.LastName} | Type={s.StaffType} | Status={s.Status} | DeptId={s.DepartmentId} | DesigId={s.DesignationId} | BoardId={s.BoardId} | Phone={s.Mobile} | Email={s.Email}");
+            }
+
+            Console.WriteLine("\n[6] ALL USERS IN DATABASE:");
+            var allUsers = (await conn.QueryAsync<dynamic>(@"
+                SELECT UserId, FullName, Email, RoleId, IsActive, StudentId, StaffId, AdminId
+                FROM `Users`
+                ORDER BY UserId ASC;")).ToList();
+
+            foreach (var u in allUsers)
+            {
+                Console.WriteLine($"  UserId={u.UserId} | Name={u.FullName} | Email={u.Email} | RoleId={u.RoleId} | IsActive={u.IsActive} | StudentId={u.StudentId} | StaffId={u.StaffId} | AdminId={u.AdminId}");
+            }
+
+            // Cleanup any stray test data with Id >= 1000 or UserId > 17
+            var deletedTestUsers = await conn.ExecuteAsync("DELETE FROM `Users` WHERE UserId > 17;");
+            var deletedTestStaff = await conn.ExecuteAsync("DELETE FROM `Staff` WHERE Id >= 1000;");
+            if (deletedTestUsers > 0 || deletedTestStaff > 0)
+            {
+                Console.WriteLine($"\n[CLEANUP] Purged {deletedTestUsers} stray test Users and {deletedTestStaff} stray test Staff.");
             }
 
             Console.WriteLine("\n================================================================================");

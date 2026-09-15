@@ -1,19 +1,20 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
 using Asp.Versioning;
 using ClosedXML.Excel;
 using CollegeManagement.API.DTOs.Result;
 using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -24,6 +25,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/results")]
     [Produces("application/json")]
+    [Authorize]
     public class ResultController : ControllerBase
     {
         private readonly IResultService _resultService;

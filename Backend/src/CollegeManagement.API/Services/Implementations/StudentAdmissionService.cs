@@ -1,8 +1,20 @@
-﻿using CollegeManagement.API.DTOs.StudentAdmission;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Net.Mail;
+using System.Threading.Tasks;
+using CollegeManagement.API.Data;
+using CollegeManagement.API.DTOs.StudentAdmission;
+using CollegeManagement.API.DTOs.Users;
 using CollegeManagement.API.Helpers;
+using CollegeManagement.API.Interfaces;
 using CollegeManagement.API.Repositories.Implementations;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -10,14 +22,29 @@ namespace CollegeManagement.API.Services.Implementations
         : IStudentAdmissionService
     {
         private readonly IStudentAdmissionRepository _repository;
+        private readonly IUserProvisioningService _userProvisioningService;
+        private readonly IEmailService _emailService;
+        private readonly AppDbContext _context;
+        private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
+        private readonly ILogger<StudentAdmissionService> _logger;
 
         public StudentAdmissionService(
             IStudentAdmissionRepository repository,
-            IWebHostEnvironment environment)
+            IUserProvisioningService userProvisioningService,
+            IEmailService emailService,
+            AppDbContext context,
+            IConfiguration configuration,
+            IWebHostEnvironment environment,
+            ILogger<StudentAdmissionService> logger)
         {
             _repository = repository;
+            _userProvisioningService = userProvisioningService;
+            _emailService = emailService;
+            _context = context;
+            _configuration = configuration;
             _environment = environment;
+            _logger = logger;
         }
 
 
@@ -154,7 +181,7 @@ namespace CollegeManagement.API.Services.Implementations
         }
 
         // =====================================================
-        // APPROVE
+        // APPROVE (ATOMIC STUDENT DOMAIN + CENTRALIZED USER PROVISIONING)
         // =====================================================
 
         public async Task<bool> ApproveAsync(
@@ -164,26 +191,167 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ArgumentNullException(nameof(request));
 
             if (request.AdmissionId <= 0)
-                throw new ArgumentException(
-                    "Invalid AdmissionId.");
+                throw new ArgumentException("Invalid AdmissionId.");
 
-            // 1. Fetch admission to get DateOfBirth for initial password generation
+            // 1. Fetch admission details
             var admission = await _repository.GetByIdAsync(request.AdmissionId);
             if (admission == null)
                 throw new KeyNotFoundException($"Admission with ID {request.AdmissionId} not found.");
 
-            // 2. Validate mandatory DateOfBirth for approval and credential creation
-            if (!admission.DateOfBirth.HasValue || admission.DateOfBirth.Value == default)
+            if (admission.IsApproved)
             {
-                throw new InvalidOperationException("Date of birth is mandatory for admission approval and initial credential generation.");
+                _logger.LogInformation("Student admission {AdmissionId} is already approved.", request.AdmissionId);
+                return true;
             }
 
-            // 3. Generate initial BCrypt password hash ONLY from actual admission DateOfBirth
-            var passwordHash = StudentCredentialHelper.GenerateInitialPasswordHash(admission.DateOfBirth.Value);
+            // 2. Open database connection and begin outer transaction for atomicity
+            var connection = _context.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open)
+            {
+                await connection.OpenAsync();
+            }
 
-            return await _repository.ApproveAsync(
-                request,
-                passwordHash);
+            using var transaction = connection.BeginTransaction();
+            UserProvisioningResult? userProvisioningResult = null;
+
+            try
+            {
+                // 3. Approve admission and create Student domain record in same transaction
+                var approveSuccess = await _repository.ApproveAsync(
+                    request,
+                    passwordHash: null,
+                    connection: connection,
+                    transaction: transaction);
+
+                if (!approveSuccess)
+                {
+                    transaction.Rollback();
+                    return false;
+                }
+
+                // 4. Retrieve created Student domain record
+                var student = await _repository.GetStudentByAdmissionIdAsync(
+                    request.AdmissionId,
+                    connection: connection,
+                    transaction: transaction);
+
+                if (student == null)
+                {
+                    transaction.Rollback();
+                    throw new InvalidOperationException($"Approved Student domain record could not be found for AdmissionId {request.AdmissionId}.");
+                }
+
+                // 5. Evaluate Student Email for User account provisioning
+                var studentEmail = !string.IsNullOrWhiteSpace(student.Email)
+                    ? student.Email.Trim()
+                    : (!string.IsNullOrWhiteSpace(admission.StudentEmail) ? admission.StudentEmail.Trim() : null);
+
+                if (!string.IsNullOrWhiteSpace(studentEmail) && IsValidEmailFormat(studentEmail))
+                {
+                    var studentName = !string.IsNullOrWhiteSpace(student.StudentName)
+                        ? student.StudentName.Trim()
+                        : $"{admission.FirstName} {admission.LastName}".Trim();
+
+                    var provisionRequest = new ProvisionStudentUserRequest
+                    {
+                        StudentId = student.StudentId,
+                        FullName = studentName,
+                        Email = studentEmail,
+                        PhoneNumber = !string.IsNullOrWhiteSpace(student.MobileNumber)
+                            ? student.MobileNumber.Trim()
+                            : admission.StudentMobileNumber
+                    };
+
+                    // Atomically provision centralized User record inside same transaction
+                    userProvisioningResult = await _userProvisioningService.ProvisionStudentUserAsync(
+                        provisionRequest,
+                        connection: connection,
+                        transaction: transaction);
+
+                    if (!userProvisioningResult.Success)
+                    {
+                        transaction.Rollback();
+                        throw new InvalidOperationException($"Student user account provisioning failed: {userProvisioningResult.ErrorMessage}");
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Student admission {AdmissionId} (StudentId: {StudentId}) approved without a User account because no valid email was provided.",
+                        request.AdmissionId, student.StudentId);
+                }
+
+                // 6. Commit single atomic transaction (Student + User created atomically)
+                transaction.Commit();
+                _logger.LogInformation(
+                    "Successfully committed Student approval for AdmissionId {AdmissionId} (StudentId: {StudentId}, UserProvisioned: {UserProvisioned})",
+                    request.AdmissionId, student.StudentId, userProvisioningResult?.Success == true);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    transaction.Rollback();
+                }
+                catch
+                {
+                    // Ignore rollback errors if already aborted
+                }
+
+                _logger.LogError(ex, "Transaction rolled back during Student admission approval for AdmissionId {AdmissionId}", request.AdmissionId);
+                throw;
+            }
+
+            // 7. Post-commit initial credential onboarding email dispatch
+            if (userProvisioningResult?.Success == true && !string.IsNullOrWhiteSpace(userProvisioningResult.TemporaryPassword))
+            {
+                try
+                {
+                    var portalUrl = _configuration?["StudentPortal:LoginUrl"]
+                                 ?? _configuration?["InstitutionSettings:PortalUrl"]
+                                 ?? "http://localhost:5173";
+
+                    var institutionName = _configuration?["InstitutionSettings:InstitutionName"]
+                                       ?? "College Management System";
+
+                    var emailBody = StudentCredentialHelper.BuildInitialCredentialEmailHtml(
+                        userProvisioningResult.FullName ?? $"{admission.FirstName} {admission.LastName}".Trim(),
+                        userProvisioningResult.Email ?? admission.StudentEmail ?? string.Empty,
+                        userProvisioningResult.TemporaryPassword,
+                        portalUrl,
+                        institutionName);
+
+                    await _emailService.SendEmailAsync(
+                        userProvisioningResult.Email,
+                        $"Your Student Portal Account Credentials - {institutionName}",
+                        emailBody);
+
+                    _logger.LogInformation("Successfully sent initial credential onboarding email to {Email}", userProvisioningResult.Email);
+                }
+                catch (Exception ex)
+                {
+                    // SMTP delivery failure after DB commit must NOT corrupt DB records or fail the API response.
+                    _logger.LogWarning(ex, "Initial credential email delivery failed for student {Email} after successful commit.", userProvisioningResult.Email);
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsValidEmailFormat(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return false;
+
+            try
+            {
+                var addr = new MailAddress(email.Trim());
+                return addr.Address == email.Trim();
+            }
+            catch
+            {
+                return false;
+            }
         }
 
 

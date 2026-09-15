@@ -53,12 +53,9 @@ namespace CollegeManagement.API.Services
             int studentId,
             StudentSelfProfileDto request);
 
-        Task<bool> ChangePasswordAsync(
-            int studentId,
-            StudentChangePasswordRequest request);
-
 
         // =========================================================
+
         // ACADEMIC OPERATIONS
         // =========================================================
 

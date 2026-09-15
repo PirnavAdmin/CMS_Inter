@@ -1,5 +1,7 @@
 using CollegeManagement.API.DTOs.Authentication;
 using CollegeManagement.API.DTOs.AcademicYear;
+using CollegeManagement.API.DTOs.Admin;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Implementations;
@@ -16,11 +18,56 @@ namespace CollegeManagement.API.Controllers
     {
         private readonly IAuthService _authService;
         private readonly IEmailService _emailService;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public AuthController(IAuthService authService, IEmailService emailService)
+        public AuthController(IAuthService authService, IEmailService emailService, IJwtTokenHelper? jwtTokenHelper = null)
         {
             _authService = authService;
             _emailService = emailService;
+            _jwtTokenHelper = jwtTokenHelper!;
+        }
+
+        /// <summary>
+        /// Changes the password for the currently authenticated user.
+        /// </summary>
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
+            {
+                return Unauthorized(new
+                {
+                    Status = false,
+                    Message = "User is not authenticated or user identifier claim is missing/invalid."
+                });
+            }
+
+            var (success, message) = await _authService.ChangePasswordAsync(
+                userId.Value,
+                request.OldPassword,
+                request.NewPassword,
+                request.ConfirmNewPassword);
+
+            if (!success)
+            {
+                return BadRequest(new
+                {
+                    Status = false,
+                    Message = message
+                });
+            }
+
+            return Ok(new
+            {
+                Status = true,
+                Message = message
+            });
         }
 
         /// <summary>
@@ -80,57 +127,37 @@ namespace CollegeManagement.API.Controllers
         }
 
         /// <summary>
-        /// Initiates the forgot password process. Validates the email/mobile and sends a password reset OTP.
+        /// Initiates the forgot password process. Sends a password reset OTP to the registered email.
         /// </summary>
         [HttpPost("forgot-password")]
         [AllowAnonymous]
         public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
             var result = await _authService.ForgotPasswordAsync(request);
-            if (!result.Status)
-            {
-                return BadRequest(new
-                {
-                    Status = result.Status,
-                    Message = result.Message
-                });
-            }
-
-            try
-            {
-                await _emailService.SendEmailAsync(
-                    request.Email,
-                    "Password Reset OTP",
-                    $@"
-                    <h2>College Management System</h2>
-                    <p>Your OTP for password reset is:</p>
-                    <h1>{result.Otp}</h1>
-                    <p>This OTP is valid for 5 minutes.</p>");
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new
-                {
-                    Status = false,
-                    Message = "Failed to send email: " + ex.Message
-                });
-            }
-
             return Ok(new
             {
                 Status = true,
-                Message = "OTP has been sent to your registered email.",
-                Otp = result.Otp
+                Message = result.Message
             });
         }
 
         /// <summary>
-        /// Verifies the OTP sent for password reset validation.
+        /// Verifies the OTP sent for password reset validation and establishes a verified reset context.
         /// </summary>
         [HttpPost("verify-otp")]
         [AllowAnonymous]
         public async Task<IActionResult> VerifyOtp(VerifyOtpRequest request)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
             var result = await _authService.VerifyOtpAsync(request);
             if (!result.Status)
             {
@@ -144,17 +171,23 @@ namespace CollegeManagement.API.Controllers
             return Ok(new
             {
                 Status = result.Status,
-                Message = result.Message
+                Message = result.Message,
+                ResetToken = result.ResetToken
             });
         }
 
         /// <summary>
-        /// Resets the user's password using the validated OTP and new password details.
+        /// Resets the user's password using the verified reset context and new password details.
         /// </summary>
         [HttpPost("reset-password")]
         [AllowAnonymous]
         public async Task<IActionResult> ResetPassword(ResetPasswordRequest request)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
             var result = await _authService.ResetPasswordAsync(request);
             if (!result.Status)
             {
@@ -162,25 +195,6 @@ namespace CollegeManagement.API.Controllers
                 {
                     Status = result.Status,
                     Message = result.Message
-                });
-            }
-
-            try
-            {
-                await _emailService.SendEmailAsync(
-                    request.Email,
-                    "Password Changed Successfully",
-                    @"
-                    <h2>College Management System</h2>
-                    <p>Your password has been changed successfully.</p>
-                    <p>If you did not make this change, please contact administration immediately.</p>");
-            }
-            catch (Exception)
-            {
-                return Ok(new
-                {
-                    Status = true,
-                    Message = "Password Reset Successfully. Note: Notification email could not be sent."
                 });
             }
 

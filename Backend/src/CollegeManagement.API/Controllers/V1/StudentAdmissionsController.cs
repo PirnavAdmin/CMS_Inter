@@ -1,6 +1,7 @@
 ﻿using Asp.Versioning;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CollegeManagement.API.Controllers.V1
@@ -8,6 +9,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/student-admissions")]
+    [Authorize]
     public class StudentAdmissionController : ControllerBase
     {
         private readonly IStudentAdmissionService _service;
@@ -371,7 +373,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
 
-        // =========================================================
+        /*// =========================================================
         // SECTION ALLOCATION - SINGLE
         // POST: api/v1/student-admissions/{id}/section
         // =========================================================
@@ -424,10 +426,10 @@ namespace CollegeManagement.API.Controllers.V1
                     details = ex.Message
                 });
             }
-        }
+        }*/
 
 
-        // =========================================================
+      /*  // =========================================================
         // BULK SECTION ALLOCATION
         // POST: api/v1/student-admissions/bulk-section
         // =========================================================
@@ -468,7 +470,7 @@ namespace CollegeManagement.API.Controllers.V1
                     details = ex.Message
                 });
             }
-        }
+        }*/
         //optional check box//
         // POST: api/v1/admissions/5/fee-selections
         [HttpPost("{id:int}/fee-selections")]
@@ -493,7 +495,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
 
-        // =========================================================
+       /* // =========================================================
         // BULK ROLL NUMBER ALLOCATION
         // POST: api/v1/student-admissions/bulk-roll-numbers
         // =========================================================
@@ -536,6 +538,6 @@ namespace CollegeManagement.API.Controllers.V1
                     details = ex.Message
                 });
             }
-        }
+        }*/
     }
 }

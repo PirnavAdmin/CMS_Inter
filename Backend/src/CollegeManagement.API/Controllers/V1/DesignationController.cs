@@ -16,6 +16,7 @@ namespace CollegeManagement.API.Controllers.V1
     [EnableCors("AllowFrontend")]
     [AllowAnonymous]
     [Produces("application/json")]
+    [Authorize]
     public class DesignationController : ControllerBase
     {
         private readonly IDesignationService _designationService;

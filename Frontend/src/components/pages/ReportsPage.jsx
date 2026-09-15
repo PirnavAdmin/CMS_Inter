@@ -21,6 +21,7 @@ import {
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Field, Loader, Modal, Toast } from "@/components/common/Ui.jsx";
 import admissionsImage from "@/assets/reports-3d/admissions.png";
 import attendanceImage from "@/assets/reports-3d/attendance.png";
@@ -1359,7 +1360,7 @@ export default function ReportsPage() {
                 {auditFilterFields.map((field) => <Field key={field.name} field={field} value={auditFilters[field.name]} onChange={handleAuditFilterChange} />)}
                 <div className="cms-field reports-audit-search-field">
                   <label htmlFor="audit-search">Search</label>
-                  <span className="reports-audit-search"><Search size={16} aria-hidden="true" /><input id="audit-search" type="search" list="audit-search-samples" value={auditFilters.search ?? ""} placeholder="User, module, action, record ID..." onChange={(event) => handleAuditFilterChange("search", event.target.value)} /></span>
+                  <span className="reports-audit-search"><Search3DIcon size={16} aria-hidden="true" /><input id="audit-search" type="search" list="audit-search-samples" value={auditFilters.search ?? ""} placeholder="User, module, action, record ID..." onChange={(event) => handleAuditFilterChange("search", event.target.value)} /></span>
                   <datalist id="audit-search-samples">{AUDIT_SEARCH_SAMPLES.map((value) => <option key={value} value={value} />)}</datalist>
                 </div>
               </div>

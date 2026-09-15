@@ -25,7 +25,12 @@ namespace CollegeManagement.API.Repositories.Implementations
         private async Task<DbConnection> GetOpenConnectionAsync()
         {
             var conn = _context.Database.GetDbConnection();
-            if (conn.State != ConnectionState.Open)
+            if (conn.State == ConnectionState.Broken || conn.State == ConnectionState.Closed)
+            {
+                try { await conn.CloseAsync(); } catch { }
+                await _context.Database.OpenConnectionAsync();
+            }
+            else if (conn.State != ConnectionState.Open)
             {
                 await _context.Database.OpenConnectionAsync();
             }
@@ -55,10 +60,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentDtosAsync(string? staffType = null, bool includeInactive = true)
         {
-            var conn = await GetOpenConnectionAsync();
-
             try
             {
+                var conn = await GetOpenConnectionAsync();
                 var depts = await conn.QueryAsync<DepartmentResponseDto>(
                     "sp_GetDepartments",
                     new { p_StaffType = staffType ?? "", p_IncludeInactive = includeInactive ? 1 : 0 },
@@ -115,7 +119,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     d.UpdatedAt
                 ORDER BY d.DepartmentName ASC;";
 
-            var results = await conn.QueryAsync<DepartmentResponseDto>(
+            var fallbackConn = await GetOpenConnectionAsync();
+            var results = await fallbackConn.QueryAsync<DepartmentResponseDto>(
                 fallbackSql,
                 new { StaffType = staffType ?? "", IncludeInactive = includeInactive ? 1 : 0 });
 
@@ -142,10 +147,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<DepartmentResponseDto?> GetDtoByIdAsync(int id)
         {
-            var conn = await GetOpenConnectionAsync();
-
             try
             {
+                var conn = await GetOpenConnectionAsync();
                 var dept = await conn.QueryFirstOrDefaultAsync<DepartmentResponseDto>(
                     "sp_GetDepartmentById",
                     new { p_DepartmentId = id },
@@ -182,7 +186,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     d.UpdatedAt
                 LIMIT 1;";
 
-            return await conn.QueryFirstOrDefaultAsync<DepartmentResponseDto>(fallbackSql, new { DepartmentId = id });
+            var fallbackConn = await GetOpenConnectionAsync();
+            return await fallbackConn.QueryFirstOrDefaultAsync<DepartmentResponseDto>(fallbackSql, new { DepartmentId = id });
         }
 
         public async Task<Department> AddDepartmentAsync(Department department)
@@ -192,10 +197,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                 department.DepartmentCode = $"DEP_{department.DepartmentName.Trim().ToUpper().Replace(" ", "_")}";
             }
 
-            var conn = await GetOpenConnectionAsync();
-
             try
             {
+                var conn = await GetOpenConnectionAsync();
                 const string insertSql = @"
                     INSERT INTO `Departments` 
                         (`DepartmentName`, `DepartmentCode`, `StaffType`, `Description`, `IsActive`, `CreatedAt`)
@@ -228,10 +232,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<Department?> UpdateDepartmentAsync(Department department)
         {
-            var conn = await GetOpenConnectionAsync();
-
             try
             {
+                var conn = await GetOpenConnectionAsync();
                 const string updateSql = @"
                     UPDATE `Departments`
                     SET `DepartmentName` = @DepartmentName,
@@ -277,10 +280,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<bool> DeleteDepartmentAsync(int id)
         {
-            var conn = await GetOpenConnectionAsync();
-
             try
             {
+                var conn = await GetOpenConnectionAsync();
                 var rows = await conn.ExecuteAsync(
                     "DELETE FROM `Departments` WHERE `DepartmentId` = @DepartmentId;",
                     new { DepartmentId = id });
@@ -300,10 +302,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<DepartmentSummaryDto> GetSummaryAsync()
         {
-            var conn = await GetOpenConnectionAsync();
-
             try
             {
+                var conn = await GetOpenConnectionAsync();
                 var summary = await conn.QueryFirstOrDefaultAsync<DepartmentSummaryDto>(
                     "sp_GetDepartmentSummary",
                     commandType: CommandType.StoredProcedure);
@@ -321,7 +322,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     (SELECT COUNT(*) FROM `Staff` WHERE IsDeleted = 0 AND (Status = 'Active' OR Status IS NULL)) AS TotalStaff
                 FROM `Departments`;";
 
-            var result = await conn.QueryFirstOrDefaultAsync<DepartmentSummaryDto>(sql);
+            var fallbackConn = await GetOpenConnectionAsync();
+            var result = await fallbackConn.QueryFirstOrDefaultAsync<DepartmentSummaryDto>(sql);
             return result ?? new DepartmentSummaryDto();
         }
 

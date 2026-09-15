@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -404,7 +405,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
           <div className="att-filter-item search-filter">
             <label>Search Student</label>
             <div className="att-search-input-wrap">
-              <Search size={14} className="att-search-icon" />
+              <Search3DIcon size={14} className="att-search-icon" />
               <input
                 type="text"
                 placeholder="Search Name, Admission No, Roll No..."

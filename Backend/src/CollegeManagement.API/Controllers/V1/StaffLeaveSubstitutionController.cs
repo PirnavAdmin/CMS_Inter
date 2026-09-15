@@ -15,28 +15,29 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/staff-leaves")]
     [EnableCors("AllowFrontend")]
-    [Authorize(Roles = "Faculty,Admin,College Admin,Super Admin,Principal,HOD")]
+    [Authorize(Roles = "Faculty,Admin,Super Admin,HOD")]
     [Produces("application/json")]
     public class StaffLeaveSubstitutionController : ControllerBase
     {
         private readonly ITimetableSubstitutionService _substitutionService;
+        private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
 
-        public StaffLeaveSubstitutionController(ITimetableSubstitutionService substitutionService)
+        public StaffLeaveSubstitutionController(
+            ITimetableSubstitutionService substitutionService,
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
         {
             _substitutionService = substitutionService;
+            _jwtTokenHelper = jwtTokenHelper;
         }
 
         private int GetCurrentUserId()
         {
-            var userIdClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
-                ?? User?.FindFirst("sub")?.Value 
-                ?? User?.FindFirst("id")?.Value 
-                ?? User?.FindFirst("UserId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
             {
-                return 15; // Fallback to existing College Admin user
+                throw new UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
             }
-            return userId;
+            return userId.Value;
         }
 
         /// <summary>
@@ -72,7 +73,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Restricted strictly to administrative roles.
         /// </summary>
         [HttpPost("{leaveRequestId:int}/substitutions")]
-        [Authorize(Roles = "Admin,College Admin,Super Admin,Principal,HOD")]
+        [Authorize(Roles = "Admin,Super Admin,HOD")]
         [ProducesResponseType(StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -5,11 +5,8 @@ import {
   Building2,
   Download,
   Eye,
-  FileSpreadsheet,
   Info,
   Pencil,
-  Plus,
-  RefreshCw,
   Search,
   Trash2,
   Upload,
@@ -19,8 +16,15 @@ import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import "./DepartmentManagementPage.css";
+import departmentsIcon from "@/assets/dashboard-3d/total-sections.png";
+import designationsIcon from "@/assets/dashboard-3d/teaching-staff.png";
+import refreshIcon from "@/assets/settings-3d/board-academic-year.png";
+import importExcelIcon from "@/assets/settings-3d/templates.png";
+import addDepartmentIcon from "@/assets/dashboard-3d/create-section.png";
+import addDesignationIcon from "@/assets/dashboard-3d/add-staff.png";
 
 // Helper: Check if staff type matches current tab (supports Teaching, Non-Teaching, Both, All)
 export const isStaffTypeMatch = (itemStaffType, currentTab) => {
@@ -39,6 +43,140 @@ export const toApiStaffType = (uiValue) => {
   return uiValue;
 };
 
+export const NON_TEACHING_DEPARTMENTS_SET = new Set([
+  "administration",
+  "accounts",
+  "accounts & finance",
+  "accounts and finance",
+  "finance",
+  "library",
+  "maintenance",
+  "maintenance & facilities",
+  "transport",
+  "transportation",
+  "security",
+  "human resources",
+  "hr",
+  "admissions",
+  "campus operations",
+  "operations",
+  "student affairs",
+  "hostel",
+  "hostel management",
+  "housekeeping",
+  "estate",
+  "facilities",
+  "it support",
+  "it & systems support",
+  "examinations",
+  "examinations cell",
+]);
+
+export const NON_TEACHING_DESIGNATIONS_SET = new Set([
+  "account",
+  "administrator",
+  "administrative officer",
+  "office administrator",
+  "accountant",
+  "senior accountant",
+  "junior accountant",
+  "accounts executive",
+  "finance executive",
+  "cashier",
+  "office assistant",
+  "attender",
+  "peon",
+  "attender / peon",
+  "clerk",
+  "data entry operator",
+  "deo",
+  "driver",
+  "bus driver",
+  "electrician",
+  "plumber",
+  "carpenter",
+  "hr executive",
+  "hr manager",
+  "librarian",
+  "library assistant",
+  "assistant librarian",
+  "maintenance supervisor",
+  "maintenance staff",
+  "receptionist",
+  "front desk executive",
+  "security guard",
+  "security supervisor",
+  "security officer",
+  "transport coordinator",
+  "transport incharge",
+  "warden",
+  "hostel warden",
+  "assistant warden",
+  "cleaner",
+  "watchman",
+  "lab assistant",
+  "store keeper",
+  "gardener",
+  "operations manager",
+  "facility supervisor",
+]);
+
+export const isOther = (name) => {
+  if (!name) return false;
+  const s = String(typeof name === "object" ? name.name || name.designationName || name.departmentName || name.label || name.value || "" : name).trim().toLowerCase();
+  return s === "other" || s === "others";
+};
+
+export const isNonTeachingDeptName = (name) => {
+  if (!name) return false;
+  const norm = String(typeof name === "object" ? name.name || name.departmentName || "" : name).trim().toLowerCase();
+  return (
+    norm === "other" ||
+    norm === "others" ||
+    NON_TEACHING_DEPARTMENTS_SET.has(norm) ||
+    norm.includes("admin") ||
+    norm.includes("account") ||
+    norm.includes("librar") ||
+    norm.includes("maint") ||
+    norm.includes("transp") ||
+    norm.includes("secur") ||
+    norm.includes("hostel") ||
+    norm.includes("operation") ||
+    norm.includes("human resource") ||
+    norm.includes("admission") ||
+    norm.includes("facility")
+  );
+};
+
+export const isNonTeachingDesigName = (name) => {
+  if (!name) return false;
+  const norm = String(typeof name === "object" ? name.name || name.designationName || "" : name).trim().toLowerCase();
+  return (
+    norm === "other" ||
+    norm === "others" ||
+    norm === "account" ||
+    NON_TEACHING_DESIGNATIONS_SET.has(norm) ||
+    norm.includes("account") ||
+    norm.includes("driver") ||
+    norm.includes("peon") ||
+    norm.includes("attender") ||
+    norm.includes("clerk") ||
+    norm.includes("librar") ||
+    norm.includes("reception") ||
+    norm.includes("guard") ||
+    norm.includes("electrician") ||
+    norm.includes("plumber") ||
+    norm.includes("warden") ||
+    norm.includes("office assistant") ||
+    norm.includes("data entry")
+  );
+};
+
+export const DEFAULT_TEACHING_DEPARTMENTS = [];
+export const DEFAULT_NON_TEACHING_DEPARTMENTS = [];
+export const DEFAULT_TEACHING_DESIGNATIONS = [];
+export const DEFAULT_NON_TEACHING_DESIGNATIONS = [];
+
 const unwrapRows = (payload) => {
   const value = payload?.data ?? payload?.Data ?? payload;
   if (Array.isArray(value)) return value;
@@ -53,35 +191,47 @@ const pick = (row, ...keys) =>
     .map((key) => row?.[key])
     .find((value) => value !== undefined && value !== null && value !== "");
 
-export const normalizeDepartment = (row) => ({
-  id: pick(row, "departmentId", "DepartmentId", "id", "Id"),
-  departmentId: pick(row, "departmentId", "DepartmentId", "id", "Id"),
-  name: String(pick(row, "departmentName", "DepartmentName", "name", "Name") || "").trim(),
-  departmentName: String(pick(row, "departmentName", "DepartmentName", "name", "Name") || "").trim(),
-  code: String(pick(row, "departmentCode", "DepartmentCode", "code", "Code") || "—").trim(),
-  departmentCode: String(pick(row, "departmentCode", "DepartmentCode", "code", "Code") || "—").trim(),
-  staffType: String(pick(row, "staffType", "StaffType") || "Teaching").trim(),
-  description: String(pick(row, "description", "Description") || "—").trim(),
-  isActive: Boolean(pick(row, "isActive", "IsActive") ?? true),
-  status:
-    pick(row, "isActive", "IsActive") === false ||
-    String(pick(row, "status", "Status") || "").toLowerCase() === "inactive"
-      ? "Inactive"
-      : "Active",
-  createdAt: pick(row, "createdAt", "CreatedAt") || null,
-  updatedAt: pick(row, "updatedAt", "UpdatedAt") || null,
-});
+export const normalizeDepartment = (row) => {
+  const name = String(pick(row, "departmentName", "DepartmentName", "name", "Name") || "").trim();
+  const rawStaffType = pick(row, "staffType", "StaffType");
+  const staffType = rawStaffType
+    ? String(rawStaffType).trim()
+    : (isNonTeachingDeptName(name) ? "Non-Teaching" : "Teaching");
+  return {
+    id: pick(row, "departmentId", "DepartmentId", "id", "Id"),
+    departmentId: pick(row, "departmentId", "DepartmentId", "id", "Id"),
+    name,
+    departmentName: name,
+    code: String(pick(row, "departmentCode", "DepartmentCode", "code", "Code") || "—").trim(),
+    departmentCode: String(pick(row, "departmentCode", "DepartmentCode", "code", "Code") || "—").trim(),
+    staffType,
+    description: String(pick(row, "description", "Description") || "—").trim(),
+    isActive: Boolean(pick(row, "isActive", "IsActive") ?? true),
+    status:
+      pick(row, "isActive", "IsActive") === false ||
+      String(pick(row, "status", "Status") || "").toLowerCase() === "inactive"
+        ? "Inactive"
+        : "Active",
+    createdAt: pick(row, "createdAt", "CreatedAt") || null,
+    updatedAt: pick(row, "updatedAt", "UpdatedAt") || null,
+  };
+};
 
 export const normalizeDesignation = (row) => {
   const idVal = pick(row, "id", "Id", "designationId", "DesignationId");
+  const name = String(pick(row, "designationName", "DesignationName", "name", "Name") || "").trim();
+  const rawStaffType = pick(row, "staffType", "StaffType");
+  const staffType = rawStaffType
+    ? String(rawStaffType).trim()
+    : (isNonTeachingDesigName(name) ? "Non-Teaching" : "Teaching");
   return {
     id: idVal,
     designationId: idVal,
-    name: String(pick(row, "designationName", "DesignationName", "name", "Name") || "").trim(),
-    designationName: String(pick(row, "designationName", "DesignationName", "name", "Name") || "").trim(),
+    name,
+    designationName: name,
     code: String(pick(row, "designationCode", "DesignationCode", "code", "Code") || "—").trim(),
     designationCode: String(pick(row, "designationCode", "DesignationCode", "code", "Code") || "—").trim(),
-    staffType: String(pick(row, "staffType", "StaffType") || "Teaching").trim(),
+    staffType,
     isActive: Boolean(pick(row, "isActive", "IsActive") ?? true),
     status:
       pick(row, "isActive", "IsActive") === false ||
@@ -289,6 +439,7 @@ export default function DepartmentManagementPage() {
   const [pendingDeleteDept, setPendingDeleteDept] = useState(null);
   const [pendingDeleteDesig, setPendingDeleteDesig] = useState(null);
   const [createKind, setCreateKind] = useState(null);
+  const [deletingDept, setDeletingDept] = useState(false);
   const [deletingDesig, setDeletingDesig] = useState(false);
 
   const requestSeqRef = useRef(0);
@@ -316,6 +467,9 @@ export default function DepartmentManagementPage() {
       }
     } catch (err) {
       console.warn("Failed to load departments:", err);
+      if (requestSeqRef.current === currentSeq) {
+        setDepartments([]);
+      }
     } finally {
       if (requestSeqRef.current === currentSeq) setDepartmentsLoading(false);
     }
@@ -333,6 +487,9 @@ export default function DepartmentManagementPage() {
       }
     } catch (err) {
       console.warn("Failed to load designations:", err);
+      if (requestSeqRef.current === currentSeq) {
+        setDesignations([]);
+      }
     } finally {
       if (requestSeqRef.current === currentSeq) {
         setDesignationsLoading(false);
@@ -352,10 +509,31 @@ export default function DepartmentManagementPage() {
 
   // Department Client-side Filtering
   const filteredDepartments = useMemo(() => {
-    const byStaff = departments.filter((item) => isStaffTypeMatch(item.staffType, staffType));
+    const isTeaching = staffType === "Teaching";
+    const seen = new Set();
+    const result = [];
+
+    const sourceList = Array.isArray(departments) ? departments : [];
+
+    for (const item of sourceList) {
+      if (!item || !item.name) continue;
+      const dName = item.name.trim();
+      const norm = dName.toLowerCase();
+      if (isOther(norm)) continue;
+
+      const isNonTeaching = isNonTeachingDeptName(norm);
+      if (isTeaching && isNonTeaching) continue;
+      if (!isTeaching && !isNonTeaching) continue;
+
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        result.push(item);
+      }
+    }
+
     const q = deptQuery.trim().toLowerCase();
-    if (!q) return byStaff;
-    return byStaff.filter((item) =>
+    if (!q) return result;
+    return result.filter((item) =>
       [item.name, item.code, item.description, item.staffType].some((val) =>
         String(val || "").toLowerCase().includes(q)
       )
@@ -372,10 +550,31 @@ export default function DepartmentManagementPage() {
 
   // Designation Client-side Filtering
   const filteredDesignations = useMemo(() => {
-    const byStaff = designations.filter((item) => isStaffTypeMatch(item.staffType, staffType));
+    const isTeaching = staffType === "Teaching";
+    const seen = new Set();
+    const result = [];
+
+    const sourceList = Array.isArray(designations) ? designations : [];
+
+    for (const item of sourceList) {
+      if (!item || !item.name) continue;
+      const dName = item.name.trim();
+      const norm = dName.toLowerCase();
+      if (isOther(norm)) continue;
+
+      const isNonTeaching = isNonTeachingDesigName(norm);
+      if (isTeaching && isNonTeaching) continue;
+      if (!isTeaching && !isNonTeaching) continue;
+
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        result.push(item);
+      }
+    }
+
     const q = designationQuery.trim().toLowerCase();
-    if (!q) return byStaff;
-    return byStaff.filter((item) =>
+    if (!q) return result;
+    return result.filter((item) =>
       [item.name, item.code, item.staffType].some((val) =>
         String(val || "").toLowerCase().includes(q)
       )
@@ -390,25 +589,51 @@ export default function DepartmentManagementPage() {
     return filteredDesignations.filter((d) => d.status === "Active").length;
   }, [filteredDesignations]);
 
+  // Delete Department Handler (DELETE /api/v1/departments/{id})
+  const handleDeleteDepartment = async () => {
+    if (!pendingDeleteDept?.id) return;
+    setDeletingDept(true);
+    try {
+      await apiClient.delete(apiEndpoints.departments.delete(pendingDeleteDept.id));
+      setToast(`Department "${pendingDeleteDept.name}" deleted successfully.`);
+      setDepartments((prev) => prev.filter((d) => d.id !== pendingDeleteDept.id));
+    } catch (error) {
+      const status = error?.response?.status;
+      if (status === 404) {
+        setToast("Department was not found on the server.");
+        setDepartments((prev) => prev.filter((d) => d.id !== pendingDeleteDept.id));
+      } else {
+        const msg = getApiErrorMessage(
+          error,
+          "This department cannot be deleted because it is currently assigned to designations or staff."
+        );
+        setToast(msg);
+      }
+    } finally {
+      setDeletingDept(false);
+      setPendingDeleteDept(null);
+    }
+  };
+
   // Delete Designation Handler (DELETE /api/v1/designations/{id})
   const handleDeleteDesignation = async () => {
     if (!pendingDeleteDesig?.id) return;
     setDeletingDesig(true);
     try {
       await apiClient.delete(apiEndpoints.designations.delete(pendingDeleteDesig.id));
-      setToast(`Designation "${pendingDeleteDesig.name}" deleted successfully.`);
+      setToast({ message: `Designation "${pendingDeleteDesig.name}" deleted successfully.`, type: "success" });
       setDesignations((prev) => prev.filter((d) => d.id !== pendingDeleteDesig.id));
     } catch (error) {
       const status = error?.response?.status;
       if (status === 404) {
-        setToast("Designation was not found on the server.");
+        setToast({ message: "Designation was not found on the server.", type: "warning" });
         setDesignations((prev) => prev.filter((d) => d.id !== pendingDeleteDesig.id));
       } else {
         const msg = getApiErrorMessage(
           error,
           "This designation cannot be deleted because it is currently assigned to staff."
         );
-        setToast(msg);
+        setToast({ message: msg, type: "error" });
       }
     } finally {
       setDeletingDesig(false);
@@ -419,14 +644,14 @@ export default function DepartmentManagementPage() {
   const pageActions = (
     <div className="master-page-actions master-summary-actions">
       <article>
-        <Building2 />
+        <img className="master-summary-icon" src={departmentsIcon} alt="" aria-hidden="true" width={28} height={28} />
         <span>
           Total Departments<strong>{filteredDepartments.length}</strong>
           <small>{activeDepartmentsCount} Active Departments</small>
         </span>
       </article>
       <article>
-        <Users />
+        <img className="master-summary-icon" src={designationsIcon} alt="" aria-hidden="true" width={28} height={28} />
         <span>
           Total Designations<strong>{filteredDesignations.length}</strong>
           <small>{activeDesignationsCount} Active Designations</small>
@@ -439,7 +664,7 @@ export default function DepartmentManagementPage() {
         title="Click to refresh department and designation data"
         aria-label="Refresh department and designation data"
       >
-        <RefreshCw className={isRefreshing || departmentsLoading || designationsLoading ? "is-spinning" : ""} />
+        <img className={`master-summary-icon${isRefreshing || departmentsLoading || designationsLoading ? " is-spinning" : ""}`} src={refreshIcon} alt="" aria-hidden="true" width={28} height={28} />
         <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
       </button>
     </div>
@@ -487,18 +712,18 @@ export default function DepartmentManagementPage() {
                   className="cms-btn secondary"
                   onClick={() => navigate("/dashboard/departments/import")}
                 >
-                  <FileSpreadsheet /> Import Excel
+                  <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} /> Import Excel
                 </button>
                 <button
                   className="cms-btn primary"
                   onClick={() => setCreateKind("department")}
                 >
-                  <Plus /> Add Department
+                  <img className="master-action-icon" src={addDepartmentIcon} alt="" aria-hidden="true" width={24} height={24} /> Add Department
                 </button>
               </div>
             </header>
             <label className="master-search">
-              <Search />
+              <Search3DIcon size={16} />
               <span className="sr-only">Search departments</span>
               <input
                 value={deptQuery}
@@ -536,7 +761,7 @@ export default function DepartmentManagementPage() {
                             <button
                               className="master-icon-button"
                               aria-label={`View ${item.name}`}
-                              onClick={() => navigate(`/dashboard/departments/${item.id}/view`)}
+                              onClick={() => navigate(`/dashboard/departments/${item.id}/view`, { state: { department: item } })}
                             >
                               <Eye />
                             </button>
@@ -586,18 +811,18 @@ export default function DepartmentManagementPage() {
                   className="cms-btn secondary"
                   onClick={() => navigate("/dashboard/designations/import")}
                 >
-                  <FileSpreadsheet /> Import Excel
+                  <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} /> Import Excel
                 </button>
                 <button
                   className="cms-btn primary"
                   onClick={() => setCreateKind("designation")}
                 >
-                  <Plus /> Add Designation
+                  <img className="master-action-icon" src={addDesignationIcon} alt="" aria-hidden="true" width={24} height={24} /> Add Designation
                 </button>
               </div>
             </header>
             <label className="master-search">
-              <Search />
+              <Search3DIcon size={16} />
               <span className="sr-only">Search designations</span>
               <input
                 value={designationQuery}
@@ -683,14 +908,14 @@ export default function DepartmentManagementPage() {
         </aside>
       </main>
 
-      {/* DEPARTMENT DELETE NOTICE DIALOG (No Backend Delete API) */}
+      {/* DEPARTMENT DELETE CONFIRM DIALOG (DELETE /api/v1/departments/{id}) */}
       {pendingDeleteDept ? (
         <ConfirmDialog
           title="Delete department?"
-          message={`Department deletion is not available because the backend DELETE endpoint has not been provided.`}
-          confirmLabel="OK"
+          message={`Are you sure you want to delete department "${pendingDeleteDept.name}"? This action cannot be undone.`}
+          confirmLabel={deletingDept ? "Deleting..." : "Delete"}
           onCancel={() => setPendingDeleteDept(null)}
-          onConfirm={() => setPendingDeleteDept(null)}
+          onConfirm={handleDeleteDepartment}
         />
       ) : null}
 
@@ -724,47 +949,69 @@ export default function DepartmentManagementPage() {
         />
       ) : null}
 
-      {toast ? <Toast message={toast} onClose={() => setToast("")} /> : null}
+      {toast ? (
+        <Toast
+          message={typeof toast === "object" ? toast.message : toast}
+          type={typeof toast === "object" ? toast.type || "success" : "success"}
+          onClose={() => setToast(null)}
+        />
+      ) : null}
     </DashboardLayout>
   );
 }
 
 // ----------------------------------------------------------------------
-// DEPARTMENT DETAILS PAGE
+// DEPARTMENT DETAILS PAGE (GET /api/v1/departments/{id})
 // ----------------------------------------------------------------------
 export function DepartmentDetailsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
-  const [department, setDepartment] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [department, setDepartment] = useState(location.state?.department || null);
+  const [loading, setLoading] = useState(!department);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (department) return;
     let active = true;
-    apiClient
-      .get(apiEndpoints.departments.getAll, { skipGlobalLoader: true })
-      .then((response) => {
+    setLoading(true);
+
+    const loadDept = async () => {
+      try {
+        if (apiEndpoints.departments.getById) {
+          const res = await apiClient.get(apiEndpoints.departments.getById(id), { skipGlobalLoader: true });
+          if (!active) return;
+          setDepartment(normalizeDepartment(res.data));
+          return;
+        }
+      } catch (err) {
+        console.warn("Direct department fetch failed, falling back to list:", err);
+      }
+
+      try {
+        const res = await apiClient.get(apiEndpoints.departments.getAll, { skipGlobalLoader: true });
         if (!active) return;
-        const list = unwrapRows(response.data).map(normalizeDepartment);
+        const list = unwrapRows(res.data).map(normalizeDepartment);
         const match = list.find((item) => String(item.id) === String(id));
         if (match) {
           setDepartment(match);
         } else {
           setError("Department details were not found.");
         }
-      })
-      .catch((requestError) => {
+      } catch (requestError) {
         if (!active) return;
         setError(getApiErrorMessage(requestError, "Department details could not be loaded."));
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    };
+
+    loadDept();
 
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, department]);
 
   return (
     <DashboardLayout
@@ -798,11 +1045,19 @@ export function DepartmentDetailsPage() {
             <p className="master-details-state">Loading department details...</p>
           ) : error ? (
             <p className="master-details-state">{error}</p>
-          ) : (
+          ) : department ? (
             <dl>
               <div>
                 <dt>Department Name</dt>
                 <dd>{department.name}</dd>
+              </div>
+              <div>
+                <dt>Department Code</dt>
+                <dd><code>{department.code}</code></dd>
+              </div>
+              <div>
+                <dt>Staff Type</dt>
+                <dd>{department.staffType}</dd>
               </div>
               <div>
                 <dt>Status</dt>
@@ -810,7 +1065,15 @@ export function DepartmentDetailsPage() {
                   <StatusBadge value={department.status} />
                 </dd>
               </div>
+              {department.description && department.description !== "—" ? (
+                <div className="is-wide">
+                  <dt>Description</dt>
+                  <dd>{department.description}</dd>
+                </div>
+              ) : null}
             </dl>
+          ) : (
+            <p className="master-details-state">Department details could not be found.</p>
           )}
         </section>
       </main>
@@ -933,7 +1196,6 @@ export function MasterFormPage({ kind }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(edit);
   const [submitting, setSubmitting] = useState(false);
-  const [apiNotice, setApiNotice] = useState("");
 
   const fields = formDefinitions[kind];
 
@@ -943,25 +1205,41 @@ export function MasterFormPage({ kind }) {
     setLoading(true);
 
     if (kind === "department") {
-      setApiNotice("Department update API is not available in the current backend contract.");
-      apiClient
-        .get(apiEndpoints.departments.getAll, { skipGlobalLoader: true })
-        .then((res) => {
+      const loadDept = async () => {
+        try {
+          const res = await apiClient.get(apiEndpoints.departments.getById(id), { skipGlobalLoader: true });
           if (!active) return;
-          const match = unwrapRows(res.data).map(normalizeDepartment).find((d) => String(d.id) === String(id));
-          if (match) {
-            setValues({
-              departmentName: match.name,
-              departmentCode: match.code,
-              description: match.description !== "—" ? match.description : "",
-              status: match.status,
-              staffType: match.staffType === "NonTeaching" ? "Non-Teaching" : "Teaching",
-            });
+          const match = normalizeDepartment(res.data);
+          setValues({
+            departmentName: match.name,
+            departmentCode: match.code !== "—" ? match.code : "",
+            description: match.description !== "—" ? match.description : "",
+            status: match.status,
+            staffType: match.staffType === "NonTeaching" ? "Non-Teaching" : match.staffType,
+          });
+        } catch {
+          try {
+            const res = await apiClient.get(apiEndpoints.departments.getAll, { skipGlobalLoader: true });
+            if (!active) return;
+            const match = unwrapRows(res.data).map(normalizeDepartment).find((d) => String(d.id) === String(id));
+            if (match) {
+              setValues({
+                departmentName: match.name,
+                departmentCode: match.code !== "—" ? match.code : "",
+                description: match.description !== "—" ? match.description : "",
+                status: match.status,
+                staffType: match.staffType === "NonTeaching" ? "Non-Teaching" : match.staffType,
+              });
+            }
+          } catch (err) {
+            if (!active) return;
+            setErrors({ apiError: getApiErrorMessage(err, "Failed to load department details.") });
           }
-        })
-        .finally(() => {
+        } finally {
           if (active) setLoading(false);
-        });
+        }
+      };
+      loadDept();
     } else {
       // Edit Designation: GET /api/v1/designations/{id}
       apiClient
@@ -972,7 +1250,7 @@ export function MasterFormPage({ kind }) {
           setValues({
             designationName: match.name,
             status: match.status,
-            staffType: match.staffType === "NonTeaching" ? "Non-Teaching" : "Teaching",
+            staffType: match.staffType === "NonTeaching" ? "Non-Teaching" : match.staffType,
           });
         })
         .catch((err) => {
@@ -992,11 +1270,6 @@ export function MasterFormPage({ kind }) {
   const submit = async (event) => {
     event.preventDefault();
 
-    if (kind === "department" && edit) {
-      setErrors({ apiError: "Department update API is not supported by the backend." });
-      return;
-    }
-
     const nextErrors = {};
     fields.forEach(([name, fieldLabel, required]) => {
       if (required && !String(values[name] ?? "").trim()) {
@@ -1010,16 +1283,20 @@ export function MasterFormPage({ kind }) {
     setSubmitting(true);
     try {
       if (kind === "department") {
-        const deptCode = values.departmentCode?.trim() || values.departmentName.trim().toUpperCase().replace(/\s+/g, "_").slice(0, 10);
+        const deptCode = values.departmentCode?.trim() || values.departmentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 10);
         const payload = {
-          departmentId: 0,
+          departmentId: Number(id) || 0,
           departmentName: values.departmentName.trim(),
           departmentCode: deptCode,
           staffType: toApiStaffType(values.staffType || "Teaching"),
           description: values.description ? values.description.trim() : "",
           isActive: values.status === "Active",
         };
-        await apiClient.post(apiEndpoints.departments.create, payload);
+        if (edit) {
+          await apiClient.put(apiEndpoints.departments.update(id), payload);
+        } else {
+          await apiClient.post(apiEndpoints.departments.create, payload);
+        }
         navigate("/dashboard/departments");
       } else {
         const payload = {
@@ -1072,12 +1349,6 @@ export function MasterFormPage({ kind }) {
               </div>
             </header>
 
-            {apiNotice && (
-              <div className="master-contract-note" style={{ marginBottom: 16 }}>
-                <Info /> <span>{apiNotice}</span>
-              </div>
-            )}
-
             {errors.apiError && (
               <div className="master-form-error-alert" style={{ marginBottom: 16, color: "#dc2626" }}>
                 <Info /> <span>{errors.apiError}</span>
@@ -1094,7 +1365,6 @@ export function MasterFormPage({ kind }) {
                     </span>
                     {type === "select" ? (
                       <select
-                        disabled={kind === "department" && edit}
                         value={values[name] ?? ""}
                         onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
                       >
@@ -1105,7 +1375,6 @@ export function MasterFormPage({ kind }) {
                       </select>
                     ) : type === "textarea" ? (
                       <textarea
-                        readOnly={kind === "department" && edit}
                         value={values[name] ?? ""}
                         placeholder={placeholder}
                         onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
@@ -1113,7 +1382,6 @@ export function MasterFormPage({ kind }) {
                     ) : (
                       <input
                         type={type}
-                        readOnly={kind === "department" && edit}
                         value={values[name] ?? ""}
                         placeholder={placeholder}
                         onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
@@ -1137,7 +1405,7 @@ export function MasterFormPage({ kind }) {
               <button
                 type="submit"
                 className="cms-btn primary"
-                disabled={submitting || (kind === "department" && edit)}
+                disabled={submitting}
               >
                 {submitting ? "Saving..." : `Save ${label}`}
               </button>
@@ -1150,7 +1418,7 @@ export function MasterFormPage({ kind }) {
 }
 
 // ----------------------------------------------------------------------
-// EXCEL IMPORT PAGE (VALIDATION PREVIEW ONLY, NO BACKEND BULK UPLOAD API)
+// EXCEL IMPORT PAGE (EXCEL IMPORT API INTEGRATION & PREVIEW)
 // ----------------------------------------------------------------------
 const importColumns = {
   department: [
@@ -1171,10 +1439,35 @@ export function MasterImportPage({ kind }) {
   const navigate = useNavigate();
   const label = kind === "department" ? "Departments" : "Designations";
   const [rows, setRows] = useState([]);
+  const [rawFile, setRawFile] = useState(null);
   const [parsing, setParsing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [importError, setImportError] = useState("");
 
-  const download = () => {
+  const download = async () => {
+    try {
+      const endpoint = kind === "department"
+        ? apiEndpoints.departments.exportTemplate
+        : apiEndpoints.designations.exportTemplate;
+      if (endpoint) {
+        const res = await apiClient.get(endpoint, { responseType: "blob" });
+        const blob = new Blob([res.data], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${kind}-import-template.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return;
+      }
+    } catch {
+      // Fallback to client-side XLSX generation
+    }
     const sheet = XLSX.utils.aoa_to_sheet([importColumns[kind]]);
     const book = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(book, sheet, label);
@@ -1183,8 +1476,10 @@ export function MasterImportPage({ kind }) {
 
   const parse = async (file) => {
     if (!file) return;
+    setRawFile(file);
     setParsing(true);
     setFileName(file.name);
+    setImportError("");
     try {
       const data = await file.arrayBuffer();
       const book = XLSX.read(data);
@@ -1217,6 +1512,28 @@ export function MasterImportPage({ kind }) {
     }
   };
 
+  const handleImport = async () => {
+    if (!rawFile) return;
+    setImporting(true);
+    setImportError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", rawFile);
+      formData.append("DefaultStaffType", "Teaching");
+      const endpoint = kind === "department"
+        ? apiEndpoints.departments.importExcel
+        : apiEndpoints.designations.importExcel;
+      await apiClient.post(endpoint, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      navigate("/dashboard/departments");
+    } catch (err) {
+      setImportError(getApiErrorMessage(err, `Failed to import ${label.toLowerCase()}.`));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const valid = rows.filter((row) => !row.problems.length).length;
   const duplicates = rows.filter((row) =>
     row.problems.some((problem) => problem.startsWith("Duplicate"))
@@ -1225,7 +1542,7 @@ export function MasterImportPage({ kind }) {
   return (
     <DashboardLayout
       title={`Import ${label}`}
-      subtitle={`Validate ${label.toLowerCase()} before importing.`}
+      subtitle={`Validate and import ${label.toLowerCase()}.`}
       breadcrumb={["Administration", "Department Management"]}
     >
       <main className="master-import">
@@ -1242,6 +1559,13 @@ export function MasterImportPage({ kind }) {
               <Download /> Download Template
             </button>
           </header>
+
+          {importError && (
+            <div className="master-form-error-alert" style={{ marginBottom: 16, color: "#dc2626" }}>
+              <Info /> <span>{importError}</span>
+            </div>
+          )}
+
           <label className="master-drop">
             <Upload />
             <strong>
@@ -1251,7 +1575,7 @@ export function MasterImportPage({ kind }) {
             <input
               type="file"
               accept=".xlsx,.xls"
-              disabled={parsing}
+              disabled={parsing || importing}
               onChange={(event) => parse(event.target.files?.[0])}
             />
           </label>
@@ -1295,12 +1619,14 @@ export function MasterImportPage({ kind }) {
                   </tbody>
                 </table>
               </div>
-              <aside className="master-contract-note">
-                <Info /> Preview is complete. Bulk import API is not available in the current backend contract.
-              </aside>
               <footer>
-                <button className="cms-btn primary" disabled>
-                  Import {label}
+                <button
+                  type="button"
+                  className="cms-btn primary"
+                  disabled={importing || parsing || !rawFile}
+                  onClick={handleImport}
+                >
+                  {importing ? "Importing..." : `Import ${label}`}
                 </button>
               </footer>
             </>

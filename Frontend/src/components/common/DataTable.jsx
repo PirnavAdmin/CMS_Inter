@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Plus, Pencil, Trash2, Eye, Printer, FileSpreadsheet, FileText, ChevronDown, Download } from "lucide-react";
+import { Plus, Pencil, Trash2, Eye, Printer, FileSpreadsheet, FileText, ChevronDown, Download } from "lucide-react";
+import Search3DIcon from "./Search3DIcon.jsx";
 import { StatusBadge, Loader } from "./Ui.jsx";
 
 const PAGE_SIZE = 5;
@@ -139,7 +140,7 @@ export default function DataTable({
     <div className="cms-card">
       <div className="cms-toolbar">
         <div className="cms-search">
-          <Search size={16} />
+          <Search3DIcon size={16} />
           <input
             value={query}
             placeholder={searchPlaceholder || `Search ${title || "records"}...`}

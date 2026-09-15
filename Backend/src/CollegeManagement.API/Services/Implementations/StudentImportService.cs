@@ -8,12 +8,15 @@ using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Students;
+using CollegeManagement.API.DTOs.Users;
 using CollegeManagement.API.Helpers;
+using CollegeManagement.API.Interfaces;
 using CollegeManagement.API.Services.Imports;
 using CollegeManagement.API.Services.Interfaces;
 using Dapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Services.Implementations
@@ -21,6 +24,9 @@ namespace CollegeManagement.API.Services.Implementations
     public class StudentImportService : IStudentImportService
     {
         private readonly AppDbContext _context;
+        private readonly IUserProvisioningService _userProvisioningService;
+        private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
         private readonly ILogger<StudentImportService> _logger;
 
         private static readonly Regex PhoneRegex = new(@"^[6-9][0-9]{9}$", RegexOptions.Compiled);
@@ -32,9 +38,17 @@ namespace CollegeManagement.API.Services.Implementations
         private static readonly HashSet<string> ValidBloodGroups = new(StringComparer.OrdinalIgnoreCase) { "A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-" };
         private static readonly HashSet<string> ValidFeeStatuses = new(StringComparer.OrdinalIgnoreCase) { "Paid", "PartiallyPaid", "Unpaid" };
 
-        public StudentImportService(AppDbContext context, ILogger<StudentImportService> logger)
+        public StudentImportService(
+            AppDbContext context,
+            IUserProvisioningService userProvisioningService,
+            IEmailService emailService,
+            IConfiguration configuration,
+            ILogger<StudentImportService> logger)
         {
             _context = context;
+            _userProvisioningService = userProvisioningService;
+            _emailService = emailService;
+            _configuration = configuration;
             _logger = logger;
         }
 
@@ -80,7 +94,7 @@ namespace CollegeManagement.API.Services.Implementations
             foreach (var r in records)
             {
                 DateTime dob = (DateTime)r.DateOfBirth;
-                string tempPassword = $"Student@{dob:ddMMyyyy}";
+                string tempPassword = "Sent to registered email";
 
                 models.Add(new CollegeManagement.API.Services.Exports.StudentCredentialPdfModel
                 {
@@ -344,14 +358,17 @@ namespace CollegeManagement.API.Services.Implementations
                     'Active',
                     1,
                     CURRENT_TIMESTAMP(6)
-                );";
+                );
+                SELECT LAST_INSERT_ID();";
+
+            var provisionedUsers = new List<UserProvisioningResult>();
 
             using var transaction = connection.BeginTransaction();
             try
             {
                 foreach (var s in validRowsToInsert)
                 {
-                    await connection.ExecuteAsync(
+                    var studentId = await connection.ExecuteScalarAsync<int>(
                         insertSql,
                         new
                         {
@@ -416,10 +433,70 @@ namespace CollegeManagement.API.Services.Implementations
                             IsFirstLogin = true
                         },
                         transaction: transaction);
+
+                    // Atomically provision User account if valid email is present
+                    if (!string.IsNullOrWhiteSpace(s.Email) && EmailRegex.IsMatch(s.Email.Trim()))
+                    {
+                        var provisionReq = new ProvisionStudentUserRequest
+                        {
+                            StudentId = studentId,
+                            FullName = s.StudentName,
+                            Email = s.Email.Trim(),
+                            PhoneNumber = s.MobileNumber
+                        };
+
+                        var userResult = await _userProvisioningService.ProvisionStudentUserAsync(
+                            provisionReq,
+                            connection: connection,
+                            transaction: transaction);
+
+                        if (!userResult.Success)
+                        {
+                            throw new ApplicationException($"Failed to provision user for student '{s.StudentName}' ({s.Email}): {userResult.ErrorMessage}");
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(userResult.TemporaryPassword))
+                        {
+                            provisionedUsers.Add(userResult);
+                        }
+                    }
                 }
 
                 transaction.Commit();
-                _logger.LogInformation("Successfully imported {Count} legacy students.", validRowsToInsert.Count);
+                _logger.LogInformation("Successfully imported {Count} students and provisioned {UserCount} user accounts.", 
+                    validRowsToInsert.Count, provisionedUsers.Count);
+
+                // Post-commit: Dispatch initial credential onboarding emails
+                if (provisionedUsers.Count > 0)
+                {
+                    var portalUrl = _configuration?["StudentPortal:LoginUrl"]
+                                 ?? _configuration?["InstitutionSettings:PortalUrl"]
+                                 ?? "http://localhost:5173";
+                    var institutionName = _configuration?["InstitutionSettings:InstitutionName"]
+                                       ?? "College Management System";
+
+                    foreach (var provUser in provisionedUsers)
+                    {
+                        try
+                        {
+                            var emailBody = StudentCredentialHelper.BuildInitialCredentialEmailHtml(
+                                provUser.FullName ?? "Student",
+                                provUser.Email ?? string.Empty,
+                                provUser.TemporaryPassword ?? string.Empty,
+                                portalUrl,
+                                institutionName);
+
+                            await _emailService.SendEmailAsync(
+                                provUser.Email,
+                                $"Your Student Portal Account Credentials - {institutionName}",
+                                emailBody);
+                        }
+                        catch (Exception emailEx)
+                        {
+                            _logger.LogWarning(emailEx, "Failed to send credential onboarding email to student {Email} after bulk import commit.", provUser.Email);
+                        }
+                    }
+                }
 
                 return new StudentImportResultDto
                 {
@@ -428,15 +505,23 @@ namespace CollegeManagement.API.Services.Implementations
                     FailedRows = distinctFailedRows.Count,
                     IsSuccess = errors.Count == 0,
                     Message = errors.Count == 0
-                        ? $"{validRowsToInsert.Count} legacy students imported successfully."
-                        : $"{validRowsToInsert.Count} legacy students imported successfully. {distinctFailedRows.Count} row(s) had errors.",
+                        ? $"{validRowsToInsert.Count} students imported successfully."
+                        : $"{validRowsToInsert.Count} students imported successfully. {distinctFailedRows.Count} row(s) had errors.",
                     Errors = errors
                 };
             }
             catch (Exception ex)
             {
-                transaction.Rollback();
-                _logger.LogError(ex, "Transaction rolled back during legacy student import.");
+                try
+                {
+                    transaction.Rollback();
+                }
+                catch
+                {
+                    // Ignore rollback errors if already aborted
+                }
+
+                _logger.LogError(ex, "Transaction rolled back during student import.");
                 throw new ApplicationException($"Database error during bulk insert: {ex.Message}", ex);
             }
         }
@@ -878,8 +963,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             DateTime admissionDate = r.AdmissionDate ?? DateTime.UtcNow.Date;
-            string defaultPassword = $"Student@{r.DateOfBirth!.Value:ddMMyyyy}";
-            string passwordHash = PasswordHasher.HashPassword(defaultPassword);
+            string passwordHash = string.Empty;
 
             var resolved = new ResolvedStudentInsertModel
             {

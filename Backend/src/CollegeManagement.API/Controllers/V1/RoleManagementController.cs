@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [Route("api/v1/roles")]
     [ApiController]
-    [Authorize(Roles = "Super Admin,Admin,College Admin")]
+    [Authorize(Roles = "Super Admin,Admin")]
     public class RoleManagementController : ControllerBase
     {
         private readonly IRoleManagementService _roleManagementService;

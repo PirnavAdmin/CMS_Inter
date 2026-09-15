@@ -19,11 +19,14 @@ import {
   ChevronRight,
   RefreshCw,
   Play,
+  UserRound,
+  BookOpen,
+  FileText,
+  UserCheck,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
-import apiClient from "@/api/apiClient.js";
-import apiEndpoints from "@/api/apiEndpoints.js";
 import {
   readNumberSeriesSettings,
   writeNumberSeriesSettings,
@@ -38,8 +41,14 @@ import {
 import "./NumberSeriesPage.css";
 
 const SERIES_ICONS = {
+  "teaching-staff-id": Users,
   "employee-id": Users,
+  "non-teaching-staff-id": UserCheck,
   "admission-no": GraduationCap,
+  "roll-no": Hash,
+  "student-id": UserRound,
+  "section-name": BookOpen,
+  "exam-code": FileText,
   "certificate-number": Award,
   "receipt-no": Receipt,
 };
@@ -57,16 +66,11 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const [toast, setToast] = useState(null);
   const [previewModalSeries, setPreviewModalSeries] = useState(null);
 
-  const fetchSeries = async () => {
+  const fetchSeries = () => {
     setLoading(true);
     try {
-      const res = await apiClient.get(apiEndpoints.numberSeries.getAll);
-      const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-      if (Array.isArray(data) && data.length > 0) {
-        const normalized = data.map(normalizeNumberSeriesItem);
-        setSeriesList(normalized);
-        writeNumberSeriesSettings(normalized);
-      }
+      const data = readNumberSeriesSettings().map(normalizeNumberSeriesItem);
+      setSeriesList(data);
     } catch (err) {
       console.warn("Using local settings fallback:", err?.message || err);
     } finally {
@@ -96,43 +100,19 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     writeNumberSeriesSettings(newList);
   };
 
-  const handleSaveConfig = async (updatedSeries) => {
+  const handleSaveConfig = (updatedSeries) => {
     setSaving(true);
     const code = updatedSeries.seriesCode || updatedSeries.slug || updatedSeries.id;
-    const payload = {
-      prefix: updatedSeries.prefix || "",
-      formatPattern: updatedSeries.format || updatedSeries.formatPattern || "",
-      numberLength: Number(updatedSeries.numberLength || 4),
-      startNumber: Number(updatedSeries.startNumber || 1),
-      description: updatedSeries.description || "",
-      isActive: updatedSeries.isActive ?? (updatedSeries.status === "Active"),
-    };
+    const normalized = normalizeNumberSeriesItem(updatedSeries);
 
-    try {
-      const res = await apiClient.put(apiEndpoints.numberSeries.update(code), payload);
-      const updatedData = res.data?.data || res.data || updatedSeries;
-      const normalized = normalizeNumberSeriesItem(updatedData);
-
-      const newList = seriesList.map((s) =>
-        (s.id === code || s.seriesCode === code) ? normalized : s
-      );
-      updateSeriesList(newList);
-      appendConfigHistory(code, normalized);
-      setToast({ message: "Number series updated successfully in database.", type: "success" });
-      return true;
-    } catch (err) {
-      console.warn("Backend update error, saving locally:", err?.message || err);
-      const normalized = normalizeNumberSeriesItem(updatedSeries);
-      const newList = seriesList.map((s) =>
-        (s.id === code || s.seriesCode === code) ? normalized : s
-      );
-      updateSeriesList(newList);
-      appendConfigHistory(code, normalized);
-      setToast({ message: "Number series updated successfully.", type: "success" });
-      return true;
-    } finally {
-      setSaving(false);
-    }
+    const newList = seriesList.map((s) =>
+      (s.id === code || s.seriesCode === code) ? normalized : s
+    );
+    updateSeriesList(newList);
+    appendConfigHistory(code, normalized);
+    setToast({ message: `${normalized.name} updated successfully.`, type: "success" });
+    setSaving(false);
+    return true;
   };
 
   const handleSequenceGenerated = (code, nextNumber) => {
@@ -264,7 +244,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
       <div className="ns-dashboard-container">
         {/* TOP NOTICE BANNER */}
         <div className="ns-info-banner">
-          <Info size={18} className="ns-info-icon" />
+          <Info size={15} className="ns-info-icon" />
           <div style={{ flex: 1 }}>
             <strong>Fixed System Series</strong>
             <p>
@@ -277,9 +257,9 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
             onClick={onRefresh}
             disabled={loading}
             style={{ alignSelf: "center", marginLeft: "auto" }}
-            title="Refresh series from backend"
+            title="Refresh series"
           >
-            <RefreshCw size={15} className={loading ? "spin" : ""} />
+            <RefreshCw size={13} className={loading ? "spin" : ""} />
             <span>{loading ? "Loading..." : "Refresh"}</span>
           </button>
         </div>
@@ -453,7 +433,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
             {/* SEARCH & PAGE SIZE BAR */}
             <div className="ns-table-tools">
               <div className="ns-search-box">
-                <Search size={16} className="ns-search-icon" />
+                <Search3DIcon size={16} className="ns-search-icon" />
                 <input
                   type="text"
                   placeholder={`Search generated ${series.name.toLowerCase()} history...`}
@@ -552,11 +532,24 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
 // Helper: Custom Table Headers per Series Type
 function RenderTableHead({ seriesId }) {
   switch (seriesId) {
+    case "teaching-staff-id":
     case "employee-id":
       return (
         <tr>
           <th>#</th>
-          <th>Employee ID</th>
+          <th>Teaching Staff ID</th>
+          <th>Employee Name</th>
+          <th>Staff Type</th>
+          <th>Department</th>
+          <th>Designation</th>
+          <th>Created On</th>
+        </tr>
+      );
+    case "non-teaching-staff-id":
+      return (
+        <tr>
+          <th>#</th>
+          <th>Non-Teaching Staff ID</th>
           <th>Employee Name</th>
           <th>Staff Type</th>
           <th>Department</th>
@@ -665,7 +658,20 @@ function RenderTableHead({ seriesId }) {
 // Helper: Custom Table Row per Series Type
 function RenderTableRow({ seriesId, row, index }) {
   switch (seriesId) {
+    case "teaching-staff-id":
     case "employee-id":
+      return (
+        <tr>
+          <td>{index}</td>
+          <td><span className="ns-code-badge font-bold">{row.val}</span></td>
+          <td><strong>{row.name}</strong></td>
+          <td>{row.staffType}</td>
+          <td>{row.dept}</td>
+          <td>{row.desig}</td>
+          <td>{row.date}</td>
+        </tr>
+      );
+    case "non-teaching-staff-id":
       return (
         <tr>
           <td>{index}</td>
@@ -1074,31 +1080,18 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleTestGenerate = async () => {
+  const handleTestGenerate = () => {
     const code = series.seriesCode || series.slug || series.id;
     setGenerating(true);
-    try {
-      const res = await apiClient.post(apiEndpoints.numberSeries.generateNext(code), {});
-      const generated = res.data?.generatedNumber || res.data?.data?.generatedNumber || res.data;
-      if (typeof generated === "string") {
-        setLiveGeneratedNumber(generated);
-        if (onSequenceGenerated) {
-          onSequenceGenerated(code, generated);
-        }
-        if (setToast) {
-          setToast({ message: `Successfully generated: ${generated}`, type: "success" });
-        }
-      }
-    } catch (err) {
-      console.warn("Backend generate-next failed, simulating locally:", err?.message || err);
-      const simulated = getNextNumberPreview(series);
-      setLiveGeneratedNumber(simulated);
-      if (onSequenceGenerated) {
-        onSequenceGenerated(code, simulated);
-      }
-    } finally {
-      setGenerating(false);
+    const simulated = getNextNumberPreview(series);
+    setLiveGeneratedNumber(simulated);
+    if (onSequenceGenerated) {
+      onSequenceGenerated(code, simulated);
     }
+    if (setToast) {
+      setToast({ message: `Successfully generated: ${simulated}`, type: "success" });
+    }
+    setGenerating(false);
   };
 
   return (

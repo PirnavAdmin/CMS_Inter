@@ -22,14 +22,19 @@ namespace CollegeManagement.API.Controllers.V1
     public class AttendanceController : ControllerBase
     {
         private readonly IAttendanceService _attendanceService;
+        private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AttendanceController"/> class.
         /// </summary>
         /// <param name="attendanceService">The attendance service dependency.</param>
-        public AttendanceController(IAttendanceService attendanceService)
+        /// <param name="jwtTokenHelper">The JWT token helper dependency.</param>
+        public AttendanceController(
+            IAttendanceService attendanceService,
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
         {
             _attendanceService = attendanceService;
+            _jwtTokenHelper = jwtTokenHelper;
         }
 
         /// <summary>
@@ -216,7 +221,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet("defaulters")]
-        [Authorize(Roles = "Super Admin,College Admin,Admin,HOD")]
+        [Authorize(Roles = "Super Admin,Admin,HOD")]
         [ProducesResponseType(typeof(IEnumerable<AttendanceDefaulterResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -318,12 +323,12 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Unlocks a locked attendance session (restricted to Super Admin and College Admin).
+        /// Unlocks a locked attendance session (restricted to Super Admin and Admin).
         /// </summary>
         /// <param name="sessionId">The session identifier.</param>
         /// <returns>A success indicator.</returns>
         [HttpPost("session/{sessionId}/unlock")]
-        [Authorize(Roles = "Super Admin,College Admin")]
+        [Authorize(Roles = "Super Admin,Admin")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -440,17 +445,17 @@ namespace CollegeManagement.API.Controllers.V1
 
         private bool IsCurrentUserAdmin()
         {
-            return User.IsInRole("Super Admin") || User.IsInRole("College Admin");
+            return User.IsInRole("Super Admin") || User.IsInRole("Admin");
         }
 
         private int GetCurrentUserId()
         {
-            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("sub")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
             {
-                return 1;
+                throw new CollegeManagement.API.Exceptions.UnauthorizedException("User is not authenticated or user identifier claim is missing/invalid.");
             }
-            return userId;
+            return userId.Value;
         }
 
         private string GetCurrentUserName()
@@ -467,10 +472,44 @@ namespace CollegeManagement.API.Controllers.V1
             return userName;
         }
         [HttpPost("audit")]
-        [Authorize(Roles = "Super Admin,College Admin,Admin,HOD")]
+        [Authorize(Roles = "Super Admin,Admin,HOD")]
         public async Task<IActionResult> GetAuditHistory([FromBody] CollegeManagement.API.DTOs.Attendance.Requests.AuditHistorySearchRequest request)
         {
             var result = await _attendanceService.GetAuditHistoryAsync(request);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Retrieves the yearly attendance overview for a specific student.
+        /// </summary>
+        [HttpGet("student/{studentId}/yearly-overview")]
+        [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetStudentYearlyOverview(int studentId, [FromQuery] int academicYearId)
+        {
+            var result = await _attendanceService.GetStudentYearlyOverviewAsync(studentId, academicYearId);
+            return Ok(result);
+        }
+
+        [HttpGet("import/template")]
+        public async Task<IActionResult> DownloadImportTemplate()
+        {
+            var bytes = await _attendanceService.GenerateImportTemplateAsync();
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "StudentAttendance_ImportTemplate.xlsx");
+        }
+
+        [HttpPost("import/excel")]
+        public async Task<IActionResult> ImportExcel(IFormFile file, [FromQuery] bool validateOnly = false)
+        {
+            if (file == null || file.Length == 0) return BadRequest("File is empty or not provided.");
+            using var ms = new System.IO.MemoryStream();
+            await file.CopyToAsync(ms);
+            
+            var userName = GetCurrentUserName();
+            var userId = GetCurrentUserId();
+            var isAdmin = IsCurrentUserAdmin();
+
+            var result = await _attendanceService.ImportAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId);
             return Ok(result);
         }
     }

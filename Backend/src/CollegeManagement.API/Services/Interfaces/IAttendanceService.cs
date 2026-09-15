@@ -143,6 +143,14 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<AcademicContextResponse?> GetAcademicContextAsync(int groupId, int sectionId);
 
         /// <summary>
+        /// Retrieves the yearly attendance overview for a specific student.
+        /// </summary>
+        Task<YearlyOverviewResponse> GetStudentYearlyOverviewAsync(int studentId, int academicYearId);
+
+        Task<byte[]> GenerateImportTemplateAsync();
+        Task<object> ImportAttendanceFromExcelAsync(byte[] fileBytes, bool validateOnly, bool isAdmin, string userName, int? userId);
+
+        /// <summary>
         /// Auto-derives assigned Subject and Faculty for specified Date, Group, Section, and Period or Session from Timetable/Section.
         /// </summary>
         Task<FacultySubjectDerivationResponse?> GetFacultySubjectAllocationAsync(System.DateTime date, int? groupId = null, int? sectionId = null, int? periodId = null, string? sessionType = null);

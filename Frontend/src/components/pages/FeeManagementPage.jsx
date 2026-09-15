@@ -23,6 +23,7 @@ import {
   Tooltip,
 } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
@@ -501,6 +502,49 @@ const hasBackendFeeTypeIds = (feeTypes) => feeTypes.some((item) => Number(item.i
 
 const pageItems = (items, page, pageSize = PAGE_SIZE) => items.slice((page - 1) * pageSize, page * pageSize);
 
+const feeAccountKey = (account = {}) => {
+  const studentFeeId = account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId;
+  if (studentFeeId) return `student-fee:${studentFeeId}`;
+  if (account.studentId) return `student:${account.studentId}`;
+  if (account.admissionNo && account.admissionNo !== "-") return `admission:${normalizeKey(account.admissionNo)}`;
+  return "";
+};
+
+const admissionNumberParts = (value) => {
+  const text = String(value || "").trim();
+  const match = text.match(/^(.*?)(\d+)\D*$/);
+  return match ? { prefix: normalizeKey(match[1]), number: Number(match[2]) } : { prefix: normalizeKey(text), number: null };
+};
+
+const compareAdmissionNumbersDesc = (left, right) => {
+  const a = admissionNumberParts(left?.admissionNo);
+  const b = admissionNumberParts(right?.admissionNo);
+  if (a.number !== null && b.number !== null && a.prefix === b.prefix && a.number !== b.number) {
+    return b.number - a.number;
+  }
+  return 0;
+};
+
+const normalizeFeeAccountDataset = (accounts = []) => {
+  const keyed = new Map();
+  const ordered = [];
+  accounts.forEach((account) => {
+    const key = feeAccountKey(account);
+    if (!key) {
+      ordered.push(account);
+      return;
+    }
+    if (!keyed.has(key)) ordered.push(account);
+    keyed.set(key, { ...keyed.get(key), ...account });
+  });
+  return ordered
+    .map((account) => {
+      const key = feeAccountKey(account);
+      return key ? keyed.get(key) : account;
+    })
+    .sort(compareAdmissionNumbersDesc);
+};
+
 const scholarshipValueLabel = (item) => (
   item.discountType === "Percentage" ? `${Number(item.discountValue || 0)}%` : formatCurrency(item.discountValue || 0)
 );
@@ -642,6 +686,22 @@ const normalizeTransactionRows = (rows, account = {}) => rows.map((item, index) 
     balance: optionalNumberValue(item, "balance", "Balance", "remainingBalance", "RemainingBalance", "outstandingBalance", "OutstandingBalance"),
   };
 });
+
+const paymentHistoryIdentity = (row = {}) => {
+  const paymentId = row.feePaymentId || row.paymentId;
+  if (paymentId) return `payment-${paymentId}`;
+  if (row.receiptNo && row.receiptNo !== "-") return `receipt-${row.receiptNo}`;
+  return [
+    "transaction",
+    row.studentId,
+    row.admissionNo,
+    row.date,
+    row.amount,
+    row.method,
+    row.reference,
+    row.type,
+  ].map((value) => String(value ?? "").trim()).join("|");
+};
 
 const normalizeReceiptBreakdownRows = (rows) => rows
   .map((item, index) => {
@@ -1874,7 +1934,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
     && matchesAnyNormalized(filters.group, selectedGroupLabel, item.groupId, item.groupName)
   ));
   const paymentPlanOptions = PAYMENT_PLANS.map((plan) => ({ value: plan, label: feeScheduleLabel(plan) }));
-  const rows = accounts.filter((item) => {
+  const rows = normalizeFeeAccountDataset(accounts.filter((item) => {
     const term = search.trim().toLowerCase();
     const selectedSectionLabel = optionLabel(sectionOptions, filters.section);
     const matchesSearch = !term
@@ -1886,7 +1946,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
       && matchesAnyNormalized(filters.section, selectedSectionLabel, item.sectionId, item.section, `${item.group || ""} / ${item.section || ""}`)
       && matchesAnyNormalized(filters.paymentPlan, feeScheduleLabel(filters.paymentPlan), item.paymentPlan, feeScheduleLabel(item.paymentPlan))
       && matchesAnyNormalized(filters.feeStatus, filters.feeStatus, item.feeStatus);
-  });
+  }));
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginatedRows = pageItems(rows, page);
   useEffect(() => {
@@ -1901,7 +1961,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls">
         <div className="cms-fee-search">
-          <Search size={15} />
+          <Search3DIcon size={15} />
           <input value={search} placeholder="Search by student name or admission number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
         <div className="cms-fee-filter-row">
@@ -1967,12 +2027,12 @@ function FeeCollectionTab({ accounts, onCollect, loading = false, error = "" }) 
     setSearch(value);
     setPage(1);
   };
-  const rows = accounts.filter((item) => {
+  const rows = normalizeFeeAccountDataset(accounts.filter((item) => {
     const term = search.trim().toLowerCase();
     return !term
       || item.studentName.toLowerCase().includes(term)
       || item.admissionNo.toLowerCase().includes(term);
-  });
+  }));
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginatedRows = pageItems(rows, page);
 
@@ -1988,7 +2048,7 @@ function FeeCollectionTab({ accounts, onCollect, loading = false, error = "" }) 
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls cms-fee-search-only">
         <div className="cms-fee-search">
-          <Search size={15} />
+          <Search3DIcon size={15} />
           <input value={search} placeholder="Search by student name or admission number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
       </div>
@@ -2937,7 +2997,14 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
       || String(row.receiptNo || "").toLowerCase().includes(term);
   });
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const paginatedRows = pageItems(rows, page);
+  const keyedRows = rows.map((row) => ({ ...row, reactKey: paymentHistoryIdentity(row) }))
+    .reduce((items, row) => {
+      const count = items.counts.get(row.reactKey) || 0;
+      items.counts.set(row.reactKey, count + 1);
+      items.rows.push({ ...row, reactKey: count ? `${row.reactKey}-${count + 1}` : row.reactKey });
+      return items;
+    }, { counts: new Map(), rows: [] }).rows;
+  const paginatedRows = pageItems(keyedRows, page);
   const historyColumns = [
     { label: "Receipt Number", value: (row) => row.receiptNo },
     { label: "Date", value: (row) => formatFeeDate(row.date) },
@@ -2988,7 +3055,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls cms-fee-search-only">
         <div className="cms-fee-search">
-          <Search size={15} />
+          <Search3DIcon size={15} />
           <input value={search} placeholder="Search by student, admission number or receipt number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
       </div>
@@ -3008,7 +3075,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
             ) : rows.length === 0 ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">No payments match the current search and filters.</td></tr>
             ) : paginatedRows.map((row) => (
-              <tr key={row.id}>
+              <tr key={row.reactKey}>
                 <td><strong>{row.receiptNo}</strong></td>
                 <td>{formatDate(row.date)}</td>
                 <td>{row.admissionNo}</td>
@@ -3196,9 +3263,9 @@ export default function FeeManagementPage() {
         const accountId = account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId;
         if (accountId) feeDetailsByAccountId.set(String(accountId), detail);
       });
-      const accounts = detailEntries.length
+      const accounts = normalizeFeeAccountDataset(detailEntries.length
         ? normalizeFeeAccountRows(rows, { ...context, feeDetailsByStudentId, feeDetailsByAccountId })
-        : initialAccounts;
+        : initialAccounts);
       if (source === "collection") {
         setCollectionAccounts(accounts);
       } else {

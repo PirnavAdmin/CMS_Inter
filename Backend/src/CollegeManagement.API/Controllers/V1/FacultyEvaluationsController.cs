@@ -1,30 +1,35 @@
+using Asp.Versioning;
+using CollegeManagement.API.DTOs.Marks;
+using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using Asp.Versioning;
-using CollegeManagement.API.DTOs.Marks;
-using CollegeManagement.API.Services.Interfaces;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/faculty/evaluations")]
+    [Authorize]
     public class FacultyEvaluationsController : ControllerBase
     {
         private readonly IEvaluationService _evaluationService;
         private readonly ILogger<FacultyEvaluationsController> _logger;
+        private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
 
         public FacultyEvaluationsController(
             IEvaluationService evaluationService,
-            ILogger<FacultyEvaluationsController> logger)
+            ILogger<FacultyEvaluationsController> logger,
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
         {
             _evaluationService = evaluationService;
             _logger = logger;
+            _jwtTokenHelper = jwtTokenHelper;
         }
 
         /// <summary>
@@ -37,7 +42,7 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? status,
             [FromQuery] string? examinationStatus)
         {
-            var effectiveFacultyId = facultyId ?? GetCurrentUserId();
+            var effectiveFacultyId = facultyId ?? GetCurrentFacultyId();
             var result = await _evaluationService.GetFacultyEvaluationsAsync(effectiveFacultyId, status, examinationStatus);
             return Ok(result);
         }
@@ -50,7 +55,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetEvaluationStudents([FromRoute] string evaluationId)
         {
-            var facultyId = GetCurrentUserId();
+            var facultyId = GetCurrentFacultyId();
             var result = await _evaluationService.GetFacultyEvaluationStudentsAsync(evaluationId, facultyId);
             if (result == null) return NotFound(new { message = "Evaluation record not found." });
             return Ok(result);
@@ -67,7 +72,7 @@ namespace CollegeManagement.API.Controllers.V1
             [FromRoute] string evaluationId,
             [FromBody] SaveFacultyMarksRequestDto request)
         {
-            var facultyId = GetCurrentUserId();
+            var facultyId = GetCurrentFacultyId();
             var success = await _evaluationService.SaveFacultyDraftMarksAsync(evaluationId, request, facultyId);
             if (!success) return BadRequest(new { message = "Failed to save marks." });
             return Ok(new { success = true, message = "Draft marks saved successfully." });
@@ -83,7 +88,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> SubmitEvaluation([FromRoute] string evaluationId)
         {
-            var facultyId = GetCurrentUserId();
+            var facultyId = GetCurrentFacultyId();
             var success = await _evaluationService.SubmitFacultyEvaluationAsync(evaluationId, facultyId);
             if (!success) return BadRequest(new { message = "Failed to submit evaluation." });
             return Ok(new { success = true, message = "Evaluation submitted successfully for verification." });
@@ -101,7 +106,7 @@ namespace CollegeManagement.API.Controllers.V1
             [FromRoute] string evaluationId,
             [FromQuery] string? resubmissionMessage = null)
         {
-            var facultyId = GetCurrentUserId();
+            var facultyId = GetCurrentFacultyId();
             ResubmitEvaluationRequestDto? request = null;
 
             if (Request.ContentLength > 0 || (Request.ContentType != null && Request.ContentType.Contains("json", StringComparison.OrdinalIgnoreCase)))
@@ -135,14 +140,9 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(new { success = true, message = "Evaluation resubmitted successfully for verification." });
         }
 
-        private int? GetCurrentUserId()
+        private int? GetCurrentFacultyId()
         {
-            var claim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id") ?? User.FindFirst("sub");
-            if (claim != null && int.TryParse(claim.Value, out int id))
-            {
-                return id;
-            }
-            return null;
+            return _jwtTokenHelper.GetStaffId(User);
         }
     }
 }

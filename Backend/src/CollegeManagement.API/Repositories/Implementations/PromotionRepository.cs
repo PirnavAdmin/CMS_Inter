@@ -374,6 +374,28 @@ ORDER BY s.StudentName;
 
             try
             {
+                int? targetAcademicLevelId = request.TargetAcademicLevelId;
+                if (!targetAcademicLevelId.HasValue || targetAcademicLevelId <= 0)
+                {
+                    if (!string.IsNullOrWhiteSpace(request.TargetAcademicLevel))
+                    {
+                        targetAcademicLevelId = await Connection.ExecuteScalarAsync<int?>(
+                            "SELECT AcademicLevelId FROM AcademicLevels WHERE LOWER(TRIM(LevelName)) = LOWER(TRIM(@Level)) LIMIT 1;",
+                            new { Level = request.TargetAcademicLevel }, transaction);
+                    }
+                }
+
+                int? targetSectionId = request.TargetSectionId;
+                if (!targetSectionId.HasValue || targetSectionId <= 0)
+                {
+                    if (!string.IsNullOrWhiteSpace(request.TargetSection))
+                    {
+                        targetSectionId = await Connection.ExecuteScalarAsync<int?>(
+                            "SELECT SectionId FROM Sections WHERE LOWER(TRIM(SectionName)) = LOWER(TRIM(@Sec)) LIMIT 1;",
+                            new { Sec = request.TargetSection }, transaction);
+                    }
+                }
+
                 foreach (var studentId in eligibleIds)
                 {
                     var student =
@@ -413,6 +435,9 @@ FOR UPDATE;
 INSERT INTO PromotionHistories
 (
     StudentId,
+    PromotionBatchId,
+    FromBoardId,
+    ToBoardId,
     FromAcademicYearId,
     ToAcademicYearId,
 
@@ -447,6 +472,9 @@ INSERT INTO PromotionHistories
 VALUES
 (
     @StudentId,
+    @PromotionBatchId,
+    @FromBoardId,
+    @ToBoardId,
     @FromAcademicYearId,
     @ToAcademicYearId,
 
@@ -482,6 +510,9 @@ VALUES
                         new
                         {
                             StudentId = studentId,
+                            PromotionBatchId = response.PromotionBatchId,
+                            FromBoardId = student.BoardId != null ? (int?)student.BoardId : null,
+                            ToBoardId = request.TargetBoardId,
 
                             FromAcademicYearId = (int)student.AcademicYearId,
 
@@ -509,27 +540,7 @@ VALUES
                         },
                         transaction);
 
-                    int? targetAcademicLevelId = request.TargetAcademicLevelId;
-                    if (!targetAcademicLevelId.HasValue || targetAcademicLevelId <= 0)
-                    {
-                        if (!string.IsNullOrWhiteSpace(request.TargetAcademicLevel))
-                        {
-                            targetAcademicLevelId = await Connection.ExecuteScalarAsync<int?>(
-                                "SELECT AcademicLevelId FROM AcademicLevels WHERE LOWER(TRIM(LevelName)) = LOWER(TRIM(@Level)) LIMIT 1;",
-                                new { Level = request.TargetAcademicLevel }, transaction);
-                        }
-                    }
-
-                    int? targetSectionId = request.TargetSectionId;
-                    if (!targetSectionId.HasValue || targetSectionId <= 0)
-                    {
-                        if (!string.IsNullOrWhiteSpace(request.TargetSection))
-                        {
-                            targetSectionId = await Connection.ExecuteScalarAsync<int?>(
-                                "SELECT SectionId FROM Sections WHERE LOWER(TRIM(SectionName)) = LOWER(TRIM(@Sec)) LIMIT 1;",
-                                new { Sec = request.TargetSection }, transaction);
-                        }
-                    }
+                    /* Target queries moved outside loop */
 
                     /*
                      * Update actual student record.
@@ -856,9 +867,9 @@ INNER JOIN PromotionHistories ph
 
 SET
     s.AcademicYearId = ph.FromAcademicYearId,
-    s.AcademicLevelId = COALESCE(ph.FromClassId, s.AcademicLevelId),
+    s.AcademicLevelId = COALESCE(NULLIF(ph.FromClassId, 0), s.AcademicLevelId),
     s.GroupId = ph.FromGroupId,
-    s.SectionId = COALESCE(ph.FromSectionId, s.SectionId),
+    s.SectionId = COALESCE(NULLIF(ph.FromSectionId, 0), s.SectionId),
     s.UpdatedAt = UTC_TIMESTAMP()
 
 WHERE s.StudentId = ph.StudentId;
@@ -1086,78 +1097,53 @@ AND s.IsActive = 1;
                 }
             }
 
-            foreach (var studentId in
-                     request.StudentIds.Distinct())
+            var ids = request.StudentIds.Distinct().ToList();
+            if (ids.Count > 0)
             {
                 try
                 {
-                    var affected =
-                        await Connection.ExecuteAsync(
-                            @"
+                    var affected = await Connection.ExecuteAsync(
+                        @"
 UPDATE Students
-
 SET
     AcademicYearId = @AcademicYearId,
     AcademicLevelId = COALESCE(@TargetAcademicLevelId, AcademicLevelId),
     GroupId = @GroupId,
     UpdatedAt = UTC_TIMESTAMP()
-
-WHERE StudentId = @StudentId
+WHERE StudentId IN @Ids
 AND IsActive = 1;
 ",
-                            new
-                            {
-                                AcademicYearId =
-                                    request.TargetAcademicYearId,
+                        new
+                        {
+                            AcademicYearId = request.TargetAcademicYearId,
+                            TargetAcademicLevelId = targetLevelId,
+                            GroupId = request.TargetGroupId,
+                            Ids = ids
+                        });
 
-                                TargetAcademicLevelId =
-                                    targetLevelId,
-
-                                GroupId =
-                                    request.TargetGroupId,
-
-                                StudentId =
-                                    studentId
-                            });
-
-                    if (affected > 0)
+                    response.UpdatedCount = ids.Count;
+                    foreach (var id in ids)
                     {
-                        response.UpdatedCount++;
-
-                        response.Students.Add(
-                            new AllocationStudentDto
-                            {
-                                StudentId = studentId,
-                                Status = "Updated",
-                                Message =
-                                    "Group allocated successfully."
-                            });
-                    }
-                    else
-                    {
-                        response.FailedCount++;
-
-                        response.Students.Add(
-                            new AllocationStudentDto
-                            {
-                                StudentId = studentId,
-                                Status = "Failed",
-                                Message =
-                                    "Student not found or inactive."
-                            });
+                        response.Students.Add(new AllocationStudentDto
+                        {
+                            StudentId = id,
+                            Status = "Updated",
+                            Message = "Group allocated successfully."
+                        });
                     }
                 }
                 catch (Exception ex)
                 {
-                    response.FailedCount++;
-
-                    response.Students.Add(
-                        new AllocationStudentDto
+                    response.FailedCount = ids.Count;
+                    foreach (var id in ids)
+                    {
+                        response.Students.Add(new AllocationStudentDto
                         {
-                            StudentId = studentId,
+                            StudentId = id,
                             Status = "Failed",
                             Message = ex.Message
                         });
+                    }
                 }
             }
 
@@ -1185,7 +1171,8 @@ AND IsActive = 1;
                 }
             }
 
-            foreach (var studentId in request.StudentIds.Distinct())
+            var ids = request.StudentIds.Distinct().ToList();
+            if (ids.Count > 0)
             {
                 try
                 {
@@ -1198,7 +1185,7 @@ SET
     GroupId = CASE WHEN @GroupId > 0 THEN @GroupId ELSE GroupId END,
     ProgramId = @ProgramId,
     UpdatedAt = UTC_TIMESTAMP()
-WHERE StudentId = @StudentId
+WHERE StudentId IN @Ids
 AND IsActive = 1;
 ",
                         new
@@ -1207,39 +1194,32 @@ AND IsActive = 1;
                             TargetAcademicLevelId = targetLevelId,
                             GroupId = request.TargetGroupId,
                             ProgramId = request.TargetProgramId,
-                            StudentId = studentId
+                            Ids = ids
                         });
 
-                    if (affected > 0)
+                    response.UpdatedCount = ids.Count;
+                    foreach (var id in ids)
                     {
-                        response.UpdatedCount++;
                         response.Students.Add(new AllocationStudentDto
                         {
-                            StudentId = studentId,
+                            StudentId = id,
                             Status = "Updated",
                             Message = "Program allocated successfully."
-                        });
-                    }
-                    else
-                    {
-                        response.FailedCount++;
-                        response.Students.Add(new AllocationStudentDto
-                        {
-                            StudentId = studentId,
-                            Status = "Failed",
-                            Message = "Student not found or inactive."
                         });
                     }
                 }
                 catch (Exception ex)
                 {
-                    response.FailedCount++;
-                    response.Students.Add(new AllocationStudentDto
+                    response.FailedCount = ids.Count;
+                    foreach (var id in ids)
                     {
-                        StudentId = studentId,
-                        Status = "Failed",
-                        Message = ex.Message
-                    });
+                        response.Students.Add(new AllocationStudentDto
+                        {
+                            StudentId = id,
+                            Status = "Failed",
+                            Message = ex.Message
+                        });
+                    }
                 }
             }
 
@@ -1279,82 +1259,55 @@ AND IsActive = 1;
                 }
             }
 
-            foreach (var studentId in
-                     request.StudentIds.Distinct())
+            var ids = request.StudentIds.Distinct().ToList();
+            if (ids.Count > 0)
             {
                 try
                 {
-                    var affected =
-                        await Connection.ExecuteAsync(
-                            @"
+                    var affected = await Connection.ExecuteAsync(
+                        @"
 UPDATE Students
-
 SET
     AcademicYearId = @AcademicYearId,
     AcademicLevelId = COALESCE(@TargetAcademicLevelId, AcademicLevelId),
     GroupId = @GroupId,
     SectionId = COALESCE(@TargetSectionId, SectionId),
     UpdatedAt = UTC_TIMESTAMP()
-
-WHERE StudentId = @StudentId
+WHERE StudentId IN @Ids
 AND IsActive = 1;
 ",
-                            new
-                            {
-                                AcademicYearId =
-                                    request.TargetAcademicYearId,
+                        new
+                        {
+                            AcademicYearId = request.TargetAcademicYearId,
+                            TargetAcademicLevelId = targetSecLevelId,
+                            GroupId = request.TargetGroupId,
+                            TargetSectionId = targetSecSectionId,
+                            Ids = ids
+                        });
 
-                                TargetAcademicLevelId =
-                                    targetSecLevelId,
-
-                                GroupId =
-                                    request.TargetGroupId,
-
-                                TargetSectionId =
-                                    targetSecSectionId,
-
-                                StudentId =
-                                    studentId
-                            });
-
-                    if (affected > 0)
+                    response.UpdatedCount = ids.Count;
+                    foreach (var id in ids)
                     {
-                        response.UpdatedCount++;
-
-                        response.Students.Add(
-                            new AllocationStudentDto
-                            {
-                                StudentId = studentId,
-                                Status = "Updated",
-                                Message =
-                                    "Section allocated successfully."
-                            });
-                    }
-                    else
-                    {
-                        response.FailedCount++;
-
-                        response.Students.Add(
-                            new AllocationStudentDto
-                            {
-                                StudentId = studentId,
-                                Status = "Failed",
-                                Message =
-                                    "Student not found or inactive."
-                            });
+                        response.Students.Add(new AllocationStudentDto
+                        {
+                            StudentId = id,
+                            Status = "Updated",
+                            Message = "Section allocated successfully."
+                        });
                     }
                 }
                 catch (Exception ex)
                 {
-                    response.FailedCount++;
-
-                    response.Students.Add(
-                        new AllocationStudentDto
+                    response.FailedCount = ids.Count;
+                    foreach (var id in ids)
+                    {
+                        response.Students.Add(new AllocationStudentDto
                         {
-                            StudentId = studentId,
+                            StudentId = id,
                             Status = "Failed",
                             Message = ex.Message
                         });
+                    }
                 }
             }
 

@@ -21,7 +21,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/staff")]
     [EnableCors("AllowFrontend")]
-    [AllowAnonymous]
+    [Authorize]
     [Produces("application/json")]
     public class StaffController : ControllerBase
     {

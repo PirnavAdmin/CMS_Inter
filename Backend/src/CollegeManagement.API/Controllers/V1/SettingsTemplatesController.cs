@@ -19,7 +19,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/settings/templates")]
     [EnableCors("AllowFrontend")]
-    [AllowAnonymous]
+    [Authorize]
     [Produces("application/json")]
     public class SettingsTemplatesController : ControllerBase
     {

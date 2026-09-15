@@ -32,8 +32,35 @@ import {
   Info
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Toast, Modal, StatusBadge } from "@/components/common/Ui.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import { Modal, Toast } from "@/components/common/Ui.jsx";
 import "./CredentialsGeneratorPage.css";
+
+// --- DEFAULT CREDENTIAL SETTINGS & PERSISTENCE ---
+export const DEFAULT_CREDENTIAL_SETTINGS = {
+  facultyEmailFormat: "{empid}@gmail.com",
+  defaultPassword: "Pirnav@123",
+  facultyPrefix: "EMP-",
+  studentPrefix: "STD-",
+  pwdLength: 8,
+  includeSymbols: true,
+  includeNumbers: true,
+  forceChangeOnFirstLogin: true,
+  expiryDays: 90,
+  emailSubject: "Your PIRNAV ERP Portal Login Credentials",
+  senderEmail: "no-reply@pirnav.edu.in",
+  autoSendEmail: true
+};
+
+export function getStoredCredentialSettings() {
+  try {
+    const raw = localStorage.getItem("pjc-credential-settings");
+    if (raw) {
+      return { ...DEFAULT_CREDENTIAL_SETTINGS, ...JSON.parse(raw) };
+    }
+  } catch {}
+  return DEFAULT_CREDENTIAL_SETTINGS;
+}
 
 // --- MOCK FACULTY DATA ---
 const INITIAL_FACULTY = [
@@ -423,18 +450,7 @@ export default function CredentialsGeneratorPage() {
   const [detailUser, setDetailUser] = useState(null);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  const [credentialSettings, setCredentialSettings] = useState({
-    facultyPrefix: "EMP-",
-    studentPrefix: "STD-",
-    pwdLength: 8,
-    includeSymbols: true,
-    includeNumbers: true,
-    forceChangeOnFirstLogin: true,
-    expiryDays: 90,
-    emailSubject: "Your PIRNAV ERP Portal Login Credentials",
-    senderEmail: "no-reply@pirnav.edu.in",
-    autoSendEmail: true
-  });
+  const [credentialSettings, setCredentialSettings] = useState(getStoredCredentialSettings);
 
   const [wizardConfig, setWizardConfig] = useState({
     targetType: activeTab === "students" ? "students" : "faculty",
@@ -914,7 +930,7 @@ export default function CredentialsGeneratorPage() {
             <div className="cred-filter-card">
               <div className="cred-filter-row">
                 <div className="cred-search-box">
-                  <Search size={16} className="cred-search-icon" />
+                  <Search3DIcon size={16} className="cred-search-icon" />
                   <input
                     type="text"
                     placeholder={
@@ -1244,12 +1260,40 @@ export default function CredentialsGeneratorPage() {
             <div className="cred-settings-card">
               <div className="cred-card-header">
                 <div>
-                  <h3>Username & Password ID Policies</h3>
-                  <p>Configure default auto-generation formats for faculty and student accounts.</p>
+                  <h3>Employee Credentials Format & ID Policies</h3>
+                  <p>Configure default email login format, passwords, and auto-generation rules for staff and faculty.</p>
                 </div>
               </div>
 
               <div className="cred-form-body">
+                <div className="cred-form-row">
+                  <div className="cred-form-field">
+                    <label>Employee Login Email Format</label>
+                    <input
+                      type="text"
+                      value={credentialSettings.facultyEmailFormat || "{empid}@gmail.com"}
+                      onChange={(e) =>
+                        setCredentialSettings((p) => ({ ...p, facultyEmailFormat: e.target.value }))
+                      }
+                      placeholder="{empid}@gmail.com"
+                    />
+                    <small>Template: Use <code>{"{empid}"}</code> for Staff ID (e.g. <code>PCTCH0001@gmail.com</code>)</small>
+                  </div>
+
+                  <div className="cred-form-field">
+                    <label>Default Initial Password</label>
+                    <input
+                      type="text"
+                      value={credentialSettings.defaultPassword || "Pirnav@123"}
+                      onChange={(e) =>
+                        setCredentialSettings((p) => ({ ...p, defaultPassword: e.target.value }))
+                      }
+                      placeholder="Pirnav@123"
+                    />
+                    <small>Default password sent with profile completion link: <code>{credentialSettings.defaultPassword || "Pirnav@123"}</code></small>
+                  </div>
+                </div>
+
                 <div className="cred-form-row">
                   <div className="cred-form-field">
                     <label>Faculty Employee ID Prefix</label>
@@ -1376,8 +1420,8 @@ export default function CredentialsGeneratorPage() {
                     <p>Welcome to PIRNAV College Management Portal. Your login credentials have been generated:</p>
                     <div className="cred-email-box">
                       <div><strong>Portal URL:</strong> https://erp.pirnav.edu.in/login</div>
-                      <div><strong>Login Username:</strong> {"{Login_ID}"}</div>
-                      <div><strong>Temporary Password:</strong> {"{Temp_Password}"}</div>
+                      <div><strong>Login Mail:</strong> {credentialSettings.facultyEmailFormat ? credentialSettings.facultyEmailFormat.replace(/\{empid\}/gi, "PCTCH0001") : "PCTCH0001@gmail.com"}</div>
+                      <div><strong>Password:</strong> {credentialSettings.defaultPassword || "Pirnav@123"}</div>
                     </div>
                     <p>Please log in immediately and update your password when prompted.</p>
                     <p>Regards,<br />PIRNAV College Administration</p>
@@ -1388,7 +1432,13 @@ export default function CredentialsGeneratorPage() {
                   <button
                     type="button"
                     className="cms-btn cms-btn-primary"
-                    onClick={() => showToast("Credential settings saved successfully.")}
+                    onClick={() => {
+                      try {
+                        localStorage.setItem("pjc-credential-settings", JSON.stringify(credentialSettings));
+                        window.dispatchEvent(new CustomEvent("credential-settings-updated", { detail: credentialSettings }));
+                      } catch {}
+                      showToast("Credential settings saved successfully.");
+                    }}
                   >
                     Save Credential Settings
                   </button>

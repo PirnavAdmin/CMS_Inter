@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using ClosedXML.Excel;
@@ -83,7 +83,7 @@ namespace CollegeManagement.API.Services.Imports
                 "6. Phone Numbers (Mobile / Father / Mother / Guardian) must be 10 digits starting with 6-9 (e.g., 9876543210).",
                 "7. Aadhaar Number must be exactly 12 digits (e.g., 123456789012).",
                 "8. Pincode must be exactly 6 digits (e.g., 500001).",
-                "9. Passwords will be automatically generated securely as: Student@{DateOfBirth:ddMMyyyy} (e.g. Student@14052008).",
+                "9. Initial login credentials will be automatically generated and sent to the student's registered email address.",
                 "10. Do NOT modify or rename column headers in the 'Students' worksheet.",
                 "11. Student photos and document certificates can be uploaded later via the Student Profile screen."
             };

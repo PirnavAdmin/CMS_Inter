@@ -552,7 +552,6 @@ DELIMITER //
 
 CREATE PROCEDURE sp_GetDashboardStaffAttendance(
     IN p_BoardId INT,
-    IN p_AcademicYearId INT,
     IN p_TargetDate DATE,
     IN p_StaffType VARCHAR(50)
 )
@@ -566,6 +565,8 @@ BEGIN
     DECLARE v_Absent INT DEFAULT 0;
     DECLARE v_Late INT DEFAULT 0;
     DECLARE v_OnLeave INT DEFAULT 0;
+    DECLARE v_TotalSessionMarks INT DEFAULT 0;
+    DECLARE v_AttendancePct DECIMAL(5,2) DEFAULT 0.0;
     DECLARE v_StaffType VARCHAR(50);
     DECLARE v_LeavesCount INT DEFAULT 0;
 
@@ -613,24 +614,51 @@ BEGIN
       AND Status = 'Approved'
       AND DATE(StartDate) <= v_TargetDate AND DATE(EndDate) >= v_TargetDate;
 
-    IF v_LeavesCount > v_OnLeave THEN
-        SET v_OnLeave = v_LeavesCount;
+    -- Total session marks & normalized attendance calculation
+    SET v_TotalSessionMarks = v_Present + v_Absent + v_Late + v_OnLeave;
+
+    IF v_TotalSessionMarks > 0 THEN
+        SET v_AttendancePct = LEAST(100.0, ROUND((v_Present * 100.0) / v_TotalSessionMarks, 1));
+    ELSEIF v_FilteredTotal > 0 AND v_Present > 0 THEN
+        SET v_AttendancePct = LEAST(100.0, ROUND((LEAST(v_Present, v_FilteredTotal) * 100.0) / v_FilteredTotal, 1));
+    ELSE
+        SET v_AttendancePct = 0.0;
+    END IF;
+
+    -- Normalize Headcounts so Present/Absent never exceed Total Staff
+    IF v_FilteredTotal > 0 THEN
+        SET v_Present = LEAST(v_Present, v_FilteredTotal);
+        SET v_Absent = LEAST(v_Absent, v_FilteredTotal);
+        SET v_Late = LEAST(v_Late, v_FilteredTotal);
+        SET v_OnLeave = LEAST(v_OnLeave, v_FilteredTotal);
     END IF;
 
     SELECT 
         v_StaffType AS StaffType,
         v_FilteredTotal AS TotalStaff,
+        v_FilteredTotal AS Total,
+        v_FilteredTotal AS TotalCount,
         v_Present AS Present,
+        v_Present AS PresentCount,
         v_Absent AS Absent,
+        v_Absent AS AbsentCount,
         v_Late AS Late,
+        v_Late AS LateCount,
         v_OnLeave AS OnLeave,
-        ROUND(COALESCE((v_Present * 100.0) / NULLIF(v_FilteredTotal, 0), 0.0), 1) AS AttendancePercentage,
-        ROUND(COALESCE((v_Present * 100.0) / NULLIF(v_FilteredTotal, 0), 0.0), 1) AS PresentPercentage,
-        ROUND(COALESCE((v_Absent * 100.0) / NULLIF(v_FilteredTotal, 0), 0.0), 1) AS AbsentPercentage,
-        ROUND(COALESCE((v_Late * 100.0) / NULLIF(v_FilteredTotal, 0), 0.0), 1) AS LatePercentage,
-        ROUND(COALESCE((v_OnLeave * 100.0) / NULLIF(v_FilteredTotal, 0), 0.0), 1) AS OnLeavePercentage,
+        v_OnLeave AS OnLeaveCount,
+        v_OnLeave AS LeaveCount,
+        v_AttendancePct AS AttendancePercentage,
+        v_AttendancePct AS Percentage,
+        v_AttendancePct AS PresentPercentage,
+        CASE WHEN v_TotalSessionMarks > 0 THEN ROUND((v_Absent * 100.0) / v_TotalSessionMarks, 1) ELSE 0.0 END AS AbsentPercentage,
+        CASE WHEN v_TotalSessionMarks > 0 THEN ROUND((v_Late * 100.0) / v_TotalSessionMarks, 1) ELSE 0.0 END AS LatePercentage,
+        CASE WHEN v_TotalSessionMarks > 0 THEN ROUND((v_OnLeave * 100.0) / v_TotalSessionMarks, 1) ELSE 0.0 END AS OnLeavePercentage,
         v_TeachingCount AS TeachingCount,
-        v_NonTeachingCount AS NonTeachingCount;
+        v_TeachingCount AS TeachingStaffCount,
+        v_NonTeachingCount AS NonTeachingCount,
+        v_NonTeachingCount AS NonTeachingStaffCount,
+        v_TeachingCount AS TeachingStaff,
+        v_NonTeachingCount AS NonTeachingStaff;
 END //
 
 DELIMITER ;

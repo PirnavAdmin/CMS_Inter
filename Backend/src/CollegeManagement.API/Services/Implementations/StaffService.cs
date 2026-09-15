@@ -22,6 +22,13 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
+using System.Data;
+using CollegeManagement.API.Data;
+using CollegeManagement.API.DTOs.Users;
+using CollegeManagement.API.Helpers;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using QuestPDF.Infrastructure;
 
 namespace CollegeManagement.API.Services.Implementations
@@ -39,6 +46,10 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IMapper _mapper;
         private readonly IWebHostEnvironment _environment;
         private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
+        private readonly AppDbContext _context;
+        private readonly IUserProvisioningService _userProvisioningService;
+        private readonly IUserRepository _userRepository;
+        private readonly ILogger<StaffService> _logger;
 
         private const decimal HoursPerClassPeriod = 1.0m;
         private const long MaxPhotoFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -57,7 +68,11 @@ namespace CollegeManagement.API.Services.Implementations
             IEmailService emailService,
             IMapper mapper,
             IWebHostEnvironment environment,
-            Microsoft.Extensions.Configuration.IConfiguration configuration)
+            Microsoft.Extensions.Configuration.IConfiguration configuration,
+            AppDbContext context,
+            IUserProvisioningService userProvisioningService,
+            IUserRepository userRepository,
+            ILogger<StaffService> logger)
         {
             _staffRepository = staffRepository;
             _allocationRepository = allocationRepository;
@@ -70,6 +85,10 @@ namespace CollegeManagement.API.Services.Implementations
             _mapper = mapper;
             _environment = environment;
             _configuration = configuration;
+            _context = context;
+            _userProvisioningService = userProvisioningService;
+            _userRepository = userRepository;
+            _logger = logger;
         }
 
         public async Task<PagedResult<StaffResponseDto>> GetPagedStaffAsync(StaffQueryParams queryParams)
@@ -247,67 +266,22 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // Check for existing staff by Email, EmployeeId, or Mobile
-            Staff? existingStaff = null;
-            if (!string.IsNullOrWhiteSpace(dto.Email))
-            {
-                existingStaff = await _staffRepository.GetByEmailAsync(dto.Email.Trim());
-            }
-            if (existingStaff == null && !string.IsNullOrWhiteSpace(employeeId))
-            {
-                existingStaff = await _staffRepository.GetByEmployeeIdAsync(employeeId.Trim());
-            }
-            if (existingStaff == null && !string.IsNullOrWhiteSpace(dto.Mobile))
-            {
-                existingStaff = await _staffRepository.GetByMobileAsync(dto.Mobile.Trim());
-            }
-
-            if (existingStaff != null)
-            {
-                existingStaff.FirstName = !string.IsNullOrWhiteSpace(dto.FirstName) ? dto.FirstName.Trim() : existingStaff.FirstName;
-                existingStaff.MiddleName = dto.MiddleName?.Trim() ?? existingStaff.MiddleName;
-                existingStaff.LastName = !string.IsNullOrWhiteSpace(dto.LastName) ? dto.LastName.Trim() : existingStaff.LastName;
-                existingStaff.Mobile = !string.IsNullOrWhiteSpace(dto.Mobile) ? dto.Mobile.Trim() : existingStaff.Mobile;
-                existingStaff.Email = !string.IsNullOrWhiteSpace(dto.Email) ? dto.Email.Trim() : existingStaff.Email;
-                existingStaff.StaffType = staffType;
-                existingStaff.DepartmentId = resolvedDepartmentId ?? existingStaff.DepartmentId;
-                existingStaff.Department = !string.IsNullOrWhiteSpace(deptName) ? deptName : existingStaff.Department;
-                existingStaff.DesignationId = resolvedDesignationId ?? existingStaff.DesignationId;
-                existingStaff.Designation = !string.IsNullOrWhiteSpace(resolvedDesignationName) ? resolvedDesignationName : existingStaff.Designation;
-                existingStaff.BoardId = dto.BoardId ?? existingStaff.BoardId;
-                existingStaff.BoardName = dto.BoardName ?? dto.Board ?? existingStaff.BoardName;
-                existingStaff.Gender = !string.IsNullOrWhiteSpace(dto.Gender) ? dto.Gender : (!string.IsNullOrWhiteSpace(existingStaff.Gender) ? existingStaff.Gender : "Male");
-                existingStaff.DateOfBirth = dto.DateOfBirth.HasValue ? dto.DateOfBirth.Value : (existingStaff.DateOfBirth != default ? existingStaff.DateOfBirth : DateTime.UtcNow.AddYears(-25));
-                existingStaff.Qualification = !string.IsNullOrWhiteSpace(dto.Qualification) ? dto.Qualification : (!string.IsNullOrWhiteSpace(existingStaff.Qualification) ? existingStaff.Qualification : "Graduate");
-                existingStaff.JoiningDate = dto.JoiningDate ?? (dto.DateOfJoining ?? (existingStaff.JoiningDate != default ? existingStaff.JoiningDate : DateTime.UtcNow));
-                existingStaff.EmploymentType = dto.EmploymentType ?? existingStaff.EmploymentType;
-                existingStaff.Status = dto.Status ?? existingStaff.Status ?? "Active";
-                existingStaff.IsDeleted = false;
-
-                if (string.IsNullOrWhiteSpace(existingStaff.ProfileLinkToken))
-                {
-                    existingStaff.ProfileLinkToken = Guid.NewGuid().ToString("N");
-                }
-
-                existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
-                await _staffRepository.UpdateAsync(existingStaff);
-
-                var allocatedSubs = dto.AllocatedSubjects ?? dto.Subjects;
-                if (allocatedSubs != null && allocatedSubs.Any())
-                {
-                    await SyncStaffSubjectAllocationsAsync(existingStaff.Id, allocatedSubs);
-                }
-
-                var refreshedExisting = await _staffRepository.GetByIdAsync(existingStaff.Id) ?? existingStaff;
-                return _mapper.Map<StaffResponseDto>(refreshedExisting);
-            }
-
             // Uniqueness Validations for new staff
+            if (string.IsNullOrWhiteSpace(dto.Email))
+                throw new ValidationException("Email address is required for staff creation.");
+
+            if (!dto.RoleId.HasValue || dto.RoleId.Value <= 0)
+                throw new ValidationException("RoleId is required and must be greater than 0.");
+
             if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
                 throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
 
             if (!await _staffRepository.IsEmailUniqueAsync(dto.Email))
-                throw new ConflictException($"Email address '{dto.Email}' is already registered.");
+                throw new ConflictException($"Email address '{dto.Email}' is already registered to a staff record.");
+
+            var existingUser = await _userRepository.GetByEmailAsync(dto.Email.Trim());
+            if (existingUser != null)
+                throw new ConflictException($"Email address '{dto.Email}' is already registered to an existing authentication account.");
 
             if (!await _staffRepository.IsMobileUniqueAsync(dto.Mobile))
                 throw new ConflictException($"Mobile number '{dto.Mobile}' is already registered.");
@@ -341,16 +315,98 @@ namespace CollegeManagement.API.Services.Implementations
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
 
-            var createdStaff = await _staffRepository.AddAsync(staff);
-            createdStaff.Department = deptName;
+            // ==================================================================================
+            // ATOMIC TRANSACTION: Create Staff + User Account (Shared EF Core + Dapper Connection)
+            // ==================================================================================
+            Role? assignedRole = null;
+            UserProvisioningResult provResult = default!;
 
-            var subNames = dto.AllocatedSubjects ?? dto.Subjects;
-            if (subNames != null && subNames.Any())
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                await SyncStaffSubjectAllocationsAsync(createdStaff.Id, subNames);
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                var dbTransaction = transaction.GetDbTransaction();
+                var connection = _context.Database.GetDbConnection();
+
+                // 1. Dynamic Role Validation and Staff-Role Security Check
+                assignedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value, connection, dbTransaction);
+                if (assignedRole == null)
+                {
+                    await transaction.RollbackAsync();
+                    throw new ValidationException($"Role with ID '{dto.RoleId.Value}' was not found in Roles table.");
+                }
+
+                var nonStaffRoles = new[] { "Super Admin", "Admin", "Student", "Parent" };
+                if (nonStaffRoles.Any(r => string.Equals(r, assignedRole.RoleName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    await transaction.RollbackAsync();
+                    throw new ValidationException($"Role '{assignedRole.RoleName}' (RoleId: {assignedRole.RoleId}) cannot be assigned to a Staff account. Please select a valid Staff/Faculty role.");
+                }
+
+                // 2. Insert Staff domain record via EF Core inside this transaction
+                _context.Staffs.Add(staff);
+                await _context.SaveChangesAsync();
+
+                // 3. Subject Allocations
+                var subNames = dto.AllocatedSubjects ?? dto.Subjects;
+                if (subNames != null && subNames.Any())
+                {
+                    await SyncStaffSubjectAllocationsAsync(staff.Id, subNames);
+                }
+
+                // 4. Centralized User Account Provisioning via Dapper on the SAME connection and transaction
+                var provRequest = new ProvisionStaffUserRequest
+                {
+                    StaffId = staff.Id,
+                    RoleId = assignedRole.RoleId,
+                    Email = staff.Email,
+                    FullName = $"{staff.FirstName} {staff.LastName}".Trim(),
+                    PhoneNumber = staff.Mobile
+                };
+
+                provResult = await _userProvisioningService.ProvisionStaffUserAsync(provRequest, connection, dbTransaction);
+                if (!provResult.Success)
+                {
+                    await transaction.RollbackAsync();
+                    throw new ValidationException(provResult.ErrorMessage ?? "Failed to provision centralized user account for staff member.");
+                }
+
+                // 5. Commit both Staff and User creation atomically
+                await transaction.CommitAsync();
+            });
+
+            // ==================================================================================
+            // POST-COMMIT: Initial Credential Onboarding Email Delivery
+            // ==================================================================================
+            if (!string.IsNullOrWhiteSpace(provResult.TemporaryPassword))
+            {
+                try
+                {
+                    var portalUrl = _configuration["InstitutionSettings:PortalUrl"] ?? _configuration["StudentPortal:LoginUrl"] ?? "http://localhost:5173";
+                    var institutionName = _configuration["InstitutionSettings:InstitutionName"] ?? "College Management System";
+                    var emailBody = StaffCredentialHelper.BuildInitialCredentialEmailHtml(
+                        $"{staff.FirstName} {staff.LastName}".Trim(),
+                        staff.Email,
+                        staff.EmployeeId,
+                        assignedRole.RoleName,
+                        provResult.TemporaryPassword,
+                        portalUrl,
+                        institutionName);
+
+                    await _emailService.SendEmailAsync(
+                        staff.Email,
+                        $"Welcome to {institutionName} - Staff Portal Login Credentials",
+                        emailBody);
+
+                    _logger.LogInformation("Successfully sent initial credential email to staff {Email} (StaffId: {StaffId}, Role: {Role})", staff.Email, staff.Id, assignedRole.RoleName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Initial credential email delivery failed for staff {Email} (StaffId: {StaffId}) after successful transaction commit.", staff.Email, staff.Id);
+                }
             }
 
-            var refreshedStaff = await _staffRepository.GetByIdAsync(createdStaff.Id) ?? createdStaff;
+            var refreshedStaff = await _staffRepository.GetByIdAsync(staff.Id) ?? staff;
             return _mapper.Map<StaffResponseDto>(refreshedStaff);
         }
 
@@ -363,6 +419,18 @@ namespace CollegeManagement.API.Services.Implementations
             // Uniqueness Validations
             if (!await _staffRepository.IsEmailUniqueAsync(dto.Email, id))
                 throw new ConflictException($"Email address '{dto.Email}' is already registered to another staff member.");
+
+            var normalizedNewEmail = dto.Email.Trim().ToUpperInvariant();
+            var normalizedOldEmail = existingStaff.Email.Trim().ToUpperInvariant();
+            bool emailChanged = !string.Equals(normalizedNewEmail, normalizedOldEmail, StringComparison.OrdinalIgnoreCase);
+            if (emailChanged)
+            {
+                var existingUserWithNewEmail = await _userRepository.GetByEmailAsync(normalizedNewEmail);
+                if (existingUserWithNewEmail != null && existingUserWithNewEmail.StaffId != id)
+                {
+                    throw new ConflictException($"Email address '{dto.Email}' is already registered to another authentication account.");
+                }
+            }
 
             if (!await _staffRepository.IsMobileUniqueAsync(dto.Mobile, id))
                 throw new ConflictException($"Mobile number '{dto.Mobile}' is already registered to another staff member.");
@@ -455,13 +523,37 @@ namespace CollegeManagement.API.Services.Implementations
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
 
-            await _staffRepository.UpdateAsync(existingStaff);
-
-            var subNames = dto.AllocatedSubjects ?? dto.Subjects;
-            if (subNames != null)
+            // Transactional update: Staff domain + Users sync
+            var updateStrategy = _context.Database.CreateExecutionStrategy();
+            await updateStrategy.ExecuteAsync(async () =>
             {
-                await SyncStaffSubjectAllocationsAsync(existingStaff.Id, subNames);
-            }
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                var dbTransaction = transaction.GetDbTransaction();
+                var connection = _context.Database.GetDbConnection();
+
+                existingStaff.UpdatedAt = DateTime.UtcNow;
+                _context.Staffs.Update(existingStaff);
+                await _context.SaveChangesAsync();
+
+                if (emailChanged)
+                {
+                    await _userRepository.UpdateEmailByStaffIdAsync(id, normalizedNewEmail, connection, dbTransaction);
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.Status))
+                {
+                    bool newIsActive = !string.Equals(dto.Status.Trim(), "Inactive", StringComparison.OrdinalIgnoreCase);
+                    await _userRepository.UpdateStatusByStaffIdAsync(id, newIsActive, connection, dbTransaction);
+                }
+
+                var subNames = dto.AllocatedSubjects ?? dto.Subjects;
+                if (subNames != null)
+                {
+                    await SyncStaffSubjectAllocationsAsync(existingStaff.Id, subNames);
+                }
+
+                await transaction.CommitAsync();
+            });
 
             var refreshedStaff = await _staffRepository.GetByIdAsync(existingStaff.Id) ?? existingStaff;
             return _mapper.Map<StaffResponseDto>(refreshedStaff);
@@ -473,7 +565,22 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            await _staffRepository.SoftDeleteAsync(staff);
+            var deleteStrategy = _context.Database.CreateExecutionStrategy();
+            await deleteStrategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                var dbTransaction = transaction.GetDbTransaction();
+                var connection = _context.Database.GetDbConnection();
+
+                staff.IsDeleted = true;
+                staff.UpdatedAt = DateTime.UtcNow;
+                _context.Staffs.Update(staff);
+                await _context.SaveChangesAsync();
+
+                await _userRepository.UpdateStatusByStaffIdAsync(id, false, connection, dbTransaction);
+                await transaction.CommitAsync();
+            });
+
             return true;
         }
 

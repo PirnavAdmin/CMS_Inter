@@ -208,7 +208,7 @@
 /* ---------- Toast Banners ---------- */
 .cms-toast-banner {
   position: fixed;
-  top: 20px;
+  top: 60px;
   right: 20px;
   padding: 11px 18px;
   border-radius: 10px;
@@ -227,6 +227,7 @@
     opacity: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -1009,6 +1010,7 @@
   .cms-filter-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+
   .cms-detail-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1018,30 +1020,37 @@
   .cms-filter-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .cms-detail-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .cms-table-container {
     overflow-x: auto;
   }
 }
 
 @media (max-width: 720px) {
+
   .cms-filter-grid,
   .cms-detail-grid {
     grid-template-columns: 1fr;
   }
+
   .cms-independent-tab-bar {
     flex-wrap: wrap;
   }
+
   .cms-workspace-actions {
     flex-direction: column;
     align-items: stretch;
   }
+
   .cms-entry-selects {
     flex-direction: column;
     width: 100%;
   }
+
   .cms-context-summary,
   .cms-entry-toolbar,
   .cms-table-toolbar,
@@ -1049,32 +1058,39 @@
     align-items: stretch;
     flex-direction: column;
   }
+
   .cms-search-wrap {
     width: 100%;
     max-width: none;
     min-width: 0;
   }
+
   .cms-bulk-actions,
   .cms-marks-actions,
   .cms-modal-foot {
     width: 100%;
   }
+
   .cms-bulk-actions .cms-btn,
   .cms-marks-actions .cms-btn,
   .cms-modal-foot .cms-btn {
     flex: 1 1 auto;
   }
+
   .cms-pagination-controls {
     justify-content: space-between;
     margin-left: 0;
   }
+
   .cms-toast-banner {
     right: 12px;
     left: 12px;
   }
+
   .cms-modal {
     max-height: calc(100vh - 32px);
   }
+
   .cms-modal-body {
     overflow-y: auto;
   }

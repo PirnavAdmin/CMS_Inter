@@ -35,6 +35,9 @@ import {
   deleteCertificate,
   downloadCertificatePdf,
 } from "../../api/certificateApi";
+import createCertificateIcon from "@/assets/sidebar-3d/certificates.png";
+import certificateRecordsIcon from "@/assets/settings-3d/audit-logs.png";
+import reviewIssueIcon from "@/assets/reports-3d/toppers.png";
 import "./CertificateManagement.css";
 
 // Supported Certificate Types
@@ -196,13 +199,8 @@ const CertificateManagement = () => {
 
     const resolvedPurpose =
       formData.purpose === "Other"
-        ? formData.customPurpose?.trim()
-        : formData.purpose;
-
-    if (!resolvedPurpose) {
-      showToast("Please provide the Purpose for certificate request", "error");
-      return;
-    }
+        ? formData.customPurpose?.trim() || null
+        : formData.purpose?.trim() || null;
 
     setActionLoading(true);
     try {
@@ -449,7 +447,7 @@ const CertificateManagement = () => {
             setCurrentPage(1);
           }}
         >
-          <FiFileText className="tab-icon" /> Create Certificate
+          <img className="tab-3d-icon" src={createCertificateIcon} alt="" aria-hidden="true" width={18} height={18} /> Create Certificate
         </button>
 
         <button
@@ -459,7 +457,7 @@ const CertificateManagement = () => {
             setCurrentPage(1);
           }}
         >
-          <FiFileText className="tab-icon" /> Certificate Records
+          <img className="tab-3d-icon" src={certificateRecordsIcon} alt="" aria-hidden="true" width={18} height={18} /> Certificate Records
         </button>
 
         <button
@@ -469,7 +467,7 @@ const CertificateManagement = () => {
             setCurrentPage(1);
           }}
         >
-          <FiCheckSquare className="tab-icon" /> Review &amp; Issue
+          <img className="tab-3d-icon" src={reviewIssueIcon} alt="" aria-hidden="true" width={18} height={18} /> Review &amp; Issue
         </button>
       </div>
 
@@ -546,9 +544,7 @@ const CertificateManagement = () => {
 
               {/* Purpose */}
               <div className="cert-form-group">
-                <label>
-                  PURPOSE <span className="text-red">*</span>
-                </label>
+                <label>PURPOSE</label>
                 <input
                   type="text"
                   list="purpose-presets"
@@ -556,7 +552,6 @@ const CertificateManagement = () => {
                   placeholder="Purpose (e.g. Higher Studies, Bank Loan)"
                   value={formData.purpose}
                   onChange={(e) => setFormData((prev) => ({ ...prev, purpose: e.target.value }))}
-                  required
                 />
                 <datalist id="purpose-presets">
                   {PURPOSE_PRESETS.map((p) => (

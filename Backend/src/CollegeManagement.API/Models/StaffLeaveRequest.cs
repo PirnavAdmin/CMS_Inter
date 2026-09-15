@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using CollegeManagement.API.Enums;
@@ -71,6 +71,12 @@ namespace CollegeManagement.API.Models
         public int? AcademicYearId { get; set; }
 
         /// <summary>
+        /// Gets or sets the configurable leave category.
+        /// Nullable for backward compatibility with existing records using LeaveType enum.
+        /// </summary>
+        public int? LeaveCategoryId { get; set; }
+
+        /// <summary>
         /// Gets or sets the User ID of the admin who approved or rejected the request.
         /// </summary>
         public int? ApprovedByUserId { get; set; }
@@ -131,6 +137,12 @@ namespace CollegeManagement.API.Models
         /// </summary>
         [ForeignKey(nameof(ApprovedByUserId))]
         public virtual User? ApprovedByUser { get; set; }
+
+        /// <summary>
+        /// Gets or sets the associated leave category.
+        /// </summary>
+        [ForeignKey(nameof(LeaveCategoryId))]
+        public virtual LeaveCategory? LeaveCategory { get; set; }
 
         #endregion
     }

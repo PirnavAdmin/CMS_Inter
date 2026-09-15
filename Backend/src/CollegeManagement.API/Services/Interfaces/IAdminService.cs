@@ -12,7 +12,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<AuthResult> LoginAsync(AdminLoginRequest request);
         Task<AdminDto> CreateAdminAsync(CreateAdminRequest request);
         Task<bool> UpdateStatusAsync(int id, bool isActive);
-        Task<bool> ChangePasswordAsync(int currentAdminId, ChangePasswordRequest request);
+        Task<(bool Success, string Message)> ChangePasswordAsync(int userId, ChangePasswordRequest request);
         Task<AuthResult> ForgotPasswordAsync(ForgotPasswordRequest request);
         Task<AuthResult> VerifyOtpAsync(VerifyOtpRequest request);
         Task<AuthResult> ResetPasswordAsync(ResetPasswordRequest request);

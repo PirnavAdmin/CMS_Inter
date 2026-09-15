@@ -29,6 +29,7 @@ import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { ConfirmDialog, Loader, Modal, StatusBadge, Toast } from "../common/Ui.jsx";
 import "./ExaminationPage.css";
 
@@ -1905,7 +1906,7 @@ function SearchableSingleSelect({
           <div className="cms-searchable-select-dropdown" style={{ zIndex: 100000 }}>
             {showSearch && (
               <div className="cms-searchable-select-search">
-                <Search size={14} style={{ color: "#94a3b8" }} />
+                <Search3DIcon size={14} />
                 <input
                   type="text"
                   autoFocus
@@ -2028,7 +2029,7 @@ function SearchableMultiSelect({
         {open && (
           <div className="cms-searchable-select-dropdown" style={{ zIndex: 100000 }}>
             <div className="cms-searchable-select-search">
-              <Search size={14} style={{ color: "#94a3b8" }} />
+              <Search3DIcon size={14} />
               <input
                 type="text"
                 autoFocus

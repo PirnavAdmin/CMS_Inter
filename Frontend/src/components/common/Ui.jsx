@@ -123,10 +123,10 @@ export function useConfirmDialog() {
 }
 
 export function Field({ field = {}, value, error, onChange, onBlur }) {
-  if (!field || typeof field !== "object") return null;
-  const { name = "", label = "", type = "text", options = [], required = false, placeholder = "", full = false, disabled = false, min, max, step } = field;
-  const id = `f-${name}`;
   const [reveal, setReveal] = useState(false);
+  if (!field || typeof field !== "object") return null;
+  const { name = "", label = "", type = "text", options = [], required = false, placeholder = "", full = false, disabled = false, min, max, step, autoComplete } = field;
+  const id = `f-${name}`;
   const isPassword = type === "password";
   const safeOpts = Array.isArray(options) ? options : [];
   const normalizedOptions = safeOpts.map((option) => (
@@ -143,26 +143,28 @@ export function Field({ field = {}, value, error, onChange, onBlur }) {
         {label} {required ? <span className="req">*</span> : null}
       </label>
       {type === "select" ? (
-        <select id={id} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
+        <select id={id} name={name} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
           <option value="">Select {label}</option>
           {normalizedOptions.map((o, index) => (
             <option key={`${o.value}-${index}`} value={o.value}>{o.label}</option>
           ))}
         </select>
       ) : type === "textarea" ? (
-        <textarea id={id} value={value ?? ""} disabled={disabled} placeholder={placeholder} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)} />
+        <textarea id={id} name={name} value={value ?? ""} disabled={disabled} placeholder={placeholder} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)} />
       ) : type === "checkbox" ? (
         <span className="cms-check">
-          <input id={id} type="checkbox" disabled={disabled} checked={!!value} onChange={(e) => handleChange(e.target.checked)} />
+          <input id={id} name={name} type="checkbox" disabled={disabled} checked={!!value} onChange={(e) => handleChange(e.target.checked)} />
           <span>{placeholder || "Yes"}</span>
         </span>
       ) : isPassword ? (
         <span className="cms-password">
           <input
             id={id}
+            name={name}
             type={reveal ? "text" : "password"}
             value={value ?? ""}
             disabled={disabled}
+            autoComplete={autoComplete}
             placeholder={placeholder || label}
             onChange={(e) => handleChange(e.target.value)}
             onBlur={() => onBlur?.(name)}
@@ -180,9 +182,11 @@ export function Field({ field = {}, value, error, onChange, onBlur }) {
       ) : (
         <input
           id={id}
+          name={name}
           type={type}
           value={value ?? ""}
           disabled={disabled}
+          autoComplete={autoComplete}
           placeholder={placeholder || label}
           min={min}
           max={max}

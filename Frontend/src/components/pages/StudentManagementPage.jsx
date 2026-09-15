@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Search, Upload } from "lucide-react";
+import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -453,7 +454,7 @@ export default function StudentManagementPage() {
         <div className="student-management-search-row">
           <div className="cms-card-body student-management-toolbar">
             <label className="student-management-search">
-              <Search size={18} />
+              <Search3DIcon size={18} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}

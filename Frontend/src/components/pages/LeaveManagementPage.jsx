@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import { 
   LEAVE_STATUS,
@@ -469,7 +471,7 @@ function LeaveHistory({ onSelect }) {
           </div>
           <div className="leave-history-controls">
             <label>
-              <Search size={15} />
+              <Search3DIcon size={15} />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search faculty..." />
             </label>
             <select value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -651,6 +653,7 @@ function RejectLeaveConfirmation({ leave, remark, setRemark, onCancel, onConfirm
 export default function LeaveManagementPage() {
   const [requests, setRequests] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
   const [affected, setAffected] = useState(null);
   const [assignment, setAssignment] = useState(null);
   const [records, setRecords] = useState([]);
@@ -658,7 +661,45 @@ export default function LeaveManagementPage() {
   const [message, setMessage] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [staffHistory, setStaffHistory] = useState(null);
-  const [rejecting, setRejecting] = useState(null);
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(tabParam === "today" ? "today" : "all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const todayDate = useMemo(() => new Date(), []);
+  const todayIso = useMemo(() => todayDate.toISOString().split("T")[0], [todayDate]);
+  const todayFormatted = useMemo(() => todayDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" }), [todayDate]);
+
+  const currentTabRequests = useMemo(() => {
+    const isTodayActive = (req) => {
+      const s = req.fromDate || (req.startDate ? req.startDate.split("T")[0] : "");
+      const e = req.toDate || (req.endDate ? req.endDate.split("T")[0] : "");
+      if (!s) return false;
+      return todayIso >= s && (!e || todayIso <= e);
+    };
+
+    return activeTab === "today" ? requests.filter(isTodayActive) : requests;
+  }, [requests, activeTab, todayIso]);
+
+  const filteredRequests = useMemo(() => {
+    return currentTabRequests.filter(req => {
+      if (statusFilter !== "all" && String(req.status || "").toLowerCase() !== statusFilter.toLowerCase()) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const name = String(req.staffName || "").toLowerCase();
+        const dept = String(req.department || "").toLowerCase();
+        const code = String(req.staffCode || req.staffId || "").toLowerCase();
+        const reason = String(req.reason || "").toLowerCase();
+        if (!name.includes(q) && !dept.includes(q) && !code.includes(q) && !reason.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [currentTabRequests, statusFilter, searchQuery]);
 
   const loadRequests = () => {
     getLeaveRequests().then(data => {
@@ -789,7 +830,7 @@ export default function LeaveManagementPage() {
     <>
       <DashboardLayout 
         title="Leave Management" 
-        subtitle="Review leave requests and arrange temporary class coverage" 
+        subtitle={activeTab === "today" ? `Showing leaves active on today (${todayFormatted})` : "Review and manage all staff leave requests across all dates"} 
         breadcrumb={["Operations", "Leave Management"]} 
         actions={
           <button className="cms-btn cms-btn-ghost leave-history-button" onClick={() => setHistoryOpen(true)}>
@@ -798,19 +839,64 @@ export default function LeaveManagementPage() {
         }
       >
         <main className="attendance-module">
+          {/* Tabs Container */}
+          <div className="leave-tabs-card">
+            <button 
+              type="button" 
+              className={`leave-tab-btn ${activeTab === "today" ? "active" : ""}`}
+              onClick={() => setActiveTab("today")}
+            >
+              <CalendarDays size={16} /> Today's Leaves <span className="tab-pill">TODAY</span>
+            </button>
+            <button 
+              type="button" 
+              className={`leave-tab-btn ${activeTab === "all" ? "active" : ""}`}
+              onClick={() => setActiveTab("all")}
+            >
+              <UsersRound size={16} /> All Requests <span className="tab-pill count">{requests.length}</span>
+            </button>
+          </div>
+
+          {/* Stat Summary Cards */}
           <section className="att-summary att-leave-summary">
-            {["Total Requests", "Pending", "Approved", "Rejected"].map(label => (
-              <div key={label}>
-                <span>{label}</span>
-                <b>
-                  {label === "Total Requests" 
-                    ? requests.length 
-                    : requests.filter(request => request.status === label).length}
-                </b>
-              </div>
-            ))}
+            {["Total Requests", "Pending Review", "Approved", "Rejected"].map(label => {
+              let count = 0;
+              if (label === "Total Requests") count = currentTabRequests.length;
+              else if (label === "Pending Review") count = currentTabRequests.filter(r => r.status === "Pending").length;
+              else if (label === "Approved") count = currentTabRequests.filter(r => r.status === "Approved").length;
+              else if (label === "Rejected") count = currentTabRequests.filter(r => r.status === "Rejected").length;
+
+              return (
+                <div key={label}>
+                  <span>{label}</span>
+                  <b>{count}</b>
+                </div>
+              );
+            })}
           </section>
 
+          {/* Filter Bar */}
+          <div className="leave-filter-bar">
+            <div className="leave-search-box">
+              <Search size={16} />
+              <input 
+                type="text" 
+                placeholder="Search faculty name, ID, department..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="leave-status-filter">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="all">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Requests Table */}
           <section className="att-card att-table-card">
             <div className="att-scroll">
               <table className="cms-table">
@@ -822,28 +908,59 @@ export default function LeaveManagementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map(request => {
-                    const rid = request.staffLeaveRequestId || request.id;
-                    return (
-                      <tr key={rid}>
-                        <td>LR-{String(rid).padStart(3, "0")}</td>
-                        <td>{request.staffName}</td>
-                        <td>{request.department || "Mathematics"}</td>
-                        <td>{request.staffType || "Teaching Staff"}</td>
-                        <td>{request.leaveType}</td>
-                        <td>{request.fromDate}</td>
-                        <td>{request.toDate}</td>
-                        <td>{request.days}</td>
-                        <td>{request.reason}</td>
-                        <td><span className="att-status">{request.status}</span></td>
-                        <td>
-                          <button className="cms-action-btn" onClick={() => openDetails(request)} aria-label="View request">
-                            <Eye size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {filteredRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
+                        {activeTab === "today" 
+                          ? "No active leaves for today." 
+                          : "No leave requests found matching these filters."}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRequests.map(request => {
+                      const rid = request.staffLeaveRequestId || request.id;
+                      const initials = (request.staffName || "Staff").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                      return (
+                        <tr key={rid}>
+                          <td><strong>LR-{String(rid).padStart(3, "0")}</strong></td>
+                          <td>
+                            <div className="staff-table-info">
+                              <span className="staff-avatar-circle">{initials}</span>
+                              <div className="staff-name-col">
+                                <strong>{request.staffName}</strong>
+                                <span>ID: {request.staffCode || request.staffId}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{request.department || "Mathematics"}</td>
+                          <td>
+                            <span style={{ fontSize: 12, color: "#475569", background: "#f1f5f9", padding: "3px 8px", borderRadius: 6, fontWeight: 600 }}>
+                              {request.staffType || "Teaching Staff"}
+                            </span>
+                          </td>
+                          <td><strong>{request.leaveType}</strong></td>
+                          <td>{prettyDate(request.fromDate || request.startDate)}</td>
+                          <td>{prettyDate(request.toDate || request.endDate)}</td>
+                          <td>
+                            <span className="days-pill">
+                              {request.days || 1} {Number(request.days || 1) === 1 ? "day" : "days"}
+                            </span>
+                          </td>
+                          <td style={{ maxWidth: 220 }}>
+                            <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontSize: 12 }}>
+                              {request.reason || "—"}
+                            </span>
+                          </td>
+                          <td><LeaveStatus status={request.status} /></td>
+                          <td>
+                            <button className="cms-action-btn" onClick={() => openDetails(request)} aria-label="View request">
+                              <Eye size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

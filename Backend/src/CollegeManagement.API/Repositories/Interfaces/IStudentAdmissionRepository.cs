@@ -1,4 +1,6 @@
+using System.Data;
 using CollegeManagement.API.DTOs.StudentAdmission;
+using CollegeManagement.API.Models;
 
 namespace CollegeManagement.API.Repositories.Interfaces
 {
@@ -14,6 +16,11 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
         Task<StudentAdmissionResponseDto?> GetByIdAsync(
             int admissionId);
+
+        Task<Student?> GetStudentByAdmissionIdAsync(
+            int admissionId,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null);
 
         Task<IEnumerable<StudentAdmissionResponseDto>> GetAllAsync();
 
@@ -54,10 +61,15 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
         Task<bool> ApproveAsync(
             ApproveStudentAdmissionRequest request,
-            string? passwordHash = null);
+            string? passwordHash = null,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null);
 
         Task<bool> RejectAsync(
             RejectStudentAdmissionRequest request);
+
+        Task<bool> DeleteAsync(
+            int admissionId);
 
         // =====================================================
         // SECTION ALLOCATION

@@ -8,6 +8,8 @@ import {
   readPasswordResetContext,
   resetPasswordForAccount,
 } from "@/features/auth/services/authService.js";
+import PasswordRequirements from "@/features/auth/components/PasswordRequirements.jsx";
+import { validateStrongPassword } from "@/features/auth/passwordPolicy.js";
 
 const fields = [
   { name: "password", label: "New Password", type: "password", required: true, full: true },
@@ -43,6 +45,11 @@ export default function ResetPassword() {
       setFormError("Please verify your OTP before resetting your password.");
       return;
     }
+    const passwordError = validateStrongPassword(values.password);
+    if (passwordError) {
+      setFormError(passwordError);
+      return;
+    }
     if (values.password !== values.confirmPassword) {
       setFormError("Password and Confirm Password must match.");
       return;
@@ -64,7 +71,12 @@ export default function ResetPassword() {
       <form onSubmit={submit} noValidate>
         {formError ? <div className="cms-alert-error" role="alert">{formError}</div> : null}
         <div className="cms-form-grid">
-          {fields.map((f) => <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />)}
+          {fields.map((f) => (
+            <div key={f.name} className="auth-field-with-guidance">
+              <Field field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
+              {f.name === "password" ? <PasswordRequirements password={values.password} /> : null}
+            </div>
+          ))}
         </div>
         <button type="submit" className="cms-btn cms-btn-primary" style={{ width: "100%", marginTop: 18 }} disabled={busy}>{busy ? "Resetting..." : "Reset Password"}</button>
       </form>

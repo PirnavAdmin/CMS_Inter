@@ -178,13 +178,13 @@ namespace CollegeManagement.API.Services.Exports
                             cc.Item().Text("LOGIN CREDENTIALS").FontSize(8).Bold().FontColor(AccentBlue);
                             cc.Item().Text(t =>
                             {
-                                t.Span("Login ID / Username: ").Bold();
-                                t.Span(s.AdmissionNo).SemiBold().FontColor(PrimaryNavy);
+                                t.Span("Login ID / Email: ").Bold();
+                                t.Span(!string.IsNullOrWhiteSpace(s.Email) ? s.Email : s.AdmissionNo).SemiBold().FontColor(PrimaryNavy);
                             });
                             cc.Item().Text(t =>
                             {
                                 t.Span("Temporary Password: ").Bold();
-                                t.Span(s.TemporaryPassword).SemiBold().FontColor(PrimaryNavy);
+                                t.Span("Initial password sent to registered email.").Italic().FontColor(PrimaryNavy);
                             });
                         });
                     });
@@ -195,7 +195,7 @@ namespace CollegeManagement.API.Services.Exports
                         ir.RelativeItem().Text(t =>
                         {
                             t.Span("NOTICE: ").Bold().FontColor(AlertText);
-                            t.Span("This temporary password must be changed upon your first login. Please log in to the Student Portal and update your password immediately.").FontSize(8).FontColor(AlertText);
+                            t.Span("Your initial temporary password has been securely dispatched to your registered email address. Please log in to the Student Portal and update your password immediately upon first login.").FontSize(8).FontColor(AlertText);
                         });
                     });
                 });

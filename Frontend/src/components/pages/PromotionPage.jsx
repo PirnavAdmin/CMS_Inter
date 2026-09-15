@@ -78,7 +78,7 @@ const getMasterFailureMessage = (responses, names) => {
   if (!failures.length) return "";
   const statuses = failures.map(({ error }) => error?.response?.status);
   if (statuses.some((status) => status === 502) || failures.some(({ error }) => !error?.response)) {
-    return "The backend API is unavailable. Start the API service on localhost:5167, then retry master data.";
+    return "Unable to connect to the server. Please check your network connection and try again.";
   }
   if (statuses.some((status) => status === 401)) return "Your session has expired. Please sign in again.";
   if (statuses.some((status) => status === 403)) return "Your account is not permitted to load Promotion master data.";
@@ -132,7 +132,11 @@ const normalizeHistory = (item) => ({
   canRollback: read(item, "canRollback", "CanRollback") !== false && !read(item, "isRolledBack", "IsRolledBack", "rollbackStatus", "RollbackStatus"),
 });
 
-const isEligible = () => true;
+const isEligible = (student) => {
+  if (!student) return false;
+  const status = (student.eligibilityStatus || "").toLowerCase();
+  return status === "eligible" || status === "";
+};
 
 export default function PromotionPage({ screen = "promotion" }) {
   const navigate = useNavigate();
@@ -1576,9 +1580,15 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
     setMessage("");
 
     try {
-      const targetYearId = numericId(setup.toYear || defaultNextYearId || selectedAcademicYearId) || 9;
-      const targetAcademicLevel = masters.levels.find((l) => l.value === asString(setup.toLevel || setup.fromLevel))?.label || "Intermediate 1st Year";
-      const targetGroupId = numericId(setup.toGroup || setup.group) || 37;
+      const targetYearId = numericId(setup.toYear || defaultNextYearId || selectedAcademicYearId);
+      const targetAcademicLevel = masters.levels.find((l) => l.value === asString(setup.toLevel || setup.fromLevel))?.label;
+      const targetGroupId = numericId(setup.toGroup || setup.group);
+
+      if (!targetYearId || !targetAcademicLevel || !targetGroupId) {
+        setMessage("Missing required target configuration. Please select Year, Level, and Group.");
+        setSaving(false);
+        return;
+      }
 
       if (isProgram) {
         const byProgram = {};
@@ -1638,12 +1648,16 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
     <section className="cms-card promotion-card">
       <div className="promotion-tabs" role="tablist" style={{ marginBottom: "14px" }}>
         <button
+          role="tab"
+          aria-selected={isProgram}
           className={isProgram ? "is-active" : ""}
           onClick={() => { setActiveTab("program"); setMessage(""); }}
         >
           Program Allocation (Track Change)
         </button>
         <button
+          role="tab"
+          aria-selected={!isProgram}
           className={!isProgram ? "is-active" : ""}
           onClick={() => { setActiveTab("section"); setMessage(""); }}
         >

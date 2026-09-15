@@ -75,6 +75,20 @@
   height: 15px;
 }
 
+.cert-primary-tab .cert-tab-3d-icon {
+  display: block;
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+  transition: transform 0.18s ease;
+}
+
+.cert-primary-tab:hover .cert-tab-3d-icon {
+  transform: scale(1.08);
+}
+
 .cert-primary-tab:hover:not(.is-active) {
   background: var(--cms-primary-soft);
   color: var(--cms-primary-dark);

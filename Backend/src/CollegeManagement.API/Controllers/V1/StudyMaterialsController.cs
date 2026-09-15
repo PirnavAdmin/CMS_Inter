@@ -1,5 +1,6 @@
 ﻿using CollegeManagement.API.DTOs.StudyMaterial;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CollegeManagement.API.Controllers.V1
@@ -7,6 +8,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [Route("api/v1/study-materials")]
     [Produces("application/json")]
+    [Authorize]
     public class StudyMaterialsController : ControllerBase
     {
         private readonly IStudyMaterialService _service;

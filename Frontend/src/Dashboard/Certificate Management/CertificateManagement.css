@@ -124,6 +124,14 @@
   font-size: 1.1rem;
 }
 
+.tab-3d-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
+  vertical-align: middle;
+}
+
 /* Card Wrapper */
 .cert-card-content {
   background-color: var(--cert-card-bg);

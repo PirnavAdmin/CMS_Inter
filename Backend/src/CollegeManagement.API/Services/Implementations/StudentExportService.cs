@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -195,7 +195,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new InvalidOperationException("Initial credential has already been consumed. Student password has already been changed.");
             }
 
-            var initialPassword = Helpers.StudentCredentialHelper.GenerateInitialPassword(student.DateOfBirth);
+            var initialPassword = "Sent to registered email";
 
             var model = new StudentIndividualCredentialSlipModel
             {

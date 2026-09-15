@@ -381,10 +381,15 @@
   width: 50px;
   min-width: 50px;
   height: 50px;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
   padding: 0;
   flex: 0 0 50px;
+  flex: 0 0 38px;
   border: 1px solid var(--cms-border);
   border-radius: 14px;
+  border-radius: 10px;
   background: var(--cms-surface);
   color: var(--cms-muted);
   box-shadow: 0 2px 7px rgba(28, 36, 22, 0.05);
@@ -393,6 +398,8 @@
 .cms-topbar > .cms-menu-toggle svg {
   width: 23px;
   height: 23px;
+  width: 18px;
+  height: 18px;
   stroke-width: 2;
 }
 
@@ -400,6 +407,8 @@
   display: block;
   width: 26px;
   height: 26px;
+  width: 19px;
+  height: 19px;
   object-fit: contain;
 }
 
@@ -806,6 +815,8 @@
   font-weight: 600;
 }
 
+
+
 .cms-page-head {
   display: flex;
   align-items: flex-end;
@@ -890,6 +901,11 @@
     height: 42px;
     flex-basis: 42px;
     border-radius: 12px;
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    border-radius: 10px;
   }
 }
 
