@@ -206,14 +206,14 @@ export const transportRoutes = [
 ];
 
 export const transportPickupPoints = [
-  { id: "TP-001", routeId: "TR-001", pickupName: "Benz Circle", area: "Benz Circle", landmark: "Trendset Mall", sequenceNumber: 1, pickupTime: "07:10", dropTime: "17:35", latitude: 16.5018, longitude: 80.648, distanceKm: 18, status: "Active" },
-  { id: "TP-002", routeId: "TR-001", pickupName: "MG Road", area: "Labbipet", landmark: "PVP Square", sequenceNumber: 2, pickupTime: "07:20", dropTime: "17:25", latitude: 16.5091, longitude: 80.6429, distanceKm: 12, status: "Active" },
-  { id: "TP-003", routeId: "TR-001", pickupName: "Governorpet", area: "Governorpet", landmark: "Old Bus Stand", sequenceNumber: 3, pickupTime: "07:32", dropTime: "17:15", latitude: 16.515, longitude: 80.6292, distanceKm: 7, status: "Active" },
-  { id: "TP-004", routeId: "TR-002", pickupName: "Gannavaram", area: "Gannavaram", landmark: "Airport Junction", sequenceNumber: 1, pickupTime: "06:55", dropTime: "17:55", latitude: 16.5409, longitude: 80.8025, distanceKm: 28, status: "Active" },
-  { id: "TP-005", routeId: "TR-002", pickupName: "Ramavarappadu", area: "Ramavarappadu", landmark: "Ring Road", sequenceNumber: 2, pickupTime: "07:18", dropTime: "17:30", latitude: 16.5279, longitude: 80.6817, distanceKm: 14, status: "Active" },
-  { id: "TP-006", routeId: "TR-003", pickupName: "Poranki", area: "Poranki", landmark: "Center", sequenceNumber: 1, pickupTime: "07:15", dropTime: "17:40", latitude: 16.4741, longitude: 80.7129, distanceKm: 16, status: "Active" },
-  { id: "TP-007", routeId: "TR-003", pickupName: "Tadigadapa", area: "Tadigadapa", landmark: "Municipal Office", sequenceNumber: 2, pickupTime: "07:28", dropTime: "17:25", latitude: 16.4867, longitude: 80.7001, distanceKm: 9, status: "Active" },
-  { id: "TP-008", routeId: "TR-004", pickupName: "Ibrahimpatnam", area: "Ibrahimpatnam", landmark: "Ferry Road", sequenceNumber: 1, pickupTime: "06:50", dropTime: "18:00", latitude: 16.5883, longitude: 80.5282, distanceKm: 24, status: "Inactive" },
+  { id: "TP-001", routeId: "TR-001", pickupName: "Benz Circle", area: "Benz Circle", landmark: "Trendset Mall", sequenceNumber: 1, pickupTime: "07:10", dropTime: "17:35", latitude: 16.5018, longitude: 80.648, distanceKm: 18, monthlyFee: 2520, status: "Active" },
+  { id: "TP-002", routeId: "TR-001", pickupName: "MG Road", area: "Labbipet", landmark: "PVP Square", sequenceNumber: 2, pickupTime: "07:20", dropTime: "17:25", latitude: 16.5091, longitude: 80.6429, distanceKm: 12, monthlyFee: 1680, status: "Active" },
+  { id: "TP-003", routeId: "TR-001", pickupName: "Governorpet", area: "Governorpet", landmark: "Old Bus Stand", sequenceNumber: 3, pickupTime: "07:32", dropTime: "17:15", latitude: 16.515, longitude: 80.6292, distanceKm: 7, monthlyFee: 980, status: "Active" },
+  { id: "TP-004", routeId: "TR-002", pickupName: "Gannavaram", area: "Gannavaram", landmark: "Airport Junction", sequenceNumber: 1, pickupTime: "06:55", dropTime: "17:55", latitude: 16.5409, longitude: 80.8025, distanceKm: 28, monthlyFee: 7140, status: "Active" },
+  { id: "TP-005", routeId: "TR-002", pickupName: "Ramavarappadu", area: "Ramavarappadu", landmark: "Ring Road", sequenceNumber: 2, pickupTime: "07:18", dropTime: "17:30", latitude: 16.5279, longitude: 80.6817, distanceKm: 14, monthlyFee: 5220, status: "Active" },
+  { id: "TP-006", routeId: "TR-003", pickupName: "Poranki", area: "Poranki", landmark: "Center", sequenceNumber: 1, pickupTime: "07:15", dropTime: "17:40", latitude: 16.4741, longitude: 80.7129, distanceKm: 16, monthlyFee: 2080, status: "Active" },
+  { id: "TP-007", routeId: "TR-003", pickupName: "Tadigadapa", area: "Tadigadapa", landmark: "Municipal Office", sequenceNumber: 2, pickupTime: "07:28", dropTime: "17:25", latitude: 16.4867, longitude: 80.7001, distanceKm: 9, monthlyFee: 1170, status: "Active" },
+  { id: "TP-008", routeId: "TR-004", pickupName: "Ibrahimpatnam", area: "Ibrahimpatnam", landmark: "Ferry Road", sequenceNumber: 1, pickupTime: "06:50", dropTime: "18:00", latitude: 16.5883, longitude: 80.5282, distanceKm: 24, monthlyFee: 5600, status: "Inactive" },
 ];
 
 export const transportVehicles = [
@@ -238,9 +238,9 @@ export const transportBusAttendants = [
 ];
 
 export const transportVehicleAssignments = [
-  { id: "TVA-001", vehicleId: "TV-001", vehicleNumber: "AP 16 TC 2401", routeId: "TR-001", routeName: "Main Campus - Benz Circle", driverId: "TD-001", driverName: "Ramesh Kumar", attendantId: "TA-001", attendantName: "Lakshmi Priya", shift: "Morning & Evening", effectiveFrom: "2026-06-01", status: "Active" },
-  { id: "TVA-002", vehicleId: "TV-002", vehicleNumber: "AP 16 TC 2402", routeId: "TR-002", routeName: "Main Campus - Gannavaram", driverId: "TD-002", driverName: "Shaik Ahmed", attendantId: "TA-002", attendantName: "Suresh Naidu", shift: "Morning & Evening", effectiveFrom: "2026-06-01", status: "Active" },
-  { id: "TVA-003", vehicleId: "TV-003", vehicleNumber: "AP 16 TC 2403", routeId: "TR-003", routeName: "Main Campus - Poranki", driverId: "TD-003", driverName: "Kiran Babu", attendantId: "TA-003", attendantName: "Mary Joseph", shift: "Morning", effectiveFrom: "2026-06-10", status: "Maintenance" },
+  { id: "TVA-001", vehicleId: "TV-001", vehicleNumber: "AP 16 TC 2401", routeId: "TR-001", routeName: "Main Campus - Benz Circle", driverId: "TD-001", driverName: "Ramesh Kumar", attendantId: "TA-001", attendantName: "Lakshmi Priya", shift: "Morning & Evening", morningTripTime: "07:05", eveningTripTime: "16:35", effectiveFrom: "2026-06-01", status: "Active" },
+  { id: "TVA-002", vehicleId: "TV-002", vehicleNumber: "AP 16 TC 2402", routeId: "TR-002", routeName: "Main Campus - Gannavaram", driverId: "TD-002", driverName: "Shaik Ahmed", attendantId: "TA-002", attendantName: "Suresh Naidu", shift: "Morning & Evening", morningTripTime: "06:55", eveningTripTime: "16:30", effectiveFrom: "2026-06-01", status: "Active" },
+  { id: "TVA-003", vehicleId: "TV-003", vehicleNumber: "AP 16 TC 2403", routeId: "TR-003", routeName: "Main Campus - Poranki", driverId: "TD-003", driverName: "Kiran Babu", attendantId: "TA-003", attendantName: "Mary Joseph", shift: "Morning", morningTripTime: "07:15", eveningTripTime: "", effectiveFrom: "2026-06-10", status: "Inactive" },
 ];
 
 export const transportStudentAssignments = [
@@ -261,13 +261,6 @@ export const transportMaintenance = [
   { id: "TM-001", vehicleId: "TV-003", vehicleNumber: "AP 16 TC 2403", category: "Preventive Service", serviceDate: "2026-09-12", nextDueDate: "2026-10-15", cost: 8500, vendor: "Metro Auto Care Center", status: "In Progress", notes: "Engine oil, brake pad and tyre rotation." },
   { id: "TM-002", vehicleId: "TV-001", vehicleNumber: "AP 16 TC 2401", category: "Fitness Check", serviceDate: "2026-08-22", nextDueDate: "2027-02-22", cost: 3200, vendor: "Sri Durga Motors", status: "Completed", notes: "Routine safety inspection completed." },
   { id: "TM-003", vehicleId: "TV-002", vehicleNumber: "AP 16 TC 2402", category: "AC Service", serviceDate: "2026-08-29", nextDueDate: "2026-11-29", cost: 6200, vendor: "Cool Ride Services", status: "Completed", notes: "Cabin filter and compressor check." },
-];
-
-export const transportFeeConfigs = [
-  { id: "TFC-001", routeId: "TR-001", routeName: "Main Campus - Benz Circle", minDistanceKm: 3, baseFare: 1800, ratePerKm: 140, acSurcharge: 0, billingCycle: "Monthly", status: "Active" },
-  { id: "TFC-002", routeId: "TR-002", routeName: "Main Campus - Gannavaram", minDistanceKm: 5, baseFare: 2200, ratePerKm: 155, acSurcharge: 850, billingCycle: "Monthly", status: "Active" },
-  { id: "TFC-003", routeId: "TR-003", routeName: "Main Campus - Poranki", minDistanceKm: 3, baseFare: 1700, ratePerKm: 130, acSurcharge: 0, billingCycle: "Monthly", status: "Active" },
-  { id: "TFC-004", routeId: "TR-004", routeName: "Main Campus - Ibrahimpatnam", minDistanceKm: 4, baseFare: 2000, ratePerKm: 150, acSurcharge: 650, billingCycle: "Monthly", status: "Inactive" },
 ];
 
 export const transportGpsSnapshots = [

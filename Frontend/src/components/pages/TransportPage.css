@@ -184,6 +184,35 @@
   font-size: 13px;
 }
 
+.cms-transport-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+
+.cms-transport-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--cms-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.cms-transport-filter select,
+.cms-transport-filter input {
+  min-height: 34px;
+  min-width: 132px;
+  padding: 6px 9px;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  font-size: 13px;
+}
+
 .cms-transport-toolbar-actions,
 .cms-transport-actions {
   display: inline-flex;
@@ -205,6 +234,29 @@
   padding: 24px !important;
   color: var(--cms-muted);
   text-align: center;
+}
+
+.cms-transport-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  color: var(--cms-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.cms-transport-pagination > div {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cms-transport-pagination .cms-btn {
+  min-height: 32px;
+  padding: 6px 12px;
 }
 
 .cms-transport-trip-list,
@@ -381,8 +433,15 @@
   }
 
   .cms-transport-toolbar,
+  .cms-transport-filters,
   .cms-transport-toolbar-actions {
     align-items: stretch;
+    width: 100%;
+  }
+
+  .cms-transport-filter,
+  .cms-transport-filter select,
+  .cms-transport-filter input {
     width: 100%;
   }
 
