@@ -139,6 +139,8 @@ export default function AppRoutes() {
         <Route path="/dashboard/faculty-allocation" element={<Navigate to="/dashboard/faculty" replace />} />
         <Route path="/dashboard/admission" element={<StudentAdmissionPage />} />
         <Route path="/dashboard/section-allocation" element={<SectionAllocationPage />} />
+        <Route path="/dashboard/section-allocation/allocated" element={<SectionAllocationPage />} />
+        <Route path="/dashboard/section-allocation/roll-numbers" element={<SectionAllocationPage />} />
         <Route path="/dashboard/students" element={<StudentManagementPage />} />
         <Route path="/dashboard/students/:id/enroll" element={<StudentEnrollmentRoute />} />
         <Route path="/dashboard/timetable" element={<TimetablePage />} />
