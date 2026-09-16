@@ -221,6 +221,67 @@
   flex-wrap: wrap;
 }
 
+.cms-transport-report-toolbar {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+}
+
+.cms-transport-report-toolbar .cms-transport-search {
+  flex: 0 0 220px;
+  min-width: 220px;
+}
+
+.cms-transport-report-toolbar .cms-transport-filters {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+}
+
+.cms-transport-report-toolbar .cms-transport-filter {
+  white-space: nowrap;
+}
+
+.cms-transport-report-toolbar .cms-transport-filter select,
+.cms-transport-report-toolbar .cms-transport-filter input {
+  min-width: 118px;
+  max-width: 150px;
+}
+
+.cms-transport-report-toolbar .cms-transport-toolbar-actions {
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+
+.cms-transport-report-toolbar-compact {
+  gap: 8px;
+}
+
+.cms-transport-report-toolbar-compact .cms-transport-search {
+  flex-basis: 180px;
+  min-width: 180px;
+  padding-inline: 9px;
+}
+
+.cms-transport-report-toolbar-compact .cms-transport-filters {
+  gap: 6px;
+  min-width: 0;
+}
+
+.cms-transport-report-toolbar-compact .cms-transport-filter {
+  gap: 5px;
+}
+
+.cms-transport-report-toolbar-compact .cms-transport-filter select,
+.cms-transport-report-toolbar-compact .cms-transport-filter input {
+  min-width: 104px;
+  max-width: 124px;
+  padding-inline: 7px;
+}
+
+.cms-transport-report-toolbar-compact .cms-transport-toolbar-actions {
+  flex: 0 0 auto;
+  margin-left: 4px;
+}
+
 .cms-transport-actions .cms-action-btn.danger {
   color: var(--cms-red);
 }
@@ -437,6 +498,27 @@
   .cms-transport-toolbar-actions {
     align-items: stretch;
     width: 100%;
+  }
+
+  .cms-transport-report-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .cms-transport-report-toolbar .cms-transport-search,
+  .cms-transport-report-toolbar .cms-transport-filters,
+  .cms-transport-report-toolbar .cms-transport-toolbar-actions {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .cms-transport-report-toolbar .cms-transport-filters {
+    flex-wrap: wrap;
+  }
+
+  .cms-transport-report-toolbar .cms-transport-filter select,
+  .cms-transport-report-toolbar .cms-transport-filter input {
+    max-width: none;
   }
 
   .cms-transport-filter,

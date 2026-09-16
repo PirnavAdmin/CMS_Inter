@@ -148,9 +148,9 @@ function StatCard({ icon: Icon, label, value, hint, tone = "blue" }) {
   );
 }
 
-function Toolbar({ query, onQuery, filters, onAdd, onExport, addLabel = "Add Record" }) {
+function Toolbar({ query, onQuery, filters, onAdd, onExport, addLabel = "Add Record", className = "" }) {
   return (
-    <div className="cms-transport-toolbar">
+    <div className={`cms-transport-toolbar ${className}`.trim()}>
       <label className="cms-transport-search">
         <Search size={16} />
         <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search transport records..." />
@@ -188,6 +188,7 @@ function TableSection({
   onDelete,
   onView,
   addLabel,
+  toolbarClassName,
 }) {
   const [page, setPage] = useState(1);
   const filterKey = JSON.stringify(filterValues);
@@ -243,6 +244,7 @@ function TableSection({
           addLabel={addLabel}
           onAdd={onAdd}
           onExport={() => exportRows(`${title.toLowerCase().replace(/\s+/g, "-")}.csv`, visibleRows, columns)}
+          className={toolbarClassName}
         />
         <div className="cms-table-wrap">
           <table className="cms-table cms-transport-table">
@@ -962,6 +964,7 @@ export default function TransportPage() {
         (!needsStatus || matchesReportStatus(row))
       );
     };
+    const needsCompactReportToolbar = activeReportTab === "trip-reports" || activeReportTab === "student-transport-reports";
 
     return (
       <div className="cms-transport-stack">
@@ -975,12 +978,14 @@ export default function TransportPage() {
           }}
           compact
         />
-        <div className="cms-transport-stat-grid">
-          <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(totalTransportRevenue)} hint="from active assignments" tone="green" />
-          <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(activeMaintenanceCost)} hint="current mock logs" tone="amber" />
-          <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0))} hint="total seats" tone="blue" />
-          <StatCard icon={UserCheck} label="Drivers & Attendants" value={drivers.length + attendants.length} hint="staff profiles" tone="violet" />
-        </div>
+        {activeReportTab === "transport-dashboard-report" ? (
+          <div className="cms-transport-stat-grid">
+            <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(totalTransportRevenue)} hint="from active assignments" tone="green" />
+            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(activeMaintenanceCost)} hint="current mock logs" tone="amber" />
+            <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0))} hint="total seats" tone="blue" />
+            <StatCard icon={UserCheck} label="Drivers & Attendants" value={drivers.length + attendants.length} hint="staff profiles" tone="violet" />
+          </div>
+        ) : null}
         <TableSection
           title="Transport Report"
           subtitle="Mock report data derived from the selected transport records."
@@ -992,6 +997,7 @@ export default function TransportPage() {
           filterValues={reportFilters}
           onFilterChange={(name, value) => setReportFilters((current) => ({ ...current, [name]: value }))}
           rowFilter={filterReportRow}
+          toolbarClassName={`cms-transport-report-toolbar${needsCompactReportToolbar ? " cms-transport-report-toolbar-compact" : ""}`}
           onExport={() => exportRows("transport-report.csv", reportRows.filter((row) => textMatch(row, query)), reportColumns)}
         />
       </div>
