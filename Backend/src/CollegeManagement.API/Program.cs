@@ -472,6 +472,24 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+if (args.Contains("--trace-detailed"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var tracer = new LiveVerificationDetailedTrace(connStr!, app.Services);
+    await tracer.RunDetailedTraceAsync();
+    Environment.Exit(0);
+    return;
+}
+
+if (args.Contains("--verify-reports-live"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var runner = new LiveReportsVerificationRunner(connStr!, app.Services);
+    var pass = await runner.RunAllTestsAsync();
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
 if (args.Contains("--reverify-senior-qa"))
 {
     var connStr = builder.Configuration.GetConnectionString("DefaultConnection");

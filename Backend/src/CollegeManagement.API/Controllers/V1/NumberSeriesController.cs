@@ -13,7 +13,6 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/settings/number-series")]
-    [Route("api/v{version:apiVersion}/number-series")]
     [EnableCors("AllowFrontend")]
     [Produces("application/json")]
     [Authorize]
@@ -31,6 +30,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Returns list of configurations for all supported number series.
         /// </summary>
         [HttpGet]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<NumberSeriesResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll()
         {
@@ -44,6 +44,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Supports code (e.g., EMPLOYEE_ID) or slug (e.g., employee-id, admission-no, certificate-number, receipt-no).
         /// </summary>
         [HttpGet("{seriesCode}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetByCode(string seriesCode)
@@ -61,6 +62,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates configuration: prefix, formatPattern, numberLength, startNumber, description.
         /// </summary>
         [HttpPut("{seriesCode}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -85,9 +87,10 @@ namespace CollegeManagement.API.Controllers.V1
         /// Executes thread-safe atomic sequence increment and returns the newly generated sequence ID.
         /// </summary>
         [HttpPost("{seriesCode}/generate-next")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(GenerateNumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GenerateNext(string seriesCode, [FromBody] GenerateNumberSeriesRequestDto? context = null)
+        public async Task<IActionResult> GenerateNext(string seriesCode, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateNumberSeriesRequestDto? context = null)
         {
             var result = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, context);
             if (result == null)
@@ -103,7 +106,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// Dynamic on-the-fly preview calculation for UI typing without persisting changes.
         /// </summary>
         [HttpGet("{seriesCode}/preview")]
-        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetPreview(
             string seriesCode,
             [FromQuery] string? pattern = null,
@@ -111,7 +115,7 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? prefix = null)
         {
             var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix);
-            return Ok(new { seriesCode, preview });
+            return Ok(preview);
         }
     }
 }

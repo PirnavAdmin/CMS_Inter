@@ -144,7 +144,9 @@ export function Field({ field = {}, value, error, onChange, onBlur }) {
       </label>
       {type === "select" ? (
         <select id={id} name={name} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
-          <option value="">Select {label}</option>
+          {!normalizedOptions.some((o) => o.value === "" || o.value === null) ? (
+            <option value="">Select {label}</option>
+          ) : null}
           {normalizedOptions.map((o, index) => (
             <option key={`${o.value}-${index}`} value={o.value}>{o.label}</option>
           ))}
