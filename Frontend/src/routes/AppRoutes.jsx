@@ -15,6 +15,7 @@ import StudentAdmissionPage from "@/components/pages/StudentAdmissionPage.jsx";
 import StudentManagementPage, { pageConfig as studentManagementConfig } from "@/components/pages/StudentManagementPage.jsx";
 import SectionAllocationPage from "@/components/pages/SectionAllocationPage.jsx";
 import TimetablePage from "@/components/pages/TimetablePage.jsx";
+import HolidayManagementPage from "@/components/pages/HolidayManagementPage.jsx";
 import AttendancePage from "@/components/pages/AttendancePage.jsx";
 import AttendanceOverviewPage from "@/components/pages/AttendanceOverviewPage.jsx";
 import LeaveManagementPage from "@/components/pages/LeaveManagementPage.jsx";
@@ -144,6 +145,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/students" element={<StudentManagementPage />} />
         <Route path="/dashboard/students/:id/enroll" element={<StudentEnrollmentRoute />} />
         <Route path="/dashboard/timetable" element={<TimetablePage />} />
+        <Route path="/dashboard/holidays" element={<HolidayManagementPage />} />
         <Route path="/dashboard/timetable/setup" element={<TimetablePage screen="setup" />} />
         <Route path="/dashboard/timetable/draft" element={<TimetablePage screen="draft" />} />
         <Route path="/dashboard/timetable/generate" element={<TimetablePage screen="generate" />} />
