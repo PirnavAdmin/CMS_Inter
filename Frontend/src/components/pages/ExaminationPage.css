@@ -3,15 +3,6 @@
    Theme: Unified Olive Glass Design System
    ============================================================ */
 
-:root {
-  --cms-primary: #6F8400;
-  --cms-primary-dark: #566900;
-  --cms-primary-soft: #F1F4E2;
-  --cms-surface: #ffffff;
-  --cms-text: #10203c;
-  --cms-muted: #7B8275;
-  --cms-border: #e4e8f0;
-}
 
 .cms-form-page.examination-form-page {
   width: 100%;
@@ -145,21 +136,22 @@
 
 .exam-table-toolbar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 20px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--cms-border);
-  flex-wrap: wrap;
-  overflow: visible;
+  flex-wrap: nowrap;
+  overflow-x: auto;
 }
 
 .exam-toolbar-filters {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   overflow: visible;
+  flex-shrink: 0;
 }
 
 .exam-toolbar-select {
@@ -167,7 +159,7 @@
   display: grid;
   gap: 6px;
   width: 175px;
-  min-width: 0;
+  min-width: 140px;
 }
 
 .exam-toolbar-actions {
@@ -178,11 +170,17 @@
   margin: 0;
 }
 
+.exam-refresh-btn,
 .exam-export-btn,
 .exam-header-create-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 36px;
   padding: 7px 14px;
   font-size: 13px;
+  white-space: nowrap;
 }
 
 .exam-back-text-link {
@@ -231,8 +229,9 @@
 }
 
 .exam-search {
-  width: 240px;
-  min-width: 0;
+  flex: 1;
+  max-width: 360px;
+  min-width: 180px;
 }
 
 .exam-search input {
@@ -987,12 +986,20 @@
   left: 0;
   right: 0;
   z-index: 100000;
-  background: var(--cms-surface);
+  background-color: var(--cms-surface, #ffffff) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
   border: 1px solid var(--cms-border);
   border-radius: 12px;
-  box-shadow: var(--cms-shadow-lg, 0 14px 35px rgba(15, 23, 42, 0.25));
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.25), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
   overflow: hidden;
   min-width: 160px;
+}
+
+[data-theme="dark"] .cms-searchable-select-dropdown,
+.dark .cms-searchable-select-dropdown {
+  background-color: var(--cms-surface, #1e293b) !important;
+  opacity: 1 !important;
 }
 
 .cms-searchable-select-search {
@@ -1001,7 +1008,14 @@
   padding: 8px 12px;
   border-bottom: 1px solid var(--cms-border);
   gap: 8px;
-  background: var(--cms-subtle);
+  background-color: var(--cms-subtle, #f8fafc) !important;
+  opacity: 1 !important;
+}
+
+[data-theme="dark"] .cms-searchable-select-search,
+.dark .cms-searchable-select-search {
+  background-color: var(--cms-subtle, #0f172a) !important;
+  opacity: 1 !important;
 }
 
 .cms-searchable-select-search input {
@@ -1017,6 +1031,14 @@
   max-height: 180px;
   overflow-y: auto;
   scrollbar-width: thin;
+  background-color: var(--cms-surface, #ffffff) !important;
+  opacity: 1 !important;
+}
+
+[data-theme="dark"] .cms-searchable-select-options,
+.dark .cms-searchable-select-options {
+  background-color: var(--cms-surface, #1e293b) !important;
+  opacity: 1 !important;
 }
 
 .cms-searchable-select-option {
@@ -1028,6 +1050,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  background-color: inherit;
+  opacity: 1 !important;
 }
 
 .cms-searchable-select-option:hover {
@@ -1235,3 +1259,47 @@
   border-color: #fed7aa;
   background: var(--cms-amber-soft, #fdf3e0);
 }
+
+.exam-group-readiness-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 8px;
+  transition: all 0.2s ease;
+}
+
+.exam-group-readiness-badge.ready {
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary-dark, #566900);
+  border: 1px solid var(--cms-primary, #6f8400);
+}
+
+.exam-group-readiness-badge.pending {
+  background: var(--cms-subtle, #f8fafc);
+  color: var(--cms-muted, #64748b);
+  border: 1px solid var(--cms-border, #e2e8f0);
+}
+
+.exam-custom-input-wrap {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Locked / Read-Only Searchable Select Trigger Styling */
+.cms-searchable-select-trigger:disabled {
+  opacity: 0.85;
+  cursor: not-allowed;
+  background: var(--cms-subtle, #f8fafc);
+  border-color: var(--cms-border, #e2e8f0);
+  box-shadow: none;
+}
+
+.cms-searchable-select-trigger:disabled:hover {
+  border-color: var(--cms-border, #e2e8f0);
+}

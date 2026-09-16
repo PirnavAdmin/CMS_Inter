@@ -105,6 +105,7 @@
   color: var(--cms-text, #171a17);
 }
 
+.cms-independent-tab-btn.active,
 .cms-independent-tab-btn.cms-active {
   color: #ffffff;
   background: var(--cms-primary);
@@ -482,7 +483,7 @@
 .cms-entry-select-compact {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
   flex: 0 1 200px;
   max-width: 220px;
   min-width: 160px;
@@ -497,7 +498,7 @@
 /* ---------- Workspace & Toolbar Layout ---------- */
 .cms-workspace-actions {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
@@ -509,6 +510,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap;
+  height: 34px;
 }
 
 .cms-file-input-hidden {
@@ -588,6 +590,67 @@
   flex-wrap: wrap;
 }
 
+/* ---------- Evaluation Table Toolbar & Inner Sub-Tabs ---------- */
+.cms-eval-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cms-eval-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cms-subtab-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--cms-surface-subtle, #f5f6f0);
+  border: 1px solid var(--cms-border, #e2e4d8);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.cms-subtab-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--cms-muted, #5c645b);
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.cms-subtab-pill-btn:hover:not(.active) {
+  color: var(--cms-text, #171a17);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.cms-subtab-pill-btn.active {
+  background: var(--cms-primary, #6f8400);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.cms-eval-search {
+  min-width: 240px;
+  max-width: 340px;
+  flex: 1;
+}
+
 .cms-search-wrap {
   position: relative;
   min-width: 240px;
@@ -635,28 +698,28 @@
 .cms-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.83rem;
+  font-size: 0.8rem;
 }
 
 .cms-table th {
   background: var(--cms-subtle, #f7f8ef);
   color: var(--cms-muted, #7b8275);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  padding: 10px 12px;
+  letter-spacing: 0.03em;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--cms-border, #e6e7de);
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 .cms-table td {
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--cms-border, #e6e7de);
   color: var(--cms-text, #171a17);
   vertical-align: middle;
   white-space: nowrap;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .cms-table tr:last-child td {
@@ -665,6 +728,34 @@
 
 .cms-table tbody tr:hover {
   background-color: var(--cms-hover, #f1f4e2);
+}
+
+/* ---------- Evaluation Tables: Compact font and padding to eliminate horizontal scroll ---------- */
+.cms-table-eval {
+  font-size: 0.76rem;
+}
+
+.cms-table-eval th {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 7px 6px;
+}
+
+.cms-table-eval td {
+  padding: 7px 6px;
+  font-size: 11.5px;
+}
+
+.cms-table-eval .cms-badge-status,
+.cms-table-eval .cms-result {
+  padding: 2px 7px;
+  font-size: 0.68rem;
+}
+
+.cms-table-eval .cms-action-btn {
+  width: 28px;
+  height: 28px;
 }
 
 .cms-number-input {
@@ -1054,12 +1145,14 @@
   .cms-context-summary,
   .cms-entry-toolbar,
   .cms-table-toolbar,
+  .cms-eval-table-toolbar,
   .cms-pagination {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .cms-search-wrap {
+  .cms-search-wrap,
+  .cms-eval-search {
     width: 100%;
     max-width: none;
     min-width: 0;
@@ -1094,4 +1187,297 @@
   .cms-modal-body {
     overflow-y: auto;
   }
+}
+
+/* ---------- Workspace Loading State & Spinners ---------- */
+.cms-workspace-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--cms-primary-border, #e2e8d0);
+  border-radius: 8px;
+  background: var(--cms-primary-soft, #f1f4e2);
+  color: var(--cms-primary, #6f8400);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.cms-workspace-loading .cms-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2.5px solid var(--cms-primary-border, #e2e8d0);
+  border-top-color: var(--cms-primary, #6f8400);
+  animation: cms-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+.cms-inline-loader {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 0;
+  color: var(--cms-muted, #7b8275);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.cms-inline-loader .cms-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2.5px solid var(--cms-border, #e6e7de);
+  border-top-color: var(--cms-primary, #6f8400);
+  animation: cms-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes cms-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Table Center Alignment Utilities ---------- */
+.cms-th-center {
+  text-align: center !important;
+}
+
+.cms-cell-center {
+  text-align: center !important;
+}
+
+.cms-cell-center input[type="checkbox"] {
+  margin: 0 auto;
+  display: block;
+}
+
+/* ---------- Compact Selection Labels in Marks Entry ---------- */
+.cms-entry-selects .cms-field-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.2px;
+  margin-bottom: 2px;
+  color: var(--cms-muted, #7b8275);
+  font-weight: 600;
+}
+
+/* ---------- Dynamic Pagination Controls (Ref Images 3 & 4) ---------- */
+.cms-sec-record-summary {
+  font-size: 0.8rem;
+  color: var(--cms-muted, #7b8275);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cms-sec-page-size-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cms-sec-page-size-label {
+  font-size: 0.8rem;
+  color: var(--cms-muted, #7b8275);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cms-sec-page-size-select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 6px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.cms-sec-page-size-select:focus {
+  border-color: var(--cms-primary);
+}
+
+.cms-sec-page-size-custom-input {
+  width: 52px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  box-sizing: border-box;
+  outline: none;
+}
+
+.cms-sec-page-size-custom-input:focus {
+  border-color: var(--cms-primary);
+}
+
+/* ---------- Bulk Import Modal (Ref Image 5) ---------- */
+.cms-import-modal {
+  max-width: 580px;
+  width: 100%;
+}
+
+.cms-room-template-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.cms-room-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 20px;
+  border: 1.5px dashed var(--cms-primary-border, #d5dcc2);
+  border-radius: 12px;
+  background: var(--cms-subtle, #f8faf2);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.cms-room-dropzone:hover,
+.cms-room-dropzone.is-dragging {
+  border-color: var(--cms-primary, #6f8400);
+  background: var(--cms-hover, #f1f4e2);
+}
+
+.cms-room-dropzone-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--cms-primary-soft, #eef3d8);
+  color: var(--cms-primary, #6f8400);
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+}
+
+.cms-room-dropzone-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--cms-text, #171a17);
+  margin-bottom: 4px;
+}
+
+.cms-room-dropzone-subtitle {
+  font-size: 11.5px;
+  color: var(--cms-muted, #7b8275);
+}
+
+.cms-room-file-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--cms-primary-border, #d5dcc2);
+  background: var(--cms-surface, #ffffff);
+  gap: 12px;
+}
+
+.cms-room-file-card-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cms-room-file-card-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cms-room-file-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text, #171a17);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cms-room-file-meta {
+  font-size: 11.5px;
+  color: var(--cms-muted, #7b8275);
+}
+
+.cms-room-verify-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.cms-room-summary-pill {
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--cms-subtle, #f7f8ef);
+  border: 1px solid var(--cms-border, #e6e7de);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.cms-room-summary-pill.valid {
+  border-color: rgba(46, 139, 87, 0.3);
+  background: var(--cms-green-soft, #e8f5ec);
+  color: var(--cms-green, #2e8b57);
+}
+
+.cms-room-summary-pill.invalid {
+  border-color: rgba(196, 61, 61, 0.3);
+  background: var(--cms-red-soft, #fbeaea);
+  color: var(--cms-red, #c43d3d);
+}
+
+.cms-room-summary-pill.duplicate {
+  border-color: rgba(185, 120, 19, 0.3);
+  background: var(--cms-amber-soft, #fff4dd);
+  color: var(--cms-amber, #b97813);
+}
+
+.cms-room-summary-pill strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.cms-room-summary-pill span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cms-room-error-log {
+  margin-top: 10px;
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--cms-red);
+  border-radius: 8px;
+  background: var(--cms-red-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cms-room-error-item {
+  font-size: 11.5px;
+  color: var(--cms-red);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
 }
