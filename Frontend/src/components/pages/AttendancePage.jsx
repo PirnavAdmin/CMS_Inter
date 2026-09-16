@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CalendarDays, ChevronLeft, ChevronRight, ClipboardClock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
+import { CalendarClock, CalendarDays, ClipboardClock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Loader, Modal, Toast } from "@/components/common/Ui.jsx";
@@ -40,15 +40,7 @@ function AttendancePagination({ page, totalRows, onPageChange }) {
  const currentPage = Math.min(page, totalPages);
  const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
  const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
- const pages = [...new Set([1, currentPage - 1, currentPage, currentPage + 1, totalPages])]
-   .filter((value) => value >= 1 && value <= totalPages)
-   .sort((a, b) => a - b);
- const controls = [];
- pages.forEach((pageNumber, index) => {
-   if (index && pageNumber - pages[index - 1] > 1) controls.push(<span className="att-page-ellipsis" key={`gap-${pageNumber}`}>...</span>);
-   controls.push(<button type="button" className={`att-page-number ${pageNumber === currentPage ? "is-active" : ""}`} aria-current={pageNumber === currentPage ? "page" : undefined} key={pageNumber} onClick={() => onPageChange(pageNumber)}>{pageNumber}</button>);
- });
- return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start} to {end} of {totalRows} records</span><div className="att-pagination-controls"><button type="button" className="att-page-arrow" aria-label="Previous page" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}><ChevronLeft size={16} /></button>{controls}<button type="button" className="att-page-arrow" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}><ChevronRight size={16} /></button></div></nav>;
+ return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start}-{end} of {totalRows} records</span><div className="att-pagination-controls"><button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button></div></nav>;
 }
 
 export default function AttendancePage() { const { area = "student" } = useParams(), staff = area === "staff"; const [notice, setNotice] = useState({ message: "", type: "success" }), [importOpen, setImportOpen] = useState(false); const say = (message, type = "success") => setNotice({ message, type }); return <><DashboardLayout title={staff ? "Staff Attendance" : "Student Attendance"} subtitle={staff ? "View and manage teaching and non-teaching staff attendance" : "View and manage student attendance records"} breadcrumb={["Operations", "Attendance"]} actions={<button type="button" className="cms-btn cms-btn-primary attendance-import-trigger" onClick={() => setImportOpen(true)}><Upload size={16} /> Import Attendance</button>}><main className="attendance-module"><Screen key={staff ? "staff" : "student"} staff={staff} say={say} /></main></DashboardLayout>{importOpen && <AttendanceImportModal staff={staff} say={say} onClose={() => setImportOpen(false)} />}<Toast message={notice.message} type={notice.type} onClose={() => setNotice({ message: "", type: "success" })} /></>; }
@@ -255,6 +247,7 @@ function Screen({ staff = false, say }) {
  const totalPages = Math.max(1, Math.ceil(visible.length / ATTENDANCE_PAGE_SIZE));
  const currentPage = Math.min(page, totalPages);
  const pagedRows = visible.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
+ useEffect(() => { setPage(1); }, [rows]);
  useEffect(() => { setPage((current) => Math.min(current, totalPages)); }, [totalPages]);
  return <><Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} /><AttendanceViewSection view={f.view} update={switchView} staff={staff} />{busy && !loaded ? <Loader label="Loading attendance..." /> : null}{loaded && (f.view === "Monthly Report" ? <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} /> : !staff && f.view === "Defaulters" ? <Defaulters rows={rows} /> : <>{staff ? <StaffSummary rows={visible} /> : <StudentSummary rows={visible} />}<section className={`att-card att-table-card ${staff ? "att-staff-table-card" : ""}`}><div className={`att-student-search att-records-search-toolbar ${staff ? "att-staff-table-toolbar" : ""}`}><div className="att-student-search-box"><Search3DIcon size={18} /><input type="search" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder={staff ? "Search by staff name or staff ID..." : "Search by student name, roll no. or admission no..."} /></div>{staff ? <button type="button" className="cms-btn cms-btn-ghost att-staff-export" disabled={busy} onClick={() => exportReport("excel")}><Download size={16} /> Export</button> : null}</div><DailyTable rows={pagedRows} staff={staff} emptyMessage={!staff && normalizedSearch ? "No students found matching your search." : undefined} edit={(record) => setEditing(staff ? { record, status: status(record.status), inTime: get(record, "inTime") || "", outTime: get(record, "outTime") || "", remarks: get(record, "remarks", "remark") || "" } : { record, morning: status(record.morningStatus), afternoon: status(record.afternoonStatus), remarks: get(record, "remarks", "remark") || "" })} view={(record) => { const personId = staff ? get(record, "facultyId", "staffId", "id") : get(record, "studentId", "id"); if (personId != null) navigate(`/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`); }} /><AttendancePagination page={currentPage} totalRows={visible.length} onPageChange={setPage} /></section></>) }{editing ? <Edit editing={editing} setEditing={setEditing} staff={staff} date={f.date} save={save} close={() => setEditing(null)} busy={busy} /> : null}</>;
 }
@@ -292,7 +285,7 @@ const staffSummaryItems = [
   ["Total Staff", Users],
   ["Present", UserCheck],
   ["Absent", UserX],
-  ["Leave", Coffee],
+  ["Leave", CalendarClock],
   ["Late", ClipboardClock],
 ];
 function StaffSummary({ rows }) {

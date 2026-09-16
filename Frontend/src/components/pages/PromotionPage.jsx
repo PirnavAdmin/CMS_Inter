@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle } from "lucide-react";
+import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, Users, UserCheck, UserX, Megaphone, RotateCcw } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -669,7 +669,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     }
   };
 
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
     setReportLoading(true);
     setError("");
     try {
@@ -687,11 +687,11 @@ export default function PromotionPage({ screen = "promotion" }) {
     } finally {
       setReportLoading(false);
     }
-  };
+  }, [selectedAcademicYearId]);
 
   useEffect(() => {
     if (activeTab === "report" && !reportLoaded) fetchReport();
-  }, [activeTab, reportLoaded]);
+  }, [activeTab, fetchReport, reportLoaded]);
 
   const exportCsv = () => {
     if (!reportRows.length) return;
@@ -782,52 +782,21 @@ export default function PromotionPage({ screen = "promotion" }) {
                 </button>
               </div>
 
-              {/* Context Scope Indicator directly linked to Navbar */}
-              <div style={{ padding: "0 20px 10px 20px" }}>
-                <div style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "12px 18px",
-                  background: "var(--cms-subtle)",
-                  borderRadius: "10px",
-                  border: "1px solid var(--cms-border)",
-                  flexWrap: "wrap",
-                  gap: "12px"
-                }}>
-                  <div style={{ display: "flex", gap: "20px", alignItems: "center", flexWrap: "wrap" }}>
-                    <div>
-                      <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--cms-muted)", display: "block", fontWeight: 600 }}>
-                        Active Board (Navbar)
-                      </span>
-                      <strong style={{ fontSize: "13.5px", color: "var(--cms-text)" }}>
-                        {selectedBoard?.name || selectedBoard?.code || "Board of Intermediate Education, AP"}
-                      </strong>
-                    </div>
-                    <div style={{ width: "1px", height: "24px", background: "var(--cms-border)" }} />
-                    <div>
-                      <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--cms-muted)", display: "block", fontWeight: 600 }}>
-                        Source Academic Year (Navbar)
-                      </span>
-                      <strong style={{ fontSize: "13.5px", color: "var(--cms-primary)" }}>
-                        {selectedAcademicYear?.label || selectedAcademicYear?.name || "2026-2027"}
-                      </strong>
-                    </div>
+              <div className="promotion-context-wrap">
+                <div className="promotion-context-row">
+                  <div className="promotion-context-board">
+                    <span className="promotion-context-label">Board</span>
+                    <strong>{selectedBoard?.name || selectedBoard?.code || "Board of Intermediate Education, AP"}</strong>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <ArrowRight size={18} color="var(--cms-muted)" />
-                    <div>
-                      <span style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--cms-muted)", display: "block", fontWeight: 600 }}>
-                        Destination Academic Year
-                      </span>
-                      <strong style={{
-                        fontSize: "13.5px",
-                        color: nextAcademicYearObj ? "var(--cms-success, #16a34a)" : "var(--cms-danger, #dc2626)"
-                      }}>
-                        {nextAcademicYearObj ? `${nextAcademicYearObj.label} (Auto)` : "2027-2028 (Default)"}
-                      </strong>
-                    </div>
+                  <div className="promotion-context-year">
+                    <span className="promotion-context-label">Source Academic Year</span>
+                    <strong>{selectedAcademicYear?.label || selectedAcademicYear?.name || "2026-2027"}</strong>
+                  </div>
+                  <span className="promotion-context-arrow" aria-hidden="true"><ArrowRight size={18} /></span>
+                  <div className={`promotion-context-year promotion-context-destination${nextAcademicYearObj ? " is-auto" : " is-missing"}`}>
+                    <span className="promotion-context-label">Destination Academic Year</span>
+                    <strong>{nextAcademicYearObj ? `${nextAcademicYearObj.label} (Auto)` : "2027-2028 (Default)"}</strong>
                   </div>
                 </div>
               </div>
@@ -1787,18 +1756,29 @@ function ReportScreen({ reportData, rows, loading, loaded, onLoad, onExportCsv }
   const notEligible = reportData?.notEligibleStudents ?? (total - eligible);
   const promoted = reportData?.promotedStudents ?? rows.filter((r) => /promot/i.test(r.status)).length;
   const rolledBack = reportData?.rolledBackStudents ?? rows.filter((r) => /rollback/i.test(r.status)).length;
+  const summaryCards = [
+    { label: "Total Students", value: total, tone: "total", Icon: Users },
+    { label: "Eligible", value: eligible, tone: "eligible", Icon: UserCheck },
+    { label: "Not Eligible", value: notEligible, tone: "not-eligible", Icon: UserX },
+    { label: "Promoted", value: promoted, tone: "promoted", Icon: Megaphone },
+    { label: "Rolled Back", value: rolledBack, tone: "rolled-back", Icon: RotateCcw },
+  ];
 
   return (
-    <>
-      <section className="promotion-summary">
-        <div><span>Total Students</span><strong>{total}</strong></div>
-        <div><span>Eligible</span><strong>{eligible}</strong></div>
-        <div><span>Not Eligible</span><strong>{notEligible}</strong></div>
-        <div><span>Promoted</span><strong>{promoted}</strong></div>
-        <div><span>Rolled Back</span><strong>{rolledBack}</strong></div>
+    <div className="promotion-report-screen">
+      <section className="promotion-summary promotion-report-summary" aria-label="Promotion report summary">
+        {summaryCards.map(({ label, value, tone, Icon }) => (
+          <article className={`promotion-report-summary-card is-${tone}`} key={label}>
+            <span className="promotion-report-summary-icon" aria-hidden="true"><Icon size={18} /></span>
+            <div>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          </article>
+        ))}
       </section>
 
-      <section className="cms-card promotion-card">
+      <section className="cms-card promotion-card promotion-report-card">
         <div className="cms-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <h2>Promotion Reports</h2>
@@ -1820,6 +1800,6 @@ function ReportScreen({ reportData, rows, loading, loaded, onLoad, onExportCsv }
           <div className="promotion-empty">Load the report to view promotion records.</div>
         )}
       </section>
-    </>
+    </div>
   );
 }
