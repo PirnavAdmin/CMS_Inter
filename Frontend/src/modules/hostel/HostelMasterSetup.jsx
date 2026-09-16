@@ -366,66 +366,66 @@ export default function HostelMasterSetup() {
       subtitle="Manage hostel blocks, room categories, rooms and wardens"
       breadcrumb={["Hostel Management", "Hostel Master Setup"]}
     >
-      <div className="hostel-page-wrapper w-full max-w-full box-border bg-[#f2f6ed] text-[#1f2913]">
+      <div className="hostel-page-wrapper w-full max-w-full box-border">
         {/* Toast Notification Banner */}
         {toastMessage && (
           <div className="pc-toast-banner" role="status">
-            <CheckCircle2 size={18} className="text-sky-600 flex-shrink-0" />
+            <CheckCircle2 size={18} className="text-[var(--cms-primary)] flex-shrink-0" />
             <span>{toastMessage}</span>
           </div>
         )}
 
-        {/* 1. TOP NAVIGATION TAB BAR (Common across all 4 screens) */}
+        {/* 1. TOP NAVIGATION TAB BAR (CMS Pill Bar) */}
         <nav
-          className="w-full max-w-full box-border bg-white p-1.5 md:p-2 rounded-2xl border border-sky-100 mb-5 flex items-center gap-1.5 md:gap-2 shadow-sm"
+          className="cms-card p-1.5 md:p-2 mb-5 flex items-center gap-1.5 flex-wrap"
           aria-label="Hostel Master Navigation Tabs"
         >
           <button
             type="button"
             className={
               activeTab === "blocks"
-                ? "bg-sky-600 text-white font-medium rounded-xl px-3.5 py-2 text-xs shadow-sm border-0 cursor-pointer flex items-center gap-2 transition whitespace-nowrap"
-                : "bg-transparent text-slate-600 hover:text-slate-900 rounded-xl px-3.5 py-2 text-xs font-medium cursor-pointer transition border-0 flex items-center gap-2 whitespace-nowrap"
+                ? "cms-btn cms-btn-primary rounded-xl px-3.5 py-2 text-xs flex items-center gap-2 whitespace-nowrap"
+                : "cms-btn cms-btn-ghost rounded-xl px-3.5 py-2 text-xs text-[var(--cms-muted)] hover:text-[var(--cms-text)] flex items-center gap-2 whitespace-nowrap"
             }
             onClick={() => setActiveTab("blocks")}
           >
-            <Building2 size={16} />
+            <Building2 size={15} />
             <span>Hostel Blocks</span>
           </button>
           <button
             type="button"
             className={
               activeTab === "categories"
-                ? "bg-sky-600 text-white font-medium rounded-xl px-3.5 py-2 text-xs shadow-sm border-0 cursor-pointer flex items-center gap-2 transition whitespace-nowrap"
-                : "bg-transparent text-slate-600 hover:text-slate-900 rounded-xl px-3.5 py-2 text-xs font-medium cursor-pointer transition border-0 flex items-center gap-2 whitespace-nowrap"
+                ? "cms-btn cms-btn-primary rounded-xl px-3.5 py-2 text-xs flex items-center gap-2 whitespace-nowrap"
+                : "cms-btn cms-btn-ghost rounded-xl px-3.5 py-2 text-xs text-[var(--cms-muted)] hover:text-[var(--cms-text)] flex items-center gap-2 whitespace-nowrap"
             }
             onClick={() => setActiveTab("categories")}
           >
-            <Layers size={16} />
+            <Layers size={15} />
             <span>Room Categories</span>
           </button>
           <button
             type="button"
             className={
               activeTab === "allocations"
-                ? "bg-sky-600 text-white font-medium rounded-xl px-3.5 py-2 text-xs shadow-sm border-0 cursor-pointer flex items-center gap-2 transition whitespace-nowrap"
-                : "bg-transparent text-slate-600 hover:text-slate-900 rounded-xl px-3.5 py-2 text-xs font-medium cursor-pointer transition border-0 flex items-center gap-2 whitespace-nowrap"
+                ? "cms-btn cms-btn-primary rounded-xl px-3.5 py-2 text-xs flex items-center gap-2 whitespace-nowrap"
+                : "cms-btn cms-btn-ghost rounded-xl px-3.5 py-2 text-xs text-[var(--cms-muted)] hover:text-[var(--cms-text)] flex items-center gap-2 whitespace-nowrap"
             }
             onClick={() => setActiveTab("allocations")}
           >
-            <BedDouble size={16} />
+            <BedDouble size={15} />
             <span>Rooms &amp; Bed Allocation</span>
           </button>
           <button
             type="button"
             className={
               activeTab === "wardens"
-                ? "bg-sky-600 text-white font-medium rounded-xl px-3.5 py-2 text-xs shadow-sm border-0 cursor-pointer flex items-center gap-2 transition whitespace-nowrap"
-                : "bg-transparent text-slate-600 hover:text-slate-900 rounded-xl px-3.5 py-2 text-xs font-medium cursor-pointer transition border-0 flex items-center gap-2 whitespace-nowrap"
+                ? "cms-btn cms-btn-primary rounded-xl px-3.5 py-2 text-xs flex items-center gap-2 whitespace-nowrap"
+                : "cms-btn cms-btn-ghost rounded-xl px-3.5 py-2 text-xs text-[var(--cms-muted)] hover:text-[var(--cms-text)] flex items-center gap-2 whitespace-nowrap"
             }
             onClick={() => setActiveTab("wardens")}
           >
-            <ShieldCheck size={16} />
+            <ShieldCheck size={15} />
             <span>Warden Allocation</span>
           </button>
         </nav>
@@ -436,42 +436,42 @@ export default function HostelMasterSetup() {
         {activeTab === "blocks" && (
           <div>
             {/* Header Row */}
-            <div className="w-full max-w-full box-border flex items-center justify-between mb-4 gap-3">
-              <div className="text-2xl font-bold text-slate-900 flex items-center gap-2 min-w-0">
-                <Building2 size={24} className="text-sky-600 flex-shrink-0" />
+            <div className="w-full max-w-full box-border flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <div className="text-xl font-bold text-[var(--cms-text)] flex items-center gap-2 min-w-0">
+                <Building2 size={22} className="text-[var(--cms-primary)] flex-shrink-0" />
                 <span>Hostels</span>
               </div>
               <button
                 type="button"
-                className="bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-sm transition cursor-pointer flex items-center gap-1.5 border-0 flex-shrink-0"
+                className="cms-btn cms-btn-primary rounded-xl px-3.5 py-2 text-xs flex items-center gap-1.5 flex-shrink-0"
                 onClick={() => setShowAddBlockModal(true)}
               >
-                <Plus size={15} />
+                <Plus size={14} />
                 <span>Add New Hostel Block</span>
               </button>
             </div>
 
             {/* Filter Bar Container */}
-            <div className="w-full max-w-full box-border p-3 bg-white rounded-2xl border border-sky-100 mb-4 flex items-center justify-between gap-3 shadow-sm">
+            <div className="cms-card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="relative flex items-center flex-1 max-w-sm min-w-0">
                 <input
                   type="text"
                   placeholder="Search by name or code..."
                   value={blockSearch}
                   onChange={(e) => setBlockSearch(e.target.value)}
-                  className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-sky-100 bg-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-slate-800 transition placeholder:text-slate-400 box-border"
+                  className="w-full h-9 pl-8 pr-3 text-xs rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] outline-none focus:border-[var(--cms-primary)] focus:ring-1 focus:ring-[var(--cms-primary)] text-[var(--cms-text)] transition placeholder:text-[var(--cms-muted)] box-border"
                 />
                 <Search
-                  size={15}
-                  className="text-slate-400 absolute left-3 pointer-events-none"
+                  size={14}
+                  className="text-[var(--cms-muted)] absolute left-2.5 pointer-events-none"
                 />
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Filter:</span>
+                <span className="text-xs text-[var(--cms-muted)] font-medium whitespace-nowrap">Filter:</span>
                 <select
                   value={blockFilter}
                   onChange={(e) => setBlockFilter(e.target.value)}
-                  className="h-10 w-48 sm:w-56 md:w-60 max-w-full px-3 text-xs rounded-xl border border-sky-100 bg-white text-slate-700 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 cursor-pointer transition box-border"
+                  className="h-9 w-48 sm:w-56 md:w-60 max-w-full px-2.5 text-xs rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] text-[var(--cms-text)] outline-none focus:border-[var(--cms-primary)] focus:ring-1 focus:ring-[var(--cms-primary)] cursor-pointer transition box-border"
                 >
                   <option value="">Select Hostel...</option>
                   <option value="all">All Hostels ({blocks.length})</option>
@@ -486,72 +486,72 @@ export default function HostelMasterSetup() {
 
             {/* Empty State vs Blocks Table */}
             {!blockFilter && !blockSearch ? (
-              <div className="w-full max-w-full box-border bg-white border border-sky-100 rounded-3xl py-16 px-6 text-center my-3 shadow-sm">
-                <div className="bg-sky-50 text-sky-600 w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3.5">
-                  <Building2 size={28} />
+              <div className="cms-card rounded-2xl py-14 px-6 text-center my-3 shadow-sm">
+                <div className="bg-[var(--cms-primary-soft)] text-[var(--cms-primary)] w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3">
+                  <Building2 size={24} />
                 </div>
-                <h3 className="text-base font-bold text-slate-900 mb-1.5">
+                <h3 className="text-sm font-bold text-[var(--cms-text)] mb-1">
                   Select a Hostel
                 </h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto m-0 leading-relaxed">
+                <p className="text-xs text-[var(--cms-muted)] max-w-md mx-auto m-0 leading-relaxed">
                   Please select a hostel option from the filter dropdown above to render operational hostel blocks.
                 </p>
               </div>
             ) : (
-              <div className="w-full max-w-full box-border bg-white rounded-2xl border border-sky-100 overflow-hidden shadow-sm my-3">
+              <div className="cms-card rounded-2xl border border-[var(--cms-border)] overflow-hidden shadow-sm my-3">
                 <div className="w-full max-w-full overflow-x-auto">
                   <table className="pc-table w-full">
                     <thead>
-                      <tr className="bg-sky-50/60 border-b border-sky-100">
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">BLOCK NAME &amp; CODE</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">CATEGORY</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">FLOORS</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">ROOMS</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">CAPACITY</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">OCCUPIED / VACANT</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">RESIDENT WARDEN</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">STATUS</th>
-                        <th className="text-right py-3 px-4 text-xs font-bold text-sky-900 uppercase">ACTIONS</th>
+                      <tr className="bg-[var(--cms-table-header)] border-b border-[var(--cms-border)]">
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">BLOCK NAME &amp; CODE</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">CATEGORY</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">FLOORS</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">ROOMS</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">CAPACITY</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">OCCUPIED / VACANT</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">RESIDENT WARDEN</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">STATUS</th>
+                        <th className="text-right py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">ACTIONS</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-sky-100">
+                    <tbody className="divide-y divide-[var(--cms-border)]">
                       {filteredBlocks.map((b) => (
-                        <tr key={b.id} className="hover:bg-sky-50/40 transition">
-                          <td className="py-3 px-4">
+                        <tr key={b.id} className="hover:bg-[var(--cms-hover)] transition border-b border-[var(--cms-border)]">
+                          <td className="py-2.5 px-3.5">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-slate-900 text-sm">{b.name}</span>
-                              <span className="bg-sky-50 border border-sky-200 text-sky-700 rounded-lg px-2.5 py-0.5 text-xs font-semibold">
+                              <span className="font-semibold text-[var(--cms-text)] text-sm">{b.name}</span>
+                              <span className="bg-[var(--cms-primary-soft)] border border-[var(--cms-primary-border)] text-[var(--cms-primary)] rounded-md px-2 py-0.5 text-xs font-semibold">
                                 {b.code}
                               </span>
                             </div>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="bg-sky-50 text-sky-700 rounded-full px-3 py-1 text-xs font-medium inline-block">
+                          <td className="py-2.5 px-3.5">
+                            <span className="bg-[var(--cms-subtle)] text-[var(--cms-text)] rounded-full px-2.5 py-0.5 text-xs font-medium inline-block">
                               {b.type}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-sm text-slate-800 font-medium">{b.floors} Floors</td>
-                          <td className="py-3 px-4 text-sm text-slate-800 font-medium">{b.totalRooms} Rooms</td>
-                          <td className="py-3 px-4 text-sm text-slate-900 font-bold">{b.totalBeds} Beds</td>
-                          <td className="py-3 px-4">
-                            <div className="text-sm font-semibold">
-                              <span className="text-amber-600">{b.occupiedBeds} Occ</span>
-                              <span className="text-slate-400 mx-1">/</span>
-                              <span className="text-emerald-600">{b.vacantBeds} Vac</span>
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-text)] font-medium">{b.floors} Floors</td>
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-text)] font-medium">{b.totalRooms} Rooms</td>
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-text)] font-bold">{b.totalBeds} Beds</td>
+                          <td className="py-2.5 px-3.5">
+                            <div className="text-xs font-semibold">
+                              <span className="text-[var(--cms-amber)]">{b.occupiedBeds} Occ</span>
+                              <span className="text-[var(--cms-muted)] mx-1">/</span>
+                              <span className="text-[var(--cms-green)]">{b.vacantBeds} Vac</span>
                             </div>
                           </td>
-                          <td className="py-3 px-4">
-                            <div className="text-sm font-semibold text-slate-900">{b.warden}</div>
-                            <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                              <Phone size={11} className="text-sky-600" /> {b.wardenPhone}
+                          <td className="py-2.5 px-3.5">
+                            <div className="text-xs font-semibold text-[var(--cms-text)]">{b.warden}</div>
+                            <div className="text-[11px] text-[var(--cms-muted)] flex items-center gap-1 mt-0.5">
+                              <Phone size={10} className="text-[var(--cms-primary)]" /> {b.wardenPhone}
                             </div>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-3 py-1 text-xs font-semibold inline-block">
-                              ✓ {b.status}
+                          <td className="py-2.5 px-3.5">
+                            <span className="cms-badge cms-badge-active">
+                              {b.status}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right">
+                          <td className="py-2.5 px-3.5 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
@@ -566,7 +566,7 @@ export default function HostelMasterSetup() {
                                   });
                                   setShowAddBlockModal(true);
                                 }}
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 transition cursor-pointer"
+                                className="cms-btn cms-btn-ghost px-2.5 py-1 text-xs"
                               >
                                 Edit
                               </button>
@@ -579,7 +579,7 @@ export default function HostelMasterSetup() {
                                     name: `${b.name} (${b.code})`,
                                   })
                                 }
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                className="cms-btn cms-btn-ghost danger px-2.5 py-1 text-xs"
                               >
                                 Delete
                               </button>
@@ -601,38 +601,38 @@ export default function HostelMasterSetup() {
         {activeTab === "categories" && (
           <div>
             {/* Header Row */}
-            <div className="w-full max-w-full box-border flex items-center justify-between mb-4 gap-3">
-              <h2 className="text-2xl font-bold text-slate-900 m-0">Room Categories</h2>
+            <div className="w-full max-w-full box-border flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <h2 className="text-xl font-bold text-[var(--cms-text)] m-0">Room Categories</h2>
               <button
                 type="button"
-                className="bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-sm transition cursor-pointer flex items-center gap-1.5 border-0 flex-shrink-0"
+                className="cms-btn cms-btn-primary rounded-xl px-3.5 py-2 text-xs flex items-center gap-1.5 flex-shrink-0"
                 onClick={() => setShowAddCategoryModal(true)}
               >
-                <Plus size={15} />
+                <Plus size={14} />
                 <span>Add Room Type</span>
               </button>
             </div>
 
             {/* Filter Bar Container */}
-            <div className="w-full max-w-full box-border p-3 bg-white rounded-2xl border border-sky-100 mb-4 flex items-center justify-between gap-3 shadow-sm">
+            <div className="cms-card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="relative flex items-center flex-1 max-w-sm min-w-0">
                 <input
                   type="text"
                   placeholder="Search by category or specification..."
                   value={categorySearch}
                   onChange={(e) => setCategorySearch(e.target.value)}
-                  className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-sky-100 bg-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-slate-800 transition placeholder:text-slate-400 box-border"
+                  className="w-full h-9 pl-8 pr-3 text-xs rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] outline-none focus:border-[var(--cms-primary)] focus:ring-1 focus:ring-[var(--cms-primary)] text-[var(--cms-text)] transition placeholder:text-[var(--cms-muted)] box-border"
                 />
                 <Search
-                  size={15}
-                  className="text-slate-400 absolute left-3 pointer-events-none"
+                  size={14}
+                  className="text-[var(--cms-muted)] absolute left-2.5 pointer-events-none"
                 />
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="h-10 w-52 sm:w-60 md:w-64 max-w-full px-3 text-xs rounded-xl border border-sky-100 bg-white text-slate-700 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 cursor-pointer transition box-border"
+                  className="h-9 w-52 sm:w-60 md:w-64 max-w-full px-2.5 text-xs rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] text-[var(--cms-text)] outline-none focus:border-[var(--cms-primary)] focus:ring-1 focus:ring-[var(--cms-primary)] cursor-pointer transition box-border"
                 >
                   <option value="">-- Select AC / Non-AC Option --</option>
                   <option value="all">All Categories</option>
@@ -645,14 +645,14 @@ export default function HostelMasterSetup() {
 
             {/* Empty State vs Categories List */}
             {!categoryFilter && !categorySearch ? (
-              <div className="w-full max-w-full box-border bg-white border border-sky-100 rounded-3xl py-16 px-6 text-center my-3 shadow-sm">
-                <div className="bg-sky-50 text-sky-600 w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3.5">
-                  <Layers size={28} />
+              <div className="cms-card rounded-2xl py-14 px-6 text-center my-3 shadow-sm">
+                <div className="bg-[var(--cms-primary-soft)] text-[var(--cms-primary)] w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3">
+                  <Layers size={24} />
                 </div>
-                <h3 className="text-base font-bold text-slate-900 mb-1.5">
+                <h3 className="text-sm font-bold text-[var(--cms-text)] mb-1">
                   Select a Filter Option
                 </h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto m-0 leading-relaxed">
+                <p className="text-xs text-[var(--cms-muted)] max-w-md mx-auto m-0 leading-relaxed">
                   Please select an option from the dropdown above to view room categories.
                 </p>
               </div>
@@ -661,36 +661,36 @@ export default function HostelMasterSetup() {
                 {filteredCategories.map((cat) => (
                   <div
                     key={cat.id}
-                    className="p-5 bg-white border border-sky-100 rounded-2xl shadow-sm flex flex-col justify-between"
+                    className="cms-card p-4 rounded-2xl flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <h4 className="text-sm font-bold text-slate-900 m-0">
+                        <h4 className="text-sm font-bold text-[var(--cms-text)] m-0">
                           {cat.name}
                         </h4>
-                        <span className="bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap">
+                        <span className="bg-[var(--cms-primary-soft)] text-[var(--cms-primary)] border border-[var(--cms-primary-border)] rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap">
                           {cat.type}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 m-0 mb-3">
+                      <p className="text-xs text-[var(--cms-muted)] m-0 mb-3 leading-relaxed">
                         {cat.specification}
                       </p>
-                      <div className="text-xs text-slate-600 space-y-1 py-2 border-y border-sky-100">
+                      <div className="text-xs text-[var(--cms-text)] space-y-1 py-2 border-y border-[var(--cms-border)]">
                         <div>
-                          <span className="font-semibold text-slate-700">Capacity:</span>{" "}
+                          <span className="font-semibold text-[var(--cms-text)]">Capacity:</span>{" "}
                           {cat.capacity} Bed{cat.capacity > 1 ? "s" : ""} per Room
                         </div>
                         <div>
-                          <span className="font-semibold text-slate-700">Blocks:</span>{" "}
-                          <span className="text-slate-500">{cat.blocks}</span>
+                          <span className="font-semibold text-[var(--cms-text)]">Blocks:</span>{" "}
+                          <span className="text-[var(--cms-muted)]">{cat.blocks}</span>
                         </div>
                       </div>
                     </div>
-                    <div className="mt-4 flex items-center justify-between pt-2 border-t border-sky-50">
+                    <div className="mt-4 flex items-center justify-between pt-2 border-t border-[var(--cms-border)]">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-sky-600">{cat.fee}</span>
-                        <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 text-xs font-semibold">
-                          ✓ {cat.status}
+                        <span className="text-sm font-bold text-[var(--cms-primary)]">{cat.fee}</span>
+                        <span className="cms-badge cms-badge-active">
+                          {cat.status}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -708,7 +708,7 @@ export default function HostelMasterSetup() {
                             });
                             setShowAddCategoryModal(true);
                           }}
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 transition cursor-pointer"
+                          className="cms-btn cms-btn-ghost px-2.5 py-1 text-xs"
                         >
                           Edit
                         </button>
@@ -721,7 +721,7 @@ export default function HostelMasterSetup() {
                               name: cat.name,
                             })
                           }
-                          className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                          className="cms-btn cms-btn-ghost danger px-2.5 py-1 text-xs"
                         >
                           Delete
                         </button>
@@ -740,42 +740,42 @@ export default function HostelMasterSetup() {
         {activeTab === "allocations" && (
           <div>
             {/* Header Row */}
-            <div className="w-full max-w-full box-border flex items-center justify-between mb-4 gap-3">
-              <div className="text-2xl font-bold text-slate-900 flex items-center gap-2 min-w-0">
-                <BedDouble size={24} className="text-sky-600 flex-shrink-0" />
+            <div className="w-full max-w-full box-border flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <div className="text-xl font-bold text-[var(--cms-text)] flex items-center gap-2 min-w-0">
+                <BedDouble size={22} className="text-[var(--cms-primary)] flex-shrink-0" />
                 <span>Rooms &amp; Bed Allocation</span>
               </div>
               <button
                 type="button"
-                className="bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-sm transition cursor-pointer flex items-center gap-1.5 border-0 flex-shrink-0"
+                className="cms-btn cms-btn-primary rounded-xl px-3.5 py-2 text-xs flex items-center gap-1.5 flex-shrink-0"
                 onClick={() => setShowAddRoomModal(true)}
               >
-                <Plus size={15} />
+                <Plus size={14} />
                 <span>Add New Room</span>
               </button>
             </div>
 
             {/* Filter Bar Container */}
-            <div className="w-full max-w-full box-border p-3 bg-white rounded-2xl border border-sky-100 mb-4 flex items-center justify-between gap-3 shadow-sm">
+            <div className="cms-card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="relative flex items-center flex-1 max-w-sm min-w-0">
                 <input
                   type="text"
                   placeholder="Search room number, hostel..."
                   value={roomSearch}
                   onChange={(e) => setRoomSearch(e.target.value)}
-                  className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-sky-100 bg-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-slate-800 transition placeholder:text-slate-400 box-border"
+                  className="w-full h-9 pl-8 pr-3 text-xs rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] outline-none focus:border-[var(--cms-primary)] focus:ring-1 focus:ring-[var(--cms-primary)] text-[var(--cms-text)] transition placeholder:text-[var(--cms-muted)] box-border"
                 />
                 <Search
-                  size={15}
-                  className="text-slate-400 absolute left-3 pointer-events-none"
+                  size={14}
+                  className="text-[var(--cms-muted)] absolute left-2.5 pointer-events-none"
                 />
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                <span className="text-xs text-slate-500 font-medium whitespace-nowrap">Filter:</span>
+                <span className="text-xs text-[var(--cms-muted)] font-medium whitespace-nowrap">Filter:</span>
                 <select
                   value={roomFilter}
                   onChange={(e) => setRoomFilter(e.target.value)}
-                  className="h-10 w-48 sm:w-56 md:w-60 max-w-full px-3 text-xs rounded-xl border border-sky-100 bg-white text-slate-700 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 cursor-pointer transition box-border"
+                  className="h-9 w-48 sm:w-56 md:w-60 max-w-full px-2.5 text-xs rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] text-[var(--cms-text)] outline-none focus:border-[var(--cms-primary)] focus:ring-1 focus:ring-[var(--cms-primary)] cursor-pointer transition box-border"
                 >
                   <option value="">Select Hostel...</option>
                   <option value="all">All Hostels ({blocks.length})</option>
@@ -790,58 +790,58 @@ export default function HostelMasterSetup() {
 
             {/* Empty State vs Rooms Table */}
             {!roomFilter && !roomSearch ? (
-              <div className="w-full max-w-full box-border bg-white border border-sky-100 rounded-3xl py-16 px-6 text-center my-3 shadow-sm">
-                <div className="bg-sky-50 text-sky-600 w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3.5">
-                  <BedDouble size={28} />
+              <div className="cms-card rounded-2xl py-14 px-6 text-center my-3 shadow-sm">
+                <div className="bg-[var(--cms-primary-soft)] text-[var(--cms-primary)] w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3">
+                  <BedDouble size={24} />
                 </div>
-                <h3 className="text-base font-bold text-slate-900 mb-1.5">
+                <h3 className="text-sm font-bold text-[var(--cms-text)] mb-1">
                   Select a Hostel
                 </h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto m-0 leading-relaxed">
+                <p className="text-xs text-[var(--cms-muted)] max-w-md mx-auto m-0 leading-relaxed">
                   Please select a hostel option from the filter dropdown above to view room allocations.
                 </p>
               </div>
             ) : (
-              <div className="w-full max-w-full box-border bg-white rounded-2xl border border-sky-100 overflow-hidden shadow-sm my-3">
+              <div className="cms-card rounded-2xl border border-[var(--cms-border)] overflow-hidden shadow-sm my-3">
                 <div className="w-full max-w-full overflow-x-auto">
                   <table className="pc-table w-full">
                     <thead>
-                      <tr className="bg-sky-50/60 border-b border-sky-100">
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">ROOM NUMBER</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">BLOCK CODE</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">FLOOR</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">TYPE</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">CAPACITY</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">OCCUPIED</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">MONTHLY FEE</th>
-                        <th className="text-right py-3 px-4 text-xs font-bold text-sky-900 uppercase">ACTIONS</th>
+                      <tr className="bg-[var(--cms-table-header)] border-b border-[var(--cms-border)]">
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">ROOM NUMBER</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">BLOCK CODE</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">FLOOR</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">TYPE</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">CAPACITY</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">OCCUPIED</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">MONTHLY FEE</th>
+                        <th className="text-right py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">ACTIONS</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-sky-100">
+                    <tbody className="divide-y divide-[var(--cms-border)]">
                       {filteredRooms.map((r, idx) => (
-                        <tr key={idx} className="hover:bg-sky-50/40 transition">
-                          <td className="py-3 px-4 font-bold text-slate-900">Room #{r.roomNo}</td>
-                          <td className="py-3 px-4">
-                            <span className="bg-sky-50 border border-sky-200 text-sky-700 rounded-lg px-2.5 py-0.5 text-xs font-semibold">
+                        <tr key={idx} className="hover:bg-[var(--cms-hover)] transition border-b border-[var(--cms-border)]">
+                          <td className="py-2.5 px-3.5 font-bold text-[var(--cms-text)]">Room #{r.roomNo}</td>
+                          <td className="py-2.5 px-3.5">
+                            <span className="bg-[var(--cms-primary-soft)] border border-[var(--cms-primary-border)] text-[var(--cms-primary)] rounded-md px-2 py-0.5 text-xs font-semibold">
                               {r.block}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-sm text-slate-800">Floor {r.floor}</td>
-                          <td className="py-3 px-4 text-sm text-slate-800">{r.type}</td>
-                          <td className="py-3 px-4 text-sm text-slate-900 font-semibold">{r.capacity} Beds</td>
-                          <td className="py-3 px-4">
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-text)]">Floor {r.floor}</td>
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-text)]">{r.type}</td>
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-text)] font-semibold">{r.capacity} Beds</td>
+                          <td className="py-2.5 px-3.5">
                             <span
                               className={
                                 r.occupied > 0
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                                  : "text-slate-500 text-xs font-medium"
+                                  ? "cms-badge cms-badge-warn"
+                                  : "cms-badge cms-badge-inactive"
                               }
                             >
                               {r.occupied} Occupied
                             </span>
                           </td>
-                          <td className="py-3 px-4 font-bold text-sky-600">{r.fee}</td>
-                          <td className="py-3 px-4 text-right">
+                          <td className="py-2.5 px-3.5 font-bold text-[var(--cms-primary)]">{r.fee}</td>
+                          <td className="py-2.5 px-3.5 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
@@ -857,7 +857,7 @@ export default function HostelMasterSetup() {
                                   });
                                   setShowAddRoomModal(true);
                                 }}
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 transition cursor-pointer"
+                                className="cms-btn cms-btn-ghost px-2.5 py-1 text-xs"
                               >
                                 Edit
                               </button>
@@ -870,7 +870,7 @@ export default function HostelMasterSetup() {
                                     name: `Room #${r.roomNo}`,
                                   })
                                 }
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                className="cms-btn cms-btn-ghost danger px-2.5 py-1 text-xs"
                               >
                                 Delete
                               </button>
@@ -892,18 +892,18 @@ export default function HostelMasterSetup() {
         {activeTab === "wardens" && (
           <div>
             {/* Header Row */}
-            <div className="w-full max-w-full box-border flex items-center justify-between mb-4 gap-3">
-              <div className="text-2xl font-bold text-slate-900 flex items-center gap-2 min-w-0">
-                <ShieldCheck size={24} className="text-sky-600 flex-shrink-0" />
+            <div className="w-full max-w-full box-border flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <div className="text-xl font-bold text-[var(--cms-text)] flex items-center gap-2 min-w-0">
+                <ShieldCheck size={22} className="text-[var(--cms-primary)] flex-shrink-0" />
                 <span>Wardens</span>
               </div>
-              <div className="flex items-center gap-2.5 flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <button
                   type="button"
-                  className="bg-sky-600 hover:bg-sky-700 text-white font-semibold px-4 py-2 rounded-xl text-xs shadow-sm transition cursor-pointer flex items-center gap-1.5 border-0"
+                  className="cms-btn cms-btn-primary rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5"
                   onClick={() => setShowAssignWardenModal(true)}
                 >
-                  <UserPlus size={15} />
+                  <UserPlus size={14} />
                   <span>Assign Warden</span>
                 </button>
                 <button
@@ -923,7 +923,7 @@ export default function HostelMasterSetup() {
                     document.body.removeChild(link);
                     showToast("Warden allocations exported successfully!");
                   }}
-                  className="border border-sky-300 text-sky-700 hover:bg-sky-50 px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer bg-white shadow-sm"
+                  className="cms-btn cms-btn-ghost rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5"
                 >
                   <Download size={14} />
                   <span>Download</span>
@@ -932,25 +932,25 @@ export default function HostelMasterSetup() {
             </div>
 
             {/* Filter Bar Container */}
-            <div className="w-full max-w-full box-border p-3 bg-white rounded-2xl border border-sky-100 mb-4 flex items-center justify-between gap-3 shadow-sm">
+            <div className="cms-card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="relative flex items-center flex-1 max-w-sm min-w-0">
                 <input
                   type="text"
                   placeholder="Search warden by name, ID, hostel..."
                   value={wardenSearch}
                   onChange={(e) => setWardenSearch(e.target.value)}
-                  className="w-full h-10 pl-9 pr-3 text-xs rounded-xl border border-sky-100 bg-white outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 text-slate-800 transition placeholder:text-slate-400 box-border"
+                  className="w-full h-9 pl-8 pr-3 text-xs rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] outline-none focus:border-[var(--cms-primary)] focus:ring-1 focus:ring-[var(--cms-primary)] text-[var(--cms-text)] transition placeholder:text-[var(--cms-muted)] box-border"
                 />
                 <Search
-                  size={15}
-                  className="text-slate-400 absolute left-3 pointer-events-none"
+                  size={14}
+                  className="text-[var(--cms-muted)] absolute left-2.5 pointer-events-none"
                 />
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <select
                   value={wardenFilter}
                   onChange={(e) => setWardenFilter(e.target.value)}
-                  className="h-10 w-48 sm:w-56 md:w-60 max-w-full px-3 text-xs rounded-xl border border-sky-100 bg-white text-slate-700 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 cursor-pointer transition box-border"
+                  className="h-9 w-48 sm:w-56 md:w-60 max-w-full px-2.5 text-xs rounded-xl border border-[var(--cms-border)] bg-[var(--cms-surface)] text-[var(--cms-text)] outline-none focus:border-[var(--cms-primary)] focus:ring-1 focus:ring-[var(--cms-primary)] cursor-pointer transition box-border"
                 >
                   <option value="">-- Select Hostel --</option>
                   <option value="all">All Hostels</option>
@@ -965,57 +965,57 @@ export default function HostelMasterSetup() {
 
             {/* Empty State vs Wardens List */}
             {!wardenFilter && !wardenSearch ? (
-              <div className="w-full max-w-full box-border bg-white border border-sky-100 rounded-3xl py-16 px-6 text-center my-3 shadow-sm">
-                <div className="bg-sky-50 text-sky-600 w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3.5">
-                  <ShieldCheck size={28} />
+              <div className="cms-card rounded-2xl py-14 px-6 text-center my-3 shadow-sm">
+                <div className="bg-[var(--cms-primary-soft)] text-[var(--cms-primary)] w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3">
+                  <ShieldCheck size={24} />
                 </div>
-                <h3 className="text-base font-bold text-slate-900 mb-1.5">
+                <h3 className="text-sm font-bold text-[var(--cms-text)] mb-1">
                   No Hostel Filter Selected
                 </h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto m-0 leading-relaxed">
+                <p className="text-xs text-[var(--cms-muted)] max-w-md mx-auto m-0 leading-relaxed">
                   Please select a hostel block from the filter dropdown above or use search/manual entry to load warden records.
                 </p>
               </div>
             ) : (
-              <div className="w-full max-w-full box-border bg-white rounded-2xl border border-sky-100 overflow-hidden shadow-sm my-3">
+              <div className="cms-card rounded-2xl border border-[var(--cms-border)] overflow-hidden shadow-sm my-3">
                 <div className="w-full max-w-full overflow-x-auto">
                   <table className="pc-table w-full">
                     <thead>
-                      <tr className="bg-sky-50/60 border-b border-sky-100">
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">EMP ID</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">WARDEN NAME</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">DESIGNATION</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">ASSIGNED HOSTEL</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">PHONE</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">EMAIL</th>
-                        <th className="text-left py-3 px-4 text-xs font-bold text-sky-900 uppercase">STATUS</th>
-                        <th className="text-right py-3 px-4 text-xs font-bold text-sky-900 uppercase">ACTIONS</th>
+                      <tr className="bg-[var(--cms-table-header)] border-b border-[var(--cms-border)]">
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">EMP ID</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">WARDEN NAME</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">DESIGNATION</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">ASSIGNED HOSTEL</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">PHONE</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">EMAIL</th>
+                        <th className="text-left py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">STATUS</th>
+                        <th className="text-right py-2.5 px-3.5 text-xs font-bold text-[var(--cms-muted)] uppercase">ACTIONS</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-sky-100">
+                    <tbody className="divide-y divide-[var(--cms-border)]">
                       {filteredWardens.map((w) => (
-                        <tr key={w.id} className="hover:bg-sky-50/40 transition">
-                          <td className="py-3 px-4 font-semibold text-xs text-slate-700">{w.empId}</td>
-                          <td className="py-3 px-4 font-bold text-sm text-slate-900">{w.name}</td>
-                          <td className="py-3 px-4 text-xs text-slate-600">{w.designation}</td>
-                          <td className="py-3 px-4">
-                            <span className="bg-sky-50 border border-sky-200 text-sky-700 rounded-lg px-2.5 py-0.5 text-xs font-semibold">
+                        <tr key={w.id} className="hover:bg-[var(--cms-hover)] transition border-b border-[var(--cms-border)]">
+                          <td className="py-2.5 px-3.5 font-semibold text-xs text-[var(--cms-muted)]">{w.empId}</td>
+                          <td className="py-2.5 px-3.5 font-bold text-sm text-[var(--cms-text)]">{w.name}</td>
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-muted)]">{w.designation}</td>
+                          <td className="py-2.5 px-3.5">
+                            <span className="bg-[var(--cms-primary-soft)] border border-[var(--cms-primary-border)] text-[var(--cms-primary)] rounded-md px-2 py-0.5 text-xs font-semibold">
                               {w.assignedHostels}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-xs text-slate-600">
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-text)]">
                             <div className="flex items-center gap-1">
-                              <Phone size={12} className="text-sky-600" />
+                              <Phone size={11} className="text-[var(--cms-primary)]" />
                               <span>{w.phone}</span>
                             </div>
                           </td>
-                          <td className="py-3 px-4 text-xs text-slate-600">{w.email}</td>
-                          <td className="py-3 px-4">
-                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 text-xs font-semibold inline-block">
-                              ✓ {w.status}
+                          <td className="py-2.5 px-3.5 text-xs text-[var(--cms-text)]">{w.email}</td>
+                          <td className="py-2.5 px-3.5">
+                            <span className="cms-badge cms-badge-active">
+                              {w.status}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right">
+                          <td className="py-2.5 px-3.5 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
@@ -1032,7 +1032,7 @@ export default function HostelMasterSetup() {
                                   });
                                   setShowAssignWardenModal(true);
                                 }}
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 transition cursor-pointer"
+                                className="cms-btn cms-btn-ghost px-2.5 py-1 text-xs"
                               >
                                 Edit
                               </button>
@@ -1045,7 +1045,7 @@ export default function HostelMasterSetup() {
                                     name: w.name,
                                   })
                                 }
-                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                className="cms-btn cms-btn-ghost danger px-2.5 py-1 text-xs"
                               >
                                 Delete
                               </button>
@@ -1066,22 +1066,22 @@ export default function HostelMasterSetup() {
         {/* ═══════════════════════════════════════════════════════════════ */}
         {showAddBlockModal && (
           <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="cms-overlay fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             role="dialog"
             aria-modal="true"
             onClick={(e) => {
               if (e.target === e.currentTarget) handleCloseAddBlockModal();
             }}
           >
-            <div className="max-w-xl w-full bg-white rounded-3xl p-6 shadow-2xl modal-content-animated border border-sky-100">
+            <div className="cms-modal max-w-xl w-full bg-[var(--cms-surface)] rounded-3xl p-6 shadow-2xl modal-content-animated border border-[var(--cms-border)]">
               {/* Header */}
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-lg font-bold text-slate-900 m-0">
+              <div className="flex justify-between items-center mb-4 pb-2 border-b border-[var(--cms-border)]">
+                <h3 className="text-base md:text-lg font-bold text-[var(--cms-text)] m-0">
                   {editingBlock ? "Edit Hostel Block" : "Add New Hostel Block"}
                 </h3>
                 <button
                   type="button"
-                  className="text-slate-400 hover:text-slate-700 text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
+                  className="text-[var(--cms-muted)] hover:text-[var(--cms-text)] text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
                   onClick={handleCloseAddBlockModal}
                   aria-label="Close modal"
                 >
@@ -1092,9 +1092,9 @@ export default function HostelMasterSetup() {
               {/* Form */}
               <form onSubmit={handleAddBlockSubmit}>
                 {/* 1. Block Name * */}
-                <div className="mb-3.5">
-                  <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                    Block Name <span className="text-red-500">*</span>
+                <div className="mb-3">
+                  <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                    Block Name <span className="text-[var(--cms-red)]">*</span>
                   </label>
                   <input
                     type="text"
@@ -1102,16 +1102,16 @@ export default function HostelMasterSetup() {
                     required
                     value={newBlock.name}
                     onChange={(e) => setNewBlock({ ...newBlock, name: e.target.value })}
-                    className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 transition placeholder:text-slate-400 box-border"
+                    className="hostel-input text-xs sm:text-sm"
                   />
                 </div>
 
                 {/* 2. Three fields in one row (grid grid-cols-3 gap-3) */}
-                <div className="grid grid-cols-3 gap-3 mb-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                   {/* Block Code * */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                      Block Code <span className="text-red-500">*</span>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                      Block Code <span className="text-[var(--cms-red)]">*</span>
                     </label>
                     <input
                       type="text"
@@ -1119,20 +1119,20 @@ export default function HostelMasterSetup() {
                       required
                       value={newBlock.code}
                       onChange={(e) => setNewBlock({ ...newBlock, code: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 transition placeholder:text-slate-400 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                     />
                   </div>
 
                   {/* Category * */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                      Category <span className="text-red-500">*</span>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                      Category <span className="text-[var(--cms-red)]">*</span>
                     </label>
                     <select
                       required
                       value={newBlock.category}
                       onChange={(e) => setNewBlock({ ...newBlock, category: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 cursor-pointer transition box-border"
+                      className="hostel-select text-xs sm:text-sm cursor-pointer"
                     >
                       <option value="">Select Category</option>
                       <option value="Boys">Boys</option>
@@ -1144,14 +1144,14 @@ export default function HostelMasterSetup() {
 
                   {/* Total Floors * */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                      Total Floors <span className="text-red-500">*</span>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                      Total Floors <span className="text-[var(--cms-red)]">*</span>
                     </label>
                     <select
                       required
                       value={newBlock.floors}
                       onChange={(e) => setNewBlock({ ...newBlock, floors: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 cursor-pointer transition box-border"
+                      className="hostel-select text-xs sm:text-sm cursor-pointer"
                     >
                       <option value="">Select Floor</option>
                       <option value="1 Floor">1 Floor</option>
@@ -1164,7 +1164,7 @@ export default function HostelMasterSetup() {
 
                 {/* 3. Location (Full width) */}
                 <div className="mb-4">
-                  <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                  <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                     Location
                   </label>
                   <input
@@ -1172,22 +1172,22 @@ export default function HostelMasterSetup() {
                     placeholder="e.g. North Campus, Block A"
                     value={newBlock.location}
                     onChange={(e) => setNewBlock({ ...newBlock, location: e.target.value })}
-                    className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 transition placeholder:text-slate-400 box-border"
+                    className="hostel-input text-xs sm:text-sm"
                   />
                 </div>
 
                 {/* Footer Buttons */}
-                <div className="flex justify-between items-center mt-6 pt-2">
+                <div className="flex justify-between items-center mt-5 pt-3 border-t border-[var(--cms-border)]">
                   <button
                     type="button"
                     onClick={handleCloseAddBlockModal}
-                    className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-5 py-2 rounded-xl text-sm font-medium cursor-pointer transition border-0"
+                    className="cms-btn cms-btn-ghost px-4 py-2 rounded-xl text-xs sm:text-sm font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="bg-sky-600 hover:bg-sky-700 text-white px-6 py-2 rounded-xl text-sm font-semibold shadow-sm cursor-pointer transition border-0"
+                    className="cms-btn cms-btn-primary px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold"
                   >
                     {editingBlock ? "Update Block" : "Save"}
                   </button>
@@ -1202,21 +1202,21 @@ export default function HostelMasterSetup() {
         {/* ═══════════════════════════════════════════════════════════════ */}
         {showAddCategoryModal && (
           <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="cms-overlay fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             role="dialog"
             aria-modal="true"
             onClick={(e) => {
               if (e.target === e.currentTarget) handleCloseAddCategoryModal();
             }}
           >
-            <div className="max-w-xl w-full bg-white rounded-3xl p-6 shadow-2xl modal-content-animated border border-sky-100">
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-lg font-bold text-slate-900 m-0">
+            <div className="cms-modal max-w-xl w-full bg-[var(--cms-surface)] rounded-3xl p-6 shadow-2xl modal-content-animated border border-[var(--cms-border)]">
+              <div className="flex justify-between items-center mb-4 pb-2 border-b border-[var(--cms-border)]">
+                <h3 className="text-base md:text-lg font-bold text-[var(--cms-text)] m-0">
                   {editingCategory ? "Edit Room Category" : "Add Room Category"}
                 </h3>
                 <button
                   type="button"
-                  className="text-slate-400 hover:text-slate-700 text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
+                  className="text-[var(--cms-muted)] hover:text-[var(--cms-text)] text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
                   onClick={handleCloseAddCategoryModal}
                 >
                   ✕
@@ -1224,9 +1224,9 @@ export default function HostelMasterSetup() {
               </div>
 
               <form onSubmit={handleAddCategorySubmit}>
-                <div className="mb-3.5">
-                  <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                    Category Name <span className="text-red-500">*</span>
+                <div className="mb-3">
+                  <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                    Category Name <span className="text-[var(--cms-red)]">*</span>
                   </label>
                   <input
                     type="text"
@@ -1234,19 +1234,19 @@ export default function HostelMasterSetup() {
                     required
                     value={newCategory.name}
                     onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-                    className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 transition box-border"
+                    className="hostel-input text-xs sm:text-sm"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                      Category Type <span className="text-red-500">*</span>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                      Category Type <span className="text-[var(--cms-red)]">*</span>
                     </label>
                     <select
                       value={newCategory.type}
                       onChange={(e) => setNewCategory({ ...newCategory, type: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 cursor-pointer box-border"
+                      className="hostel-select text-xs sm:text-sm cursor-pointer"
                     >
                       <option value="AC Accommodation">AC Accommodation</option>
                       <option value="Non-AC Standard">Non-AC Standard</option>
@@ -1254,7 +1254,7 @@ export default function HostelMasterSetup() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                       Sharing Capacity (Beds)
                     </label>
                     <input
@@ -1263,14 +1263,14 @@ export default function HostelMasterSetup() {
                       max="6"
                       value={newCategory.capacity}
                       onChange={(e) => setNewCategory({ ...newCategory, capacity: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                       Base Monthly Fee
                     </label>
                     <input
@@ -1278,11 +1278,11 @@ export default function HostelMasterSetup() {
                       placeholder="e.g. ₹8,500/mo"
                       value={newCategory.fee}
                       onChange={(e) => setNewCategory({ ...newCategory, fee: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                       Associated Blocks
                     </label>
                     <input
@@ -1290,13 +1290,13 @@ export default function HostelMasterSetup() {
                       placeholder="e.g. Block A, Block B"
                       value={newCategory.blocks}
                       onChange={(e) => setNewCategory({ ...newCategory, blocks: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                     />
                   </div>
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                  <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                     Specifications / Amenities
                   </label>
                   <input
@@ -1304,21 +1304,21 @@ export default function HostelMasterSetup() {
                     placeholder="e.g. AC, Attached Bath, Wi-Fi, Balcony"
                     value={newCategory.specification}
                     onChange={(e) => setNewCategory({ ...newCategory, specification: e.target.value })}
-                    className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                    className="hostel-input text-xs sm:text-sm"
                   />
                 </div>
 
-                <div className="flex justify-between items-center mt-6 pt-2">
+                <div className="flex justify-between items-center mt-5 pt-3 border-t border-[var(--cms-border)]">
                   <button
                     type="button"
                     onClick={handleCloseAddCategoryModal}
-                    className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-5 py-2 rounded-xl text-sm font-medium cursor-pointer transition border-0"
+                    className="cms-btn cms-btn-ghost px-4 py-2 rounded-xl text-xs sm:text-sm font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="bg-sky-600 hover:bg-sky-700 text-white px-6 py-2 rounded-xl text-sm font-semibold shadow-sm cursor-pointer transition border-0"
+                    className="cms-btn cms-btn-primary px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold"
                   >
                     {editingCategory ? "Update Category" : "Save Category"}
                   </button>
@@ -1333,21 +1333,21 @@ export default function HostelMasterSetup() {
         {/* ═══════════════════════════════════════════════════════════════ */}
         {showAddRoomModal && (
           <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="cms-overlay fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             role="dialog"
             aria-modal="true"
             onClick={(e) => {
               if (e.target === e.currentTarget) handleCloseAddRoomModal();
             }}
           >
-            <div className="max-w-xl w-full bg-white rounded-3xl p-6 shadow-2xl modal-content-animated border border-sky-100">
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-lg font-bold text-slate-900 m-0">
+            <div className="cms-modal max-w-xl w-full bg-[var(--cms-surface)] rounded-3xl p-6 shadow-2xl modal-content-animated border border-[var(--cms-border)]">
+              <div className="flex justify-between items-center mb-4 pb-2 border-b border-[var(--cms-border)]">
+                <h3 className="text-base md:text-lg font-bold text-[var(--cms-text)] m-0">
                   {editingRoom ? "Edit Room Configuration" : "Configure New Room"}
                 </h3>
                 <button
                   type="button"
-                  className="text-slate-400 hover:text-slate-700 text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
+                  className="text-[var(--cms-muted)] hover:text-[var(--cms-text)] text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
                   onClick={handleCloseAddRoomModal}
                 >
                   ✕
@@ -1355,14 +1355,14 @@ export default function HostelMasterSetup() {
               </div>
 
               <form onSubmit={handleAddRoomSubmit}>
-                <div className="grid grid-cols-2 gap-3 mb-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                      Room Number <span className="text-red-500">*</span>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                      Room Number <span className="text-[var(--cms-red)]">*</span>
                     </label>
                     <input
                       type="text"
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                       placeholder="e.g. 106"
                       required
                       value={newRoom.roomNo}
@@ -1370,9 +1370,9 @@ export default function HostelMasterSetup() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">Hostel Block</label>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">Hostel Block</label>
                     <select
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 cursor-pointer box-border"
+                      className="hostel-select text-xs sm:text-sm cursor-pointer"
                       value={newRoom.block}
                       onChange={(e) => setNewRoom({ ...newRoom, block: e.target.value })}
                     >
@@ -1385,35 +1385,35 @@ export default function HostelMasterSetup() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">Floor</label>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">Floor</label>
                     <input
                       type="number"
                       min="1"
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                       value={newRoom.floor}
                       onChange={(e) => setNewRoom({ ...newRoom, floor: e.target.value })}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">Sharing Capacity</label>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">Sharing Capacity</label>
                     <input
                       type="number"
                       min="1"
                       max="6"
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                       value={newRoom.capacity}
                       onChange={(e) => setNewRoom({ ...newRoom, capacity: e.target.value })}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">Room Type</label>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">Room Type</label>
                     <select
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 cursor-pointer box-border"
+                      className="hostel-select text-xs sm:text-sm cursor-pointer"
                       value={newRoom.type}
                       onChange={(e) => setNewRoom({ ...newRoom, type: e.target.value })}
                     >
@@ -1424,27 +1424,27 @@ export default function HostelMasterSetup() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">Monthly Fee</label>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">Monthly Fee</label>
                     <input
                       type="text"
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                       value={newRoom.fee}
                       onChange={(e) => setNewRoom({ ...newRoom, fee: e.target.value })}
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center mt-6 pt-2">
+                <div className="flex justify-between items-center mt-5 pt-3 border-t border-[var(--cms-border)]">
                   <button
                     type="button"
                     onClick={handleCloseAddRoomModal}
-                    className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-5 py-2 rounded-xl text-sm font-medium cursor-pointer transition border-0"
+                    className="cms-btn cms-btn-ghost px-4 py-2 rounded-xl text-xs sm:text-sm font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="bg-sky-600 hover:bg-sky-700 text-white px-6 py-2 rounded-xl text-sm font-semibold shadow-sm cursor-pointer transition border-0"
+                    className="cms-btn cms-btn-primary px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold"
                   >
                     {editingRoom ? "Update Room" : "Save Room"}
                   </button>
@@ -1459,21 +1459,21 @@ export default function HostelMasterSetup() {
         {/* ═══════════════════════════════════════════════════════════════ */}
         {showAssignWardenModal && (
           <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="cms-overlay fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             role="dialog"
             aria-modal="true"
             onClick={(e) => {
               if (e.target === e.currentTarget) handleCloseAssignWardenModal();
             }}
           >
-            <div className="max-w-xl w-full bg-white rounded-3xl p-6 shadow-2xl modal-content-animated border border-sky-100">
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-lg font-bold text-slate-900 m-0">
+            <div className="cms-modal max-w-xl w-full bg-[var(--cms-surface)] rounded-3xl p-6 shadow-2xl modal-content-animated border border-[var(--cms-border)]">
+              <div className="flex justify-between items-center mb-4 pb-2 border-b border-[var(--cms-border)]">
+                <h3 className="text-base md:text-lg font-bold text-[var(--cms-text)] m-0">
                   {editingWarden ? "Edit Resident Warden" : "Assign Resident Warden"}
                 </h3>
                 <button
                   type="button"
-                  className="text-slate-400 hover:text-slate-700 text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
+                  className="text-[var(--cms-muted)] hover:text-[var(--cms-text)] text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
                   onClick={handleCloseAssignWardenModal}
                 >
                   ✕
@@ -1481,10 +1481,10 @@ export default function HostelMasterSetup() {
               </div>
 
               <form onSubmit={handleAssignWardenSubmit}>
-                <div className="grid grid-cols-2 gap-3 mb-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                      Warden Name <span className="text-red-500">*</span>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                      Warden Name <span className="text-[var(--cms-red)]">*</span>
                     </label>
                     <input
                       type="text"
@@ -1492,12 +1492,12 @@ export default function HostelMasterSetup() {
                       required
                       value={newWarden.name}
                       onChange={(e) => setNewWarden({ ...newWarden, name: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                      Employee ID <span className="text-red-500">*</span>
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
+                      Employee ID <span className="text-[var(--cms-red)]">*</span>
                     </label>
                     <input
                       type="text"
@@ -1505,14 +1505,14 @@ export default function HostelMasterSetup() {
                       required
                       value={newWarden.empId}
                       onChange={(e) => setNewWarden({ ...newWarden, empId: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                       Phone Number
                     </label>
                     <input
@@ -1520,11 +1520,11 @@ export default function HostelMasterSetup() {
                       placeholder="e.g. +91 98765 43210"
                       value={newWarden.phone}
                       onChange={(e) => setNewWarden({ ...newWarden, phone: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                       Email Address
                     </label>
                     <input
@@ -1532,20 +1532,20 @@ export default function HostelMasterSetup() {
                       placeholder="e.g. warden@college.edu"
                       value={newWarden.email}
                       onChange={(e) => setNewWarden({ ...newWarden, email: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 box-border"
+                      className="hostel-input text-xs sm:text-sm"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                       Assigned Hostel Block
                     </label>
                     <select
                       value={newWarden.assignedHostels}
                       onChange={(e) => setNewWarden({ ...newWarden, assignedHostels: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 cursor-pointer box-border"
+                      className="hostel-select text-xs sm:text-sm cursor-pointer"
                     >
                       {blocks.map((b) => (
                         <option key={b.id} value={b.name}>
@@ -1555,13 +1555,13 @@ export default function HostelMasterSetup() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                    <label className="block text-xs font-semibold text-[var(--cms-text)] mb-1">
                       Role / Designation
                     </label>
                     <select
                       value={newWarden.designation}
                       onChange={(e) => setNewWarden({ ...newWarden, designation: e.target.value })}
-                      className="w-full border border-sky-100 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 rounded-xl text-sm p-2.5 outline-none bg-white text-slate-800 cursor-pointer box-border"
+                      className="hostel-select text-xs sm:text-sm cursor-pointer"
                     >
                       <option value="Chief Resident Warden">Chief Resident Warden</option>
                       <option value="Senior Resident Warden">Senior Resident Warden</option>
@@ -1571,17 +1571,17 @@ export default function HostelMasterSetup() {
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center mt-6 pt-2">
+                <div className="flex justify-between items-center mt-5 pt-3 border-t border-[var(--cms-border)]">
                   <button
                     type="button"
                     onClick={handleCloseAssignWardenModal}
-                    className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-5 py-2 rounded-xl text-sm font-medium cursor-pointer transition border-0"
+                    className="cms-btn cms-btn-ghost px-4 py-2 rounded-xl text-xs sm:text-sm font-medium"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="bg-sky-600 hover:bg-sky-700 text-white px-6 py-2 rounded-xl text-sm font-semibold shadow-sm cursor-pointer transition border-0"
+                    className="cms-btn cms-btn-primary px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold"
                   >
                     {editingWarden ? "Update Warden" : "Assign Warden"}
                   </button>
@@ -1596,35 +1596,35 @@ export default function HostelMasterSetup() {
         {/* ═══════════════════════════════════════════════════════════════ */}
         {deleteTarget && (
           <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            className="cms-overlay fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
             role="dialog"
             aria-modal="true"
             onClick={(e) => {
               if (e.target === e.currentTarget) setDeleteTarget(null);
             }}
           >
-            <div className="max-w-md w-full bg-white rounded-3xl p-6 shadow-2xl modal-content-animated border border-sky-100">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-slate-900 m-0">Confirm Deletion</h3>
+            <div className="cms-modal max-w-md w-full bg-[var(--cms-surface)] rounded-3xl p-6 shadow-2xl modal-content-animated border border-[var(--cms-border)]">
+              <div className="flex justify-between items-center mb-4 pb-2 border-b border-[var(--cms-border)]">
+                <h3 className="text-base md:text-lg font-bold text-[var(--cms-text)] m-0">Confirm Deletion</h3>
                 <button
                   type="button"
-                  className="text-slate-400 hover:text-slate-700 text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
+                  className="text-[var(--cms-muted)] hover:text-[var(--cms-text)] text-lg cursor-pointer bg-transparent border-0 p-1 transition leading-none"
                   onClick={() => setDeleteTarget(null)}
                   aria-label="Close modal"
                 >
                   ✕
                 </button>
               </div>
-              <p className="text-sm text-slate-600 mb-6">
+              <p className="text-xs sm:text-sm text-[var(--cms-muted)] mb-5 leading-relaxed">
                 Are you sure you want to delete{" "}
-                <span className="font-semibold text-slate-900">{deleteTarget.name}</span>?
+                <span className="font-semibold text-[var(--cms-text)]">{deleteTarget.name}</span>?
                 This record will be permanently removed.
               </p>
-              <div className="flex justify-end items-center gap-3">
+              <div className="flex justify-end items-center gap-2.5 pt-2 border-t border-[var(--cms-border)]">
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(null)}
-                  className="bg-slate-100 text-slate-700 hover:bg-slate-200 px-5 py-2 rounded-xl text-sm font-medium cursor-pointer transition border-0"
+                  className="cms-btn cms-btn-ghost px-4 py-2 rounded-xl text-xs sm:text-sm font-medium"
                 >
                   Cancel
                 </button>
@@ -1639,7 +1639,7 @@ export default function HostelMasterSetup() {
                     setDeleteTarget(null);
                     showToast(`${name} has been deleted successfully.`);
                   }}
-                  className="bg-rose-600 hover:bg-rose-700 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-sm cursor-pointer transition border-0"
+                  className="cms-btn cms-btn-ghost danger px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold"
                 >
                   Delete
                 </button>

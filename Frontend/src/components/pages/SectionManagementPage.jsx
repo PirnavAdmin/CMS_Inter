@@ -12,13 +12,16 @@ import {
   Building2,
   Layers,
   Download,
+  Loader2,
+  Upload,
+  FileSpreadsheet,
+  AlertCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout";
-import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import "./SectionManagementPage.css";
 
 const PAGE_SIZE = 5;
@@ -515,7 +518,7 @@ function SearchableSelect({
         <div className="cms-searchable-select-menu">
           {showSearch && (
             <div className="cms-searchable-select-search">
-              <Search3DIcon size={14} />
+              <Search size={14} />
               <input
                 type="text"
                 autoFocus
@@ -670,7 +673,7 @@ export default function SectionManagementPage() {
       onSuccess();
     } catch (error) {
       console.error(label + " failed", error);
-      say((saved ? "The request succeeded, but backend synchronization could not be confirmed. Reload before retrying. " : "") + getApiErrorMessage(error));
+      say((saved ? "The request succeeded, but backend synchronization could not be confirmed. Reload before retrying. " : "") + getApiErrorMessage(error), "error");
     } finally {
       operationRef.current = false;
       setOperation("");
@@ -724,6 +727,39 @@ export default function SectionManagementPage() {
   const [roomFilters, setRoomFilters] = useState({ building: "", floor: "", roomType: "" });
   const [roomSearch, setRoomSearch] = useState("");
   const [roomPage, setRoomPage] = useState(1);
+
+  // Dynamic Compact Pagination state
+  const [roomPageSize, setRoomPageSize] = useState(5);
+  const [isCustomRoomPage, setIsCustomRoomPage] = useState(false);
+  const [customRoomPageInput, setCustomRoomPageInput] = useState("");
+
+  const [sectionPageSize, setSectionPageSize] = useState(5);
+  const [isCustomSectionPage, setIsCustomSectionPage] = useState(false);
+  const [customSectionPageInput, setCustomSectionPageInput] = useState("");
+
+  // Room Excel Global Upload Modal state
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [validationResult, setValidationResult] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // Section Student Counts & Delete Guard Modal state
+  const [sectionStudentCounts, setSectionStudentCounts] = useState({});
+  const [deleteModalState, setDeleteModalState] = useState({
+    isOpen: false,
+    section: null,
+    loading: false,
+    studentCount: null,
+  });
+
+  // Room Delete Modal state (Unconstrained, matches Section Delete confirmation modal)
+  const [deleteRoomModalState, setDeleteRoomModalState] = useState({
+    isOpen: false,
+    room: null,
+  });
 
   // Screen View state replacing modals
   const [sectionView, setSectionView] = useState("list");
@@ -779,13 +815,14 @@ export default function SectionManagementPage() {
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
-  const say = useCallback((message) => {
+  const say = useCallback((message, type = "success") => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast(message);
+    const toastObj = typeof message === "object" && message !== null ? message : { text: message, type };
+    setToast(toastObj);
     toastTimer.current = setTimeout(() => {
       setToast(null);
       toastTimer.current = null;
-    }, 3200);
+    }, 3500);
   }, []);
 
   const loadRooms = useCallback(async () => {
@@ -801,6 +838,27 @@ export default function SectionManagementPage() {
     return next;
   }, []);
 
+  const loadStudentCounts = useCallback(async () => {
+    try {
+      const res = await apiClient.get(apiEndpoints.students.getAll);
+      const studentList = unwrapList(res);
+      const counts = {};
+      if (Array.isArray(studentList)) {
+        studentList.forEach((s) => {
+          const sId = normalizeId(s.sectionId);
+          if (sId) {
+            counts[sId] = (counts[sId] || 0) + 1;
+          }
+        });
+      }
+      setSectionStudentCounts(counts);
+      return counts;
+    } catch (err) {
+      console.warn("Could not fetch student counts for sections:", err);
+      return {};
+    }
+  }, []);
+
   const loadSections = useCallback(async () => {
     const response = await apiClient.get(apiEndpoints.sections.getAll);
     const next = normalizeEntityList(response, normalizeSection);
@@ -811,8 +869,9 @@ export default function SectionManagementPage() {
       return 0;
     });
     setSections(next);
+    loadStudentCounts();
     return next;
-  }, []);
+  }, [loadStudentCounts]);
 
   useEffect(() => {
     let active = true;
@@ -825,9 +884,10 @@ export default function SectionManagementPage() {
       apiClient.get(apiEndpoints.rooms.getAll),
       apiClient.get(apiEndpoints.sections.getAll),
       apiClient.get("/api/v1/staff/dropdown", { params: { staffType: "Teaching" } }),
+      apiClient.get(apiEndpoints.students.getAll),
     ]).then((results) => {
       if (!active) return;
-      const [boardsResult, yearsResult, roomsResult, sectionsResult, staffResult] = results;
+      const [boardsResult, yearsResult, roomsResult, sectionsResult, staffResult, studentsResult] = results;
       if (boardsResult.status === "fulfilled") {
         setBoardsList(unwrapList(boardsResult.value).map(normalizeBoard).filter((item) => item.id && item.isActive));
       }
@@ -855,13 +915,24 @@ export default function SectionManagementPage() {
       if (staffResult.status === "fulfilled") {
         const staffData = unwrapList(staffResult.value).map(normalizeTeacher);
         const teachingStaff = staffData.filter(
-          (item) =>
-            item.isActive &&
-            String(item.staffType || "Teaching")
-              .trim()
-              .toLowerCase() === "teaching"
+          (item) => item.isActive && String(item.staffType || "Teaching").toLowerCase() === "teaching"
         );
         setTeachersList(teachingStaff.filter((item) => item.id));
+      }
+      if (studentsResult?.status === "fulfilled") {
+        try {
+          const studentList = unwrapList(studentsResult.value);
+          const counts = {};
+          if (Array.isArray(studentList)) {
+            studentList.forEach((s) => {
+              const sId = normalizeId(s.sectionId);
+              if (sId) counts[sId] = (counts[sId] || 0) + 1;
+            });
+          }
+          setSectionStudentCounts(counts);
+        } catch {
+          // ignore error if student list format varies
+        }
       }
       const rejected = results.find((result) => result.status === "rejected");
       if (rejected) say(getApiErrorMessage(rejected.reason) || "Some Section Management data could not be loaded.");
@@ -992,30 +1063,16 @@ export default function SectionManagementPage() {
       groupName: group?.name || section.group || "—",
       programName: program?.name || section.program || "—",
       roomNo: room?.roomNo || section.roomNo || "—",
-      teacherName: teacher ? (teacher.employeeId ? `${teacher.name} (${teacher.employeeId})` : teacher.name) : (section.teacher || "—"),
+      teacherName: teacher?.name || (section.teacher ? section.teacher.replace(/\s*\([^)]*\)$/, "") : "—"),
     };
   }, [boardsById, yearsById, levelsById, groupsById, programsById, roomsById, teachersById]);
 
   const roomAllowed = (room, row, otherRows = []) => Boolean(room?.id && room.isActive && room.roomType === "Classroom" &&
     (row.status !== "Active" || (![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
       .some((section) => section.status === "Active" && normalizeId(section.roomId) === normalizeId(room.id)))));
-  const teacherAssignmentConflict = (teacherId, row, otherRows = []) =>
-    row.status === "Active" &&
-    [
-      ...sections.filter(
-        (section) =>
-          normalizeId(section.id) !== normalizeId(selectedSectionId)
-      ),
-      ...otherRows,
-    ].some(
-      (section) =>
-        section.status === "Active" &&
-        normalizeId(section.classTeacherId) === normalizeId(teacherId)
-    );
-
-  const teacherAllowed = (teacher, row, otherRows = []) =>
-    isTeachingStaff(teacher) &&
-    !teacherAssignmentConflict(teacher.id, row, otherRows);
+  const teacherAllowed = (teacher, row, otherRows = []) => isTeachingStaff(teacher) &&
+    (row.status !== "Active" || ![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
+      .some((section) => section.status === "Active" && normalizeId(section.classTeacherId) === normalizeId(teacher.id)));
   const roomOptionsFor = (row, others = []) => rooms.filter((room) => roomAllowed(room, row, others))
     .map((room) => ({ value: normalizeId(room.id), label: room.roomNo + " (Cap: " + room.capacity + ")" }));
   const teacherOptionsFor = (row, others = []) => teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
@@ -1025,8 +1082,13 @@ export default function SectionManagementPage() {
   const previewSection = sections.find((item) => normalizeId(item.id) === normalizeId(selectedSectionId));
   const availableRooms = previewOption(roomOptionsFor(sectionForm), sectionForm.roomId, previewSection?.roomNo || "Current Room");
   const availableTeachers = previewOption(teacherOptionsFor(sectionForm), sectionForm.classTeacherId, previewSection?.teacher || "Current Incharge");
-  const getAvailableRoomsForBulkRow = (index) => roomOptionsFor(bulkSections[index], bulkSections.filter((_, other) => index !== other));
-  const getAvailableTeachersForBulkRow = (index) => teacherOptionsFor(bulkSections[index], bulkSections.filter((_, other) => index !== other));
+
+  const bulkRoomOptionsFor = (row, others = []) => rooms.filter((room) => roomAllowed(room, row, others))
+    .map((room) => ({ value: normalizeId(room.id), label: String(room.roomNo) }));
+  const bulkTeacherOptionsFor = (row, others = []) => teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
+    .map((teacher) => ({ value: normalizeId(teacher.id), label: teacher.name }));
+  const getAvailableRoomsForBulkRow = (index) => bulkRoomOptionsFor(bulkSections[index], bulkSections.filter((_, other) => index !== other));
+  const getAvailableTeachersForBulkRow = (index) => bulkTeacherOptionsFor(bulkSections[index], bulkSections.filter((_, other) => index !== other));
 
   // Filtering & Pagination
   const filteredSections = useMemo(() => {
@@ -1055,8 +1117,8 @@ export default function SectionManagementPage() {
     });
   }, [sections, filters, search, resolveSection]);
 
-  const sectionPages = Math.max(1, Math.ceil(filteredSections.length / PAGE_SIZE));
-  const shownSections = filteredSections.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const sectionPages = Math.max(1, Math.ceil(filteredSections.length / (sectionPageSize || 5)));
+  const shownSections = filteredSections.slice((page - 1) * (sectionPageSize || 5), page * (sectionPageSize || 5));
 
   const filteredRooms = useMemo(() => {
     const q = roomSearch.trim().toLowerCase();
@@ -1076,14 +1138,14 @@ export default function SectionManagementPage() {
     });
   }, [rooms, roomSearch, roomFilters]);
 
-  const roomPages = Math.max(1, Math.ceil(filteredRooms.length / PAGE_SIZE));
-  const shownRooms = filteredRooms.slice((roomPage - 1) * PAGE_SIZE, roomPage * PAGE_SIZE);
+  const roomPages = Math.max(1, Math.ceil(filteredRooms.length / (roomPageSize || 5)));
+  const shownRooms = filteredRooms.slice((roomPage - 1) * (roomPageSize || 5), roomPage * (roomPageSize || 5));
 
   useEffect(() => { setPage((current) => Math.min(current, sectionPages)); }, [sectionPages]);
   useEffect(() => { setRoomPage((current) => Math.min(current, roomPages)); }, [roomPages]);
-  useEffect(() => { setRoomPage(1); }, [roomFilters, roomSearch]);
+  useEffect(() => { setRoomPage(1); }, [roomFilters, roomSearch, roomPageSize]);
 
-  useEffect(() => { setPage(1); }, [filters, search]);
+  useEffect(() => { setPage(1); }, [filters, search, sectionPageSize]);
 
   // Dropdowns
   const selectedSection = useMemo(() => sections.find((item) => normalizeId(item.id) === normalizeId(selectedSectionId)), [sections, selectedSectionId]);
@@ -1108,12 +1170,12 @@ export default function SectionManagementPage() {
   const filteredGroupOptions = useMemo(() => groupsList
     .filter((group) => group.isActive && matchesGroupScope(group, sectionForm))
     .map((group) => ({ value: normalizeId(group.id), label: group.name })),
-  [groupsList, sectionForm]);
+    [groupsList, sectionForm]);
 
   const filteredProgramOptions = useMemo(() => programsList
     .filter((program) => program.isActive && normalizeId(program.groupId) === normalizeId(sectionForm.groupId))
     .map((program) => ({ value: normalizeId(program.programId), label: program.name })),
-  [programsList, sectionForm.groupId]);
+    [programsList, sectionForm.groupId]);
 
   const levelOptions = useMemo(() => {
     const options = academicLevelsList.filter((l) => l.isActive).map((l) => ({ value: String(l.id), label: l.name }));
@@ -1325,19 +1387,8 @@ export default function SectionManagementPage() {
       const roomObj = roomsById.get(String(sectionForm.roomId));
       const strengthNum = Number(sectionForm.strength);
       if (!roomAllowed(roomObj, sectionForm)) errs.roomId = "Room is not available for Section allocation";
-      const selectedTeacher = teachersById.get(
-        normalizeId(sectionForm.classTeacherId)
-      );
-
-      if (!sectionForm.classTeacherId) {
-        errs.classTeacherId = "Incharge is required";
-      } else if (!isTeachingStaff(selectedTeacher)) {
-        errs.classTeacherId = "Select an active Teaching Staff member";
-      } else if (
-        teacherAssignmentConflict(selectedTeacher.id, sectionForm)
-      ) {
-        errs.classTeacherId =
-          "This faculty member is already assigned to another active section";
+      if (sectionForm.classTeacherId && !teacherAllowed(teachersById.get(normalizeId(sectionForm.classTeacherId)), sectionForm)) {
+        errs.classTeacherId = "Select an available active Teaching Incharge";
       }
       if (sections.some((item) => normalizeId(item.id) !== normalizeId(selectedSectionId) && sameText(item.name, sectionForm.name) && normalizeId(item.boardId) === normalizeId(boardId) && normalizeId(item.academicYearId) === normalizeId(academicYearId) && normalizeId(item.groupId) === normalizeId(groupId) && normalizeId(item.programId) === normalizeId(programId) && normalizeId(item.academicLevelId) === normalizeId(academicLevelId))) errs.name = "Section Name already exists for this academic scope";
 
@@ -1392,20 +1443,8 @@ export default function SectionManagementPage() {
         const roomObj = roomsById.get(normalizeId(sec.roomId));
         const others = bulkSections.filter((_, index) => index !== i);
         if (!roomAllowed(roomObj, sec, others)) errs[`room_${i}`] = "Room is not available for Section allocation";
-
-        const selectedTeacher = teachersById.get(
-          normalizeId(sec.classTeacherId)
-        );
-
-        if (!sec.classTeacherId) {
-          errs[`teacher_${i}`] = "Incharge is required";
-        } else if (!isTeachingStaff(selectedTeacher)) {
-          errs[`teacher_${i}`] = "Select an active Teaching Staff member";
-        } else if (
-          teacherAssignmentConflict(selectedTeacher.id, sec, others)
-        ) {
-          errs[`teacher_${i}`] =
-            "This faculty member is already assigned to another active section";
+        if (sec.classTeacherId && !teacherAllowed(teachersById.get(normalizeId(sec.classTeacherId)), sec, others)) {
+          errs[`teacher_${i}`] = "Select an available active Teaching Incharge";
         }
         const strengthNum = Number(sec.strength);
         if (!String(sec.strength).trim() || !Number.isInteger(strengthNum) || strengthNum <= 0 || strengthNum > 150) {
@@ -1492,31 +1531,390 @@ export default function SectionManagementPage() {
       });
   };
 
-  const deleteSection = async (sec) => {
+  // ---------- ROOM EXCEL UPLOAD / IMPORT HANDLERS ----------
+  const closeUploadModal = () => {
+    if (isImporting) return;
+    setIsUploadModalOpen(false);
+    setUploadFile(null);
+    setValidationResult(null);
+    setIsValidating(false);
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer?.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleFileSelect = (file) => {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith(".xlsx") && !name.endsWith(".xls") && !name.endsWith(".csv")) {
+      say("Please upload a valid Excel file (.xlsx, .xls, or .csv)", "error");
+      return;
+    }
+    setUploadFile(file);
+    setValidationResult(null);
+  };
+
+  const downloadRoomTemplate = () => {
+    const templateData = [
+      {
+        "Room Number": "101",
+        "Building": "Main Block",
+        "Floor": "1",
+        "Room Type": "Classroom",
+        "Capacity": 60,
+        "Status": "Active",
+      },
+      {
+        "Room Number": "102",
+        "Building": "Main Block",
+        "Floor": "1",
+        "Room Type": "Laboratory",
+        "Capacity": 40,
+        "Status": "Active",
+      },
+      {
+        "Room Number": "201",
+        "Building": "Tech Block",
+        "Floor": "2",
+        "Room Type": "Computer Lab",
+        "Capacity": 50,
+        "Status": "Active",
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    ws["!cols"] = [{ wch: 16 }, { wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Rooms");
+    XLSX.writeFile(wb, "Room_Import_Template.xlsx");
+  };
+
+  const validateExcelFile = () => {
+    if (!uploadFile) {
+      say("Please select or drop an Excel file first.", "error");
+      return;
+    }
+
+    setIsValidating(true);
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) {
+          throw new Error("No worksheets found in the uploaded workbook.");
+        }
+        const worksheet = workbook.Sheets[sheetName];
+        const rawRows = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+        if (!rawRows.length) {
+          setValidationResult({
+            totalRows: 0,
+            validRows: 0,
+            invalidRows: 0,
+            duplicateRows: 0,
+            errors: [{ row: 0, message: "The uploaded file contains no data rows." }],
+            validPayloads: [],
+            isValid: false,
+          });
+          setIsValidating(false);
+          return;
+        }
+
+        const errors = [];
+        const seenInFile = new Set();
+        const existingRoomsSet = new Set(rooms.map((r) => String(r.roomNo || "").trim().toLowerCase()));
+        const validPayloads = [];
+        let duplicateCount = 0;
+
+        rawRows.forEach((row, idx) => {
+          const rowNum = idx + 2; // Excel row number (1-based header is row 1)
+
+          // Match keys case-insensitively and flexibly
+          const getVal = (...keys) => {
+            for (const key of keys) {
+              const matchedKey = Object.keys(row).find(
+                (k) => k.trim().toLowerCase().replace(/[_\s-]/g, "") === key.toLowerCase().replace(/[_\s-]/g, "")
+              );
+              if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== "") {
+                return String(row[matchedKey]).trim();
+              }
+            }
+            return "";
+          };
+
+          const roomNo = getVal("Room Number", "Room No", "roomNumber", "roomNo", "room");
+          const building = getVal("Building", "Block", "Building Name", "Block Name", "buildingName");
+          const floor = getVal("Floor", "Floor No", "floorNumber", "floor");
+          const rawRoomType = getVal("Room Type", "RoomType", "room_type", "type");
+          const rawCapacity = getVal("Capacity", "Room Capacity", "maxCapacity", "capacity");
+          const rawStatus = getVal("Status", "isActive", "Active", "status");
+
+          let rowHasError = false;
+
+          // Validate Room Number
+          if (!roomNo) {
+            errors.push({ row: rowNum, message: "Room Number is required." });
+            rowHasError = true;
+          } else if (roomNo.length > 50) {
+            errors.push({ row: rowNum, message: "Room Number must not exceed 50 characters." });
+            rowHasError = true;
+          } else {
+            const normalizedRoomNo = roomNo.toLowerCase();
+            if (seenInFile.has(normalizedRoomNo)) {
+              errors.push({ row: rowNum, message: `Duplicate Room Number "${roomNo}" within the file.` });
+              duplicateCount++;
+              rowHasError = true;
+            } else if (existingRoomsSet.has(normalizedRoomNo)) {
+              errors.push({ row: rowNum, message: `Room Number "${roomNo}" already exists in the system.` });
+              duplicateCount++;
+              rowHasError = true;
+            }
+            seenInFile.add(normalizedRoomNo);
+          }
+
+          // Validate Building
+          if (!building) {
+            errors.push({ row: rowNum, message: "Building / Block name is required." });
+            rowHasError = true;
+          }
+
+          // Validate Floor
+          if (!floor) {
+            errors.push({ row: rowNum, message: "Floor is required." });
+            rowHasError = true;
+          }
+
+          // Validate Room Type
+          const matchedType = ROOM_TYPES.find(
+            (t) => t.toLowerCase() === rawRoomType.toLowerCase()
+          );
+          if (!matchedType) {
+            errors.push({ row: rowNum, message: `Invalid Room Type "${rawRoomType}". Allowed: ${ROOM_TYPES.join(", ")}.` });
+            rowHasError = true;
+          }
+
+          // Validate Capacity
+          const capNum = Number(rawCapacity);
+          if (!rawCapacity || !Number.isInteger(capNum) || capNum < 1 || capNum > 1000) {
+            errors.push({ row: rowNum, message: `Capacity must be a whole number between 1 and 1000 (received "${rawCapacity || "empty"}").` });
+            rowHasError = true;
+          }
+
+          // Status defaults to Active if not explicitly Inactive
+          const isActive = !["inactive", "false", "0"].includes(rawStatus.toLowerCase());
+
+          if (!rowHasError) {
+            validPayloads.push({
+              roomNo,
+              building,
+              floor: String(floor),
+              roomType: matchedType,
+              capacity: capNum,
+              isActive: isActive ? "Active" : "Inactive",
+            });
+          }
+        });
+
+        const isValid = errors.length === 0 && validPayloads.length === rawRows.length;
+        setValidationResult({
+          totalRows: rawRows.length,
+          validRows: validPayloads.length,
+          invalidRows: rawRows.length - validPayloads.length,
+          duplicateRows: duplicateCount,
+          errors,
+          validPayloads,
+          isValid,
+        });
+
+        if (isValid) {
+          say(`All ${validPayloads.length} rooms validated successfully! Ready to import.`);
+        } else {
+          say(`Validation completed with ${errors.length} issue(s). Please review errors.`, "error");
+        }
+      } catch (err) {
+        console.error("Excel parse failed", err);
+        setValidationResult({
+          totalRows: 0,
+          validRows: 0,
+          invalidRows: 0,
+          duplicateRows: 0,
+          errors: [{ row: 0, message: "Could not read Excel file: " + (err.message || "Invalid file format") }],
+          validPayloads: [],
+          isValid: false,
+        });
+        say("Failed to parse Excel file: " + (err.message || "Invalid format"), "error");
+      } finally {
+        setIsValidating(false);
+      }
+    };
+
+    reader.onerror = () => {
+      setIsValidating(false);
+      say("Failed to read the file from your computer.", "error");
+    };
+
+    reader.readAsArrayBuffer(uploadFile);
+  };
+
+  const handleImportRooms = async () => {
+    if (!validationResult || !validationResult.isValid || !validationResult.validPayloads?.length) return;
+    if (isImporting) return;
+
+    setIsImporting(true);
+    const payloads = validationResult.validPayloads.map(roomPayload);
+
+    try {
+      await runMutation(
+        "BULK_ROOM_IMPORT",
+        () => apiClient.post(ROOM_ENDPOINTS.bulk, { rooms: payloads }),
+        async (response) => {
+          const next = await loadRooms();
+          verifyBulkResult(response, payloads.length);
+          if (!payloads.every((payload) => next.some((room) => matchesRoom(room, payload)))) {
+            throw new Error("Some imported Rooms could not be verified in the backend data.");
+          }
+        },
+        () => {
+          setRoomPage(1);
+          setIsUploadModalOpen(false);
+          setUploadFile(null);
+          setValidationResult(null);
+          say(`Successfully imported ${payloads.length} rooms!`);
+        }
+      );
+    } catch (err) {
+      console.error("Import rooms failed", err);
+      say("Import failed: " + getApiErrorMessage(err), "error");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const openDeleteSectionModal = async (sec) => {
     if (operationRef.current || initialLoading) return;
-    if (!window.confirm('Are you sure you want to delete section "' + sec.name + '"?')) return;
-    await runMutation("DELETE_SECTION:" + sec.id,
+    setDeleteModalState({
+      isOpen: true,
+      section: sec,
+      loading: true,
+      studentCount: null,
+    });
+
+    try {
+      const res = await apiClient.get(apiEndpoints.students.getBySection(sec.id));
+      const studentList = unwrapList(res);
+      const count = Array.isArray(studentList) ? studentList.length : 0;
+      setDeleteModalState((prev) => ({
+        ...prev,
+        loading: false,
+        studentCount: count,
+      }));
+      setSectionStudentCounts((prev) => ({ ...prev, [sec.id]: count }));
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        setDeleteModalState((prev) => ({
+          ...prev,
+          loading: false,
+          studentCount: 0,
+        }));
+        setSectionStudentCounts((prev) => ({ ...prev, [sec.id]: 0 }));
+      } else {
+        const list = err?.response?.data?.data || err?.response?.data;
+        const count = Array.isArray(list) ? list.length : 0;
+        setDeleteModalState((prev) => ({
+          ...prev,
+          loading: false,
+          studentCount: count,
+        }));
+        setSectionStudentCounts((prev) => ({ ...prev, [sec.id]: count }));
+      }
+    }
+  };
+
+  const closeDeleteSectionModal = () => {
+    if (operationRef.current) return;
+    setDeleteModalState({
+      isOpen: false,
+      section: null,
+      loading: false,
+      studentCount: null,
+    });
+  };
+
+  const confirmDeleteSection = async () => {
+    const sec = deleteModalState.section;
+    if (!sec || operationRef.current || deleteModalState.studentCount > 0) return;
+
+    await runMutation(
+      "DELETE_SECTION:" + sec.id,
       () => apiClient.delete(apiEndpoints.sections.delete(sec.id)),
       async () => {
         const next = await loadSections();
         await loadRooms();
-        if (next.some((item) => item.id === sec.id)) throw new Error("The Section is still present in the backend data.");
+        closeDeleteSectionModal();
+        if (next.some((item) => item.id === sec.id)) {
+          throw new Error("The Section is still present in the backend data.");
+        }
       },
-      () => say('Section "' + sec.name + '" deleted successfully.'));
+      () => {
+        closeDeleteSectionModal();
+        say('Section "' + sec.name + '" deleted successfully.');
+      }
+    );
   };
 
-  const deleteRoom = async (room) => {
+  const openDeleteRoomModal = (room) => {
     if (operationRef.current || initialLoading) return;
-    const assigned = sections.find((section) => section.status === "Active" && normalizeId(section.roomId) === normalizeId(room.id));
-    if (assigned) return say('Cannot delete room "' + room.roomNo + '" because it is assigned to active section "' + assigned.name + '".');
-    if (!window.confirm('Are you sure you want to delete room "' + room.roomNo + '"?')) return;
-    await runMutation("DELETE_ROOM:" + room.id,
-      () => apiClient.delete(ROOM_ENDPOINTS.delete(room.id)),
+    setDeleteRoomModalState({
+      isOpen: true,
+      room,
+    });
+  };
+
+  const closeDeleteRoomModal = () => {
+    if (operationRef.current) return;
+    setDeleteRoomModalState({
+      isOpen: false,
+      room: null,
+    });
+  };
+
+  const confirmDeleteRoom = async () => {
+    const rm = deleteRoomModalState.room;
+    if (!rm || operationRef.current) return;
+    await runMutation(
+      "DELETE_ROOM:" + rm.id,
+      () => apiClient.delete(ROOM_ENDPOINTS.delete(rm.id)),
       async () => {
         const next = await loadRooms();
-        if (next.some((item) => item.id === room.id)) throw new Error("The Room is still present in the backend data.");
+        closeDeleteRoomModal();
+        if (next.some((item) => item.id === rm.id)) throw new Error("The Room is still present in the backend data.");
       },
-      () => say('Room "' + room.roomNo + '" deleted successfully.'));
+      () => {
+        closeDeleteRoomModal();
+        say('Room "' + rm.roomNo + '" deleted successfully.');
+      }
+    );
   };
 
   const exportAllocationExcel = () => {
@@ -1585,7 +1983,7 @@ export default function SectionManagementPage() {
               <div className="cms-card">
                 <div className="cms-toolbar cms-sec-toolbar">
                   <div className="cms-search cms-sec-search">
-                    <Search3DIcon size={16} />
+                    <Search size={16} />
                     <input
                       type="search"
                       placeholder="Search by Room No, block, floor..."
@@ -1625,6 +2023,18 @@ export default function SectionManagementPage() {
                   <div className="cms-sec-toolbar-spacer" />
                   <button
                     type="button"
+                    className="cms-btn cms-btn-outline cms-sec-compact-btn"
+                    onClick={() => {
+                      setIsUploadModalOpen(true);
+                      setUploadFile(null);
+                      setValidationResult(null);
+                    }}
+                  >
+                    <Upload size={16} />
+                    Upload
+                  </button>
+                  <button
+                    type="button"
                     className="cms-btn cms-btn-primary cms-sec-compact-btn"
                     onClick={openAddRoom}
                   >
@@ -1639,10 +2049,10 @@ export default function SectionManagementPage() {
                     <thead>
                       <tr>
                         <th>Room No</th>
-                        <th>Block Name</th>
-                        <th>Floor</th>
+                        <th className="cms-cell-center">Block Name</th>
+                        <th className="cms-cell-center">Floor</th>
                         <th>Room Type</th>
-                        <th>Capacity</th>
+                        <th className="cms-cell-center">Capacity</th>
                         <th>Status</th>
                         <th>Actions</th>
                       </tr>
@@ -1652,10 +2062,10 @@ export default function SectionManagementPage() {
                         shownRooms.map((room) => (
                           <tr key={room.id}>
                             <td className="cms-sec-name-cell">{room.roomNo}</td>
-                            <td>{room.building}</td>
-                            <td>{room.floor}</td>
+                            <td className="cms-cell-center">{room.building}</td>
+                            <td className="cms-cell-center">{room.floor}</td>
                             <td>{room.roomType}</td>
-                            <td>{room.capacity}</td>
+                            <td className="cms-cell-center">{room.capacity}</td>
                             <td>
                               <span
                                 className={`cms-sec-status-badge ${room.isActive ? "cms-badge-active" : "cms-badge-inactive"
@@ -1685,9 +2095,9 @@ export default function SectionManagementPage() {
                                 <button
                                   type="button"
                                   className="cms-sec-action-btn cms-sec-delete-action"
-                                  title={operation === `DELETE_ROOM:${room.id}` ? "Deleting..." : "Delete Room"}
+                                  title="Delete Room"
                                   disabled={Boolean(operation)}
-                                  onClick={() => deleteRoom(room)}
+                                  onClick={() => openDeleteRoomModal(room)}
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -1709,9 +2119,56 @@ export default function SectionManagementPage() {
                 {/* Room Pagination */}
                 <div className="cms-sec-pagination">
                   <span className="cms-sec-record-summary">
-                    Showing {shownRooms.length ? (roomPage - 1) * PAGE_SIZE + 1 : 0}–
-                    {Math.min(roomPage * PAGE_SIZE, filteredRooms.length)} of {filteredRooms.length} records
+                    Showing {shownRooms.length ? (roomPage - 1) * roomPageSize + 1 : 0}–
+                    {Math.min(roomPage * roomPageSize, filteredRooms.length)} of {filteredRooms.length} records
                   </span>
+
+                  <div className="cms-sec-page-size-wrap">
+                    <span className="cms-sec-page-size-label">Per page:</span>
+                    <select
+                      className="cms-sec-page-size-select"
+                      aria-label="Rooms per page"
+                      value={isCustomRoomPage ? "custom" : roomPageSize}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "custom") {
+                          setIsCustomRoomPage(true);
+                          setCustomRoomPageInput(String(roomPageSize));
+                        } else {
+                          setIsCustomRoomPage(false);
+                          setRoomPageSize(Number(val));
+                          setRoomPage(1);
+                        }
+                      }}
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={15}>15</option>
+                      <option value={25}>25</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    {isCustomRoomPage && (
+                      <input
+                        type="number"
+                        min="1"
+                        max="200"
+                        className="cms-sec-page-size-custom-input"
+                        value={customRoomPageInput}
+                        placeholder="Qty"
+                        aria-label="Custom rooms per page"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomRoomPageInput(val);
+                          const num = parseInt(val, 10);
+                          if (Number.isInteger(num) && num > 0) {
+                            setRoomPageSize(num);
+                            setRoomPage(1);
+                          }
+                        }}
+                      />
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     className="cms-btn cms-btn-ghost"
@@ -1890,7 +2347,7 @@ export default function SectionManagementPage() {
                             disabled={roomFormMode === "preview"}
                           >
                             <option value="" disabled>Select Status</option>
-                              <option value="Active">Active</option>
+                            <option value="Active">Active</option>
                             <option value="Inactive">Inactive</option>
                           </select>
                           {roomFieldErrors.isActive && <span className="cms-field-error">{roomFieldErrors.isActive}</span>}
@@ -2058,6 +2515,7 @@ export default function SectionManagementPage() {
                       type="button"
                       className="cms-btn cms-btn-ghost"
                       onClick={() => setRoomView("list")}
+                      disabled={Boolean(operation)}
                     >
                       {roomFormMode === "preview" ? "Close" : "Cancel"}
                     </button>
@@ -2087,7 +2545,7 @@ export default function SectionManagementPage() {
               <div className="cms-card">
                 <div className="cms-toolbar cms-sec-toolbar">
                   <div className="cms-search cms-sec-search">
-                    <Search3DIcon size={16} />
+                    <Search size={16} />
                     <input
                       type="search"
                       placeholder="Search by section, group, program..."
@@ -2137,14 +2595,13 @@ export default function SectionManagementPage() {
                       />
                     </div>
                   </div>
-                  <div className="cms-sec-action-row">
-                    <button type="button" className="cms-btn cms-btn-ghost cms-sec-compact-btn cms-allocation-export-btn" onClick={exportAllocationExcel}>
-                      <Download size={15} /> Download Excel
-                    </button>
-                    <button type="button" className="cms-btn cms-btn-primary cms-sec-compact-btn" onClick={openAddSection}>
-                      <Plus size={16} /> Add Section
-                    </button>
-                  </div>
+                  <div className="cms-sec-toolbar-spacer" />
+                  <button type="button" className="cms-btn cms-btn-ghost cms-sec-compact-btn cms-allocation-export-btn" onClick={exportAllocationExcel}>
+                    <Download size={15} /> Download Excel
+                  </button>
+                  <button type="button" className="cms-btn cms-btn-primary cms-sec-compact-btn" onClick={openAddSection}>
+                    <Plus size={16} /> Add Section
+                  </button>
                 </div>
 
                 {/* Sections Table */}
@@ -2153,33 +2610,43 @@ export default function SectionManagementPage() {
                     <thead>
                       <tr>
                         <th>Section Name</th>
-                        <th>Board</th>
-                        <th>Academic Year</th>
                         <th>Group</th>
                         <th>Program</th>
                         <th>Academic Level</th>
-                        <th>Room No</th>
+                        <th className="cms-cell-center">Room No</th>
                         <th>Incharge</th>
-                        <th>Capacity</th>
+                        <th className="cms-cell-center">Capacity</th>
+                        <th className="cms-cell-center">No of Students</th>
                         <th>Status</th>
-                        <th>Actions</th>
+                        <th className="cms-cell-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {shownSections.length ? (
                         shownSections.map((sec) => {
                           const detail = resolveSection(sec);
+                          const teacherObj = teachersById.get(normalizeId(sec.classTeacherId));
+                          const teacherCode = teacherObj?.employeeId || teacherObj?.employeeCode || "";
+                          const studentCount = sectionStudentCounts[sec.id] !== undefined ? sectionStudentCounts[sec.id] : 0;
                           return (
                             <tr key={sec.id}>
                               <td className="cms-sec-name-cell">{sec.name}</td>
-                              <td title={`${detail.boardName} (${detail.boardCode})`}>{detail.boardCode}</td>
-                              <td title={detail.academicYearName}>{detail.academicYearName}</td>
                               <td title={detail.groupName}>{detail.groupName}</td>
                               <td title={detail.programName}>{detail.programName}</td>
-                              <td title={detail.academicLevelName}>{detail.academicLevelName}</td>
-                              <td title={detail.roomNo}>{detail.roomNo}</td>
-                              <td title={detail.teacherName}>{detail.teacherName}</td>
-                              <td>{sec.strength || "—"}</td>
+                              <td title={detail.academicLevelName}>
+                                <div className="cms-two-line">
+                                  <span className="cms-two-line-primary">{detail.academicLevelName || "—"}</span>
+                                </div>
+                              </td>
+                              <td className="cms-cell-center" title={detail.roomNo}>{detail.roomNo || "—"}</td>
+                              <td title={detail.teacherName}>
+                                <div className="cms-two-line">
+                                  <span className="cms-two-line-primary">{detail.teacherName || "—"}</span>
+                                  {teacherCode && <span className="cms-two-line-secondary">{teacherCode}</span>}
+                                </div>
+                              </td>
+                              <td className="cms-cell-center">{sec.strength || "—"}</td>
+                              <td className="cms-cell-center">{studentCount ?? 0}</td>
                               <td>
                                 <span
                                   className={`cms-sec-status-badge ${sec.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"
@@ -2188,8 +2655,8 @@ export default function SectionManagementPage() {
                                   {sec.status}
                                 </span>
                               </td>
-                              <td>
-                                <div className="cms-sec-table-actions">
+                              <td className="cms-cell-center">
+                                <div className="cms-sec-table-actions" style={{ justifyContent: "center" }}>
                                   <button
                                     type="button"
                                     className="cms-sec-action-btn"
@@ -2209,9 +2676,9 @@ export default function SectionManagementPage() {
                                   <button
                                     type="button"
                                     className="cms-sec-action-btn cms-sec-delete-action"
-                                    title={operation === `DELETE_SECTION:${sec.id}` ? "Deleting..." : "Delete Section"}
+                                    title="Delete Section"
                                     disabled={Boolean(operation)}
-                                    onClick={() => deleteSection(sec)}
+                                    onClick={() => openDeleteSectionModal(sec)}
                                   >
                                     <Trash2 size={14} />
                                   </button>
@@ -2222,7 +2689,7 @@ export default function SectionManagementPage() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan="11" style={{ textAlign: "center", padding: "24px" }}>
+                          <td colSpan="10" style={{ textAlign: "center", padding: "24px" }}>
                             No sections found matching your criteria.
                           </td>
                         </tr>
@@ -2234,9 +2701,56 @@ export default function SectionManagementPage() {
                 {/* Section Pagination */}
                 <div className="cms-sec-pagination">
                   <span className="cms-sec-record-summary">
-                    Showing {shownSections.length ? (page - 1) * PAGE_SIZE + 1 : 0}–
-                    {Math.min(page * PAGE_SIZE, filteredSections.length)} of {filteredSections.length} records
+                    Showing {shownSections.length ? (page - 1) * sectionPageSize + 1 : 0}–
+                    {Math.min(page * sectionPageSize, filteredSections.length)} of {filteredSections.length} records
                   </span>
+
+                  <div className="cms-sec-page-size-wrap">
+                    <span className="cms-sec-page-size-label">Per page:</span>
+                    <select
+                      className="cms-sec-page-size-select"
+                      aria-label="Sections per page"
+                      value={isCustomSectionPage ? "custom" : sectionPageSize}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "custom") {
+                          setIsCustomSectionPage(true);
+                          setCustomSectionPageInput(String(sectionPageSize));
+                        } else {
+                          setIsCustomSectionPage(false);
+                          setSectionPageSize(Number(val));
+                          setPage(1);
+                        }
+                      }}
+                    >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={15}>15</option>
+                      <option value={25}>25</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    {isCustomSectionPage && (
+                      <input
+                        type="number"
+                        min="1"
+                        max="200"
+                        className="cms-sec-page-size-custom-input"
+                        value={customSectionPageInput}
+                        placeholder="Qty"
+                        aria-label="Custom sections per page"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCustomSectionPageInput(val);
+                          const num = parseInt(val, 10);
+                          if (Number.isInteger(num) && num > 0) {
+                            setSectionPageSize(num);
+                            setPage(1);
+                          }
+                        }}
+                      />
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     className="cms-btn cms-btn-ghost"
@@ -2287,6 +2801,15 @@ export default function SectionManagementPage() {
                         className={`cms-sec-mode-toggle-btn ${sectionCreationType === "single" ? "is-active" : ""}`}
                         onClick={() => {
                           setSectionCreationType("single");
+                          setSectionForm((f) => ({
+                            ...f,
+                            name: "",
+                            roomId: "",
+                            classTeacherId: "",
+                            strength: "",
+                            status: "",
+                          }));
+                          setBulkSections([{ name: "", roomId: "", classTeacherId: "", strength: "", status: "" }]);
                           setFieldErrors({});
                         }}
                       >
@@ -2297,6 +2820,15 @@ export default function SectionManagementPage() {
                         className={`cms-sec-mode-toggle-btn ${sectionCreationType === "bulk" ? "is-active" : ""}`}
                         onClick={() => {
                           setSectionCreationType("bulk");
+                          setSectionForm((f) => ({
+                            ...f,
+                            name: "",
+                            roomId: "",
+                            classTeacherId: "",
+                            strength: "",
+                            status: "",
+                          }));
+                          setBulkSections([{ name: "", roomId: "", classTeacherId: "", strength: "", status: "" }]);
                           setFieldErrors({});
                         }}
                       >
@@ -2463,7 +2995,7 @@ export default function SectionManagementPage() {
                           </div>
 
                           <div className="cms-field">
-                            <label>Incharge (Invigilator / Faculty) <span className="req">*</span></label>
+                            <label>Incharge</label>
                             <SearchableSelect
                               value={sectionForm.classTeacherId}
                               onChange={(val) => setSectionForm((f) => ({ ...f, classTeacherId: val }))}
@@ -2531,7 +3063,7 @@ export default function SectionManagementPage() {
                           }}
                         >
                           <span style={{ fontSize: "13px", fontWeight: "700" }}>
-                            Configure Program Sections ({bulkSections.length})
+                            Configure Program Sections
                           </span>
                           <button
                             type="button"
@@ -2623,21 +3155,23 @@ export default function SectionManagementPage() {
                             </div>
 
                             <div className="cms-field">
-                              <select
-                                className="cms-sec-native-select"
+                              <SearchableSelect
                                 value={sec.status}
-                                onChange={(event) => {
+                                onChange={(val) => {
                                   setBulkSections((prev) => {
                                     const next = [...prev];
-                                    next[idx].status = event.target.value;
+                                    next[idx].status = val;
                                     return next;
                                   });
                                 }}
-                              >
-                                <option value="" disabled>Select Status</option>
-                              <option value="Active">Active</option>
-                                <option value="Inactive">Inactive</option>
-                              </select>
+                                options={[
+                                  { value: "Active", label: "Active" },
+                                  { value: "Inactive", label: "Inactive" },
+                                ]}
+                                placeholder="Select Status"
+                                showSearch={false}
+                                hasError={Boolean(fieldErrors[`status_${idx}`])}
+                              />
                               {fieldErrors[`status_${idx}`] && <span className="cms-field-error">{fieldErrors[`status_${idx}`]}</span>}
                             </div>
 
@@ -2662,6 +3196,7 @@ export default function SectionManagementPage() {
                       type="button"
                       className="cms-btn cms-btn-ghost"
                       onClick={() => setSectionView("list")}
+                      disabled={Boolean(operation)}
                     >
                       {sectionFormMode === "preview" ? "Close" : "Cancel"}
                     </button>
@@ -2677,11 +3212,361 @@ export default function SectionManagementPage() {
           </>
         )}
 
+        {/* ROOM EXCEL UPLOAD / IMPORT MODAL */}
+        {isUploadModalOpen && (
+          <div className="cms-overlay" onClick={closeUploadModal}>
+            <div
+              className="cms-modal cms-room-upload-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="upload-rooms-title"
+            >
+              <div className="cms-modal-head">
+                <div>
+                  <h3 id="upload-rooms-title">Upload &amp; Import Rooms</h3>
+                  <p className="cms-room-modal-subtitle">
+                    Import previous rooms and buildings using an Excel (.xlsx, .xls) or CSV file.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  style={{ width: 32, height: 32, padding: 0 }}
+                  onClick={closeUploadModal}
+                  disabled={isImporting}
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="cms-modal-body">
+                <div className="cms-room-template-action">
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-ghost"
+                    style={{ fontSize: 12, height: 28, padding: "0 8px", gap: 5 }}
+                    onClick={downloadRoomTemplate}
+                  >
+                    <Download size={13} />
+                    Download Excel Template
+                  </button>
+                </div>
+
+                {/* Drag and Drop Zone / File Card */}
+                {!uploadFile ? (
+                  <div
+                    className={`cms-room-dropzone ${isDragging ? "is-dragging" : ""}`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx, .xls, .csv"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) handleFileSelect(e.target.files[0]);
+                      }}
+                    />
+                    <div className="cms-room-dropzone-icon">
+                      <Upload size={20} />
+                    </div>
+                    <span className="cms-room-dropzone-title">Click to upload or drag &amp; drop file</span>
+                    <span className="cms-room-dropzone-subtitle">Supported formats: .xlsx, .xls, .csv</span>
+                  </div>
+                ) : (
+                  <div className="cms-room-file-card">
+                    <div className="cms-room-file-card-info">
+                      <FileSpreadsheet size={24} color="var(--cms-primary, #6F8400)" />
+                      <div className="cms-room-file-card-details">
+                        <span className="cms-room-file-name">{uploadFile.name}</span>
+                        <span className="cms-room-file-meta">
+                          {(uploadFile.size / 1024).toFixed(1)} KB • Ready for validation
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      style={{ height: 28, padding: "0 10px", fontSize: 12 }}
+                      onClick={() => {
+                        setUploadFile(null);
+                        setValidationResult(null);
+                      }}
+                      disabled={isValidating || isImporting}
+                    >
+                      Change File
+                    </button>
+                  </div>
+                )}
+
+                {/* Validation Results Display */}
+                {validationResult && (
+                  <>
+                    <div className="cms-room-verify-summary">
+                      <div className="cms-room-summary-pill">
+                        <strong>{validationResult.totalRows}</strong>
+                        <span>Total Rows</span>
+                      </div>
+                      <div className="cms-room-summary-pill valid">
+                        <strong>{validationResult.validRows}</strong>
+                        <span>Valid</span>
+                      </div>
+                      <div className="cms-room-summary-pill invalid">
+                        <strong>{validationResult.invalidRows}</strong>
+                        <span>Errors</span>
+                      </div>
+                      <div className="cms-room-summary-pill duplicate">
+                        <strong>{validationResult.duplicateRows}</strong>
+                        <span>Duplicates</span>
+                      </div>
+                    </div>
+
+                    {validationResult.errors?.length > 0 && (
+                      <div className="cms-room-error-log">
+                        {validationResult.errors.map((err, i) => (
+                          <div key={i} className="cms-room-error-item">
+                            <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+                            <span>
+                              {err.row > 0 ? `Row ${err.row}: ` : ""}
+                              {err.message}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="cms-modal-foot">
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  onClick={closeUploadModal}
+                  disabled={isImporting}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-outline"
+                  onClick={validateExcelFile}
+                  disabled={!uploadFile || isValidating || isImporting}
+                >
+                  {isValidating ? (
+                    <>
+                      <Loader2 size={14} className="cms-spin" />
+                      Validating...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={14} />
+                      Validate File
+                    </>
+                  )}
+                </button>
+
+                {validationResult?.isValid && validationResult?.validPayloads?.length > 0 && (
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-primary"
+                    onClick={handleImportRooms}
+                    disabled={isImporting}
+                  >
+                    {isImporting ? (
+                      <>
+                        <Loader2 size={14} className="cms-spin" />
+                        Importing Rooms...
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={14} />
+                        Import {validationResult.validPayloads.length} Rooms
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Section Delete Confirmation Modal */}
+        {deleteModalState.isOpen && (
+          <div className="cms-overlay" onClick={closeDeleteSectionModal}>
+            <div
+              className="cms-modal cms-delete-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-section-title"
+            >
+              <div className="cms-delete-modal-content">
+                <div
+                  className={`cms-delete-modal-icon ${
+                    deleteModalState.loading
+                      ? ""
+                      : deleteModalState.studentCount > 0
+                        ? "blocked"
+                        : "confirm"
+                  }`}
+                >
+                  {deleteModalState.loading ? (
+                    <Loader2 size={24} className="cms-spin" />
+                  ) : deleteModalState.studentCount > 0 ? (
+                    <AlertCircle size={26} />
+                  ) : (
+                    <Trash2 size={24} />
+                  )}
+                </div>
+
+                <h3 id="delete-section-title" className="cms-delete-modal-title">
+                  {deleteModalState.loading
+                    ? "Checking Enrolled Students..."
+                    : deleteModalState.studentCount > 0
+                      ? "Cannot Delete Section"
+                      : `Delete Section "${deleteModalState.section?.name}"?`}
+                </h3>
+
+                <p className="cms-delete-modal-desc">
+                  {deleteModalState.loading ? (
+                    `Checking if "${deleteModalState.section?.name || "this section"}" contains active student assignments...`
+                  ) : deleteModalState.studentCount > 0 ? (
+                    <>
+                      This section currently has{" "}
+                      <strong style={{ color: "var(--cms-red, #d93636)" }}>
+                        {deleteModalState.studentCount} student{deleteModalState.studentCount === 1 ? "" : "s"}
+                      </strong>{" "}
+                      enrolled. Sections with active students cannot be deleted.
+                    </>
+                  ) : (
+                    "This action will remove the section and its classroom/incharge assignments. This cannot be undone."
+                  )}
+                </p>
+
+                {!deleteModalState.loading && deleteModalState.studentCount > 0 && (
+                  <div className="cms-delete-modal-alert">
+                    Please reassign or remove all {deleteModalState.studentCount} student(s) from this section before attempting deletion.
+                  </div>
+                )}
+              </div>
+
+              <div className="cms-modal-foot">
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  onClick={closeDeleteSectionModal}
+                  disabled={operation === `DELETE_SECTION:${deleteModalState.section?.id}`}
+                >
+                  {deleteModalState.studentCount > 0 ? "Close" : "Cancel"}
+                </button>
+
+                {!deleteModalState.loading && deleteModalState.studentCount === 0 && (
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-danger"
+                    onClick={confirmDeleteSection}
+                    disabled={operation === `DELETE_SECTION:${deleteModalState.section?.id}`}
+                    style={{
+                      background: "var(--cms-red, #d93636)",
+                      borderColor: "var(--cms-red, #d93636)",
+                      color: "#ffffff",
+                    }}
+                  >
+                    {operation === `DELETE_SECTION:${deleteModalState.section?.id}` ? (
+                      <>
+                        <Loader2 size={14} className="cms-spin" /> Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 size={14} /> Delete Section
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Room Delete Confirmation Modal (Theme-Based Clean Dialog) */}
+        {deleteRoomModalState.isOpen && (
+          <div className="cms-overlay" onClick={closeDeleteRoomModal}>
+            <div
+              className="cms-modal cms-delete-modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-room-title"
+            >
+              <div className="cms-delete-modal-content">
+                <div className="cms-delete-modal-icon confirm">
+                  <Trash2 size={24} />
+                </div>
+
+                <h3 id="delete-room-title" className="cms-delete-modal-title">
+                  Delete Room "{deleteRoomModalState.room?.roomNo}"?
+                </h3>
+
+                <p className="cms-delete-modal-desc">
+                  This action will remove the room from institutional records. This cannot be undone.
+                </p>
+              </div>
+
+              <div className="cms-modal-foot">
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  onClick={closeDeleteRoomModal}
+                  disabled={operation === `DELETE_ROOM:${deleteRoomModalState.room?.id}`}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-danger"
+                  onClick={confirmDeleteRoom}
+                  disabled={operation === `DELETE_ROOM:${deleteRoomModalState.room?.id}`}
+                  style={{
+                    background: "var(--cms-red, #d93636)",
+                    borderColor: "var(--cms-red, #d93636)",
+                    color: "#ffffff",
+                  }}
+                >
+                  {operation === `DELETE_ROOM:${deleteRoomModalState.room?.id}` ? (
+                    <>
+                      <Loader2 size={14} className="cms-spin" /> Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={14} /> Delete Room
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Global Toast Notification */}
         {toast && (
-          <div className="cms-toast">
-            <CheckCircle2 size={18} />
-            <span>{toast}</span>
+          <div
+            className={`cms-toast ${typeof toast === "object" && toast?.type === "error" ? "cms-toast-error" : "cms-toast-success"}`}
+            role="status"
+          >
+            {typeof toast === "object" && toast?.type === "error" ? (
+              <X size={18} />
+            ) : (
+              <CheckCircle2 size={18} />
+            )}
+            <span>{typeof toast === "object" ? toast.text : toast}</span>
           </div>
         )}
       </div>

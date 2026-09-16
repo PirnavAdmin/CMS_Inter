@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
-  Home,
   Building2,
   BedDouble,
   PieChart,
@@ -17,8 +16,10 @@ import {
   Layers,
   CircleCheck,
   TriangleAlert,
-  ChevronDown,
   Clock,
+  ChevronRight,
+  Info,
+  CheckCircle2,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import {
@@ -40,6 +41,7 @@ export default function HostelDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [toastMessage, setToastMessage] = useState("");
+  const pageSize = 4;
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -56,22 +58,58 @@ export default function HostelDashboard() {
     showToast(`Outpass rejected for ${name}`);
   };
 
-  // Filtered block for overview
-  const activeBlock = useMemo(() => {
+  // Search input handler
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setSelectedBlockName("");
+    setCurrentPage(1);
+  };
+
+  // Dropdown select handler
+  const handleBlockSelect = (e) => {
+    setSelectedBlockName(e.target.value);
+    setSearchQuery("");
+    setCurrentPage(1);
+  };
+
+  // Filtered blocks based on search and selected block
+  const filteredBlocks = useMemo(() => {
+    let result = blocks;
     if (selectedBlockName) {
-      return blocks.find((b) => b.name === selectedBlockName) || null;
+      result = result.filter((b) => b.name === selectedBlockName);
     }
     if (searchQuery.trim()) {
-      return (
-        blocks.find(
-          (b) =>
-            b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            b.code.toLowerCase().includes(searchQuery.toLowerCase())
-        ) || null
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (b) =>
+          b.name?.toLowerCase().includes(q) ||
+          b.code?.toLowerCase().includes(q) ||
+          b.warden?.toLowerCase().includes(q) ||
+          b.type?.toLowerCase().includes(q) ||
+          b.description?.toLowerCase().includes(q)
       );
     }
-    return null;
-  }, [selectedBlockName, searchQuery, blocks]);
+    return result;
+  }, [blocks, selectedBlockName, searchQuery]);
+
+  // Active block displayed in the top analytics strip
+  const activeBlock = useMemo(() => {
+    if (selectedBlockName) {
+      const found = blocks.find((b) => b.name === selectedBlockName);
+      if (found) return found;
+    }
+    if (filteredBlocks.length > 0) {
+      return filteredBlocks[0];
+    }
+    return blocks[0] || null;
+  }, [selectedBlockName, filteredBlocks, blocks]);
+
+  // Paged blocks for table view
+  const totalPages = Math.max(1, Math.ceil(filteredBlocks.length / pageSize));
+  const pagedBlocks = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredBlocks.slice(startIndex, startIndex + pageSize);
+  }, [filteredBlocks, currentPage, pageSize]);
 
   return (
     <DashboardLayout
@@ -79,233 +117,283 @@ export default function HostelDashboard() {
       subtitle={null}
       breadcrumb={["Hostel Management", "Dashboard"]}
     >
-      <div
-        className="hostel-dashboard-page min-h-screen bg-[#f2f6ed] p-6 text-[#1f2913]"
-        style={{ backgroundColor: "#f2f6ed", minHeight: "100vh" }}
-      >
+      <div className="hostel-dashboard-page">
         {/* Toast feedback banner */}
         {toastMessage && (
-          <div
-            className="mb-4 p-3.5 rounded-xl border border-[#e2ebd8] bg-[#f0f4e8] text-[#476323] text-sm font-semibold flex items-center gap-2 shadow-sm animate-in fade-in"
-            role="status"
-          >
-            <CircleCheck size={18} className="text-[#5b7a2b]" />
+          <div className="hostel-toast-banner" role="status">
+            <CircleCheck size={16} />
             <span>{toastMessage}</span>
           </div>
         )}
 
-        {/* 1. TOP HEADER - NO EXTRA BUTTONS, NO DATE, NO TABS */}
-        <div className="flex items-center gap-3 mb-5">
-          <div
-            className="w-10 h-10 rounded-xl border border-[#e2ebd8] bg-white flex items-center justify-center text-[#5b7a2b] shadow-xs flex-shrink-0"
-            style={{ width: "40px", height: "40px" }}
-          >
-            <Home size={22} className="text-[#5b7a2b]" strokeWidth={2} />
+        {/* 1. TOP HEADER BAR — Compact like Reference Image 1 */}
+        <header className="hostel-header-bar">
+          <div className="hostel-greeting-wrap">
+            <h1 className="hostel-greeting-title">
+              <Building2 size={20} className="hostel-title-icon" /> Hostel Management Dashboard
+            </h1>
+            <p className="hostel-greeting-sub">
+              Monitor bed occupancy, manage block capacities, and process student outpass permissions.
+            </p>
           </div>
-          <div>
-            <h1 className="text-2xl font-black text-[#1f2913] tracking-tight m-0">Hostel Dashboard</h1>
+          <div className="hostel-header-controls">
+            <div className="hostel-last-updated-badge">
+              <Clock size={12} />
+              <span>Live Status • <strong>All Blocks Operational</strong></span>
+            </div>
           </div>
+        </header>
+
+        {/* Global Context Banner */}
+        <div className="hostel-viewing-banner">
+          <Info size={15} className="hostel-banner-icon" />
+          <span>
+            Hostel Facilities Overview • Tracking live occupancy for <strong>{metrics.totalHostels} Hostel Blocks</strong> with <strong>{metrics.totalCapacity} Total Beds</strong>.
+          </span>
         </div>
 
-        {/* 2. STRICT 4-COLUMN GRID (4 CARDS SIDE-BY-SIDE IN 2 ROWS) */}
-        <div
-          className="grid grid-cols-4 gap-4 mb-5"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: "16px",
-          }}
-        >
+        {/* 2. COMPACT 8-KPI GRID — Strict 4 Columns, Clean & Professional */}
+        <section className="hostel-kpi-grid" aria-label="Hostel Key Metrics">
           {/* Card 1: TOTAL HOSTELS */}
-          <div className="p-4 bg-white rounded-xl border border-[#e2ebd8] shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">TOTAL HOSTELS</span>
-              <div className="w-8 h-8 rounded-lg bg-[#f0f4e8] text-[#4d6b2c] flex items-center justify-center flex-shrink-0">
-                <Building2 size={18} strokeWidth={2} />
+          <article className="hostel-kpi tone-primary">
+            <div className="hostel-kpi-top">
+              <span className="hostel-kpi-icon">
+                <Building2 size={16} strokeWidth={2.2} />
+              </span>
+              <div className="hostel-kpi-title-wrap">
+                <span className="hostel-kpi-label">Total Hostels</span>
+                <div className="hostel-kpi-value-row">
+                  <strong className="hostel-kpi-value">{metrics.totalHostels}</strong>
+                  <span className="hostel-kpi-trend">Active</span>
+                </div>
+                <span className="hostel-kpi-subtext">Operational blocks</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-neutral-900">{metrics.totalHostels}</span>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold bg-[#e9f2dd] text-[#476323] px-2 py-0.5 rounded-md">
-                ↗ Active
-              </span>
-            </div>
-          </div>
+          </article>
 
           {/* Card 2: TOTAL CAPACITY */}
-          <div className="p-4 bg-white rounded-xl border border-[#e2ebd8] shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">TOTAL CAPACITY</span>
-              <div className="w-8 h-8 rounded-lg bg-[#f0f4e8] text-[#4d6b2c] flex items-center justify-center flex-shrink-0">
-                <BedDouble size={18} strokeWidth={2} />
+          <article className="hostel-kpi tone-cyan">
+            <div className="hostel-kpi-top">
+              <span className="hostel-kpi-icon">
+                <BedDouble size={16} strokeWidth={2.2} />
+              </span>
+              <div className="hostel-kpi-title-wrap">
+                <span className="hostel-kpi-label">Total Capacity</span>
+                <div className="hostel-kpi-value-row">
+                  <strong className="hostel-kpi-value">
+                    {metrics.totalCapacity} <small>Beds</small>
+                  </strong>
+                  <span className="hostel-kpi-trend">Max Cap</span>
+                </div>
+                <span className="hostel-kpi-subtext">Registered capacity</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-neutral-900">
-                {metrics.totalCapacity} <span className="text-sm font-semibold text-[#5b7a2b]">Beds</span>
-              </span>
-              <span className="inline-flex items-center text-xs font-semibold bg-[#e9f2dd] text-[#476323] px-2 py-0.5 rounded-md">
-                Max Cap
-              </span>
-            </div>
-          </div>
+          </article>
 
           {/* Card 3: OCCUPANCY RATE */}
-          <div className="p-4 bg-white rounded-xl border border-[#e2ebd8] shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">OCCUPANCY RATE</span>
-              <div className="w-8 h-8 rounded-lg bg-[#f0f4e8] text-[#4d6b2c] flex items-center justify-center flex-shrink-0">
-                <PieChart size={18} strokeWidth={2} />
+          <article className="hostel-kpi tone-violet">
+            <div className="hostel-kpi-top">
+              <span className="hostel-kpi-icon">
+                <PieChart size={16} strokeWidth={2.2} />
+              </span>
+              <div className="hostel-kpi-title-wrap">
+                <span className="hostel-kpi-label">Occupancy Rate</span>
+                <div className="hostel-kpi-value-row">
+                  <strong className="hostel-kpi-value">{metrics.occupancyRate}%</strong>
+                  <span className="hostel-kpi-trend">Optimal</span>
+                </div>
+                <span className="hostel-kpi-subtext">Live allocation</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-neutral-900">{metrics.occupancyRate}%</span>
-              <span className="inline-flex items-center text-xs font-semibold bg-[#e9f2dd] text-[#476323] px-2 py-0.5 rounded-md">
-                Optimal
-              </span>
-            </div>
-          </div>
+          </article>
 
           {/* Card 4: OCCUPIED BEDS */}
-          <div className="p-4 bg-white rounded-xl border border-[#e2ebd8] shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">OCCUPIED BEDS</span>
-              <div className="w-8 h-8 rounded-lg bg-[#fef3c7] text-[#d97706] flex items-center justify-center flex-shrink-0">
-                <UserRound size={18} strokeWidth={2} />
+          <article className="hostel-kpi tone-orange">
+            <div className="hostel-kpi-top">
+              <span className="hostel-kpi-icon">
+                <UserRound size={16} strokeWidth={2.2} />
+              </span>
+              <div className="hostel-kpi-title-wrap">
+                <span className="hostel-kpi-label">Occupied Beds</span>
+                <div className="hostel-kpi-value-row">
+                  <strong className="hostel-kpi-value">{metrics.occupiedBeds}</strong>
+                  <span className="hostel-kpi-trend">Assigned</span>
+                </div>
+                <span className="hostel-kpi-subtext">Allotted to students</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-neutral-900">{metrics.occupiedBeds}</span>
-              <span className="inline-flex items-center text-xs font-semibold bg-[#e9f2dd] text-[#476323] px-2 py-0.5 rounded-md">
-                Assigned
-              </span>
-            </div>
-          </div>
+          </article>
 
           {/* Card 5: VACANT BEDS */}
-          <div className="p-4 bg-white rounded-xl border border-[#e2ebd8] shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">VACANT BEDS</span>
-              <div className="w-8 h-8 rounded-lg bg-[#dcfce7] text-[#16a34a] flex items-center justify-center flex-shrink-0">
-                <BedDouble size={18} strokeWidth={2} />
+          <article className="hostel-kpi tone-green">
+            <div className="hostel-kpi-top">
+              <span className="hostel-kpi-icon">
+                <BedDouble size={16} strokeWidth={2.2} />
+              </span>
+              <div className="hostel-kpi-title-wrap">
+                <span className="hostel-kpi-label">Vacant Beds</span>
+                <div className="hostel-kpi-value-row">
+                  <strong className="hostel-kpi-value">{metrics.vacantBeds}</strong>
+                  <span className="hostel-kpi-trend">Available</span>
+                </div>
+                <span className="hostel-kpi-subtext">Ready for allocation</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-neutral-900">{metrics.vacantBeds}</span>
-              <span className="inline-flex items-center text-xs font-semibold bg-[#e9f2dd] text-[#476323] px-2 py-0.5 rounded-md">
-                Available
-              </span>
-            </div>
-          </div>
+          </article>
 
           {/* Card 6: HOSTELLERS */}
-          <div className="p-4 bg-white rounded-xl border border-[#e2ebd8] shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">HOSTELLERS</span>
-              <div className="w-8 h-8 rounded-lg bg-[#f0f4e8] text-[#4d6b2c] flex items-center justify-center flex-shrink-0">
-                <Users size={18} strokeWidth={2} />
+          <article className="hostel-kpi tone-blue">
+            <div className="hostel-kpi-top">
+              <span className="hostel-kpi-icon">
+                <Users size={16} strokeWidth={2.2} />
+              </span>
+              <div className="hostel-kpi-title-wrap">
+                <span className="hostel-kpi-label">Hostellers</span>
+                <div className="hostel-kpi-value-row">
+                  <strong className="hostel-kpi-value">{metrics.hostellers}</strong>
+                  <span className="hostel-kpi-trend">Students</span>
+                </div>
+                <span className="hostel-kpi-subtext">Active residents</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-neutral-900">{metrics.hostellers}</span>
-              <span className="inline-flex items-center text-xs font-semibold bg-[#e9f2dd] text-[#476323] px-2 py-0.5 rounded-md">
-                Students
-              </span>
-            </div>
-          </div>
+          </article>
 
           {/* Card 7: MONTHLY REVENUE */}
-          <div className="p-4 bg-white rounded-xl border border-[#e2ebd8] shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">MONTHLY REVENUE</span>
-              <div className="w-8 h-8 rounded-lg bg-[#dcfce7] text-[#16a34a] flex items-center justify-center flex-shrink-0">
-                <IndianRupee size={18} strokeWidth={2.2} />
+          <article className="hostel-kpi tone-green">
+            <div className="hostel-kpi-top">
+              <span className="hostel-kpi-icon">
+                <IndianRupee size={16} strokeWidth={2.2} />
+              </span>
+              <div className="hostel-kpi-title-wrap">
+                <span className="hostel-kpi-label">Monthly Revenue</span>
+                <div className="hostel-kpi-value-row">
+                  <strong className="hostel-kpi-value">₹{metrics.monthlyRevenue.toLocaleString()}</strong>
+                  <span className="hostel-kpi-trend">Billed</span>
+                </div>
+                <span className="hostel-kpi-subtext">Hostel fees billing</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-neutral-900">₹{metrics.monthlyRevenue.toLocaleString()}</span>
-              <span className="inline-flex items-center text-xs font-semibold bg-[#e9f2dd] text-[#476323] px-2 py-0.5 rounded-md">
-                Billed
-              </span>
-            </div>
-          </div>
+          </article>
 
           {/* Card 8: ACTIVE WARDENS */}
-          <div className="p-4 bg-white rounded-xl border border-[#e2ebd8] shadow-xs flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">ACTIVE WARDENS</span>
-              <div className="w-8 h-8 rounded-lg bg-[#fee2e2] text-[#dc2626] flex items-center justify-center flex-shrink-0">
-                <ShieldCheck size={18} strokeWidth={2} />
+          <article className="hostel-kpi tone-red">
+            <div className="hostel-kpi-top">
+              <span className="hostel-kpi-icon">
+                <ShieldCheck size={16} strokeWidth={2.2} />
+              </span>
+              <div className="hostel-kpi-title-wrap">
+                <span className="hostel-kpi-label">Active Wardens</span>
+                <div className="hostel-kpi-value-row">
+                  <strong className="hostel-kpi-value">{metrics.activeWardens}</strong>
+                  <span className="hostel-kpi-trend">Supervising</span>
+                </div>
+                <span className="hostel-kpi-subtext">Staff on duty</span>
               </div>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-bold text-neutral-900">{metrics.activeWardens}</span>
-              <span className="inline-flex items-center text-xs font-semibold bg-[#e9f2dd] text-[#476323] px-2 py-0.5 rounded-md">
-                Supervising
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. OVERALL HOSTEL BED OCCUPANCY COMPONENT */}
-        <section className="bg-white border border-[#e2ebd8] rounded-2xl shadow-xs p-5 mb-5" aria-label="Bed Occupancy">
-          {/* Top Row */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm font-bold tracking-wide uppercase text-[#1f2913] flex items-center gap-2">
-              <Clock size={16} className="text-[#476323]" />
-              <span>OVERALL HOSTEL BED OCCUPANCY</span>
-            </div>
-            <span className="text-xs md:text-sm font-semibold text-[#5b7a2b]">
-              {metrics.occupiedBeds} Occupied / {metrics.vacantBeds} Vacant ({metrics.totalCapacity} Total Capacity)
-            </span>
-          </div>
-
-          {/* Middle Row (Horizontal Visible Progress Bar) */}
-          <div className="w-full h-3 rounded-full overflow-hidden flex my-3 bg-[#c8e6a6]">
-            <div
-              className="h-full bg-gradient-to-r from-[#5b7a2b] to-[#739938] rounded-l-full"
-              style={{ width: `${Math.max(metrics.occupancyRate, metrics.occupiedBeds > 0 ? 3 : 0)}%` }}
-            />
-            <div
-              className="h-full bg-[#c8e6a6]"
-              style={{ width: `${100 - Math.max(metrics.occupancyRate, metrics.occupiedBeds > 0 ? 3 : 0)}%` }}
-            />
-          </div>
-
-          {/* Bottom Row */}
-          <div className="flex items-center justify-between text-xs text-slate-500 mt-2">
-            <div className="flex items-center">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5b7a2b] mr-1.5" />
-              <span>Occupied Beds ({metrics.occupancyRate}%)</span>
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#5b7a2b] mr-1.5 ml-4" />
-              <span>Vacant Beds ({100 - metrics.occupancyRate}%)</span>
-            </div>
-            <span>Live Status</span>
-          </div>
+          </article>
         </section>
 
-        {/* 4. HOSTEL BLOCK OVERVIEW COMPONENT */}
-        <section className="bg-white border border-[#e2ebd8] rounded-2xl shadow-xs p-5 mb-5" aria-label="Block Overview">
-          {/* Header Row */}
-          <div className="flex items-center justify-between mb-4">
-            <div className="text-base font-bold text-[#1f2913] flex items-center gap-2">
-              <Building2 size={20} className="text-[#5b7a2b]" />
-              <span>Hostel Block Overview</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                placeholder="Search block name or code..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-9 w-60 text-xs px-3 rounded-xl border border-[#e2ebd8] bg-white placeholder-slate-400 focus:outline-none focus:border-[#5b7a2b] text-[#1f2913]"
+        {/* Quick Actions Row — Matching Reference Image 1 */}
+        <nav className="hostel-quick-actions" aria-label="Quick Actions">
+          <h2>Quick Actions</h2>
+          <div className="hostel-quick-actions-list">
+            <Link to="/hostel/master-setup" className="hostel-quick-action tone-primary">
+              <span className="hostel-quick-action-icon"><Building2 size={13} /></span>
+              <span>Setup Blocks</span>
+            </Link>
+            <Link to="/hostel/students" className="hostel-quick-action tone-blue">
+              <span className="hostel-quick-action-icon"><Users size={13} /></span>
+              <span>Hostel Students</span>
+            </Link>
+            <Link to="/hostel/student-allocation" className="hostel-quick-action tone-green">
+              <span className="hostel-quick-action-icon"><BedDouble size={13} /></span>
+              <span>Bed Allocation</span>
+            </Link>
+            <Link to="/hostel/attendance" className="hostel-quick-action tone-orange">
+              <span className="hostel-quick-action-icon"><CheckCircle2 size={13} /></span>
+              <span>Mark Attendance</span>
+            </Link>
+            <Link to="/hostel/reports" className="hostel-quick-action tone-violet">
+              <span className="hostel-quick-action-icon"><PieChart size={13} /></span>
+              <span>Hostel Reports</span>
+            </Link>
+          </div>
+        </nav>
+
+        {/* 3. OVERALL HOSTEL BED OCCUPANCY — Compact & Aligned */}
+        <article className="hostel-card" aria-label="Bed Occupancy">
+          <header className="hostel-card-head">
+            <h2>
+              <Clock size={14} className="hostel-title-icon" />
+              OVERALL HOSTEL BED OCCUPANCY
+            </h2>
+            <span className="hostel-card-sub-metric">
+              {metrics.occupiedBeds} Occupied / {metrics.vacantBeds} Vacant ({metrics.totalCapacity} Total Capacity)
+            </span>
+          </header>
+          <div className="hostel-card-body">
+            <div className="hostel-progress-track">
+              <div
+                className="hostel-progress-fill-occupied"
+                style={{ width: `${Math.max(metrics.occupancyRate, metrics.occupiedBeds > 0 ? 3 : 0)}%` }}
               />
+              <div
+                className="hostel-progress-fill-vacant"
+                style={{ width: `${100 - Math.max(metrics.occupancyRate, metrics.occupiedBeds > 0 ? 3 : 0)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs" style={{ color: "var(--cms-muted)" }}>
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ background: "var(--cms-primary)" }}
+                  />
+                  <span>Occupied Beds ({metrics.occupancyRate}%)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ background: "#22a447" }}
+                  />
+                  <span>Vacant Beds ({100 - metrics.occupancyRate}%)</span>
+                </span>
+              </div>
+              <span className="font-semibold">Live Status</span>
+            </div>
+          </div>
+        </article>
+
+        {/* 4. HOSTEL BLOCK OVERVIEW — Top Analytics Strip & Data in Table Format */}
+        <article className="hostel-card" aria-label="Block Overview">
+          <header className="hostel-card-head">
+            <h2>
+              <Building2 size={14} className="hostel-title-icon" />
+              Hostel Block Overview &amp; Analytics
+            </h2>
+            <div className="hostel-card-head-actions">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search block, code, warden..."
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  className="hostel-input"
+                  style={{ width: "190px", paddingLeft: "22px" }}
+                />
+                <Search
+                  size={12}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: "var(--cms-muted)" }}
+                />
+              </div>
               <select
                 value={selectedBlockName}
-                onChange={(e) => setSelectedBlockName(e.target.value)}
-                className="h-9 w-48 text-xs px-3 rounded-xl border border-[#e2ebd8] bg-white text-[#1f2913] focus:outline-none focus:border-[#5b7a2b] cursor-pointer"
+                onChange={handleBlockSelect}
+                className="hostel-select"
+                style={{ width: "170px" }}
               >
-                <option value="">Select Hostel Block...</option>
+                <option value="">All Hostel Blocks ({blocks.length})</option>
                 {blocks.map((b) => (
                   <option key={b.id || b.name} value={b.name}>
                     {b.name}
@@ -313,292 +401,322 @@ export default function HostelDashboard() {
                 ))}
               </select>
             </div>
-          </div>
+          </header>
 
-          {/* Center Placeholder Box */}
-          {!activeBlock ? (
-            <div className="border border-[#e2ebd8] rounded-2xl py-10 px-4 text-center my-4 bg-[#f0f4e8]">
-              <Building2 className="w-12 h-12 text-[#5b7a2b] mx-auto mb-2" strokeWidth={1.5} />
-              <h3 className="text-sm font-bold text-[#1f2913] mb-1">
-                Select a Hostel Block
-              </h3>
-              <p className="text-xs text-[#6b7e5d] max-w-md mx-auto">
-                Please select a hostel block from the dropdown above or type a search query to render block details.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4 my-2">
-              <div className="p-4 rounded-xl bg-[#f0f4e8] border border-[#e2ebd8] flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <h4 className="text-base font-bold text-[#1f2913] m-0">
-                    {activeBlock.name} ({activeBlock.code})
-                  </h4>
-                  <p className="text-xs text-[#6b7e5d] m-0 mt-0.5">
-                    {activeBlock.type} Accommodation • {activeBlock.description}
-                  </p>
+          <div className="hostel-card-body">
+            {/* Top Analytics Strip for Block Overview */}
+            {activeBlock ? (
+              <div className="hostel-block-analytics-strip">
+                <div className="hostel-block-analytics-info">
+                  <strong>
+                    {activeBlock.name} ({activeBlock.code}) • <span style={{ color: "var(--cms-primary)" }}>{activeBlock.type}</span>
+                  </strong>
+                  <span>{activeBlock.description}</span>
                 </div>
-                <span className="bg-[#e9f2dd] text-[#476323] border border-[#c8e6a6] rounded-md px-2.5 py-1 text-xs font-semibold">
-                  ● Active Status
-                </span>
-              </div>
-
-              {/* Metric Boxes Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                <div className="p-3.5 bg-white border border-[#e2ebd8] rounded-xl text-center shadow-xs">
-                  <div className="flex items-center justify-center gap-1 text-[#6b7e5d] mb-1">
-                    <Layers size={15} />
-                    <span className="text-xs font-medium uppercase text-[#6b7e5d]">Floors</span>
-                  </div>
-                  <div className="text-xl font-bold text-[#1f2913]">{activeBlock.floors}</div>
-                </div>
-
-                <div className="p-3.5 bg-white border border-[#e2ebd8] rounded-xl text-center shadow-xs">
-                  <div className="flex items-center justify-center gap-1 text-[#6b7e5d] mb-1">
-                    <DoorClosed size={15} />
-                    <span className="text-xs font-medium uppercase text-[#6b7e5d]">Total Rooms</span>
-                  </div>
-                  <div className="text-xl font-bold text-[#1f2913]">{activeBlock.totalRooms}</div>
-                </div>
-
-                <div className="p-3.5 bg-white border border-[#e2ebd8] rounded-xl text-center shadow-xs">
-                  <div className="flex items-center justify-center gap-1 text-[#6b7e5d] mb-1">
-                    <UserRound size={15} />
-                    <span className="text-xs font-medium uppercase text-[#6b7e5d]">Occupied Beds</span>
-                  </div>
-                  <div className="text-xl font-bold text-amber-600">{activeBlock.occupiedBeds}</div>
-                </div>
-
-                <div className="p-3.5 bg-white border border-[#e2ebd8] rounded-xl text-center shadow-xs">
-                  <div className="flex items-center justify-center gap-1 text-[#6b7e5d] mb-1">
-                    <BedDouble size={15} />
-                    <span className="text-xs font-medium uppercase text-[#6b7e5d]">Vacant Beds</span>
-                  </div>
-                  <div className="text-xl font-bold text-[#476323]">{activeBlock.vacantBeds}</div>
-                </div>
-
-                <div className="p-3.5 bg-white border border-[#e2ebd8] rounded-xl text-center shadow-xs col-span-2 sm:col-span-1">
-                  <div className="flex items-center justify-center gap-1 text-[#6b7e5d] mb-1">
-                    <ShieldCheck size={15} />
-                    <span className="text-xs font-medium uppercase text-[#6b7e5d]">Warden</span>
-                  </div>
-                  <div className="text-xs font-bold text-[#1f2913] truncate" title={activeBlock.warden}>
-                    {activeBlock.warden}
-                  </div>
-                  <div className="text-[11px] text-[#6b7e5d] flex items-center justify-center gap-1 mt-0.5">
-                    <Phone size={11} /> {activeBlock.wardenPhone}
-                  </div>
+                <div className="hostel-block-analytics-chips">
+                  <span className="hostel-block-chip">
+                    Floors: <strong>{activeBlock.floors}</strong>
+                  </span>
+                  <span className="hostel-block-chip">
+                    Rooms: <strong>{activeBlock.totalRooms}</strong>
+                  </span>
+                  <span className="hostel-block-chip">
+                    Occupied: <strong style={{ color: "#d97706" }}>{activeBlock.occupiedBeds}</strong>
+                  </span>
+                  <span className="hostel-block-chip">
+                    Vacant: <strong style={{ color: "#15803d" }}>{activeBlock.vacantBeds}</strong>
+                  </span>
+                  <span className="hostel-block-chip">
+                    Warden: <strong>{activeBlock.warden}</strong> ({activeBlock.wardenPhone})
+                  </span>
+                  <span className="cms-badge cms-badge-active">
+                    Active Status
+                  </span>
                 </div>
               </div>
-            </div>
-          )}
+            ) : null}
 
-          {/* Footer Row */}
-          <div className="flex items-center justify-between mt-4 pt-2">
-            <span className="text-xs text-[#6b7e5d]">
-              Showing {blocks.length > 0 ? Math.min(currentPage, blocks.length) : 0} of {blocks.length} records
-            </span>
-            <div className="flex items-center gap-1 text-xs text-[#6b7e5d]">
-              <button
-                type="button"
-                className="w-7 h-7 flex items-center justify-center rounded border border-[#e2ebd8] hover:bg-[#f0f4e8] disabled:opacity-40 transition cursor-pointer"
-                onClick={() => {
-                  setCurrentPage(1);
-                  if (blocks[0]) setSelectedBlockName(blocks[0].name);
-                }}
-                disabled={currentPage === 1 || blocks.length <= 1}
-                title="First Page"
-              >
-                «
-              </button>
-              <button
-                type="button"
-                className="w-7 h-7 flex items-center justify-center rounded border border-[#e2ebd8] hover:bg-[#f0f4e8] disabled:opacity-40 transition cursor-pointer"
-                onClick={() => {
-                  const p = Math.max(1, currentPage - 1);
-                  setCurrentPage(p);
-                  if (blocks[p - 1]) setSelectedBlockName(blocks[p - 1].name);
-                }}
-                disabled={currentPage === 1}
-                title="Previous Page"
-              >
-                ‹
-              </button>
-              {Array.from({ length: Math.min(Math.max(blocks.length, 1), 4) }).map((_, idx) => {
-                const page = idx + 1;
-                return (
-                  <button
-                    key={page}
-                    type="button"
-                    onClick={() => {
-                      setCurrentPage(page);
-                      if (blocks[page - 1]) setSelectedBlockName(blocks[page - 1].name);
-                    }}
-                    className={`w-7 h-7 rounded font-bold text-xs flex items-center justify-center transition cursor-pointer ${
-                      currentPage === page
-                        ? "bg-[#5b7a2b] text-white shadow-xs"
-                        : "border border-[#e2ebd8] text-[#1f2913] hover:bg-[#f0f4e8]"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                className="w-7 h-7 flex items-center justify-center rounded border border-[#e2ebd8] hover:bg-[#f0f4e8] disabled:opacity-40 transition cursor-pointer"
-                onClick={() => {
-                  const maxP = Math.max(1, Math.min(blocks.length, 4));
-                  const p = Math.min(maxP, currentPage + 1);
-                  setCurrentPage(p);
-                  if (blocks[p - 1]) setSelectedBlockName(blocks[p - 1].name);
-                }}
-                disabled={currentPage >= Math.max(1, Math.min(blocks.length, 4))}
-                title="Next Page"
-              >
-                ›
-              </button>
-              <button
-                type="button"
-                className="w-7 h-7 flex items-center justify-center rounded border border-[#e2ebd8] hover:bg-[#f0f4e8] disabled:opacity-40 transition cursor-pointer"
-                onClick={() => {
-                  const maxP = Math.max(1, Math.min(blocks.length, 4));
-                  setCurrentPage(maxP);
-                  if (blocks[maxP - 1]) setSelectedBlockName(blocks[maxP - 1].name);
-                }}
-                disabled={currentPage >= Math.max(1, Math.min(blocks.length, 4))}
-                title="Last Page"
-              >
-                »
-              </button>
+            {/* Block Data in Table Format */}
+            <div className="hostel-block-table-wrap">
+              <table className="hostel-block-table">
+                <thead>
+                  <tr>
+                    <th>Block Name &amp; Code</th>
+                    <th>Type</th>
+                    <th>Floors</th>
+                    <th>Rooms</th>
+                    <th>Total Beds</th>
+                    <th>Occupied</th>
+                    <th>Vacant</th>
+                    <th>Warden &amp; Contact</th>
+                    <th style={{ textAlign: "center" }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBlocks.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ textAlign: "center", padding: "16px", color: "var(--cms-muted)" }}>
+                        No hostel blocks match your search query.
+                      </td>
+                    </tr>
+                  ) : (
+                    pagedBlocks.map((b) => {
+                      const isSelected = activeBlock && activeBlock.id === b.id;
+                      return (
+                        <tr
+                          key={b.id || b.name}
+                          className={isSelected ? "is-selected-row" : ""}
+                          onClick={() => {
+                            setSelectedBlockName(b.name);
+                          }}
+                          title="Click row to view block analytics on top"
+                        >
+                          <td>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`hostel-table-dot ${isSelected ? "is-active" : ""}`} />
+                              <strong style={{ color: "var(--cms-text)" }}>{b.name}</strong>
+                              <small style={{ color: "var(--cms-muted)" }}>({b.code})</small>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`cms-badge no-dot ${b.type === "Boys" ? "tone-blue" : "tone-violet"}`}>
+                              {b.type}
+                            </span>
+                          </td>
+                          <td>{b.floors}</td>
+                          <td>{b.totalRooms}</td>
+                          <td>{b.totalBeds || (b.occupiedBeds + b.vacantBeds)}</td>
+                          <td style={{ color: "#d97706", fontWeight: 700 }}>{b.occupiedBeds}</td>
+                          <td style={{ color: "#15803d", fontWeight: 700 }}>{b.vacantBeds}</td>
+                          <td>
+                            <div className="flex flex-col text-xs leading-tight">
+                              <span className="font-semibold">{b.warden}</span>
+                              <span style={{ color: "var(--cms-muted)", fontSize: "10px" }}>{b.wardenPhone}</span>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: "center" }}>
+                            <span className="cms-badge cms-badge-active">{b.status || "Active"}</span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </section>
 
-        {/* 5. BOTTOM TWO-COLUMN GRID */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-          {/* RECENT BED ALLOCATIONS */}
-          <div className="bg-white border border-[#e2ebd8] rounded-xl shadow-xs p-5 flex flex-col justify-between">
-            <div>
-              {/* Header */}
-              <div className="flex items-center justify-between mb-4 pb-1">
-                <div className="flex items-center gap-2">
-                  <CircleCheck size={18} className="text-emerald-500" />
-                  <h3 className="text-sm font-bold tracking-wide text-slate-800 uppercase m-0">
-                    RECENT BED ALLOCATIONS
-                  </h3>
-                </div>
-                <Link
-                  to="/hostel/students"
-                  className="text-xs font-semibold text-[#5b7a2b] hover:text-[#465f1f] hover:underline no-underline"
+            {/* Pagination Controls */}
+            <div
+              className="flex items-center justify-between pt-2 mt-2 border-t"
+              style={{ borderColor: "var(--cms-border)" }}
+            >
+              <span className="text-[11px]" style={{ color: "var(--cms-muted)" }}>
+                Showing {filteredBlocks.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–
+                {Math.min(currentPage * pageSize, filteredBlocks.length)} of {filteredBlocks.length} records
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="hostel-pagination-btn"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  title="First Page"
                 >
-                  View All →
-                </Link>
+                  «
+                </button>
+                <button
+                  type="button"
+                  className="hostel-pagination-btn"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  title="Previous Page"
+                >
+                  ‹
+                </button>
+                {Array.from({ length: totalPages }).map((_, idx) => {
+                  const page = idx + 1;
+                  return (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      className={`hostel-pagination-btn ${currentPage === page ? "is-active" : ""}`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="hostel-pagination-btn"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  title="Next Page"
+                >
+                  ›
+                </button>
+                <button
+                  type="button"
+                  className="hostel-pagination-btn"
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage >= totalPages}
+                  title="Last Page"
+                >
+                  »
+                </button>
               </div>
+            </div>
+          </div>
+        </article>
 
-              {/* Allocations List */}
-              <div className="divide-y divide-slate-100">
+        {/* 5. BOTTOM TWO-COLUMN GRID — Vertical Layout matching Reference Image 2 */}
+        <section className="hostel-bottom-grid" aria-label="Recent Activities">
+          {/* RECENT BED ALLOCATIONS — Vertical List like Certificate Requests & Exams */}
+          <article className="hostel-card">
+            <header className="hostel-card-head">
+              <h2>
+                <CheckCircle2 size={14} className="text-emerald-600" />
+                RECENT BED ALLOCATIONS
+              </h2>
+              <Link to="/hostel/students" className="hostel-view-link">
+                View All <ChevronRight size={12} />
+              </Link>
+            </header>
+            <div className="hostel-card-body" style={{ padding: "8px 10px" }}>
+              <div
+                className="hostel-info-list"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  width: "100%",
+                  minWidth: 0,
+                  boxSizing: "border-box",
+                }}
+              >
                 {allocations.slice(0, 4).map((alloc) => (
                   <div
                     key={alloc.id}
-                    className="py-3 flex items-center justify-between gap-3 hover:bg-[#f0f4e8]/40 px-2 rounded-xl transition"
+                    className="hostel-info-item"
+                    style={{
+                      display: "flex",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                      width: "100%",
+                      minWidth: 0,
+                      boxSizing: "border-box",
+                    }}
                   >
-                    <div>
-                      <p className="text-sm font-bold text-slate-900 m-0 leading-tight">
-                        {alloc.name || alloc.studentName}
-                      </p>
-                      <p className="text-xs text-slate-500 m-0 mt-0.5">
-                        {alloc.admissionNo || alloc.admNo || alloc.id} • {alloc.block || alloc.blockName}
-                      </p>
+                    <span className="hostel-list-icon tone-green">
+                      <BedDouble size={14} />
+                    </span>
+                    <div className="hostel-info-content">
+                      <strong>{alloc.name || alloc.studentName}</strong>
+                      <small>
+                        {alloc.admissionNo || alloc.admNo || alloc.id} • {alloc.block || alloc.blockName} • {alloc.roomBed || alloc.roomBadge || (alloc.room ? `Room #${alloc.room} (${alloc.bed || 'BED-1'})` : 'BED-1')}
+                      </small>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <span className="bg-[#f0f4e8] text-[#4d6b2c] border border-[#e2ebd8] rounded-lg px-2.5 py-1 text-xs font-semibold whitespace-nowrap inline-block">
-                        {alloc.roomBed || alloc.roomBadge || (alloc.room ? `${alloc.room} (${alloc.bed || 'BED-1'})` : 'BED-1')}
-                      </span>
-                      <p className="text-[11px] text-slate-400 m-0 mt-0.5">
-                        Joined: {alloc.joinDate}
-                      </p>
-                    </div>
+                    <span className="hostel-days-badge" title={`Joined: ${alloc.joinDate}`}>
+                      {alloc.joinDate}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
+          </article>
 
-          {/* ACTIVE OUTPASS & LEAVE REQUESTS */}
-          <div className="bg-white border border-[#e2ebd8] rounded-xl shadow-xs p-5 flex flex-col justify-between">
-            <div>
-              {/* Header */}
-              <div className="flex items-center justify-between mb-4 pb-1">
-                <div className="flex items-center gap-2">
-                  <TriangleAlert size={18} className="text-amber-500" />
-                  <h3 className="text-sm font-bold tracking-wide text-slate-800 uppercase m-0">
-                    ACTIVE OUTPASS &amp; LEAVE REQUESTS
-                  </h3>
-                </div>
-                <Link
-                  to="/hostel/reports"
-                  className="text-xs font-semibold text-[#5b7a2b] hover:text-[#465f1f] hover:underline no-underline"
-                >
-                  View All →
-                </Link>
-              </div>
-
-              {/* Requests List */}
-              <div className="divide-y divide-slate-100">
-                {outpasses.slice(0, 2).map((req) => (
+          {/* ACTIVE OUTPASS & LEAVE REQUESTS — Vertical List like Examinations */}
+          <article className="hostel-card">
+            <header className="hostel-card-head">
+              <h2>
+                <TriangleAlert size={14} className="text-amber-500" />
+                ACTIVE OUTPASS &amp; LEAVE REQUESTS
+              </h2>
+              <Link to="/hostel/reports" className="hostel-view-link">
+                View All <ChevronRight size={12} />
+              </Link>
+            </header>
+            <div className="hostel-card-body" style={{ padding: "8px 10px" }}>
+              <div
+                className="hostel-info-list"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                  width: "100%",
+                  minWidth: 0,
+                  boxSizing: "border-box",
+                }}
+              >
+                {outpasses.slice(0, 4).map((req) => (
                   <div
                     key={req.id}
-                    className="py-3.5 flex items-center justify-between gap-3 hover:bg-[#f0f4e8]/40 px-2 rounded-xl transition flex-wrap sm:flex-nowrap"
+                    className="hostel-info-item"
+                    style={{
+                      display: "flex",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                      width: "100%",
+                      minWidth: 0,
+                      boxSizing: "border-box",
+                    }}
                   >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-bold text-slate-900 m-0 leading-tight">
-                          {req.studentName}
-                        </p>
+                    <span className="hostel-list-icon tone-orange">
+                      <Clock size={14} />
+                    </span>
+                    <div className="hostel-info-content">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <strong>{req.studentName}</strong>
                         <span
-                          className={
+                          className={`dashboard-status-badge ${
                             req.status === "Approved"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
+                              ? "badge-approved"
                               : req.status === "Rejected"
-                              ? "bg-red-50 text-red-700 border border-red-200 rounded-md px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
-                              : "bg-amber-50 text-amber-700 border border-amber-200 rounded-md px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap"
-                          }
+                              ? "badge-rejected"
+                              : "badge-pending"
+                          }`}
                         >
                           {req.status}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 m-0 mt-0.5">
+                      <small>
                         {req.requestType} • {req.roomNo}
-                      </p>
-                      <p className="text-[11px] text-slate-400 m-0 mt-0.5">
-                        Return: {req.returnDate}
-                      </p>
+                      </small>
                     </div>
-
-                    {/* Outpass Action Buttons */}
-                    <div className="flex items-center gap-2 flex-shrink-0 mt-2 sm:mt-0">
-                      <button
-                        type="button"
-                        onClick={() => handleApproveOutpass(req.id, req.studentName)}
-                        disabled={req.status === "Approved"}
-                        className="bg-[#5b7a2b] hover:bg-[#465f1f] text-white rounded-lg px-3 py-1.5 text-xs font-semibold flex items-center gap-1 transition cursor-pointer disabled:opacity-50 border-0 shadow-2xs"
-                      >
-                        <Check size={14} /> Approve
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRejectOutpass(req.id, req.studentName)}
-                        disabled={req.status === "Rejected"}
-                        className="bg-white hover:bg-red-50 text-red-600 border border-red-200 rounded-lg px-3 py-1.5 text-xs font-semibold flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
-                      >
-                        <X size={14} /> Reject
-                      </button>
+                    <div className="hostel-outpass-right">
+                      <div className="hostel-mini-actions">
+                        <button
+                          type="button"
+                          onClick={() => handleApproveOutpass(req.id, req.studentName)}
+                          disabled={req.status === "Approved"}
+                          className="cms-btn cms-btn-primary hostel-mini-btn"
+                          title="Approve Outpass"
+                        >
+                          <Check size={11} /> Approve
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRejectOutpass(req.id, req.studentName)}
+                          disabled={req.status === "Rejected"}
+                          className="cms-btn cms-btn-ghost danger hostel-mini-btn"
+                          title="Reject Outpass"
+                        >
+                          <X size={11} /> Reject
+                        </button>
+                      </div>
+                      <span className="hostel-days-badge" title={`Return: ${req.returnDate}`}>
+                        {req.returnDate}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
+          </article>
         </section>
       </div>
     </DashboardLayout>
