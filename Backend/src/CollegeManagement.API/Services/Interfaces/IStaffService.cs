@@ -13,6 +13,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<StaffResponseDto?> GetStaffByIdAsync(int id);
         Task<StaffResponseDto?> GetStaffByEmployeeIdAsync(string employeeId);
         Task<StaffProfileFullDto> GetStaffProfileFullAsync(int id);
+        Task<StaffProfileFullDto> GetStaffProfileByEmployeeIdAsync(string employeeId);
         Task<StaffProfileFullDto> GetStaffProfileByTokenAsync(string token);
         Task<string> GetNextEmployeeIdAsync(string staffType);
         Task<StaffDashboardStatsDto> GetDashboardStatsAsync();

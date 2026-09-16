@@ -56,6 +56,7 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.BoardName, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardName : src.BoardName))
                 .ForMember(dest => dest.BoardCode, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardCode : (src.BoardName ?? string.Empty)))
                 .ForMember(dest => dest.Designation, opt => opt.MapFrom(src => src.DesignationRef != null ? src.DesignationRef.Name : src.Designation))
+                .ForMember(dest => dest.DepartmentSpecific, opt => opt.MapFrom(src => DeserializeDictionary(src.DepartmentSpecificJson)))
                 .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => src.StaffSubjectAllocations != null
                     ? src.StaffSubjectAllocations.Select(a => a.Subject != null ? a.Subject.SubjectName : string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList()
                     : new List<string>()));
@@ -66,6 +67,7 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.BoardName, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardName : src.BoardName))
                 .ForMember(dest => dest.BoardCode, opt => opt.MapFrom(src => src.BoardRef != null ? src.BoardRef.BoardCode : src.BoardName))
                 .ForMember(dest => dest.Designation, opt => opt.MapFrom(src => src.DesignationRef != null ? src.DesignationRef.Name : src.Designation))
+                .ForMember(dest => dest.DepartmentSpecific, opt => opt.MapFrom(src => DeserializeDictionary(src.DepartmentSpecificJson)))
                 .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => src.StaffSubjectAllocations != null
                     ? src.StaffSubjectAllocations.Select(a => a.Subject != null ? a.Subject.SubjectName : string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList()
                     : new List<string>()))
@@ -130,6 +132,19 @@ namespace CollegeManagement.API.Profiles
             catch
             {
                 return null;
+            }
+        }
+
+        private static Dictionary<string, object>? DeserializeDictionary(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, object>();
+            try
+            {
+                return JsonSerializer.Deserialize<Dictionary<string, object>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new Dictionary<string, object>();
+            }
+            catch
+            {
+                return new Dictionary<string, object>();
             }
         }
     }

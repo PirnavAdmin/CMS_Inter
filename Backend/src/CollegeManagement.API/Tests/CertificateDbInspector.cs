@@ -66,8 +66,8 @@ namespace CollegeManagement.API.Tests
             // 4. Check Stored Procedures
             Console.WriteLine("\n--- CERTIFICATE STORED PROCEDURES IN DATABASE ---");
             var procs = (await conn.QueryAsync<string>(@"
-                SELECT routine_name FROM information_schema.routines
-                WHERE routine_schema = DATABASE() AND routine_name LIKE '%Certificate%';")).ToList();
+                SELECT routine_name FROM information_schema.routines 
+                WHERE routine_schema = DATABASE() AND (routine_name LIKE '%Certificate%' OR routine_name LIKE '%Scholarship%');")).ToList();
             foreach (var p in procs)
             {
                 Console.WriteLine($"  Procedure: {p}");

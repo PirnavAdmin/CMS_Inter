@@ -8,6 +8,7 @@ export const apiEndpoints = {
     changePassword: "/api/Auth/change-password",
     users: "/api/Auth/users",
     userById: (id) => `/api/Auth/user/${id}`,
+    refreshToken: "/api/Auth/refresh-token",
   },
   admin: {
     login: "/api/Admin/login",

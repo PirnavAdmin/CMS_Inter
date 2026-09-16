@@ -823,9 +823,18 @@
   color: #64748b;
 }
 
+.cert-logo-img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
+}
+
 .cert-default-logo {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   background: #355e3b;
   color: #ffffff;
   border-radius: 50%;
@@ -881,6 +890,9 @@
 }
 
 .cert-footer-col.center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   text-align: center;
 }
 
@@ -889,24 +901,50 @@
 }
 
 .cert-seal-stamp {
-  display: inline-block;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   border: 2px dashed #b45309;
   color: #b45309;
   border-radius: 50%;
-  width: 64px;
-  height: 64px;
-  line-height: 60px;
+  width: 72px;
+  height: 72px;
+  padding: 4px;
+  box-sizing: border-box;
+  line-height: 1.15;
   font-size: 9px;
   font-weight: 800;
   text-transform: uppercase;
+  text-align: center;
+  letter-spacing: 0.5px;
+  margin: 0 auto;
 }
 
-.cert-qr-placeholder {
+.cert-seal-stamp span {
+  display: block;
+  text-align: center;
+  width: 100%;
+}
+
+.cert-qr-placeholder,
+.cert-qr-svg-wrap {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 3px;
   margin-top: 6px;
+}
+
+.cert-qr-svg-wrap svg,
+.cert-qr-placeholder svg {
+  width: 48px;
+  height: 48px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 2px;
+  background: #ffffff;
+  box-sizing: border-box;
 }
 
 .qr-box {

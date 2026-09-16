@@ -9,6 +9,7 @@ using Asp.Versioning;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
@@ -100,6 +101,42 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var result = await _staffService.GetStaffProfileFullAsync(id);
             return Ok(result);
+        }
+
+        /// <summary>
+        /// 5b. GET /api/v1/staff/by-employee-id/{employeeId}
+        /// Get complete staff profile details by Employee ID string (e.g. PCTCH0001, PCNT0001).
+        /// </summary>
+        [HttpGet("by-employee-id/{employeeId}")]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetStaffByEmployeeId(string employeeId)
+        {
+            var result = await _staffService.GetStaffProfileByEmployeeIdAsync(employeeId);
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// 5c. GET /api/v1/staff/profile/{identifier}
+        /// Universal lookup accepting either integer database ID or string Employee ID.
+        /// </summary>
+        [HttpGet("profile/{identifier}")]
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(StaffProfileFullDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetStaffProfileByIdentifier(string identifier)
+        {
+            if (int.TryParse(identifier, out int id) && id > 0)
+            {
+                var res = await _staffService.GetStaffProfileFullAsync(id);
+                return Ok(res);
+            }
+            else
+            {
+                var res = await _staffService.GetStaffProfileByEmployeeIdAsync(identifier);
+                return Ok(res);
+            }
         }
 
         /// <summary>
@@ -329,6 +366,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// Generates and streams QuestPDF printable staff profile document.
         /// </summary>
         [HttpGet("{id:int}/print-pdf")]
+        [HttpGet("{id:int}/pdf")]
+        [HttpGet("{id:int}/profile-pdf")]
+        [HttpGet("{id:int}/print")]
         [AllowAnonymous]
         public async Task<IActionResult> PrintProfilePdf(int id)
         {
@@ -485,7 +525,7 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var isNonTeaching = string.Equals(effectiveStaffType?.Replace("-", "").Replace("_", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
                 var fallback = isNonTeaching
-                    ? new[] { "Administration", "Accounts & Finance", "Admissions", "Examinations", "Library", "Transport", "Hostel", "Security", "Maintenance", "Student Support Services", "Campus Operations", "IT & Technical Support" }
+                    ? new[] { "Administration", "Accounts & Finance", "Admissions", "Examinations", "Library", "Transport", "Hostel", "Security", "Maintenance", "IT & Technical Support", "Human Resources (HR)", "Housekeeping & Sanitation", "Stores & Inventory", "Student Affairs & Welfare", "Campus Operations", "Laboratory Support" }
                     : new[] { "Accountancy", "Biology", "Botany", "Business Studies", "Chemistry", "Civics", "Commerce", "Computer Applications", "Computer Science", "Data Science", "Economics", "English", "Environmental Studies", "Hindi", "History", "Languages", "Mathematics", "Physical Education", "Physics", "Political Science", "Sanskrit", "Science", "Statistics", "Telugu", "Urdu", "Zoology" };
 
                 var fallbackStaffType = isNonTeaching ? "Non-Teaching" : "Teaching";
@@ -559,7 +599,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             var isNonTeachingFallback = string.Equals(effectiveStaffType?.Replace("-", "").Replace("_", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var fallback = isNonTeachingFallback
-                ? new[] { "Administrative Officer", "Accountant", "Librarian", "Office Assistant", "Clerk", "Receptionist", "System Administrator", "Network Engineer", "Attender / Peon" }
+                ? new[] { "Administrative Officer", "Office Assistant", "Clerk", "Receptionist", "Senior Accountant", "Accountant", "Cashier", "Fee Collection Executive", "Librarian", "Assistant Librarian", "Library Assistant", "Bus Driver", "Van Driver", "Driver", "Bus Attendant", "Transport In-charge", "Chief Warden", "Hostel Warden", "Assistant Warden", "Cook", "Mess Manager", "Security Officer", "Security Supervisor", "Security Guard", "CCTV Operator", "Electrician", "Plumber", "AC Technician", "Maintenance Supervisor", "System Administrator", "IT Support Specialist", "Network Engineer", "HR Manager", "HR Executive", "Housekeeping Supervisor", "Store Keeper", "Inventory Executive", "Lab Assistant", "Attender / Peon" }
                 : new[] { "Junior Lecturer", "Lecturer", "Senior Lecturer", "Subject Teacher", "Head of Department (HOD)", "Academic Coordinator", "Vice Principal", "Professor", "Associate Professor", "Assistant Professor" };
 
             var desigStaffType = isNonTeachingFallback ? "Non-Teaching" : "Teaching";

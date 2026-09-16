@@ -254,5 +254,17 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? DocumentsJson { get; set; }
         public string? BankDetailsJson { get; set; }
         public string? EmergencyContactJson { get; set; }
+        public string? DepartmentSpecificJson { get; set; }
+
+        // Dynamic Department & Role Specific Fields from Frontend
+        public Dictionary<string, object>? DepartmentSpecific { get; set; }
+        public Dictionary<string, object>? CustomFields
+        {
+            get => DepartmentSpecific;
+            set => DepartmentSpecific = value;
+        }
+
+        // Dynamic Role Documents Dictionary from Frontend
+        public Dictionary<string, string>? Documents { get; set; }
     }
 }

@@ -207,11 +207,21 @@ public class DashboardRepository : IDashboardRepository
         }
 
         int studentCount = await conn.ExecuteScalarAsync<int>(@"
-            SELECT COUNT(*) FROM Students
+            SELECT COUNT(*) FROM `StudentAdmissions`
             WHERE (IsActive = 1 OR IsActive IS NULL)
               AND (@effectiveAcademicYearId IS NULL OR AcademicYearId = @effectiveAcademicYearId)
               AND (@boardId IS NULL OR BoardId = @boardId);",
             new { effectiveAcademicYearId, boardId });
+
+        if (studentCount == 0)
+        {
+            studentCount = await conn.ExecuteScalarAsync<int>(@"
+                SELECT COUNT(*) FROM `Students`
+                WHERE (IsActive = 1 OR IsActive IS NULL)
+                  AND (@effectiveAcademicYearId IS NULL OR AcademicYearId = @effectiveAcademicYearId)
+                  AND (@boardId IS NULL OR BoardId = @boardId);",
+                new { effectiveAcademicYearId, boardId });
+        }
 
         int teachingStaff = await conn.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM `Staff`
@@ -545,16 +555,32 @@ public class DashboardRepository : IDashboardRepository
 
         var rows = (await conn.QueryAsync<dynamic>(@"
             SELECT 
-                COALESCE(s.Gender, '') AS Gender,
-                COALESCE(s.IsActive, 1) AS IsActive,
+                COALESCE(sa.Gender, '') AS Gender,
+                COALESCE(sa.IsActive, 1) AS IsActive,
                 COALESCE(al.LevelName, '') AS AcademicLevel,
-                s.AdmissionDate
-            FROM `Students` s
-            LEFT JOIN `AcademicLevels` al ON s.AcademicLevelId = al.AcademicLevelId
-            WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-              AND (@academicYearId IS NULL OR s.AcademicYearId = @academicYearId)
-              AND (@boardId IS NULL OR s.BoardId = @boardId);",
+                sa.AdmissionDate
+            FROM `StudentAdmissions` sa
+            LEFT JOIN `AcademicLevels` al ON sa.AcademicLevelId = al.AcademicLevelId
+            WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+              AND (@academicYearId IS NULL OR sa.AcademicYearId = @academicYearId)
+              AND (@boardId IS NULL OR sa.BoardId = @boardId);",
             new { academicYearId, boardId })).ToList();
+
+        if (rows.Count == 0)
+        {
+            rows = (await conn.QueryAsync<dynamic>(@"
+                SELECT 
+                    COALESCE(s.Gender, '') AS Gender,
+                    COALESCE(s.IsActive, 1) AS IsActive,
+                    COALESCE(al.LevelName, '') AS AcademicLevel,
+                    s.AdmissionDate
+                FROM `Students` s
+                LEFT JOIN `AcademicLevels` al ON s.AcademicLevelId = al.AcademicLevelId
+                WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+                  AND (@academicYearId IS NULL OR s.AcademicYearId = @academicYearId)
+                  AND (@boardId IS NULL OR s.BoardId = @boardId);",
+                new { academicYearId, boardId })).ToList();
+        }
 
         int tCount = rows.Count;
         int act = rows.Count(r => Convert.ToBoolean(r.IsActive));
@@ -582,17 +608,34 @@ public class DashboardRepository : IDashboardRepository
         {
             var dbTrends = (await conn.QueryAsync<dynamic>(@"
                 SELECT 
-                    DATE_FORMAT(s.AdmissionDate, '%b %Y') AS Period,
-                    MIN(s.AdmissionDate) AS SortDate,
+                    DATE_FORMAT(COALESCE(sa.AdmissionDate, sa.CreatedAt), '%b %Y') AS Period,
+                    MIN(COALESCE(sa.AdmissionDate, sa.CreatedAt)) AS SortDate,
                     COUNT(*) AS StudentsJoined
-                FROM `Students` s
-                WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-                  AND (@academicYearId IS NULL OR s.AcademicYearId = @academicYearId)
-                  AND (@boardId IS NULL OR s.BoardId = @boardId)
-                  AND s.AdmissionDate IS NOT NULL
-                GROUP BY DATE_FORMAT(s.AdmissionDate, '%b %Y')
+                FROM `StudentAdmissions` sa
+                WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+                  AND (@academicYearId IS NULL OR sa.AcademicYearId = @academicYearId)
+                  AND (@boardId IS NULL OR sa.BoardId = @boardId)
+                  AND (sa.AdmissionDate IS NOT NULL OR sa.CreatedAt IS NOT NULL)
+                GROUP BY DATE_FORMAT(COALESCE(sa.AdmissionDate, sa.CreatedAt), '%b %Y')
                 ORDER BY SortDate ASC;",
                 new { academicYearId, boardId })).ToList();
+
+            if (!dbTrends.Any())
+            {
+                dbTrends = (await conn.QueryAsync<dynamic>(@"
+                    SELECT 
+                        DATE_FORMAT(COALESCE(s.AdmissionDate, s.CreatedAt), '%b %Y') AS Period,
+                        MIN(COALESCE(s.AdmissionDate, s.CreatedAt)) AS SortDate,
+                        COUNT(*) AS StudentsJoined
+                    FROM `Students` s
+                    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+                      AND (@academicYearId IS NULL OR s.AcademicYearId = @academicYearId)
+                      AND (@boardId IS NULL OR s.BoardId = @boardId)
+                      AND (s.AdmissionDate IS NOT NULL OR s.CreatedAt IS NOT NULL)
+                    GROUP BY DATE_FORMAT(COALESCE(s.AdmissionDate, s.CreatedAt), '%b %Y')
+                    ORDER BY SortDate ASC;",
+                    new { academicYearId, boardId })).ToList();
+            }
 
             foreach (var tr in dbTrends)
             {

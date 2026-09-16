@@ -105,6 +105,11 @@ namespace CollegeManagement.API.DTOs.Staff
             set => AllocatedSubjects = value;
         }
 
+        // Dynamic Role-Specific & Non-Teaching Fields
+        public Dictionary<string, object>? DepartmentSpecific { get; set; }
+        public Dictionary<string, object>? CustomFields => DepartmentSpecific;
+        public Dictionary<string, string>? Documents { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }

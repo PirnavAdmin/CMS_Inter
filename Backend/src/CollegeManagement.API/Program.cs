@@ -622,23 +622,17 @@ using (var scope = app.Services.CreateScope())
         ");
 
         db.Database.ExecuteSqlRaw(@"
-            SET @idx_exists = (
-                SELECT COUNT(*)
-                FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = 'Examinations'
-                  AND INDEX_NAME = 'IX_Examinations_ExamCode'
-            );
+            SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Examinations' AND INDEX_NAME = 'IX_Examinations_ExamCode');
+            SET @ddl = IF(@idx_exists = 0, 'ALTER TABLE `Examinations` ADD UNIQUE INDEX `IX_Examinations_ExamCode` (`ExamCode`);', 'SELECT 1;');
+            PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-            SET @ddl = IF(
-                @idx_exists = 0,
-                'ALTER TABLE `Examinations` ADD UNIQUE INDEX `IX_Examinations_ExamCode` (`ExamCode`);',
-                'SELECT 1;'
-            );
+            SET @col_exists_ds = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Staff' AND COLUMN_NAME = 'DepartmentSpecificJson');
+            SET @ddl_ds = IF(@col_exists_ds = 0, 'ALTER TABLE `Staff` ADD COLUMN `DepartmentSpecificJson` LONGTEXT NULL;', 'SELECT 1;');
+            PREPARE stmt FROM @ddl_ds; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-            PREPARE stmt FROM @ddl;
-            EXECUTE stmt;
-            DEALLOCATE PREPARE stmt;
+            SET @col_exists_cf = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Staff' AND COLUMN_NAME = 'CustomFieldsJson');
+            SET @ddl_cf = IF(@col_exists_cf = 0, 'ALTER TABLE `Staff` ADD COLUMN `CustomFieldsJson` LONGTEXT NULL;', 'SELECT 1;');
+            PREPARE stmt FROM @ddl_cf; EXECUTE stmt; DEALLOCATE PREPARE stmt;
         ");
     }
     catch (Exception ex)

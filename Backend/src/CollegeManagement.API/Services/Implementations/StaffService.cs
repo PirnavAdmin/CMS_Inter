@@ -137,6 +137,18 @@ namespace CollegeManagement.API.Services.Implementations
             return MapToFullProfileDto(staff);
         }
 
+        public async Task<StaffProfileFullDto> GetStaffProfileByEmployeeIdAsync(string employeeId)
+        {
+            if (string.IsNullOrWhiteSpace(employeeId))
+                throw new ValidationException("Employee ID cannot be empty.");
+
+            var staff = await _staffRepository.GetByEmployeeIdAsync(employeeId.Trim());
+            if (staff == null)
+                throw new NotFoundException($"Staff record with Employee ID {employeeId} not found.");
+
+            return MapToFullProfileDto(staff);
+        }
+
         public async Task<StaffProfileFullDto> GetStaffProfileByTokenAsync(string token)
         {
             if (string.IsNullOrWhiteSpace(token))
@@ -308,7 +320,8 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.HighestQualification, dto.University, dto.Specialization, dto.PassingYear, dto.Percentage,
                 dto.TotalExperience, dto.PreviousInstitution, dto.PreviousDesignation, dto.ExperienceFrom, dto.ExperienceTo,
                 dto.AadhaarDocument, dto.PanDocument, dto.QualificationCertificate, dto.ExperienceCertificate, dto.Resume, dto.BankProof, dto.DrivingLicence, dto.OtherDocuments, dto.Photo, dto.Signature,
-                dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson);
+                dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson,
+                dto.DepartmentSpecific, dto.Documents, dto.DepartmentSpecificJson);
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
 
@@ -537,7 +550,8 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.HighestQualification, dto.University, dto.Specialization, dto.PassingYear, dto.Percentage,
                 dto.TotalExperience, dto.PreviousInstitution, dto.PreviousDesignation, dto.ExperienceFrom, dto.ExperienceTo,
                 dto.AadhaarDocument, dto.PanDocument, dto.QualificationCertificate, dto.ExperienceCertificate, dto.Resume, dto.BankProof, dto.DrivingLicence, dto.OtherDocuments, dto.Photo, dto.Signature,
-                dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson);
+                dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson,
+                dto.DepartmentSpecific, dto.Documents, dto.DepartmentSpecificJson);
 
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
@@ -1445,6 +1459,40 @@ namespace CollegeManagement.API.Services.Implementations
                                 r.RelativeItem().Text($"Branch: {profile.BankDetails?.Branch ?? "—"}");
                             });
                         });
+
+                        // Role & Department Specific Details (Non-Teaching)
+                        if (profile.DepartmentSpecific != null && profile.DepartmentSpecific.Count > 0)
+                        {
+                            col.Item().PaddingTop(10);
+                            col.Item().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(10).Column(c =>
+                            {
+                                c.Item().Text($"{profile.Department} — Role Specific Information").Bold().FontSize(11).FontColor(Colors.Green.Darken3);
+                                c.Item().PaddingTop(3).Column(detailCol =>
+                                {
+                                    var entries = profile.DepartmentSpecific.ToList();
+                                    for (int i = 0; i < entries.Count; i += 2)
+                                    {
+                                        var item1 = entries[i];
+                                        var val1 = item1.Value?.ToString() ?? "—";
+                                        var item2 = i + 1 < entries.Count ? entries[i + 1] : default;
+
+                                        detailCol.Item().PaddingBottom(2).Row(r =>
+                                        {
+                                            r.RelativeItem().Text($"{item1.Key}: {val1}");
+                                            if (item2.Key != null)
+                                            {
+                                                var val2 = item2.Value?.ToString() ?? "—";
+                                                r.RelativeItem().Text($"{item2.Key}: {val2}");
+                                            }
+                                            else
+                                            {
+                                                r.RelativeItem().Text("");
+                                            }
+                                        });
+                                    }
+                                });
+                            });
+                        }
                     });
 
                     // Footer
@@ -1699,6 +1747,32 @@ namespace CollegeManagement.API.Services.Implementations
                 else dto.OtherDocuments = d.FileName;
             }
 
+            // Dynamic Role-Specific / Department Specific details
+            if (!string.IsNullOrWhiteSpace(staff.DepartmentSpecificJson))
+            {
+                try
+                {
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(staff.DepartmentSpecificJson);
+                    if (dict != null)
+                    {
+                        dto.DepartmentSpecific = dict;
+                    }
+                }
+                catch { }
+            }
+
+            // Dynamic documents map for frontend lookup
+            if (docList.Any())
+            {
+                foreach (var d in docList)
+                {
+                    if (!string.IsNullOrWhiteSpace(d.DocumentType) && !string.IsNullOrWhiteSpace(d.FileName))
+                    {
+                        dto.DocumentsMap[d.DocumentType] = d.FileName;
+                    }
+                }
+            }
+
             return dto;
         }
 
@@ -1777,6 +1851,36 @@ namespace CollegeManagement.API.Services.Implementations
                 if (!string.IsNullOrWhiteSpace(dto.Employment.EmploymentType)) staff.EmploymentType = dto.Employment.EmploymentType.Trim();
                 if (!string.IsNullOrWhiteSpace(dto.Employment.Status)) staff.Status = dto.Employment.Status.Trim();
             }
+
+            if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.Any())
+            {
+                staff.DepartmentSpecificJson = JsonSerializer.Serialize(dto.DepartmentSpecific);
+            }
+
+            if (dto.Documents != null && dto.Documents.Any())
+            {
+                var docList = DeserializeList<StaffDocumentItem>(staff.DocumentsJson);
+                foreach (var kvp in dto.Documents)
+                {
+                    if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                    {
+                        docList.RemoveAll(d => string.Equals(d.DocumentType, kvp.Key, StringComparison.OrdinalIgnoreCase));
+                        docList.Add(new StaffDocumentItem
+                        {
+                            DocumentType = kvp.Key,
+                            DocumentName = kvp.Value,
+                            FileName = kvp.Value,
+                            FilePath = $"/uploads/staff-documents/{kvp.Value}",
+                            FileType = Path.GetExtension(kvp.Value).TrimStart('.').ToUpper(),
+                            UploadedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+                if (docList.Any())
+                {
+                    staff.DocumentsJson = JsonSerializer.Serialize(docList);
+                }
+            }
         }
 
         private static void SyncFlattenedPropertiesToJson(
@@ -1786,7 +1890,10 @@ namespace CollegeManagement.API.Services.Implementations
             string? highestQualification, string? university, string? specialization, string? passingYear, string? percentage,
             string? totalExp, string? previousInstitution, string? previousDesignation, string? expFrom, string? expTo,
             string? aadhaarDoc, string? panDoc, string? qualCert, string? expCert, string? resume, string? bankProof, string? drivingLicence, string? otherDocs, string? photo, string? signature,
-            string? rawEduJson, string? rawExpJson, string? rawDocJson, string? rawBankJson, string? rawEmergencyJson)
+            string? rawEduJson, string? rawExpJson, string? rawDocJson, string? rawBankJson, string? rawEmergencyJson,
+            Dictionary<string, object>? departmentSpecific = null,
+            Dictionary<string, string>? documentsMap = null,
+            string? rawDeptSpecificJson = null)
         {
             // 1. Bank Details
             if (!string.IsNullOrWhiteSpace(rawBankJson))
@@ -1929,10 +2036,32 @@ namespace CollegeManagement.API.Services.Implementations
                 AddOrUpdateDoc("Photo", photo);
                 AddOrUpdateDoc("Signature", signature);
 
+                // Dynamic documents from frontend map
+                if (documentsMap != null && documentsMap.Count > 0)
+                {
+                    foreach (var kvp in documentsMap)
+                    {
+                        if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                        {
+                            AddOrUpdateDoc(kvp.Key, kvp.Value);
+                        }
+                    }
+                }
+
                 if (docList.Any())
                 {
                     staff.DocumentsJson = JsonSerializer.Serialize(docList);
                 }
+            }
+
+            // 6. Department Specific / Role Specific Details for Non-Teaching Staff
+            if (!string.IsNullOrWhiteSpace(rawDeptSpecificJson))
+            {
+                staff.DepartmentSpecificJson = rawDeptSpecificJson;
+            }
+            else if (departmentSpecific != null && departmentSpecific.Count > 0)
+            {
+                staff.DepartmentSpecificJson = JsonSerializer.Serialize(departmentSpecific);
             }
         }
 

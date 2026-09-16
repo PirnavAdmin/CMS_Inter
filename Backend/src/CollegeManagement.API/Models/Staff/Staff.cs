@@ -194,6 +194,14 @@ namespace CollegeManagement.API.Models.Staff
         public string? DocumentsJson { get; set; }
         public string? BankDetailsJson { get; set; }
         public string? EmergencyContactJson { get; set; }
+        public string? DepartmentSpecificJson { get; set; }
+
+        [NotMapped]
+        public string? CustomFieldsJson
+        {
+            get => DepartmentSpecificJson;
+            set => DepartmentSpecificJson = value;
+        }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

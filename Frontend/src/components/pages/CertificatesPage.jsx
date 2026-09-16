@@ -8,6 +8,8 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES } from "@/components/pages/TemplatesPage.jsx";
 import { certificates as mockCertificates, students as mockStudents } from "@/data/mockData.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
+import { generateQrCodeSvg } from "@/utils/qrCodeGenerator.js";
 import createCertificateIcon from "@/assets/sidebar-3d/certificates.png";
 import certificateRecordsIcon from "@/assets/settings-3d/audit-logs.png";
 import reviewIssueIcon from "@/assets/reports-3d/toppers.png";
@@ -1227,6 +1229,14 @@ const CERTIFICATE_PRINT_CSS = `
   .cert-header-left {
     display: flex;
     justify-content: center;
+    align-items: center;
+  }
+  .cert-logo-img {
+    height: 48px;
+    width: auto;
+    max-width: 85px;
+    object-fit: contain;
+    display: block;
   }
   .cert-default-logo {
     width: 42px;
@@ -1327,30 +1337,57 @@ const CERTIFICATE_PRINT_CSS = `
     color: #334155;
   }
   .cert-footer-col p { margin: 2px 0; }
-  .cert-footer-col.center { text-align: center; }
+  .cert-footer-col.center { text-align: center; display: flex; justify-content: center; align-items: center; }
   .cert-footer-col.right { text-align: right; }
   .cert-seal-stamp {
-    display: inline-block;
     border: 2px dashed #1e3a8a;
     color: #1e3a8a;
     border-radius: 50%;
-    width: 72px;
-    height: 72px;
-    display: flex;
+    width: 76px;
+    height: 76px;
+    min-width: 76px;
+    min-height: 76px;
+    max-width: 76px;
+    max-height: 76px;
+    display: inline-flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
     margin: 0 auto;
     text-align: center;
+    box-sizing: border-box;
+    padding: 4px;
+    overflow: hidden;
+    word-break: break-word;
+  }
+  .cert-seal-stamp span {
+    display: block;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: 0.5px;
   }
   .cert-qr-placeholder {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 3px;
-    margin-top: 8px;
+    margin-top: 6px;
+  }
+  .cert-qr-svg-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cert-qr-svg-wrap svg {
+    display: block;
+    width: 100%;
+    height: 100%;
   }
   .qr-box {
     width: 44px;
@@ -1435,7 +1472,7 @@ function buildPrintHtml(record) {
         <header class="cert-header">
           <div class="cert-header-grid">
             <div class="cert-header-left">
-              <div class="cert-default-logo" style="background-color: ${borderColor}">P</div>
+              <img src="${pirnavCollegesLogo}" alt="Pirnav College" class="cert-logo-img" />
             </div>
             <div class="cert-header-center">
               <h1 class="cert-institution-name" style="color: ${borderColor}">PIRNAV COLLEGE</h1>
@@ -1474,7 +1511,9 @@ function buildPrintHtml(record) {
             <p>Date: <strong>${issueDate}</strong></p>
             ${template.qrEnabled !== false ? `
               <div class="cert-qr-placeholder">
-                <div class="qr-box">QR</div>
+                <div class="cert-qr-svg-wrap" style="width: 48px; height: 48px;">
+                  ${generateQrCodeSvg(`https://pirnavcollege.edu.in/verify-certificate/${encodeURIComponent(certificateNo)}`, 48, borderColor)}
+                </div>
                 <span>Scan to verify</span>
               </div>
             ` : ''}
@@ -1482,7 +1521,7 @@ function buildPrintHtml(record) {
 
           <div class="cert-footer-col center">
             <div class="cert-seal-stamp" style="border-color: ${borderColor}; color: ${borderColor};">
-              <span>PIRNAV COLLEGE<br/>VIJAYAWADA</span>
+              <span>PIRNAV<br/>COLLEGE</span>
             </div>
           </div>
 
@@ -1569,55 +1608,14 @@ export default function CertificatesPage() {
   const filtersReadyRef = useRef(false);
 
   const availableCertificateTypes = useMemo(() => {
-    const excludedTypes = new Set([
-      "study and conduct certificate",
-      "study & conduct certificate",
-      "transfer certificate",
-      "staff management bulk upload template",
-      "student admissions bulk upload template",
-      "student id card template",
-      "bulk upload template",
-      "id card template",
-    ]);
-    const list = [...CERTIFICATE_TYPES];
-    const combined = [...activeTemplates];
-    try {
-      const stored = getStoredCertificateTemplates();
-      if (Array.isArray(stored)) {
-        stored.forEach((st) => {
-          const stTitle = st.title || st.name;
-          const stCode = st.templateCode || st.id;
-          if (!combined.some((c) => (stTitle && (c.title === stTitle || c.name === stTitle)) || (stCode && (c.templateCode === stCode || c.id === stCode)))) {
-            combined.push(st);
-          }
-        });
-      }
-    } catch {}
-
-    if (combined.length) {
-      combined.forEach((tpl) => {
-        const title = formatTemplateTitle(tpl.title || tpl.name, tpl.templateCode || tpl.id);
-        const cat = String(tpl.category || "").toLowerCase();
-        const tLower = String(title || "").toLowerCase();
-        if (
-          title &&
-          !list.includes(title) &&
-          title !== "Others" &&
-          !cat.includes("upload") &&
-          !cat.includes("bulk") &&
-          !cat.includes("document") &&
-          !tLower.includes("bulk upload") &&
-          !tLower.includes("id card")
-        ) {
-          list.splice(list.length - 1, 0, title);
-        }
-      });
-    }
-    return list.filter((item) => {
-      const lower = String(item || "").trim().toLowerCase();
-      return !excludedTypes.has(lower) && !lower.includes("bulk upload") && !lower.includes("id card");
-    });
-  }, [activeTemplates]);
+    return [
+      "Bonafide Certificate",
+      "Study Certificate",
+      "Conduct Certificate",
+      "Transfer Certificate",
+      "Others",
+    ];
+  }, []);
 
   const formFields = useMemo(
     () => baseFormFields.map((field) => {
@@ -2617,72 +2615,52 @@ export default function CertificatesPage() {
 
   const openPrintPreview = (record) => {
     if (!record) return;
+    const presentation = resolveCertificatePresentation(record.type, record.orientation);
+    if (presentation) {
+      setPrintPreview(record);
+    } else {
+      setToast("Unsupported certificate type.");
+      return;
+    }
+
     (async () => {
       const requestId = ++detailsRequestRef.current;
       const resolvedId = await resolveServerCertificateId(record);
-      if (!resolvedId) {
-        if (requestId === detailsRequestRef.current) {
-          if (resolveCertificatePresentation(record.type, record.orientation)) setPrintPreview(record);
-          else setToast("Unsupported certificate type.");
-        }
-        return;
-      }
+      if (!resolvedId) return;
+
       try {
-        const previewRes = await apiClient.get(CERTIFICATE_API.preview(resolvedId));
+        const previewRes = await apiClient.get(CERTIFICATE_API.preview(resolvedId), { skipGlobalLoader: true });
         if (requestId !== detailsRequestRef.current) return;
         const previewData = unwrapSinglePayload(previewRes.data);
         if (previewData && (previewData.paragraphOne || previewData.heading || previewData.certificateNumber)) {
-          setPrintPreview({
-            ...record,
-            ...previewData,
-            id: record.id,
-            backendId: resolvedId,
-            number: previewData.certificateNumber || record.number,
-            type: previewData.certificateType || record.type,
-            status: previewData.status || record.status,
-            issue: previewData.issueDate || record.issue,
-            requestDate: previewData.requestDate || record.requestDate,
-            remarks: previewData.remarks || record.remarks,
-            purpose: previewData.purpose || record.purpose,
-            paragraphOne: previewData.paragraphOne,
-            paragraphTwo: previewData.paragraphTwo,
-            heading: previewData.heading,
-            borderColor: previewData.borderColor,
-            badgeBgColor: previewData.badgeBgColor,
-            badgeTextColor: previewData.badgeTextColor,
-            signatureType: previewData.signatureType || "Principal",
-            sealText: previewData.sealText || "PIRNAV COLLEGE\nVIJAYAWADA",
-            qrEnabled: previewData.qrEnabled !== false,
-            signature: previewData.signature || getSignatureValue(previewRes.data) || record.signature || "",
+          setPrintPreview((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              ...previewData,
+              number: previewData.certificateNumber || prev.number,
+              type: previewData.certificateType || prev.type,
+              status: previewData.status || prev.status,
+              issue: previewData.issueDate || prev.issue,
+              requestDate: previewData.requestDate || prev.requestDate,
+              remarks: previewData.remarks || prev.remarks,
+              purpose: previewData.purpose || prev.purpose,
+              paragraphOne: previewData.paragraphOne,
+              paragraphTwo: previewData.paragraphTwo,
+              heading: previewData.heading,
+              borderColor: previewData.borderColor,
+              badgeBgColor: previewData.badgeBgColor,
+              badgeTextColor: previewData.badgeTextColor,
+              signatureType: previewData.signatureType || prev.signatureType || "Principal",
+              sealText: previewData.sealText || "PIRNAV\nCOLLEGE",
+              qrEnabled: previewData.qrEnabled !== false,
+              signature: previewData.signature || getSignatureValue(previewRes.data) || prev.signature || "",
+            };
           });
           return;
         }
       } catch {
-        // Fall back to getById
-      }
-
-      try {
-        const response = await apiClient.get(CERTIFICATE_API.getById(resolvedId));
-        if (requestId !== detailsRequestRef.current) return;
-        const details = unwrapSinglePayload(response.data);
-        if (hasCertificateShape(details)) {
-          const normalizedDetails = normalizeCertificate(details);
-          if (!resolveCertificatePresentation(normalizedDetails.type, normalizedDetails.orientation)) {
-            setToast("Unsupported certificate type.");
-            return;
-          }
-          setPrintPreview({
-            ...normalizedDetails,
-            signature: normalizedDetails.signature || getSignatureValue(response.data) || record.signature || "",
-          });
-          return;
-        }
-      } catch {
-        // keep fallback below
-      }
-      if (requestId === detailsRequestRef.current) {
-        if (resolveCertificatePresentation(record.type, record.orientation)) setPrintPreview(record);
-        else setToast("Unsupported certificate type.");
+        // Ignored, user already has full record preview
       }
     })();
   };
@@ -2930,7 +2908,7 @@ export default function CertificatesPage() {
                                 setErrors((prev) => ({ ...prev, type: undefined, customType: undefined }));
                               }}
                             >
-                              <option value="">Select Certificate Type</option>
+                              <option value="" disabled hidden>Select Certificate Type</option>
                               {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
                             </select>
                             <FaChevronDown size={13} aria-hidden="true" />
@@ -3219,11 +3197,9 @@ export default function CertificatesPage() {
         <footer className="cert-table-footer">
           <span>Showing {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} records</span>
           <nav aria-label="Certificate records pagination">
-            <button type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Prev</button>
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
-              <button type="button" key={pageNumber} className={pageNumber === currentPage ? "active" : ""} aria-current={pageNumber === currentPage ? "page" : undefined} onClick={() => setPage(pageNumber)}>{pageNumber}</button>
-            ))}
-            <button type="button" disabled={currentPage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
+            <button type="button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Prev</button>
+            <button type="button" className="active" aria-current="page">{currentPage}</button>
+            <button type="button" disabled={currentPage >= totalPages || totalPages === 0} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
           </nav>
         </footer>
         </section>
@@ -3384,11 +3360,9 @@ export default function CertificatesPage() {
             <footer className="cert-table-footer">
               <span>Showing {actionRows.length ? (currentActionPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentActionPage * PAGE_SIZE, actionRows.length)} of {actionRows.length} records</span>
               <nav aria-label="Certificate workflow pagination">
-                <button type="button" disabled={currentActionPage === 1} onClick={() => setActionPage((value) => Math.max(1, value - 1))}>Prev</button>
-                {Array.from({ length: actionTotalPages }, (_, index) => index + 1).map((pageNumber) => (
-                  <button type="button" key={pageNumber} className={pageNumber === currentActionPage ? "active" : ""} aria-current={pageNumber === currentActionPage ? "page" : undefined} onClick={() => setActionPage(pageNumber)}>{pageNumber}</button>
-                ))}
-                <button type="button" disabled={currentActionPage === actionTotalPages} onClick={() => setActionPage((value) => Math.min(actionTotalPages, value + 1))}>Next</button>
+                <button type="button" disabled={currentActionPage <= 1} onClick={() => setActionPage((value) => Math.max(1, value - 1))}>Prev</button>
+                <button type="button" className="active" aria-current="page">{currentActionPage}</button>
+                <button type="button" disabled={currentActionPage >= actionTotalPages || actionTotalPages === 0} onClick={() => setActionPage((value) => Math.min(actionTotalPages, value + 1))}>Next</button>
               </nav>
             </footer>
           </section>
@@ -3428,7 +3402,7 @@ export default function CertificatesPage() {
                   <header className="cert-header">
                     <div className="cert-header-grid">
                       <div className="cert-header-left">
-                        <div className="cert-default-logo" style={{ backgroundColor: printTemplate.borderColor || "#1e3a8a" }}>P</div>
+                        <img src={pirnavCollegesLogo} alt="Pirnav College" className="cert-logo-img" />
                       </div>
                       <div className="cert-header-center">
                         <h1 className="cert-institution-name" style={{ color: printTemplate.borderColor || "#1e3a8a" }}>PIRNAV COLLEGE</h1>
@@ -3469,7 +3443,16 @@ export default function CertificatesPage() {
                       <p>Date: <strong>{formatDateDdMmYyyy(printPreview.issue || printPreview.requestDate || todayIso())}</strong></p>
                       {printTemplate.qrEnabled !== false && (
                         <div className="cert-qr-placeholder">
-                          <div className="qr-box">QR</div>
+                          <div
+                            className="cert-qr-svg-wrap"
+                            dangerouslySetInnerHTML={{
+                              __html: generateQrCodeSvg(
+                                `https://pirnavcollege.edu.in/verify-certificate/${encodeURIComponent(printPreview.number || "CERT-2026-001")}`,
+                                44,
+                                printTemplate.borderColor || "#1e3a8a"
+                              ),
+                            }}
+                          />
                           <span>Scan to verify</span>
                         </div>
                       )}
@@ -3477,7 +3460,7 @@ export default function CertificatesPage() {
 
                     <div className="cert-footer-col center">
                       <div className="cert-seal-stamp" style={{ borderColor: printTemplate.borderColor || "#1e3a8a", color: printTemplate.borderColor || "#1e3a8a" }}>
-                        <span>PIRNAV COLLEGE<br/>VIJAYAWADA</span>
+                        <span>PIRNAV<br/>COLLEGE</span>
                       </div>
                     </div>
 

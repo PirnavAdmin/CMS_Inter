@@ -99,7 +99,7 @@ BEGIN
           st.StaffType = 'Teaching' 
           OR st.StaffType = 'Both' 
           OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching'
-          OR (st.StaffType IS NULL AND (st.FacultyType IS NULL OR st.FacultyType != 'Non-Teaching'))
+          OR st.StaffType IS NULL
       );
 
     -- 3. Non-Teaching Staff Count
@@ -356,36 +356,77 @@ CREATE PROCEDURE sp_GetDashboardStudentsOverview(
     IN p_AcademicYearId INT
 )
 BEGIN
-    -- Resultset 1: Summary Counts & Gender / Level Distribution
-    SELECT 
-        COUNT(*) AS TotalStudents,
-        SUM(CASE WHEN s.IsActive = 1 OR s.IsActive IS NULL THEN 1 ELSE 0 END) AS ActiveStudents,
-        SUM(CASE WHEN s.IsActive = 0 THEN 1 ELSE 0 END) AS InactiveStudents,
-        SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('male', 'm', 'boy', 'boys') THEN 1 ELSE 0 END) AS MaleStudents,
-        SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) AS FemaleStudents,
-        SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) NOT IN ('male', 'm', 'boy', 'boys', 'female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) AS OtherStudents,
-        ROUND(COALESCE((SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('male', 'm', 'boy', 'boys') THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 0.0), 1) AS MalePercentage,
-        ROUND(COALESCE((SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 0.0), 1) AS FemalePercentage,
-        SUM(CASE WHEN al.LevelName LIKE '%1%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%first%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%junior%' THEN 1 ELSE 0 END) AS FirstYearStudents,
-        SUM(CASE WHEN al.LevelName LIKE '%2%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%second%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%senior%' THEN 1 ELSE 0 END) AS SecondYearStudents
-    FROM `Students` s
-    LEFT JOIN `AcademicLevels` al ON s.AcademicLevelId = al.AcademicLevelId
-    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-      AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
-      AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
+    DECLARE v_AdmissionsCount INT DEFAULT 0;
 
-    -- Resultset 2: Monthly Trend (Dynamically computed from Students.AdmissionDate)
-    SELECT 
-        DATE_FORMAT(s.AdmissionDate, '%b %Y') AS Period,
-        MIN(s.AdmissionDate) AS SortDate,
-        COUNT(*) AS StudentsJoined
-    FROM `Students` s
-    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
-      AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
-      AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
-      AND s.AdmissionDate IS NOT NULL
-    GROUP BY DATE_FORMAT(s.AdmissionDate, '%b %Y')
-    ORDER BY SortDate ASC;
+    SELECT COUNT(*) INTO v_AdmissionsCount
+    FROM `StudentAdmissions` sa
+    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+      AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
+      AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
+
+    IF v_AdmissionsCount > 0 THEN
+        -- Resultset 1: Summary Counts & Gender / Level Distribution (From StudentAdmissions)
+        SELECT 
+            COUNT(*) AS TotalStudents,
+            SUM(CASE WHEN sa.IsActive = 1 OR sa.IsActive IS NULL THEN 1 ELSE 0 END) AS ActiveStudents,
+            SUM(CASE WHEN sa.IsActive = 0 THEN 1 ELSE 0 END) AS InactiveStudents,
+            SUM(CASE WHEN LOWER(COALESCE(sa.Gender, '')) IN ('male', 'm', 'boy', 'boys') THEN 1 ELSE 0 END) AS MaleStudents,
+            SUM(CASE WHEN LOWER(COALESCE(sa.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) AS FemaleStudents,
+            SUM(CASE WHEN LOWER(COALESCE(sa.Gender, '')) NOT IN ('male', 'm', 'boy', 'boys', 'female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) AS OtherStudents,
+            ROUND(COALESCE((SUM(CASE WHEN LOWER(COALESCE(sa.Gender, '')) IN ('male', 'm', 'boy', 'boys') THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 0.0), 1) AS MalePercentage,
+            ROUND(COALESCE((SUM(CASE WHEN LOWER(COALESCE(sa.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 0.0), 1) AS FemalePercentage,
+            SUM(CASE WHEN al.LevelName LIKE '%1%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%first%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%junior%' OR sa.AcademicLevelId = 1 THEN 1 ELSE 0 END) AS FirstYearStudents,
+            SUM(CASE WHEN al.LevelName LIKE '%2%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%second%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%senior%' OR sa.AcademicLevelId = 2 THEN 1 ELSE 0 END) AS SecondYearStudents
+        FROM `StudentAdmissions` sa
+        LEFT JOIN `AcademicLevels` al ON sa.AcademicLevelId = al.AcademicLevelId
+        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+          AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
+          AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
+
+        -- Resultset 2: Monthly Trend (Dynamically computed from StudentAdmissions.AdmissionDate/CreatedAt)
+        SELECT 
+            DATE_FORMAT(COALESCE(sa.AdmissionDate, sa.CreatedAt), '%b %Y') AS Period,
+            MIN(COALESCE(sa.AdmissionDate, sa.CreatedAt)) AS SortDate,
+            COUNT(*) AS StudentsJoined
+        FROM `StudentAdmissions` sa
+        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+          AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
+          AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
+          AND (sa.AdmissionDate IS NOT NULL OR sa.CreatedAt IS NOT NULL)
+        GROUP BY DATE_FORMAT(COALESCE(sa.AdmissionDate, sa.CreatedAt), '%b %Y')
+        ORDER BY SortDate ASC;
+    ELSE
+        -- Resultset 1: Fallback from Students Table
+        SELECT 
+            COUNT(*) AS TotalStudents,
+            SUM(CASE WHEN s.IsActive = 1 OR s.IsActive IS NULL THEN 1 ELSE 0 END) AS ActiveStudents,
+            SUM(CASE WHEN s.IsActive = 0 THEN 1 ELSE 0 END) AS InactiveStudents,
+            SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('male', 'm', 'boy', 'boys') THEN 1 ELSE 0 END) AS MaleStudents,
+            SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) AS FemaleStudents,
+            SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) NOT IN ('male', 'm', 'boy', 'boys', 'female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) AS OtherStudents,
+            ROUND(COALESCE((SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('male', 'm', 'boy', 'boys') THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 0.0), 1) AS MalePercentage,
+            ROUND(COALESCE((SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 0.0), 1) AS FemalePercentage,
+            SUM(CASE WHEN al.LevelName LIKE '%1%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%first%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%junior%' OR s.AcademicLevelId = 1 THEN 1 ELSE 0 END) AS FirstYearStudents,
+            SUM(CASE WHEN al.LevelName LIKE '%2%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%second%' OR LOWER(COALESCE(al.LevelName, '')) LIKE '%senior%' OR s.AcademicLevelId = 2 THEN 1 ELSE 0 END) AS SecondYearStudents
+        FROM `Students` s
+        LEFT JOIN `AcademicLevels` al ON s.AcademicLevelId = al.AcademicLevelId
+        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+          AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
+          AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
+
+        -- Resultset 2: Fallback Monthly Trend from Students.AdmissionDate
+        SELECT 
+            DATE_FORMAT(COALESCE(s.AdmissionDate, s.CreatedAt), '%b %Y') AS Period,
+            MIN(COALESCE(s.AdmissionDate, s.CreatedAt)) AS SortDate,
+            COUNT(*) AS StudentsJoined
+        FROM `Students` s
+        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+          AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
+          AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
+          AND (s.AdmissionDate IS NOT NULL OR s.CreatedAt IS NOT NULL)
+        GROUP BY DATE_FORMAT(COALESCE(s.AdmissionDate, s.CreatedAt), '%b %Y')
+        ORDER BY SortDate ASC;
+    END IF;
 END //
 
 DELIMITER ;

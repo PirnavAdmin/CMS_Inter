@@ -46,6 +46,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Toast } from "@/components/common/Ui.jsx";
 import * as templateApi from "@/api/templateApi.js";
+import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
+import { generateQrCodeSvg } from "@/utils/qrCodeGenerator.js";
 import "./TemplatesPage.css";
 
 // Helper: Returns today's present date formatted as DD Mon YYYY (e.g., 15 Sep 2026)
@@ -1727,7 +1729,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                           customLogoUrl ? (
                             <img src={customLogoUrl} alt="Logo" className="cert-college-logo" style={{ width: logoSize, height: logoSize }} />
                           ) : (
-                            <div className="cert-default-logo" style={{ width: logoSize, height: logoSize, fontSize: logoSize * 0.5, backgroundColor: borderColor }}>P</div>
+                            <img src={pirnavCollegesLogo} alt="Pirnav College" className="cert-logo-img" style={{ height: logoSize, width: "auto", maxWidth: logoSize * 2, objectFit: "contain" }} />
                           )
                         )}
                       </div>
@@ -1783,7 +1785,17 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                       <p>Date: <strong>{issueDate}</strong></p>
                       {qrEnabled && (
                         <div className="cert-qr-placeholder">
-                          <div className="qr-box" style={{ width: qrSize, height: qrSize }}>QR</div>
+                          <div
+                            className="cert-qr-svg-wrap"
+                            style={{ width: qrSize, height: qrSize }}
+                            dangerouslySetInnerHTML={{
+                              __html: generateQrCodeSvg(
+                                `https://pirnavcollege.edu.in/verify-certificate/${template.refPrefix || "BC"}-2026-001`,
+                                qrSize,
+                                borderColor || "#1e3a8a"
+                              ),
+                            }}
+                          />
                           <span>{qrLabel}</span>
                         </div>
                       )}
@@ -1792,7 +1804,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                     <div className="cert-footer-col center">
                       {showSeal && (
                         <div className="cert-seal-stamp" style={{ borderColor: sealColor, color: sealColor }}>
-                          <span>{seal}</span>
+                          <span>PIRNAV<br/>COLLEGE</span>
                         </div>
                       )}
                     </div>
@@ -2411,7 +2423,7 @@ function TemplatePreviewScreen({ template, onDownload, notify }) {
               <header className="cert-header">
                 <div className="cert-header-grid">
                   <div className="cert-header-left">
-                    <div className="cert-default-logo" style={{ backgroundColor: template.borderColor || "#1e3a8a" }}>P</div>
+                    <img src={pirnavCollegesLogo} alt="Pirnav College" className="cert-logo-img" />
                   </div>
                   <div className="cert-header-center">
                     <h1 className="cert-institution-name" style={{ color: template.borderColor || "#1e3a8a" }}>
@@ -2458,9 +2470,18 @@ function TemplatePreviewScreen({ template, onDownload, notify }) {
                 <div className="cert-footer-col left">
                   <p>Place: <strong>{template.place || "Vijayawada"}</strong></p>
                   <p>Date: <strong>{template.issueDate || getPresentDateFormatted()}</strong></p>
-                  {template.qrEnabled && (
+                  {template.qrEnabled !== false && (
                     <div className="cert-qr-placeholder">
-                      <div className="qr-box">QR</div>
+                      <div
+                        className="cert-qr-svg-wrap"
+                        dangerouslySetInnerHTML={{
+                          __html: generateQrCodeSvg(
+                            `https://pirnavcollege.edu.in/verify-certificate/${template.refPrefix || "BC"}-2026-001`,
+                            44,
+                            template.borderColor || "#1e3a8a"
+                          ),
+                        }}
+                      />
                       <span>Scan to verify</span>
                     </div>
                   )}
@@ -2468,7 +2489,7 @@ function TemplatePreviewScreen({ template, onDownload, notify }) {
 
                 <div className="cert-footer-col center">
                   <div className="cert-seal-stamp" style={{ borderColor: template.borderColor || "#1e3a8a", color: template.borderColor || "#1e3a8a" }}>
-                    <span>PIRNAV COLLEGE<br/>VIJAYAWADA</span>
+                    <span>PIRNAV<br/>COLLEGE</span>
                   </div>
                 </div>
 
