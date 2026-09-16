@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   BarChart3,
   Bus,
   CalendarClock,
+  CheckCircle,
   Download,
   Edit3,
   Eye,
+  FileText,
   IndianRupee,
   MapPin,
+  PieChart,
   Plus,
   Route,
   Search,
@@ -366,8 +370,12 @@ export default function TransportPage() {
     const totalCapacity = vehicleAssignments.reduce((total, assignment) => total + (findVehicle(assignment.vehicleId)?.capacity || 0), 0);
     const totalAssigned = activeStudents.length;
     return {
+      totalVehicles: vehicles.length,
       activeVehicles: activeVehicles.length,
       maintenanceVehicles: vehicles.filter((vehicle) => vehicle.status === "Maintenance").length,
+      totalDrivers: drivers.length,
+      activeDrivers: drivers.filter((driver) => driver.status === "Active").length,
+      totalAttendants: attendants.length,
       activeRoutes: routes.filter((route) => route.status === "Active").length,
       activeStudents: activeStudents.length,
       runningTrips: trips.filter((trip) => trip.status === "Running").length,
@@ -438,12 +446,21 @@ export default function TransportPage() {
     { name: "routeEnd", label: "Route End", placeholder: "Enter route end location..." },
     { name: "totalDistanceKm", label: "Total Distance (KM)", type: "number", min: 0, placeholder: "e.g. 18.5" },
     { name: "estimatedTimeMinutes", label: "Est Time (Minutes)", type: "number", min: 0, placeholder: "e.g. 45" },
-    { name: "minDistanceKm", label: "Min Range (KM)", type: "number", min: 0, placeholder: "e.g. 5" },
-    { name: "minBaseFare", label: "Non-AC Base Fare (₹)", type: "number", min: 0, placeholder: "e.g. 1000" },
-    { name: "ratePerKm", label: "Non-AC Rate/Addl KM", type: "number", min: 0, placeholder: "e.g. 100" },
-    { name: "acMinBaseFare", label: "AC Base Fare (₹)", type: "number", min: 0, placeholder: "e.g. 1200" },
-    { name: "acRatePerKm", label: "AC Rate/Addl KM (₹)", type: "number", min: 0, placeholder: "e.g. 150" },
-    { name: "description", label: "Description", type: "textarea", full: true, placeholder: "Enter route description..." },
+    {
+      type: "group",
+      name: "routeFareSlab",
+      title: "Distance & Slab Rate Configuration",
+      className: "cms-transport-route-slab",
+      columns: 3,
+      fields: [
+        { name: "minDistanceKm", label: "Min Range (KM)", type: "number", min: 0, placeholder: "e.g. 5" },
+        { name: "minBaseFare", label: "Non-AC Base Fare (\u20b9)", type: "number", min: 0, placeholder: "e.g. 1000" },
+        { name: "ratePerKm", label: "Non-AC Rate/Addl KM", type: "number", min: 0, placeholder: "e.g. 100" },
+        { name: "acMinBaseFare", label: "AC Base Fare (\u20b9)", type: "number", min: 0, placeholder: "e.g. 1200" },
+        { name: "acRatePerKm", label: "AC Rate/Addl KM (\u20b9)", type: "number", min: 0, placeholder: "e.g. 150" },
+      ],
+    },
+    { name: "description", label: "Description", full: true, placeholder: "Enter route description..." },
   ];
 
   const pickupFields = [
@@ -727,6 +744,48 @@ export default function TransportPage() {
     );
   };
 
+  const openTransportOperations = () => {
+    setActiveSection("operations");
+    setActiveOperationTab("trips");
+    setQuery("");
+  };
+
+  const getTripDetailRow = (trip) => {
+    const assignment = findAssignment(trip.assignmentId);
+    return {
+      vehicleNumber: trip.vehicleNumber || assignment?.vehicleNumber || "-",
+      routeName: trip.routeName || assignment?.routeName || "-",
+      tripType: trip.tripType || "-",
+      tripDate: trip.tripDate || "-",
+      driver: trip.driverName || assignment?.driverName || "-",
+      busAttendant: trip.attendantName || assignment?.attendantName || "-",
+      startTime: trip.startTime || "-",
+      endTime: trip.endTime || "-",
+      studentsPresent: trip.studentsPresent ?? "-",
+      status: trip.status || "-",
+    };
+  };
+
+  const openTripDetails = (trip) => {
+    setDetailConfig({ title: "Trip Details", row: getTripDetailRow(trip) });
+  };
+
+  const transportStatusMetrics = [
+    { label: "Active Vehicles", value: summary.activeVehicles, tone: "blue" },
+    { label: "Morning Running", value: trips.filter((trip) => trip.tripType === "Morning" && trip.status === "Running").length, tone: "green" },
+    { label: "Morning Completed", value: trips.filter((trip) => trip.tripType === "Morning" && trip.status === "Completed").length, tone: "blue" },
+    { label: "Evening Pending", value: trips.filter((trip) => trip.tripType === "Evening" && trip.status !== "Completed").length, tone: "amber" },
+    { label: "Delayed Trips", value: trips.filter((trip) => ["Delayed", "Cancelled"].includes(trip.status)).length, tone: "muted" },
+    { label: "Under Maintenance", value: summary.maintenanceVehicles, tone: "red" },
+  ];
+
+  const getVehicleOccupancy = (vehicle) => {
+    const assigned = studentAssignments.filter((student) => student.vehicleId === vehicle.id && student.status === "Active").length;
+    const capacity = Number(vehicle.capacity) || 0;
+    const percent = capacity ? Math.round((assigned / capacity) * 100) : 0;
+    return { assigned, capacity, percent };
+  };
+
   const studentTransportReportColumns = [
     { key: "studentName", label: "Student & Class", strong: true, value: (row) => `${row.studentName} (${row.group || "-"} ${row.section || ""})` },
     { key: "admissionNo", label: "Adm No" },
@@ -768,48 +827,76 @@ export default function TransportPage() {
   const renderDashboard = () => (
     <div className="cms-transport-stack">
       <div className="cms-transport-stat-grid">
-        <StatCard icon={Bus} label="Active Vehicles" value={summary.activeVehicles} hint={`${summary.maintenanceVehicles} under maintenance`} tone="blue" />
+        <StatCard icon={Bus} label="Total Vehicles" value={summary.totalVehicles} hint={`(${summary.activeVehicles} Active)`} tone="blue" />
         <StatCard icon={Route} label="Active Routes" value={summary.activeRoutes} hint={`${pickupPoints.length} pickup points`} tone="green" />
-        <StatCard icon={Users} label="Assigned Students" value={summary.activeStudents} hint={`${summary.utilization}% capacity used`} tone="violet" />
-        <StatCard icon={CalendarClock} label="Today's Trips" value={summary.completedTrips + summary.runningTrips} hint={`${summary.runningTrips} running now`} tone="amber" />
+        <StatCard icon={Users} label="Total Drivers" value={summary.totalDrivers} hint={`(${summary.activeDrivers} Active)`} tone="blue" />
+        <StatCard icon={UserCheck} label="Total Bus Attendants" value={summary.totalAttendants} tone="violet" />
+        <StatCard icon={CheckCircle} label="Students Using Transport" value={summary.activeStudents} hint={`${summary.utilization}% capacity used`} tone="green" />
+        <StatCard icon={Wrench} label="Vehicles Under Maintenance" value={summary.maintenanceVehicles} tone="amber" />
+        <StatCard icon={FileText} label="Expiring Vehicle Documents" value={summary.expiringDocs} tone="red" />
+        <StatCard icon={AlertTriangle} label="Expiring Driver Licenses" value={summary.expiringLicenses} tone="red" />
       </div>
 
       {(summary.expiringDocs || summary.expiringLicenses) ? (
         <div className="cms-transport-warning">
           <AlertTriangle size={18} />
-          <span>{summary.expiringDocs} vehicle document set(s) and {summary.expiringLicenses} driver license(s) need review within the next 45 days.</span>
+          <span><strong>Regulatory Compliance Warning</strong> {summary.expiringDocs} vehicle document(s) and {summary.expiringLicenses} driver license(s) expiring soon.</span>
+          <em>Action Required</em>
         </div>
       ) : null}
 
-      <div className="cms-transport-two-col">
-        <div className="cms-card">
-          <div className="cms-card-head"><h2>Today's Transport Status</h2></div>
+      <div className="cms-card">
+          <div className="cms-card-head cms-transport-status-head">
+            <div>
+              <h2>Today's Transport Status</h2>
+              <p>Current mock trip activity and assignment readiness.</p>
+            </div>
+            <button type="button" className="cms-btn cms-btn-primary cms-transport-open-ops" onClick={openTransportOperations}>
+              Open Transport Operations <ArrowRight size={15} />
+            </button>
+          </div>
           <div className="cms-card-body">
-            <div className="cms-transport-trip-list">
-              {trips.map((trip) => (
-                <button key={trip.id} type="button" className="cms-transport-trip" onClick={() => setDetailConfig({ title: "Trip Details", row: trip })}>
-                  <span>
-                    <strong>{trip.vehicleNumber}</strong>
-                    <small>{trip.routeName} - {trip.tripType}</small>
-                  </span>
-                  <StatusBadge value={trip.status} />
-                </button>
+            <div className="cms-transport-status-metrics">
+              {transportStatusMetrics.map((metric) => (
+                <div key={metric.label} className={`cms-transport-status-metric tone-${metric.tone}`}>
+                  <span>{metric.label}</span>
+                  <strong>{metric.value}</strong>
+                </div>
               ))}
             </div>
+            <div className="cms-transport-trip-list">
+              {trips.map((trip) => {
+                const assignment = findAssignment(trip.assignmentId);
+                return (
+                <div key={trip.id} className="cms-transport-trip">
+                  <span className="cms-transport-trip-info">
+                    <strong>{trip.vehicleNumber}</strong>
+                    <small>{trip.routeName} - {trip.tripType}</small>
+                    <small>Driver: {trip.driverName || assignment?.driverName || "-"} &middot; Attendant: {trip.attendantName || assignment?.attendantName || "-"}</small>
+                  </span>
+                  <span className="cms-transport-trip-actions">
+                    <StatusBadge value={trip.status} />
+                    <button type="button" className="cms-transport-details-btn" onClick={() => openTripDetails(trip)}>
+                      <Eye size={14} /> Details
+                    </button>
+                  </span>
+                </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+      </div>
 
+      <div className="cms-transport-two-col">
         <div className="cms-card">
-          <div className="cms-card-head"><h2>Route Occupancy</h2></div>
+          <div className="cms-card-head"><h2><BarChart3 size={20} /> Vehicle Seat Occupancy Matrix</h2></div>
           <div className="cms-card-body">
             <div className="cms-transport-occupancy">
-              {vehicleAssignments.map((assignment) => {
-                const capacity = findVehicle(assignment.vehicleId)?.capacity || 0;
-                const assigned = studentAssignments.filter((student) => student.vehicleId === assignment.vehicleId && student.status === "Active").length;
-                const percent = capacity ? Math.round((assigned / capacity) * 100) : 0;
+              {vehicles.map((vehicle) => {
+                const { assigned, capacity, percent } = getVehicleOccupancy(vehicle);
                 return (
-                  <div key={assignment.id}>
-                    <span><strong>{assignment.routeName}</strong><small>{assigned}/{capacity} seats</small></span>
+                  <div key={vehicle.id}>
+                    <span><strong>{vehicle.vehicleNumber} ({vehicle.vehicleType})</strong><small>{assigned} / {capacity} Seats ({percent}%)</small></span>
                     <div className="cms-transport-progress"><i style={{ width: `${Math.min(percent, 100)}%` }} /></div>
                   </div>
                 );
@@ -817,12 +904,25 @@ export default function TransportPage() {
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="cms-card">
-        <div className="cms-card-head"><h2>Live GPS Snapshot</h2></div>
-        <div className="cms-card-body">
-          {renderGpsCards()}
+        <div className="cms-card">
+          <div className="cms-card-head"><h2><PieChart size={20} /> Route-wise Student Distribution</h2></div>
+          <div className="cms-card-body">
+            <div className="cms-transport-route-distribution">
+              {routes.map((route) => {
+                const students = studentAssignments.filter((student) => student.routeId === route.id && student.status === "Active").length;
+                return (
+                  <div key={route.id}>
+                    <span>
+                      <strong>{route.routeName}</strong>
+                      <small>{route.routeCode} &bull; {route.totalDistanceKm} KM</small>
+                    </span>
+                    <em>{students} Student{students === 1 ? "" : "s"}</em>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1053,7 +1153,7 @@ export default function TransportPage() {
           title={formConfig.title}
           fields={formConfig.fields}
           initial={formConfig.record || {}}
-          columns={3}
+          columns={formConfig.key === "routes" ? 2 : 3}
           onCancel={() => setFormConfig(null)}
           onSave={saveForm}
         />
