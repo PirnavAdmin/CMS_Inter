@@ -217,17 +217,13 @@ public class DashboardRepository : IDashboardRepository
             SELECT COUNT(*) FROM `Staff`
             WHERE (IsDeleted = 0 OR IsDeleted IS NULL)
               AND (Status = 'Active' OR Status IS NULL)
-              AND (StaffType = 'Teaching' OR FacultyType = 'Teaching')
-              AND (@boardId IS NULL OR BoardId = @boardId OR BoardId IS NULL OR BoardId = 0);",
-            new { boardId });
+              AND (StaffType = 'Teaching' OR StaffType = 'Both' OR REPLACE(REPLACE(COALESCE(StaffType, ''), '-', ''), ' ', '') = 'Teaching' OR StaffType IS NULL);");
 
         int nonTeachingStaff = await conn.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM `Staff`
             WHERE (IsDeleted = 0 OR IsDeleted IS NULL)
               AND (Status = 'Active' OR Status IS NULL)
-              AND (StaffType = 'Non-Teaching' OR (StaffType != 'Teaching' AND FacultyType != 'Teaching'))
-              AND (@boardId IS NULL OR BoardId = @boardId OR BoardId IS NULL OR BoardId = 0);",
-            new { boardId });
+              AND (StaffType = 'Non-Teaching' OR StaffType = 'NonTeaching' OR StaffType = 'Non Teaching' OR REPLACE(REPLACE(COALESCE(StaffType, ''), '-', ''), ' ', '') = 'NonTeaching');");
 
         int totalGroups = await conn.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM `Groups`
@@ -313,7 +309,7 @@ public class DashboardRepository : IDashboardRepository
                     SELECT COUNT(DISTINCT s.Id) FROM `Staff` s
                     WHERE (s.IsDeleted = 0 OR s.IsDeleted IS NULL)
                       AND (s.Status = 'Active' OR s.Status IS NULL)
-                      AND (s.StaffType = 'Teaching' OR s.FacultyType = 'Teaching')
+                      AND (s.StaffType = 'Teaching' OR s.StaffType IS NULL)
                       AND (@boardId IS NULL OR s.BoardId = @boardId OR s.BoardId IS NULL OR s.BoardId = 0)
                       AND (s.JoiningDate IS NOT NULL AND DATE(s.JoiningDate) <= @priorEndStr);",
                     new { boardId, priorEndStr });
@@ -322,7 +318,7 @@ public class DashboardRepository : IDashboardRepository
                     SELECT COUNT(DISTINCT s.Id) FROM `Staff` s
                     WHERE (s.IsDeleted = 0 OR s.IsDeleted IS NULL)
                       AND (s.Status = 'Active' OR s.Status IS NULL)
-                      AND (s.StaffType = 'Non-Teaching' OR (s.StaffType != 'Teaching' AND s.FacultyType != 'Teaching'))
+                      AND (s.StaffType = 'Non-Teaching' OR (s.StaffType != 'Teaching' AND s.StaffType IS NOT NULL))
                       AND (@boardId IS NULL OR s.BoardId = @boardId OR s.BoardId IS NULL OR s.BoardId = 0)
                       AND (s.JoiningDate IS NOT NULL AND DATE(s.JoiningDate) <= @priorEndStr);",
                     new { boardId, priorEndStr });
@@ -609,19 +605,7 @@ public class DashboardRepository : IDashboardRepository
         }
         catch { }
 
-        if (!trends.Any())
-        {
-            var months = new[] { "Jan 2026", "Feb 2026", "Mar 2026", "Apr 2026", "May 2026" };
-            double[] factors = tCount > 0 ? new[] { 0.70, 0.78, 0.85, 0.92, 1.00 } : new[] { 0.0, 0.0, 0.0, 0.0, 0.0 };
-            for (int i = 0; i < months.Length; i++)
-            {
-                trends.Add(new StudentMonthlyTrendDto
-                {
-                    Period = months[i],
-                    StudentsJoined = (int)Math.Round(tCount * factors[i])
-                });
-            }
-        }
+        // Return genuine database trends (empty list if no records exist)
 
         return new StudentsOverviewResponseDto
         {
@@ -1117,19 +1101,19 @@ public class DashboardRepository : IDashboardRepository
         int totalStaff = await conn.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM Staff st
             WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
-              AND (st.Status = 'Active' OR st.Status IS NULL)
-              AND (@boardId IS NULL OR st.BoardId = @boardId OR st.BoardId IS NULL OR st.BoardId = 0);",
-            new { boardId });
+              AND (st.Status = 'Active' OR st.Status IS NULL);");
 
         int teachingCount = await conn.ExecuteScalarAsync<int>(@"
             SELECT COUNT(*) FROM Staff st
             WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
               AND (st.Status = 'Active' OR st.Status IS NULL)
-              AND (st.StaffType = 'Teaching' OR st.FacultyType = 'Teaching' OR st.StaffType IS NULL)
-              AND (@boardId IS NULL OR st.BoardId = @boardId OR st.BoardId IS NULL OR st.BoardId = 0);",
-            new { boardId });
+              AND (st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching' OR st.StaffType IS NULL);");
 
-        int nonTeachingCount = Math.Max(0, totalStaff - teachingCount);
+        int nonTeachingCount = await conn.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(*) FROM Staff st
+            WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+              AND (st.Status = 'Active' OR st.Status IS NULL)
+              AND (st.StaffType = 'Non-Teaching' OR st.StaffType = 'NonTeaching' OR st.StaffType = 'Non Teaching' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'NonTeaching');");
         int present = 0, absent = 0, late = 0, onLeave = 0;
 
         try
@@ -1776,7 +1760,7 @@ public class DashboardRepository : IDashboardRepository
                 INNER JOIN `StaffSubjectAllocations` sa ON sa.StaffId = s.Id
                 WHERE (s.IsDeleted = 0 OR s.IsDeleted IS NULL)
                   AND (s.Status = 'Active' OR s.Status IS NULL)
-                  AND (s.StaffType = 'Teaching' OR s.FacultyType = 'Teaching')
+                  AND (s.StaffType = 'Teaching' OR s.StaffType IS NULL)
                   AND (@boardId IS NULL OR s.BoardId = @boardId)
                 GROUP BY s.Id, s.FirstName, s.LastName, d.DepartmentName
                 ORDER BY AssignedSubjects DESC, s.FirstName ASC;", new { boardId })).Select(r => new FacultyWorkloadItemDto

@@ -228,6 +228,7 @@ export const apiEndpoints = {
     importExcel: "/api/v1/departments/import-excel",
     exportExcel: "/api/v1/departments/export-excel",
     template: "/api/v1/departments/template",
+    exportTemplate: "/api/v1/departments/template",
   },
   designations: {
     getAll: "/api/v1/designations",
@@ -235,6 +236,10 @@ export const apiEndpoints = {
     getById: (id) => `/api/v1/designations/${id}`,
     update: (id) => `/api/v1/designations/${id}`,
     delete: (id) => `/api/v1/designations/${id}`,
+    importExcel: "/api/v1/departments/import-excel",
+    exportExcel: "/api/v1/designations/export-excel",
+    template: "/api/v1/designations/template",
+    exportTemplate: "/api/v1/designations/template",
   },
   sections: {
     getAll: "/api/v1/Sections",

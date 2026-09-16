@@ -71,6 +71,13 @@ namespace CollegeManagement.API.Services.Implementations
                 placeholders = new List<string>();
             }
 
+            int ver = 1;
+            if (!string.IsNullOrWhiteSpace(t.Version))
+            {
+                int.TryParse(t.Version.Trim().TrimStart('v', 'V'), out ver);
+                if (ver < 1) ver = 1;
+            }
+
             return new TemplateResponseDto
             {
                 Id = t.Id,
@@ -80,7 +87,7 @@ namespace CollegeManagement.API.Services.Implementations
                 ContentBody = t.ContentBody,
                 Placeholders = placeholders,
                 IsActive = t.IsActive,
-                Version = t.Version,
+                Version = ver,
                 CreatedAt = t.CreatedAt,
                 UpdatedAt = t.UpdatedAt
             };
@@ -144,7 +151,7 @@ namespace CollegeManagement.API.Services.Implementations
                 ContentBody = dto.ContentBody,
                 PlaceholdersJson = JsonSerializer.Serialize(placeholders),
                 IsActive = dto.IsActive,
-                Version = 1,
+                Version = "1",
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -206,7 +213,29 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (!string.IsNullOrWhiteSpace(request.TemplateCode))
             {
-                template = await _repository.GetByCodeAsync(request.TemplateCode, ct);
+                var code = request.TemplateCode.Trim();
+                template = await _repository.GetByCodeAsync(code, ct);
+                if (template == null)
+                {
+                    var alias = code.ToUpperInvariant() switch
+                    {
+                        "BONAFIDE_CERT" => "BC",
+                        "CONDUCT_CERT" => "CC",
+                        "STUDY_CERT" => "SC",
+                        "TRANSFER_CERT" => "TC",
+                        "CUSTOM_CERT" => "OC",
+                        "BC" => "BONAFIDE_CERT",
+                        "CC" => "CONDUCT_CERT",
+                        "SC" => "STUDY_CERT",
+                        "TC" => "TRANSFER_CERT",
+                        "OC" => "CUSTOM_CERT",
+                        _ => null
+                    };
+                    if (!string.IsNullOrEmpty(alias))
+                    {
+                        template = await _repository.GetByCodeAsync(alias, ct);
+                    }
+                }
             }
 
             if (template == null && request.TemplateId.HasValue && request.TemplateId.Value > 0)
@@ -214,10 +243,12 @@ namespace CollegeManagement.API.Services.Implementations
                 template = await _repository.GetByIdAsync(request.TemplateId.Value, ct);
             }
 
-            // Fallback default
+            // Fallback default: BC or BONAFIDE_CERT or any first active Certificate template
             if (template == null)
             {
-                template = await _repository.GetByCodeAsync("BONAFIDE_CERT", ct);
+                template = await _repository.GetByCodeAsync("BC", ct)
+                    ?? await _repository.GetByCodeAsync("BONAFIDE_CERT", ct)
+                    ?? (await _repository.GetActiveByCategoryAsync("Certificate", ct)).FirstOrDefault();
             }
 
             if (template == null)
@@ -351,6 +382,13 @@ namespace CollegeManagement.API.Services.Implementations
                     RegexOptions.IgnoreCase);
             }
 
+            int ver = 1;
+            if (!string.IsNullOrWhiteSpace(template.Version))
+            {
+                int.TryParse(template.Version.Trim().TrimStart('v', 'V'), out ver);
+                if (ver < 1) ver = 1;
+            }
+
             return new RenderedTemplateResponseDto
             {
                 TemplateCode = template.TemplateCode,
@@ -358,7 +396,7 @@ namespace CollegeManagement.API.Services.Implementations
                 Category = template.Category,
                 RenderedHtml = renderedHtml,
                 AppliedPlaceholders = placeholderValues,
-                Version = template.Version
+                Version = ver
             };
         }
     }

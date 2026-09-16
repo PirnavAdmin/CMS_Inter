@@ -17,8 +17,10 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> ValidateCodeAsync(string code, int? excludeId = null);
         Task<bool> ValidateNameAsync(string name, int? excludeId = null);
         Task<MasterImportResultDto> ImportDepartmentsFromExcelAsync(Microsoft.AspNetCore.Http.IFormFile file, string? defaultStaffType = null);
+        Task<MasterImportResultDto> ImportDepartmentsAndDesignationsFromExcelAsync(Microsoft.AspNetCore.Http.IFormFile file, string? defaultStaffType = null);
         Task<MasterImportResultDto> BulkImportDepartmentsAsync(IEnumerable<CreateDepartmentDto> dtos, string? defaultStaffType = null);
         Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDepartmentTemplateExcelAsync(string? staffType = null);
+        Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDepartmentDesignationTemplateExcelAsync(string? staffType = null);
         Task<(byte[] Bytes, string ContentType, string FileName)> ExportDepartmentsExcelAsync(string? staffType = null);
     }
 }

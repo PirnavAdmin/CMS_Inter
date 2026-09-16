@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -140,6 +141,403 @@ public class CertificateRepository : ICertificateRepository
         catch (Exception ex)
         {
             Console.WriteLine($"GetByIdAsync Error: {ex.Message}");
+            return null;
+        }
+    }
+
+    // =========================================================
+    // GET CERTIFICATE PREVIEW (Fully Hydrated Template & Data)
+    // =========================================================
+    public async Task<CertificatePreviewResponseDto?> GetPreviewAsync(
+        int id,
+        CancellationToken ct = default)
+    {
+        if (id <= 0) return null;
+
+        using var connection = _database.CreateConnection();
+
+        var cols = await GetCertificateTableColumnsAsync(connection);
+        var pk = cols.Contains("CertificateId") ? "c.CertificateId" : "c.Id";
+
+        var sql = $@"
+            SELECT 
+                c.*,
+                COALESCE(s.StudentName, NULLIF(TRIM(CONCAT(sa.FirstName, ' ', COALESCE(sa.LastName, ''))), ''), c.StudentName, 'Student') AS Hydrated_StudentName,
+                COALESCE(s.FatherName, sa.FatherName, 'Parent Name') AS Hydrated_FatherName,
+                COALESCE(s.MotherName, sa.MotherName, 'Anita Devi') AS Hydrated_MotherName,
+                COALESCE(c.AdmissionNo, sa.AdmissionNo, s.AdmissionNo, 'ADM-2026-0000') AS Hydrated_AdmissionNo,
+                COALESCE(s.RollNo, s.AdmissionNo, sa.AdmissionNo, '101') AS Hydrated_RollNo,
+                COALESCE(c.GroupName, g.GroupName, 'MPC') AS Hydrated_GroupName,
+                COALESCE(c.AcademicLevel, al.LevelName, '1st Year') AS Hydrated_AcademicLevel,
+                COALESCE(c.AcademicYear, ay.AcademicYearName, '2026-2027') AS Hydrated_AcademicYear,
+                COALESCE(b.BoardName, 'Board of Intermediate Education, Andhra Pradesh (BIEAP)') AS Hydrated_BoardName,
+                COALESCE(sec.SectionName, 'A') AS Hydrated_SectionName,
+                s.DateOfBirth AS Hydrated_Dob,
+                s.Gender AS Hydrated_Gender,
+                COALESCE(s.BloodGroup, 'O+') AS Hydrated_BloodGroup,
+                COALESCE(s.MobileNumber, '') AS Hydrated_Mobile
+            FROM `certificates` c
+            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
+            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
+            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
+            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
+            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
+            LEFT JOIN `Sections` sec ON sec.SectionId = COALESCE(sa.SectionId, s.SectionId)
+            LEFT JOIN `Boards` b ON b.BoardId = COALESCE(sa.BoardId, s.BoardId)
+            WHERE {pk} = @id
+            LIMIT 1;";
+
+        try
+        {
+            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                new CommandDefinition(sql, new { id }, cancellationToken: ct));
+
+            if (row == null) return null;
+
+            var dict = (IDictionary<string, object>)row;
+
+            int certId = id;
+            if (dict.ContainsKey("CertificateId") && dict["CertificateId"] != null)
+                certId = Convert.ToInt32(dict["CertificateId"]);
+            else if (dict.ContainsKey("Id") && dict["Id"] != null)
+                certId = Convert.ToInt32(dict["Id"]);
+
+            string certNo = dict.ContainsKey("CertificateNumber") && dict["CertificateNumber"] != null
+                ? dict["CertificateNumber"].ToString()!
+                : (dict.ContainsKey("CertificateNo") && dict["CertificateNo"] != null ? dict["CertificateNo"].ToString()! : $"CERT-{certId}");
+
+            int studentId = dict.ContainsKey("StudentId") && dict["StudentId"] != null ? Convert.ToInt32(dict["StudentId"]) : 0;
+            string studentName = dict.ContainsKey("Hydrated_StudentName") && dict["Hydrated_StudentName"] != null ? dict["Hydrated_StudentName"].ToString()! : "Student";
+            string fatherName = dict.ContainsKey("Hydrated_FatherName") && dict["Hydrated_FatherName"] != null ? dict["Hydrated_FatherName"].ToString()! : "Parent Name";
+            string motherName = dict.ContainsKey("Hydrated_MotherName") && dict["Hydrated_MotherName"] != null ? dict["Hydrated_MotherName"].ToString()! : "Anita Devi";
+            string admissionNo = dict.ContainsKey("Hydrated_AdmissionNo") && dict["Hydrated_AdmissionNo"] != null ? dict["Hydrated_AdmissionNo"].ToString()! : "";
+            string rollNo = dict.ContainsKey("Hydrated_RollNo") && dict["Hydrated_RollNo"] != null ? dict["Hydrated_RollNo"].ToString()! : "";
+            string groupName = dict.ContainsKey("Hydrated_GroupName") && dict["Hydrated_GroupName"] != null ? dict["Hydrated_GroupName"].ToString()! : "MPC";
+            string academicLevel = dict.ContainsKey("Hydrated_AcademicLevel") && dict["Hydrated_AcademicLevel"] != null ? dict["Hydrated_AcademicLevel"].ToString()! : "1st Year";
+            string academicYear = dict.ContainsKey("Hydrated_AcademicYear") && dict["Hydrated_AcademicYear"] != null ? dict["Hydrated_AcademicYear"].ToString()! : "2026-2027";
+            string boardName = dict.ContainsKey("Hydrated_BoardName") && dict["Hydrated_BoardName"] != null ? dict["Hydrated_BoardName"].ToString()! : "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
+            string sectionName = dict.ContainsKey("Hydrated_SectionName") && dict["Hydrated_SectionName"] != null ? dict["Hydrated_SectionName"].ToString()! : "A";
+
+            string certType = dict.ContainsKey("CertificateType") && dict["CertificateType"] != null ? dict["CertificateType"].ToString()! : "Certificate";
+            string purpose = dict.ContainsKey("Purpose") && dict["Purpose"] != null ? dict["Purpose"].ToString()! : "Higher Education / Official Verification";
+            string remarks = dict.ContainsKey("Remarks") && dict["Remarks"] != null ? dict["Remarks"].ToString()! : "";
+            string status = dict.ContainsKey("Status") && dict["Status"] != null ? dict["Status"].ToString()! : "Generated";
+            string issuedBy = dict.ContainsKey("IssuedBy") && dict["IssuedBy"] != null ? dict["IssuedBy"].ToString()! : "Dr. S. K. Rao (Principal)";
+
+            DateTime reqDate = DateTime.UtcNow;
+            if (dict.ContainsKey("RequestDate") && dict["RequestDate"] is DateTime rdt) reqDate = rdt;
+            else if (dict.ContainsKey("CreatedAt") && dict["CreatedAt"] is DateTime cdt) reqDate = cdt;
+
+            DateTime issDate = reqDate;
+            if (dict.ContainsKey("IssueDate") && dict["IssueDate"] is DateTime idt) issDate = idt;
+
+            string dobStr = "14/08/2008";
+            if (dict.ContainsKey("Hydrated_Dob") && dict["Hydrated_Dob"] is DateTime dobDt) dobStr = dobDt.ToString("dd/MM/yyyy");
+
+            string gender = dict.ContainsKey("Hydrated_Gender") && dict["Hydrated_Gender"] != null ? dict["Hydrated_Gender"].ToString()! : "";
+            string bloodGroup = dict.ContainsKey("Hydrated_BloodGroup") && dict["Hydrated_BloodGroup"] != null ? dict["Hydrated_BloodGroup"].ToString()! : "O+";
+            string mobile = dict.ContainsKey("Hydrated_Mobile") && dict["Hydrated_Mobile"] != null ? dict["Hydrated_Mobile"].ToString()! : "";
+
+            // 2. Fetch or resolve matching template from `templates` table
+            var templateSql = @"
+                SELECT * FROM `templates` 
+                WHERE IsActive = 1 
+                  AND (LOWER(TemplateCode) = LOWER(@code) OR LOWER(Title) = LOWER(@type) OR LOWER(Title) LIKE CONCAT('%', LOWER(@type), '%'))
+                ORDER BY Id DESC 
+                LIMIT 1;";
+
+            string codeGuess = certType.ToUpperInvariant().Replace(" ", "_").Replace("(", "").Replace(")", "");
+            if (codeGuess.Contains("BONAFIDE")) codeGuess = "BONAFIDE_CERT";
+            else if (codeGuess.Contains("STUDY")) codeGuess = "STUDY_CERT";
+            else if (codeGuess.Contains("CONDUCT")) codeGuess = "CONDUCT_CERT";
+            else if (codeGuess.Contains("TRANSFER") || codeGuess.Contains("TC")) codeGuess = "TRANSFER_CERT";
+            else if (codeGuess.Contains("OTHER")) codeGuess = "OTHERS";
+
+            var dbTemplate = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                new CommandDefinition(templateSql, new { code = codeGuess, type = certType.Trim() }, cancellationToken: ct));
+
+            string templateCode = codeGuess;
+            string templateTitle = certType;
+            string rawBody = "";
+            string borderColor = "#1e3a8a";
+            string badgeBgColor = "#1e3a8a";
+            string badgeTextColor = "#ffffff";
+            string orientation = "Landscape";
+            string signatureType = "Principal";
+
+            if (certType.Contains("Study", StringComparison.OrdinalIgnoreCase))
+            {
+                borderColor = "#15803d";
+                badgeBgColor = "#15803d";
+            }
+            else if (certType.Contains("Conduct", StringComparison.OrdinalIgnoreCase))
+            {
+                borderColor = "#991b1b";
+                badgeBgColor = "#991b1b";
+            }
+            else if (certType.Contains("Transfer", StringComparison.OrdinalIgnoreCase) || certType.Contains("TC", StringComparison.OrdinalIgnoreCase))
+            {
+                borderColor = "#b45309";
+                badgeBgColor = "#b45309";
+            }
+            else if (certType.Contains("Other", StringComparison.OrdinalIgnoreCase))
+            {
+                borderColor = "#0f766e";
+                badgeBgColor = "#0f766e";
+            }
+
+            if (dbTemplate != null)
+            {
+                var tDict = (IDictionary<string, object>)dbTemplate;
+                if (tDict.ContainsKey("TemplateCode") && tDict["TemplateCode"] != null)
+                    templateCode = tDict["TemplateCode"].ToString()!;
+                if (tDict.ContainsKey("Title") && tDict["Title"] != null)
+                    templateTitle = tDict["Title"].ToString()!;
+                if (tDict.ContainsKey("ContentBody") && tDict["ContentBody"] != null)
+                    rawBody = tDict["ContentBody"].ToString()!;
+            }
+
+            // Standard fallback bodies if rawBody empty
+            if (string.IsNullOrWhiteSpace(rawBody))
+            {
+                if (templateCode.Contains("BONAFIDE", StringComparison.OrdinalIgnoreCase) || certType.Contains("Bonafide", StringComparison.OrdinalIgnoreCase))
+                {
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.";
+                }
+                else if (templateCode.Contains("STUDY", StringComparison.OrdinalIgnoreCase) || certType.Contains("Study", StringComparison.OrdinalIgnoreCase))
+                {
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.";
+                }
+                else if (templateCode.Contains("CONDUCT", StringComparison.OrdinalIgnoreCase) || certType.Contains("Conduct", StringComparison.OrdinalIgnoreCase))
+                {
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has been a student of this college during the academic year(s) {{academic_year}}.\nTo the best of our knowledge and records, his/her conduct and character have been Good.";
+                }
+                else if (templateCode.Contains("TRANSFER", StringComparison.OrdinalIgnoreCase) || certType.Contains("Transfer", StringComparison.OrdinalIgnoreCase))
+                {
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this college from {{study_from}} to {{study_to}}.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.";
+                }
+                else
+                {
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} is studying in {{academic_level}} ({{group_name}}) for the Academic Year {{academic_year}}.\nThis is to certify that {{custom_body}}.";
+                }
+            }
+
+            string studentIdStr = studentId > 0 ? studentId.ToString() : (admissionNo.Length > 0 ? Regex.Replace(admissionNo, @"\D", "") : "518");
+            if (string.IsNullOrWhiteSpace(studentIdStr)) studentIdStr = "518";
+
+            var payload = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["student_name"] = studentName,
+                ["studentName"] = studentName,
+                ["name"] = studentName,
+                ["student"] = studentName,
+
+                ["father_name"] = fatherName,
+                ["fatherName"] = fatherName,
+                ["father"] = fatherName,
+                ["parent_name"] = fatherName,
+                ["parentName"] = fatherName,
+
+                ["mother_name"] = motherName,
+                ["motherName"] = motherName,
+                ["mother"] = motherName,
+
+                ["student_id"] = studentIdStr,
+                ["studentId"] = studentIdStr,
+                ["id"] = studentIdStr,
+
+                ["admission_no"] = admissionNo,
+                ["admissionNo"] = admissionNo,
+                ["admission_number"] = admissionNo,
+                ["admissionNumber"] = admissionNo,
+
+                ["roll_no"] = rollNo,
+                ["rollNo"] = rollNo,
+                ["roll_number"] = rollNo,
+                ["rollNumber"] = rollNo,
+
+                ["academic_level"] = academicLevel,
+                ["academicLevel"] = academicLevel,
+                ["level"] = academicLevel,
+                ["year"] = academicLevel,
+
+                ["group_name"] = groupName,
+                ["groupName"] = groupName,
+                ["group"] = groupName,
+                ["stream"] = groupName,
+
+                ["section"] = sectionName,
+                ["section_name"] = sectionName,
+                ["sectionName"] = sectionName,
+
+                ["academic_year"] = academicYear,
+                ["academicYear"] = academicYear,
+                ["year_name"] = academicYear,
+
+                ["board_name"] = boardName,
+                ["boardName"] = boardName,
+                ["board"] = boardName,
+
+                ["course_name"] = $"Intermediate ({groupName})",
+                ["courseName"] = $"Intermediate ({groupName})",
+                ["course"] = "Intermediate",
+
+                ["certificate_number"] = certNo,
+                ["certificateNumber"] = certNo,
+                ["certificate_no"] = certNo,
+                ["certificateNo"] = certNo,
+
+                ["issue_date"] = issDate.ToString("dd/MM/yyyy"),
+                ["issueDate"] = issDate.ToString("dd/MM/yyyy"),
+                ["date"] = issDate.ToString("dd/MM/yyyy"),
+
+                ["request_date"] = reqDate.ToString("dd/MM/yyyy"),
+                ["requestDate"] = reqDate.ToString("dd/MM/yyyy"),
+
+                ["place"] = "Vijayawada",
+                ["purpose"] = purpose,
+                ["remarks"] = remarks,
+                ["status"] = status,
+                ["issued_by"] = issuedBy,
+                ["issuedBy"] = issuedBy,
+                ["principal_name"] = issuedBy,
+
+                ["conduct_rating"] = "Good",
+                ["conduct"] = "Good",
+                ["study_from"] = "June 2025",
+                ["study_to"] = "May 2027",
+
+                ["dob"] = dobStr,
+                ["date_of_birth"] = dobStr,
+                ["gender"] = gender,
+                ["blood_group"] = bloodGroup,
+                ["mobile"] = mobile,
+
+                ["college_name"] = "Pirnav College",
+                ["college_address"] = "D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh",
+                ["custom_body"] = !string.IsNullOrWhiteSpace(purpose) ? purpose : "has demonstrated commendable academic performance and exemplary conduct"
+            };
+
+            string Interpolate(string text)
+            {
+                if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+                var res = Regex.Replace(text, @"\{\{([a-zA-Z0-9_\-]+)\}\}", m =>
+                {
+                    var k = m.Groups[1].Value;
+                    if (payload.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
+                    return string.Empty;
+                }, RegexOptions.IgnoreCase);
+
+                res = Regex.Replace(res, @"\{([a-zA-Z0-9_\-]+)\}", m =>
+                {
+                    var k = m.Groups[1].Value;
+                    if (payload.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
+                    return string.Empty;
+                }, RegexOptions.IgnoreCase);
+
+                res = Regex.Replace(res, @"\$\{([a-zA-Z0-9_\.\-]+)\}", m =>
+                {
+                    var k = m.Groups[1].Value.Replace("data.", "").Replace("record.", "");
+                    if (payload.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
+                    return string.Empty;
+                }, RegexOptions.IgnoreCase);
+
+                return res.Trim();
+            }
+
+            string hydratedParagraphOne = Interpolate(rawBody);
+            string hydratedParagraphTwo = !string.IsNullOrWhiteSpace(purpose)
+                ? $"This certificate is issued for the purpose of {Interpolate(purpose)}."
+                : string.Empty;
+
+            string htmlContent = $@"
+<div class=""visual-certificate-canvas {orientation.ToLowerInvariant()}"" style=""background-color: #ffffff;"">
+  <div class=""cert-inner-border"" style=""border-color: {borderColor}; border-style: double; border-width: 4px;"">
+    <header class=""cert-header"">
+      <div class=""cert-header-grid"">
+        <div class=""cert-header-left"">
+          <div class=""cert-default-logo"" style=""background-color: {borderColor};"">P</div>
+        </div>
+        <div class=""cert-header-center"">
+          <h1 class=""cert-institution-name"" style=""color: {borderColor};"">PIRNAV COLLEGE</h1>
+          <p class=""cert-tagline"" style=""color: {borderColor};"">(Intermediate / Junior College)</p>
+          <p class=""cert-address"">D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh</p>
+        </div>
+        <div class=""cert-header-right"">
+          <small>Affiliated to</small>
+          <strong>Board of Intermediate Education</strong>
+          <small>Andhra Pradesh (BIEAP)</small>
+          <small>College Code: 12345</small>
+        </div>
+      </div>
+      <div class=""cert-ref-row"">
+        <span>Ref No: <strong>{certNo}</strong></span>
+        <span>Date: <strong>{issDate:dd/MM/yyyy}</strong></span>
+      </div>
+    </header>
+    <div class=""cert-title-badge"">
+      <h2 style=""background-color: {badgeBgColor}; color: {badgeTextColor};"">{templateTitle.ToUpperInvariant()}</h2>
+    </div>
+    <div class=""cert-body-area"">
+      <p class=""cert-content-text"">{hydratedParagraphOne}</p>
+      {(string.IsNullOrWhiteSpace(hydratedParagraphTwo) ? "" : $"<p class=\"cert-purpose-text\">{hydratedParagraphTwo}</p>")}
+      {(string.IsNullOrWhiteSpace(remarks) ? "" : $"<p class=\"cert-remarks\" style=\"margin-top: 10px; font-size: 13px;\"><strong>Remarks:</strong> {remarks}</p>")}
+    </div>
+    <footer class=""cert-footer-area"">
+      <div class=""cert-footer-col left"">
+        <p>Place: <strong>Vijayawada</strong></p>
+        <p>Date: <strong>{issDate:dd/MM/yyyy}</strong></p>
+        <div class=""cert-qr-placeholder"">
+          <div class=""qr-box"">QR</div>
+          <span>Scan to verify</span>
+        </div>
+      </div>
+      <div class=""cert-footer-col center"">
+        <div class=""cert-seal-stamp"" style=""border-color: {borderColor}; color: {borderColor};"">
+          <span>PIRNAV COLLEGE<br/>VIJAYAWADA</span>
+        </div>
+      </div>
+      <div class=""cert-footer-col right"">
+        <div class=""cert-sig-line"">
+          <span class=""sig-handwritten style-cursive-hand"">{signatureType} Signature</span>
+          <strong class=""sig-title"">{signatureType}</strong>
+          <small>Pirnav College</small>
+        </div>
+      </div>
+    </footer>
+  </div>
+</div>";
+
+            return new CertificatePreviewResponseDto
+            {
+                CertificateId = certId,
+                CertificateNumber = certNo,
+                CertificateType = certType,
+                Status = status,
+                RequestDate = reqDate,
+                IssueDate = issDate,
+                IssuedBy = issuedBy,
+                Purpose = purpose,
+                Remarks = remarks,
+                TemplateCode = templateCode,
+                TemplateTitle = templateTitle,
+                Orientation = orientation,
+                BorderColor = borderColor,
+                BadgeBgColor = badgeBgColor,
+                BadgeTextColor = badgeTextColor,
+                SignatureType = signatureType,
+                SealText = "PIRNAV COLLEGE\nVIJAYAWADA",
+                QrEnabled = true,
+                Heading = templateTitle,
+                ParagraphOne = hydratedParagraphOne,
+                ParagraphTwo = hydratedParagraphTwo,
+                HtmlContent = htmlContent,
+                DataPayload = payload
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"GetPreviewAsync Error: {ex.Message}");
             return null;
         }
     }

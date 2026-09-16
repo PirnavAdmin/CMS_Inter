@@ -73,7 +73,7 @@ const DASHBOARD_API = {
 
 const QUICK_ACTIONS = [
   { label: "Add Student", to: "/dashboard/admission", icon: addStudentIcon, tone: "green" },
-  { label: "Add Staff", to: "/dashboard/faculty", icon: addStaffIcon, tone: "blue" },
+  { label: "Add Staff", to: "/dashboard/staff/add", icon: addStaffIcon, tone: "blue" },
   { label: "Create Group", to: "/dashboard/courses/add", icon: createGroupIcon, tone: "violet" },
   { label: "Create Section", to: "/dashboard/sections", icon: createSectionIcon, tone: "cyan" },
   { label: "Create Exam", to: "/dashboard/examinations/add", icon: createExamIcon, tone: "orange" },
@@ -178,11 +178,68 @@ function EmptyState({ message = "No data available." }) {
   );
 }
 
-function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last year", changePct = "↑ 5%", previousValue }) {
+function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, rawPctKeys) {
+  const cardObj = summaryData?.[cardKey] || summaryData?.[`${cardKey}Card`] || summaryData?.[`${cardKey}Metric`];
+  
+  let current = cardObj?.currentCount ?? cardObj?.CurrentCount ?? metric(summaryData, rawCurrentKeys);
+  let previous = cardObj?.previousCount ?? cardObj?.PreviousCount ?? cardObj?.lastYearCount ?? cardObj?.LastYearCount ?? metric(summaryData, rawPrevKeys) ?? 0;
+  let rawGrowth = cardObj?.growthPercentage ?? cardObj?.GrowthPercentage ?? cardObj?.percentageChange ?? cardObj?.PercentageChange ?? metric(summaryData, rawPctKeys);
+  let status = String(cardObj?.growthStatus ?? cardObj?.GrowthStatus ?? cardObj?.status ?? cardObj?.Status ?? "").toUpperCase();
+
+  const isAvailable = current !== undefined && current !== null && current !== "";
+  const numCurrent = Number(current ?? 0);
+  const numPrevious = Number(previous ?? 0);
+
+  if (!status) {
+    if (numPrevious === 0) {
+      status = numCurrent > 0 ? "NEW" : "NO DATA";
+    } else {
+      status = numCurrent > numPrevious ? "GROWTH" : (numCurrent < numPrevious ? "DECLINE" : "NEUTRAL");
+    }
+  }
+
+  let badge = "—";
+  let label = "vs last year";
+
+  if (status === "NEW" || numPrevious === 0) {
+    if (numCurrent === 0) {
+      badge = "No Data";
+      label = "No records";
+    } else {
+      badge = "NEW";
+      label = "First recorded year";
+    }
+  } else if (rawGrowth !== undefined && rawGrowth !== null) {
+    const numPct = Number(rawGrowth);
+    if (numPct > 0) {
+      badge = `↑ ${numPct.toFixed(1)}%`;
+      label = "vs last year";
+    } else if (numPct < 0) {
+      badge = `↓ ${Math.abs(numPct).toFixed(1)}%`;
+      label = "vs last year";
+    } else {
+      badge = `→ 0.0%`;
+      label = "vs last year";
+    }
+  } else {
+    badge = "NEW";
+    label = "vs last year";
+  }
+
+  return {
+    value: isAvailable ? numCurrent : undefined,
+    previousValue: numPrevious,
+    badge,
+    label,
+    status
+  };
+}
+
+function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last year", changePct = "NEW", previousValue, to }) {
   const isAvailable = value !== undefined && value !== null && value !== "";
-  const formattedPrev = isAvailable && previousValue !== undefined && previousValue !== null ? formatNumber(previousValue) : "Unavailable";
-  return (
-    <article className={`dashboard-kpi dashboard-kpi-${tone}`}>
+  const formattedPrev = isAvailable && previousValue !== undefined && previousValue !== null ? formatNumber(previousValue) : "0";
+  const content = (
+    <article className={`dashboard-kpi dashboard-kpi-${tone} ${to ? "dashboard-kpi-clickable" : ""}`} style={to ? { cursor: "pointer" } : {}}>
       <div className="dashboard-kpi-pop" role="tooltip">
         <span>Last year: <strong>{formattedPrev}</strong></span>
       </div>
@@ -201,6 +258,15 @@ function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last yea
       </div>
     </article>
   );
+
+  if (to) {
+    return (
+      <Link to={to} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+        {content}
+      </Link>
+    );
+  }
+  return content;
 }
 
 export default function DashboardPage() {
@@ -466,58 +532,63 @@ export default function DashboardPage() {
     setToastMessage(`Dashboard refreshed with latest data (${formattedNow})`);
   }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchStudentAttendance, fetchStaffAttendance, fetchCertificateRequests, fetchUpcomingExaminations]);
 
-  // Extracted KPI Values from Summary API
-  const totalStudentsVal = metric(summaryState.data, ["totalStudents", "totalStudentCount", "studentCount"]);
-  const teachingStaffVal = metric(summaryState.data, ["teachingStaff", "teachingStaffCount"]);
-  const nonTeachingStaffVal = metric(summaryState.data, ["nonTeachingStaff", "nonTeachingStaffCount"]);
-  const totalGroupsVal = metric(summaryState.data, ["totalGroups", "groupCount"]);
-  const totalSectionsVal = metric(summaryState.data, ["totalSections", "sectionCount"]);
+  // Extracted KPI Values & Metrics dynamically resolved from Backend API
+  const studentsKpi = resolveKpiMetric(summaryState.data, "totalStudents", ["totalStudents", "totalStudentCount", "studentCount"], ["lastYearTotalStudents", "lastYearStudentCount"], ["studentsVsLastYearPercentage"]);
+  const teachingKpi = resolveKpiMetric(summaryState.data, "teachingStaff", ["teachingStaff", "teachingStaffCount"], ["lastYearTeachingStaff", "lastYearTeachingStaffCount"], ["teachingStaffVsLastYearPercentage"]);
+  const nonTeachingKpi = resolveKpiMetric(summaryState.data, "nonTeachingStaff", ["nonTeachingStaff", "nonTeachingStaffCount"], ["lastYearNonTeachingStaff", "lastYearNonTeachingStaffCount"], ["nonTeachingStaffVsLastYearPercentage"]);
+  const groupsKpi = resolveKpiMetric(summaryState.data, "totalGroups", ["totalGroups", "groupCount"], ["lastYearTotalGroups", "lastYearGroupCount"], ["groupsVsLastYearPercentage"]);
+  const sectionsKpi = resolveKpiMetric(summaryState.data, "totalSections", ["totalSections", "sectionCount"], ["lastYearTotalSections", "lastYearSectionCount"], ["sectionsVsLastYearPercentage"]);
 
   const kpis = [
     {
       label: "Total Students",
-      value: totalStudentsVal,
-      previousValue: typeof totalStudentsVal === "number" ? Math.round(totalStudentsVal / 1.05) : null,
+      value: studentsKpi.value,
+      previousValue: studentsKpi.previousValue,
       icon: totalStudentsIcon,
       tone: "green",
-      changeLabel: "vs last year",
-      changePct: "↑ 5%",
+      changeLabel: studentsKpi.label,
+      changePct: studentsKpi.badge,
+      to: "/dashboard/students",
     },
     {
       label: "Teaching Staff",
-      value: teachingStaffVal,
-      previousValue: typeof teachingStaffVal === "number" ? Math.round(teachingStaffVal / 1.02) : null,
+      value: teachingKpi.value,
+      previousValue: teachingKpi.previousValue,
       icon: teachingStaffIcon,
       tone: "blue",
-      changeLabel: "vs last year",
-      changePct: "↑ 2%",
+      changeLabel: teachingKpi.label,
+      changePct: teachingKpi.badge,
+      to: "/dashboard/staff/teaching",
     },
     {
       label: "Non-Teaching Staff",
-      value: nonTeachingStaffVal,
-      previousValue: typeof nonTeachingStaffVal === "number" ? nonTeachingStaffVal : null,
+      value: nonTeachingKpi.value,
+      previousValue: nonTeachingKpi.previousValue,
       icon: nonTeachingStaffIcon,
       tone: "orange",
-      changeLabel: "vs last year",
-      changePct: "→ 0%",
+      changeLabel: nonTeachingKpi.label,
+      changePct: nonTeachingKpi.badge,
+      to: "/dashboard/staff/non-teaching",
     },
     {
       label: "Total Groups",
-      value: totalGroupsVal,
-      previousValue: typeof totalGroupsVal === "number" ? totalGroupsVal : null,
+      value: groupsKpi.value,
+      previousValue: groupsKpi.previousValue,
       icon: totalGroupsIcon,
       tone: "violet",
-      changeLabel: "vs last year",
-      changePct: "→ 0%",
+      changeLabel: groupsKpi.label,
+      changePct: groupsKpi.badge,
+      to: "/dashboard/courses",
     },
     {
       label: "Total Sections",
-      value: totalSectionsVal,
-      previousValue: typeof totalSectionsVal === "number" ? Math.round(totalSectionsVal / 1.04) : null,
+      value: sectionsKpi.value,
+      previousValue: sectionsKpi.previousValue,
       icon: totalSectionsIcon,
       tone: "cyan",
-      changeLabel: "vs last year",
-      changePct: "↑ 4%",
+      changeLabel: sectionsKpi.label,
+      changePct: sectionsKpi.badge,
+      to: "/dashboard/sections",
     },
   ];
 
@@ -704,7 +775,7 @@ export default function DashboardPage() {
                   <div className="dashboard-student-chip chip-total">
                     <span className="chip-icon"><Users size={15} /></span>
                     <div>
-                      <strong>{formatNumber(totalStudentsVal ?? metric(overviewState.data, ["totalStudents", "totalCount"]))}</strong>
+                      <strong>{formatNumber(studentsKpi.value ?? metric(overviewState.data, ["totalStudents", "totalCount"]))}</strong>
                       <small>Total Students</small>
                     </div>
                   </div>

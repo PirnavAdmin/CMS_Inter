@@ -433,26 +433,51 @@ public class ReportService : IReportService
                 break;
 
             case IReadOnlyList<StudentStrengthReportDto> ssList:
-                title = "Student Strength Breakdown Report";
-                headers = new[] { "S.No", "Group", "Section", "Male Students", "Female Students", "Total Strength" };
+                title = "Student Strength Detailed Report";
+                var allStudents = ssList.SelectMany(x => x.Students ?? Enumerable.Empty<StudentStrengthStudentDto>()).ToList();
                 var totS = ssList.Sum(x => x.TotalStudents);
                 var totM = ssList.Sum(x => x.MaleStudents);
                 var totF = ssList.Sum(x => x.FemaleStudents);
                 kpis.Add(("Total Students", $"{totS}"));
                 kpis.Add(("Male Students", $"{totM}"));
                 kpis.Add(("Female Students", $"{totF}"));
-                int ssIdx = 1;
-                foreach (var s in ssList)
+
+                if (allStudents.Count > 0)
                 {
-                    rows.Add(new[]
+                    headers = new[] { "S.No", "Admission No", "Roll No", "Student Name", "Gender", "Group", "Section", "Board", "Mobile" };
+                    int stuIdx = 1;
+                    foreach (var s in allStudents)
                     {
-                        $"{ssIdx++}",
-                        s.GroupName ?? "—",
-                        s.SectionName ?? "—",
-                        $"{s.MaleStudents}",
-                        $"{s.FemaleStudents}",
-                        $"{s.TotalStudents}"
-                    });
+                        rows.Add(new[]
+                        {
+                            $"{stuIdx++}",
+                            s.AdmissionNo ?? $"STU-{s.StudentId}",
+                            s.RollNo ?? "—",
+                            s.StudentName ?? "—",
+                            s.Gender ?? "—",
+                            s.GroupName ?? "—",
+                            s.SectionName ?? "—",
+                            s.BoardName ?? "—",
+                            s.MobileNumber ?? "—"
+                        });
+                    }
+                }
+                else
+                {
+                    headers = new[] { "S.No", "Group", "Section", "Male Students", "Female Students", "Total Strength" };
+                    int ssIdx = 1;
+                    foreach (var s in ssList)
+                    {
+                        rows.Add(new[]
+                        {
+                            $"{ssIdx++}",
+                            s.GroupName ?? "—",
+                            s.SectionName ?? "—",
+                            $"{s.MaleStudents}",
+                            $"{s.FemaleStudents}",
+                            $"{s.TotalStudents}"
+                        });
+                    }
                 }
                 break;
 

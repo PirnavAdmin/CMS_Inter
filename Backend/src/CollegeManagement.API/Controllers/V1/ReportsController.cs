@@ -104,23 +104,6 @@ public class ReportsController : ControllerBase
             })
             .ToListAsync(ct);
 
-        if (!result.Any())
-        {
-            result = await _db.AcademicLevels.AsNoTracking()
-                .Where(x => x.IsActive)
-                .OrderBy(x => x.DisplayOrder)
-                .ThenBy(x => x.LevelName)
-                .Select(x => new
-                {
-                    id = x.AcademicLevelId,
-                    academicLevelId = x.AcademicLevelId,
-                    name = x.LevelName,
-                    levelName = x.LevelName,
-                    code = x.LevelCode
-                })
-                .ToListAsync(ct);
-        }
-
         return Ok(result);
     }
 
@@ -133,18 +116,19 @@ public class ReportsController : ControllerBase
     {
         var query = _db.Groups.AsNoTracking().Where(x => x.IsActive);
 
-        if (academicYearId.HasValue && academicYearId.Value > 0)
-            query = query.Where(x => x.AcademicYearId == academicYearId.Value);
-
-        if (academicLevelId.HasValue && academicLevelId.Value > 0)
-            query = query.Where(x => x.AcademicLevelId == academicLevelId.Value);
-
         if (boardId.HasValue && boardId.Value > 0)
         {
-            query = query.Where(x =>
-                x.BoardId == boardId.Value
-                || _db.Sections.Any(s => s.IsActive && s.GroupId == x.GroupId && s.BoardId == boardId.Value)
-                || _db.StudentAdmissions.Any(a => a.IsActive && a.GroupId == x.GroupId && a.BoardId == boardId.Value));
+            query = query.Where(x => x.BoardId == boardId.Value);
+        }
+
+        if (academicYearId.HasValue && academicYearId.Value > 0)
+        {
+            query = query.Where(x => x.AcademicYearId == academicYearId.Value);
+        }
+
+        if (academicLevelId.HasValue && academicLevelId.Value > 0)
+        {
+            query = query.Where(x => x.AcademicLevelId == academicLevelId.Value);
         }
 
         var result = await query
@@ -163,26 +147,6 @@ public class ReportsController : ControllerBase
             })
             .ToListAsync(ct);
 
-        if (!result.Any())
-        {
-            result = await _db.Groups.AsNoTracking()
-                .Where(x => x.IsActive)
-                .OrderBy(x => x.GroupName)
-                .Select(x => new
-                {
-                    id = x.GroupId,
-                    groupId = x.GroupId,
-                    name = x.GroupName,
-                    groupName = x.GroupName,
-                    code = x.GroupCode,
-                    groupCode = x.GroupCode,
-                    academicYearId = x.AcademicYearId,
-                    academicLevel = x.AcademicLevelNavigation != null ? x.AcademicLevelNavigation.LevelName : string.Empty,
-                    board = x.BoardNavigation != null ? x.BoardNavigation.BoardName : string.Empty
-                })
-                .ToListAsync(ct);
-        }
-
         return Ok(result);
     }
 
@@ -199,18 +163,14 @@ public class ReportsController : ControllerBase
         if (groupId.HasValue && groupId.Value > 0)
             query = query.Where(x => x.GroupId == groupId.Value);
 
+        if (boardId.HasValue && boardId.Value > 0)
+            query = query.Where(x => x.BoardId == boardId.Value);
+
         if (academicYearId.HasValue && academicYearId.Value > 0)
             query = query.Where(x => x.AcademicYearId == academicYearId.Value);
 
-        if (boardId.HasValue && boardId.Value > 0)
-        {
-            query = query.Where(x => x.BoardId == boardId.Value || x.BoardId == null || _db.StudentAdmissions.Any(a => a.IsActive && a.SectionId == x.SectionId && a.BoardId == boardId.Value));
-        }
-
         if (academicLevelId.HasValue && academicLevelId.Value > 0)
-        {
-            query = query.Where(x => x.AcademicLevelId == academicLevelId.Value || x.AcademicLevelId == null);
-        }
+            query = query.Where(x => x.AcademicLevelId == academicLevelId.Value);
 
         var result = await query
             .OrderBy(x => x.SectionName)
@@ -229,50 +189,6 @@ public class ReportsController : ControllerBase
                 maximumStrength = x.MaximumStrength
             })
             .ToListAsync(ct);
-
-        if (!result.Any() && groupId.HasValue && groupId.Value > 0)
-        {
-            result = await _db.Sections.AsNoTracking()
-                .Where(x => x.IsActive && x.GroupId == groupId.Value)
-                .OrderBy(x => x.SectionName)
-                .Select(x => new
-                {
-                    id = x.SectionId,
-                    sectionId = x.SectionId,
-                    name = x.SectionName,
-                    sectionName = x.SectionName,
-                    groupId = x.GroupId,
-                    groupName = x.GroupNavigation != null ? x.GroupNavigation.GroupName : string.Empty,
-                    boardId = x.BoardId,
-                    board = x.BoardNavigation != null ? x.BoardNavigation.BoardName : string.Empty,
-                    academicYearId = x.AcademicYearId,
-                    academicLevel = x.AcademicLevelNavigation != null ? x.AcademicLevelNavigation.LevelName : string.Empty,
-                    maximumStrength = x.MaximumStrength
-                })
-                .ToListAsync(ct);
-        }
-
-        if (!result.Any())
-        {
-            result = await _db.Sections.AsNoTracking()
-                .Where(x => x.IsActive)
-                .OrderBy(x => x.SectionName)
-                .Select(x => new
-                {
-                    id = x.SectionId,
-                    sectionId = x.SectionId,
-                    name = x.SectionName,
-                    sectionName = x.SectionName,
-                    groupId = x.GroupId,
-                    groupName = x.GroupNavigation != null ? x.GroupNavigation.GroupName : string.Empty,
-                    boardId = x.BoardId,
-                    board = x.BoardNavigation != null ? x.BoardNavigation.BoardName : string.Empty,
-                    academicYearId = x.AcademicYearId,
-                    academicLevel = x.AcademicLevelNavigation != null ? x.AcademicLevelNavigation.LevelName : string.Empty,
-                    maximumStrength = x.MaximumStrength
-                })
-                .ToListAsync(ct);
-        }
 
         return Ok(result);
     }

@@ -11,7 +11,9 @@ using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Repositories.Implementations;
+using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Implementations;
+using CollegeManagement.API.Services.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,7 +28,11 @@ namespace CollegeManagement.API.Tests
 
         public MasterDataBackendTester(string connectionString)
         {
-            _connectionString = connectionString;
+            var csb = new MySqlConnectionStringBuilder(connectionString)
+            {
+                AllowUserVariables = true
+            };
+            _connectionString = csb.ConnectionString;
         }
 
         public async Task<bool> RunAllTestsAsync()
@@ -253,6 +259,10 @@ namespace CollegeManagement.API.Tests
             services.AddDbContext<AppDbContext>(options =>
                 options.UseMySql(_connectionString, ServerVersion.AutoDetect(_connectionString)));
             services.AddAutoMapper(typeof(AppDbContext).Assembly);
+            services.AddScoped<IDepartmentRepository, DepartmentRepository>();
+            services.AddScoped<IDepartmentService, DepartmentService>();
+            services.AddScoped<IDesignationRepository, DesignationRepository>();
+            services.AddScoped<IDesignationService, DesignationService>();
             services.AddScoped<DepartmentRepository>();
             services.AddScoped<DepartmentService>();
             services.AddScoped<DesignationRepository>();
@@ -365,7 +375,7 @@ namespace CollegeManagement.API.Tests
             }
 
             // Step 5: Test Uniqueness Validations
-            Console.WriteLine("\n[5/5] Testing Name & Code Validation APIs...");
+            Console.WriteLine("\n[5/7] Testing Name & Code Validation APIs...");
             try
             {
                 using var scope = sp.CreateScope();
@@ -395,6 +405,155 @@ namespace CollegeManagement.API.Tests
             catch (Exception ex)
             {
                 Console.WriteLine($"  [FAIL] Validation Error: {ex.Message}");
+                failed++;
+            }
+
+            // Step 6: Test 2-Sheet Excel Template Generation
+            Console.WriteLine("\n[6/7] Testing Unified 2-Sheet Excel Template Generation...");
+            try
+            {
+                using var scope = sp.CreateScope();
+                var deptService = scope.ServiceProvider.GetRequiredService<DepartmentService>();
+                var templateResult = await deptService.GenerateDepartmentDesignationTemplateExcelAsync();
+
+                if (templateResult.Bytes != null && templateResult.Bytes.Length > 0 && !string.IsNullOrEmpty(templateResult.FileName))
+                {
+                    using var ms = new MemoryStream(templateResult.Bytes);
+                    using var wb = new ClosedXML.Excel.XLWorkbook(ms);
+
+                    var hasDeptSheet = wb.Worksheets.Contains("Departments");
+                    var hasDesigSheet = wb.Worksheets.Contains("Designations");
+
+                    if (hasDeptSheet && hasDesigSheet)
+                    {
+                        var deptSheet = wb.Worksheet("Departments");
+                        var desigSheet = wb.Worksheet("Designations");
+
+                        var deptHeader = deptSheet.Cell(1, 1).GetString();
+                        var desigHeader = desigSheet.Cell(1, 1).GetString();
+
+                        if (deptHeader.Contains("Department Name") && desigHeader.Contains("Designation Name"))
+                        {
+                            Console.WriteLine($"  [PASS] 2-Sheet Excel Template Generated ({templateResult.Bytes.Length:N0} bytes): Worksheets='Departments', 'Designations' with rich styling and sample rows.");
+                            passed++;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"  [FAIL] Unexpected headers: Dept='{deptHeader}', Desig='{desigHeader}'");
+                            failed++;
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"  [FAIL] Missing sheets: Departments={hasDeptSheet}, Designations={hasDesigSheet}");
+                        failed++;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("  [FAIL] Template bytes were null or empty.");
+                    failed++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  [FAIL] Template Generation Error: {ex.Message}");
+                failed++;
+            }
+
+            // Step 7: Test Multi-Sheet Excel Bulk Import & Dependency Resolution
+            Console.WriteLine("\n[7/7] Testing Multi-Sheet Excel Bulk Import Engine...");
+            try
+            {
+                using var scope = sp.CreateScope();
+                var deptService = scope.ServiceProvider.GetRequiredService<DepartmentService>();
+                var desigService = scope.ServiceProvider.GetRequiredService<DesignationService>();
+                var deptRepo = scope.ServiceProvider.GetRequiredService<IDepartmentRepository>();
+                var desigRepo = scope.ServiceProvider.GetRequiredService<IDesignationRepository>();
+
+                var testUid = Guid.NewGuid().ToString("N").Substring(0, 6);
+                var testDeptName = $"AutoTest_Dept_{testUid}";
+                var testDeptCode = $"ATD_{testUid.ToUpper()}";
+                var testDesigName = $"AutoTest_Professor_{testUid}";
+
+                // Build in-memory Excel workbook with 2 sheets
+                using var testWb = new ClosedXML.Excel.XLWorkbook();
+                var dSheet = testWb.Worksheets.Add("Departments");
+                dSheet.Cell(1, 1).Value = "Department Name";
+                dSheet.Cell(1, 2).Value = "Department Code";
+                dSheet.Cell(1, 3).Value = "Staff Type";
+                dSheet.Cell(1, 4).Value = "Description";
+                dSheet.Cell(1, 5).Value = "Status";
+
+                dSheet.Cell(2, 1).Value = testDeptName;
+                dSheet.Cell(2, 2).Value = testDeptCode;
+                dSheet.Cell(2, 3).Value = "Teaching";
+                dSheet.Cell(2, 4).Value = "Automated test department for verification";
+                dSheet.Cell(2, 5).Value = "Active";
+
+                var desSheet = testWb.Worksheets.Add("Designations");
+                desSheet.Cell(1, 1).Value = "Designation Name";
+                desSheet.Cell(1, 2).Value = "Department Name";
+                desSheet.Cell(1, 3).Value = "Staff Type";
+                desSheet.Cell(1, 4).Value = "Status";
+
+                desSheet.Cell(2, 1).Value = testDesigName;
+                desSheet.Cell(2, 2).Value = testDeptName; // Links to testDeptName in same batch
+                desSheet.Cell(2, 3).Value = "Teaching";
+                desSheet.Cell(2, 4).Value = "Active";
+
+                using var testMs = new MemoryStream();
+                testWb.SaveAs(testMs);
+                var testBytes = testMs.ToArray();
+
+                var formFile = new Microsoft.AspNetCore.Http.FormFile(
+                    new MemoryStream(testBytes), 0, testBytes.Length, "file", "Test_Bulk_Import.xlsx")
+                {
+                    Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(),
+                    ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                };
+
+                // Execute Bulk Import
+                var importResult = await deptService.ImportDepartmentsAndDesignationsFromExcelAsync(formFile, "Teaching");
+
+                if (importResult.Success && importResult.SuccessCount >= 2 && importResult.DepartmentsImported >= 1 && importResult.DesignationsImported >= 1)
+                {
+                    Console.WriteLine($"  [PASS] Multi-sheet Import Succeeded: {importResult.Message} (Read={importResult.TotalRowsRead}, Success={importResult.SuccessCount}, Depts={importResult.DepartmentsImported}, Desigs={importResult.DesignationsImported})");
+
+                    // Verify in database
+                    var allDepts = await deptRepo.GetDepartmentsAsync();
+                    var importedDept = allDepts.FirstOrDefault(d => d.DepartmentName == testDeptName);
+                    var importedDesig = (await desigRepo.GetAllAsync()).FirstOrDefault(d => d.Name == testDesigName);
+
+                    if (importedDept != null && importedDesig != null && importedDesig.DepartmentId == importedDept.DepartmentId)
+                    {
+                        Console.WriteLine($"  [PASS] Relationship Verified in DB: Designation '{importedDesig.Name}' assigned to DepartmentId={importedDept.DepartmentId} ('{importedDept.DepartmentName}').");
+                        passed++;
+
+                        // Cleanup test records
+                        await desigRepo.DeleteAsync(importedDesig.Id);
+                        await deptRepo.DeleteDepartmentAsync(importedDept.DepartmentId);
+                        Console.WriteLine("  [PASS] Test data cleaned up successfully.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("  [FAIL] Could not verify DB relationship after import.");
+                        failed++;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"  [FAIL] Import failed or incomplete counts: Success={importResult.Success}, Count={importResult.SuccessCount}, Msg={importResult.Message}");
+                    foreach (var err in importResult.Errors)
+                    {
+                        Console.WriteLine($"         Error: Row {err.RowNumber} ({err.ItemName}): {err.ErrorMessage}");
+                    }
+                    failed++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  [FAIL] Multi-sheet Import Error: {ex.Message}\n{ex.StackTrace}");
                 failed++;
             }
 

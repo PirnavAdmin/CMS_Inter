@@ -95,16 +95,24 @@ BEGIN
     FROM `Staff` st
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (st.StaffType = 'Teaching' OR st.FacultyType = 'Teaching')
-      AND (p_BoardId IS NULL OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
+      AND (
+          st.StaffType = 'Teaching' 
+          OR st.StaffType = 'Both' 
+          OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching'
+          OR (st.StaffType IS NULL AND (st.FacultyType IS NULL OR st.FacultyType != 'Non-Teaching'))
+      );
 
     -- 3. Non-Teaching Staff Count
     SELECT COUNT(*) INTO v_NonTeachingStaff
     FROM `Staff` st
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (st.StaffType = 'Non-Teaching' OR (st.StaffType != 'Teaching' AND st.FacultyType != 'Teaching'))
-      AND (p_BoardId IS NULL OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
+      AND (
+          st.StaffType = 'Non-Teaching' 
+          OR st.StaffType = 'NonTeaching' 
+          OR st.StaffType = 'Non Teaching' 
+          OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'NonTeaching'
+      );
 
     -- 4. Total Groups Count
     SELECT COUNT(*) INTO v_TotalGroups

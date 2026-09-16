@@ -151,6 +151,25 @@ public class CertificatesController : ControllerBase
     }
 
     // =========================================================
+    // 4.1. GET CERTIFICATE PREVIEW
+    // GET /api/v1/certificates/{id}/preview
+    // GET /api/v1/certificates/records/{id}/preview
+    // =========================================================
+    [HttpGet("{id:int}/preview")]
+    [HttpGet("records/{id:int}/preview")]
+    [ProducesResponseType(typeof(CertificatePreviewResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPreview(int id, CancellationToken ct = default)
+    {
+        if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
+
+        var result = await _service.GetPreviewAsync(id, ct);
+        if (result == null) return NotFound(new { message = "Certificate not found" });
+
+        return Ok(result);
+    }
+
+    // =========================================================
     // 5. UNIFIED GENERATE CERTIFICATE
     // POST /api/v1/certificates/generate
     // =========================================================

@@ -37,14 +37,70 @@ public class DashboardCardMetricDto
 {
     public int CurrentCount { get; set; }
     public int PreviousCount { get; set; }
+    public int Difference { get; set; }
     public int PreviousYearValue => PreviousCount;
     public int LastYearCount => PreviousCount;
-    public decimal PercentageChange { get; set; }
-    public decimal Percentage => PercentageChange;
-    public decimal GrowthPercentage => PercentageChange;
+    public decimal? GrowthPercentage { get; set; }
+    public decimal? PercentageChange => GrowthPercentage;
+    public decimal? Percentage => GrowthPercentage;
+    public string GrowthStatus { get; set; } = "NEW";
+    public string GrowthType => GrowthStatus;
+    public string Status => GrowthStatus;
     public string Trend { get; set; } = "neutral";
-    public string GrowthType => Trend;
-    public string Status => Trend;
+
+    public static DashboardCardMetricDto Create(int current, int previous, decimal? explicitPct = null)
+    {
+        int diff = current - previous;
+        decimal? pct = null;
+        string status = "NEW";
+        string trend = "neutral";
+
+        if (previous > 0)
+        {
+            pct = explicitPct ?? Math.Round(((current - previous) * 100.0m) / previous, 1);
+            if (current > previous)
+            {
+                status = "GROWTH";
+                trend = "up";
+            }
+            else if (current < previous)
+            {
+                status = "DECLINE";
+                trend = "down";
+            }
+            else
+            {
+                status = "NEUTRAL";
+                trend = "neutral";
+            }
+        }
+        else if (current > 0)
+        {
+            previous = 0;
+            diff = current;
+            pct = null;
+            status = "NEW";
+            trend = "up";
+        }
+        else
+        {
+            previous = 0;
+            diff = 0;
+            pct = null;
+            status = "NO DATA";
+            trend = "neutral";
+        }
+
+        return new DashboardCardMetricDto
+        {
+            CurrentCount = current,
+            PreviousCount = previous,
+            Difference = diff,
+            GrowthPercentage = pct,
+            GrowthStatus = status,
+            Trend = trend
+        };
+    }
 }
 
 public class DashboardSummaryResponseDto
@@ -74,58 +130,22 @@ public class DashboardSummaryResponseDto
     public int LastYearTotalSections { get; set; }
 
     // Structured Metric Cards for API consumers & modern frontends
-    public DashboardCardMetricDto TotalStudentsCard => new()
-    {
-        CurrentCount = TotalStudents,
-        PreviousCount = LastYearTotalStudents,
-        PercentageChange = StudentsVsLastYearPercentage,
-        Trend = StudentsVsLastYearPercentage > 0 ? "up" : (StudentsVsLastYearPercentage < 0 ? "down" : "neutral")
-    };
+    public DashboardCardMetricDto TotalStudentsCard => DashboardCardMetricDto.Create(TotalStudents, LastYearTotalStudents, LastYearTotalStudents > 0 ? StudentsVsLastYearPercentage : null);
     public DashboardCardMetricDto StudentsMetric => TotalStudentsCard;
 
-    public DashboardCardMetricDto TeachingStaffCard => new()
-    {
-        CurrentCount = TeachingStaff,
-        PreviousCount = LastYearTeachingStaff,
-        PercentageChange = TeachingStaffVsLastYearPercentage,
-        Trend = TeachingStaffVsLastYearPercentage > 0 ? "up" : (TeachingStaffVsLastYearPercentage < 0 ? "down" : "neutral")
-    };
+    public DashboardCardMetricDto TeachingStaffCard => DashboardCardMetricDto.Create(TeachingStaff, LastYearTeachingStaff, LastYearTeachingStaff > 0 ? TeachingStaffVsLastYearPercentage : null);
     public DashboardCardMetricDto TeachingStaffMetric => TeachingStaffCard;
 
-    public DashboardCardMetricDto NonTeachingStaffCard => new()
-    {
-        CurrentCount = NonTeachingStaff,
-        PreviousCount = LastYearNonTeachingStaff,
-        PercentageChange = NonTeachingStaffVsLastYearPercentage,
-        Trend = NonTeachingStaffVsLastYearPercentage > 0 ? "up" : (NonTeachingStaffVsLastYearPercentage < 0 ? "down" : "neutral")
-    };
+    public DashboardCardMetricDto NonTeachingStaffCard => DashboardCardMetricDto.Create(NonTeachingStaff, LastYearNonTeachingStaff, LastYearNonTeachingStaff > 0 ? NonTeachingStaffVsLastYearPercentage : null);
     public DashboardCardMetricDto NonTeachingStaffMetric => NonTeachingStaffCard;
 
-    public DashboardCardMetricDto TotalStaffCard => new()
-    {
-        CurrentCount = TotalStaff,
-        PreviousCount = LastYearTotalStaff,
-        PercentageChange = StaffVsLastYearPercentage,
-        Trend = StaffVsLastYearPercentage > 0 ? "up" : (StaffVsLastYearPercentage < 0 ? "down" : "neutral")
-    };
+    public DashboardCardMetricDto TotalStaffCard => DashboardCardMetricDto.Create(TotalStaff, LastYearTotalStaff, LastYearTotalStaff > 0 ? StaffVsLastYearPercentage : null);
     public DashboardCardMetricDto TotalStaffMetric => TotalStaffCard;
 
-    public DashboardCardMetricDto TotalGroupsCard => new()
-    {
-        CurrentCount = TotalGroups,
-        PreviousCount = LastYearTotalGroups,
-        PercentageChange = GroupsVsLastYearPercentage,
-        Trend = GroupsVsLastYearPercentage > 0 ? "up" : (GroupsVsLastYearPercentage < 0 ? "down" : "neutral")
-    };
+    public DashboardCardMetricDto TotalGroupsCard => DashboardCardMetricDto.Create(TotalGroups, LastYearTotalGroups, LastYearTotalGroups > 0 ? GroupsVsLastYearPercentage : null);
     public DashboardCardMetricDto GroupsMetric => TotalGroupsCard;
 
-    public DashboardCardMetricDto TotalSectionsCard => new()
-    {
-        CurrentCount = TotalSections,
-        PreviousCount = LastYearTotalSections,
-        PercentageChange = SectionsVsLastYearPercentage,
-        Trend = SectionsVsLastYearPercentage > 0 ? "up" : (SectionsVsLastYearPercentage < 0 ? "down" : "neutral")
-    };
+    public DashboardCardMetricDto TotalSectionsCard => DashboardCardMetricDto.Create(TotalSections, LastYearTotalSections, LastYearTotalSections > 0 ? SectionsVsLastYearPercentage : null);
     public DashboardCardMetricDto SectionsMetric => TotalSectionsCard;
 
     // Backward compatibility & alias properties

@@ -22,6 +22,16 @@ export const getCertificateById = (id) => {
   return api.get(`/api/v1/certificates/${id}`);
 };
 
+// 4.1. Get hydrated certificate preview by ID (interpolated template & placeholders)
+export const getCertificatePreview = (id) => {
+  return api.get(`/api/v1/certificates/${id}/preview`);
+};
+
+// 4.2. Dynamically render certificate template with payload
+export const renderCertificateTemplate = (payload) => {
+  return api.post("/api/v1/certificates/render-template", payload);
+};
+
 // 5. Generate / Create Certificate
 export const generateCertificate = (data) => {
   return api.post("/api/v1/certificates/generate", data);

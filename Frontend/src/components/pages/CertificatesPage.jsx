@@ -32,6 +32,7 @@ const CERTIFICATE_API = {
   templateByCode: (templateCode) => `${CERTIFICATE_BASE}/template-by-code/${encodeURIComponent(templateCode)}`,
   renderTemplate: `${CERTIFICATE_BASE}/render-template`,
   previewTemplate: `${CERTIFICATE_BASE}/preview-template`,
+  preview: (id) => `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/preview`,
   list: CERTIFICATE_BASE,
   workflowStats: `${CERTIFICATE_BASE}/workflow-stats`,
   studentsDropdown: `${CERTIFICATE_BASE}/students-dropdown`,
@@ -913,31 +914,86 @@ export function renderTemplateWithRecord(text, record = {}) {
     sId = record.rollNo && record.rollNo !== "-" ? record.rollNo : (record.admissionNo ? record.admissionNo.replace(/\D/g, "") : "518");
   }
 
+  const studentName = record.student || record.studentName || record.name || "Student Name";
+  const admissionNo = record.admissionNo || record.admission_no || "ADM-2026-0000";
+  const rollNo = record.rollNo && record.rollNo !== "-" ? record.rollNo : (record.admissionNo ? record.admissionNo.replace(/\D/g, "") : "101");
+  const groupName = record.group || record.groupName || record.group_name || "MPC";
+  const academicLevel = record.level || record.academicLevel || record.academic_level || "1st Year";
+  const academicYear = record.academicYear || record.academic_year || "2026-2027";
+  const boardName = record.board || record.boardName || record.board_name || "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
+  const courseName = record.courseName || record.course_name || `Intermediate (${groupName})`;
+  const certNumber = record.number || record.certificateNo || record.certificateNumber || "CERT-001";
+  const issueDateStr = formatDateDdMmYyyy(record.issue || record.issueDate || todayIso());
+  const requestDateStr = formatDateDdMmYyyy(record.requestDate || todayIso());
+  const purposeStr = record.purpose || "Higher Education / Official Purpose";
+  const remarksStr = record.remarks || "";
+
   const merged = {
     ...FALLBACK_PLACEHOLDERS,
-    student_name: record.student || record.studentName || record.name || "Student Name",
+    student_name: studentName,
+    studentname: studentName,
+    student: studentName,
+    name: studentName,
+    fullname: studentName,
     father_name: father || "Parent Name",
+    fathername: father || "Parent Name",
+    father: father || "Parent Name",
+    parent_name: father || "Parent Name",
     mother_name: record.motherName || record.mother_name || "Anita Devi",
+    mothername: record.motherName || record.mother_name || "Anita Devi",
+    mother: record.motherName || record.mother_name || "Anita Devi",
     student_id: String(sId || "518"),
-    admission_no: record.admissionNo || record.admission_no || "ADM-2026-0000",
-    roll_no: record.rollNo && record.rollNo !== "-" ? record.rollNo : (record.admissionNo ? record.admissionNo.replace(/\D/g, "") : "101"),
-    group_name: record.group || record.groupName || record.group_name || "MPC",
-    academic_level: record.level || record.academicLevel || record.academic_level || "I / II Year",
-    academic_year: record.academicYear || record.academic_year || "2026-2027",
-    board_name: record.board || record.boardName || record.board_name || "Board of Intermediate Education, Andhra Pradesh (BIEAP)",
-    course_name: record.courseName || record.course_name || "Intermediate (MPC)",
-    certificate_number: record.number || record.certificateNo || record.certificateNumber || "BC/2026/001",
-    issue_date: formatDateDdMmYyyy(record.issue || record.issueDate || todayIso()),
+    studentid: String(sId || "518"),
+    id: String(sId || "518"),
+    admission_no: admissionNo,
+    admissionno: admissionNo,
+    admission_number: admissionNo,
+    roll_no: rollNo,
+    rollno: rollNo,
+    roll_number: rollNo,
+    group_name: groupName,
+    groupname: groupName,
+    group: groupName,
+    stream: groupName,
+    section: record.section || record.sectionName || "A",
+    section_name: record.section || record.sectionName || "A",
+    academic_level: academicLevel,
+    academiclevel: academicLevel,
+    level: academicLevel,
+    year: academicLevel,
+    academic_year: academicYear,
+    academicyear: academicYear,
+    board_name: boardName,
+    boardname: boardName,
+    board: boardName,
+    course_name: courseName,
+    coursename: courseName,
+    course: "Intermediate",
+    certificate_number: certNumber,
+    certificatenumber: certNumber,
+    certificate_no: certNumber,
+    certificateno: certNumber,
+    number: certNumber,
+    issue_date: issueDateStr,
+    issuedate: issueDateStr,
+    date: issueDateStr,
+    request_date: requestDateStr,
+    requestdate: requestDateStr,
     place: record.place || "Vijayawada",
-    purpose: record.purpose || "Higher Education / Official Purpose",
-    principal_name: record.principalName || "Dr. S. K. Rao",
+    purpose: purposeStr,
+    remarks: remarksStr,
+    status: record.status || "Generated",
+    principal_name: record.principalName || record.issuedBy || "Dr. S. K. Rao (Principal)",
+    issued_by: record.issuedBy || "Dr. S. K. Rao (Principal)",
     study_from: record.studyFrom || "June 2025",
     study_to: record.studyTo || "May 2027",
     conduct_rating: record.conductRating || "Good",
+    conduct: record.conductRating || "Good",
     amount_paid: record.amountPaid || "45,000",
     amount_in_words: record.amountInWords || "Forty Five Thousand Only",
     medium: record.medium || "English",
     dob: record.dob || "14 August 2008",
+    date_of_birth: record.dob || "14 August 2008",
     date_of_admission: record.dateOfAdmission || "10 June 2025",
     reason_for_leaving: record.reasonForLeaving || "Completed Course",
     dues_cleared: record.duesCleared || "YES",
@@ -949,34 +1005,73 @@ export function renderTemplateWithRecord(text, record = {}) {
     fee_type: record.feeType || "Tuition & Examination Fees",
     payment_date: record.paymentDate || "01 Sep 2026",
     receipt_number: record.receiptNumber || "REC-2026-992",
+    college_name: "Pirnav College",
+    college_address: "D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh",
     custom_body: record.customBody || record.purpose || "has demonstrated commendable academic performance and exemplary conduct",
   };
 
-  let interpolated = cleanText.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, key) => {
-    if (merged[key] !== undefined && merged[key] !== null && String(merged[key]).trim() !== "") {
-      return String(merged[key]);
+  const resolveTokenValue = (rawKey) => {
+    if (!rawKey) return "";
+    const cleanKey = String(rawKey).trim().replace(/^data\./i, "").replace(/^record\./i, "");
+    const lowerKey = cleanKey.toLowerCase();
+    const snakeKey = cleanKey.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+
+    if (merged[cleanKey] !== undefined && merged[cleanKey] !== null && String(merged[cleanKey]).trim() !== "") {
+      return String(merged[cleanKey]);
     }
-    if (FALLBACK_PLACEHOLDERS[key] !== undefined) {
-      return FALLBACK_PLACEHOLDERS[key];
+    if (merged[lowerKey] !== undefined && merged[lowerKey] !== null && String(merged[lowerKey]).trim() !== "") {
+      return String(merged[lowerKey]);
     }
-    return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    if (merged[snakeKey] !== undefined && merged[snakeKey] !== null && String(merged[snakeKey]).trim() !== "") {
+      return String(merged[snakeKey]);
+    }
+    if (FALLBACK_PLACEHOLDERS[lowerKey] !== undefined) {
+      return FALLBACK_PLACEHOLDERS[lowerKey];
+    }
+    if (FALLBACK_PLACEHOLDERS[snakeKey] !== undefined) {
+      return FALLBACK_PLACEHOLDERS[snakeKey];
+    }
+    return "";
+  };
+
+  // Replace {{token}}
+  let interpolated = cleanText.replace(/\{\{([a-zA-Z0-9_\.\-]+)\}\}/g, (match, key) => {
+    const val = resolveTokenValue(key);
+    return val !== undefined ? val : "";
   });
 
-  // Also sanitize single-bracket placeholders if any
-  interpolated = interpolated.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
-    if (merged[key] !== undefined && merged[key] !== null && String(merged[key]).trim() !== "") {
-      return String(merged[key]);
-    }
-    if (FALLBACK_PLACEHOLDERS[key] !== undefined) {
-      return FALLBACK_PLACEHOLDERS[key];
-    }
-    return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  // Replace ${data.token} or ${token}
+  interpolated = interpolated.replace(/\$\{([a-zA-Z0-9_\.\-]+)\}/g, (match, key) => {
+    const val = resolveTokenValue(key);
+    return val !== undefined ? val : "";
   });
 
-  return interpolated;
+  // Replace {token}
+  interpolated = interpolated.replace(/\{([a-zA-Z0-9_\.\-]+)\}/g, (match, key) => {
+    const val = resolveTokenValue(key);
+    return val !== undefined ? val : "";
+  });
+
+  return interpolated.trim();
 }
 
 function getCertificateTemplate(type, record) {
+  if (record?.paragraphOne && record?.heading) {
+    return {
+      heading: record.heading,
+      paragraphOne: record.paragraphOne,
+      paragraphTwo: record.paragraphTwo || (record.purpose ? `This certificate is issued for the purpose of ${record.purpose}.` : ""),
+      isCustom: true,
+      borderColor: record.borderColor || "#1e3a8a",
+      badgeBgColor: record.badgeBgColor || record.borderColor || "#1e3a8a",
+      badgeTextColor: record.badgeTextColor || "#ffffff",
+      signatureType: record.signatureType || "Principal",
+      seal: record.sealText || "Principal Seal",
+      qrEnabled: record.qrEnabled !== false,
+      templateObj: null,
+    };
+  }
+
   const presentation = resolveCertificatePresentation(type, record?.orientation);
   const rawType = presentation?.type || type || "";
 
@@ -2532,6 +2627,40 @@ export default function CertificatesPage() {
         }
         return;
       }
+      try {
+        const previewRes = await apiClient.get(CERTIFICATE_API.preview(resolvedId));
+        if (requestId !== detailsRequestRef.current) return;
+        const previewData = unwrapSinglePayload(previewRes.data);
+        if (previewData && (previewData.paragraphOne || previewData.heading || previewData.certificateNumber)) {
+          setPrintPreview({
+            ...record,
+            ...previewData,
+            id: record.id,
+            backendId: resolvedId,
+            number: previewData.certificateNumber || record.number,
+            type: previewData.certificateType || record.type,
+            status: previewData.status || record.status,
+            issue: previewData.issueDate || record.issue,
+            requestDate: previewData.requestDate || record.requestDate,
+            remarks: previewData.remarks || record.remarks,
+            purpose: previewData.purpose || record.purpose,
+            paragraphOne: previewData.paragraphOne,
+            paragraphTwo: previewData.paragraphTwo,
+            heading: previewData.heading,
+            borderColor: previewData.borderColor,
+            badgeBgColor: previewData.badgeBgColor,
+            badgeTextColor: previewData.badgeTextColor,
+            signatureType: previewData.signatureType || "Principal",
+            sealText: previewData.sealText || "PIRNAV COLLEGE\nVIJAYAWADA",
+            qrEnabled: previewData.qrEnabled !== false,
+            signature: previewData.signature || getSignatureValue(previewRes.data) || record.signature || "",
+          });
+          return;
+        }
+      } catch {
+        // Fall back to getById
+      }
+
       try {
         const response = await apiClient.get(CERTIFICATE_API.getById(resolvedId));
         if (requestId !== detailsRequestRef.current) return;

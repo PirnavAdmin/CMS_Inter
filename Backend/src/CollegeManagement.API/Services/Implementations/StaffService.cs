@@ -270,9 +270,6 @@ namespace CollegeManagement.API.Services.Implementations
             if (string.IsNullOrWhiteSpace(dto.Email))
                 throw new ValidationException("Email address is required for staff creation.");
 
-            if (!dto.RoleId.HasValue || dto.RoleId.Value <= 0)
-                throw new ValidationException("RoleId is required and must be greater than 0.");
-
             if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
                 throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
 
@@ -329,11 +326,33 @@ namespace CollegeManagement.API.Services.Implementations
                 var connection = _context.Database.GetDbConnection();
 
                 // 1. Dynamic Role Validation and Staff-Role Security Check
-                assignedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value, connection, dbTransaction);
-                if (assignedRole == null)
+                if (dto.RoleId.HasValue && dto.RoleId.Value > 0)
                 {
-                    await transaction.RollbackAsync();
-                    throw new ValidationException($"Role with ID '{dto.RoleId.Value}' was not found in Roles table.");
+                    assignedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value, connection, dbTransaction);
+                    if (assignedRole == null)
+                    {
+                        await transaction.RollbackAsync();
+                        throw new ValidationException($"Role with ID '{dto.RoleId.Value}' was not found in Roles table.");
+                    }
+                }
+                else
+                {
+                    // Fallback to appropriate role (Faculty for Teaching, Staff/Faculty for Non-Teaching)
+                    var targetRoleName = string.Equals(staffType, "Teaching", StringComparison.OrdinalIgnoreCase) ? "Faculty" : "Staff";
+                    assignedRole = await _userRepository.GetRoleByNameAsync(targetRoleName, connection, dbTransaction);
+                    if (assignedRole == null)
+                    {
+                        assignedRole = await _userRepository.GetRoleByNameAsync("Faculty", connection, dbTransaction);
+                    }
+                    if (assignedRole == null)
+                    {
+                        assignedRole = await _userRepository.GetRoleByIdAsync(4, connection, dbTransaction);
+                    }
+                    if (assignedRole == null)
+                    {
+                        await transaction.RollbackAsync();
+                        throw new ValidationException("No valid default staff role (Faculty/Staff) could be resolved.");
+                    }
                 }
 
                 var nonStaffRoles = new[] { "Super Admin", "Admin", "Student", "Parent" };

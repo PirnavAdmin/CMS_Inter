@@ -63,9 +63,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                 INSERT IGNORE INTO `NumberSeriesConfigurations` 
                     (`SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, `IsActive`)
                 VALUES 
-                    ('EMPLOYEE_ID', 'Employee ID', 'PCTCH', 'PCTCH{SEQ}', 4, 1, 39, 'Configure employee ID format for teaching and non-teaching staff.', 1),
+                    ('TEACHING_STAFF_ID', 'Teaching Staff ID', 'PCTCH', 'PCTCH{SEQ}', 4, 1, 0, 'Configure ID series for Teaching faculty and academic staff.', 1),
+                    ('NON_TEACHING_STAFF_ID', 'Non-Teaching Staff ID', 'PCNT', 'PCNT{SEQ}', 4, 1, 0, 'Configure ID series for Administrative, Technical and Support staff.', 1),
                     ('ADMISSION_NO', 'Admission No.', 'ADM', 'ADM-{SEQ}', 2, 1, 17, 'Configure admission number format for students.', 1),
-                    ('CERTIFICATE_NO', 'Certificate Number', 'CND', 'CND-{YEAR}-{RANDOM}', 6, 1, 1, 'Configure certificate number format for generated certificates.', 1),
+                    ('ROLL_NO', 'Roll No.', '', '{SEQ}', 1, 1, 1, 'Configure roll number sequence for student class rosters.', 1),
+                    ('STUDENT_ID', 'Student ID', '', '{SEQ}', 3, 1, 518, 'Configure global unique system student ID format.', 1),
+                    ('SECTION_NAME', 'Section Name', '', '{GROUP}-Section {SECTION}', 1, 1, 1, 'Configure naming format pattern for classroom sections.', 1),
+                    ('EXAM_CODE', 'Exam Code', 'EXAM', '{GROUP}-{TYPE}-{YEAR}', 4, 1, 1, 'Configure code format for examination schedules and assessments.', 1),
+                    ('CERTIFICATE_NO', 'Certificate Number', 'CND', 'CND-{YEAR}-{RANDOM}', 6, 1, 439, 'Configure certificate number format for generated certificates.', 1),
                     ('RECEIPT_NO', 'Receipt No.', 'FEE', 'FEE-{YYYYMMDD}-{SEQ}', 6, 1, 11, 'Configure receipt number format for fee collections.', 1);";
 
             await conn.ExecuteAsync(seedSql);
