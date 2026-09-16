@@ -31,6 +31,23 @@ import {
   UserCheck,
   Lock,
   KeyRound,
+  Bus,
+  BookOpen,
+  CreditCard,
+  ShieldCheck,
+  Wrench,
+  Cpu,
+  FileCheck2,
+  Sparkles,
+  Package,
+  HeartHandshake,
+  Layers,
+  FlaskConical,
+  Building,
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  HelpCircle,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -39,6 +56,14 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
+import {
+  NON_TEACHING_ROLE_CONFIG,
+  normalizeDepartmentCode,
+  normalizeDesignationCode,
+  getDepartmentConfig,
+  getDepartmentRoles,
+  getRoleConfig,
+} from "@/data/nonTeachingRolesConfig.js";
 import * as XLSX from "xlsx";
 import "./StaffManagementPage.css";
 import totalStaffIcon from "@/assets/dashboard-3d/add-staff.png";
@@ -1468,11 +1493,18 @@ function Field({
 
     if (name === "designation") {
       const currentDept = safeValues.department;
+      if (!isTeaching && currentDept) {
+        const deptRoles = getDepartmentRoles(currentDept);
+        if (Array.isArray(deptRoles) && deptRoles.length > 0) {
+          return deptRoles;
+        }
+      }
+
       let deptSpecific = [];
       if (currentDept) {
         deptSpecific = isTeaching
           ? (teachingDesignationMap[currentDept] || [])
-          : (nonTeachingDesignationMap[currentDept] || []);
+          : (getDepartmentRoles(currentDept) || nonTeachingDesignationMap[currentDept] || []);
       }
 
       const baseList = Array.isArray(designationOptions) && designationOptions.length > 0
@@ -3173,6 +3205,129 @@ function TeachingForm({ records, setRecords, existing }) {
 }
 
 // ----------------------------------------------------------------------
+// DEPARTMENT HELPER PANEL & DYNAMIC FIELD COMPONENTS
+// ----------------------------------------------------------------------
+function DepartmentHelperPanel({ department, designation }) {
+  const deptConfig = getDepartmentConfig(department);
+  const roleConfig = getRoleConfig(department, designation);
+  const IconComp = DEPARTMENT_ICONS[deptConfig.deptCode] || Building2;
+
+  return (
+    <aside className="nt-helper-panel">
+      <div className="nt-helper-header">
+        <div className="nt-role-header-icon">
+          <IconComp size={20} />
+        </div>
+        <div>
+          <span className="nt-helper-badge">{deptConfig.deptName}</span>
+          <h4 className="nt-helper-title">{roleConfig.roleLabel || designation || "Department Role"}</h4>
+          <p className="nt-helper-tagline">"{deptConfig.tagline}"</p>
+        </div>
+      </div>
+      <p className="nt-helper-desc">{deptConfig.description}</p>
+      <div>
+        <h5 className="nt-helper-points-title">Key Operational Responsibilities</h5>
+        <ul className="nt-helper-points">
+          {deptConfig.highlights.map((point, idx) => (
+            <li key={idx}>
+              <CheckCircle2 size={13} />
+              <span>{point}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </aside>
+  );
+}
+
+const DEPARTMENT_ICONS = {
+  TRANSPORT: Bus,
+  HOSTEL: Building2,
+  LIBRARY: BookOpen,
+  ACCOUNTS_FINANCE: CreditCard,
+  SECURITY: ShieldCheck,
+  MAINTENANCE: Wrench,
+  IT_SUPPORT: Cpu,
+  EXAMINATIONS: FileCheck2,
+  ADMINISTRATION: Building,
+  HR: Users,
+  ADMISSIONS: GraduationCap,
+  HOUSEKEEPING: Sparkles,
+  STORES_INVENTORY: Package,
+  STUDENT_AFFAIRS: HeartHandshake,
+  CAMPUS_OPERATIONS: Layers,
+  LAB_SUPPORT: FlaskConical,
+};
+
+function DepartmentSpecificFields({ fields = [], values = {}, setValues, errors = {}, setErrors }) {
+  const handleChange = (fieldName, val) => {
+    if (typeof setErrors === "function" && errors[fieldName]) {
+      setErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[fieldName];
+        return copy;
+      });
+    }
+    if (typeof setValues === "function") {
+      setValues((prev) => ({
+        ...prev,
+        [fieldName]: val,
+      }));
+    }
+  };
+
+  return (
+    <div className="staff-form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+      {fields.map((f) => {
+        const { name, label, type, options, required, placeholder, gridSpan } = f;
+        const val = values[name] ?? "";
+        const hasError = Boolean(errors[name]);
+        const isWide = gridSpan === "is-wide" || type === "textarea";
+
+        return (
+          <label key={name} className={`${isWide ? "is-wide" : ""} ${hasError ? "has-field-error" : ""}`}>
+            <span>
+              {label} {required ? <b className="required-star">*</b> : null}
+            </span>
+            {type === "select" ? (
+              <select
+                value={val}
+                onChange={(e) => handleChange(name, e.target.value)}
+                style={hasError ? { borderColor: "#ef4444" } : undefined}
+              >
+                <option value="">Select {label}</option>
+                {(options || []).map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            ) : type === "textarea" ? (
+              <textarea
+                rows={3}
+                value={val}
+                placeholder={placeholder || `Enter ${label.toLowerCase()}...`}
+                onChange={(e) => handleChange(name, e.target.value)}
+                style={hasError ? { borderColor: "#ef4444" } : undefined}
+              />
+            ) : (
+              <input
+                type={type === "number" ? "number" : type === "date" ? "date" : "text"}
+                value={val}
+                placeholder={placeholder || `Enter ${label.toLowerCase()}...`}
+                onChange={(e) => handleChange(name, e.target.value)}
+                style={hasError ? { borderColor: "#ef4444" } : undefined}
+              />
+            )}
+            {hasError ? <span className="field-error">{errors[name]}</span> : null}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
 // CREATE / EDIT NON-TEACHING FORM (POST /api/v1/staff & PUT /api/v1/staff/{id})
 // ----------------------------------------------------------------------
 function NonTeachingForm({ records, setRecords, existing }) {
@@ -3182,47 +3337,105 @@ function NonTeachingForm({ records, setRecords, existing }) {
   const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
   const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || activeBoardCode || "";
   const activeBoardId = selectedBoard?.id || selectedBoard?.boardId || undefined;
-  const pincodeRequestRef = useRef(0);
-  const labels = [
-    "Personal Information",
-    "Contact & Address",
-    "Employment Details",
-    "Salary & Bank",
-    "Documents",
-    "Emergency Contact",
-    "Review",
-  ];
-  const [step, setStep] = useState(0);
-  const [values, setValues] = useState(
-    existing || {
-      staffType: "Non-Teaching",
-      employeeId: "",
-      board: activeBoardName,
-      boardName: activeBoardName,
-      boardCode: activeBoardCode,
-      ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
-      status: "Active",
-      nationality: "Indian",
-      country: "India",
-    },
-  );
-  const [errors, setErrors] = useState({});
-  const [toast, setToast] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [pincodeError, setPincodeError] = useState("");
-  const [editingFromReview, setEditingFromReview] = useState(false);
 
-  useEffect(() => {
-    if (!existing && activeBoardName && !values.board) {
-      setValues((v) => ({
-        ...v,
+  const stepLabels = [
+    "Basic Details",
+    "Department & Role",
+    "Department Specific Details",
+    "Documents & Summary",
+  ];
+
+  const [step, setStep] = useState(0);
+  const [editingFromReview, setEditingFromReview] = useState(false);
+  const [toast, setToast] = useState("");
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
+  // Confirmation Warnings State
+  const [deptChangePending, setDeptChangePending] = useState(null);
+  const [desigChangePending, setDesigChangePending] = useState(null);
+
+  // Form State Structure
+  const [formData, setFormData] = useState(() => {
+    if (existing) {
+      const existingDeptSpec = existing.departmentSpecific || {};
+      const existingDocs = existing.documents || {};
+      return {
+        basic: {
+          board: existing.board || existing.boardName || activeBoardName,
+          boardName: existing.boardName || existing.board || activeBoardName,
+          boardCode: existing.boardCode || activeBoardCode,
+          boardId: existing.boardId || activeBoardId,
+          employeeId: existing.employeeId || "",
+          firstName: existing.firstName || "",
+          middleName: existing.middleName || "",
+          lastName: existing.lastName || "",
+          gender: existing.gender || "Male",
+          dateOfBirth: existing.dateOfBirth || "",
+          mobile: existing.mobile || "",
+          email: existing.email || "",
+          profilePhoto: existing.profilePhoto || null,
+        },
+        employment: {
+          department: existing.department || "Transport",
+          designation: existing.designation || "Driver",
+          employmentType: existing.employmentType || "Full Time",
+          dateOfJoining: existing.dateOfJoining || existing.joiningDate || new Date().toISOString().split("T")[0],
+          status: existing.status || "Active",
+        },
+        departmentSpecific: {
+          ...existingDeptSpec,
+          ...existing,
+        },
+        documents: {
+          ...existingDocs,
+        },
+      };
+    }
+
+    return {
+      basic: {
         board: activeBoardName,
         boardName: activeBoardName,
         boardCode: activeBoardCode,
-        ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
+        boardId: activeBoardId,
+        employeeId: "",
+        firstName: "",
+        middleName: "",
+        lastName: "",
+        gender: "Male",
+        dateOfBirth: "",
+        mobile: "",
+        email: "",
+        profilePhoto: null,
+      },
+      employment: {
+        department: "Transport",
+        designation: "Driver",
+        employmentType: "Full Time",
+        dateOfJoining: new Date().toISOString().split("T")[0],
+        status: "Active",
+      },
+      departmentSpecific: {},
+      documents: {},
+    };
+  });
+
+  // Sync active board if creating new staff
+  useEffect(() => {
+    if (!existing && activeBoardName && !formData.basic.board) {
+      setFormData((prev) => ({
+        ...prev,
+        basic: {
+          ...prev.basic,
+          board: activeBoardName,
+          boardName: activeBoardName,
+          boardCode: activeBoardCode,
+          boardId: activeBoardId,
+        },
       }));
     }
-  }, [activeBoardName, activeBoardCode, activeBoardId, existing, values.board]);
+  }, [activeBoardName, activeBoardCode, activeBoardId, existing, formData.basic.board]);
 
   // Fetch next employee ID dynamically from Settings Number Series / Staff API
   useEffect(() => {
@@ -3230,92 +3443,217 @@ function NonTeachingForm({ records, setRecords, existing }) {
     async function fetchNextId() {
       const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records);
       if (isMounted && nextId) {
-        setValues((v) => ({ ...v, employeeId: nextId }));
+        setFormData((prev) => ({
+          ...prev,
+          basic: { ...prev.basic, employeeId: nextId },
+        }));
       }
     }
-    if (!existing) fetchNextId();
-    return () => { isMounted = false; };
-  }, [existing, records]);
+    if (!existing && !formData.basic.employeeId) fetchNextId();
+    return () => {
+      isMounted = false;
+    };
+  }, [existing, records, formData.basic.employeeId]);
 
-  useEffect(() => {
-    const pincode = String(values.pin || "").replace(/\D/g, "").slice(0, 6);
-    if (pincode !== String(values.pin || "")) {
-      setValues((current) => ({ ...current, pin: pincode }));
-      return undefined;
-    }
-    if (!/^\d{6}$/.test(pincode)) {
-      pincodeRequestRef.current += 1;
-      setPincodeError("");
-      return undefined;
-    }
+  // Current Role Configuration based on (department, designation)
+  const currentDept = formData.employment.department || "Transport";
+  const currentDesig = formData.employment.designation || "Driver";
+  const deptConfig = useMemo(() => getDepartmentConfig(currentDept), [currentDept]);
+  const roleConfig = useMemo(() => getRoleConfig(currentDept, currentDesig), [currentDept, currentDesig]);
+  const DeptIcon = DEPARTMENT_ICONS[deptConfig.deptCode] || Building2;
 
-    let ignore = false;
-    const requestId = ++pincodeRequestRef.current;
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await apiClient.get(apiEndpoints.location.byPincode(pincode), { skipGlobalLoader: true });
-        const data = response.data?.data ?? response.data?.Data ?? response.data ?? {};
-        const location = {
-          country: data.country || "India",
-          state: data.state || "",
-          district: data.district || "",
-          city: data.city || data.postOffice || "",
-        };
-        if (ignore || requestId !== pincodeRequestRef.current) return;
-        setValues((current) => ({ ...current, ...location }));
-        setPincodeError("");
-      } catch {
-        if (!ignore && requestId === pincodeRequestRef.current) {
-          setPincodeError("Location could not be loaded. Enter details manually.");
+  // Check if departmentSpecific has user-entered data
+  const hasRoleData = useMemo(() => {
+    const spec = formData.departmentSpecific;
+    if (!spec || typeof spec !== "object") return false;
+    return Object.values(spec).some((v) => v !== undefined && v !== null && String(v).trim() !== "");
+  }, [formData.departmentSpecific]);
+
+  // Handle Department Dropdown Selection (with confirmation if data exists)
+  const handleDepartmentSelect = (newDept) => {
+    if (newDept === formData.employment.department) return;
+    if (hasRoleData) {
+      setDeptChangePending(newDept);
+    } else {
+      applyDepartmentChange(newDept);
+    }
+  };
+
+  const applyDepartmentChange = (newDept) => {
+    const availableRoles = getDepartmentRoles(newDept);
+    const defaultRole = availableRoles[0] || "";
+    setFormData((prev) => ({
+      ...prev,
+      employment: {
+        ...prev.employment,
+        department: newDept,
+        designation: defaultRole,
+      },
+      departmentSpecific: {},
+    }));
+    setDeptChangePending(null);
+  };
+
+  // Handle Designation Dropdown Selection (with confirmation if data exists)
+  const handleDesignationSelect = (newDesig) => {
+    if (newDesig === formData.employment.designation) return;
+    if (hasRoleData) {
+      setDesigChangePending(newDesig);
+    } else {
+      applyDesignationChange(newDesig);
+    }
+  };
+
+  const applyDesignationChange = (newDesig) => {
+    setFormData((prev) => ({
+      ...prev,
+      employment: {
+        ...prev.employment,
+        designation: newDesig,
+      },
+      departmentSpecific: {},
+    }));
+    setDesigChangePending(null);
+  };
+
+  // Step 1 Fields (Basic Staff Details)
+  const basicFields = useMemo(() => [
+    ["board", "Board Name", "select", [], true],
+    ["employeeId", "Employee ID", "text", [], true],
+    ["firstName", "First Name", "text", [], true],
+    ["middleName", "Middle Name", "text", [], false],
+    ["lastName", "Last Name", "text", [], true],
+    ["gender", "Gender", "select", ["Male", "Female", "Other"], true],
+    ["dateOfBirth", "Date of Birth", "date", [], true],
+    ["mobile", "Mobile Number", "text", [], true],
+    ["email", "Email Address", "email", [], false],
+    ["profilePhoto", "Profile Photo", "file", [], false],
+  ], []);
+
+  // Step 2 Fields (Department & Designation)
+  const availableDeptOptions = useMemo(() => {
+    const apiList = Array.isArray(apiDepts) && apiDepts.length > 0 ? apiDepts : nonTeachingDepartments;
+    const filtered = apiList.filter((d) => isNonTeachingDeptName(typeof d === "object" ? d.name || d.departmentName : d));
+    return filtered.length > 0 ? filtered : nonTeachingDepartments;
+  }, [apiDepts]);
+
+  const availableDesigOptions = useMemo(() => {
+    return getDepartmentRoles(currentDept);
+  }, [currentDept]);
+
+  // Validation functions
+  const validateStep = (stepIndex) => {
+    const nextErrors = {};
+
+    if (stepIndex === 0) {
+      // Validate Basic Details
+      const basic = formData.basic;
+      if (!basic.board && !activeBoardName) nextErrors.board = "Please select a board name";
+      if (!basic.employeeId) nextErrors.employeeId = "Employee ID is required";
+      if (!basic.firstName || basic.firstName.trim().length < 2) nextErrors.firstName = "First Name must be at least 2 characters";
+      if (!basic.lastName || basic.lastName.trim().length < 1) nextErrors.lastName = "Last Name is required";
+      if (!basic.gender) nextErrors.gender = "Gender is required";
+
+      if (!basic.dateOfBirth) {
+        nextErrors.dateOfBirth = "Date of Birth is required";
+      } else {
+        const dob = new Date(basic.dateOfBirth);
+        const today = new Date();
+        const minAgeDate = new Date();
+        minAgeDate.setFullYear(today.getFullYear() - 18);
+        if (dob > minAgeDate) nextErrors.dateOfBirth = "Staff member must be at least 18 years old";
+      }
+
+      if (!basic.mobile) {
+        nextErrors.mobile = "Mobile number is required";
+      } else {
+        const cleanMob = basic.mobile.replace(/\D/g, "");
+        if (cleanMob.length !== 10 || !/^[6-9]/.test(cleanMob)) {
+          nextErrors.mobile = "Mobile number must be a valid 10-digit number starting with 6, 7, 8, or 9";
         }
       }
-    }, 450);
-    return () => {
-      ignore = true;
-      window.clearTimeout(timer);
-    };
-  }, [values.pin]);
 
-  const next = () => {
-    const currentFields = nonTeachingSteps[step] || [];
-    const stepErrors = validateStepFields(currentFields, values, activeBoardName);
+      if (basic.email && basic.email.trim()) {
+        if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(basic.email.trim())) {
+          nextErrors.email = "Please enter a valid email address";
+        }
+      }
+    }
 
+    if (stepIndex === 1) {
+      // Validate Department & Role
+      const emp = formData.employment;
+      if (!emp.department) nextErrors.department = "Department is required";
+      if (!emp.designation) nextErrors.designation = "Designation is required";
+      if (!emp.employmentType) nextErrors.employmentType = "Employment type is required";
+      if (!emp.dateOfJoining) nextErrors.dateOfJoining = "Date of Joining is required";
+      if (!emp.status) nextErrors.status = "Status is required";
+    }
+
+    if (stepIndex === 2) {
+      // Validate Department & Role Specific fields
+      const roleFields = roleConfig.fields || [];
+      const specValues = formData.departmentSpecific || {};
+      for (const field of roleFields) {
+        if (field.required) {
+          const val = specValues[field.name];
+          if (val === undefined || val === null || String(val).trim() === "") {
+            nextErrors[field.name] = `${field.label} is required`;
+          }
+        }
+      }
+    }
+
+    return nextErrors;
+  };
+
+  const handleNext = () => {
+    const stepErrors = validateStep(step);
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
       setToast("Please fill in all mandatory fields marked with an asterisk (*).");
       return;
     }
-
     setErrors({});
     if (editingFromReview) {
       setEditingFromReview(false);
-      setStep(6);
+      setStep(3);
       return;
     }
     setStep((s) => s + 1);
   };
 
-  const save = async () => {
-    for (let i = 0; i < 6; i++) {
-      const stepFields = nonTeachingSteps[i] || [];
-      const stepErrors = validateStepFields(stepFields, values, activeBoardName);
+  const handleSaveStaff = async () => {
+    // Validate all 3 active steps before final submission
+    for (let i = 0; i < 3; i++) {
+      const stepErrors = validateStep(i);
       if (Object.keys(stepErrors).length > 0) {
         setErrors(stepErrors);
-        setToast(`Please fill in all mandatory fields in ${labels[i]}.`);
+        setToast(`Please fill in all mandatory fields in ${stepLabels[i]}.`);
         setStep(i);
         return;
       }
     }
 
-    const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
-    const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
+    const basic = formData.basic;
+    const emp = formData.employment;
+    const spec = formData.departmentSpecific;
+    const docs = formData.documents;
+
+    const fullName = [basic.firstName, basic.middleName, basic.lastName].filter(Boolean).join(" ") || basic.employeeId || "Non-Teaching Staff";
+    const resolvedCode = basic.boardCode || resolveBoardCode({ board: basic.board, boardName: basic.boardName }, boards);
+
     const payload = {
-      ...values,
-      boardCode: resolvedCode !== "—" ? resolvedCode : values.boardCode,
+      ...basic,
+      ...emp,
+      ...spec,
+      boardCode: resolvedCode !== "—" ? resolvedCode : basic.boardCode,
       fullName,
       staffType: "Non-Teaching",
       profileStatus: "Completed",
       profileCompletionPercentage: 100,
+      departmentSpecific: { ...spec },
+      documents: { ...docs },
     };
 
     setSubmitting(true);
@@ -3329,9 +3667,19 @@ function NonTeachingForm({ records, setRecords, existing }) {
         const res = await apiClient.post(apiEndpoints.faculty.create, payload);
         targetId = res.data?.id || res.data?.staffId;
       }
-      const record = { ...payload, id: targetId, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
+
+      const record = {
+        ...payload,
+        id: targetId,
+        profileStatus: "Completed",
+        profileCompletion: 100,
+        addedOn: existing?.addedOn || new Date().toISOString().split("T")[0],
+      };
+
       if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
+      window.dispatchEvent(new Event("staff-records-updated"));
+
       if (existing) {
         setToast("Non-teaching staff profile updated successfully.");
         n(`/dashboard/staff/non-teaching`);
@@ -3349,19 +3697,24 @@ function NonTeachingForm({ records, setRecords, existing }) {
           nextErrors.employeeId = errMsg;
           try {
             const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records);
-            if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
+            if (nextId) setFormData((prev) => ({ ...prev, basic: { ...prev.basic, employeeId: nextId } }));
           } catch {}
         }
         if (lower.includes("email")) nextErrors.email = errMsg;
         if (lower.includes("mobile")) nextErrors.mobile = errMsg;
-        if (lower.includes("aadhaar")) nextErrors.aadhaar = errMsg;
         setErrors(nextErrors);
         setStep(0);
         return;
       }
-      console.warn("Save non-teaching staff API error:", err);
+      console.warn("Save non-teaching staff API offline, using local fallback save:", err);
       targetId = existing?.id || Date.now();
-      const record = { ...payload, id: targetId, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
+      const record = {
+        ...payload,
+        id: targetId,
+        profileStatus: "Completed",
+        profileCompletion: 100,
+        addedOn: existing?.addedOn || new Date().toISOString().split("T")[0],
+      };
       if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
       if (existing) {
@@ -3375,67 +3728,381 @@ function NonTeachingForm({ records, setRecords, existing }) {
     }
   };
 
+  // Handle Document Upload simulation
+  const handleDocUpload = (docKey, e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFormData((prev) => ({
+        ...prev,
+        documents: {
+          ...prev.documents,
+          [docKey]: file.name,
+        },
+      }));
+      setToast(`Uploaded ${file.name}`);
+    }
+  };
+
   return (
     <DashboardLayout
       title={existing ? "Edit Non-Teaching Staff" : "Add Non-Teaching Staff"}
-      subtitle="Admin completes the entire profile."
-      breadcrumb={["People", "Staff Management"]}
+      subtitle="Complete non-teaching staff profile with dynamic role-specific fields and compliance checklist."
+      breadcrumb={["People", "Staff Management", existing ? "Edit Non-Teaching" : "Add Non-Teaching"]}
     >
       <Toast message={toast} onClose={() => setToast("")} />
       <main className="staff-mock-page">
         <Back />
-        <Steps labels={labels} step={step} />
-        <section className="staff-form-panel non-teaching-form">
-          <header>
-            <Building2 />
-            <div>
-              <h2>{labels[step]}</h2>
-              <p>Step {step + 1} of 7</p>
-            </div>
-          </header>
-          {step < 6 ? (
-            <div className="staff-form-grid">
-              {nonTeachingSteps[step].map((f) => (
+        <Steps labels={stepLabels} step={step} />
+
+        {/* STEP 1: BASIC STAFF DETAILS */}
+        {step === 0 && (
+          <form
+            className="staff-form-panel non-teaching-basic-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleNext();
+            }}
+          >
+            <header>
+              <UserRound />
+              <div>
+                <h2>Basic Staff Details</h2>
+                <p>Enter the basic information of the non-teaching staff member.</p>
+              </div>
+            </header>
+            <div className="staff-form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+              {basicFields.map((f) => (
                 <Field
                   key={f[0]}
                   item={f}
-                  values={values}
-                  setValues={setValues}
+                  values={formData.basic}
+                  setValues={(updater) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      basic: typeof updater === "function" ? updater(prev.basic) : updater,
+                    }));
+                  }}
                   setErrors={setErrors}
-                  error={errors[f[0]] || (f[0] === "pin" ? pincodeError : "")}
+                  error={errors[f[0]]}
                   forceOptional={false}
-                  departmentOptions={apiDepts}
-                  designationOptions={apiDesigs}
                   staffType="Non-Teaching"
                 />
               ))}
             </div>
-          ) : (
-            <Summary
-              record={{
-                ...values,
-                fullName: [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" "),
-              }}
-              groups={labels.slice(0, 6).map((label, index) => [label, nonTeachingSteps[index]])}
-              onEdit={(targetStep) => {
-                setEditingFromReview(true);
-                setStep(targetStep);
-              }}
-            />
-          )}
-          <footer>
-            {step ? (
-              <button className="cms-btn cms-btn-ghost" onClick={() => setStep((s) => s - 1)}>
+            <footer>
+              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff")}>
+                Cancel
+              </button>
+              <button type="submit" className="cms-btn cms-btn-primary">
+                Next <ChevronRight />
+              </button>
+            </footer>
+          </form>
+        )}
+
+        {/* STEP 2: DEPARTMENT & ROLE */}
+        {step === 1 && (
+          <form
+            className="staff-form-panel non-teaching-dept-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleNext();
+            }}
+          >
+            <header>
+              <Building2 />
+              <div>
+                <h2>Department &amp; Designation</h2>
+                <p>Select the employee's department, role, employment type and status.</p>
+              </div>
+            </header>
+            <div className="staff-form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+              <label className={errors.department ? "has-field-error" : ""}>
+                <span>
+                  Department <b className="required-star">*</b>
+                </span>
+                <SearchSelectInput
+                  label="Department"
+                  opts={availableDeptOptions}
+                  value={formData.employment.department}
+                  onChange={handleDepartmentSelect}
+                  hasError={Boolean(errors.department)}
+                />
+                {errors.department ? <span className="field-error">{errors.department}</span> : null}
+              </label>
+
+              <label className={errors.designation ? "has-field-error" : ""}>
+                <span>
+                  Designation / Role <b className="required-star">*</b>
+                </span>
+                <SearchSelectInput
+                  label="Designation / Role"
+                  opts={availableDesigOptions}
+                  value={formData.employment.designation}
+                  onChange={handleDesignationSelect}
+                  hasError={Boolean(errors.designation)}
+                />
+                {errors.designation ? <span className="field-error">{errors.designation}</span> : null}
+              </label>
+
+              <label className={errors.employmentType ? "has-field-error" : ""}>
+                <span>
+                  Employment Type <b className="required-star">*</b>
+                </span>
+                <select
+                  value={formData.employment.employmentType}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      employment: { ...prev.employment, employmentType: val },
+                    }));
+                  }}
+                >
+                  <option value="Full Time">Full Time</option>
+                  <option value="Part Time">Part Time</option>
+                  <option value="Contract">Contract</option>
+                </select>
+                {errors.employmentType ? <span className="field-error">{errors.employmentType}</span> : null}
+              </label>
+
+              <label className={errors.dateOfJoining ? "has-field-error" : ""}>
+                <span>
+                  Date of Joining <b className="required-star">*</b>
+                </span>
+                <input
+                  type="date"
+                  value={formData.employment.dateOfJoining}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      employment: { ...prev.employment, dateOfJoining: val },
+                    }));
+                  }}
+                />
+                {errors.dateOfJoining ? <span className="field-error">{errors.dateOfJoining}</span> : null}
+              </label>
+
+              <label className={errors.status ? "has-field-error" : ""}>
+                <span>
+                  Status <b className="required-star">*</b>
+                </span>
+                <select
+                  value={formData.employment.status}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      employment: { ...prev.employment, status: val },
+                    }));
+                  }}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                {errors.status ? <span className="field-error">{errors.status}</span> : null}
+              </label>
+            </div>
+            <footer>
+              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(0)}>
                 <ChevronLeft /> Previous
               </button>
-            ) : null}
-            <button className="cms-btn cms-btn-primary" onClick={step === 6 ? save : next}>
-              {step === 6 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Review" : "Next"}
-              <ChevronRight />
-            </button>
-          </footer>
-        </section>
+              <button type="submit" className="cms-btn cms-btn-primary">
+                Next: Role Details <ChevronRight />
+              </button>
+            </footer>
+          </form>
+        )}
+
+        {/* STEP 3: DEPARTMENT SPECIFIC DETAILS */}
+        {step === 2 && (
+          <div className="nt-role-container">
+            <div className="nt-role-form-card">
+              <header className="nt-role-header">
+                <div className="nt-role-header-icon">
+                  <DeptIcon size={20} />
+                </div>
+                <div className="nt-role-header-text">
+                  <h2>
+                    {deptConfig.deptName} Details — {roleConfig.roleLabel || currentDesig}
+                  </h2>
+                  <p>Configure role-specific operational parameters and responsibilities.</p>
+                </div>
+              </header>
+
+              <DepartmentSpecificFields
+                fields={roleConfig.fields || []}
+                values={formData.departmentSpecific}
+                setValues={(updater) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    departmentSpecific: typeof updater === "function" ? updater(prev.departmentSpecific) : updater,
+                  }));
+                }}
+                errors={errors}
+                setErrors={setErrors}
+              />
+
+              <footer style={{ display: "flex", justifyContent: "flex-end", gap: "8px", padding: "12px 16px", borderTop: "1px solid var(--cms-border)" }}>
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(1)}>
+                  <ChevronLeft /> Previous
+                </button>
+                <button type="button" className="cms-btn cms-btn-primary" onClick={handleNext}>
+                  Next: Documents &amp; Summary <ChevronRight />
+                </button>
+              </footer>
+            </div>
+
+            <DepartmentHelperPanel department={currentDept} designation={currentDesig} />
+          </div>
+        )}
+
+        {/* STEP 4: DOCUMENTS & SUMMARY */}
+        {step === 3 && (
+          <section className="staff-form-panel non-teaching-summary-panel">
+            <header>
+              <FileCheck2 />
+              <div>
+                <h2>Documents &amp; Final Summary</h2>
+                <p>Upload role compliance documents and verify all employee details before final submission.</p>
+              </div>
+            </header>
+
+            {/* DOCUMENTS UPLOAD SECTION */}
+            <div className="nt-doc-section">
+              <h3>1. Compliance &amp; Verification Documents</h3>
+              <p>Upload the required identity, trade, and role verification documents.</p>
+              <div className="nt-doc-grid">
+                {/* Common Documents */}
+                {[
+                  { key: "aadhaarDoc", label: "Aadhaar Card", required: false },
+                  { key: "panDoc", label: "PAN Card", required: false },
+                  { key: "addressProofDoc", label: "Address Proof", required: false },
+                  { key: "bankProofDoc", label: "Bank Passbook / Cheque", required: false },
+                  ...(roleConfig.docList || []),
+                ].map((doc) => {
+                  const isUploaded = Boolean(formData.documents[doc.key]);
+                  return (
+                    <div key={doc.key} className={`nt-doc-item ${isUploaded ? "is-uploaded" : ""}`}>
+                      <div className="nt-doc-info">
+                        <span className="nt-doc-name">
+                          {doc.label} {doc.required ? <b className="required-star">*</b> : null}
+                        </span>
+                        <span className="nt-doc-status">
+                          {isUploaded ? `Uploaded: ${formData.documents[doc.key]}` : "Not Uploaded"}
+                        </span>
+                      </div>
+                      <label className="nt-doc-upload-btn">
+                        <Upload size={13} /> {isUploaded ? "Replace" : "Upload"}
+                        <input
+                          type="file"
+                          style={{ display: "none" }}
+                          onChange={(e) => handleDocUpload(doc.key, e)}
+                        />
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* SUMMARY CARDS SECTION */}
+            <div style={{ padding: "16px" }}>
+              <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "700" }}>2. Review Employee Information</h3>
+              <div className="staff-summary" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+                {/* Basic Details Card */}
+                <article>
+                  <header>
+                    <h3>Basic Information</h3>
+                    <button type="button" onClick={() => { setEditingFromReview(true); setStep(0); }}>
+                      <Pencil size={12} /> Edit
+                    </button>
+                  </header>
+                  <p><span>Full Name</span><strong>{[formData.basic.firstName, formData.basic.middleName, formData.basic.lastName].filter(Boolean).join(" ") || "—"}</strong></p>
+                  <p><span>Employee ID</span><strong>{formData.basic.employeeId || "—"}</strong></p>
+                  <p><span>Board Name</span><strong>{formData.basic.boardName || formData.basic.board || activeBoardName || "—"}</strong></p>
+                  <p><span>Gender</span><strong>{formData.basic.gender || "—"}</strong></p>
+                  <p><span>Date of Birth</span><strong>{formData.basic.dateOfBirth || "—"}</strong></p>
+                  <p><span>Mobile Number</span><strong>{formData.basic.mobile || "—"}</strong></p>
+                  <p><span>Email Address</span><strong>{formData.basic.email || "—"}</strong></p>
+                </article>
+
+                {/* Department & Employment Card */}
+                <article>
+                  <header>
+                    <h3>Department &amp; Role</h3>
+                    <button type="button" onClick={() => { setEditingFromReview(true); setStep(1); }}>
+                      <Pencil size={12} /> Edit
+                    </button>
+                  </header>
+                  <p><span>Department</span><strong>{formData.employment.department}</strong></p>
+                  <p><span>Designation</span><strong>{formData.employment.designation}</strong></p>
+                  <p><span>Employment Type</span><strong>{formData.employment.employmentType}</strong></p>
+                  <p><span>Date of Joining</span><strong>{formData.employment.dateOfJoining}</strong></p>
+                  <p><span>Status</span><strong><Badge value={formData.employment.status} /></strong></p>
+                  <p><span>Staff Type</span><strong>Non-Teaching</strong></p>
+                </article>
+
+                {/* Department Specific Details Card */}
+                <article style={{ gridColumn: "1 / -1" }}>
+                  <header>
+                    <h3>{deptConfig.deptName} Details ({roleConfig.roleLabel || currentDesig})</h3>
+                    <button type="button" onClick={() => { setEditingFromReview(true); setStep(2); }}>
+                      <Pencil size={12} /> Edit
+                    </button>
+                  </header>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" }}>
+                    {(roleConfig.fields || []).map((f) => {
+                      const val = formData.departmentSpecific[f.name];
+                      const displayVal = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "—";
+                      return (
+                        <p key={f.name} style={{ margin: 0, padding: "6px 0", borderBottom: "1px solid var(--cms-border)" }}>
+                          <span>{f.label}</span>
+                          <strong>{displayVal}</strong>
+                        </p>
+                      );
+                    })}
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <footer>
+              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(2)}>
+                <ChevronLeft /> Previous
+              </button>
+              <button type="button" className="cms-btn cms-btn-primary" onClick={handleSaveStaff} disabled={submitting}>
+                <Check /> {submitting ? "Saving Staff..." : "Save Non-Teaching Staff"}
+              </button>
+            </footer>
+          </section>
+        )}
       </main>
+
+      {/* DEPARTMENT CHANGE CONFIRMATION DIALOG */}
+      {deptChangePending ? (
+        <ConfirmDialog
+          title="Change Department?"
+          message={`Changing the department to "${deptChangePending}" will clear the previously entered department-specific details. Do you want to continue?`}
+          cancelText="Cancel"
+          confirmText="Change Department"
+          onCancel={() => setDeptChangePending(null)}
+          onConfirm={() => applyDepartmentChange(deptChangePending)}
+        />
+      ) : null}
+
+      {/* DESIGNATION CHANGE CONFIRMATION DIALOG */}
+      {desigChangePending ? (
+        <ConfirmDialog
+          title="Change Designation / Role?"
+          message={`Changing the designation to "${desigChangePending}" will update the role-specific fields and may clear data that is no longer applicable. Do you want to continue?`}
+          cancelText="Cancel"
+          confirmText="Change Designation"
+          onCancel={() => setDesigChangePending(null)}
+          onConfirm={() => applyDesignationChange(desigChangePending)}
+        />
+      ) : null}
     </DashboardLayout>
   );
 }
@@ -4639,7 +5306,46 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       ],
     ],
   ];
-  const groups = suppliedGroups || defaultGroups;
+
+  const nonTeachingRoleFields = useMemo(() => {
+    if (record?.staffType === "Non-Teaching" && record?.department && record?.designation) {
+      const config = getRoleConfig(record.department, record.designation);
+      if (config && Array.isArray(config.fields) && config.fields.length > 0) {
+        return config.fields.map((f) => [f.name, f.label]);
+      }
+    }
+    return [];
+  }, [record?.staffType, record?.department, record?.designation]);
+
+  const groups = useMemo(() => {
+    if (suppliedGroups) return suppliedGroups;
+    if (record?.staffType === "Non-Teaching" && nonTeachingRoleFields.length > 0) {
+      const deptConf = getDepartmentConfig(record.department);
+      return [
+        defaultGroups[0], // Basic Information
+        defaultGroups[1], // Contact & Address
+        [
+          "Department & Role",
+          [
+            ["department", "Department"],
+            ["designation", "Designation"],
+            ["dateOfJoining", "Date of Joining"],
+            ["employmentType", "Employment Type"],
+            ["staffType", "Staff Type"],
+            ["status", "Status"],
+          ],
+        ],
+        [
+          `${deptConf.deptName} Details (${record.designation})`,
+          nonTeachingRoleFields,
+        ],
+        defaultGroups[5], // Documents
+        defaultGroups[6], // Bank Details
+        defaultGroups[7], // Emergency Contact
+      ];
+    }
+    return defaultGroups;
+  }, [suppliedGroups, record?.staffType, record?.department, record?.designation, nonTeachingRoleFields, defaultGroups]);
 
   const startEdit = (groupIndex) => {
     if (onEdit) {
