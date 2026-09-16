@@ -128,6 +128,8 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
     });
 #endregion
 
@@ -226,6 +228,11 @@ builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddScoped<IStudyMaterialRepository, StudyMaterialRepository>();
 builder.Services.AddScoped<ICertificateRepository, CertificateRepository>();
 builder.Services.AddScoped<IFeeRepository, FeeRepository>();
+builder.Services.AddScoped<ISectionRepository, SectionRepository>();
+builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocationRepository>();
+builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
+builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
+builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
 
 // Hostel Repositories
 builder.Services.AddScoped<IHostelBlockRepository, HostelBlockRepository>();
@@ -242,11 +249,17 @@ builder.Services.AddScoped<IHostelReportRepository, HostelReportRepository>();
 #endregion
 
 #region Services
+builder.Services.AddScoped<IJwtTokenHelper, JwtTokenHelper>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRoleManagementService, RoleManagementService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
+builder.Services.AddScoped<ITemplateService, TemplateService>();
+builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ILookupCacheService, LookupCacheService>();
@@ -263,6 +276,7 @@ builder.Services.AddSingleton<IAttendanceCacheService, AttendanceCacheService>()
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
+builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IStudentAdmissionService, StudentAdmissionService>();
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
@@ -528,6 +542,26 @@ app.Use(async (context, next) =>
     }
     else if (path.StartsWith("/api/subjects", StringComparison.OrdinalIgnoreCase) &&
              !path.StartsWith("/api/v1/subjects", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Path = "/api/v1" + path.Substring(4);
+    }
+    else if (path.StartsWith("/api/dashboard", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/dashboard", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Path = "/api/v1" + path.Substring(4);
+    }
+    else if (path.StartsWith("/api/departments", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/departments", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Path = "/api/v1" + path.Substring(4);
+    }
+    else if (path.StartsWith("/api/designations", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/designations", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Request.Path = "/api/v1" + path.Substring(4);
+    }
+    else if (path.StartsWith("/api/certificates", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/certificates", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
