@@ -1302,4 +1302,55 @@
 
 .cms-searchable-select-trigger:disabled:hover {
   border-color: var(--cms-border, #e2e8f0);
-}
+}
+
+/* Examination-scoped Dropdown Opacity Correction */
+.examination-page .cms-searchable-select-dropdown,
+.examination-page .cms-select-dropdown,
+.examination-page [role="listbox"],
+.examination-modal .cms-searchable-select-dropdown,
+.examination-modal .cms-select-dropdown,
+.examination-modal [role="listbox"],
+.cms-form-page.examination-form-page .cms-searchable-select-dropdown,
+.cms-form-page.examination-form-page [role="listbox"],
+.cms-form-page.examination-form-page .cms-searchable-select-search,
+.cms-form-page.examination-form-page .cms-searchable-select-options,
+.exam-list-card .cms-searchable-select-dropdown,
+.exam-list-card [role="listbox"],
+.exam-list-card .cms-searchable-select-search,
+.exam-list-card .cms-searchable-select-options,
+.exam-schedule-card .cms-searchable-select-dropdown,
+.exam-schedule-card [role="listbox"],
+.exam-schedule-card .cms-searchable-select-search,
+.exam-schedule-card .cms-searchable-select-options,
+.exam-modal .cms-searchable-select-dropdown,
+.exam-modal [role="listbox"],
+.exam-modal .cms-searchable-select-search,
+.exam-modal .cms-searchable-select-options,
+.cms-modal.exam-modal .cms-searchable-select-dropdown,
+.cms-modal.exam-modal [role="listbox"],
+.cms-modal.exam-modal .cms-searchable-select-search,
+.cms-modal.exam-modal .cms-searchable-select-options {
+  background-color: var(--cms-surface, #ffffff);
+  opacity: 1;
+  isolation: isolate;
+}
+
+.cms-form-page.examination-form-page .cms-searchable-select-option,
+.exam-list-card .cms-searchable-select-option,
+.exam-schedule-card .cms-searchable-select-option,
+.exam-modal .cms-searchable-select-option,
+.cms-modal.exam-modal .cms-searchable-select-option {
+  background-color: var(--cms-surface, #ffffff);
+  opacity: 1;
+}
+
+.cms-form-page.examination-form-page .cms-searchable-select-option:hover,
+.exam-list-card .cms-searchable-select-option:hover,
+.exam-schedule-card .cms-searchable-select-option:hover,
+.exam-modal .cms-searchable-select-option:hover,
+.cms-modal.exam-modal .cms-searchable-select-option:hover {
+  background-color: var(--cms-hover, #f1f5f9);
+}
+
+
