@@ -1593,7 +1593,7 @@ function Field({
         const liveDesigs = designationOptions.filter(Boolean);
 
         if (currentDept) {
-          // 1. Live designations specifically linked to this department
+          // Strictly return live designations assigned to this department in the database
           const deptMatching = liveDesigs
             .filter((d) => {
               if (!d) return false;
@@ -1603,21 +1603,8 @@ function Field({
             .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
             .filter(Boolean);
 
-          // 2. Unassigned / general designations in DB (e.g. Cleaner, Attender where department is not fixed)
-          const generalMatching = liveDesigs
-            .filter((d) => {
-              if (!d) return false;
-              const dDeptName = typeof d === "object" ? String(d.departmentName || d.department || "").trim() : "";
-              const dDeptId = typeof d === "object" ? d.departmentId : null;
-              return !dDeptName && !dDeptId;
-            })
-            .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
-            .filter(Boolean);
-
-          // If there are department-specific designations or general unassigned designations from DB, combine them!
-          const combined = Array.from(new Set([...deptMatching, ...generalMatching]));
-          if (combined.length > 0) {
-            return combined;
+          if (deptMatching.length > 0) {
+            return Array.from(new Set(deptMatching));
           }
         }
 
