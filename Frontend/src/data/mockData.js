@@ -270,6 +270,7 @@ export const transportGpsSnapshots = [
 ];
 
 export const holidayRecords = [
+  { id: "HOL-008", holidayName: "Independence Day", holidayType: "National Holiday", dateType: "Single Day", startDate: "2026-08-15", endDate: "", appliesTo: "All Students & Staff", description: "National holiday for Independence Day.", status: "Active" },
   { id: "HOL-001", holidayName: "Gandhi Jayanti", holidayType: "National Holiday", dateType: "Single Day", startDate: "2026-10-02", endDate: "", appliesTo: "All Students & Staff", description: "National holiday in observance of Gandhi Jayanti.", status: "Active" },
   { id: "HOL-002", holidayName: "Dasara Holidays", holidayType: "Festival Holiday", dateType: "Date Range", startDate: "2026-10-19", endDate: "2026-10-23", appliesTo: "All Students & Staff", description: "Festival break for Dasara celebrations.", status: "Active" },
   { id: "HOL-003", holidayName: "Diwali", holidayType: "Festival Holiday", dateType: "Single Day", startDate: "2026-11-08", endDate: "", appliesTo: "All Students & Staff", description: "Festival holiday for Diwali.", status: "Active" },
@@ -277,7 +278,6 @@ export const holidayRecords = [
   { id: "HOL-005", holidayName: "Sankranti Vacation", holidayType: "Festival Holiday", dateType: "Date Range", startDate: "2027-01-12", endDate: "2027-01-16", appliesTo: "All Students & Staff", description: "Scheduled Sankranti vacation.", status: "Active" },
   { id: "HOL-006", holidayName: "Republic Day", holidayType: "National Holiday", dateType: "Single Day", startDate: "2027-01-26", endDate: "", appliesTo: "All Students & Staff", description: "National holiday for Republic Day.", status: "Active" },
   { id: "HOL-007", holidayName: "Ugadi", holidayType: "Festival Holiday", dateType: "Single Day", startDate: "2027-04-08", endDate: "", appliesTo: "All Students & Staff", description: "Festival holiday for Ugadi.", status: "Active" },
-  { id: "HOL-008", holidayName: "Independence Day", holidayType: "National Holiday", dateType: "Single Day", startDate: "2026-08-15", endDate: "", appliesTo: "All Students & Staff", description: "National holiday for Independence Day.", status: "Inactive" },
 ];
 
 export const options = {

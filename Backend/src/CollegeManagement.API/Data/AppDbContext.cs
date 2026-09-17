@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Models.Reports;
+using CollegeManagement.API.Models.Holiday;
 
 namespace CollegeManagement.API.Data
 {
@@ -58,6 +59,7 @@ namespace CollegeManagement.API.Data
         public DbSet<Examination> Examinations { get; set; }
         public DbSet<ExamCodeSequence> ExamCodeSequences { get; set; }
         public DbSet<ExamSchedule> ExamSchedules { get; set; }
+        public DbSet<Holiday> Holidays { get; set; }
         public DbSet<HallTicket> HallTickets { get; set; }
         public DbSet<InvigilatorAssignment> InvigilatorAssignments { get; set; }
         public DbSet<Mark> Marks { get; set; }

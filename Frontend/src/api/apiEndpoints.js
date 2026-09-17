@@ -507,6 +507,14 @@ export const apiEndpoints = {
     toggleActive: (id) => `/api/v1/settings/templates/${id}/toggle-active`,
     preview: "/api/v1/settings/templates/preview",
   },
+  holidays: {
+    list: "/api/v1/holidays",
+    summary: "/api/v1/holidays/summary",
+    getById: (id) => `/api/v1/holidays/${id}`,
+    create: "/api/v1/holidays",
+    update: (id) => `/api/v1/holidays/${id}`,
+    delete: (id) => `/api/v1/holidays/${id}`,
+  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
