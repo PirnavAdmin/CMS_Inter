@@ -635,12 +635,25 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             int daysInMonth = DateTime.DaysInMonth(targetYear, targetMonth);
+            var monthStartDate = new DateTime(targetYear, targetMonth, 1);
+            var monthEndDate = new DateTime(targetYear, targetMonth, daysInMonth);
+
+            var monthHolidays = await _context.Holidays
+                .Where(h => !h.IsDeleted && h.Status == "Active" 
+                         && h.StartDate <= monthEndDate && h.EndDate >= monthStartDate
+                         && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Students Only")
+                         && (!request.BoardId.HasValue || h.BoardId == null || h.BoardId == request.BoardId.Value)
+                         && (!request.AcademicYearId.HasValue || h.AcademicYearId == null || h.AcademicYearId == request.AcademicYearId.Value))
+                .ToListAsync();
 
             var dayHeaders = new List<DayHeaderDto>();
             for (int day = 1; day <= daysInMonth; day++)
             {
                 var dt = new DateTime(targetYear, targetMonth, day);
-                bool isHoliday = dt.DayOfWeek == DayOfWeek.Sunday;
+                bool isSunday = dt.DayOfWeek == DayOfWeek.Sunday;
+                var matchingHoliday = monthHolidays.FirstOrDefault(h => dt.Date >= h.StartDate.Date && dt.Date <= h.EndDate.Date);
+                bool isOfficialHoliday = matchingHoliday != null;
+                bool isHoliday = isSunday || isOfficialHoliday;
                 string dayNameUpper = dt.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture).ToUpper();
 
                 dayHeaders.Add(new DayHeaderDto
@@ -727,14 +740,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             foreach (var student in studentList)
             {
                 var dailyStatus = new List<string>();
-                int presentCount = 0, absentCount = 0, halfDayCount = 0;
+                int presentCount = 0, absentCount = 0, leaveCount = 0;
 
                 for (int day = 1; day <= daysInMonth; day++)
                 {
-                    var header = dayHeaders[day - 1];
-                    if (header.IsHoliday)
+                    var dt = new DateTime(targetYear, targetMonth, day);
+                    bool isSunday = dt.DayOfWeek == DayOfWeek.Sunday;
+                    var matchingHoliday = monthHolidays.FirstOrDefault(h => dt.Date >= h.StartDate.Date && dt.Date <= h.EndDate.Date);
+                    bool isOfficialHoliday = matchingHoliday != null;
+
+                    if (isOfficialHoliday)
                     {
                         dailyStatus.Add("H");
+                        continue;
+                    }
+                    if (isSunday)
+                    {
+                        dailyStatus.Add("-");
                         continue;
                     }
 
@@ -770,9 +792,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                             }
                             else
                             {
-                                // One present & one absent/other, or partial -> Half Day
+                                // One present & one absent/other, or student half-day -> HalfDay (HD)
                                 dailyStatus.Add("HD");
-                                halfDayCount++;
+                                leaveCount++;
                             }
                         }
                         else
@@ -792,14 +814,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                             else
                             {
                                 dailyStatus.Add("HD");
-                                halfDayCount++;
+                                leaveCount++;
                             }
                         }
                     }
                 }
 
-                int markedCount = presentCount + absentCount + halfDayCount;
-                double percentage = markedCount > 0 ? Math.Round((double)(presentCount + 0.5 * halfDayCount) / markedCount * 100, 1) : 0;
+                int markedCount = presentCount + absentCount + leaveCount;
+                double percentage = markedCount > 0 ? Math.Round((double)(presentCount + 0.5 * leaveCount) / markedCount * 100, 1) : 0;
 
                 studentRows.Add(new StudentMonthlyGridRowDto
                 {
@@ -811,9 +833,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                     DailyStatus = dailyStatus,
                     PresentCount = presentCount,
                     AbsentCount = absentCount,
-                    HalfDayCount = halfDayCount,
+                    HalfDayCount = leaveCount,
+                    LeaveCount = leaveCount,
                     LateCount = 0,
-                    LeaveCount = 0,
                     Percentage = percentage
                 });
 

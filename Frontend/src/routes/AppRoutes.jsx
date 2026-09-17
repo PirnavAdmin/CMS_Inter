@@ -31,6 +31,7 @@ import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
+import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
@@ -172,6 +173,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/settings" element={<SettingsPage />} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
         <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
+        <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
         <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
         <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<NumberSeriesPage mode="edit" />} />
         <Route path="/dashboard/settings/number-series/:seriesId" element={<NumberSeriesPage mode="detail" />} />

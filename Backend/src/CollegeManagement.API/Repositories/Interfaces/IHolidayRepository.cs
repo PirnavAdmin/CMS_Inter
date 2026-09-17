@@ -16,5 +16,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<Holiday> CreateAsync(Holiday holiday);
         Task<Holiday?> UpdateAsync(int id, Holiday updated);
         Task<bool> DeleteAsync(int id);
+        Task<(bool IsHoliday, string? HolidayName, string? HolidayType)> IsHolidayAsync(DateTime date, int? boardId = null, int? academicYearId = null, string? appliesTo = null);
+        Task<IEnumerable<Holiday>> GetHolidaysBetweenDatesAsync(DateTime startDate, DateTime endDate, int? boardId = null, int? academicYearId = null, string? appliesTo = null);
     }
 }
