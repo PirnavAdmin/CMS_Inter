@@ -362,19 +362,21 @@ namespace CollegeManagement.API.Repositories.Implementations
             var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var prefix = isTeaching ? "PCTCH" : "PCNT";
 
-            // Find maximum existing sequential numeric suffix
-            var existingIds = await _context.Staffs
-                .Where(s => s.EmployeeId.StartsWith(prefix))
-                .Select(s => s.EmployeeId)
+            // Find maximum existing sequential numeric suffix for the staff type
+            var existingStaff = await _context.Staffs
+                .Where(s => !s.IsDeleted)
+                .Select(s => new { s.EmployeeId, s.StaffType })
                 .ToListAsync();
 
             int maxNumber = 0;
-            foreach (var id in existingIds)
+            foreach (var s in existingStaff)
             {
-                if (id.Length > prefix.Length)
+                var id = s.EmployeeId?.Trim() ?? string.Empty;
+                var currentIsTeaching = !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+                if (currentIsTeaching == isTeaching || id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    var numPart = id.Substring(prefix.Length);
-                    if (int.TryParse(numPart, out int parsedNum) && parsedNum > maxNumber)
+                    var match = System.Text.RegularExpressions.Regex.Match(id, @"\d+");
+                    if (match.Success && int.TryParse(match.Value, out int parsedNum) && parsedNum > maxNumber && parsedNum < 100000)
                     {
                         maxNumber = parsedNum;
                     }

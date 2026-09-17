@@ -482,6 +482,8 @@ export const normalizeStaffRecord = (raw) => {
 export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existingRecords = []) => {
   const isTeaching = String(staffType || "").toLowerCase().includes("teach") && !String(staffType || "").toLowerCase().includes("non");
   const prefix = isTeaching ? "PCTCH" : "PCNT";
+  const seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+  const seriesKey = isTeaching ? "teaching-staff-id" : "non-teaching-staff-id";
 
   // Helper to compute sequential ID from existing records
   const computeFromRecords = () => {
@@ -491,8 +493,11 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
     const relevant = existingRecords.filter((r) => {
       if (!r) return false;
       const type = String(r.staffType || "").toLowerCase();
-      if (isTeaching) return !type.includes("non");
-      return type.includes("non");
+      const empId = String(r.employeeId || "").toUpperCase();
+      if (isTeaching) {
+        return (!type.includes("non") && type.includes("teach")) || empId.startsWith("PCTCH");
+      }
+      return type.includes("non") || empId.startsWith("PCNT");
     });
     let maxSeq = 0;
     for (const r of relevant) {
@@ -500,12 +505,12 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
       const match = empId.match(/(\d+)/);
       if (match) {
         const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > maxSeq && num < 1000) {
+        if (!isNaN(num) && num > maxSeq && num < 100000) {
           maxSeq = num;
         }
       }
     }
-    const nextSeq = maxSeq > 0 ? maxSeq + 1 : (relevant.length > 0 ? relevant.length + 1 : 1);
+    const nextSeq = maxSeq > 0 ? maxSeq + 1 : 1;
     return `${prefix}${String(nextSeq).padStart(4, "0")}`;
   };
 
@@ -519,12 +524,6 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
       if (raw && (typeof raw === "string" || typeof raw === "number")) {
         const str = String(raw).trim();
         if (str && !str.includes("[object")) {
-          const match = str.match(/(\d+)/);
-          const num = match ? parseInt(match[1], 10) : 0;
-          if (num >= 40 && Array.isArray(existingRecords) && existingRecords.length < 25) {
-            const calculated = computeFromRecords();
-            if (calculated) return calculated;
-          }
           return str;
         }
       }
@@ -533,17 +532,21 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
 
   // 2. Try Settings Number Series API
   try {
-    const nsRes = await apiClient.get(apiEndpoints.numberSeries.getByCode("EMPLOYEE_ID"));
+    const nsRes = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode));
     if (nsRes?.data) {
       const live = nsRes.data.livePreview || nsRes.data.currentExample || nsRes.data.generatedNumber;
       if (live && typeof live === "string" && !live.includes("[object")) {
-        const match = live.match(/(\d+)/);
-        const num = match ? parseInt(match[1], 10) : 0;
-        if (num >= 40 && Array.isArray(existingRecords) && existingRecords.length < 25) {
-          const calculated = computeFromRecords();
-          if (calculated) return calculated;
-        }
         return live.trim();
+      }
+    }
+  } catch {}
+
+  try {
+    const nsRes2 = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesKey));
+    if (nsRes2?.data) {
+      const live2 = nsRes2.data.livePreview || nsRes2.data.currentExample || nsRes2.data.generatedNumber;
+      if (live2 && typeof live2 === "string" && !live2.includes("[object")) {
+        return live2.trim();
       }
     }
   } catch {}
@@ -553,13 +556,8 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
   if (calculated) return calculated;
 
   // 4. Fallback to Local Number Series Settings
-  const localVal = generateNextNumber("employee-id");
+  const localVal = generateNextNumber(seriesKey);
   if (localVal && !String(localVal).includes("[object")) {
-    const match = String(localVal).match(/(\d+)/);
-    const num = match ? parseInt(match[1], 10) : 0;
-    if (num >= 40 && Array.isArray(existingRecords) && existingRecords.length < 25) {
-      return `${prefix}0001`;
-    }
     return String(localVal).trim();
   }
   return isTeaching ? "PCTCH0001" : "PCNT0001";
@@ -666,6 +664,7 @@ const teachingFields = [
 ];
 
 const nonTeachingSteps = [
+  // Step 0: Personal Information
   [
     ["board", "Board Name", "select", [], true],
     ["employeeId", "Employee ID"],
@@ -682,6 +681,7 @@ const nonTeachingSteps = [
     ["pan", "PAN Number", "text", [], false],
     ["profilePhoto", "Profile Photo", "file", [], false],
   ],
+  // Step 1: Contact & Address
   [
     ["mobile", "Mobile"],
     ["email", "Email", "email", [], false],
@@ -693,6 +693,7 @@ const nonTeachingSteps = [
     ["currentAddress", "Current Address", "textarea"],
     ["permanentAddress", "Permanent Address", "textarea", [], false],
   ],
+  // Step 2: Employment Details (Job Details)
   [
     ["department", "Department", "search-select", nonTeachingDepartments, true],
     ["designation", "Designation", "search-select", nonTeachingDesignations, true],
@@ -701,6 +702,8 @@ const nonTeachingSteps = [
     ["experience", "Experience", "text", [], false],
     ["status", "Status", "select", ["Active", "Inactive"], true, "start-new-row"],
   ],
+  /*
+  // Step 4 (Salary & Bank) is commented out as salary structure is assigned in a separate module
   [
     ["salaryStructure", "Salary Structure", "text", [], false],
     ["basicSalary", "Basic Salary", "number", [], false],
@@ -714,6 +717,8 @@ const nonTeachingSteps = [
     ["esiNumber", "ESI Number", "text", [], false],
     ["uanNumber", "UAN Number", "text", [], false],
   ],
+  */
+  // Step 3 (formerly Step 4): Documents
   [
     ["aadhaarDocument", "Aadhaar", "file", [], false],
     ["panDocument", "PAN", "file", [], false],
@@ -724,6 +729,7 @@ const nonTeachingSteps = [
     ["drivingLicence", "Driving Licence", "file", [], false],
     ["otherDocuments", "Other Documents", "file", [], false],
   ],
+  // Step 4 (formerly Step 5): Emergency Contact
   [
     ["emergencyName", "Contact Name", "text", [], false],
     ["emergencyRelationship", "Relationship", "text", [], false],
@@ -732,6 +738,33 @@ const nonTeachingSteps = [
     ["emergencyAddress", "Address", "textarea", [], false],
   ],
 ];
+
+export const getNonTeachingStepFields = (stepIndex, values = {}) => {
+  const isTransport =
+    String(values?.department || "").trim().toLowerCase().includes("transport") ||
+    String(values?.designation || "").trim().toLowerCase().includes("driver");
+
+  if (stepIndex === 2) {
+    const base = [
+      ["department", "Department", "search-select", nonTeachingDepartments, true],
+      ["designation", "Designation", "search-select", nonTeachingDesignations, true],
+    ];
+    if (isTransport) {
+      base.push(
+        ["drivingLicenseNumber", "Driver's License Number", "text", [], true],
+        ["drivingLicenseExpiryDate", "License Expiry Date", "date", [], true]
+      );
+    }
+    base.push(
+      ["dateOfJoining", "Date of Joining", "date", [], true],
+      ["qualification", "Qualification", "text", [], true],
+      ["experience", "Experience", "text", [], false],
+      ["status", "Status", "select", ["Active", "Inactive"], true, "start-new-row"]
+    );
+    return base;
+  }
+  return nonTeachingSteps[stepIndex] || [];
+};
 
 const portalSteps = [
   "Personal Details",
@@ -1392,6 +1425,21 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
         const num = Number(strVal);
         if (isNaN(num) || num < 0) {
           newErrors[name] = "Salary must be a positive number";
+        }
+      }
+
+      // Driver's License Number
+      if (name === "drivingLicenseNumber" || name === "drivingLicence") {
+        if (strVal.length < 3) {
+          newErrors[name] = "Please enter a valid Driver's License Number";
+        }
+      }
+
+      // License Expiry Date
+      if (name === "drivingLicenseExpiryDate" || name === "licenseExpiryDate") {
+        const expDate = new Date(strVal);
+        if (isNaN(expDate.getTime())) {
+          newErrors[name] = "Please enter a valid License Expiry Date";
         }
       }
     }
@@ -3188,7 +3236,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
     "Personal Information",
     "Contact & Address",
     "Employment Details",
-    "Salary & Bank",
+    // "Salary & Bank", // Commented out per requirement: salary structure is assigned in separate module
     "Documents",
     "Emergency Contact",
     "Review",
@@ -3278,7 +3326,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
   }, [values.pin]);
 
   const next = () => {
-    const currentFields = nonTeachingSteps[step] || [];
+    const currentFields = getNonTeachingStepFields(step, values);
     const stepErrors = validateStepFields(currentFields, values, activeBoardName);
 
     if (Object.keys(stepErrors).length > 0) {
@@ -3290,15 +3338,15 @@ function NonTeachingForm({ records, setRecords, existing }) {
     setErrors({});
     if (editingFromReview) {
       setEditingFromReview(false);
-      setStep(6);
+      setStep(labels.length - 1);
       return;
     }
     setStep((s) => s + 1);
   };
 
   const save = async () => {
-    for (let i = 0; i < 6; i++) {
-      const stepFields = nonTeachingSteps[i] || [];
+    for (let i = 0; i < labels.length - 1; i++) {
+      const stepFields = getNonTeachingStepFields(i, values);
       const stepErrors = validateStepFields(stepFields, values, activeBoardName);
       if (Object.keys(stepErrors).length > 0) {
         setErrors(stepErrors);
@@ -3391,12 +3439,12 @@ function NonTeachingForm({ records, setRecords, existing }) {
             <Building2 />
             <div>
               <h2>{labels[step]}</h2>
-              <p>Step {step + 1} of 7</p>
+              <p>Step {step + 1} of {labels.length}</p>
             </div>
           </header>
-          {step < 6 ? (
+          {step < labels.length - 1 ? (
             <div className="staff-form-grid">
-              {nonTeachingSteps[step].map((f) => (
+              {getNonTeachingStepFields(step, values).map((f) => (
                 <Field
                   key={f[0]}
                   item={f}
@@ -3417,7 +3465,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 ...values,
                 fullName: [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" "),
               }}
-              groups={labels.slice(0, 6).map((label, index) => [label, nonTeachingSteps[index]])}
+              groups={labels.slice(0, labels.length - 1).map((label, index) => [label, getNonTeachingStepFields(index, values)])}
               onEdit={(targetStep) => {
                 setEditingFromReview(true);
                 setStep(targetStep);
@@ -3430,8 +3478,8 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 <ChevronLeft /> Previous
               </button>
             ) : null}
-            <button className="cms-btn cms-btn-primary" onClick={step === 6 ? save : next}>
-              {step === 6 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Review" : "Next"}
+            <button className="cms-btn cms-btn-primary" onClick={step === labels.length - 1 ? save : next}>
+              {step === labels.length - 1 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Review" : "Next"}
               <ChevronRight />
             </button>
           </footer>
