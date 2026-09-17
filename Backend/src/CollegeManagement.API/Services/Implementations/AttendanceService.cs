@@ -854,6 +854,192 @@ namespace CollegeManagement.API.Services.Implementations
         }
 
         /// <summary>
+        /// Bulk saves/updates session-based attendance records for Admin in a single database transaction.
+        /// </summary>
+        public async Task<int> AdminBulkSaveStudentAttendanceAsync(AdminBulkSaveStudentAttendanceRequest request, string userName, int? userId = null)
+        {
+            if (request == null)
+            {
+                throw new ValidationException("Request body cannot be null.");
+            }
+            if (request.Attendances == null || !request.Attendances.Any())
+            {
+                throw new ValidationException("Attendances list cannot be null or empty.");
+            }
+
+            var date = request.AttendanceDate.Date;
+
+            if (userId.HasValue)
+            {
+                var userExists = await _context.Users.AnyAsync(u => u.UserId == userId.Value);
+                if (!userExists)
+                {
+                    userId = null; // Prevent FK constraint failure
+                }
+            }
+
+            var studentIds = request.Attendances.Select(a => a.StudentId).Distinct().ToList();
+
+            // 1. Fetch all active students in ONE query
+            var students = await _context.Students
+                .Where(s => studentIds.Contains(s.StudentId) && s.IsActive)
+                .ToDictionaryAsync(s => s.StudentId);
+
+            if (!students.Any())
+            {
+                throw new ValidationException("No matching active students found.");
+            }
+
+            // 2. Fetch existing attendances for these students on this date in ONE query
+            var existingAttendances = await _context.Attendances
+                .Where(a => a.AttendanceDate.Date == date && studentIds.Contains(a.StudentId) && a.IsActive)
+                .ToListAsync();
+
+            // 3. Fetch valid reference IDs in ONE query to prevent FK constraint failures on dirty student data
+            var validGroupIds = (await _context.Groups.Select(g => g.GroupId).ToListAsync()).ToHashSet();
+            var validYearIds = (await _context.AcademicYears.Select(y => y.AcademicYearId).ToListAsync()).ToHashSet();
+            var validLevelIds = (await _context.AcademicLevels.Select(l => l.AcademicLevelId).ToListAsync()).ToHashSet();
+            var validBoardIds = (await _context.Boards.Select(b => b.BoardId).ToListAsync()).ToHashSet();
+            var validSectionIds = (await _context.Sections.Select(s => s.SectionId).ToListAsync()).ToHashSet();
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    int affectedCount = 0;
+                    var newAttendances = new List<Attendance>();
+                    var auditHistories = new List<AttendanceAuditHistory>();
+
+                    foreach (var item in request.Attendances)
+                    {
+                        if (!students.TryGetValue(item.StudentId, out var student))
+                            continue;
+
+                        // Helper to process session
+                        void ProcessSession(Enums.StudentAttendanceSession session, Enums.AttendanceStatus? status)
+                        {
+                            if (!status.HasValue) return;
+
+                            var existing = existingAttendances.FirstOrDefault(a => a.StudentId == item.StudentId && a.Session == session);
+                            if (existing != null)
+                            {
+                                var oldStatus = existing.Status;
+                                if (oldStatus != status.Value || existing.Remarks != item.Remarks)
+                                {
+                                    existing.Status = status.Value;
+                                    existing.Remarks = item.Remarks;
+                                    existing.UpdatedAt = DateTime.UtcNow;
+                                    existing.ModifiedByUserId = userId;
+                                    existing.ModifiedAt = DateTime.UtcNow;
+                                    _context.Attendances.Update(existing);
+
+                                    auditHistories.Add(new AttendanceAuditHistory
+                                    {
+                                        EntityType = "Student",
+                                        EntityId = existing.AttendanceId,
+                                        StudentId = item.StudentId,
+                                        AttendanceDate = date,
+                                        OldStatus = (byte)oldStatus,
+                                        NewStatus = (byte)status.Value,
+                                        Action = "UPDATE",
+                                        Description = item.Remarks ?? $"Status updated from {oldStatus} to {status.Value} for {session}.",
+                                        ModifiedByUserId = userId,
+                                        ModifiedByUserName = userName,
+                                        CreatedAt = DateTime.UtcNow
+                                    });
+                                    affectedCount++;
+                                }
+                            }
+                            else
+                            {
+                                int? boardId = request.BoardId ?? student.BoardId;
+                                if (boardId.HasValue && !validBoardIds.Contains(boardId.Value)) boardId = null;
+
+                                int? yearId = request.AcademicYearId ?? student.AcademicYearId;
+                                if (yearId.HasValue && !validYearIds.Contains(yearId.Value)) yearId = null;
+
+                                int? levelId = request.AcademicLevelId ?? student.AcademicLevelId;
+                                if (levelId.HasValue && !validLevelIds.Contains(levelId.Value)) levelId = null;
+
+                                int? groupId = request.GroupId ?? student.GroupId;
+                                if (groupId.HasValue && !validGroupIds.Contains(groupId.Value)) groupId = null;
+
+                                int? sectionId = request.SectionId ?? student.SectionId;
+                                if (sectionId.HasValue && !validSectionIds.Contains(sectionId.Value)) sectionId = null;
+
+                                var newRecord = new Attendance
+                                {
+                                    StudentId = item.StudentId,
+                                    Status = status.Value,
+                                    Remarks = item.Remarks,
+                                    Session = session,
+                                    AttendanceDate = date,
+                                    BoardId = boardId,
+                                    AcademicYearId = yearId,
+                                    AcademicLevelId = levelId,
+                                    GroupId = groupId,
+                                    SectionId = sectionId,
+                                    IsActive = true,
+                                    CreatedAt = DateTime.UtcNow,
+                                    ModifiedByUserId = userId,
+                                    ModifiedAt = DateTime.UtcNow
+                                };
+                                newAttendances.Add(newRecord);
+                                affectedCount++;
+                            }
+                        }
+
+                        ProcessSession(Enums.StudentAttendanceSession.Morning, item.MorningStatus);
+                        ProcessSession(Enums.StudentAttendanceSession.Afternoon, item.AfternoonStatus);
+                    }
+
+                    if (newAttendances.Any())
+                    {
+                        await _context.Attendances.AddRangeAsync(newAttendances);
+                        await _context.SaveChangesAsync();
+
+                        // Now add audit histories for newly inserted records
+                        foreach (var newRec in newAttendances)
+                        {
+                            auditHistories.Add(new AttendanceAuditHistory
+                            {
+                                EntityType = "Student",
+                                EntityId = newRec.AttendanceId,
+                                StudentId = newRec.StudentId,
+                                AttendanceDate = date,
+                                OldStatus = null,
+                                NewStatus = (byte)newRec.Status,
+                                Action = "CREATE",
+                                Description = newRec.Remarks ?? $"Attendance marked as {newRec.Status} for {newRec.Session}.",
+                                ModifiedByUserId = userId,
+                                ModifiedByUserName = userName,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                        }
+                    }
+
+                    if (auditHistories.Any())
+                    {
+                        await _context.AttendanceAuditHistories.AddRangeAsync(auditHistories);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                    _attendanceCache.InvalidateAll();
+                    return affectedCount;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+
+        /// <summary>
         /// Validates existence and updates the active status of an attendance record.
         /// </summary>
         public async Task<int> ChangeAttendanceActiveStatusAsync(int attendanceId, bool isActive, bool isAdmin, string userName)

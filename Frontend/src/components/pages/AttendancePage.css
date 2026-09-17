@@ -1812,3 +1812,104 @@
 .attendance-import-badge.error { background: #fee2e2; color: #b91c1c; }
 @media (max-width: 560px) { .attendance-import-summary { grid-template-columns: 1fr; } .attendance-import-modal .cms-modal-body { max-height: calc(100vh - 150px); } }
 
+/* Holiday Banner in Attendance Page */
+.att-holiday-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #92400e;
+  font-size: 0.9rem;
+}
+
+.att-holiday-banner-badge {
+  background: #f59e0b;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+/* Monthly Holiday Pill */
+.att-month-h {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  font-weight: 700 !important;
+  border: 1px solid #fde68a !important;
+}
+
+/* Timing Indicators in Daily Table */
+.att-time-late {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.att-time-early {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.att-time-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.att-time-tag.is-late {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.att-time-tag.is-early {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+/* Half-Day Pill & Summary */
+.att-month-hd {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  font-weight: 700 !important;
+  border: 1px solid #fde68a !important;
+}
+
+.att-summary-half-day {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+.att-summary-half-day .att-summary-icon {
+  background: #fef3c7 !important;
+  color: #d97706 !important;
+}
+
+/* Toolbar Quick Actions */
+.att-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.att-toolbar-actions .cms-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+}
+

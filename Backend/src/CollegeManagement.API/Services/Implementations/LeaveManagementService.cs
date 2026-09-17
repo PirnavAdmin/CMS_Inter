@@ -173,8 +173,10 @@ namespace CollegeManagement.API.Services.Implementations
                         // userName already resolved
                         for (var date = leave.StartDate.Date; date <= leave.EndDate.Date; date = date.AddDays(1))
                         {
-                            // Skip Sundays as per existing project convention
+                            // Skip Sundays and official holidays as per project convention
                             if (date.DayOfWeek == DayOfWeek.Sunday) continue;
+                            bool isHoliday = await _context.Holidays.AnyAsync(h => !h.IsDeleted && h.Status == "Active" && date >= h.StartDate.Date && date <= h.EndDate.Date && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"));
+                            if (isHoliday) continue;
 
                             var staffType = leave.Staff.StaffType.Equals("Teaching", StringComparison.OrdinalIgnoreCase) 
                                 ? CollegeManagement.API.Enums.StaffType.Teaching 

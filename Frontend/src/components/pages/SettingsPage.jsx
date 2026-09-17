@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays } from "lucide-react";
+import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import boardAcademicYearImage from "@/assets/settings-3d/board-academic-year.png";
 import numberSeriesImage from "@/assets/settings-3d/number-series.png";
@@ -49,6 +49,15 @@ export default function SettingsPage() {
       icon: CalendarDays,
       to: "/dashboard/settings/leave-types",
       buttonText: "Manage Leave Types",
+      primary: true,
+    },
+    {
+      id: "attendance-timing",
+      title: "Attendance Timing Configuration",
+      description: "Configure work shifts, check-in & check-out timings, late arrival thresholds, and early checkout rules for staff.",
+      icon: Clock,
+      to: "/dashboard/settings/attendance-timing",
+      buttonText: "Manage Timing Rules",
       primary: true,
     },
     {

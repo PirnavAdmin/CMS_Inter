@@ -23,6 +23,16 @@ namespace CollegeManagement.API.Enums
         /// <summary>
         /// The student is on approved leave.
         /// </summary>
-        Leave = 4
+        Leave = 4,
+
+        /// <summary>
+        /// The student attended half day (Morning or Afternoon session).
+        /// </summary>
+        HalfDay = 4,
+
+        /// <summary>
+        /// The day is an official institution holiday.
+        /// </summary>
+        Holiday = 5
     }
 }
