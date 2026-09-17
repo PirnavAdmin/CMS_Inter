@@ -464,8 +464,44 @@
 }
 
 /* Students Overview Card */
-.dashboard-area-chart-wrap {
+.dashboard-area-chart-container {
+  display: flex;
+  align-items: stretch;
   width: 100%;
+  height: 135px;
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-area-chart-yaxis {
+  height: 135px;
+  flex-shrink: 0;
+  overflow: visible;
+  user-select: none;
+  pointer-events: none;
+}
+
+.dashboard-area-chart-wrap {
+  flex: 1;
+  min-width: 0;
+  height: 135px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  cursor: grab;
+  user-select: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-area-chart-wrap:active {
+  cursor: grabbing;
+}
+
+.dashboard-area-chart-wrap::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .dashboard-students-chips {

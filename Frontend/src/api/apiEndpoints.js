@@ -538,6 +538,11 @@ export const apiEndpoints = {
     update: (id) => `/api/v1/attendance-timing-config/${id}`,
     delete: (id) => `/api/v1/attendance-timing-config/${id}`,
   },
+  roles: {
+    list: "/api/v1/roles",
+    getAll: "/api/v1/roles",
+    getById: (id) => `/api/v1/roles/${id}`,
+  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (

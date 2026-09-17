@@ -418,6 +418,9 @@ export const normalizeStaffRecord = (raw) => {
     department: r.department || personal.department || "Teaching Department",
     designation: r.designation || personal.designation || "Assistant Professor",
     staffType: r.staffType || "Teaching",
+    role: r.role || r.roleName || personal.role || (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"),
+    roleName: r.roleName || r.role || personal.role || (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"),
+    roleId: r.roleId || personal.roleId || (r.role === "Faculty" ? 4 : r.role === "HOD" ? 3 : r.role === "Accounts" ? 7 : r.role === "Examination Cell" ? 8 : r.role === "Library" ? 9 : r.role === "Placement Officer" ? 11 : r.role === "Cleaner" ? 13 : r.role === "Driver" ? 12 : r.role === "Hostel Warden" ? 10 : (r.staffType === "Non-Teaching" ? 13 : 4)),
     status: r.status || "Active",
     employmentType: r.employmentType || "Full Time",
     dateOfJoining: r.dateOfJoining || r.joiningDate || "—",
@@ -660,9 +663,25 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
   return true;
 };
 
+export const TEACHING_ROLE_NAMES = [
+  "Accounts",
+  "Examination Cell",
+  "Faculty",
+  "HOD",
+  "Library",
+  "Placement Officer",
+];
+
+export const NON_TEACHING_ROLE_NAMES = [
+  "Cleaner",
+  "Driver",
+  "Hostel Warden",
+];
+
 const teachingFields = [
   ["board", "Board Name", "select", [], true],
   ["employeeId", "Employee ID", "text", [], true],
+  ["role", "Role", "search-select", TEACHING_ROLE_NAMES, true],
   ["firstName", "First Name", "text", [], true],
   ["middleName", "Middle Name", "text", [], false],
   ["lastName", "Last Name", "text", [], true],
@@ -684,6 +703,7 @@ const nonTeachingSteps = [
   [
     ["board", "Board Name", "select", [], true],
     ["employeeId", "Employee ID"],
+    ["role", "Role", "search-select", NON_TEACHING_ROLE_NAMES, true],
     ["firstName", "First Name"],
     ["middleName", "Middle Name", "text", [], false],
     ["lastName", "Last Name"],
@@ -919,7 +939,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
           if (inputEl) inputEl.focus();
         }}
       >
-        <Search className="staff-search-icon" aria-hidden="true" size={14} />
+        <Search className="staff-search-icon" aria-hidden="true" size={13} />
         <input
           type="text"
           value={search}
@@ -938,13 +958,12 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             if (typeof onChange === "function") onChange(e.target.value);
             setOpen(true);
           }}
-          placeholder={`Search ${String(label || "").toLowerCase()}`}
+          placeholder={`Search or select ${String(label || "").toLowerCase()}...`}
           autoComplete="off"
         />
         <ChevronDown
           className="staff-dropdown-caret"
-          size={14}
-          style={{ cursor: "pointer", pointerEvents: "auto" }}
+          size={13}
           onClick={(e) => {
             e.stopPropagation();
             setOpen((prev) => !prev);
@@ -1306,6 +1325,53 @@ function useStaffTypeOptions(staffType) {
   return { departments, designations, loading };
 }
 
+function useStaffRoles(staffType) {
+  const isTeaching = staffType === "Teaching";
+  const defaultList = isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
+  const [roles, setRoles] = useState(defaultList);
+  const [roleObjects, setRoleObjects] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadRoles() {
+      try {
+        const res = await apiClient.get(apiEndpoints.roles?.list || "/api/v1/roles");
+        const data = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+        if (Array.isArray(data) && data.length > 0) {
+          const targetNames = isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
+          const targetNorms = targetNames.map((n) => n.toLowerCase().replace(/[-_\s]/g, ""));
+
+          const matched = data.filter((r) => {
+            const rName = (typeof r === "object" ? r.roleName || r.name : String(r)).toLowerCase().replace(/[-_\s]/g, "");
+            return targetNorms.includes(rName);
+          });
+
+          if (isMounted && matched.length > 0) {
+            setRoleObjects(matched);
+            const names = matched.map((r) => (typeof r === "object" ? r.roleName || r.name : String(r))).filter(Boolean);
+            const sortedNames = targetNames.filter((tn) =>
+              names.some((n) => n.toLowerCase().replace(/[-_\s]/g, "") === tn.toLowerCase().replace(/[-_\s]/g, ""))
+            );
+            setRoles(sortedNames.length > 0 ? sortedNames : names);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to fetch roles from API, using default role list:", err);
+      }
+      if (isMounted) {
+        setRoles(defaultList);
+      }
+    }
+    loadRoles();
+    return () => {
+      isMounted = false;
+    };
+  }, [staffType]);
+
+  return { roles, roleObjects };
+}
+
 function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") {
   const newErrors = {};
   for (const f of fieldsList) {
@@ -1525,6 +1591,7 @@ function Field({
   forceOptional = false,
   departmentOptions = null,
   designationOptions = null,
+  roleOptions = null,
   staffType = null,
 }) {
   const { boards, selectedBoard, setSelectedBoard } = useAcademicContext();
@@ -1572,6 +1639,14 @@ function Field({
 
   const rawOpts = useMemo(() => {
     if (name === "board") return contextBoardOpts;
+
+    if (name === "role") {
+      if (Array.isArray(roleOptions) && roleOptions.length > 0) {
+        const liveRoleNames = roleOptions.map((r) => (typeof r === "object" ? r.roleName || r.name : String(r))).filter(Boolean);
+        return Array.from(new Set(liveRoleNames));
+      }
+      return isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
+    }
 
     if (name === "department") {
       if (Array.isArray(departmentOptions) && departmentOptions.length > 0) {
@@ -1630,7 +1705,7 @@ function Field({
     }
 
     return options;
-  }, [name, contextBoardOpts, departmentOptions, designationOptions, options, isTeaching, safeValues.department]);
+  }, [name, contextBoardOpts, roleOptions, departmentOptions, designationOptions, options, isTeaching, safeValues.department]);
 
   const opts = Array.isArray(rawOpts) ? rawOpts : [];
 
@@ -1664,6 +1739,23 @@ function Field({
     if (typeof setValues === "function") {
       setValues((v) => {
         const prev = v && typeof v === "object" ? v : {};
+        if (name === "role") {
+          const matchedRole = Array.isArray(roleOptions)
+            ? roleOptions.find((r) => {
+                if (typeof r === "object") {
+                  return (r.roleName || r.name) === value || String(r.roleId || r.id) === String(value);
+                }
+                return r === value;
+              })
+            : null;
+          const roleIdVal = typeof matchedRole === "object" ? (matchedRole?.roleId || matchedRole?.id) : undefined;
+          return {
+            ...prev,
+            role: value,
+            roleName: value,
+            ...(roleIdVal ? { roleId: Number(roleIdVal) } : {}),
+          };
+        }
         if (name === "department") {
           return { ...prev, department: value, designation: "", allocatedSubjects: [], subjects: [] };
         }
@@ -1757,10 +1849,21 @@ function Field({
         {label} {required ? <b className="required-star" style={{ color: "#ef4444", marginLeft: "2px", fontWeight: "bold" }}>*</b> : null}
       </span>
       {type === "select" ? (
-        <select value={val} onChange={(e) => change(e.target.value)} style={errorStyle}>
-          <option value="">Select {label}</option>
+        <select
+          value={val}
+          onChange={(e) => change(e.target.value)}
+          style={{
+            ...errorStyle,
+            color: val ? "var(--cms-text)" : "var(--cms-muted, #738065)",
+          }}
+        >
+          <option value="" disabled hidden style={{ color: "var(--cms-muted, #738065)" }}>
+            Select {label}
+          </option>
           {opts.map((o) => (
-            <option key={o} value={o}>{o}</option>
+            <option key={o} value={o} style={{ color: "var(--cms-text)" }}>
+              {o}
+            </option>
           ))}
         </select>
       ) : type === "search-select" ? (
@@ -3136,12 +3239,16 @@ function TeachingForm({ records, setRecords, existing }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
   const { departments: apiDepts, designations: apiDesigs } = useStaffTypeOptions("Teaching");
+  const { roles: apiRoles, roleObjects: apiRoleObjects } = useStaffRoles("Teaching");
   const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
   const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || activeBoardCode || "";
   const activeBoardId = selectedBoard?.id || selectedBoard?.boardId || undefined;
   const [values, setValues] = useState(
     existing || {
       staffType: "Teaching",
+      role: "",
+      roleName: "",
+      roleId: undefined,
       employeeId: "",
       board: activeBoardName,
       boardName: activeBoardName,
@@ -3194,8 +3301,14 @@ function TeachingForm({ records, setRecords, existing }) {
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId || "Teaching Staff";
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
 
+    const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
+    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Faculty" ? 4 : values.role === "HOD" ? 3 : values.role === "Accounts" ? 7 : values.role === "Examination Cell" ? 8 : values.role === "Library" ? 9 : values.role === "Placement Officer" ? 11 : 4));
+
     const payload = {
       ...values,
+      role: values.role || "Faculty",
+      roleName: values.roleName || values.role || "Faculty",
+      roleId: Number(resolvedRoleId),
       boardCode: resolvedCode !== "—" ? resolvedCode : values.boardCode,
       fullName,
       staffType: "Teaching",
@@ -3294,6 +3407,7 @@ function TeachingForm({ records, setRecords, existing }) {
                 forceOptional={false}
                 departmentOptions={apiDepts}
                 designationOptions={apiDesigs}
+                roleOptions={apiRoleObjects.length > 0 ? apiRoleObjects : apiRoles}
                 staffType="Teaching"
               />
             ))}
@@ -3319,6 +3433,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
   const { departments: apiDepts, designations: apiDesigs } = useStaffTypeOptions("Non-Teaching");
+  const { roles: apiRoles, roleObjects: apiRoleObjects } = useStaffRoles("Non-Teaching");
   const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
   const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || activeBoardCode || "";
   const activeBoardId = selectedBoard?.id || selectedBoard?.boardId || undefined;
@@ -3336,6 +3451,9 @@ function NonTeachingForm({ records, setRecords, existing }) {
   const [values, setValues] = useState(
     existing || {
       staffType: "Non-Teaching",
+      role: "",
+      roleName: "",
+      roleId: undefined,
       employeeId: "",
       board: activeBoardName,
       boardName: activeBoardName,
@@ -3449,8 +3567,14 @@ function NonTeachingForm({ records, setRecords, existing }) {
 
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
+    const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
+    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : 13));
+
     const payload = {
       ...values,
+      role: values.role || "Cleaner",
+      roleName: values.roleName || values.role || "Cleaner",
+      roleId: Number(resolvedRoleId),
       boardCode: resolvedCode !== "—" ? resolvedCode : values.boardCode,
       fullName,
       staffType: "Non-Teaching",
@@ -3546,6 +3670,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
                   forceOptional={false}
                   departmentOptions={apiDepts}
                   designationOptions={apiDesigs}
+                  roleOptions={apiRoleObjects.length > 0 ? apiRoleObjects : apiRoles}
                   staffType="Non-Teaching"
                 />
               ))}

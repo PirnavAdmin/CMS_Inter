@@ -8,7 +8,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES } from "@/components/pages/TemplatesPage.jsx";
 import { certificates as mockCertificates, students as mockStudents } from "@/data/mockData.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
+import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
 import { generateQrCodeSvg } from "@/utils/qrCodeGenerator.js";
 import createCertificateIcon from "@/assets/sidebar-3d/certificates.png";
 import certificateRecordsIcon from "@/assets/settings-3d/audit-logs.png";
@@ -513,7 +513,7 @@ function formatDateDdMmYyyy(value) {
 const baseFormFields = [
   { name: "admissionNo", label: "Admission No.", type: "text", placeholder: "Enter admission number", required: true },
   { name: "type", label: "Certificate Type", type: "select", required: true },
-  { name: "purpose", label: "Purpose", required: true },
+  { name: "purpose", label: "Purpose", placeholder: "Purpose", required: false },
   { name: "requestDate", label: "Request Date", type: "date", required: true },
   { name: "remarks", label: "Remarks" },
 ];
@@ -523,9 +523,9 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
   const [highlighted, setHighlighted] = useState(0);
   const query = String(value || "").trim().toLowerCase();
   const matches = useMemo(() => {
-    if (!query) return students.slice(0, 8);
+    if (!query) return students;
     return students.filter((student) => [student.admissionNo, student.name, student.rollNo]
-      .some((entry) => String(entry || "").toLowerCase().includes(query))).slice(0, 8);
+      .some((entry) => String(entry || "").toLowerCase().includes(query)));
   }, [query, students]);
 
   const choose = (student) => {
@@ -1472,7 +1472,7 @@ function buildPrintHtml(record) {
         <header class="cert-header">
           <div class="cert-header-grid">
             <div class="cert-header-left">
-              <img src="${pirnavCollegesLogo}" alt="Pirnav College" class="cert-logo-img" />
+              <img src="${pirnavCollegeCrest}" alt="Pirnav College" class="cert-logo-img" />
             </div>
             <div class="cert-header-center">
               <h1 class="cert-institution-name" style="color: ${borderColor}">PIRNAV COLLEGE</h1>
@@ -1952,14 +1952,15 @@ export default function CertificatesPage() {
   const visibleBulkStudents = useMemo(() => {
     const normalized = (value) => String(value || "").trim().toLocaleLowerCase();
     const search = normalized(bulkStudentSearch);
-    return bulkStudentRows.filter((student) => (
-      (!bulkStudentFilters.academicYear || !student.academicYear || normalized(student.academicYear) === normalized(bulkStudentFilters.academicYear))
-      && (!bulkStudentFilters.board || !student.board || normalized(student.board) === normalized(bulkStudentFilters.board))
-      && (!bulkStudentFilters.group || normalized(student.group) === normalized(bulkStudentFilters.group))
-      && (!bulkStudentFilters.section || normalized(student.section) === normalized(bulkStudentFilters.section))
-      && (!search || [student.admissionNo, student.name, student.rollNo, student.group, student.section]
-        .some((value) => normalized(value).includes(search)))
-    ));
+    return bulkStudentRows.filter((student) => {
+      const yearMatch = !bulkStudentFilters.academicYear || !student.academicYear || normalized(student.academicYear) === normalized(bulkStudentFilters.academicYear);
+      const boardMatch = !bulkStudentFilters.board || !student.board || normalized(student.board) === normalized(bulkStudentFilters.board) || normalized(student.board).includes(normalized(bulkStudentFilters.board)) || normalized(bulkStudentFilters.board).includes(normalized(student.board));
+      const groupMatch = !bulkStudentFilters.group || normalized(student.group) === normalized(bulkStudentFilters.group);
+      const sectionMatch = !bulkStudentFilters.section || normalized(student.section) === normalized(bulkStudentFilters.section);
+      const searchMatch = !search || [student.admissionNo, student.name, student.rollNo, student.group, student.section]
+        .some((value) => normalized(value).includes(search));
+      return yearMatch && boardMatch && groupMatch && sectionMatch && searchMatch;
+    });
   }, [bulkStudentFilters, bulkStudentRows, bulkStudentSearch]);
 
   const selectedBulkAdmissionNumbers = useMemo(
@@ -2016,9 +2017,7 @@ export default function CertificatesPage() {
       next.customType = "Enter the certificate type";
     }
 
-    if (purpose && purpose.length < 5) {
-      next.purpose = "Purpose should be at least 5 characters";
-    } else if (purpose.length > MAX_PURPOSE_LENGTH) {
+    if (purpose && purpose.length > MAX_PURPOSE_LENGTH) {
       next.purpose = `Purpose should not exceed ${MAX_PURPOSE_LENGTH} characters`;
     }
 
@@ -3402,7 +3401,7 @@ export default function CertificatesPage() {
                   <header className="cert-header">
                     <div className="cert-header-grid">
                       <div className="cert-header-left">
-                        <img src={pirnavCollegesLogo} alt="Pirnav College" className="cert-logo-img" />
+                        <img src={pirnavCollegeCrest} alt="Pirnav College" className="cert-logo-img" />
                       </div>
                       <div className="cert-header-center">
                         <h1 className="cert-institution-name" style={{ color: printTemplate.borderColor || "#1e3a8a" }}>PIRNAV COLLEGE</h1>
