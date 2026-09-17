@@ -26,6 +26,7 @@ import {
   Type,
   ChevronRight,
   ChevronLeft,
+  ArrowLeft,
   ArrowUp,
   ArrowDown,
   UploadCloud,
@@ -867,6 +868,26 @@ export default function TemplatesPage() {
       breadcrumb={["Home", "Settings", "Templates"]}
     >
       <main className="templates-main-container">
+        {/* Back Navigation */}
+        <div className="cms-back-nav-bar" style={{ marginBottom: "14px" }}>
+          <Link
+            to="/dashboard/settings"
+            className="cms-back-link"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              color: "var(--cms-primary, #355e3b)",
+              fontWeight: 650,
+              fontSize: "13px",
+              textDecoration: "none",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={16} /> Back to Settings
+          </Link>
+        </div>
+
         {/* Main Tabs Navigation */}
         <nav className="templates-tabs-bar" aria-label="Template Categories">
           <button

@@ -252,40 +252,56 @@ export const nonTeachingDesignations = [
 ];
 
 export const teachingDesignationMap = {
-  "Computer Science": ["HOD", "Assistant Professor", "Associate Professor", "Professor", "Lecturer", "Senior Lecturer", "Lab Incharge"],
-  Mathematics: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor", "Professor"],
-  Physics: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor", "Lab Incharge"],
-  Chemistry: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor", "Lab Incharge"],
-  Biology: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor", "Lab Incharge"],
-  Botany: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor"],
-  Zoology: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor"],
-  English: ["HOD", "Assistant Professor", "Associate Professor", "Lecturer", "Senior Lecturer"],
-  Commerce: ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  Economics: ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  Accountancy: ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  "Business Studies": ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  Statistics: ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  Electronics: ["HOD", "Assistant Professor", "Lecturer", "Lab Incharge"],
-  Hindi: ["HOD", "Lecturer", "Senior Lecturer"],
-  Telugu: ["HOD", "Lecturer", "Senior Lecturer"],
-  Sanskrit: ["HOD", "Lecturer", "Senior Lecturer"],
-  Urdu: ["HOD", "Lecturer", "Senior Lecturer"],
-  Languages: ["HOD", "Lecturer", "Senior Lecturer", "Assistant Professor"],
+  "Computer Science": ["Head of Department (HOD)", "Professor", "Associate Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer", "Lab Incharge"],
+  Mathematics: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer"],
+  Physics: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer", "Lab Incharge"],
+  Chemistry: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer", "Lab Incharge"],
+  Biology: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer", "Lab Incharge"],
+  Botany: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer"],
+  Zoology: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer"],
+  English: ["Head of Department (HOD)", "Professor", "Associate Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Commerce: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Economics: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Accountancy: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  "Business Studies": ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Statistics: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Electronics: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer", "Lab Incharge"],
+  Hindi: ["Head of Department (HOD)", "Senior Lecturer", "Lecturer"],
+  Telugu: ["Head of Department (HOD)", "Senior Lecturer", "Lecturer"],
+  Sanskrit: ["Head of Department (HOD)", "Senior Lecturer", "Lecturer"],
+  Urdu: ["Head of Department (HOD)", "Senior Lecturer", "Lecturer"],
+  Languages: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Civics: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  History: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  "Political Science": ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Sociology: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Biotechnology: ["Head of Department (HOD)", "Assistant Professor", "Lecturer", "Lab Incharge"],
 };
 
 export const nonTeachingDesignationMap = {
-  Administration: ["Administrative Officer", "Office Administrator", "Office Assistant", "Clerk", "Attender / Peon"],
-  "Accounts & Finance": ["Accountant", "Senior Accountant", "Finance Executive", "Cashier", "Office Assistant"],
-  Accounts: ["Accountant", "Senior Accountant", "Finance Executive", "Cashier", "Office Assistant"],
+  Administration: ["Administrative Officer", "Office Administrator", "Office Assistant", "Clerk", "Attender / Peon", "Data Entry Operator"],
+  "Accounts & Finance": ["Accountant", "Senior Accountant", "Junior Accountant", "Finance Executive", "Accounts Executive", "Cashier", "Office Assistant"],
+  Accounts: ["Accountant", "Senior Accountant", "Junior Accountant", "Finance Executive", "Accounts Executive", "Cashier", "Office Assistant"],
+  Finance: ["Accountant", "Senior Accountant", "Finance Executive", "Cashier"],
   Library: ["Librarian", "Assistant Librarian", "Library Assistant", "Attender"],
-  "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Attender / Peon"],
-  Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Attender / Peon"],
-  Transport: ["Transport Coordinator", "Transport Incharge", "Driver"],
-  Security: ["Security Officer", "Security Supervisor", "Security Guard"],
+  "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
+  Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
+  Transport: ["Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transportation: ["Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Security: ["Security Officer", "Security Supervisor", "Security Guard", "Watchman"],
   "Human Resources": ["HR Manager", "HR Executive", "Office Assistant"],
-  Admissions: ["Admissions Officer", "Admissions Counselor", "Data Entry Operator"],
-  "Hostel Management": ["Hostel Warden", "Assistant Warden", "Attender / Peon"],
+  HR: ["HR Manager", "HR Executive", "Office Assistant"],
+  Admissions: ["Admissions Officer", "Admissions Counselor", "Data Entry Operator", "Office Assistant"],
+  Hostel: ["Hostel Warden", "Assistant Warden", "Attender / Peon", "Cleaner"],
+  "Hostel Management": ["Hostel Warden", "Assistant Warden", "Attender / Peon", "Cleaner"],
   "Campus Operations": ["Operations Manager", "Facility Supervisor", "Office Assistant"],
+  Operations: ["Operations Manager", "Facility Supervisor", "Office Assistant"],
+  "Student Affairs": ["Student Affairs Officer", "Counselor", "Office Assistant"],
+  "IT & Systems Support": ["IT Support Executive", "System Administrator", "Lab Assistant"],
+  "IT Support": ["IT Support Executive", "System Administrator", "Lab Assistant"],
+  "Examinations Cell": ["Examination Incharge", "Data Entry Operator", "Clerk"],
+  Examinations: ["Examination Incharge", "Data Entry Operator", "Clerk"],
+  Housekeeping: ["Housekeeping Supervisor", "Cleaner", "Attender / Peon"],
 };
 
 export const isOther = (name) => {
@@ -862,31 +878,61 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
   }, []);
 
   const filteredOpts = useMemo(() => {
+    const withoutOther = safeOpts.filter((o) => {
+      const s = getOptLabel(o).toLowerCase().trim();
+      return s !== "other" && s !== "others";
+    });
     const q = (search || "").toLowerCase().trim();
-    const withoutOther = safeOpts.filter((o) => !isOther(o));
     if (!q) return withoutOther;
+
+    const currentSelectedLabel = (getOptLabel(value) || "").toLowerCase().trim();
+    const currentSelectedValue = (getOptValue(value) || "").toLowerCase().trim();
+    // If the search string matches current selected item's label/value (i.e. user just focused/clicked to open dropdown),
+    // show ALL available options so the user can easily switch to any other department or designation!
+    if (q === currentSelectedLabel || q === currentSelectedValue) {
+      return withoutOther;
+    }
+
     return withoutOther.filter((o) => {
       const lbl = getOptLabel(o).toLowerCase();
       const val = getOptValue(o).toLowerCase();
       return lbl.includes(q) || val.includes(q);
     });
-  }, [safeOpts, search]);
+  }, [safeOpts, search, value]);
 
   const handleSelect = (opt) => {
     const optVal = getOptValue(opt);
-    setSearch(getOptLabel(opt));
+    const optLbl = getOptLabel(opt);
+    setSearch(optLbl);
     if (typeof onChange === "function") onChange(optVal);
     setOpen(false);
   };
 
   return (
     <div className={`staff-custom-search-select ${hasError ? "has-error" : ""}`} ref={ref}>
-      <div className="staff-search-input-wrap" style={hasError ? { borderColor: "#ef4444" } : undefined}>
+      <div
+        className="staff-search-input-wrap"
+        style={{ ...(hasError ? { borderColor: "#ef4444" } : {}), cursor: "pointer" }}
+        onClick={() => {
+          setOpen((prev) => !prev);
+          const inputEl = ref.current?.querySelector("input");
+          if (inputEl) inputEl.focus();
+        }}
+      >
         <Search className="staff-search-icon" aria-hidden="true" size={14} />
         <input
           type="text"
           value={search}
-          onFocus={() => setOpen(true)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          onFocus={(e) => {
+            setOpen(true);
+            try {
+              e.target.select();
+            } catch {}
+          }}
           onChange={(e) => {
             setSearch(e.target.value);
             if (typeof onChange === "function") onChange(e.target.value);
@@ -895,7 +941,17 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
           placeholder={`Search ${String(label || "").toLowerCase()}`}
           autoComplete="off"
         />
-        <ChevronDown className="staff-dropdown-caret" size={14} />
+        <ChevronDown
+          className="staff-dropdown-caret"
+          size={14}
+          style={{ cursor: "pointer", pointerEvents: "auto" }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((prev) => !prev);
+            const inputEl = ref.current?.querySelector("input");
+            if (inputEl) inputEl.focus();
+          }}
+        />
       </div>
       {open ? (
         <div
@@ -907,13 +963,15 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             zIndex: 99999,
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
             border: "1px solid var(--cms-border, #d1d5db)",
+            maxHeight: "220px",
+            overflowY: "auto",
           }}
         >
           {filteredOpts.length > 0 ? (
             filteredOpts.map((o, idx) => {
               const optVal = getOptValue(o);
               const optLbl = getOptLabel(o);
-              const isSelected = value === optVal;
+              const isSelected = value === optVal || value === optLbl;
               return (
                 <div
                   key={`${optVal}-${idx}`}
@@ -922,6 +980,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
                     backgroundColor: isSelected ? "var(--cms-primary-soft, #f0fdf4)" : "#ffffff",
                     color: isSelected ? "var(--cms-primary, #355e3b)" : "var(--cms-text, #1f2937)",
                     fontWeight: isSelected ? "600" : "normal",
+                    cursor: "pointer",
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -1208,7 +1267,19 @@ function useStaffTypeOptions(staffType) {
             return isNonTeachingDesigName(desigName);
           }
         });
-        desigOpts = filteredDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean);
+        desigOpts = filteredDesigs
+          .map((d) =>
+            typeof d === "object"
+              ? {
+                  name: d.name || d.designationName,
+                  designationName: d.name || d.designationName,
+                  departmentName: d.departmentName || d.department || "",
+                  departmentId: d.departmentId || null,
+                  staffType: d.staffType || d.StaffType,
+                }
+              : d
+          )
+          .filter(Boolean);
       } catch (e) {
         console.warn("Failed to fetch designations from API:", e);
       }
@@ -1223,7 +1294,7 @@ function useStaffTypeOptions(staffType) {
 
       if (isMounted) {
         setDepartments(Array.from(new Set(deptOpts)));
-        setDesignations(Array.from(new Set(desigOpts)));
+        setDesignations(desigOpts);
         setLoading(false);
       }
     }
@@ -1516,26 +1587,57 @@ function Field({
     }
 
     if (name === "designation") {
-      const currentDept = safeValues.department;
-      let deptSpecific = [];
-      if (currentDept) {
-        deptSpecific = isTeaching
-          ? (teachingDesignationMap[currentDept] || [])
-          : (nonTeachingDesignationMap[currentDept] || []);
+      const currentDept = String(safeValues.department || "").trim();
+      const currentDeptNorm = currentDept.toLowerCase().replace(/[-_\s&]/g, "");
+
+      // 1. Check API designations specifically matching this department
+      let apiMatching = [];
+      if (currentDept && Array.isArray(designationOptions) && designationOptions.length > 0) {
+        apiMatching = designationOptions
+          .filter((d) => {
+            if (!d) return false;
+            const dDeptName = typeof d === "object" ? String(d.departmentName || d.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "") : "";
+            if (dDeptName && (dDeptName === currentDeptNorm || currentDeptNorm.includes(dDeptName) || dDeptName.includes(currentDeptNorm))) {
+              return true;
+            }
+            return false;
+          })
+          .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+          .filter(Boolean);
       }
 
+      // 2. Check map matching for this department
+      let mapMatching = [];
+      if (currentDept) {
+        const activeMap = isTeaching ? teachingDesignationMap : nonTeachingDesignationMap;
+        for (const [deptKey, desigs] of Object.entries(activeMap)) {
+          const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
+          if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
+            mapMatching = [...mapMatching, ...(Array.isArray(desigs) ? desigs : [])];
+          }
+        }
+      }
+
+      const deptSpecific = Array.from(new Set([...apiMatching, ...mapMatching]));
+      // If a department is selected and has specific designations, return ONLY those!
+      if (currentDept && deptSpecific.length > 0) {
+        return deptSpecific;
+      }
+
+      // 3. Fallback to general designations if no department is selected or no specific mapping
       const baseList = Array.isArray(designationOptions) && designationOptions.length > 0
         ? designationOptions
         : (Array.isArray(options) && options.length > 0 ? options : (isTeaching ? teachingDesignations : nonTeachingDesignations));
 
-      const filteredBase = baseList.filter((d) => {
-        const dName = typeof d === "object" ? d.name || d.designationName : String(d || "");
-        return isTeaching ? !isNonTeachingDesigName(dName) : isNonTeachingDesigName(dName);
-      });
+      const filteredBase = baseList
+        .filter((d) => {
+          const dName = typeof d === "object" ? d.name || d.designationName : String(d || "");
+          return isTeaching ? !isNonTeachingDesigName(dName) : isNonTeachingDesigName(dName);
+        })
+        .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+        .filter(Boolean);
 
-      const combined = [...deptSpecific, ...filteredBase];
-      const unique = Array.from(new Set(combined.length > 0 ? combined : (isTeaching ? teachingDesignations : nonTeachingDesignations)));
-      return unique;
+      return Array.from(new Set(filteredBase));
     }
 
     return options;
