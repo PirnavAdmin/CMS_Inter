@@ -41,6 +41,7 @@ import {
   XCircle,
   LogOut,
   AlertCircle,
+  ArrowRight,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
@@ -77,6 +78,22 @@ const studentSubtabs = [
   { id: "attendance", label: "Hostel Attendance Register", title: "Hostel Attendance Register", subtitle: "Biometric and roll call daily logs for resident hostellers", icon: Users },
   { id: "outpasses", label: "Outpass & Leave Management", title: "Outpass & Leave Requests", subtitle: "Manage student gate passes, weekend home permissions, emergency leaves, and warden approvals", icon: ArrowRightLeft },
   { id: "transfers", label: "Transfer & Vacate Student", title: "Hostel Transfers & Bed Vacations", subtitle: "Track inter-block migrations, room swaps, and official bed vacation applications", icon: RotateCcw },
+];
+
+// Reference Academic Year Months for Monthly Attendance
+const academicMonthOptions = [
+  { value: "2026-06", label: "June 2026", rangeText: "Jun 1, 2026 – Jun 30, 2026" },
+  { value: "2026-07", label: "July 2026", rangeText: "Jul 1, 2026 – Jul 31, 2026" },
+  { value: "2026-08", label: "August 2026", rangeText: "Aug 1, 2026 – Aug 31, 2026" },
+  { value: "2026-09", label: "September 2026", rangeText: "Sep 1, 2026 – Sep 30, 2026" },
+  { value: "2026-10", label: "October 2026", rangeText: "Oct 1, 2026 – Oct 31, 2026" },
+  { value: "2026-11", label: "November 2026", rangeText: "Nov 1, 2026 – Nov 30, 2026" },
+  { value: "2026-12", label: "December 2026", rangeText: "Dec 1, 2026 – Dec 31, 2026" },
+  { value: "2027-01", label: "January 2027", rangeText: "Jan 1, 2027 – Jan 31, 2027" },
+  { value: "2027-02", label: "February 2027", rangeText: "Feb 1, 2027 – Feb 28, 2027" },
+  { value: "2027-03", label: "March 2027", rangeText: "Mar 1, 2027 – Mar 31, 2027" },
+  { value: "2027-04", label: "April 2027", rangeText: "Apr 1, 2027 – Apr 30, 2027" },
+  { value: "2027-05", label: "May 2027", rangeText: "May 1, 2027 – May 31, 2027" },
 ];
 
 // Seed constants matching Screenshot 1 & 2 reference data
@@ -743,8 +760,13 @@ export default function HostelPage() {
 
   // Attendance specific state matching Screenshot 1 & 2
   const [attendanceShift, setAttendanceShift] = useState("night");
-  const [attendanceDate, setAttendanceDate] = useState("2026-09-16");
+  const [attendanceDate, setAttendanceDate] = useState("2026-09-17");
   const [attendanceFrequency, setAttendanceFrequency] = useState("daily");
+  const [attendanceMonth, setAttendanceMonth] = useState("2026-09");
+  const [customRangeStart, setCustomRangeStart] = useState("2026-09-01");
+  const [customRangeEnd, setCustomRangeEnd] = useState("2026-09-17");
+  const [appliedCustomRange, setAppliedCustomRange] = useState({ start: "2026-09-01", end: "2026-09-17" });
+  const [rangeError, setRangeError] = useState("");
   const [attendanceSearch, setAttendanceSearch] = useState("");
   const [attendanceBlock, setAttendanceBlock] = useState("Ramachandra Bhavan (Block A)");
   const [attendanceRoom, setAttendanceRoom] = useState("all");
@@ -1385,8 +1407,73 @@ export default function HostelPage() {
     showToast("Attendance log saved successfully!", "success");
   };
 
+  // ── Attendance Mode & Date Range Handlers ────────────────────────────
+  const handleSelectAttendanceFrequency = (mode) => {
+    setAttendanceFrequency(mode);
+    setRangeError("");
+    if (mode === "daily") {
+      if (!attendanceDate) setAttendanceDate("2026-09-17");
+    } else if (mode === "monthly") {
+      if (!attendanceMonth) setAttendanceMonth("2026-09");
+    } else if (mode === "custom") {
+      if (!customRangeStart && !customRangeEnd) {
+        setCustomRangeStart("2026-09-01");
+        setCustomRangeEnd("2026-09-17");
+        setAppliedCustomRange({ start: "2026-09-01", end: "2026-09-17" });
+      }
+    }
+  };
+
+  const handleCustomStartChange = (val) => {
+    setCustomRangeStart(val);
+    if (val && customRangeEnd && val > customRangeEnd) {
+      setRangeError("Start date cannot be after end date.");
+    } else {
+      setRangeError("");
+    }
+  };
+
+  const handleCustomEndChange = (val) => {
+    setCustomRangeEnd(val);
+    if (val && customRangeStart && val < customRangeStart) {
+      setRangeError("End date cannot be before start date.");
+    } else {
+      setRangeError("");
+    }
+  };
+
+  const handleApplyCustomRange = () => {
+    if (!customRangeStart || !customRangeEnd) {
+      setRangeError("Please select both start and end dates.");
+      showToast("Please select a valid date range.", "error");
+      return;
+    }
+    if (customRangeStart > customRangeEnd) {
+      setRangeError("Start date cannot be after end date.");
+      showToast("Start date cannot be after end date.", "error");
+      return;
+    }
+    setRangeError("");
+    setAppliedCustomRange({ start: customRangeStart, end: customRangeEnd });
+    showToast(`Applied date range: ${customRangeStart} → ${customRangeEnd}`, "success");
+  };
+
+  const handleClearCustomRange = () => {
+    setCustomRangeStart("");
+    setCustomRangeEnd("");
+    setRangeError("");
+  };
+
   const handleExportAttendanceReport = (filteredList) => {
     const shiftData = attendanceMap[attendanceShift] || {};
+    const selectedMonthObj = academicMonthOptions.find((m) => m.value === attendanceMonth);
+    const activePeriodLabel =
+      attendanceFrequency === "daily"
+        ? attendanceDate
+        : attendanceFrequency === "monthly"
+        ? (selectedMonthObj ? selectedMonthObj.label : attendanceMonth)
+        : `${appliedCustomRange.start || "start"}_to_${appliedCustomRange.end || "end"}`;
+
     const exportData = filteredList.map((s) => ({
       admissionNo: s.admissionNo || s.id,
       studentName: s.name,
@@ -1395,10 +1482,10 @@ export default function HostelPage() {
       attendanceStatus: shiftData[s.id]?.status || "Unmarked",
       inTime: shiftData[s.id]?.inTime || s.inTime || "07:00",
       shift: attendanceShift.toUpperCase(),
-      date: attendanceDate,
+      date: activePeriodLabel,
     }));
     exportCsv(
-      `hostel-attendance-${attendanceShift}-${attendanceDate}.csv`,
+      `hostel-attendance-${attendanceShift}-${String(activePeriodLabel).replace(/[^a-zA-Z0-9_-]/g, "_")}.csv`,
       exportData,
       [
         { key: "admissionNo", label: "Admission No" },
@@ -1408,9 +1495,10 @@ export default function HostelPage() {
         { key: "attendanceStatus", label: "Attendance Status" },
         { key: "inTime", label: "In Time" },
         { key: "shift", label: "Shift" },
-        { key: "date", label: "Date" },
+        { key: "date", label: "Date / Period" },
       ]
     );
+    showToast(`Exported ${attendanceShift} attendance log for ${activePeriodLabel}`);
   };
 
   // ═════════════════════════════════════════════════════════════════════
@@ -3957,22 +4045,29 @@ export default function HostelPage() {
             </button>
           </div>
 
-          {/* Right: Daily / Monthly toggle & Export Report */}
+          {/* Right: Daily / Monthly / Custom Range toggle & Export Report */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div className="cms-att-freq-compact">
+            <div className="cms-att-freq-compact" role="tablist" aria-label="Attendance Mode">
               <button
                 type="button"
                 className={`cms-att-freq-btn-compact ${attendanceFrequency === "daily" ? "is-active" : ""}`}
-                onClick={() => setAttendanceFrequency("daily")}
+                onClick={() => handleSelectAttendanceFrequency("daily")}
               >
                 Daily Attendance
               </button>
               <button
                 type="button"
                 className={`cms-att-freq-btn-compact ${attendanceFrequency === "monthly" ? "is-active" : ""}`}
-                onClick={() => setAttendanceFrequency("monthly")}
+                onClick={() => handleSelectAttendanceFrequency("monthly")}
               >
                 Monthly Attendance
+              </button>
+              <button
+                type="button"
+                className={`cms-att-freq-btn-compact ${attendanceFrequency === "custom" ? "is-active" : ""}`}
+                onClick={() => handleSelectAttendanceFrequency("custom")}
+              >
+                Custom Range
               </button>
             </div>
 
@@ -3987,7 +4082,7 @@ export default function HostelPage() {
         </div>
 
         {/* Filter Card / Bar */}
-        <div className="cms-att-filter-card-compact">
+        <div className={`cms-att-filter-card-compact ${attendanceFrequency === "custom" ? "has-custom-range" : ""}`}>
           {/* 1. SEARCH STUDENT */}
           <div>
             <label className="cms-att-filter-lbl-compact">SEARCH STUDENT</label>
@@ -4014,20 +4109,118 @@ export default function HostelPage() {
             </div>
           </div>
 
-          {/* 2. ATTENDANCE DATE * */}
+          {/* 2. DYNAMIC ATTENDANCE DATE / MONTH / DATE RANGE */}
           <div>
-            <label className="cms-att-filter-lbl-compact">
-              ATTENDANCE DATE <span style={{ color: "var(--cms-red)" }}>*</span>
-            </label>
-            <div style={{ position: "relative", width: "100%" }}>
-              <input
-                type="date"
-                value={attendanceDate}
-                onChange={(e) => setAttendanceDate(e.target.value)}
-                className="cms-alloc-input-compact"
-                style={{ height: 34, paddingLeft: 12, paddingRight: 12, fontSize: 12.5, fontWeight: 600 }}
-              />
-            </div>
+            {attendanceFrequency === "daily" && (
+              <>
+                <label className="cms-att-filter-lbl-compact">
+                  ATTENDANCE DATE <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <div style={{ position: "relative", width: "100%" }}>
+                  <input
+                    type="date"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                    className="cms-alloc-input-compact"
+                    style={{ height: 34, paddingLeft: 12, paddingRight: 12, fontSize: 12.5, fontWeight: 600 }}
+                  />
+                </div>
+              </>
+            )}
+
+            {attendanceFrequency === "monthly" && (
+              <>
+                <label className="cms-att-filter-lbl-compact">
+                  MONTH <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <div style={{ position: "relative", width: "100%" }}>
+                  <select
+                    value={attendanceMonth}
+                    onChange={(e) => setAttendanceMonth(e.target.value)}
+                    className="cms-alloc-select-compact"
+                    style={{ height: 34, fontSize: 12.5, fontWeight: 600 }}
+                  >
+                    {academicMonthOptions.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      pointerEvents: "none",
+                      color: "var(--cms-muted)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <ChevronDown size={14} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {attendanceFrequency === "custom" && (
+              <>
+                <label className="cms-att-filter-lbl-compact">
+                  DATE RANGE <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <div className="cms-att-date-range-group">
+                  <div className="cms-att-date-range-input-wrap">
+                    <input
+                      type="date"
+                      value={customRangeStart}
+                      onChange={(e) => handleCustomStartChange(e.target.value)}
+                      className={`cms-alloc-input-compact cms-att-range-input ${rangeError && !customRangeStart ? "is-invalid" : ""}`}
+                      aria-label="Start Date"
+                      title="Start Date"
+                    />
+                  </div>
+                  <span className="cms-att-range-arrow" aria-hidden="true">
+                    <ArrowRight size={13} />
+                  </span>
+                  <div className="cms-att-date-range-input-wrap">
+                    <input
+                      type="date"
+                      value={customRangeEnd}
+                      onChange={(e) => handleCustomEndChange(e.target.value)}
+                      className={`cms-alloc-input-compact cms-att-range-input ${rangeError && (!customRangeEnd || customRangeStart > customRangeEnd) ? "is-invalid" : ""}`}
+                      aria-label="End Date"
+                      title="End Date"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplyCustomRange}
+                    className="cms-att-range-apply-btn"
+                    title="Apply Range"
+                  >
+                    Apply
+                  </button>
+                  {(customRangeStart || customRangeEnd) && (
+                    <button
+                      type="button"
+                      onClick={handleClearCustomRange}
+                      className="cms-att-range-clear-btn"
+                      title="Clear Range"
+                      aria-label="Clear date range"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                {rangeError && (
+                  <div className="cms-att-range-error-text">
+                    <AlertCircle size={11} />
+                    <span>{rangeError}</span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* 3. HOSTEL BLOCK */}
@@ -4126,7 +4319,11 @@ export default function HostelPage() {
               </h3>
             </div>
             <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--cms-muted)" }}>
-              Date: {attendanceDate}
+              {attendanceFrequency === "daily" && `Date: ${attendanceDate}`}
+              {attendanceFrequency === "monthly" &&
+                `Month: ${academicMonthOptions.find((m) => m.value === attendanceMonth)?.label || "September 2026"}`}
+              {attendanceFrequency === "custom" &&
+                `Date Range: ${appliedCustomRange.start || "--"} → ${appliedCustomRange.end || "--"}`}
             </span>
           </div>
 
