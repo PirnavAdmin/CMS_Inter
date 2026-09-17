@@ -220,6 +220,23 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(results);
         }
 
+        /// <summary>
+        /// Saves or updates student attendance records in bulk for Admin (session-based).
+        /// </summary>
+        [HttpPost("admin/bulk-save")]
+        [Authorize(Roles = "Super Admin,Admin")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> AdminBulkSaveStudentAttendance([FromBody] AdminBulkSaveStudentAttendanceRequest request)
+        {
+            var userName = GetCurrentUserName();
+            var userId = GetCurrentUserId();
+            var count = await _attendanceService.AdminBulkSaveStudentAttendanceAsync(request, userName, userId);
+            return Ok(new { success = true, message = $"Attendance saved successfully for {count} records.", count });
+        }
+
         [HttpGet("defaulters")]
         [Authorize(Roles = "Super Admin,Admin,HOD")]
         [ProducesResponseType(typeof(IEnumerable<AttendanceDefaulterResponse>), StatusCodes.Status200OK)]

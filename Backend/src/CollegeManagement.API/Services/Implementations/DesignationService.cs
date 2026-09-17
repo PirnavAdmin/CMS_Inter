@@ -417,71 +417,35 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDesignationTemplateExcelAsync(string? staffType = null)
         {
             using var workbook = new ClosedXML.Excel.XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("Designations");
+            var ws = workbook.Worksheets.Add("Designations");
 
-            var headers = new[]
-            {
-                "Designation Name", "Designation Code", "Department Code", "Staff Type",
-                "Designation Level", "Reports To Designation Code", "Maximum Weekly Hours",
-                "Description", "Status", "Display Order"
-            };
+            var headers = new[] { "Designation Name", "Staff Type", "Status" };
 
             for (int col = 0; col < headers.Length; col++)
             {
-                var cell = worksheet.Cell(1, col + 1);
+                var cell = ws.Cell(1, col + 1);
                 cell.Value = headers[col];
                 cell.Style.Font.Bold = true;
+                cell.Style.Font.FontSize = 11;
                 cell.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
-                cell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromArgb(46, 125, 50);
+                cell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromArgb(30, 64, 175);
                 cell.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+                cell.Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
+                cell.Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
+                cell.Style.Border.OutsideBorderColor = ClosedXML.Excel.XLColor.FromArgb(203, 213, 225);
             }
+            ws.Row(1).Height = 26;
 
-            var cleanType = staffType?.Replace("-", "").Replace("_", "").Trim().ToLower();
-            bool isTeaching = cleanType == "teaching";
-            bool isNonTeaching = cleanType == "nonteaching";
-
-            var sampleRows = isTeaching
-                ? new[]
-                {
-                    new[] { "Professor", "DES_PROF", "MATH", "Teaching", "Level 1", "", "16", "Senior Academic Professor", "Active", "1" },
-                    new[] { "Associate Professor", "DES_ASSOC_PROF", "MATH", "Teaching", "Level 2", "DES_PROF", "16", "Associate Professor", "Active", "2" },
-                    new[] { "Assistant Professor", "DES_ASST_PROF", "CS", "Teaching", "Level 3", "DES_ASSOC_PROF", "18", "Assistant Professor", "Active", "3" },
-                    new[] { "Senior Lecturer", "DES_SR_LECT", "PHYS", "Teaching", "Level 3", "", "18", "Senior Lecturer", "Active", "4" },
-                    new[] { "Junior Lecturer", "DES_JR_LECT", "CHEM", "Teaching", "Level 4", "DES_SR_LECT", "20", "Junior Lecturer", "Active", "5" }
-                }
-                : isNonTeaching
-                ? new[]
-                {
-                    new[] { "Administrative Officer", "DES_ADMIN_OFF", "ADMIN", "Non-Teaching", "Level 1", "", "40", "Head of Administration", "Active", "1" },
-                    new[] { "Accountant", "DES_ACCT", "ACC_FIN", "Non-Teaching", "Level 2", "DES_ADMIN_OFF", "40", "Senior Accountant", "Active", "2" },
-                    new[] { "Librarian", "DES_LIB", "LIB", "Non-Teaching", "Level 2", "", "40", "Head Librarian", "Active", "3" },
-                    new[] { "Office Assistant", "DES_OFF_ASST", "ADMIN", "Non-Teaching", "Level 3", "DES_ADMIN_OFF", "40", "Office Assistant", "Active", "4" },
-                    new[] { "Attender / Peon", "DES_PEON", "MAINT", "Non-Teaching", "Level 5", "", "44", "Campus Attendant", "Active", "5" }
-                }
-                : new[]
-                {
-                    new[] { "Professor", "DES_PROF", "MATH", "Teaching", "Level 1", "", "16", "Senior Academic Professor", "Active", "1" },
-                    new[] { "Assistant Professor", "DES_ASST_PROF", "CS", "Teaching", "Level 3", "", "18", "Assistant Professor", "Active", "2" },
-                    new[] { "Administrative Officer", "DES_ADMIN_OFF", "ADMIN", "Non-Teaching", "Level 1", "", "40", "Head of Administration", "Active", "3" },
-                    new[] { "Accountant", "DES_ACCT", "ACC_FIN", "Non-Teaching", "Level 2", "", "40", "Senior Accountant", "Active", "4" },
-                    new[] { "Librarian", "DES_LIB", "LIB", "Non-Teaching", "Level 2", "", "40", "Head Librarian", "Active", "5" }
-                };
-
-            for (int r = 0; r < sampleRows.Length; r++)
-            {
-                for (int c = 0; c < sampleRows[r].Length; c++)
-                {
-                    worksheet.Cell(r + 2, c + 1).Value = sampleRows[r][c];
-                }
-            }
-
-            worksheet.Columns().AdjustToContents();
+            ws.Column(1).Width = 35;
+            ws.Column(2).Width = 20;
+            ws.Column(3).Width = 15;
+            ws.ShowGridLines = true;
 
             using var ms = new System.IO.MemoryStream();
             workbook.SaveAs(ms);
             var fileName = !string.IsNullOrWhiteSpace(staffType)
-                ? $"designation-import-template-{staffType.ToLower().Replace(" ", "-")}.xlsx"
-                : "designation-import-template.xlsx";
+                ? $"Designation_Import_Template_{staffType.ToLower().Replace(" ", "_")}.xlsx"
+                : "Designation_Import_Template.xlsx";
 
             return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }

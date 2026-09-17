@@ -34,6 +34,14 @@ public class CertificateService : ICertificateService
         return await _repository.GetByIdAsync(id, ct);
     }
 
+    public async Task<CertificatePreviewResponseDto?> GetPreviewAsync(
+        int id,
+        CancellationToken ct = default)
+    {
+        if (id <= 0) return null;
+        return await _repository.GetPreviewAsync(id, ct);
+    }
+
     public async Task<CertificateWorkflowStatsDto> GetWorkflowStatsAsync(
         CancellationToken ct = default)
     {

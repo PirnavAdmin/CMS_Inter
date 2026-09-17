@@ -26,8 +26,14 @@ namespace CollegeManagement.API.Services.Implementations
 
             return cleaned switch
             {
-                "employee-id" or "employee" or "employeeid" or "emp" => "EMPLOYEE_ID",
+                "teaching-staff-id" or "teaching-staff" or "teaching" or "tch" => "TEACHING_STAFF_ID",
+                "non-teaching-staff-id" or "non-teaching-staff" or "non-teaching" or "nonteaching" or "nt" => "NON_TEACHING_STAFF_ID",
+                "employee-id" or "employee" or "employeeid" or "emp" => "TEACHING_STAFF_ID",
                 "admission-no" or "admission" or "admissionno" or "adm" => "ADMISSION_NO",
+                "roll-no" or "rollno" or "roll" => "ROLL_NO",
+                "student-id" or "studentid" or "student" or "stu" => "STUDENT_ID",
+                "section-name" or "section" or "sectionname" or "sec" => "SECTION_NAME",
+                "exam-code" or "exam" or "examcode" => "EXAM_CODE",
                 "certificate-number" or "certificate-no" or "certificateno" or "certificate" or "cert" => "CERTIFICATE_NO",
                 "receipt-no" or "receipt" or "receiptno" or "fee-receipt" or "fee" => "RECEIPT_NO",
                 _ => codeOrSlug.Trim().ToUpperInvariant().Replace("-", "_")
@@ -38,8 +44,14 @@ namespace CollegeManagement.API.Services.Implementations
         {
             return seriesCode.ToUpperInvariant() switch
             {
-                "EMPLOYEE_ID" => "employee-id",
+                "TEACHING_STAFF_ID" => "teaching-staff-id",
+                "NON_TEACHING_STAFF_ID" => "non-teaching-staff-id",
+                "EMPLOYEE_ID" => "teaching-staff-id",
                 "ADMISSION_NO" => "admission-no",
+                "ROLL_NO" => "roll-no",
+                "STUDENT_ID" => "student-id",
+                "SECTION_NAME" => "section-name",
+                "EXAM_CODE" => "exam-code",
                 "CERTIFICATE_NO" => "certificate-number",
                 "RECEIPT_NO" => "receipt-no",
                 _ => seriesCode.ToLowerInvariant().Replace("_", "-")

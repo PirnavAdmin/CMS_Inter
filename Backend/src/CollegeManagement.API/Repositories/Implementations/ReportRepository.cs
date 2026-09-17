@@ -22,40 +22,96 @@ public class ReportRepository : IReportRepository
     public ReportRepository(AppDbContext context) => _context = context;
     private IDbConnection Connection => _context.Database.GetDbConnection();
 
-    private static object P(ReportFilterModel f) => new
+    private static (DateTime? From, DateTime? To) NormalizeDateRange(DateTime? from, DateTime? to)
     {
-        p_BoardId = f.BoardId,
-        p_AcademicYearId = f.AcademicYearId,
-        p_AcademicLevelId = f.AcademicLevelId,
-        p_GroupId = f.GroupId,
-        p_SectionId = f.SectionId,
-        p_FromDate = f.FromDate,
-        p_ToDate = f.ToDate
-    };
+        DateTime? nFrom = from.HasValue ? from.Value.Date : null;
+        DateTime? nTo = to.HasValue ? to.Value.Date.AddDays(1).AddTicks(-1) : null;
+        return (nFrom, nTo);
+    }
+
+    private static object P(ReportFilterModel f)
+    {
+        var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
+        return new
+        {
+            p_BoardId = f.BoardId,
+            p_AcademicYearId = f.AcademicYearId,
+            p_AcademicLevelId = f.AcademicLevelId,
+            p_GroupId = f.GroupId,
+            p_SectionId = f.SectionId,
+            p_FromDate = fromDate,
+            p_ToDate = toDate
+        };
+    }
 
     private async Task<IReadOnlyList<T>> QueryAsync<T>(string procedure, ReportFilterModel filter, Func<Task<IReadOnlyList<T>>> fallback, CancellationToken ct)
     {
         try
         {
-            var command = new CommandDefinition(procedure, P(filter), commandType: CommandType.StoredProcedure, cancellationToken: ct);
-            var rows = await Connection.QueryAsync<T>(command);
-            var list = rows.AsList();
-            if (list != null) return list;
+            var result = await fallback();
+            if (result != null) return result;
         }
         catch
         {
-            // Fallback to strict EF Core query
+            // Fallback to procedure if direct query encountered an issue
         }
 
         try
         {
-            var result = await fallback();
-            return result ?? Array.Empty<T>();
+            var command = new CommandDefinition(procedure, P(filter), commandType: CommandType.StoredProcedure, cancellationToken: ct);
+            var rows = await Connection.QueryAsync<T>(command);
+            var list = rows.AsList();
+            if (list != null && list.Count > 0) return list;
         }
         catch
         {
-            return Array.Empty<T>();
+            // Ignored
         }
+
+        return Array.Empty<T>();
+    }
+
+    // Helper lookup dictionaries (safe against duplicate keys)
+    private async Task<Dictionary<int, string>> GetBoardMapAsync(CancellationToken ct)
+    {
+        var list = await _context.Boards.AsNoTracking().ToListAsync(ct);
+        return list.GroupBy(x => x.BoardId).ToDictionary(g => g.Key, g => g.First().BoardName);
+    }
+
+    private async Task<Dictionary<int, string>> GetAcademicYearMapAsync(CancellationToken ct)
+    {
+        var list = await _context.AcademicYears.AsNoTracking().ToListAsync(ct);
+        return list.GroupBy(x => x.AcademicYearId).ToDictionary(g => g.Key, g => g.First().AcademicYearName);
+    }
+
+    private async Task<Dictionary<int, string>> GetGroupMapAsync(CancellationToken ct)
+    {
+        var list = await _context.Groups.AsNoTracking().ToListAsync(ct);
+        return list.GroupBy(x => x.GroupId).ToDictionary(g => g.Key, g => g.First().GroupName);
+    }
+
+    private async Task<Dictionary<int, string>> GetSectionMapAsync(CancellationToken ct)
+    {
+        var list = await _context.Sections.AsNoTracking().ToListAsync(ct);
+        return list.GroupBy(x => x.SectionId).ToDictionary(g => g.Key, g => g.First().SectionName);
+    }
+
+    private async Task<Dictionary<int, string>> GetFeeStructureMapAsync(CancellationToken ct)
+    {
+        var list = await _context.FeeStructures.AsNoTracking().ToListAsync(ct);
+        return list.GroupBy(x => x.FeeStructureId).ToDictionary(g => g.Key, g => g.First().StructureName);
+    }
+
+    private async Task<Dictionary<int, string>> GetExamMapAsync(CancellationToken ct)
+    {
+        var list = await _context.Examinations.AsNoTracking().ToListAsync(ct);
+        return list.GroupBy(x => x.ExaminationId).ToDictionary(g => g.Key, g => g.First().ExamName);
+    }
+
+    private async Task<Dictionary<int, string>> GetSubjectMapAsync(CancellationToken ct)
+    {
+        var list = await _context.Subjects.AsNoTracking().ToListAsync(ct);
+        return list.GroupBy(x => x.SubjectId).ToDictionary(g => g.Key, g => g.First().SubjectName);
     }
 
     // =========================================================================
@@ -63,37 +119,23 @@ public class ReportRepository : IReportRepository
     // =========================================================================
     public async Task<DashboardReportDto> GetDashboardAsync(ReportFilterModel f, CancellationToken ct = default)
     {
-        try
-        {
-            var command = new CommandDefinition("sp_Report_Dashboard", P(f), commandType: CommandType.StoredProcedure, cancellationToken: ct);
-            using var multi = await Connection.QueryMultipleAsync(command);
-            var summary = await multi.ReadFirstOrDefaultAsync<DashboardReportDto>();
-            if (summary != null)
-            {
-                summary.AdmissionsVsTarget = (await multi.ReadAsync<TrendPointDto>()).AsList();
-                summary.AttendanceTrend = (await multi.ReadAsync<TrendPointDto>()).AsList();
-                summary.FeeCollectedVsDue = (await multi.ReadAsync<TrendPointDto>()).AsList();
-                summary.Toppers = (await multi.ReadAsync<TopperReportDto>()).AsList();
-                return summary;
-            }
-        }
-        catch
-        {
-            // Fallback to direct dynamic EF calculations
-        }
+        var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
 
-        // 1. Admissions Count
-        var admQuery = _context.StudentAdmissions.AsNoTracking().Where(a => a.IsActive);
+        // 1. Admissions Count (Valid, Active, Non-rejected)
+        var admQuery = _context.StudentAdmissions.AsNoTracking().Where(a => a.IsActive && !a.IsRejected && a.Status != "Rejected");
         if (f.BoardId.HasValue && f.BoardId.Value > 0) admQuery = admQuery.Where(a => a.BoardId == f.BoardId.Value);
         if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) admQuery = admQuery.Where(a => a.AcademicYearId == f.AcademicYearId.Value);
         if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) admQuery = admQuery.Where(a => a.AcademicLevelId == f.AcademicLevelId.Value);
         if (f.GroupId.HasValue && f.GroupId.Value > 0) admQuery = admQuery.Where(a => a.GroupId == f.GroupId.Value);
-        if (f.SectionId.HasValue && f.SectionId.Value > 0) admQuery = admQuery.Where(a => a.SectionId == f.SectionId.Value);
-        if (f.FromDate.HasValue) admQuery = admQuery.Where(a => a.AdmissionDate >= f.FromDate.Value);
-        if (f.ToDate.HasValue) admQuery = admQuery.Where(a => a.AdmissionDate <= f.ToDate.Value);
+        if (f.SectionId.HasValue && f.SectionId.Value > 0)
+        {
+            admQuery = admQuery.Where(a => _context.Students.Any(s => (s.AdmissionId == a.AdmissionId || s.AdmissionNo == a.AdmissionNo) && s.SectionId == f.SectionId.Value));
+        }
+        if (fromDate.HasValue) admQuery = admQuery.Where(a => a.AdmissionDate >= fromDate.Value);
+        if (toDate.HasValue) admQuery = admQuery.Where(a => a.AdmissionDate <= toDate.Value);
         var admissionsCount = await admQuery.CountAsync(ct);
 
-        // 2. Student Strength
+        // 2. Student Strength (Active Enrolled Students)
         var stuQuery = _context.Students.AsNoTracking().Where(s => s.IsActive);
         if (f.BoardId.HasValue && f.BoardId.Value > 0) stuQuery = stuQuery.Where(s => s.BoardId == f.BoardId.Value);
         if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) stuQuery = stuQuery.Where(s => s.AcademicYearId == f.AcademicYearId.Value);
@@ -102,36 +144,50 @@ public class ReportRepository : IReportRepository
         if (f.SectionId.HasValue && f.SectionId.Value > 0) stuQuery = stuQuery.Where(s => s.SectionId == f.SectionId.Value);
         var strengthCount = await stuQuery.CountAsync(ct);
 
-        // 3. Attendance Rate
+        // 3. Attendance Rate (Present logs / Total logged student instances)
         var attQuery = _context.Attendances.AsNoTracking().Where(a => a.IsActive);
         if (f.BoardId.HasValue && f.BoardId.Value > 0) attQuery = attQuery.Where(a => a.BoardId == f.BoardId.Value);
         if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) attQuery = attQuery.Where(a => a.AcademicYearId == f.AcademicYearId.Value);
         if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) attQuery = attQuery.Where(a => a.AcademicLevelId == f.AcademicLevelId.Value);
         if (f.GroupId.HasValue && f.GroupId.Value > 0) attQuery = attQuery.Where(a => a.GroupId == f.GroupId.Value);
         if (f.SectionId.HasValue && f.SectionId.Value > 0) attQuery = attQuery.Where(a => a.SectionId == f.SectionId.Value);
-        if (f.FromDate.HasValue) attQuery = attQuery.Where(a => a.AttendanceDate >= f.FromDate.Value);
-        if (f.ToDate.HasValue) attQuery = attQuery.Where(a => a.AttendanceDate <= f.ToDate.Value);
+        if (fromDate.HasValue) attQuery = attQuery.Where(a => a.AttendanceDate >= fromDate.Value);
+        if (toDate.HasValue) attQuery = attQuery.Where(a => a.AttendanceDate <= toDate.Value);
         var totalAtt = await attQuery.CountAsync(ct);
         var presentAtt = totalAtt > 0 ? await attQuery.CountAsync(a => a.Status == AttendanceStatus.Present, ct) : 0;
         decimal attendancePct = totalAtt > 0 ? Math.Round((decimal)presentAtt * 100m / totalAtt, 2) : 0m;
 
-        // 4. Fee Collection
-        var feeQuery = _context.FeePayments.AsNoTracking().Include(p => p.Student).AsQueryable();
-        if (f.BoardId.HasValue && f.BoardId.Value > 0) feeQuery = feeQuery.Where(p => p.Student != null && p.Student.BoardId == f.BoardId.Value);
-        if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) feeQuery = feeQuery.Where(p => p.Student != null && p.Student.AcademicYearId == f.AcademicYearId.Value);
-        if (f.GroupId.HasValue && f.GroupId.Value > 0) feeQuery = feeQuery.Where(p => p.Student != null && p.Student.GroupId == f.GroupId.Value);
-        if (f.SectionId.HasValue && f.SectionId.Value > 0) feeQuery = feeQuery.Where(p => p.Student != null && p.Student.SectionId == f.SectionId.Value);
-        if (f.FromDate.HasValue) feeQuery = feeQuery.Where(p => p.PaymentDate >= f.FromDate.Value);
-        if (f.ToDate.HasValue) feeQuery = feeQuery.Where(p => p.PaymentDate <= f.ToDate.Value);
-        decimal feeCollected = await feeQuery.SumAsync(p => p.Amount, ct);
+        // 4. Fee Collection (Valid payments from FeePayments joined with Students)
+        var feeQuery = _context.FeePayments.AsNoTracking().Where(p => p.Status != "Cancelled" && p.Status != "Failed");
+        if (f.BoardId.HasValue && f.BoardId.Value > 0 || f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0 || f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0 || f.GroupId.HasValue && f.GroupId.Value > 0 || f.SectionId.HasValue && f.SectionId.Value > 0)
+        {
+            feeQuery = feeQuery.Where(p => _context.Students.Any(s => s.StudentId == p.StudentId 
+                && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
+                && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
+                && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
+                && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
+                && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
+            ));
+        }
+        if (fromDate.HasValue) feeQuery = feeQuery.Where(p => p.PaymentDate >= fromDate.Value);
+        if (toDate.HasValue) feeQuery = feeQuery.Where(p => p.PaymentDate <= toDate.Value);
+        decimal feeCollected = 0;
+        try { feeCollected = await feeQuery.SumAsync(p => p.Amount, ct); } catch { }
 
-        // 5. Due Fees
-        var dueQuery = _context.StudentFees.AsNoTracking().Include(sf => sf.Student).Where(sf => sf.Status != "Cancelled");
-        if (f.BoardId.HasValue && f.BoardId.Value > 0) dueQuery = dueQuery.Where(sf => sf.Student != null && sf.Student.BoardId == f.BoardId.Value);
-        if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) dueQuery = dueQuery.Where(sf => sf.Student != null && sf.Student.AcademicYearId == f.AcademicYearId.Value);
-        if (f.GroupId.HasValue && f.GroupId.Value > 0) dueQuery = dueQuery.Where(sf => sf.Student != null && sf.Student.GroupId == f.GroupId.Value);
-        if (f.SectionId.HasValue && f.SectionId.Value > 0) dueQuery = dueQuery.Where(sf => sf.Student != null && sf.Student.SectionId == f.SectionId.Value);
-        decimal dueFees = await dueQuery.SumAsync(sf => sf.BalanceAmount, ct);
+        // 5. Due Fees (Outstanding from StudentFees joined with Students)
+        var dueQuery = _context.StudentFees.AsNoTracking().Where(sf => sf.Status != "Cancelled" && sf.BalanceAmount > 0);
+        if (f.BoardId.HasValue && f.BoardId.Value > 0 || f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0 || f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0 || f.GroupId.HasValue && f.GroupId.Value > 0 || f.SectionId.HasValue && f.SectionId.Value > 0)
+        {
+            dueQuery = dueQuery.Where(sf => _context.Students.Any(s => s.StudentId == sf.StudentId 
+                && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
+                && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
+                && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
+                && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
+                && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
+            ));
+        }
+        decimal dueFees = 0;
+        try { dueFees = await dueQuery.SumAsync(sf => sf.BalanceAmount, ct); } catch { }
 
         // 6. Examinations Count
         var examQuery = _context.Examinations.AsNoTracking().Where(e => e.IsActive);
@@ -139,28 +195,42 @@ public class ReportRepository : IReportRepository
         if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) examQuery = examQuery.Where(e => e.AcademicYearId == f.AcademicYearId.Value);
         if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) examQuery = examQuery.Where(e => e.AcademicLevelId == f.AcademicLevelId.Value);
         if (f.GroupId.HasValue && f.GroupId.Value > 0) examQuery = examQuery.Where(e => e.GroupId == f.GroupId.Value);
-        if (f.FromDate.HasValue) examQuery = examQuery.Where(e => e.StartDate >= DateOnly.FromDateTime(f.FromDate.Value));
-        if (f.ToDate.HasValue) examQuery = examQuery.Where(e => e.EndDate <= DateOnly.FromDateTime(f.ToDate.Value));
+        if (fromDate.HasValue) examQuery = examQuery.Where(e => e.StartDate >= DateOnly.FromDateTime(fromDate.Value));
+        if (toDate.HasValue) examQuery = examQuery.Where(e => e.EndDate <= DateOnly.FromDateTime(toDate.Value));
         var examsCount = await examQuery.CountAsync(ct);
 
-        // 7. Results Published
-        var resQuery = _context.Results.AsNoTracking().Include(r => r.Student).Where(r => r.IsPublished);
+        // 7. Results Published (Distinct student-exam results published)
+        var resQuery = _context.Results.AsNoTracking().Where(r => r.IsPublished);
         if (f.BoardId.HasValue && f.BoardId.Value > 0) resQuery = resQuery.Where(r => r.BoardId == f.BoardId.Value);
         if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) resQuery = resQuery.Where(r => r.AcademicYearId == f.AcademicYearId.Value);
         if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) resQuery = resQuery.Where(r => r.AcademicLevelId == f.AcademicLevelId.Value);
         if (f.GroupId.HasValue && f.GroupId.Value > 0) resQuery = resQuery.Where(r => r.GroupId == f.GroupId.Value);
-        if (f.SectionId.HasValue && f.SectionId.Value > 0) resQuery = resQuery.Where(r => r.Student != null && r.Student.SectionId == f.SectionId.Value);
-        var resultsPublished = await resQuery.Select(r => r.ExamId).Distinct().CountAsync(ct);
+        if (f.SectionId.HasValue && f.SectionId.Value > 0) resQuery = resQuery.Where(r => _context.Students.Any(s => s.StudentId == r.StudentId && s.SectionId == f.SectionId.Value));
+        if (fromDate.HasValue) resQuery = resQuery.Where(r => r.PublishedDate >= fromDate.Value);
+        if (toDate.HasValue) resQuery = resQuery.Where(r => r.PublishedDate <= toDate.Value);
 
-        // 8. Pass Percentage
-        var totalResults = await resQuery.CountAsync(ct);
-        var passedResults = totalResults > 0 ? await resQuery.CountAsync(r => r.ResultStatus == "Pass" || r.ResultStatus == "Passed" || r.ResultStatus == "PROMOTED", ct) : 0;
-        decimal passPct = totalResults > 0 ? Math.Round((decimal)passedResults * 100m / totalResults, 2) : 0m;
+        var rawResults = await resQuery.Select(r => new { r.StudentId, r.ExamId, r.ResultStatus, r.TotalMarks }).ToListAsync(ct);
+        var resultsPublished = rawResults.Select(r => new { r.StudentId, r.ExamId }).Distinct().Count();
 
-        // 9. Faculty Workload (Hours)
+        // 8. Pass Percentage (Holistic student evaluation: Passed all subjects in exam)
+        var studentExamGroup = rawResults
+            .GroupBy(r => new { r.StudentId, r.ExamId })
+            .Select(g => new
+            {
+                IsPassed = g.All(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) 
+                                   || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase) 
+                                   || string.Equals(x.ResultStatus, "PROMOTED", StringComparison.OrdinalIgnoreCase))
+            })
+            .ToList();
+        var totalAppeared = studentExamGroup.Count;
+        var totalPassed = studentExamGroup.Count(x => x.IsPassed);
+        decimal passPct = totalAppeared > 0 ? Math.Round((decimal)totalPassed * 100m / totalAppeared, 2) : 0m;
+
+        // 9. Faculty Workload (Weekly Teaching Hours)
         var ttQuery = _context.Timetables.AsNoTracking().Include(t => t.Period).Where(t => t.IsPublished && t.Period != null && !t.Period.IsBreak);
         if (f.BoardId.HasValue && f.BoardId.Value > 0) ttQuery = ttQuery.Where(t => t.BoardId == f.BoardId.Value);
         if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) ttQuery = ttQuery.Where(t => t.AcademicYearId == f.AcademicYearId.Value);
+        if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) ttQuery = ttQuery.Where(t => t.AcademicLevelId == f.AcademicLevelId.Value);
         if (f.GroupId.HasValue && f.GroupId.Value > 0) ttQuery = ttQuery.Where(t => t.GroupId == f.GroupId.Value);
         if (f.SectionId.HasValue && f.SectionId.Value > 0) ttQuery = ttQuery.Where(t => t.SectionId == f.SectionId.Value);
         var ttList = await ttQuery.Select(t => new { t.Period!.StartTime, t.Period.EndTime }).ToListAsync(ct);
@@ -172,8 +242,53 @@ public class ReportRepository : IReportRepository
         }
         workloadHrs = Math.Round(workloadHrs, 1);
 
-        // 10. Toppers Identified
-        var toppersCount = await resQuery.Where(r => r.Rank.HasValue && r.Rank.Value <= 10).Select(r => r.StudentId).Distinct().CountAsync(ct);
+        // 10. Toppers Identified (Top rankers in published exam results)
+        var toppersCount = rawResults
+            .GroupBy(r => new { r.StudentId, r.ExamId })
+            .Where(g => g.All(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) 
+                                || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase) 
+                                || string.Equals(x.ResultStatus, "PROMOTED", StringComparison.OrdinalIgnoreCase)))
+            .Select(g => g.Key.StudentId)
+            .Distinct()
+            .Count();
+        toppersCount = Math.Min(toppersCount, 10);
+
+        // Compute dashboard trends
+        var admTrend = await admQuery
+            .GroupBy(a => new { Year = a.AdmissionDate.Year, Month = a.AdmissionDate.Month })
+            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+            .Select(g => new TrendPointDto
+            {
+                Label = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM"),
+                Value = g.Count(),
+                Target = g.Count(),
+                Due = 0
+            })
+            .ToListAsync(ct);
+
+        var attTrend = await attQuery
+            .GroupBy(a => new { Year = a.AttendanceDate.Year, Month = a.AttendanceDate.Month })
+            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+            .Select(g => new TrendPointDto
+            {
+                Label = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM"),
+                Value = g.Count() > 0 ? Math.Round((decimal)g.Count(x => x.Status == AttendanceStatus.Present) * 100m / g.Count(), 2) : 0m,
+                Target = 0,
+                Due = 0
+            })
+            .ToListAsync(ct);
+
+        var feeTrend = await feeQuery
+            .GroupBy(p => new { Year = p.PaymentDate.Year, Month = p.PaymentDate.Month })
+            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+            .Select(g => new TrendPointDto
+            {
+                Label = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMM"),
+                Value = g.Sum(x => x.Amount),
+                Target = 0,
+                Due = 0
+            })
+            .ToListAsync(ct);
 
         return new DashboardReportDto
         {
@@ -187,9 +302,9 @@ public class ReportRepository : IReportRepository
             StudentStrength = strengthCount,
             PassPercentage = passPct,
             ToppersIdentified = toppersCount,
-            AdmissionsVsTarget = new List<TrendPointDto>(),
-            AttendanceTrend = new List<TrendPointDto>(),
-            FeeCollectedVsDue = new List<TrendPointDto>(),
+            AdmissionsVsTarget = admTrend,
+            AttendanceTrend = attTrend,
+            FeeCollectedVsDue = feeTrend,
             Toppers = new List<TopperReportDto>()
         };
     }
@@ -201,23 +316,36 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<AdmissionReportDto>("sp_Report_Admissions", f, async () =>
         {
-            var query = _context.StudentAdmissions.AsNoTracking().Where(a => a.IsActive);
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
+            var query = _context.StudentAdmissions.AsNoTracking().Where(a => a.IsActive && !a.IsRejected && a.Status != "Rejected");
 
             if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(a => a.BoardId == f.BoardId.Value);
             if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) query = query.Where(a => a.AcademicYearId == f.AcademicYearId.Value);
             if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) query = query.Where(a => a.AcademicLevelId == f.AcademicLevelId.Value);
             if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(a => a.GroupId == f.GroupId.Value);
-            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(a => a.SectionId == f.SectionId.Value);
-            if (f.FromDate.HasValue) query = query.Where(a => a.AdmissionDate >= f.FromDate.Value);
-            if (f.ToDate.HasValue) query = query.Where(a => a.AdmissionDate <= f.ToDate.Value);
+            if (f.SectionId.HasValue && f.SectionId.Value > 0)
+            {
+                query = query.Where(a => _context.Students.Any(s => (s.AdmissionId == a.AdmissionId || s.AdmissionNo == a.AdmissionNo) && s.SectionId == f.SectionId.Value));
+            }
+            if (fromDate.HasValue) query = query.Where(a => a.AdmissionDate >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(a => a.AdmissionDate <= toDate.Value);
 
             var admissions = await query.OrderByDescending(a => a.AdmissionDate).ToListAsync(ct);
             if (!admissions.Any()) return Array.Empty<AdmissionReportDto>();
 
-            var boardMap = await _context.Boards.AsNoTracking().ToDictionaryAsync(b => b.BoardId, b => b.BoardName, ct);
-            var yearMap = await _context.AcademicYears.AsNoTracking().ToDictionaryAsync(y => y.AcademicYearId, y => y.AcademicYearName, ct);
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
-            var sectionMap = await _context.Sections.AsNoTracking().ToDictionaryAsync(s => s.SectionId, s => s.SectionName, ct);
+            var boardMap = await GetBoardMapAsync(ct);
+            var yearMap = await GetAcademicYearMapAsync(ct);
+            var groupMap = await GetGroupMapAsync(ct);
+            var sectionMap = await GetSectionMapAsync(ct);
+
+            // Fetch matching student records to map section and roll info
+            var admIds = admissions.Select(a => a.AdmissionId).ToList();
+            var admNos = admissions.Select(a => a.AdmissionNo).Where(n => !string.IsNullOrEmpty(n)).ToList();
+            var studentList = await _context.Students.AsNoTracking()
+                .Where(s => (s.AdmissionId.HasValue && admIds.Contains(s.AdmissionId.Value)) || (s.AdmissionNo != null && admNos.Contains(s.AdmissionNo)))
+                .ToListAsync(ct);
+            var studentMapByAdmId = studentList.Where(s => s.AdmissionId.HasValue).GroupBy(s => s.AdmissionId!.Value).ToDictionary(g => g.Key, g => g.First());
+            var studentMapByAdmNo = studentList.Where(s => !string.IsNullOrEmpty(s.AdmissionNo)).GroupBy(s => s.AdmissionNo!).ToDictionary(g => g.Key, g => g.First());
 
             return admissions.Select(a =>
             {
@@ -225,7 +353,13 @@ public class ReportRepository : IReportRepository
                 var bName = boardMap.ContainsKey(a.BoardId) ? boardMap[a.BoardId] : "Board";
                 var yName = yearMap.ContainsKey(a.AcademicYearId) ? yearMap[a.AcademicYearId] : "Academic Year";
                 var gName = groupMap.ContainsKey(a.GroupId) ? groupMap[a.GroupId] : "Group";
-                var sName = a.SectionId.HasValue && sectionMap.ContainsKey(a.SectionId.Value) ? sectionMap[a.SectionId.Value] : "Section";
+
+                var matchedStudent = studentMapByAdmId.ContainsKey(a.AdmissionId)
+                    ? studentMapByAdmId[a.AdmissionId]
+                    : (a.AdmissionNo != null && studentMapByAdmNo.ContainsKey(a.AdmissionNo) ? studentMapByAdmNo[a.AdmissionNo] : null);
+
+                int? sId = matchedStudent?.SectionId;
+                var sName = sId.HasValue && sectionMap.ContainsKey(sId.Value) ? sectionMap[sId.Value] : "Section";
 
                 return new AdmissionReportDto
                 {
@@ -244,32 +378,31 @@ public class ReportRepository : IReportRepository
                     GroupId = a.GroupId,
                     GroupName = gName,
                     Group = gName,
-                    SectionId = a.SectionId,
+                    SectionId = sId,
                     SectionName = sName,
                     Section = sName,
                     AdmissionDate = a.AdmissionDate,
-                    Status = a.Status ?? "Pending",
+                    Status = a.Status ?? (a.IsApproved ? "Approved" : "Pending"),
                     IsApproved = a.IsApproved,
                     IsRejected = a.IsRejected,
                     IsVerified = a.IsVerified,
                     Gender = a.Gender,
                     FatherName = a.FatherName,
                     FatherMobile = a.FatherMobile,
-                    RollNo = a.RollNo,
+                    RollNo = matchedStudent?.RollNo ?? a.AdmissionNo,
                     AdmissionType = a.AdmissionType,
                     Medium = a.Medium,
                     Period = yName,
                     Admissions = 1,
                     Approved = a.IsApproved ? 1 : 0,
                     Rejected = a.IsRejected ? 1 : 0,
-                    Pending = (!a.IsApproved && !a.IsRejected) ? 1 : 0
                 };
             }).ToList();
         }, ct);
     }
 
     // =========================================================================
-    // 3. STUDENT STRENGTH REPORT
+    // 3. STUDENT STRENGTH REPORT (AGGREGATED + INDIVIDUAL STUDENTS LIST)
     // =========================================================================
     public Task<IReadOnlyList<StudentStrengthReportDto>> GetStudentStrengthAsync(ReportFilterModel f, CancellationToken ct = default)
     {
@@ -286,9 +419,9 @@ public class ReportRepository : IReportRepository
             var students = await query.ToListAsync(ct);
             if (!students.Any()) return Array.Empty<StudentStrengthReportDto>();
 
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
-            var sectionMap = await _context.Sections.AsNoTracking().ToDictionaryAsync(s => s.SectionId, s => s.SectionName, ct);
-            var boardMap = await _context.Boards.AsNoTracking().ToDictionaryAsync(b => b.BoardId, b => b.BoardName, ct);
+            var groupMap = await GetGroupMapAsync(ct);
+            var sectionMap = await GetSectionMapAsync(ct);
+            var boardMap = await GetBoardMapAsync(ct);
 
             return students
                 .GroupBy(s => new { GroupId = s.GroupId ?? 0, SectionId = s.SectionId ?? 0 })
@@ -334,6 +467,7 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<AttendanceReportDto>("sp_Report_Attendance", f, async () =>
         {
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
             var query = _context.Attendances.AsNoTracking().Where(a => a.IsActive);
 
             if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(a => a.BoardId == f.BoardId.Value);
@@ -341,14 +475,14 @@ public class ReportRepository : IReportRepository
             if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) query = query.Where(a => a.AcademicLevelId == f.AcademicLevelId.Value);
             if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(a => a.GroupId == f.GroupId.Value);
             if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(a => a.SectionId == f.SectionId.Value);
-            if (f.FromDate.HasValue) query = query.Where(a => a.AttendanceDate >= f.FromDate.Value);
-            if (f.ToDate.HasValue) query = query.Where(a => a.AttendanceDate <= f.ToDate.Value);
+            if (fromDate.HasValue) query = query.Where(a => a.AttendanceDate >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(a => a.AttendanceDate <= toDate.Value);
 
             var list = await query.ToListAsync(ct);
             if (!list.Any()) return Array.Empty<AttendanceReportDto>();
 
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
-            var sectionMap = await _context.Sections.AsNoTracking().ToDictionaryAsync(s => s.SectionId, s => s.SectionName, ct);
+            var groupMap = await GetGroupMapAsync(ct);
+            var sectionMap = await GetSectionMapAsync(ct);
 
             return list
                 .GroupBy(a => a.AttendanceDate.Date)
@@ -389,16 +523,25 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<FacultyAttendanceReportDto>("sp_Report_FacultyAttendance", f, async () =>
         {
-            var query = _context.StaffAttendances.AsNoTracking().Include(sa => sa.Faculty).Where(sa => sa.IsActive);
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
+            var query = _context.StaffAttendances.AsNoTracking().Where(sa => sa.IsActive);
+            if (fromDate.HasValue) query = query.Where(sa => sa.CreatedAt >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(sa => sa.CreatedAt <= toDate.Value);
 
             var logs = await query.ToListAsync(ct);
             if (!logs.Any()) return Array.Empty<FacultyAttendanceReportDto>();
+
+            var facultyIds = logs.Select(x => x.FacultyId).Distinct().ToList();
+            var staffMap = await _context.Staffs.AsNoTracking()
+                .Where(s => facultyIds.Contains(s.Id))
+                .GroupBy(s => s.Id)
+                .ToDictionaryAsync(g => g.Key, g => g.First(), ct);
 
             return logs
                 .GroupBy(sa => sa.FacultyId)
                 .Select(g =>
                 {
-                    var first = g.FirstOrDefault()?.Faculty;
+                    var st = staffMap.ContainsKey(g.Key) ? staffMap[g.Key] : null;
                     var total = g.Count();
                     var present = g.Count(x => x.Status == AttendanceStatus.Present);
                     var absent = g.Count(x => x.Status == AttendanceStatus.Absent);
@@ -409,9 +552,9 @@ public class ReportRepository : IReportRepository
                     return new FacultyAttendanceReportDto
                     {
                         FacultyId = g.Key,
-                        FacultyName = first != null ? $"{first.FirstName} {first.LastName}".Trim() : $"Faculty #{g.Key}",
-                        DepartmentName = "Academics",
-                        Designation = "Lecturer",
+                        FacultyName = st != null ? $"{st.FirstName} {st.LastName}".Trim() : $"Staff #{g.Key}",
+                        DepartmentName = st?.Department ?? "Academics",
+                        Designation = st?.Designation ?? "Lecturer",
                         TotalDays = total,
                         Present = present,
                         Absent = absent,
@@ -430,34 +573,48 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<FeeCollectionReportDto>("sp_Report_FeeCollection", f, async () =>
         {
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
             var query = _context.FeePayments.AsNoTracking()
-                .Include(p => p.Student)
-                .Include(p => p.Receipt)
-                .AsQueryable();
+                .Where(p => p.Status != "Cancelled" && p.Status != "Failed");
 
-            if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(p => p.Student != null && p.Student.BoardId == f.BoardId.Value);
-            if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) query = query.Where(p => p.Student != null && p.Student.AcademicYearId == f.AcademicYearId.Value);
-            if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(p => p.Student != null && p.Student.GroupId == f.GroupId.Value);
-            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(p => p.Student != null && p.Student.SectionId == f.SectionId.Value);
-            if (f.FromDate.HasValue) query = query.Where(p => p.PaymentDate >= f.FromDate.Value);
-            if (f.ToDate.HasValue) query = query.Where(p => p.PaymentDate <= f.ToDate.Value);
+            if (f.BoardId.HasValue && f.BoardId.Value > 0 || f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0 || f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0 || f.GroupId.HasValue && f.GroupId.Value > 0 || f.SectionId.HasValue && f.SectionId.Value > 0)
+            {
+                query = query.Where(p => _context.Students.Any(s => s.StudentId == p.StudentId 
+                    && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
+                    && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
+                    && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
+                    && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
+                    && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
+                ));
+            }
+            if (fromDate.HasValue) query = query.Where(p => p.PaymentDate >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(p => p.PaymentDate <= toDate.Value);
 
             var payments = await query.OrderByDescending(p => p.PaymentDate).ToListAsync(ct);
             if (!payments.Any()) return Array.Empty<FeeCollectionReportDto>();
 
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
-            var sectionMap = await _context.Sections.AsNoTracking().ToDictionaryAsync(s => s.SectionId, s => s.SectionName, ct);
+            var studentIds = payments.Select(p => p.StudentId).Distinct().ToList();
+            var studentMap = await _context.Students.AsNoTracking()
+                .Where(s => studentIds.Contains(s.StudentId))
+                .GroupBy(s => s.StudentId)
+                .ToDictionaryAsync(g => g.Key, g => g.First(), ct);
+
+            var groupMap = await GetGroupMapAsync(ct);
+            var sectionMap = await GetSectionMapAsync(ct);
 
             return payments.Select(p =>
             {
-                var s = p.Student;
+                var s = studentMap.ContainsKey(p.StudentId) ? studentMap[p.StudentId] : null;
                 var gName = s?.GroupId.HasValue == true && groupMap.ContainsKey(s.GroupId.Value) ? groupMap[s.GroupId.Value] : "Group";
                 var sName = s?.SectionId.HasValue == true && sectionMap.ContainsKey(s.SectionId.Value) ? sectionMap[s.SectionId.Value] : "Section";
+                var rcpNo = !string.IsNullOrWhiteSpace(p.ReceiptNumber)
+                    ? p.ReceiptNumber
+                    : (p.TransactionReference ?? $"RCP-{p.FeePaymentId:D5}");
 
                 return new FeeCollectionReportDto
                 {
                     PaymentId = p.FeePaymentId,
-                    ReceiptNo = p.Receipt != null ? p.Receipt.ReceiptNumber : $"RCP-{p.FeePaymentId:D5}",
+                    ReceiptNo = rcpNo,
                     StudentId = p.StudentId,
                     StudentName = s?.StudentName ?? $"Student #{p.StudentId}",
                     AdmissionNo = s?.AdmissionNo ?? "—",
@@ -466,11 +623,11 @@ public class ReportRepository : IReportRepository
                     SectionName = sName,
                     PaidAmount = p.Amount,
                     Collected = p.Amount,
-                    Discount = p.DiscountAmount,
-                    Fine = p.FineAmount,
+                    Discount = 0,
+                    Fine = 0,
                     PaymentDate = p.PaymentDate,
-                    PaymentMode = p.PaymentMode.ToString(),
-                    Status = p.Status.ToString(),
+                    PaymentMode = p.PaymentMode,
+                    Status = p.Status,
                     Remarks = p.Remarks,
                     Period = p.PaymentDate.ToString("yyyy-MM"),
                     Transactions = 1
@@ -487,26 +644,38 @@ public class ReportRepository : IReportRepository
         return QueryAsync<OutstandingFeeReportDto>("sp_Report_OutstandingFees", f, async () =>
         {
             var query = _context.StudentFees.AsNoTracking()
-                .Include(sf => sf.Student)
-                .Include(sf => sf.FeeStructure)
                 .Where(sf => sf.Status != "Cancelled" && sf.BalanceAmount > 0);
 
-            if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(sf => sf.Student != null && sf.Student.BoardId == f.BoardId.Value);
-            if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) query = query.Where(sf => sf.Student != null && sf.Student.AcademicYearId == f.AcademicYearId.Value);
-            if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(sf => sf.Student != null && sf.Student.GroupId == f.GroupId.Value);
-            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(sf => sf.Student != null && sf.Student.SectionId == f.SectionId.Value);
+            if (f.BoardId.HasValue && f.BoardId.Value > 0 || f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0 || f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0 || f.GroupId.HasValue && f.GroupId.Value > 0 || f.SectionId.HasValue && f.SectionId.Value > 0)
+            {
+                query = query.Where(sf => _context.Students.Any(s => s.StudentId == sf.StudentId 
+                    && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
+                    && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
+                    && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
+                    && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
+                    && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
+                ));
+            }
 
             var list = await query.OrderByDescending(sf => sf.BalanceAmount).ToListAsync(ct);
             if (!list.Any()) return Array.Empty<OutstandingFeeReportDto>();
 
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
-            var sectionMap = await _context.Sections.AsNoTracking().ToDictionaryAsync(s => s.SectionId, s => s.SectionName, ct);
+            var studentIds = list.Select(sf => sf.StudentId).Distinct().ToList();
+            var studentMap = await _context.Students.AsNoTracking()
+                .Where(s => studentIds.Contains(s.StudentId))
+                .GroupBy(s => s.StudentId)
+                .ToDictionaryAsync(g => g.Key, g => g.First(), ct);
+
+            var groupMap = await GetGroupMapAsync(ct);
+            var sectionMap = await GetSectionMapAsync(ct);
+            var structMap = await GetFeeStructureMapAsync(ct);
 
             return list.Select(sf =>
             {
-                var s = sf.Student;
+                var s = studentMap.ContainsKey(sf.StudentId) ? studentMap[sf.StudentId] : null;
                 var gName = s?.GroupId.HasValue == true && groupMap.ContainsKey(s.GroupId.Value) ? groupMap[s.GroupId.Value] : "Group";
                 var sName = s?.SectionId.HasValue == true && sectionMap.ContainsKey(s.SectionId.Value) ? sectionMap[s.SectionId.Value] : "Section";
+                var structName = structMap.ContainsKey(sf.FeeStructureId) ? structMap[sf.FeeStructureId] : "Academic Fee";
 
                 return new OutstandingFeeReportDto
                 {
@@ -518,8 +687,8 @@ public class ReportRepository : IReportRepository
                     GroupName = gName,
                     SectionName = sName,
                     MobileNumber = s?.MobileNumber ?? "—",
-                    FeeStructureName = sf.FeeStructure?.StructureName ?? "Academic Fee",
-                    PaymentPlan = "Standard",
+                    FeeStructureName = structName,
+                    PaymentPlan = sf.PaymentPlan ?? "Standard",
                     TotalAmount = sf.TotalAmount,
                     ConcessionAmount = sf.ConcessionAmount,
                     PayableAmount = sf.PayableAmount,
@@ -540,21 +709,22 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<ExaminationReportDto>("sp_Report_Examinations", f, async () =>
         {
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
             var query = _context.Examinations.AsNoTracking().Where(e => e.IsActive);
 
             if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(e => e.BoardId == f.BoardId.Value);
             if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) query = query.Where(e => e.AcademicYearId == f.AcademicYearId.Value);
             if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) query = query.Where(e => e.AcademicLevelId == f.AcademicLevelId.Value);
             if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(e => e.GroupId == f.GroupId.Value);
-            if (f.FromDate.HasValue) query = query.Where(e => e.StartDate >= DateOnly.FromDateTime(f.FromDate.Value));
-            if (f.ToDate.HasValue) query = query.Where(e => e.EndDate <= DateOnly.FromDateTime(f.ToDate.Value));
+            if (fromDate.HasValue) query = query.Where(e => e.StartDate >= DateOnly.FromDateTime(fromDate.Value));
+            if (toDate.HasValue) query = query.Where(e => e.EndDate <= DateOnly.FromDateTime(toDate.Value));
 
             var exams = await query.ToListAsync(ct);
             if (!exams.Any()) return Array.Empty<ExaminationReportDto>();
 
-            var boardMap = await _context.Boards.AsNoTracking().ToDictionaryAsync(b => b.BoardId, b => b.BoardName, ct);
-            var yearMap = await _context.AcademicYears.AsNoTracking().ToDictionaryAsync(y => y.AcademicYearId, y => y.AcademicYearName, ct);
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
+            var boardMap = await GetBoardMapAsync(ct);
+            var yearMap = await GetAcademicYearMapAsync(ct);
+            var groupMap = await GetGroupMapAsync(ct);
 
             return exams.Select(e => new ExaminationReportDto
             {
@@ -588,25 +758,38 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<ResultAnalysisReportDto>("sp_Report_Results", f, async () =>
         {
-            var query = _context.Results.AsNoTracking().Include(r => r.Student).Include(r => r.Examination).Where(r => r.IsPublished);
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
+            var query = _context.Results.AsNoTracking().Where(r => r.IsPublished);
 
             if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(r => r.BoardId == f.BoardId.Value);
             if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) query = query.Where(r => r.AcademicYearId == f.AcademicYearId.Value);
             if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) query = query.Where(r => r.AcademicLevelId == f.AcademicLevelId.Value);
             if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(r => r.GroupId == f.GroupId.Value);
-            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(r => r.Student != null && r.Student.SectionId == f.SectionId.Value);
+            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(r => _context.Students.Any(s => s.StudentId == r.StudentId && s.SectionId == f.SectionId.Value));
+            if (fromDate.HasValue) query = query.Where(r => r.PublishedDate >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(r => r.PublishedDate <= toDate.Value);
 
             var list = await query.ToListAsync(ct);
             if (!list.Any()) return Array.Empty<ResultAnalysisReportDto>();
 
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
-            var sectionMap = await _context.Sections.AsNoTracking().ToDictionaryAsync(s => s.SectionId, s => s.SectionName, ct);
+            var studentIds = list.Select(r => r.StudentId).Distinct().ToList();
+            var studentMap = await _context.Students.AsNoTracking()
+                .Where(s => studentIds.Contains(s.StudentId))
+                .GroupBy(s => s.StudentId)
+                .ToDictionaryAsync(g => g.Key, g => g.First(), ct);
+
+            var examMap = await GetExamMapAsync(ct);
+            var subjectMap = await GetSubjectMapAsync(ct);
+            var groupMap = await GetGroupMapAsync(ct);
+            var sectionMap = await GetSectionMapAsync(ct);
 
             return list.Select(r =>
             {
-                var s = r.Student;
+                var s = studentMap.ContainsKey(r.StudentId) ? studentMap[r.StudentId] : null;
                 var gName = r.GroupId > 0 && groupMap.ContainsKey(r.GroupId) ? groupMap[r.GroupId] : "Group";
                 var sName = s?.SectionId.HasValue == true && sectionMap.ContainsKey(s.SectionId.Value) ? sectionMap[s.SectionId.Value] : "Section";
+                var examName = examMap.ContainsKey(r.ExamId) ? examMap[r.ExamId] : "Examination";
+                var subjName = subjectMap.ContainsKey(r.SubjectId) ? subjectMap[r.SubjectId] : "Subject";
 
                 return new ResultAnalysisReportDto
                 {
@@ -615,17 +798,21 @@ public class ReportRepository : IReportRepository
                     StudentName = s?.StudentName ?? $"Student #{r.StudentId}",
                     RollNo = s?.RollNo ?? "—",
                     ExamId = r.ExamId,
-                    ExamName = r.Examination != null ? r.Examination.ExamName : "Examination",
+                    ExamName = examName,
+                    SubjectId = r.SubjectId,
+                    SubjectName = subjName,
                     TotalMarks = r.TotalMarks,
                     MarksObtained = r.TotalMarks,
+                    InternalMarks = r.InternalMarks,
+                    ExternalMarks = r.ExternalMarks,
                     Grade = r.Grade ?? "A",
                     ResultStatus = r.ResultStatus,
                     PublishedDate = r.PublishedDate,
                     GroupName = gName,
                     SectionName = sName,
                     TotalResults = 1,
-                    Passed = (r.ResultStatus == "Pass" || r.ResultStatus == "Passed" || r.ResultStatus == "PROMOTED") ? 1 : 0,
-                    Failed = (r.ResultStatus == "Fail" || r.ResultStatus == "Failed") ? 1 : 0,
+                    Passed = (string.Equals(r.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) || string.Equals(r.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase) || string.Equals(r.ResultStatus, "PROMOTED", StringComparison.OrdinalIgnoreCase)) ? 1 : 0,
+                    Failed = (string.Equals(r.ResultStatus, "Fail", StringComparison.OrdinalIgnoreCase) || string.Equals(r.ResultStatus, "Failed", StringComparison.OrdinalIgnoreCase)) ? 1 : 0,
                     AveragePercentage = r.TotalMarks
                 };
             }).ToList();
@@ -639,36 +826,49 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<PassPercentageReportDto>("sp_Report_PassPercentage", f, async () =>
         {
-            var query = _context.Results.AsNoTracking().Include(r => r.Student).Include(r => r.Examination).Where(r => r.IsPublished);
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
+            var query = _context.Results.AsNoTracking().Where(r => r.IsPublished);
 
             if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(r => r.BoardId == f.BoardId.Value);
             if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) query = query.Where(r => r.AcademicYearId == f.AcademicYearId.Value);
             if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) query = query.Where(r => r.AcademicLevelId == f.AcademicLevelId.Value);
             if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(r => r.GroupId == f.GroupId.Value);
-            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(r => r.Student != null && r.Student.SectionId == f.SectionId.Value);
+            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(r => _context.Students.Any(s => s.StudentId == r.StudentId && s.SectionId == f.SectionId.Value));
+            if (fromDate.HasValue) query = query.Where(r => r.PublishedDate >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(r => r.PublishedDate <= toDate.Value);
 
             var list = await query.ToListAsync(ct);
             if (!list.Any()) return Array.Empty<PassPercentageReportDto>();
 
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
-            var yearMap = await _context.AcademicYears.AsNoTracking().ToDictionaryAsync(y => y.AcademicYearId, y => y.AcademicYearName, ct);
+            var examMap = await GetExamMapAsync(ct);
+            var groupMap = await GetGroupMapAsync(ct);
+            var yearMap = await GetAcademicYearMapAsync(ct);
 
             return list
                 .GroupBy(r => new { r.ExamId, GroupId = r.GroupId })
                 .Select(g =>
                 {
                     var first = g.FirstOrDefault();
-                    var total = g.Count();
-                    var passed = g.Count(r => r.ResultStatus == "Pass" || r.ResultStatus == "Passed" || r.ResultStatus == "PROMOTED");
-                    var failed = g.Count(r => r.ResultStatus == "Fail" || r.ResultStatus == "Failed");
+                    var studentsInGroup = g.GroupBy(x => x.StudentId).Select(sg => new
+                    {
+                        StudentId = sg.Key,
+                        IsPassed = sg.All(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) 
+                                           || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase) 
+                                           || string.Equals(x.ResultStatus, "PROMOTED", StringComparison.OrdinalIgnoreCase))
+                    }).ToList();
+
+                    var total = studentsInGroup.Count;
+                    var passed = studentsInGroup.Count(x => x.IsPassed);
+                    var failed = total - passed;
                     var pct = total > 0 ? Math.Round((decimal)passed * 100m / total, 2) : 0m;
                     var gName = g.Key.GroupId > 0 && groupMap.ContainsKey(g.Key.GroupId) ? groupMap[g.Key.GroupId] : "Group";
                     var yName = first != null && yearMap.ContainsKey(first.AcademicYearId) ? yearMap[first.AcademicYearId] : "Academic Year";
+                    var examName = examMap.ContainsKey(g.Key.ExamId) ? examMap[g.Key.ExamId] : "Examination";
 
                     return new PassPercentageReportDto
                     {
                         ExamId = g.Key.ExamId,
-                        ExamName = first?.Examination != null ? first.Examination.ExamName : "Examination",
+                        ExamName = examName,
                         AcademicYear = yName,
                         GroupName = gName,
                         SectionName = "All Sections",
@@ -688,26 +888,104 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<TopperReportDto>("sp_Report_Toppers", f, async () =>
         {
-            var query = _context.Results.AsNoTracking().Include(r => r.Student).Where(r => r.IsPublished);
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
+            var query = _context.Results.AsNoTracking().Where(r => r.IsPublished);
 
             if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(r => r.BoardId == f.BoardId.Value);
             if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) query = query.Where(r => r.AcademicYearId == f.AcademicYearId.Value);
             if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) query = query.Where(r => r.AcademicLevelId == f.AcademicLevelId.Value);
             if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(r => r.GroupId == f.GroupId.Value);
-            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(r => r.Student != null && r.Student.SectionId == f.SectionId.Value);
+            if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(r => _context.Students.Any(s => s.StudentId == r.StudentId && s.SectionId == f.SectionId.Value));
+            if (fromDate.HasValue) query = query.Where(r => r.PublishedDate >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(r => r.PublishedDate <= toDate.Value);
 
-            var list = await query.OrderByDescending(r => r.TotalMarks).Take(10).ToListAsync(ct);
+            var list = await query.ToListAsync(ct);
             if (!list.Any()) return Array.Empty<TopperReportDto>();
 
-            var groupMap = await _context.Groups.AsNoTracking().ToDictionaryAsync(g => g.GroupId, g => g.GroupName, ct);
-            var sectionMap = await _context.Sections.AsNoTracking().ToDictionaryAsync(s => s.SectionId, s => s.SectionName, ct);
+            var studentIds = list.Select(r => r.StudentId).Distinct().ToList();
+            var studentMap = await _context.Students.AsNoTracking()
+                .Where(s => studentIds.Contains(s.StudentId))
+                .GroupBy(s => s.StudentId)
+                .ToDictionaryAsync(g => g.Key, g => g.First(), ct);
+
+            var groupMap = await GetGroupMapAsync(ct);
+            var sectionMap = await GetSectionMapAsync(ct);
+
+            var studentAggregates = list
+                .GroupBy(r => new { r.StudentId, r.ExamId })
+                .Where(g => g.All(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) 
+                                    || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase) 
+                                    || string.Equals(x.ResultStatus, "PROMOTED", StringComparison.OrdinalIgnoreCase)))
+                .Select(g =>
+                {
+                    var first = g.First();
+                    var s = studentMap.ContainsKey(g.Key.StudentId) ? studentMap[g.Key.StudentId] : null;
+                    var totalMarks = g.Sum(x => x.TotalMarks);
+                    var subjectCount = g.Count();
+                    var maxMarks = subjectCount * 100m;
+                    var percentage = maxMarks > 0 ? Math.Round(totalMarks * 100m / maxMarks, 2) : 0m;
+
+                    return new
+                    {
+                        StudentId = g.Key.StudentId,
+                        ExamId = g.Key.ExamId,
+                        Student = s,
+                        GroupId = first.GroupId,
+                        SectionId = s?.SectionId,
+                        TotalMarks = totalMarks,
+                        MaxMarks = maxMarks,
+                        Percentage = percentage,
+                        Subjects = subjectCount,
+                        PassedSubjects = subjectCount,
+                        FailedSubjects = 0
+                    };
+                })
+                .OrderByDescending(x => x.TotalMarks)
+                .Take(10)
+                .ToList();
+
+            if (!studentAggregates.Any())
+            {
+                studentAggregates = list
+                    .GroupBy(r => new { r.StudentId, r.ExamId })
+                    .Select(g =>
+                    {
+                        var first = g.First();
+                        var s = studentMap.ContainsKey(g.Key.StudentId) ? studentMap[g.Key.StudentId] : null;
+                        var totalMarks = g.Sum(x => x.TotalMarks);
+                        var subjectCount = g.Count();
+                        var maxMarks = subjectCount * 100m;
+                        var percentage = maxMarks > 0 ? Math.Round(totalMarks * 100m / maxMarks, 2) : 0m;
+                        var passedCount = g.Count(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) 
+                                                    || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase) 
+                                                    || string.Equals(x.ResultStatus, "PROMOTED", StringComparison.OrdinalIgnoreCase));
+
+                        return new
+                        {
+                            StudentId = g.Key.StudentId,
+                            ExamId = g.Key.ExamId,
+                            Student = s,
+                            GroupId = first.GroupId,
+                            SectionId = s?.SectionId,
+                            TotalMarks = totalMarks,
+                            MaxMarks = maxMarks,
+                            Percentage = percentage,
+                            Subjects = subjectCount,
+                            PassedSubjects = passedCount,
+                            FailedSubjects = subjectCount - passedCount
+                        };
+                    })
+                    .OrderByDescending(x => x.TotalMarks)
+                    .Take(10)
+                    .ToList();
+            }
 
             int rank = 1;
-            return list.Select(r =>
+            return studentAggregates.Select(r =>
             {
                 var s = r.Student;
                 var gName = r.GroupId > 0 && groupMap.ContainsKey(r.GroupId) ? groupMap[r.GroupId] : "Group";
-                var sName = s?.SectionId.HasValue == true && sectionMap.ContainsKey(s.SectionId.Value) ? sectionMap[s.SectionId.Value] : "Section";
+                var sName = r.SectionId.HasValue && sectionMap.ContainsKey(r.SectionId.Value) ? sectionMap[r.SectionId.Value] : "Section";
 
                 return new TopperReportDto
                 {
@@ -715,10 +993,17 @@ public class ReportRepository : IReportRepository
                     StudentId = r.StudentId,
                     StudentName = s?.StudentName ?? $"Student #{r.StudentId}",
                     RollNo = s?.RollNo ?? "—",
+                    AdmissionNo = s?.AdmissionNo ?? "—",
+                    GroupId = r.GroupId,
                     GroupName = gName,
+                    SectionId = r.SectionId ?? 0,
                     SectionName = sName,
                     TotalMarks = r.TotalMarks,
-                    Percentage = r.TotalMarks
+                    MaxMarks = r.MaxMarks,
+                    Percentage = r.Percentage,
+                    Subjects = r.Subjects,
+                    PassedSubjects = r.PassedSubjects,
+                    FailedSubjects = r.FailedSubjects
                 };
             }).ToList();
         }, ct);
@@ -739,6 +1024,7 @@ public class ReportRepository : IReportRepository
 
             if (f.BoardId.HasValue && f.BoardId.Value > 0) query = query.Where(t => t.BoardId == f.BoardId.Value);
             if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) query = query.Where(t => t.AcademicYearId == f.AcademicYearId.Value);
+            if (f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0) query = query.Where(t => t.AcademicLevelId == f.AcademicLevelId.Value);
             if (f.GroupId.HasValue && f.GroupId.Value > 0) query = query.Where(t => t.GroupId == f.GroupId.Value);
             if (f.SectionId.HasValue && f.SectionId.Value > 0) query = query.Where(t => t.SectionId == f.SectionId.Value);
 
@@ -783,10 +1069,11 @@ public class ReportRepository : IReportRepository
     {
         return QueryAsync<AuditLogDto>("sp_Report_AuditLogs", f, async () =>
         {
+            var (fromDate, toDate) = NormalizeDateRange(f.FromDate, f.ToDate);
             var query = _context.AuditLogs.AsNoTracking().AsQueryable();
 
-            if (f.FromDate.HasValue) query = query.Where(a => a.CreatedAt >= f.FromDate.Value);
-            if (f.ToDate.HasValue) query = query.Where(a => a.CreatedAt <= f.ToDate.Value);
+            if (fromDate.HasValue) query = query.Where(a => a.CreatedAt >= fromDate.Value);
+            if (toDate.HasValue) query = query.Where(a => a.CreatedAt <= toDate.Value);
 
             var list = await query.OrderByDescending(a => a.CreatedAt).Take(100).ToListAsync(ct);
             return list.Select(a => new AuditLogDto

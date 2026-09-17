@@ -53,6 +53,11 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<int> BulkUpdateAttendanceAsync(BulkUpdateAttendanceRequest request, bool isAdmin, string userName, int? userId = null);
 
         /// <summary>
+        /// Bulk saves/updates session-based attendance records for Admin in a single database transaction.
+        /// </summary>
+        Task<int> AdminBulkSaveStudentAttendanceAsync(AdminBulkSaveStudentAttendanceRequest request, string userName, int? userId = null);
+
+        /// <summary>
         /// Retrieves a single detailed attendance record by its ID.
         /// </summary>
         /// <param name="attendanceId">The attendance identifier.</param>

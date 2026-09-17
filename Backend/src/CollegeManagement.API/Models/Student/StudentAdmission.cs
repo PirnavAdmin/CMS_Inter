@@ -114,6 +114,7 @@ namespace CollegeManagement.API.Models
         public int? ProgramId { get; set; }
 
         // Section is allocated AFTER approval
+        [NotMapped]
         public int? SectionId { get; set; }
 
         // Roll Number is allocated in bulk AFTER section allocation
@@ -145,7 +146,7 @@ namespace CollegeManagement.API.Models
         [MaxLength(50)]
         public string? Medium { get; set; }
         // ADD THIS
-        public int FeeStructureId { get; set; }
+        public int? FeeStructureId { get; set; }
         public string? PaymentPlan { get; set; }
         [MaxLength(50)]
         public string? ScholarshipStatus { get; set; }

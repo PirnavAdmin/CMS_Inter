@@ -252,40 +252,56 @@ export const nonTeachingDesignations = [
 ];
 
 export const teachingDesignationMap = {
-  "Computer Science": ["HOD", "Assistant Professor", "Associate Professor", "Professor", "Lecturer", "Senior Lecturer", "Lab Incharge"],
-  Mathematics: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor", "Professor"],
-  Physics: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor", "Lab Incharge"],
-  Chemistry: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor", "Lab Incharge"],
-  Biology: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor", "Lab Incharge"],
-  Botany: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor"],
-  Zoology: ["HOD", "Senior Lecturer", "Junior Lecturer", "Lecturer", "Assistant Professor"],
-  English: ["HOD", "Assistant Professor", "Associate Professor", "Lecturer", "Senior Lecturer"],
-  Commerce: ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  Economics: ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  Accountancy: ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  "Business Studies": ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  Statistics: ["HOD", "Assistant Professor", "Lecturer", "Senior Lecturer"],
-  Electronics: ["HOD", "Assistant Professor", "Lecturer", "Lab Incharge"],
-  Hindi: ["HOD", "Lecturer", "Senior Lecturer"],
-  Telugu: ["HOD", "Lecturer", "Senior Lecturer"],
-  Sanskrit: ["HOD", "Lecturer", "Senior Lecturer"],
-  Urdu: ["HOD", "Lecturer", "Senior Lecturer"],
-  Languages: ["HOD", "Lecturer", "Senior Lecturer", "Assistant Professor"],
+  "Computer Science": ["Head of Department (HOD)", "Professor", "Associate Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer", "Lab Incharge"],
+  Mathematics: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer"],
+  Physics: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer", "Lab Incharge"],
+  Chemistry: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer", "Lab Incharge"],
+  Biology: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer", "Lab Incharge"],
+  Botany: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer"],
+  Zoology: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer", "Junior Lecturer"],
+  English: ["Head of Department (HOD)", "Professor", "Associate Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Commerce: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Economics: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Accountancy: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  "Business Studies": ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Statistics: ["Head of Department (HOD)", "Professor", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Electronics: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer", "Lab Incharge"],
+  Hindi: ["Head of Department (HOD)", "Senior Lecturer", "Lecturer"],
+  Telugu: ["Head of Department (HOD)", "Senior Lecturer", "Lecturer"],
+  Sanskrit: ["Head of Department (HOD)", "Senior Lecturer", "Lecturer"],
+  Urdu: ["Head of Department (HOD)", "Senior Lecturer", "Lecturer"],
+  Languages: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Civics: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  History: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  "Political Science": ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Sociology: ["Head of Department (HOD)", "Assistant Professor", "Senior Lecturer", "Lecturer"],
+  Biotechnology: ["Head of Department (HOD)", "Assistant Professor", "Lecturer", "Lab Incharge"],
 };
 
 export const nonTeachingDesignationMap = {
-  Administration: ["Administrative Officer", "Office Administrator", "Office Assistant", "Clerk", "Attender / Peon"],
-  "Accounts & Finance": ["Accountant", "Senior Accountant", "Finance Executive", "Cashier", "Office Assistant"],
-  Accounts: ["Accountant", "Senior Accountant", "Finance Executive", "Cashier", "Office Assistant"],
+  Administration: ["Administrative Officer", "Office Administrator", "Office Assistant", "Clerk", "Attender / Peon", "Data Entry Operator"],
+  "Accounts & Finance": ["Accountant", "Senior Accountant", "Junior Accountant", "Finance Executive", "Accounts Executive", "Cashier", "Office Assistant"],
+  Accounts: ["Accountant", "Senior Accountant", "Junior Accountant", "Finance Executive", "Accounts Executive", "Cashier", "Office Assistant"],
+  Finance: ["Accountant", "Senior Accountant", "Finance Executive", "Cashier"],
   Library: ["Librarian", "Assistant Librarian", "Library Assistant", "Attender"],
-  "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Attender / Peon"],
-  Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Attender / Peon"],
-  Transport: ["Transport Coordinator", "Transport Incharge", "Driver"],
-  Security: ["Security Officer", "Security Supervisor", "Security Guard"],
+  "Maintenance & Facilities": ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
+  Maintenance: ["Maintenance Supervisor", "Electrician", "Plumber", "Carpenter", "Gardener", "Attender / Peon"],
+  Transport: ["Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Transportation: ["Transport Coordinator", "Transport Incharge", "Driver", "Bus Driver"],
+  Security: ["Security Officer", "Security Supervisor", "Security Guard", "Watchman"],
   "Human Resources": ["HR Manager", "HR Executive", "Office Assistant"],
-  Admissions: ["Admissions Officer", "Admissions Counselor", "Data Entry Operator"],
-  "Hostel Management": ["Hostel Warden", "Assistant Warden", "Attender / Peon"],
+  HR: ["HR Manager", "HR Executive", "Office Assistant"],
+  Admissions: ["Admissions Officer", "Admissions Counselor", "Data Entry Operator", "Office Assistant"],
+  Hostel: ["Hostel Warden", "Assistant Warden", "Attender / Peon", "Cleaner"],
+  "Hostel Management": ["Hostel Warden", "Assistant Warden", "Attender / Peon", "Cleaner"],
   "Campus Operations": ["Operations Manager", "Facility Supervisor", "Office Assistant"],
+  Operations: ["Operations Manager", "Facility Supervisor", "Office Assistant"],
+  "Student Affairs": ["Student Affairs Officer", "Counselor", "Office Assistant"],
+  "IT & Systems Support": ["IT Support Executive", "System Administrator", "Lab Assistant"],
+  "IT Support": ["IT Support Executive", "System Administrator", "Lab Assistant"],
+  "Examinations Cell": ["Examination Incharge", "Data Entry Operator", "Clerk"],
+  Examinations: ["Examination Incharge", "Data Entry Operator", "Clerk"],
+  Housekeeping: ["Housekeeping Supervisor", "Cleaner", "Attender / Peon"],
 };
 
 export const isOther = (name) => {
@@ -482,6 +498,8 @@ export const normalizeStaffRecord = (raw) => {
 export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existingRecords = []) => {
   const isTeaching = String(staffType || "").toLowerCase().includes("teach") && !String(staffType || "").toLowerCase().includes("non");
   const prefix = isTeaching ? "PCTCH" : "PCNT";
+  const seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+  const seriesKey = isTeaching ? "teaching-staff-id" : "non-teaching-staff-id";
 
   // Helper to compute sequential ID from existing records
   const computeFromRecords = () => {
@@ -491,8 +509,11 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
     const relevant = existingRecords.filter((r) => {
       if (!r) return false;
       const type = String(r.staffType || "").toLowerCase();
-      if (isTeaching) return !type.includes("non");
-      return type.includes("non");
+      const empId = String(r.employeeId || "").toUpperCase();
+      if (isTeaching) {
+        return (!type.includes("non") && type.includes("teach")) || empId.startsWith("PCTCH");
+      }
+      return type.includes("non") || empId.startsWith("PCNT");
     });
     let maxSeq = 0;
     for (const r of relevant) {
@@ -500,12 +521,12 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
       const match = empId.match(/(\d+)/);
       if (match) {
         const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > maxSeq && num < 1000) {
+        if (!isNaN(num) && num > maxSeq && num < 100000) {
           maxSeq = num;
         }
       }
     }
-    const nextSeq = maxSeq > 0 ? maxSeq + 1 : (relevant.length > 0 ? relevant.length + 1 : 1);
+    const nextSeq = maxSeq > 0 ? maxSeq + 1 : 1;
     return `${prefix}${String(nextSeq).padStart(4, "0")}`;
   };
 
@@ -519,12 +540,6 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
       if (raw && (typeof raw === "string" || typeof raw === "number")) {
         const str = String(raw).trim();
         if (str && !str.includes("[object")) {
-          const match = str.match(/(\d+)/);
-          const num = match ? parseInt(match[1], 10) : 0;
-          if (num >= 40 && Array.isArray(existingRecords) && existingRecords.length < 25) {
-            const calculated = computeFromRecords();
-            if (calculated) return calculated;
-          }
           return str;
         }
       }
@@ -533,17 +548,21 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
 
   // 2. Try Settings Number Series API
   try {
-    const nsRes = await apiClient.get(apiEndpoints.numberSeries.getByCode("EMPLOYEE_ID"));
+    const nsRes = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode));
     if (nsRes?.data) {
       const live = nsRes.data.livePreview || nsRes.data.currentExample || nsRes.data.generatedNumber;
       if (live && typeof live === "string" && !live.includes("[object")) {
-        const match = live.match(/(\d+)/);
-        const num = match ? parseInt(match[1], 10) : 0;
-        if (num >= 40 && Array.isArray(existingRecords) && existingRecords.length < 25) {
-          const calculated = computeFromRecords();
-          if (calculated) return calculated;
-        }
         return live.trim();
+      }
+    }
+  } catch {}
+
+  try {
+    const nsRes2 = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesKey));
+    if (nsRes2?.data) {
+      const live2 = nsRes2.data.livePreview || nsRes2.data.currentExample || nsRes2.data.generatedNumber;
+      if (live2 && typeof live2 === "string" && !live2.includes("[object")) {
+        return live2.trim();
       }
     }
   } catch {}
@@ -553,13 +572,8 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
   if (calculated) return calculated;
 
   // 4. Fallback to Local Number Series Settings
-  const localVal = generateNextNumber("employee-id");
+  const localVal = generateNextNumber(seriesKey);
   if (localVal && !String(localVal).includes("[object")) {
-    const match = String(localVal).match(/(\d+)/);
-    const num = match ? parseInt(match[1], 10) : 0;
-    if (num >= 40 && Array.isArray(existingRecords) && existingRecords.length < 25) {
-      return `${prefix}0001`;
-    }
     return String(localVal).trim();
   }
   return isTeaching ? "PCTCH0001" : "PCNT0001";
@@ -611,12 +625,12 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
 
   // 1. Direct Board ID match
   const recordBoardId = staffRecord.boardId || staffRecord.BoardId;
-  if (recordBoardId && targetId && String(recordBoardId) === String(targetId)) {
-    return true;
+  if (recordBoardId) {
+    return targetId ? String(recordBoardId) === String(targetId) : true;
   }
 
-  // 2. Resolve staff board code
-  const recordBoardCode = String(staffRecord.boardCode || staffRecord.BoardCode || resolveBoardCode(staffRecord, boardsList) || "").trim().toUpperCase();
+  // 2. Match staff board code if explicitly present on record
+  const recordBoardCode = String(staffRecord.boardCode || staffRecord.BoardCode || "").trim().toUpperCase();
   if (targetCode && recordBoardCode && recordBoardCode !== "—") {
     if (recordBoardCode === targetCode) return true;
     if ((targetCode.includes("TSBIE") || targetCode.includes("TGBIE") || targetCode.includes("TELANGANA")) &&
@@ -631,9 +645,9 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
     if (targetCode.includes("ICSE") && recordBoardCode.includes("ICSE")) return true;
   }
 
-  // 3. Match staff board name string
+  // 3. Match staff board name string if explicitly present on record
   const recordBoardName = String(staffRecord.board || staffRecord.boardName || staffRecord.BoardName || "").trim().toLowerCase();
-  if (targetName && recordBoardName) {
+  if (targetName && recordBoardName && recordBoardName !== "—") {
     if (recordBoardName === targetName) return true;
     if (targetName.includes("andhra") && recordBoardName.includes("andhra")) return true;
     if (targetName.includes("telangana") && recordBoardName.includes("telangana")) return true;
@@ -642,7 +656,8 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
     if (targetName.includes("central") && recordBoardName.includes("central")) return true;
   }
 
-  return false;
+  // 4. If no specific board is attached to the staff record, they are shared/general across all boards
+  return true;
 };
 
 const teachingFields = [
@@ -665,6 +680,7 @@ const teachingFields = [
 ];
 
 const nonTeachingSteps = [
+  // Step 0: Personal Information
   [
     ["board", "Board Name", "select", [], true],
     ["employeeId", "Employee ID"],
@@ -681,6 +697,7 @@ const nonTeachingSteps = [
     ["pan", "PAN Number", "text", [], false],
     ["profilePhoto", "Profile Photo", "file", [], false],
   ],
+  // Step 1: Contact & Address
   [
     ["mobile", "Mobile"],
     ["email", "Email", "email", [], false],
@@ -692,6 +709,7 @@ const nonTeachingSteps = [
     ["currentAddress", "Current Address", "textarea"],
     ["permanentAddress", "Permanent Address", "textarea", [], false],
   ],
+  // Step 2: Employment Details (Job Details)
   [
     ["department", "Department", "search-select", nonTeachingDepartments, true],
     ["designation", "Designation", "search-select", nonTeachingDesignations, true],
@@ -700,6 +718,8 @@ const nonTeachingSteps = [
     ["experience", "Experience", "text", [], false],
     ["status", "Status", "select", ["Active", "Inactive"], true, "start-new-row"],
   ],
+  /*
+  // Step 4 (Salary & Bank) is commented out as salary structure is assigned in a separate module
   [
     ["salaryStructure", "Salary Structure", "text", [], false],
     ["basicSalary", "Basic Salary", "number", [], false],
@@ -713,6 +733,8 @@ const nonTeachingSteps = [
     ["esiNumber", "ESI Number", "text", [], false],
     ["uanNumber", "UAN Number", "text", [], false],
   ],
+  */
+  // Step 3 (formerly Step 4): Documents
   [
     ["aadhaarDocument", "Aadhaar", "file", [], false],
     ["panDocument", "PAN", "file", [], false],
@@ -723,6 +745,7 @@ const nonTeachingSteps = [
     ["drivingLicence", "Driving Licence", "file", [], false],
     ["otherDocuments", "Other Documents", "file", [], false],
   ],
+  // Step 4 (formerly Step 5): Emergency Contact
   [
     ["emergencyName", "Contact Name", "text", [], false],
     ["emergencyRelationship", "Relationship", "text", [], false],
@@ -731,6 +754,33 @@ const nonTeachingSteps = [
     ["emergencyAddress", "Address", "textarea", [], false],
   ],
 ];
+
+export const getNonTeachingStepFields = (stepIndex, values = {}) => {
+  const isTransport =
+    String(values?.department || "").trim().toLowerCase().includes("transport") ||
+    String(values?.designation || "").trim().toLowerCase().includes("driver");
+
+  if (stepIndex === 2) {
+    const base = [
+      ["department", "Department", "search-select", nonTeachingDepartments, true],
+      ["designation", "Designation", "search-select", nonTeachingDesignations, true],
+    ];
+    if (isTransport) {
+      base.push(
+        ["drivingLicenseNumber", "Driver's License Number", "text", [], true],
+        ["drivingLicenseExpiryDate", "License Expiry Date", "date", [], true]
+      );
+    }
+    base.push(
+      ["dateOfJoining", "Date of Joining", "date", [], true],
+      ["qualification", "Qualification", "text", [], true],
+      ["experience", "Experience", "text", [], false],
+      ["status", "Status", "select", ["Active", "Inactive"], true, "start-new-row"]
+    );
+    return base;
+  }
+  return nonTeachingSteps[stepIndex] || [];
+};
 
 const portalSteps = [
   "Personal Details",
@@ -828,31 +878,61 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
   }, []);
 
   const filteredOpts = useMemo(() => {
+    const withoutOther = safeOpts.filter((o) => {
+      const s = getOptLabel(o).toLowerCase().trim();
+      return s !== "other" && s !== "others";
+    });
     const q = (search || "").toLowerCase().trim();
-    const withoutOther = safeOpts.filter((o) => !isOther(o));
     if (!q) return withoutOther;
+
+    const currentSelectedLabel = (getOptLabel(value) || "").toLowerCase().trim();
+    const currentSelectedValue = (getOptValue(value) || "").toLowerCase().trim();
+    // If the search string matches current selected item's label/value (i.e. user just focused/clicked to open dropdown),
+    // show ALL available options so the user can easily switch to any other department or designation!
+    if (q === currentSelectedLabel || q === currentSelectedValue) {
+      return withoutOther;
+    }
+
     return withoutOther.filter((o) => {
       const lbl = getOptLabel(o).toLowerCase();
       const val = getOptValue(o).toLowerCase();
       return lbl.includes(q) || val.includes(q);
     });
-  }, [safeOpts, search]);
+  }, [safeOpts, search, value]);
 
   const handleSelect = (opt) => {
     const optVal = getOptValue(opt);
-    setSearch(getOptLabel(opt));
+    const optLbl = getOptLabel(opt);
+    setSearch(optLbl);
     if (typeof onChange === "function") onChange(optVal);
     setOpen(false);
   };
 
   return (
     <div className={`staff-custom-search-select ${hasError ? "has-error" : ""}`} ref={ref}>
-      <div className="staff-search-input-wrap" style={hasError ? { borderColor: "#ef4444" } : undefined}>
+      <div
+        className="staff-search-input-wrap"
+        style={{ ...(hasError ? { borderColor: "#ef4444" } : {}), cursor: "pointer" }}
+        onClick={() => {
+          setOpen((prev) => !prev);
+          const inputEl = ref.current?.querySelector("input");
+          if (inputEl) inputEl.focus();
+        }}
+      >
         <Search className="staff-search-icon" aria-hidden="true" size={14} />
         <input
           type="text"
           value={search}
-          onFocus={() => setOpen(true)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          onFocus={(e) => {
+            setOpen(true);
+            try {
+              e.target.select();
+            } catch {}
+          }}
           onChange={(e) => {
             setSearch(e.target.value);
             if (typeof onChange === "function") onChange(e.target.value);
@@ -861,7 +941,17 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
           placeholder={`Search ${String(label || "").toLowerCase()}`}
           autoComplete="off"
         />
-        <ChevronDown className="staff-dropdown-caret" size={14} />
+        <ChevronDown
+          className="staff-dropdown-caret"
+          size={14}
+          style={{ cursor: "pointer", pointerEvents: "auto" }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((prev) => !prev);
+            const inputEl = ref.current?.querySelector("input");
+            if (inputEl) inputEl.focus();
+          }}
+        />
       </div>
       {open ? (
         <div
@@ -873,13 +963,15 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             zIndex: 99999,
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
             border: "1px solid var(--cms-border, #d1d5db)",
+            maxHeight: "220px",
+            overflowY: "auto",
           }}
         >
           {filteredOpts.length > 0 ? (
             filteredOpts.map((o, idx) => {
               const optVal = getOptValue(o);
               const optLbl = getOptLabel(o);
-              const isSelected = value === optVal;
+              const isSelected = value === optVal || value === optLbl;
               return (
                 <div
                   key={`${optVal}-${idx}`}
@@ -888,6 +980,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
                     backgroundColor: isSelected ? "var(--cms-primary-soft, #f0fdf4)" : "#ffffff",
                     color: isSelected ? "var(--cms-primary, #355e3b)" : "var(--cms-text, #1f2937)",
                     fontWeight: isSelected ? "600" : "normal",
+                    cursor: "pointer",
                   }}
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -1174,7 +1267,19 @@ function useStaffTypeOptions(staffType) {
             return isNonTeachingDesigName(desigName);
           }
         });
-        desigOpts = filteredDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean);
+        desigOpts = filteredDesigs
+          .map((d) =>
+            typeof d === "object"
+              ? {
+                  name: d.name || d.designationName,
+                  designationName: d.name || d.designationName,
+                  departmentName: d.departmentName || d.department || "",
+                  departmentId: d.departmentId || null,
+                  staffType: d.staffType || d.StaffType,
+                }
+              : d
+          )
+          .filter(Boolean);
       } catch (e) {
         console.warn("Failed to fetch designations from API:", e);
       }
@@ -1189,7 +1294,7 @@ function useStaffTypeOptions(staffType) {
 
       if (isMounted) {
         setDepartments(Array.from(new Set(deptOpts)));
-        setDesignations(Array.from(new Set(desigOpts)));
+        setDesignations(desigOpts);
         setLoading(false);
       }
     }
@@ -1393,6 +1498,21 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
           newErrors[name] = "Salary must be a positive number";
         }
       }
+
+      // Driver's License Number
+      if (name === "drivingLicenseNumber" || name === "drivingLicence") {
+        if (strVal.length < 3) {
+          newErrors[name] = "Please enter a valid Driver's License Number";
+        }
+      }
+
+      // License Expiry Date
+      if (name === "drivingLicenseExpiryDate" || name === "licenseExpiryDate") {
+        const expDate = new Date(strVal);
+        if (isNaN(expDate.getTime())) {
+          newErrors[name] = "Please enter a valid License Expiry Date";
+        }
+      }
     }
   }
   return newErrors;
@@ -1467,26 +1587,57 @@ function Field({
     }
 
     if (name === "designation") {
-      const currentDept = safeValues.department;
-      let deptSpecific = [];
-      if (currentDept) {
-        deptSpecific = isTeaching
-          ? (teachingDesignationMap[currentDept] || [])
-          : (nonTeachingDesignationMap[currentDept] || []);
+      const currentDept = String(safeValues.department || "").trim();
+      const currentDeptNorm = currentDept.toLowerCase().replace(/[-_\s&]/g, "");
+
+      // 1. Check API designations specifically matching this department
+      let apiMatching = [];
+      if (currentDept && Array.isArray(designationOptions) && designationOptions.length > 0) {
+        apiMatching = designationOptions
+          .filter((d) => {
+            if (!d) return false;
+            const dDeptName = typeof d === "object" ? String(d.departmentName || d.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "") : "";
+            if (dDeptName && (dDeptName === currentDeptNorm || currentDeptNorm.includes(dDeptName) || dDeptName.includes(currentDeptNorm))) {
+              return true;
+            }
+            return false;
+          })
+          .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+          .filter(Boolean);
       }
 
+      // 2. Check map matching for this department
+      let mapMatching = [];
+      if (currentDept) {
+        const activeMap = isTeaching ? teachingDesignationMap : nonTeachingDesignationMap;
+        for (const [deptKey, desigs] of Object.entries(activeMap)) {
+          const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
+          if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
+            mapMatching = [...mapMatching, ...(Array.isArray(desigs) ? desigs : [])];
+          }
+        }
+      }
+
+      const deptSpecific = Array.from(new Set([...apiMatching, ...mapMatching]));
+      // If a department is selected and has specific designations, return ONLY those!
+      if (currentDept && deptSpecific.length > 0) {
+        return deptSpecific;
+      }
+
+      // 3. Fallback to general designations if no department is selected or no specific mapping
       const baseList = Array.isArray(designationOptions) && designationOptions.length > 0
         ? designationOptions
         : (Array.isArray(options) && options.length > 0 ? options : (isTeaching ? teachingDesignations : nonTeachingDesignations));
 
-      const filteredBase = baseList.filter((d) => {
-        const dName = typeof d === "object" ? d.name || d.designationName : String(d || "");
-        return isTeaching ? !isNonTeachingDesigName(dName) : isNonTeachingDesigName(dName);
-      });
+      const filteredBase = baseList
+        .filter((d) => {
+          const dName = typeof d === "object" ? d.name || d.designationName : String(d || "");
+          return isTeaching ? !isNonTeachingDesigName(dName) : isNonTeachingDesigName(dName);
+        })
+        .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+        .filter(Boolean);
 
-      const combined = [...deptSpecific, ...filteredBase];
-      const unique = Array.from(new Set(combined.length > 0 ? combined : (isTeaching ? teachingDesignations : nonTeachingDesignations)));
-      return unique;
+      return Array.from(new Set(filteredBase));
     }
 
     return options;
@@ -1914,7 +2065,6 @@ function Dashboard({ records = [] }) {
             ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
             ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
             ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
-            ["Credentials Generator", "Format", credentialsGeneratorIcon, "modal:credentials"],
           ].map(([l, v, icon, to]) => (
             <article
               key={l}
@@ -3086,7 +3236,8 @@ function TeachingForm({ records, setRecords, existing }) {
         setToast("Teaching staff profile updated successfully.");
         n(`/dashboard/staff/teaching`);
       } else {
-        n(`/dashboard/staff/${record.id}/send-link`);
+        setToast("Teaching staff created and invitation email sent successfully.");
+        n(`/dashboard/staff/teaching`);
       }
     } catch (err) {
       const status = err?.response?.status;
@@ -3117,7 +3268,8 @@ function TeachingForm({ records, setRecords, existing }) {
         setToast("Teaching staff profile updated successfully.");
         n(`/dashboard/staff/teaching`);
       } else {
-        n(`/dashboard/staff/${record.id}/send-link`);
+        setToast("Teaching staff created and invitation email sent successfully.");
+        n(`/dashboard/staff/teaching`);
       }
     } finally {
       setSubmitting(false);
@@ -3133,7 +3285,6 @@ function TeachingForm({ records, setRecords, existing }) {
       <Toast message={toast} onClose={() => setToast("")} />
       <main className="staff-mock-page">
         <Back />
-        <Steps labels={["Basic Details", "Send Link"]} step={0} />
         <form className="staff-form-panel teaching-basic-form" onSubmit={submit}>
           <header>
             <UserRound />
@@ -3162,8 +3313,8 @@ function TeachingForm({ records, setRecords, existing }) {
             <button type="button" className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff")}>
               Cancel
             </button>
-            <button className="cms-btn cms-btn-primary">
-              Save &amp; Next <ChevronRight />
+            <button className="cms-btn cms-btn-primary" disabled={submitting}>
+              {submitting ? "Saving..." : existing ? "Update Teaching Staff" : "Save Teaching Staff"}
             </button>
           </footer>
         </form>
@@ -3187,7 +3338,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
     "Personal Information",
     "Contact & Address",
     "Employment Details",
-    "Salary & Bank",
+    // "Salary & Bank", // Commented out per requirement: salary structure is assigned in separate module
     "Documents",
     "Emergency Contact",
     "Review",
@@ -3277,7 +3428,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
   }, [values.pin]);
 
   const next = () => {
-    const currentFields = nonTeachingSteps[step] || [];
+    const currentFields = getNonTeachingStepFields(step, values);
     const stepErrors = validateStepFields(currentFields, values, activeBoardName);
 
     if (Object.keys(stepErrors).length > 0) {
@@ -3289,15 +3440,15 @@ function NonTeachingForm({ records, setRecords, existing }) {
     setErrors({});
     if (editingFromReview) {
       setEditingFromReview(false);
-      setStep(6);
+      setStep(labels.length - 1);
       return;
     }
     setStep((s) => s + 1);
   };
 
   const save = async () => {
-    for (let i = 0; i < 6; i++) {
-      const stepFields = nonTeachingSteps[i] || [];
+    for (let i = 0; i < labels.length - 1; i++) {
+      const stepFields = getNonTeachingStepFields(i, values);
       const stepErrors = validateStepFields(stepFields, values, activeBoardName);
       if (Object.keys(stepErrors).length > 0) {
         setErrors(stepErrors);
@@ -3390,12 +3541,12 @@ function NonTeachingForm({ records, setRecords, existing }) {
             <Building2 />
             <div>
               <h2>{labels[step]}</h2>
-              <p>Step {step + 1} of 7</p>
+              <p>Step {step + 1} of {labels.length}</p>
             </div>
           </header>
-          {step < 6 ? (
+          {step < labels.length - 1 ? (
             <div className="staff-form-grid">
-              {nonTeachingSteps[step].map((f) => (
+              {getNonTeachingStepFields(step, values).map((f) => (
                 <Field
                   key={f[0]}
                   item={f}
@@ -3416,7 +3567,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 ...values,
                 fullName: [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" "),
               }}
-              groups={labels.slice(0, 6).map((label, index) => [label, nonTeachingSteps[index]])}
+              groups={labels.slice(0, labels.length - 1).map((label, index) => [label, getNonTeachingStepFields(index, values)])}
               onEdit={(targetStep) => {
                 setEditingFromReview(true);
                 setStep(targetStep);
@@ -3429,8 +3580,8 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 <ChevronLeft /> Previous
               </button>
             ) : null}
-            <button className="cms-btn cms-btn-primary" onClick={step === 6 ? save : next}>
-              {step === 6 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Review" : "Next"}
+            <button className="cms-btn cms-btn-primary" onClick={step === labels.length - 1 ? save : next}>
+              {step === labels.length - 1 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Review" : "Next"}
               <ChevronRight />
             </button>
           </footer>
@@ -4893,6 +5044,7 @@ export default function StaffManagementPage() {
   const loc = useLocation();
   const n = useNavigate();
   const { id } = useParams();
+  const { boards, selectedBoard } = useAcademicContext();
 
   const [records, setRaw] = useState(() => []);
   const [activities, setActivityRaw] = useState(() => []);
@@ -4901,8 +5053,9 @@ export default function StaffManagementPage() {
   const [loadingStaff, setLoadingStaff] = useState(false);
 
   const safeRecords = useMemo(() => {
-    return Array.isArray(records) ? records : [];
-  }, [records]);
+    const raw = Array.isArray(records) ? records : [];
+    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards));
+  }, [records, selectedBoard, boards]);
 
   const setRecords = (next) => {
     const rawList = Array.isArray(next) ? next : [];
@@ -4930,15 +5083,20 @@ export default function StaffManagementPage() {
     write(ACTIVITY_STORE, next);
   };
 
-  // Initial Staff Load (GET /api/v1/staff)
+  // Initial Staff Load (GET /api/v1/staff filtered by selected Board)
   useEffect(() => {
     let isMounted = true;
     async function loadInit() {
       try {
-        const listRes = await staffApi.getStaffPaged({ PageNumber: 1, PageSize: 50 });
+        const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const listRes = await staffApi.getStaffPaged({
+          PageNumber: 1,
+          PageSize: 100,
+          BoardId: activeBoardId || undefined,
+        });
         if (isMounted && listRes.data) {
           const listItems = listRes.data.items || listRes.data.data || (Array.isArray(listRes.data) ? listRes.data : []);
-          if (Array.isArray(listItems) && listItems.length > 0) {
+          if (Array.isArray(listItems)) {
             setRecords(listItems);
           }
         }
@@ -4946,7 +5104,7 @@ export default function StaffManagementPage() {
     }
     loadInit();
     return () => { isMounted = false; };
-  }, []);
+  }, [selectedBoard]);
 
   // Fetch staff record from API whenever id changes
   useEffect(() => {

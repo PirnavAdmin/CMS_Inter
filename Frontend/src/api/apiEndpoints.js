@@ -8,6 +8,7 @@ export const apiEndpoints = {
     changePassword: "/api/Auth/change-password",
     users: "/api/Auth/users",
     userById: (id) => `/api/Auth/user/${id}`,
+    refreshToken: "/api/Auth/refresh-token",
   },
   admin: {
     login: "/api/Admin/login",
@@ -228,6 +229,7 @@ export const apiEndpoints = {
     importExcel: "/api/v1/departments/import-excel",
     exportExcel: "/api/v1/departments/export-excel",
     template: "/api/v1/departments/template",
+    exportTemplate: "/api/v1/departments/template",
   },
   designations: {
     getAll: "/api/v1/designations",
@@ -235,6 +237,10 @@ export const apiEndpoints = {
     getById: (id) => `/api/v1/designations/${id}`,
     update: (id) => `/api/v1/designations/${id}`,
     delete: (id) => `/api/v1/designations/${id}`,
+    importExcel: "/api/v1/departments/import-excel",
+    exportExcel: "/api/v1/designations/export-excel",
+    template: "/api/v1/designations/template",
+    exportTemplate: "/api/v1/designations/template",
   },
   sections: {
     getAll: "/api/v1/Sections",
@@ -285,6 +291,7 @@ export const apiEndpoints = {
     search: "/api/v1/attendance/search",
     students: "/api/v1/attendance/students",
     studentAdminDaily: "/api/v1/attendance/admin/students",
+    studentAdminBulkSave: "/api/v1/attendance/admin/bulk-save",
     studentUpdate: "/api/v1/attendance/update",
     facultySubject: "/api/v1/attendance/faculty-subject",
     academicContext: "/api/v1/attendance/academic-context",
@@ -316,6 +323,14 @@ export const apiEndpoints = {
     leaveAction: (id) => `/api/v1/staff-attendance/leave/${id}/action`,
     importTemplate: "/api/v1/staff-attendance/import/template",
     importExcel: "/api/v1/staff-attendance/import/excel",
+  },
+  attendanceTimingConfig: {
+    list: "/api/v1/attendance-timing-config",
+    effective: "/api/v1/attendance-timing-config/effective",
+    getById: (id) => `/api/v1/attendance-timing-config/${id}`,
+    create: "/api/v1/attendance-timing-config",
+    update: (id) => `/api/v1/attendance-timing-config/${id}`,
+    delete: (id) => `/api/v1/attendance-timing-config/${id}`,
   },
   leaveCategories: {
     getAll: "/api/v1/leave-categories",
@@ -514,6 +529,14 @@ export const apiEndpoints = {
     create: "/api/v1/holidays",
     update: (id) => `/api/v1/holidays/${id}`,
     delete: (id) => `/api/v1/holidays/${id}`,
+  },
+  attendanceTimingConfig: {
+    list: "/api/v1/attendance-timing-config",
+    effective: "/api/v1/attendance-timing-config/effective",
+    getById: (id) => `/api/v1/attendance-timing-config/${id}`,
+    create: "/api/v1/attendance-timing-config",
+    update: (id) => `/api/v1/attendance-timing-config/${id}`,
+    delete: (id) => `/api/v1/attendance-timing-config/${id}`,
   },
 };
 

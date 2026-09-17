@@ -140,7 +140,7 @@ export const menu = [
     section: "Staff",
     items: [
       { to: "/dashboard/staff", label: "Staff Management", icon: staffIcon },
-      { to: "/dashboard/departments", label: "Department Management", icon: generatedSidebarIcons.department },
+      { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
     ],

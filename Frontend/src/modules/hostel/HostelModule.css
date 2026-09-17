@@ -515,3 +515,135 @@ button,
 [data-theme="dark"] .cms-hostel-table tbody tr:hover {
   background: var(--cms-hover);
 }
+
+/* ---------- Hostel Attendance Register Date / Filter Controls ---------- */
+.cms-att-freq-compact {
+  display: inline-flex;
+  align-items: center;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  border-radius: 9999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.cms-att-freq-btn-compact {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--cms-muted);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cms-att-freq-btn-compact:hover {
+  color: var(--cms-text);
+  background: var(--cms-hover);
+}
+
+.cms-att-freq-btn-compact.is-active {
+  background: var(--cms-primary);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.cms-att-filter-card-compact.has-custom-range {
+  grid-template-columns: 1.15fr 1.55fr 1.15fr 0.95fr;
+}
+
+.cms-att-date-range-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.cms-att-date-range-input-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+}
+
+.cms-att-range-input {
+  height: 34px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  padding: 0 6px !important;
+  text-align: center;
+  width: 100%;
+  border-radius: 8px !important;
+}
+
+.cms-att-range-input.is-invalid {
+  border-color: var(--cms-red) !important;
+  background-color: #fff5f5 !important;
+}
+
+.cms-att-range-arrow {
+  color: var(--cms-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0 1px;
+}
+
+.cms-att-range-apply-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: none;
+  background: var(--cms-primary);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cms-att-range-apply-btn:hover {
+  background: var(--cms-primary-hover, #5a7400);
+}
+
+.cms-att-range-clear-btn {
+  height: 34px;
+  width: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.cms-att-range-clear-btn:hover {
+  color: var(--cms-red);
+  border-color: var(--cms-red-soft);
+  background: var(--cms-hover);
+}
+
+.cms-att-range-error-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--cms-red);
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 4px;
+  line-height: 1.2;
+}
+

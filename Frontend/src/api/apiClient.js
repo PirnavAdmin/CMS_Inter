@@ -1,6 +1,6 @@
-﻿import axios from "axios";
+import axios from "axios";
 import { env } from "@/config/env.js";
-import { clearAuthSession, getAuthToken } from "@/features/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken } from "@/features/authStorage.js";
 
 let activeApiRequests = 0;
 const apiLoadingListeners = new Set();
@@ -33,7 +33,10 @@ export const getApiLoadingSnapshot = () => activeApiRequests > 0;
 const isHtmlResponse = (data) =>
   typeof data === "string" && /^\s*(<!doctype html|<html)/i.test(data);
 
-const isLoginRequest = (config) => /\/login\/?$/i.test(String(config?.url || ""));
+const isAuthBypassRequest = (config) => {
+  const url = String(config?.url || "");
+  return /\/login\/?$/i.test(url) || /\/refresh(-token)?\/?$/i.test(url) || /\/register\/?$/i.test(url);
+};
 
 const getStoredAccessToken = () => {
   const stored = getAuthToken();
@@ -95,6 +98,23 @@ const apiClient = axios.create({
   },
 });
 
+let isRefreshing = false;
+let refreshSubscribers = [];
+
+const subscribeTokenRefresh = (callback) => {
+  refreshSubscribers.push(callback);
+};
+
+const onTokenRefreshed = (newToken) => {
+  refreshSubscribers.forEach((callback) => callback(newToken));
+  refreshSubscribers = [];
+};
+
+const onTokenRefreshFailed = (error) => {
+  refreshSubscribers.forEach((callback) => callback(null, error));
+  refreshSubscribers = [];
+};
+
 apiClient.interceptors.request.use(
   (config) => {
     beginApiLoading(config);
@@ -125,26 +145,94 @@ apiClient.interceptors.response.use(
     if (!isHtmlResponse(response.data)) return response;
     return Promise.reject(new Error("Backend returned HTML instead of JSON. Check API base URL or proxy."));
   },
-  (error) => {
+  async (error) => {
     finishApiLoading(error.config);
+    const originalRequest = error.config;
+
     if (import.meta.env.DEV) {
       console.error("API response error:", {
-        url: error.config?.url,
-        method: error.config?.method,
+        url: originalRequest?.url,
+        method: originalRequest?.method,
         status: error.response?.status,
         data: error.response?.data,
       });
     }
+
     if (isHtmlResponse(error.response?.data)) {
       error.response.data = { message: "Backend returned HTML instead of JSON. Check API base URL or proxy." };
     }
-    if (error.response?.status === 401 && !isLoginRequest(error.config)) {
-      clearAuthSession();
-      if (window.location.pathname !== "/login") window.location.assign("/login");
+
+    // Handle 401 Unauthorized with automatic token refresh
+    if (error.response?.status === 401 && originalRequest && !isAuthBypassRequest(originalRequest)) {
+      if (originalRequest._retry) {
+        clearAuthSession();
+        if (window.location.pathname !== "/login") window.location.assign("/login");
+        return Promise.reject(error);
+      }
+
+      const currentToken = getStoredAccessToken();
+      if (!currentToken) {
+        clearAuthSession();
+        if (window.location.pathname !== "/login") window.location.assign("/login");
+        return Promise.reject(error);
+      }
+
+      originalRequest._retry = true;
+
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh((newToken, refreshError) => {
+            if (refreshError || !newToken) {
+              return reject(error);
+            }
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            resolve(apiClient(originalRequest));
+          });
+        });
+      }
+
+      isRefreshing = true;
+
+      try {
+        const refreshBaseUrl = env.useDevProxy ? "" : env.apiBaseUrl;
+        const refreshResponse = await axios.post(
+          `${refreshBaseUrl}/api/Auth/refresh-token`,
+          { token: currentToken },
+          {
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${currentToken}`,
+            },
+          }
+        );
+
+        const newAccessToken =
+          refreshResponse.data?.accessToken ||
+          refreshResponse.data?.AccessToken ||
+          refreshResponse.data?.data?.accessToken;
+
+        if (!newAccessToken) {
+          throw new Error("Refresh response did not provide a valid access token.");
+        }
+
+        updateAuthToken(newAccessToken);
+        isRefreshing = false;
+        onTokenRefreshed(newAccessToken);
+
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        return apiClient(originalRequest);
+      } catch (refreshErr) {
+        isRefreshing = false;
+        onTokenRefreshFailed(refreshErr);
+        clearAuthSession();
+        if (window.location.pathname !== "/login") window.location.assign("/login");
+        return Promise.reject(refreshErr);
+      }
     }
+
     return Promise.reject(error);
   },
 );
 
 export default apiClient;
-

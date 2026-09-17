@@ -11,10 +11,13 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public int? DepartmentId { get; set; }
         public string DepartmentName { get; set; } = string.Empty;
         public string DesignationName { get; set; } = string.Empty;
-        public AttendanceStatus Status { get; set; } = AttendanceStatus.Present;
+        public AttendanceStatus? Status { get; set; }
+        public bool IsAttendanceMarked { get; set; }
         public TimeSpan? InTime { get; set; }
         public TimeSpan? OutTime { get; set; }
         public VerificationMethod VerificationMethod { get; set; } = VerificationMethod.Manual;
         public string? Remarks { get; set; }
+        public bool IsLate { get; set; }
+        public bool IsEarlyCheckout { get; set; }
     }
 }

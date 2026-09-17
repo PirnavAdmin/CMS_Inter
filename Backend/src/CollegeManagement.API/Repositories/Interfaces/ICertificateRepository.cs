@@ -17,6 +17,10 @@ public interface ICertificateRepository
         int id,
         CancellationToken ct = default);
 
+    Task<CertificatePreviewResponseDto?> GetPreviewAsync(
+        int id,
+        CancellationToken ct = default);
+
     Task<CertificateWorkflowStatsDto> GetWorkflowStatsAsync(
         CancellationToken ct = default);
 

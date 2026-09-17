@@ -62,7 +62,7 @@ export default function Login() {
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
 
       const userRole = String(result.user.role || "").toLowerCase();
-      if (userRole === "faculty" || userRole === "teacher") {
+      if (userRole === "faculty" || userRole === "teacher" || userRole === "hod" || userRole.includes("faculty") || userRole.includes("lecturer")) {
         navigate("/faculty-dashboard", { replace: true });
       } else {
         navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });

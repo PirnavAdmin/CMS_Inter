@@ -60,6 +60,7 @@ namespace CollegeManagement.API.Data
         public DbSet<ExamCodeSequence> ExamCodeSequences { get; set; }
         public DbSet<ExamSchedule> ExamSchedules { get; set; }
         public DbSet<Holiday> Holidays { get; set; }
+        public DbSet<AttendanceTimingConfig> AttendanceTimingConfigs { get; set; }
         public DbSet<HallTicket> HallTickets { get; set; }
         public DbSet<InvigilatorAssignment> InvigilatorAssignments { get; set; }
         public DbSet<Mark> Marks { get; set; }
@@ -353,9 +354,10 @@ namespace CollegeManagement.API.Data
                 .HasColumnName("ProgramId");
 
             modelBuilder.Entity<StudentAdmission>()
-                .Property(sa => sa.SectionId)
-                .HasColumnName("SectionId");
+                .Ignore(sa => sa.SectionId);
 
+            modelBuilder.Entity<StudentAdmission>()
+                .Ignore(sa => sa.RollNo);
              #endregion
             modelBuilder.Entity<Student>()
                 .HasIndex(s => s.BoardId);
@@ -474,43 +476,43 @@ namespace CollegeManagement.API.Data
             // ============================================================
             modelBuilder.Entity<StudentFee>(entity =>
             {
-                entity.HasKey("StudentFeeId");
+                entity.HasKey(x => x.StudentFeeId);
 
-                entity.Property("TotalAmount")
+                entity.Property(x => x.TotalAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("ConcessionAmount")
+                entity.Property(x => x.ConcessionAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("PayableAmount")
+                entity.Property(x => x.PayableAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("PaidAmount")
+                entity.Property(x => x.PaidAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("BalanceAmount")
+                entity.Property(x => x.BalanceAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("Status")
+                entity.Property(x => x.Status)
                     .IsRequired()
                     .HasMaxLength(30);
 
-                entity.Property("AssignedAt")
+                entity.Property(x => x.AssignedAt)
                     .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
 
-                entity.HasIndex("StudentId", "FeeStructureId")
+                entity.HasIndex(x => new { x.StudentId, x.FeeStructureId })
                     .IsUnique();
 
                 // Student -> StudentFee
-                entity.HasOne<Student>()
+                entity.HasOne(x => x.Student)
                     .WithMany()
-                    .HasForeignKey("StudentId")
+                    .HasForeignKey(x => x.StudentId)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 // FeeStructure -> StudentFee
-                entity.HasOne<FeeStructure>()
-                    .WithMany()
-                    .HasForeignKey("FeeStructureId")
+                entity.HasOne(x => x.FeeStructure)
+                    .WithMany(x => x.StudentFees)
+                    .HasForeignKey(x => x.FeeStructureId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -563,8 +565,8 @@ namespace CollegeManagement.API.Data
             {
                 entity.HasKey(x => x.FeePaymentId);
                 entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
-                entity.Property(x => x.DiscountAmount).HasColumnType("decimal(18,2)");
-                entity.Property(x => x.FineAmount).HasColumnType("decimal(18,2)");
+                entity.Ignore(x => x.DiscountAmount);
+                entity.Ignore(x => x.FineAmount);
                 entity.Property(x => x.PaymentMode).IsRequired().HasMaxLength(30);
                 entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
                 entity.Property(x => x.PaymentDate).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");

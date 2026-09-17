@@ -25,6 +25,7 @@ import {
   getCertificates,
   getCertificateWorkflowStats,
   getCertificateStudentsDropdown,
+  getCertificatePreview,
   generateCertificate,
   reviewCertificate,
   approveCertificate,
@@ -35,6 +36,7 @@ import {
   deleteCertificate,
   downloadCertificatePdf,
 } from "../../api/certificateApi";
+import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES } from "@/components/pages/TemplatesPage.jsx";
 import createCertificateIcon from "@/assets/sidebar-3d/certificates.png";
 import certificateRecordsIcon from "@/assets/settings-3d/audit-logs.png";
 import reviewIssueIcon from "@/assets/reports-3d/toppers.png";
@@ -111,9 +113,31 @@ const CertificateManagement = () => {
   // Modals
   const [viewingCertificate, setViewingCertificate] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
 
   const [cancellingCert, setCancellingCert] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
+
+  const handleOpenPreview = async (cert) => {
+    setViewingCertificate(cert);
+    setPreviewData(null);
+    setShowViewModal(true);
+    setPreviewLoading(true);
+    try {
+      const certId = cert.certificateId || cert.id;
+      if (certId) {
+        const res = await getCertificatePreview(certId);
+        if (res?.data) {
+          setPreviewData(res.data);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch server preview, will display local hydrated view", err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const showToast = (message, type = "success") => {
     setToast({ show: true, message, type });
@@ -838,14 +862,11 @@ const CertificateManagement = () => {
                       <td>{getStatusBadge(cert.status)}</td>
                       <td className="text-center">
                         <div className="cert-action-buttons">
-                          {/* View */}
+                          {/* View / Preview */}
                           <button
                             className="btn-icon-action btn-view"
-                            title="View Certificate Details"
-                            onClick={() => {
-                              setViewingCertificate(cert);
-                              setShowViewModal(true);
-                            }}
+                            title="Preview Certificate"
+                            onClick={() => handleOpenPreview(cert)}
                           >
                             <FiEye />
                           </button>
@@ -1100,14 +1121,11 @@ const CertificateManagement = () => {
                             </button>
                           )}
 
-                          {/* View Eye */}
+                          {/* View / Preview Eye */}
                           <button
                             className="btn-icon-action btn-view"
-                            title="View Details"
-                            onClick={() => {
-                              setViewingCertificate(cert);
-                              setShowViewModal(true);
-                            }}
+                            title="Preview Certificate"
+                            onClick={() => handleOpenPreview(cert)}
                           >
                             <FiEye />
                           </button>
@@ -1182,15 +1200,15 @@ const CertificateManagement = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* VIEW CERTIFICATE DETAILS MODAL */}
+      {/* VIEW / PREVIEW CERTIFICATE MODAL */}
       {/* ========================================================================= */}
       {showViewModal && viewingCertificate && (
         <div className="cert-modal-backdrop" onClick={() => setShowViewModal(false)}>
-          <div className="cert-modal-dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="cert-modal-dialog cert-modal-dialog-lg" onClick={(e) => e.stopPropagation()}>
             <div className="cert-modal-header">
               <div className="modal-title-with-icon">
                 <FiAward className="modal-icon" />
-                <h3>{viewingCertificate.certificateType}</h3>
+                <h3>Certificate Preview: {previewData?.title || viewingCertificate.certificateType}</h3>
               </div>
               <button className="btn-close-modal" onClick={() => setShowViewModal(false)}>
                 <FiX />
@@ -1198,64 +1216,109 @@ const CertificateManagement = () => {
             </div>
 
             <div className="cert-modal-body">
-              <div className="cert-preview-card">
-                <div className="cert-preview-header">
-                  <h4>COLLEGE MANAGEMENT SYSTEM</h4>
-                  <p>Certificate of Verification &amp; Recognition</p>
+              {previewLoading ? (
+                <div className="cert-preview-loading" style={{ textAlign: "center", padding: "3rem" }}>
+                  <div className="cert-spinner-inline"></div>
+                  <span>Loading &amp; hydrating certificate template...</span>
                 </div>
-
-                <div className="cert-preview-meta">
-                  <div className="meta-badge-box">
-                    <span className="meta-label">Certificate No:</span>
-                    <span className="meta-value font-bold">
-                      {viewingCertificate.certificateNumber}
-                    </span>
-                  </div>
-                  <div className="meta-badge-box">
-                    <span className="meta-label">Status:</span>
-                    {getStatusBadge(viewingCertificate.status)}
-                  </div>
-                </div>
-
-                <div className="cert-preview-details-grid">
-                  <div className="detail-item">
-                    <span className="detail-label">Student Name</span>
-                    <span className="detail-value">{viewingCertificate.studentName}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Admission Number</span>
-                    <span className="detail-value">{viewingCertificate.admissionNo}</span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Academic Level / Year</span>
-                    <span className="detail-value">
-                      {viewingCertificate.academicLevel || "1st Year"} ({viewingCertificate.academicYear || "2026-2027"})
-                    </span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Group / Stream</span>
-                    <span className="detail-value">{viewingCertificate.groupName || "MPC"}</span>
-                  </div>
-                  <div className="detail-item full-width">
-                    <span className="detail-label">Purpose</span>
-                    <span className="detail-value">{viewingCertificate.purpose}</span>
-                  </div>
-                  {viewingCertificate.remarks && (
-                    <div className="detail-item full-width">
-                      <span className="detail-label">Remarks</span>
-                      <span className="detail-value text-muted">{viewingCertificate.remarks}</span>
+              ) : (
+                <div className="cert-preview-card cert-canvas-ornate">
+                  <div className="cert-preview-header">
+                    <h4 className="cert-inst-title">PRAGATI JUNIOR COLLEGE</h4>
+                    <p className="cert-inst-subtitle">Affiliated to Board of Intermediate Education, Andhra Pradesh</p>
+                    <p className="cert-inst-address">Main Road, Kakinada, Andhra Pradesh - 533001</p>
+                    <div className="cert-title-badge-container">
+                      <span className="cert-title-badge">
+                        {previewData?.heading || previewData?.title || (viewingCertificate.certificateType ? viewingCertificate.certificateType.toUpperCase() : "CERTIFICATE")}
+                      </span>
                     </div>
-                  )}
-                  <div className="detail-item">
-                    <span className="detail-label">Request Date</span>
-                    <span className="detail-value">{formatDate(viewingCertificate.requestDate)}</span>
                   </div>
-                  <div className="detail-item">
-                    <span className="detail-label">Issue Date</span>
-                    <span className="detail-value">{formatDate(viewingCertificate.issueDate)}</span>
+
+                  <div className="cert-preview-meta">
+                    <div className="meta-badge-box">
+                      <span className="meta-label">Certificate No:</span>
+                      <span className="meta-value font-bold">
+                        {previewData?.certificateNumber || viewingCertificate.certificateNumber}
+                      </span>
+                    </div>
+                    <div className="meta-badge-box">
+                      <span className="meta-label">Status:</span>
+                      {getStatusBadge(previewData?.status || viewingCertificate.status)}
+                    </div>
+                  </div>
+
+                  {/* Dynamic Hydrated Content */}
+                  <div className="cert-body-content" style={{ margin: "1.5rem 0", lineHeight: "1.8", color: "#1f2937", fontSize: "1.05rem" }}>
+                    <p style={{ marginBottom: "1rem", textAlign: "justify" }}>
+                      {previewData?.paragraphOne || (
+                        <>
+                          This is to certify that Mr./Ms. <strong>{viewingCertificate.studentName || "Student"}</strong>, 
+                          bearing Admission Number <strong>{viewingCertificate.admissionNo || "-"}</strong>, 
+                          is/was a bonafide student of this institution pursuing <strong>{viewingCertificate.groupName || "Intermediate"}</strong> (
+                          <strong>{viewingCertificate.academicLevel || "1st Year"}</strong>) for the academic year{" "}
+                          <strong>{viewingCertificate.academicYear || "2026-2027"}</strong>.
+                        </>
+                      )}
+                    </p>
+
+                    {previewData?.paragraphTwo ? (
+                      <p style={{ marginBottom: "1rem", textAlign: "justify" }}>
+                        {previewData.paragraphTwo}
+                      </p>
+                    ) : viewingCertificate.purpose ? (
+                      <p style={{ marginBottom: "1rem", textAlign: "justify" }}>
+                        This certificate is issued on request for the purpose of <em>{viewingCertificate.purpose}</em>.
+                      </p>
+                    ) : null}
+
+                    {viewingCertificate.remarks && (
+                      <p style={{ marginTop: "0.5rem", fontSize: "0.92rem", color: "#6b7280" }}>
+                        <strong>Remarks:</strong> {viewingCertificate.remarks}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Summary Details Grid */}
+                  <div className="cert-preview-details-grid">
+                    <div className="detail-item">
+                      <span className="detail-label">Student Name</span>
+                      <span className="detail-value">{previewData?.studentName || viewingCertificate.studentName}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Admission Number</span>
+                      <span className="detail-value">{previewData?.admissionNo || viewingCertificate.admissionNo}</span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Academic Level / Year</span>
+                      <span className="detail-value">
+                        {previewData?.academicLevel || viewingCertificate.academicLevel || "1st Year"} ({previewData?.academicYear || viewingCertificate.academicYear || "2026-2027"})
+                      </span>
+                    </div>
+                    <div className="detail-item">
+                      <span className="detail-label">Group / Stream</span>
+                      <span className="detail-value">{previewData?.groupName || viewingCertificate.groupName || "MPC"}</span>
+                    </div>
+                  </div>
+
+                  {/* Footer Seal & Signature */}
+                  <div className="cert-footer-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px dashed #d1d5db" }}>
+                    <div>
+                      <div><strong>Place:</strong> {previewData?.place || "Kakinada"}</div>
+                      <div><strong>Date:</strong> {formatDate(previewData?.issueDate || viewingCertificate.issueDate || viewingCertificate.requestDate)}</div>
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ width: "80px", height: "80px", borderRadius: "50%", border: "2px double #15803d", display: "flex", alignItems: "center", justifyContent: "center", color: "#15803d", fontSize: "0.68rem", fontWeight: "700", textAlign: "center", transform: "rotate(-10deg)" }}>
+                        INSTITUTION<br />SEAL
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ borderBottom: "1px solid #374151", width: "160px", marginBottom: "4px" }}></div>
+                      <div style={{ fontWeight: "700", color: "#111827" }}>{previewData?.issuedBy || "Principal"}</div>
+                      <div style={{ fontSize: "0.8rem", color: "#6b7280" }}>Authorized Signatory</div>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="cert-modal-footer">

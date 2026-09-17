@@ -36,6 +36,13 @@ if (args.Length > 0)
 {
     var connStr = builder.Configuration.GetConnectionString("DefaultConnection")!;
 
+    if (args.Contains("--compare-live-db"))
+    {
+        var comparator = new LiveDbMetricComparator(connStr);
+        var success = await comparator.CompareAllMetricsAsync();
+        Environment.Exit(success ? 0 : 1);
+        return;
+    }
     if (args.Contains("--test-staff-module"))
     {
         var tester = new StaffModuleBackendTester(connStr);
@@ -62,15 +69,60 @@ if (args.Length > 0)
         Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
         return;
     }
+    if (args.Contains("--test-settings-module"))
+    {
+        var tester = new SettingsModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--inspect-dashboard-db"))
+    {
+        var inspector = new DashboardDbInspector(connStr);
+        await inspector.InspectAsync();
+        Environment.Exit(0);
+        return;
+    }
+    if (args.Contains("--inspect-duplicates"))
+    {
+        var inspector = new DuplicateDataInspector(connStr);
+        await inspector.InspectAsync();
+        Environment.Exit(0);
+        return;
+    }
     if (args.Contains("--test-dashboard-module"))
     {
         var tester = new DashboardModuleBackendTester(connStr);
         Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
         return;
     }
+    if (args.Contains("--test-master-data"))
+    {
+        var tester = new MasterDataBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
     if (args.Contains("--test-reports-module"))
     {
         var tester = new ReportModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--audit-reports-forensic"))
+    {
+        var auditor = new ReportForensicAuditor(connStr);
+        Environment.Exit(await auditor.RunForensicAuditAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--diagnose-reports-db"))
+    {
+        var diagnostic = new ReportDbDiagnostic(connStr);
+        await diagnostic.RunDiagnosticAsync();
+        Environment.Exit(0);
+        return;
+    }
+    if (args.Contains("--test-number-series"))
+    {
+        var tester = new NumberSeriesBackendTester(connStr);
         Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
         return;
     }
@@ -234,6 +286,7 @@ builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
 builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
+builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
 
 // Hostel Repositories
 builder.Services.AddScoped<IHostelBlockRepository, HostelBlockRepository>();
@@ -261,6 +314,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
 builder.Services.AddScoped<ITemplateService, TemplateService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
+builder.Services.AddScoped<IAttendanceTimingConfigService, AttendanceTimingConfigService>();
 builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
@@ -420,6 +474,140 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+if (args.Contains("--trace-detailed"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var tracer = new LiveVerificationDetailedTrace(connStr!, app.Services);
+    await tracer.RunDetailedTraceAsync();
+    Environment.Exit(0);
+    return;
+}
+
+if (args.Contains("--verify-reports-live"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var runner = new LiveReportsVerificationRunner(connStr!, app.Services);
+    var pass = await runner.RunAllTestsAsync();
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--reverify-senior-qa"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var runner = new SeniorQaReverificationRunner(connStr!, app.Services);
+    var pass = await runner.RunVerificationAsync();
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--discrepancy-audit"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var auditor = new DiscrepancyForensicAuditor(connStr!, app.Services);
+    var pass = await auditor.RunAuditAsync();
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-staff-attendance-module"))
+{
+    var pass = await StaffAttendanceModuleBackendTester.RunAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-db-all"))
+{
+    var exitCode = await DbSchemaAndSpTester.RunAsync(app.Services);
+    Environment.Exit(exitCode);
+    return;
+}
+
+if (args.Contains("--test-user-provisioning"))
+{
+    var pass = await UserProvisioningFoundationTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-student-provisioning"))
+{
+    var pass = await StudentUserProvisioningTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-staff-provisioning"))
+{
+    var pass = await StaffUserProvisioningTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-admin-provisioning"))
+{
+    var pass = await AdminUserProvisioningTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-jwt-claims") || args.Contains("--test-phase6a-jwt"))
+{
+    var pass = await JwtClaimsFoundationTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-auth-harmonization"))
+{
+    var pass = await AuthorizationHarmonizationTester.RunTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-centralized-login"))
+{
+    var pass = await CentralizedLoginTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-claim-consumers"))
+{
+    var pass = await ClaimConsumerMigrationTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-password-change"))
+{
+    var pass = await CentralizedPasswordChangeTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-forgot-reset"))
+{
+    var pass = await ForgotResetPasswordTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-admin-adapter") || args.Contains("--test-admin-login-adapter"))
+{
+    var pass = await AdminLoginAdapterTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-email-status-sync"))
+{
+    var pass = await EmailAndStatusSyncTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
 #region Database Schema Initialization
 using (var scope = app.Services.CreateScope())
 {
@@ -436,23 +624,17 @@ using (var scope = app.Services.CreateScope())
         ");
 
         db.Database.ExecuteSqlRaw(@"
-            SET @idx_exists = (
-                SELECT COUNT(*)
-                FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = 'Examinations'
-                  AND INDEX_NAME = 'IX_Examinations_ExamCode'
-            );
+            SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Examinations' AND INDEX_NAME = 'IX_Examinations_ExamCode');
+            SET @ddl = IF(@idx_exists = 0, 'ALTER TABLE `Examinations` ADD UNIQUE INDEX `IX_Examinations_ExamCode` (`ExamCode`);', 'SELECT 1;');
+            PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-            SET @ddl = IF(
-                @idx_exists = 0,
-                'ALTER TABLE `Examinations` ADD UNIQUE INDEX `IX_Examinations_ExamCode` (`ExamCode`);',
-                'SELECT 1;'
-            );
+            SET @col_exists_ds = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Staff' AND COLUMN_NAME = 'DepartmentSpecificJson');
+            SET @ddl_ds = IF(@col_exists_ds = 0, 'ALTER TABLE `Staff` ADD COLUMN `DepartmentSpecificJson` LONGTEXT NULL;', 'SELECT 1;');
+            PREPARE stmt FROM @ddl_ds; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
-            PREPARE stmt FROM @ddl;
-            EXECUTE stmt;
-            DEALLOCATE PREPARE stmt;
+            SET @col_exists_cf = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Staff' AND COLUMN_NAME = 'CustomFieldsJson');
+            SET @ddl_cf = IF(@col_exists_cf = 0, 'ALTER TABLE `Staff` ADD COLUMN `CustomFieldsJson` LONGTEXT NULL;', 'SELECT 1;');
+            PREPARE stmt FROM @ddl_cf; EXECUTE stmt; DEALLOCATE PREPARE stmt;
         ");
     }
     catch (Exception ex)
@@ -464,25 +646,30 @@ using (var scope = app.Services.CreateScope())
 #endregion
 
 #region Pipeline Middleware
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+    ForwardedHeaders = ForwardedHeaders.All
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseCors("AllowFrontend");
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-if (app.Environment.IsDevelopment())
+#region Swagger UI
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "College Management API v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "College Management API v1");
+    c.RoutePrefix = "swagger";
+});
+#endregion
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseStaticFiles();
 app.UseAuthentication();
 

@@ -62,6 +62,8 @@ const DASHBOARD_API = {
   groupDistribution: "/api/v1/dashboard/group-distribution",
   studentsAttendanceToday: "/api/v1/dashboard/students-attendance-today",
   staffAttendanceToday: "/api/v1/dashboard/staff-attendance-today",
+  upcomingHolidays: "/api/v1/dashboard/upcoming-holidays",
+  holidaysList: "/api/v1/holidays",
   certificateRequests: "/api/v1/dashboard/certificate-requests",
   upcomingExaminations: "/api/v1/dashboard/upcoming-examinations",
   todaysHighlights: "/api/v1/dashboard/todays-highlights",
@@ -73,7 +75,7 @@ const DASHBOARD_API = {
 
 const QUICK_ACTIONS = [
   { label: "Add Student", to: "/dashboard/admission", icon: addStudentIcon, tone: "green" },
-  { label: "Add Staff", to: "/dashboard/faculty", icon: addStaffIcon, tone: "blue" },
+  { label: "Add Staff", to: "/dashboard/staff/add", icon: addStaffIcon, tone: "blue" },
   { label: "Create Group", to: "/dashboard/courses/add", icon: createGroupIcon, tone: "violet" },
   { label: "Create Section", to: "/dashboard/sections", icon: createSectionIcon, tone: "cyan" },
   { label: "Create Exam", to: "/dashboard/examinations/add", icon: createExamIcon, tone: "orange" },
@@ -178,11 +180,68 @@ function EmptyState({ message = "No data available." }) {
   );
 }
 
-function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last year", changePct = "↑ 5%", previousValue }) {
+function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, rawPctKeys) {
+  const cardObj = summaryData?.[cardKey] || summaryData?.[`${cardKey}Card`] || summaryData?.[`${cardKey}Metric`];
+  
+  let current = cardObj?.currentCount ?? cardObj?.CurrentCount ?? metric(summaryData, rawCurrentKeys);
+  let previous = cardObj?.previousCount ?? cardObj?.PreviousCount ?? cardObj?.lastYearCount ?? cardObj?.LastYearCount ?? metric(summaryData, rawPrevKeys) ?? 0;
+  let rawGrowth = cardObj?.growthPercentage ?? cardObj?.GrowthPercentage ?? cardObj?.percentageChange ?? cardObj?.PercentageChange ?? metric(summaryData, rawPctKeys);
+  let status = String(cardObj?.growthStatus ?? cardObj?.GrowthStatus ?? cardObj?.status ?? cardObj?.Status ?? "").toUpperCase();
+
+  const isAvailable = current !== undefined && current !== null && current !== "";
+  const numCurrent = Number(current ?? 0);
+  const numPrevious = Number(previous ?? 0);
+
+  if (!status) {
+    if (numPrevious === 0) {
+      status = numCurrent > 0 ? "NEW" : "NO DATA";
+    } else {
+      status = numCurrent > numPrevious ? "GROWTH" : (numCurrent < numPrevious ? "DECLINE" : "NEUTRAL");
+    }
+  }
+
+  let badge = "—";
+  let label = "vs last year";
+
+  if (status === "NEW" || numPrevious === 0) {
+    if (numCurrent === 0) {
+      badge = "No Data";
+      label = "No records";
+    } else {
+      badge = "NEW";
+      label = "First recorded year";
+    }
+  } else if (rawGrowth !== undefined && rawGrowth !== null) {
+    const numPct = Number(rawGrowth);
+    if (numPct > 0) {
+      badge = `↑ ${numPct.toFixed(1)}%`;
+      label = "vs last year";
+    } else if (numPct < 0) {
+      badge = `↓ ${Math.abs(numPct).toFixed(1)}%`;
+      label = "vs last year";
+    } else {
+      badge = `→ 0.0%`;
+      label = "vs last year";
+    }
+  } else {
+    badge = "NEW";
+    label = "vs last year";
+  }
+
+  return {
+    value: isAvailable ? numCurrent : undefined,
+    previousValue: numPrevious,
+    badge,
+    label,
+    status
+  };
+}
+
+function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last year", changePct = "NEW", previousValue, to }) {
   const isAvailable = value !== undefined && value !== null && value !== "";
-  const formattedPrev = isAvailable && previousValue !== undefined && previousValue !== null ? formatNumber(previousValue) : "Unavailable";
-  return (
-    <article className={`dashboard-kpi dashboard-kpi-${tone}`}>
+  const formattedPrev = isAvailable && previousValue !== undefined && previousValue !== null ? formatNumber(previousValue) : "0";
+  const content = (
+    <article className={`dashboard-kpi dashboard-kpi-${tone} ${to ? "dashboard-kpi-clickable" : ""}`} style={to ? { cursor: "pointer" } : {}}>
       <div className="dashboard-kpi-pop" role="tooltip">
         <span>Last year: <strong>{formattedPrev}</strong></span>
       </div>
@@ -201,6 +260,15 @@ function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last yea
       </div>
     </article>
   );
+
+  if (to) {
+    return (
+      <Link to={to} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+        {content}
+      </Link>
+    );
+  }
+  return content;
 }
 
 export default function DashboardPage() {
@@ -226,6 +294,7 @@ export default function DashboardPage() {
   const [groupState, setGroupState] = useState({ loading: true, error: null, data: null });
   const [studentAttState, setStudentAttState] = useState({ loading: true, error: null, data: null, timestamp: formattedTimestamp() });
   const [staffAttState, setStaffAttState] = useState({ loading: true, error: null, data: null, timestamp: formattedTimestamp() });
+  const [holidayState, setHolidayState] = useState({ loading: true, error: null, data: null });
   const [certState, setCertState] = useState({ loading: true, error: null, data: null });
   const [examState, setExamState] = useState({ loading: true, error: null, data: null });
 
@@ -235,6 +304,7 @@ export default function DashboardPage() {
   const groupSeq = useRef(0);
   const studentAttSeq = useRef(0);
   const staffAttSeq = useRef(0);
+  const holidaySeq = useRef(0);
   const certSeq = useRef(0);
   const examSeq = useRef(0);
 
@@ -387,26 +457,31 @@ export default function DashboardPage() {
     }
   }, [boardId, staffType]);
 
-  // 6. GET /api/v1/dashboard/certificate-requests
-  const fetchCertificateRequests = useCallback(async () => {
-    const seq = ++certSeq.current;
-    setCertState((prev) => ({ ...prev, loading: true, error: null }));
+  // 6. GET /api/v1/dashboard/upcoming-holidays (with fallback to /api/v1/holidays)
+  const fetchUpcomingHolidays = useCallback(async () => {
+    const seq = ++holidaySeq.current;
+    setHolidayState((prev) => ({ ...prev, loading: true, error: null }));
     try {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
-        date: todayDate,
+        limit: 20,
       };
-      const res = await apiClient.get(DASHBOARD_API.certificateRequests, { params });
-      if (certSeq.current === seq) {
-        setCertState({ loading: false, error: null, data: unwrap(res.data) });
+      let res;
+      try {
+        res = await apiClient.get(DASHBOARD_API.upcomingHolidays, { params });
+      } catch {
+        res = await apiClient.get(DASHBOARD_API.holidaysList, { params: { ...params, pageSize: 20, status: "Active" } });
+      }
+      if (holidaySeq.current === seq) {
+        setHolidayState({ loading: false, error: null, data: unwrap(res.data) });
       }
     } catch (err) {
-      if (certSeq.current === seq) {
-        setCertState({ loading: false, error: getApiErrorMessage(err, "Failed to load certificate requests"), data: null });
+      if (holidaySeq.current === seq) {
+        setHolidayState({ loading: false, error: getApiErrorMessage(err, "Failed to load upcoming holidays"), data: null });
       }
     }
-  }, [boardId, academicYearId, todayDate]);
+  }, [boardId, academicYearId]);
 
   // 7. GET /api/v1/dashboard/upcoming-examinations
   const fetchUpcomingExaminations = useCallback(async () => {
@@ -433,9 +508,9 @@ export default function DashboardPage() {
     fetchSummary();
     fetchStudentsOverview();
     fetchGroupDistribution();
-    fetchCertificateRequests();
+    fetchUpcomingHolidays();
     fetchUpcomingExaminations();
-  }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchCertificateRequests, fetchUpcomingExaminations]);
+  }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchUpcomingHolidays, fetchUpcomingExaminations]);
 
   // Student View-By dropdown change effect -> Refresh ONLY Student Attendance card
   useEffect(() => {
@@ -456,7 +531,7 @@ export default function DashboardPage() {
       fetchGroupDistribution(),
       fetchStudentAttendance(),
       fetchStaffAttendance(),
-      fetchCertificateRequests(),
+      fetchUpcomingHolidays(),
       fetchUpcomingExaminations(),
     ]);
     setIsRefreshing(false);
@@ -464,60 +539,65 @@ export default function DashboardPage() {
     const formattedNow = formattedTimestamp(now);
     setLastUpdated(formattedNow);
     setToastMessage(`Dashboard refreshed with latest data (${formattedNow})`);
-  }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchStudentAttendance, fetchStaffAttendance, fetchCertificateRequests, fetchUpcomingExaminations]);
+  }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchStudentAttendance, fetchStaffAttendance, fetchUpcomingHolidays, fetchUpcomingExaminations]);
 
-  // Extracted KPI Values from Summary API
-  const totalStudentsVal = metric(summaryState.data, ["totalStudents", "totalStudentCount", "studentCount"]);
-  const teachingStaffVal = metric(summaryState.data, ["teachingStaff", "teachingStaffCount"]);
-  const nonTeachingStaffVal = metric(summaryState.data, ["nonTeachingStaff", "nonTeachingStaffCount"]);
-  const totalGroupsVal = metric(summaryState.data, ["totalGroups", "groupCount"]);
-  const totalSectionsVal = metric(summaryState.data, ["totalSections", "sectionCount"]);
+  // Extracted KPI Values & Metrics dynamically resolved from Backend API
+  const studentsKpi = resolveKpiMetric(summaryState.data, "totalStudents", ["totalStudents", "totalStudentCount", "studentCount"], ["lastYearTotalStudents", "lastYearStudentCount"], ["studentsVsLastYearPercentage"]);
+  const teachingKpi = resolveKpiMetric(summaryState.data, "teachingStaff", ["teachingStaff", "teachingStaffCount"], ["lastYearTeachingStaff", "lastYearTeachingStaffCount"], ["teachingStaffVsLastYearPercentage"]);
+  const nonTeachingKpi = resolveKpiMetric(summaryState.data, "nonTeachingStaff", ["nonTeachingStaff", "nonTeachingStaffCount"], ["lastYearNonTeachingStaff", "lastYearNonTeachingStaffCount"], ["nonTeachingStaffVsLastYearPercentage"]);
+  const groupsKpi = resolveKpiMetric(summaryState.data, "totalGroups", ["totalGroups", "groupCount"], ["lastYearTotalGroups", "lastYearGroupCount"], ["groupsVsLastYearPercentage"]);
+  const sectionsKpi = resolveKpiMetric(summaryState.data, "totalSections", ["totalSections", "sectionCount"], ["lastYearTotalSections", "lastYearSectionCount"], ["sectionsVsLastYearPercentage"]);
 
   const kpis = [
     {
       label: "Total Students",
-      value: totalStudentsVal,
-      previousValue: typeof totalStudentsVal === "number" ? Math.round(totalStudentsVal / 1.05) : null,
+      value: studentsKpi.value,
+      previousValue: studentsKpi.previousValue,
       icon: totalStudentsIcon,
       tone: "green",
-      changeLabel: "vs last year",
-      changePct: "↑ 5%",
+      changeLabel: studentsKpi.label,
+      changePct: studentsKpi.badge,
+      to: "/dashboard/students",
     },
     {
       label: "Teaching Staff",
-      value: teachingStaffVal,
-      previousValue: typeof teachingStaffVal === "number" ? Math.round(teachingStaffVal / 1.02) : null,
+      value: teachingKpi.value,
+      previousValue: teachingKpi.previousValue,
       icon: teachingStaffIcon,
       tone: "blue",
-      changeLabel: "vs last year",
-      changePct: "↑ 2%",
+      changeLabel: teachingKpi.label,
+      changePct: teachingKpi.badge,
+      to: "/dashboard/staff/teaching",
     },
     {
       label: "Non-Teaching Staff",
-      value: nonTeachingStaffVal,
-      previousValue: typeof nonTeachingStaffVal === "number" ? nonTeachingStaffVal : null,
+      value: nonTeachingKpi.value,
+      previousValue: nonTeachingKpi.previousValue,
       icon: nonTeachingStaffIcon,
       tone: "orange",
-      changeLabel: "vs last year",
-      changePct: "→ 0%",
+      changeLabel: nonTeachingKpi.label,
+      changePct: nonTeachingKpi.badge,
+      to: "/dashboard/staff/non-teaching",
     },
     {
       label: "Total Groups",
-      value: totalGroupsVal,
-      previousValue: typeof totalGroupsVal === "number" ? totalGroupsVal : null,
+      value: groupsKpi.value,
+      previousValue: groupsKpi.previousValue,
       icon: totalGroupsIcon,
       tone: "violet",
-      changeLabel: "vs last year",
-      changePct: "→ 0%",
+      changeLabel: groupsKpi.label,
+      changePct: groupsKpi.badge,
+      to: "/dashboard/courses",
     },
     {
       label: "Total Sections",
-      value: totalSectionsVal,
-      previousValue: typeof totalSectionsVal === "number" ? Math.round(totalSectionsVal / 1.04) : null,
+      value: sectionsKpi.value,
+      previousValue: sectionsKpi.previousValue,
       icon: totalSectionsIcon,
       tone: "cyan",
-      changeLabel: "vs last year",
-      changePct: "↑ 4%",
+      changeLabel: sectionsKpi.label,
+      changePct: sectionsKpi.badge,
+      to: "/dashboard/sections",
     },
   ];
 
@@ -547,18 +627,18 @@ export default function DashboardPage() {
     const total = metric(data, ["total", "totalStudents", "totalCount"]);
     const present = metric(data, ["present", "presentCount"]);
     const absent = metric(data, ["absent", "absentCount"]);
-    const late = metric(data, ["late", "lateCount"]);
+    const halfDay = metric(data, ["halfDay", "halfDayCount", "halfDays", "late", "lateCount"]);
     const percentage = metric(data, ["percentage", "attendancePercentage"]);
 
     const chartData = data.chartData || [
       { name: "Present", value: present ?? 0, color: "#22a447" },
       { name: "Absent", value: absent ?? 0, color: "#ef4444" },
-      { name: "Late", value: late ?? 0, color: "#f59e0b" },
+      { name: "Half-day", value: halfDay ?? 0, color: "#f59e0b" },
     ];
 
     const breakdownList = data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
-    return { total, present, absent, late, percentage, chartData, breakdownList };
+    return { total, present, absent, halfDay, late: halfDay, percentage, chartData, breakdownList };
   }, [studentAttState.data]);
 
   // Staff Attendance Normalized Values
@@ -583,18 +663,38 @@ export default function DashboardPage() {
     return { total, present, absent, late, onLeave, percentage, teachingCount, nonTeachingCount, chartData };
   }, [staffAttState.data]);
 
-  // Certificate Requests Normalized List
-  const certRequests = useMemo(() => {
-    const raw = certState.data?.items || certState.data?.requests || (Array.isArray(certState.data) ? certState.data : []);
+  // Upcoming Holidays Normalized List
+  const holidaysList = useMemo(() => {
+    const raw = holidayState.data?.items || holidayState.data?.holidays || (Array.isArray(holidayState.data) ? holidayState.data : []);
     if (!Array.isArray(raw)) return [];
-    return raw.map((item, idx) => ({
-      id: item.id || idx,
-      label: item.label || item.certificateName || item.title || "Certificate Request",
-      subtitle: item.subtitle || item.studentName || item.requestNo || "",
-      status: item.status || "Pending",
-      tone: item.tone || (String(item.status).toLowerCase() === "approved" ? "green" : "orange"),
-    }));
-  }, [certState.data]);
+    return raw.map((item, idx) => {
+      const name = item.holidayName || item.name || item.title || "College Holiday";
+      const type = item.holidayType || item.type || "Festival Holiday";
+      const dateRangeText = item.formattedDateRange || item.dateRange || item.startDate || "Scheduled";
+      const dayOfWeek = item.dayOfWeek || (item.startDate ? new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${String(item.startDate).split("T")[0]}T00:00:00`)) : "");
+      const durationText = item.durationText || (item.totalDays ? (item.totalDays > 1 ? `${item.totalDays} Days` : "1 Day") : "1 Day");
+      const badge = item.countdownText || item.badge || item.lifecycleStatus || "Upcoming";
+
+      let tone = "violet";
+      const lowerType = String(type).toLowerCase();
+      if (lowerType.includes("national")) tone = "orange";
+      else if (lowerType.includes("festival")) tone = "violet";
+      else if (lowerType.includes("special")) tone = "cyan";
+      else tone = "blue";
+
+      return {
+        id: item.id || item.holidayCode || idx,
+        name,
+        type,
+        dateRangeText,
+        dayOfWeek,
+        durationText,
+        badge,
+        tone,
+        appliesTo: item.appliesTo || "All Students & Staff",
+      };
+    });
+  }, [holidayState.data]);
 
   // Upcoming Examinations Normalized List
   const examsList = useMemo(() => {
@@ -704,7 +804,7 @@ export default function DashboardPage() {
                   <div className="dashboard-student-chip chip-total">
                     <span className="chip-icon"><Users size={15} /></span>
                     <div>
-                      <strong>{formatNumber(totalStudentsVal ?? metric(overviewState.data, ["totalStudents", "totalCount"]))}</strong>
+                      <strong>{formatNumber(metric(overviewState.data, ["totalStudents", "totalCount"]) ?? studentsKpi.value)}</strong>
                       <small>Total Students</small>
                     </div>
                   </div>
@@ -834,10 +934,10 @@ export default function DashboardPage() {
                           </div>
                           <div className="legend-item">
                             <span className="legend-label">
-                              <span className="dot dot-late" /> Late
+                              <span className="dot dot-halfday dot-late" /> Half-day
                             </span>
                             <span className="legend-val">
-                              <strong>{formatNumber(studentAttData.late)}</strong>
+                              <strong>{formatNumber(studentAttData.halfDay)}</strong>
                             </span>
                           </div>
                         </div>
@@ -857,9 +957,9 @@ export default function DashboardPage() {
                           <small>Absent</small>
                           <strong>{formatNumber(studentAttData.absent)}</strong>
                         </div>
-                        <div className="att-kpi-chip text-late">
-                          <small>Late</small>
-                          <strong>{formatNumber(studentAttData.late)}</strong>
+                        <div className="att-kpi-chip text-halfday text-late">
+                          <small>Half-day</small>
+                          <strong>{formatNumber(studentAttData.halfDay)}</strong>
                         </div>
                         <div className="att-kpi-chip text-primary">
                           <small>Attendance</small>
@@ -876,6 +976,7 @@ export default function DashboardPage() {
                       const name = item.name || item.groupName || item.sectionName || item.levelName || `Item ${idx + 1}`;
                       const pct = Number(item.percentage ?? (item.total ? ((item.present / item.total) * 100).toFixed(1) : 0));
                       const itemColor = item.color || "#22a447";
+                      const itemHd = item.halfDay ?? item.late;
                       return (
                         <div key={name || idx} className="att-breakdown-item">
                           <div className="att-breakdown-head">
@@ -888,7 +989,7 @@ export default function DashboardPage() {
                           <div className="att-breakdown-meta">
                             <span>Present: <strong>{formatNumber(item.present)}</strong> / {formatNumber(item.total)}</span>
                             <span>Absent: <strong>{formatNumber(item.absent)}</strong></span>
-                            {item.late !== undefined ? <span>Late: <strong>{formatNumber(item.late)}</strong></span> : null}
+                            {itemHd !== undefined ? <span>Half-day: <strong>{formatNumber(itemHd)}</strong></span> : null}
                           </div>
                         </div>
                       );
@@ -1046,33 +1147,38 @@ export default function DashboardPage() {
             )}
           </article>
 
-          {/* Card 2: Certificate Requests */}
-          <article className="dashboard-card dashboard-certificate-card">
+          {/* Card 2: Upcoming Holidays & College Breaks */}
+          <article className="dashboard-card dashboard-holiday-card">
             <CardHeader
-              title="Certificate Requests"
-              action={<Link to="/dashboard/certificates" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>}
+              title={`Upcoming Holidays (${holidaysList.length})`}
+              action={<Link to="/dashboard/holidays" className="dashboard-view-link">View All <ChevronRight size={14} /></Link>}
             />
-            {certState.loading ? (
-              <LoadingState label="Loading requests..." />
-            ) : certState.error ? (
-              <ErrorState message={certState.error} onRetry={fetchCertificateRequests} />
-            ) : certRequests.length === 0 ? (
-              <EmptyState message="No certificate requests found." />
+            {holidayState.loading ? (
+              <LoadingState label="Loading holidays..." />
+            ) : holidayState.error ? (
+              <ErrorState message={holidayState.error} onRetry={fetchUpcomingHolidays} />
+            ) : holidaysList.length === 0 ? (
+              <EmptyState message="No upcoming holidays scheduled." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">
-                  {certRequests.map((item, index) => (
-                    <div key={`certificate-${item.id}-${index}`} className="dashboard-info-item">
+                  {holidaysList.map((item, index) => (
+                    <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
-                        <FileText size={15} />
+                        <CalendarDays size={15} />
                       </span>
                       <div className="dashboard-info-content">
-                        <strong>{item.label}</strong>
-                        <small>{item.subtitle}</small>
+                        <div className="dashboard-holiday-title-row">
+                          <strong>{item.name}</strong>
+                          <span className={`holiday-type-pill pill-${item.tone}`}>{item.type}</span>
+                        </div>
+                        <small className="dashboard-holiday-meta">
+                          <span>{item.dateRangeText}</span>
+                          {item.dayOfWeek ? <span className="holiday-meta-dot">• {item.dayOfWeek}</span> : null}
+                          <span className="holiday-duration-badge">{item.durationText}</span>
+                        </small>
                       </div>
-                      <span className={`dashboard-status-badge badge-${String(item.status).toLowerCase()}`}>
-                        {item.status}
-                      </span>
+                      <span className={`dashboard-days-badge holiday-badge badge-${item.tone}`}>{item.badge}</span>
                     </div>
                   ))}
                 </div>
