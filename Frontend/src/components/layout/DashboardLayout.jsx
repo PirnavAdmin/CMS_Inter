@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building,
-  Building2, LayoutDashboard, Users, BarChart3,
+  Building2, LayoutDashboard, Users, BarChart3, CalendarDays,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -122,6 +122,7 @@ export const menu = [
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
+      { to: "/dashboard/holidays", label: "Holiday Management", icon: CalendarDays },
     ],
   },
   {

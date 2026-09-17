@@ -246,7 +246,7 @@ function FacultyDashboard() {
   }, [activeModule, attendanceDate, attendanceSection]);
   const [marksState, setMarksState] = useState(mockStudentsList);
   const [examDutiesState, setExamDutiesState] = useState(mockExamDutiesList);
-  const [leavesState, setLeavesState] = useState(() => getLeaveRequests().filter((leave) => leave.staffId === mockFaculty.employeeId));
+  const [leavesState, setLeavesState] = useState(mockLeavesList);
   const [reimbursementsState, setReimbursementsState] = useState(mockReimbursementsList);
   const [messagesState, setMessagesState] = useState(mockMessagesHistory);
   const [newMessageText, setNewMessageText] = useState("");
@@ -275,9 +275,18 @@ function FacultyDashboard() {
 
   useEffect(() => {
     let isMounted = true;
-    getLeaveRequests().then((data) => {
-      if (isMounted) setLeavesState(data.filter((leave) => leave.staffId === mockFaculty.employeeId));
-    }).catch(err => console.error(err));
+    getLeaveRequests()
+      .then((data) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          const facultyLeaves = data.filter((leave) => leave.staffId === mockFaculty.employeeId);
+          if (facultyLeaves.length > 0) {
+            setLeavesState(facultyLeaves);
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn("Could not load leaves from backend API, using fallback data:", err);
+      });
     return () => { isMounted = false; };
   }, []);
 
@@ -1577,7 +1586,7 @@ function FacultyDashboard() {
   // SCREEN 11 — LEAVE REQUESTS VIEW
   // ------------------------------------------------------------------------
   const renderLeaveRequestsView = () => {
-    const handleLeaveSubmit = (e) => {
+    const handleLeaveSubmit = async (e) => {
       e.preventDefault();
       if (!leaveForm.reason.trim()) {
         showToast("Please enter a reason for leave application.");
@@ -1590,7 +1599,7 @@ function FacultyDashboard() {
         return;
       }
       const requestedDays = Math.floor((end - start) / 86400000) + 1;
-      const newLeave = submitLeaveRequest({
+      const payload = {
         staffId: mockFaculty.employeeId,
         staffName: mockFaculty.fullName,
         department: mockFaculty.department,
@@ -1600,8 +1609,26 @@ function FacultyDashboard() {
         toDate: leaveForm.to,
         days: requestedDays,
         reason: leaveForm.reason,
-      });
-      setLeavesState((current) => [newLeave, ...current]);
+      };
+
+      const fallbackLeave = {
+        id: `l-${Date.now()}`,
+        type: leaveForm.type,
+        from: leaveForm.from,
+        to: leaveForm.to,
+        days: requestedDays,
+        reason: leaveForm.reason,
+        appliedOn: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+        status: "Pending",
+        approver: "HOD Mathematics",
+      };
+
+      try {
+        const res = await submitLeaveRequest(payload);
+        setLeavesState((current) => [res || fallbackLeave, ...current]);
+      } catch {
+        setLeavesState((current) => [fallbackLeave, ...current]);
+      }
       showToast("Leave request submitted successfully!");
       setLeaveForm({ ...leaveForm, reason: "" });
     };

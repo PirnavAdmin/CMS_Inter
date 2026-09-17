@@ -24,7 +24,6 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
@@ -70,10 +69,22 @@ const newAdmissionValues = (values = {}) => {
 const getCollection = (payload) => {
   const data = payload?.data ?? payload?.Data ?? payload;
   if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.result)) return data.result;
+  if (Array.isArray(data?.Result)) return data.Result;
+  if (Array.isArray(data?.response)) return data.response;
+  if (Array.isArray(data?.Response)) return data.Response;
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.Data)) return data.Data;
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data?.Items)) return data.Items;
+  if (Array.isArray(data?.records)) return data.records;
+  if (Array.isArray(data?.Records)) return data.Records;
+  if (Array.isArray(data?.rows)) return data.rows;
+  if (Array.isArray(data?.Rows)) return data.Rows;
+  if (Array.isArray(data?.scholarships)) return data.scholarships;
+  if (Array.isArray(data?.Scholarships)) return data.Scholarships;
+  if (Array.isArray(data?.groups)) return data.groups;
+  if (Array.isArray(data?.Groups)) return data.Groups;
   if (Array.isArray(data?.results)) return data.results;
   if (Array.isArray(data?.Results)) return data.Results;
   if (Array.isArray(data?.$values)) return data.$values;
@@ -189,6 +200,101 @@ const studentPhotoSource = (values = {}, previewUrl = "") => (
   previewUrl || values.photoUrl || values.studentPhoto || ""
 );
 
+const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.onerror = reject;
+  reader.readAsDataURL(blob);
+});
+
+const loadPdfImageDataUrl = async (source) => {
+  try {
+    if (typeof File !== "undefined" && source instanceof File) return await blobToDataUrl(source);
+  } catch {
+    return "";
+  }
+  const normalizedSrc = resolveStudentPhotoUrl(source);
+  if (!normalizedSrc) return "";
+  if (/^data:image\//i.test(normalizedSrc)) return normalizedSrc;
+  try {
+    if (normalizedSrc.startsWith("blob:")) {
+      const response = await fetch(normalizedSrc);
+      if (!response.ok) return "";
+      return await blobToDataUrl(await response.blob());
+    }
+    const response = await apiClient.get(normalizedSrc, {
+      responseType: "blob",
+      headers: { Accept: "image/*" },
+      skipGlobalLoader: true,
+    });
+    const contentType = String(response.headers?.["content-type"] ?? response.data?.type ?? "").toLowerCase();
+    if (!contentType.startsWith("image/")) return "";
+    return await blobToDataUrl(response.data);
+  } catch {
+    try {
+      const response = await fetch(normalizedSrc, { credentials: "include", headers: { Accept: "image/*" } });
+      if (!response.ok) throw new Error(`Photo request failed with HTTP ${response.status}`);
+      const blob = await response.blob();
+      if (!String(blob.type || "").toLowerCase().startsWith("image/")) return "";
+      return await blobToDataUrl(blob);
+    } catch {
+      // Fall through to the visible development log below.
+    }
+    if (import.meta.env.DEV) console.error("Student photo failed to load for PDF:", normalizedSrc);
+    return "";
+  }
+};
+
+const readImageDimensions = (src) => new Promise((resolve) => {
+  if (!src || typeof Image === "undefined") {
+    resolve({ width: 1, height: 1 });
+    return;
+  }
+  const image = new Image();
+  image.onload = () => resolve({
+    width: image.naturalWidth || image.width || 1,
+    height: image.naturalHeight || image.height || 1,
+  });
+  image.onerror = () => resolve({ width: 1, height: 1 });
+  image.src = src;
+});
+
+const coverImageDataUrl = (src, targetRatio) => new Promise((resolve) => {
+  if (!src || typeof Image === "undefined" || typeof document === "undefined") {
+    resolve(src);
+    return;
+  }
+  const image = new Image();
+  image.onload = () => {
+    const sourceWidth = image.naturalWidth || image.width || 1;
+    const sourceHeight = image.naturalHeight || image.height || 1;
+    const sourceRatio = sourceWidth / sourceHeight;
+    let cropWidth = sourceWidth;
+    let cropHeight = sourceHeight;
+    let cropX = 0;
+    let cropY = 0;
+    if (sourceRatio > targetRatio) {
+      cropWidth = sourceHeight * targetRatio;
+      cropX = (sourceWidth - cropWidth) / 2;
+    } else {
+      cropHeight = sourceWidth / targetRatio;
+      cropY = (sourceHeight - cropHeight) / 2;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = 360;
+    canvas.height = Math.max(1, Math.round(canvas.width / targetRatio));
+    const context = canvas.getContext("2d");
+    if (!context) {
+      resolve(src);
+      return;
+    }
+    context.drawImage(image, cropX, cropY, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+    resolve(canvas.toDataURL("image/jpeg", 0.9));
+  };
+  image.onerror = () => resolve(src);
+  image.src = src;
+});
+
 const isLooseId = (value) => {
   const text = String(value ?? "").trim();
   return text === "" || text === "0";
@@ -256,6 +362,42 @@ const lookupLabel = (options = [], value, currentLabel = "") => {
   const label = String(currentLabel || "").trim();
   if (label && !isRawIdDisplay(label, value)) return label;
   return optionLabel(options, value) || (label && !isRawIdDisplay(label) ? label : "");
+};
+
+const optionMatchesRecord = (selectedValue, options = [], ...candidates) => {
+  const selected = String(selectedValue ?? "").trim();
+  if (!selected) return true;
+  const selectedLabel = optionLabel(options, selected);
+  const accepted = [selected, selectedLabel].filter(Boolean).map(normalizeMatchText);
+  return candidates.some((candidate) => {
+    const normalized = normalizeMatchText(candidate);
+    return normalized && accepted.includes(normalized);
+  });
+};
+
+const optionFromRecord = (value, label) => {
+  const normalizedValue = String(value ?? "").trim();
+  const normalizedLabel = String(label ?? "").trim();
+  if (!normalizedValue && !normalizedLabel) return null;
+  return {
+    value: normalizedValue || normalizedLabel,
+    label: normalizedLabel || normalizedValue,
+  };
+};
+
+const scopedOptionMatches = (selectedValue, options = [], candidateId = "", candidateName = "", selectedLabel = "") => {
+  const selected = String(selectedValue ?? "").trim();
+  if (!selected) return true;
+  const accepted = [
+    ...optionValuesFor(options, selected),
+    selectedLabel,
+  ].filter(Boolean).map(normalizeMatchText);
+  if (!accepted.length) return true;
+  const candidates = [candidateId, candidateName]
+    .map(normalizeMatchText)
+    .filter((value) => value && value !== "0" && value !== "[object object]");
+  if (!candidates.length) return true;
+  return candidates.some((candidate) => accepted.includes(candidate));
 };
 
 const resolveOptionValue = (options = [], value, label = "") => {
@@ -381,8 +523,11 @@ const classifyFeeItem = (item) => {
 const isActiveRecord = (item) => {
   const status = read(item, "status", "Status");
   const isActive = read(item, "isActive", "IsActive", "active", "Active");
-  if (typeof status === "string") return status.toLowerCase() !== "inactive";
+  if (typeof status === "string") return !["inactive", "false", "0", "no", "disabled"].includes(status.trim().toLowerCase());
+  if (typeof status === "number") return status !== 0;
   if (typeof isActive === "boolean") return isActive;
+  if (typeof isActive === "number") return isActive !== 0;
+  if (typeof isActive === "string") return ["true", "1", "active", "yes"].includes(isActive.trim().toLowerCase());
   return true;
 };
 
@@ -451,16 +596,39 @@ const feeStructureMatchesSelection = (item, { boardId, academicYearId, groupId, 
   && structureProgramMatches(programId, options.programs, item.programId, item.programName)
 );
 
+const normalizeScholarshipDiscountType = (value) => {
+  const text = String(value || "").trim();
+  const normalized = text.toLowerCase();
+  if (["%", "percent", "percentage"].includes(normalized)) return "Percentage";
+  if (["fixed", "amount", "flat", "fixed amount"].includes(normalized)) return "Fixed";
+  return text || "Percentage";
+};
+
 const normalizeScholarship = (item) => {
-  const id = readId(item, "scholarshipId", "ScholarshipId", "id", "Id");
-  const name = readText(item, "scholarshipName", "ScholarshipName", "name", "Name", "title", "Title");
+  const id = readId(item, "scholarshipId", "ScholarshipId", "scholarshipID", "ScholarshipID", "id", "Id");
+  const name = readText(item, "scholarshipName", "ScholarshipName", "schemeName", "SchemeName", "name", "Name", "title", "Title", "label", "Label", "scholarship", "Scholarship");
   if (!id || !name || !isActiveRecord(item)) return null;
-  const discountType = readText(item, "discountType", "DiscountType", "type", "Type") || "Percentage";
+  const board = read(item, "board", "Board");
+  const academicYear = read(item, "academicYear", "AcademicYear", "year", "Year");
+  const academicLevel = read(item, "academicLevel", "AcademicLevel", "level", "Level");
+  const group = read(item, "group", "Group");
+  const program = read(item, "program", "Program");
+  const discountType = readText(item, "discountType", "DiscountType", "scholarshipType", "ScholarshipType", "type", "Type", "concessionType", "ConcessionType");
   return {
     id,
     name,
-    discountType: discountType === "%" ? "Percentage" : discountType,
-    discountValue: readNumber(item, "discountValue", "DiscountValue", "value", "Value", "percentage", "Percentage", "amount", "Amount") ?? 0,
+    discountType: normalizeScholarshipDiscountType(discountType),
+    discountValue: readNumber(item, "discountValue", "DiscountValue", "value", "Value", "percentage", "Percentage", "amount", "Amount", "scholarshipValue", "ScholarshipValue") ?? 0,
+    boardId: readId(item, "boardId", "BoardId") || readId(board, "boardId", "BoardId", "id", "Id"),
+    boardName: readText(item, "boardName", "BoardName") || (typeof board === "string" ? board : readText(board, "boardName", "BoardName", "name", "Name", "boardCode", "BoardCode")),
+    academicYearId: readId(item, "academicYearId", "AcademicYearId") || readId(academicYear, "academicYearId", "AcademicYearId", "id", "Id"),
+    academicYearName: readText(item, "academicYearName", "AcademicYearName", "yearName", "YearName") || (typeof academicYear === "string" ? academicYear : readText(academicYear, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name")),
+    academicLevelId: readId(item, "academicLevelId", "AcademicLevelId") || readId(academicLevel, "academicLevelId", "AcademicLevelId", "id", "Id"),
+    academicLevelName: readText(item, "academicLevelName", "AcademicLevelName", "levelName", "LevelName") || (typeof academicLevel === "string" ? academicLevel : readText(academicLevel, "academicLevelName", "AcademicLevelName", "levelName", "LevelName", "name", "Name")),
+    groupId: readId(item, "groupId", "GroupId") || readId(group, "groupId", "GroupId", "id", "Id"),
+    groupName: readText(item, "groupName", "GroupName", "groupCode", "GroupCode") || (typeof group === "string" ? group : readText(group, "groupName", "GroupName", "name", "Name", "groupCode", "GroupCode")),
+    programId: readId(item, "programId", "ProgramId") || readId(program, "programId", "ProgramId", "id", "Id"),
+    programName: readText(item, "programName", "ProgramName", "programCode", "ProgramCode") || (typeof program === "string" ? program : readText(program, "programName", "ProgramName", "name", "Name", "programCode", "ProgramCode")),
   };
 };
 
@@ -471,6 +639,23 @@ const toOption = (item, idKeys, labelKeys) => {
   const label = read(item, ...labelKeys) || value;
   if (value === undefined || value === null || value === "") return null;
   return { value: String(value), label: String(label) };
+};
+
+const normalizeGroupOption = (item) => {
+  const option = toOption(item, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "groupCode", "GroupCode", "name", "Name"]);
+  if (!option) return null;
+  const board = read(item, "board", "Board");
+  const academicYear = read(item, "academicYear", "AcademicYear", "year", "Year");
+  const academicLevel = read(item, "academicLevel", "AcademicLevel", "level", "Level");
+  return {
+    ...option,
+    boardId: readId(item, "boardId", "BoardId") || readId(board, "boardId", "BoardId", "id", "Id"),
+    boardName: readText(item, "boardName", "BoardName") || (typeof board === "string" ? board : readText(board, "boardName", "BoardName", "name", "Name", "boardCode", "BoardCode")),
+    academicYearId: readId(item, "academicYearId", "AcademicYearId") || readId(academicYear, "academicYearId", "AcademicYearId", "id", "Id"),
+    academicYearName: readText(item, "academicYearName", "AcademicYearName", "yearName", "YearName") || (typeof academicYear === "string" ? academicYear : readText(academicYear, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name")),
+    academicLevelId: readId(item, "academicLevelId", "AcademicLevelId") || readId(academicLevel, "academicLevelId", "AcademicLevelId", "id", "Id"),
+    academicLevelName: readText(item, "academicLevelName", "AcademicLevelName", "levelName", "LevelName") || (typeof academicLevel === "string" ? academicLevel : readText(academicLevel, "academicLevelName", "AcademicLevelName", "levelName", "LevelName", "name", "Name")),
+  };
 };
 
 const normalizeBloodGroupOption = (item) => {
@@ -598,6 +783,11 @@ const cleanExportValue = (value) => {
   return String(value);
 };
 
+const formatPdfCurrency = (value) => {
+  const amount = Number(value || 0);
+  return `Rs. ${(Number.isFinite(amount) ? Math.round(amount) : 0).toLocaleString("en-IN")}`;
+};
+
 const safeExportFileName = (value) => String(value || "student-admissions")
   .trim()
   .toLowerCase()
@@ -671,8 +861,8 @@ const steps = [
     title: "Academic Details",
     fields: [
       { name: "level", label: "Academic Level", type: "select", options: [], required: true },
-      { name: "group", label: "Group", type: "select", options: [] },
-      { name: "program", label: "Program", type: "select", options: [] },
+      { name: "group", label: "Group", type: "select", options: [], required: true },
+      { name: "program", label: "Program", type: "select", options: [], required: true },
       { name: "medium", label: "Medium", type: "select", options: ["English", "Telugu", "Hindi"] },
       { name: "secondLanguage", label: "Second Language", type: "select", options: ["Sanskrit", "Telugu", "Hindi", "French"] },
     ],
@@ -1061,6 +1251,42 @@ const hydratePersistedFeeState = (currentValues, payload) => {
   };
 };
 
+const persistedFeeComponents = (payload) => persistedFeeSources(payload)
+  .flatMap((source) => getNestedRows(source, "components", "Components", "feeComponents", "FeeComponents"))
+  .map((item) => normalizeFeeStructureItem(item))
+  .filter(Boolean);
+
+const readPersistedFeeSummary = (payload, fallbackFee) => {
+  const sources = persistedFeeSources(payload);
+  if (!sources.length) return fallbackFee;
+  const components = persistedFeeComponents(payload);
+  const componentTotal = (kind, amountKeys) => components
+    .filter((item) => item.kind === kind)
+    .reduce((sum, item) => sum + (amountKeys.map((key) => Number(item[key])).find(Number.isFinite) || 0), 0);
+  const readFirstNumber = (...keys) => sources
+    .map((source) => readNumber(source, ...keys))
+    .find((value) => value !== null);
+  const readFirstText = (...keys) => sources
+    .map((source) => readText(source, ...keys))
+    .find(Boolean) || "";
+  const totalAmount = readFirstNumber("totalAmount", "TotalAmount");
+  const concessionAmount = readFirstNumber("concessionAmount", "ConcessionAmount", "discountAmount", "DiscountAmount");
+  const payableAmount = readFirstNumber("payableAmount", "PayableAmount", "netPayable", "NetPayable");
+  const paidAmount = readFirstNumber("paidAmount", "PaidAmount", "amountPaid", "AmountPaid");
+  const balanceAmount = readFirstNumber("balanceAmount", "BalanceAmount", "remainingBalance", "RemainingBalance");
+
+  return {
+    admissionFee: componentTotal("admission", ["payableAmount", "originalAmount"]) || fallbackFee.admissionFee,
+    courseFee: componentTotal("course", ["originalAmount", "payableAmount"]) || fallbackFee.courseFeeOriginal || fallbackFee.courseFee,
+    concessionAmount: concessionAmount ?? fallbackFee.courseConcession,
+    optionalFees: componentTotal("optional", ["payableAmount", "originalAmount"]) || fallbackFee.optionalFeesTotal,
+    totalPayable: payableAmount ?? fallbackFee.totalPayable ?? fallbackFee.totalCommitment,
+    amountPaid: paidAmount ?? fallbackFee.paidToday,
+    remainingBalance: balanceAmount ?? fallbackFee.remainingBalance ?? fallbackFee.remaining,
+    paymentPlan: readFirstText("paymentPlan", "PaymentPlan", "planName", "PlanName") || fallbackFee.paymentPlan,
+  };
+};
+
 const normalizeAdmissionRow = (item) => {
   const admissionId = readId(item, "admissionId", "AdmissionId", "id", "Id");
   const student = read(item, "student", "Student", "studentDetails", "StudentDetails", "approvedStudent", "ApprovedStudent", "createdStudent", "CreatedStudent");
@@ -1115,11 +1341,15 @@ const normalizeAdmissionRow = (item) => {
     admissionNo,
     studentName,
     admissionDate: readText(item, "admissionDate", "AdmissionDate", "date", "Date"),
+    academicYearId,
     academicYear: academicYearId || academicYearName,
     academicYearName,
+    boardId,
     board: boardId || boardName,
     boardName,
+    groupId,
     group: !isRawIdDisplay(groupName, groupId) ? groupName : groupId,
+    programId,
     program: !isRawIdDisplay(programName, programId) ? programName : programId,
     studentPhoto,
     photoUrl,
@@ -1330,8 +1560,8 @@ const deriveAdmissionFee = (values) => {
   const totalCommitment = admissionFee + courseFeePayable + optionalFeesTotal;
   const schedule = Array.isArray(values.installments) ? values.installments : [];
   const isInstallment = values.paymentPlan === "Installment Payment";
-  const coursePaidToday = isInstallment ? 0 : courseFeePayable;
-  const paidToday = admissionFee + optionalFeesTotal + coursePaidToday;
+  const coursePaidToday = 0;
+  const paidToday = 0;
   const courseScheduleBalance = isInstallment ? Math.max(courseFeePayable - coursePaidToday, 0) : 0;
 
   return {
@@ -1343,7 +1573,7 @@ const deriveAdmissionFee = (values) => {
     courseFeePayable,
     optionalFeesTotal,
     totalCommitment,
-    admissionFeeDueToday: admissionFee,
+    admissionFeeDueToday: 0,
     coursePaidToday,
     courseScheduleBalance,
     feeItems,
@@ -1715,7 +1945,7 @@ function FeeSummaryRows({ fee }) {
       <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
       <div><span>Optional Selected Fees</span><strong>{formatCurrency(fee.optionalFeesTotal)}</strong></div>
       <div className="is-total"><span>Total Fee Commitment</span><strong>{formatCurrency(fee.totalCommitment)}</strong></div>
-      <div><span>Due on Admission</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
+      <div><span>Amount Paid Now</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
       <div><span>Future Scheduled Course Fee</span><strong>{formatCurrency(fee.courseScheduleBalance)}</strong></div>
       <div className="is-total"><span>Remaining Balance</span><strong>{formatCurrency(fee.remainingBalance)}</strong></div>
       <div><span>Payment Plan</span><strong>{fee.paymentPlan ? paymentPlanLabel(fee.paymentPlan) : "Not selected"}</strong></div>
@@ -1902,14 +2132,6 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
             <FeeItemsTable feeItems={fee.feeItems} errors={errors} onChange={onChange} />
           </section>
 
-          <section className="cms-fee-block">
-            <h3>Admission Fee - Due Today</h3>
-            <div className="cms-fee-summary">
-              <div><span>Admission Fee</span><strong>{formatCurrency(fee.admissionFee)}</strong></div>
-              <div><span>Payment Requirement</span><strong>Due on admission</strong></div>
-            </div>
-          </section>
-
           <ConcessionPanel fee={fee} values={values} errors={errors} onChange={onChange} scholarships={scholarships} />
 
           <section className="cms-fee-block">
@@ -1926,7 +2148,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
                   <span className="cms-fee-radio" aria-hidden="true" />
                   <span>
                     <strong>{paymentPlanLabel(plan)}</strong>
-                    <small>{plan === "Full Payment" ? "Admission Fee and the full Course Fee are due on admission." : "Admission Fee is due on admission; schedule the Course Fee payable."}</small>
+                    <small>{plan === "Full Payment" ? "Use the selected fee items as one fee assignment." : "Schedule the Course Fee payable."}</small>
                   </span>
                 </button>
               ))}
@@ -1959,7 +2181,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
                 <div><span>Admission Fee</span><strong>{formatCurrency(fee.admissionFee)}</strong></div>
                 <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
                 <div><span>Optional One-Time Fees</span><strong>{formatCurrency(fee.optionalFeesTotal)}</strong></div>
-                <div className="is-total"><span>Total Due on Admission</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
+                <div className="is-total"><span>Total Selected Fee</span><strong>{formatCurrency(fee.totalCommitment)}</strong></div>
               </div>
             </section>
           )}
@@ -1985,7 +2207,7 @@ function FeePreview({ fee, values }) {
         <div><span>Scholarship</span><strong>{fee.concessionName || "No scholarship"}</strong></div>
         <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
         <div><span>Payment Plan</span><strong>{values.paymentPlan ? paymentPlanLabel(values.paymentPlan) : "Not selected"}</strong></div>
-        <div><span>Due on Admission</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
+        <div><span>Amount Paid Now</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
         <div><span>Future Course Schedules</span><strong>{formatCurrency(fee.courseScheduleBalance)}</strong></div>
         <div><span>Remaining Balance</span><strong>{formatCurrency(fee.remainingBalance)}</strong></div>
       </div>
@@ -2072,6 +2294,7 @@ export default function AdmissionPage() {
   const approveStatusCheckRef = useRef(new Set());
   const verifiedInFlightRef = useRef(new Set());
   const admissionsRequestRef = useRef(0);
+  const scholarshipRequestRef = useRef(0);
   const autoLocationRef = useRef({ city: "", district: "", state: "" });
 
   const current = allSteps[step];
@@ -2155,7 +2378,29 @@ export default function AdmissionPage() {
     ));
   }, [masterOptions.boards, masterOptions.groups, masterOptions.levels, masterOptions.sections, values.board, values.group, values.groupName, values.level, values.levelName, values.year]);
   const programOptions = useMemo(() => masterOptions.programs || [], [masterOptions.programs]);
-  const groupFilterOptions = useMemo(() => masterOptions.groups || [], [masterOptions.groups]);
+  const groupFilterOptions = useMemo(() => {
+    const scopedMasterGroups = (masterOptions.groups || []).filter((item) => (
+      scopedOptionMatches(selectedContextBoardValue, boardOptions, item.boardId, item.boardName, selectedContextBoardLabel)
+      && scopedOptionMatches(selectedContextYearValue, yearOptions, item.academicYearId, item.academicYearName, selectedContextYearLabel)
+    ));
+    const admissionGroups = admissions
+      .map((row) => optionFromRecord(row.groupId || row.values?.group, row.group || row.values?.groupName))
+      .filter(Boolean);
+    return uniqueOptionsByValue([...scopedMasterGroups, ...admissionGroups]);
+  }, [
+    admissions,
+    boardOptions,
+    masterOptions.groups,
+    selectedContextBoardLabel,
+    selectedContextBoardValue,
+    selectedContextYearLabel,
+    selectedContextYearValue,
+    yearOptions,
+  ]);
+  const academicYearFilterOptions = useMemo(() => uniqueAcademicYearsByName(
+    yearOptions || [],
+    (item) => item.label,
+  ), [yearOptions]);
   const bloodGroupOptions = useMemo(() => (
     masterOptions.bloodGroups?.length ? masterOptions.bloodGroups : DEFAULT_BLOOD_GROUP_OPTIONS
   ), [masterOptions.bloodGroups]);
@@ -2238,16 +2483,26 @@ export default function AdmissionPage() {
         || String(row.studentName || "").toLowerCase().includes(term)
         || String(row.admissionNo || "").toLowerCase().includes(term);
       const rowYearLabel = admissionYearDisplay(row);
-      const matchesYear = !filters.year
-        || String(row.academicYear) === String(filters.year)
-        || normalizeMatchText(rowYearLabel) === normalizeMatchText(filters.year);
-      const matchesGroup = !filters.group
-        || String(row.values?.group || "") === String(filters.group)
-        || String(row.group || "").trim().toLowerCase() === String(optionLabel(groupFilterOptions, filters.group) || filters.group).trim().toLowerCase();
+      const matchesYear = optionMatchesRecord(
+        filters.year,
+        academicYearFilterOptions,
+        row.values?.year,
+        row.academicYear,
+        row.academicYearName,
+        rowYearLabel,
+      );
+      const matchesGroup = optionMatchesRecord(
+        filters.group,
+        groupFilterOptions,
+        row.groupId,
+        row.values?.group,
+        row.group,
+        row.values?.groupName,
+      );
       const matchesStatus = !filters.status || normalizeAdmissionStatus(row.status) === filters.status;
       return matchesSearch && matchesYear && matchesGroup && matchesStatus;
     });
-  }, [admissionYearDisplay, admissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
+  }, [academicYearFilterOptions, admissionYearDisplay, admissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
   const totalPages = Math.max(1, Math.ceil(displayedAdmissions.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedAdmissions = displayedAdmissions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -2313,6 +2568,12 @@ export default function AdmissionPage() {
     ]);
     const admissionNo = values.admissionNo || "admission";
     const document = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    const pdfPhotoSource = typeof File !== "undefined" && values.photo instanceof File ? values.photo : studentPhotoSource(values, photoPreviewUrl);
+    const pdfPhotoDataUrl = await loadPdfImageDataUrl(pdfPhotoSource);
+    const pdfPhotoDimensions = pdfPhotoDataUrl ? await readImageDimensions(pdfPhotoDataUrl) : null;
+    const pdfPhotoBoxWidth = 112;
+    const pdfPhotoLabelHeight = 14;
+    const pdfFee = readPersistedFeeSummary(values.persistedFeeDetails, fee);
     document.setFontSize(16);
     document.text("Student Admission Form", 36, 38);
     document.setFontSize(10);
@@ -2320,15 +2581,18 @@ export default function AdmissionPage() {
     document.text(`Admission No: ${admissionNo}`, 36, 56);
     let startY = 76;
 
-    previewSections.forEach((section) => {
+    for (const section of previewSections) {
       if (section.custom === "fee") {
+        const concessionAmount = Number(pdfFee.concessionAmount || 0);
         const feeRows = [
-          ["Admission Fee", formatCurrency(fee.admissionFee)],
-          ["Course Fee", formatCurrency(fee.courseFee)],
-          ["Total Payable", formatCurrency(fee.totalPayable)],
-          ["Due on Admission", formatCurrency(fee.paidToday)],
-          ["Remaining", formatCurrency(fee.remaining)],
-          ["Payment Plan", paymentPlanLabel(fee.paymentPlan) || "-"],
+          ["Admission Fee", formatPdfCurrency(pdfFee.admissionFee)],
+          ["Course Fee", formatPdfCurrency(pdfFee.courseFee)],
+          ["Scholarship / Concession", concessionAmount > 0 ? `-${formatPdfCurrency(concessionAmount)}` : formatPdfCurrency(0)],
+          ["Selected Optional Fees", formatPdfCurrency(pdfFee.optionalFees)],
+          ["Total Payable", formatPdfCurrency(pdfFee.totalPayable)],
+          ["Amount Paid", formatPdfCurrency(pdfFee.amountPaid)],
+          ["Remaining Balance", formatPdfCurrency(pdfFee.remainingBalance)],
+          ["Payment Plan", paymentPlanLabel(pdfFee.paymentPlan) || "-"],
         ];
         autoTable(document, {
           startY,
@@ -2339,13 +2603,18 @@ export default function AdmissionPage() {
           margin: { left: 36, right: 36 },
         });
         startY = document.lastAutoTable.finalY + 14;
-        return;
+        continue;
       }
 
-      const body = visibleFieldsFor(section.previewFields ?? section.fields, values).map((field) => [
+      const isStudentDetailsSection = section.title === "Student Details";
+      const fields = visibleFieldsFor(section.previewFields ?? section.fields, values)
+        .filter((field) => !(isStudentDetailsSection && field.type === "file" && field.name === "photo"));
+      const body = fields.map((field) => [
         field.label,
         cleanExportValue(formatPreviewValue(field, previewFieldValue(field, values))),
       ]);
+      const isAdmissionSection = section.title === "Admission";
+      const tableStartY = startY;
       autoTable(document, {
         startY,
         head: [[section.title, "Details"]],
@@ -2353,14 +2622,28 @@ export default function AdmissionPage() {
         styles: { fontSize: 9, cellPadding: 5, overflow: "linebreak", textColor: [28, 36, 22] },
         headStyles: { fillColor: [111, 132, 0], textColor: [255, 255, 255] },
         columnStyles: { 0: { cellWidth: 150, fontStyle: "bold" } },
-        margin: { left: 36, right: 36 },
+        margin: isAdmissionSection && pdfPhotoDataUrl ? { left: 36, right: 164 } : { left: 36, right: 36 },
       });
+      if (isAdmissionSection && pdfPhotoDataUrl && pdfPhotoDimensions) {
+        const tableHeight = Math.max(0, document.lastAutoTable.finalY - tableStartY);
+        const boxHeight = Math.max(118, Math.min(152, tableHeight - pdfPhotoLabelHeight));
+        const photoDataUrl = await coverImageDataUrl(pdfPhotoDataUrl, pdfPhotoBoxWidth / boxHeight);
+        const x = document.internal.pageSize.getWidth() - 36 - pdfPhotoBoxWidth;
+        const y = tableStartY;
+        document.setDrawColor(210, 214, 194);
+        document.setLineWidth(0.6);
+        document.rect(x, y, pdfPhotoBoxWidth, boxHeight);
+        document.addImage(photoDataUrl, undefined, x + 1, y + 1, pdfPhotoBoxWidth - 2, boxHeight - 2);
+        document.setFontSize(8);
+        document.setTextColor(0, 0, 0);
+        document.text("Student Photo", x + (pdfPhotoBoxWidth / 2), y + boxHeight + 10, { align: "center" });
+      }
       startY = document.lastAutoTable.finalY + 14;
       if (startY > 720) {
         document.addPage();
         startY = 40;
       }
-    });
+    }
 
     document.save(`${safeExportFileName(`Admission ${admissionNo}`)}.pdf`);
   };
@@ -2466,6 +2749,23 @@ export default function AdmissionPage() {
     });
   }, [isFeeStep]);
 
+  useEffect(() => {
+    if (!isFeeStep || scholarships.length) return undefined;
+    const requestId = scholarshipRequestRef.current + 1;
+    scholarshipRequestRef.current = requestId;
+    apiClient.get(apiEndpoints.fee.scholarships)
+      .then((response) => {
+        if (scholarshipRequestRef.current !== requestId) return;
+        setScholarships(getCollection(response.data).map(normalizeScholarship).filter(Boolean));
+      })
+      .catch((err) => {
+        if (scholarshipRequestRef.current === requestId) {
+          console.error("Unable to load admission scholarships", err);
+        }
+      });
+    return undefined;
+  }, [isFeeStep, scholarships.length]);
+
   const mastersLoadedRef = useRef(false);
   const loadedAcademicLevelsRef = useRef(new Set());
   const loadedBoardLevelsRef = useRef(new Set());
@@ -2485,23 +2785,17 @@ export default function AdmissionPage() {
           return apiClient.get(apiEndpoints.groups.getAll, { params: { isActive: true } });
         });
       const selectedBoardForLevels = selectedContextBoardValue || values.board;
-      const [yearsResult, levelsResult, groupsResult, sectionsResult, bloodGroupsResult, scholarshipsResult] = await Promise.allSettled([
+      const [yearsResult, levelsResult, groupsResult, sectionsResult, bloodGroupsResult] = await Promise.allSettled([
         apiClient.get(apiEndpoints.academicYears.getAll),
         apiClient.get(apiEndpoints.boards.getAcademicLevels, selectedBoardForLevels ? { params: { boardId: selectedBoardForLevels } } : undefined),
         fetchGroups(),
         apiClient.get(apiEndpoints.sections.getAll),
         apiClient.get(apiEndpoints.admissions.bloodGroups),
-        apiClient.get(apiEndpoints.fee.scholarships),
       ]);
 
       if (ignore) return;
       if (groupsResult.status === "rejected") console.error("Unable to load admission groups", groupsResult.reason);
       if (sectionsResult.status === "rejected") console.error("Unable to load admission sections", sectionsResult.reason);
-      if (scholarshipsResult.status === "fulfilled") {
-        setScholarships(getCollection(scholarshipsResult.value.data).map(normalizeScholarship).filter(Boolean));
-      } else {
-        setScholarships([]);
-      }
       const allYearOptions = yearsResult.status === "fulfilled"
         ? getCollection(yearsResult.value.data)
           .map((item) => {
@@ -2529,15 +2823,7 @@ export default function AdmissionPage() {
           : (current.levels || []),
         groups: groupsResult.status === "fulfilled"
           ? getCollection(groupsResult.value.data)
-            .map((item) => {
-              const option = toOption(item, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "groupCode", "GroupCode", "name", "Name"]);
-              return option ? {
-                ...option,
-                boardId: readId(item, "boardId", "BoardId"),
-                academicYearId: readId(item, "academicYearId", "AcademicYearId"),
-                academicLevelId: readId(item, "academicLevelId", "AcademicLevelId"),
-              } : null;
-            })
+            .map(normalizeGroupOption)
             .filter((item) => item?.value)
           : (current.groups || []),
         sections: sectionsResult.status === "fulfilled"
@@ -2773,15 +3059,7 @@ export default function AdmissionPage() {
       .then((response) => {
         if (ignore) return;
         const groups = getCollection(response.data)
-          .map((item) => {
-            const option = toOption(item, ["groupId", "GroupId", "id", "Id"], ["groupName", "GroupName", "groupCode", "GroupCode", "name", "Name"]);
-            return option ? {
-              ...option,
-              boardId: readId(item, "boardId", "BoardId"),
-              academicYearId: readId(item, "academicYearId", "AcademicYearId"),
-              academicLevelId: readId(item, "academicLevelId", "AcademicLevelId"),
-            } : null;
-          })
+          .map(normalizeGroupOption)
           .filter((item) => item?.value);
         setMasterOptions((current) => ({ ...current, groups }));
       })
@@ -3031,7 +3309,6 @@ export default function AdmissionPage() {
   }, [values.pincode, viewMode]);
 
   const fee = deriveAdmissionFee(values);
-
   const changePlan = (plan) => {
     setErrors((current) => ({ ...current, paymentPlan: undefined, installments: undefined }));
     setValues((current) => {
@@ -3068,11 +3345,6 @@ export default function AdmissionPage() {
       return { ...current, installments: schedule };
     });
   };
-
-  const academicYearFilterOptions = useMemo(() => uniqueAcademicYearsByName(
-    (masterOptions.years || []).map((item) => ({ value: item.label, label: item.label })),
-    (item) => item.label,
-  ), [masterOptions.years]);
 
   const feeContext = [
     { label: "Student", value: [values.firstName, values.lastName].filter(Boolean).join(" ") },
@@ -3420,7 +3692,10 @@ export default function AdmissionPage() {
         try {
           const feeDetailsResponse = await apiClient.get(feeDetailsEndpoint);
           const persistedFee = readPersistedFeeState(feeDetailsResponse.data, formValues);
-          formValues = hydratePersistedFeeState(formValues, feeDetailsResponse.data);
+          formValues = {
+            ...hydratePersistedFeeState(formValues, feeDetailsResponse.data),
+            persistedFeeDetails: getObject(feeDetailsResponse.data),
+          };
           if (import.meta.env.DEV) {
             console.log("Payment plan hydration:", {
               rawBackendPaymentPlan: persistedFee.rawPaymentPlan,
@@ -3552,14 +3827,14 @@ export default function AdmissionPage() {
     const studentFeeId = readStudentFeeAssignmentId(assignResponse.data);
     if (!studentFeeId) throw new Error("Fee structure was assigned, but the student fee assignment ID was not returned.");
 
-    if (Number(detailRow.values.scholarshipId)) {
+    if (Number(feeValues.scholarshipId)) {
       await apiClient.post(apiEndpoints.fee.concession, {
         studentId,
         studentFeeId: Number(studentFeeId),
-        scholarshipId: Number(detailRow.values.scholarshipId),
-        scholarshipName: detailRow.values.concessionName || null,
-        discountType: detailRow.values.concessionType || null,
-        discountValue: Number(detailRow.values.concessionValue || 0),
+        scholarshipId: Number(feeValues.scholarshipId),
+        scholarshipName: feeValues.concessionName || null,
+        discountType: feeValues.concessionType || null,
+        discountValue: Number(feeValues.concessionValue || 0),
         reason: "Applied during admission approval",
       });
     }
@@ -3818,7 +4093,7 @@ export default function AdmissionPage() {
         <div className="cms-card cms-admission-list-card">
           <div className="cms-admission-toolbar">
             <div className="cms-search cms-admission-search">
-              <Search3DIcon size={16} />
+              <Search size={16} />
               <input
                 value={search}
                 placeholder="Search by student name or admission number"

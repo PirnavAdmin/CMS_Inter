@@ -688,8 +688,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         await NextRollNo(
                             academicYearId,
                             academicLevelId,
-                            targetGroupId,
-                            request.ProgramId)
+                            targetGroupId)
+                           
                     ).ToString();
             }
 
@@ -715,7 +715,7 @@ namespace CollegeManagement.API.Repositories.Implementations
               AND AcademicYearId = @AcademicYearId
               AND AcademicLevelId = @AcademicLevelId
               AND GroupId = @GroupId
-              AND ProgramId = @ProgramId
+             
               AND RollNo = @RollNo
               AND (IsActive = 1 OR IsActive IS NULL);";
 
@@ -791,8 +791,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             NextRollNo(
                 int academicYearId,
                 int academicLevelId,
-                int groupId,
-                int programId)
+                int groupId)
+                
         {
             const string sql = @"
         SELECT RollNo
@@ -811,8 +811,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     {
                         AcademicYearId = academicYearId,
                         AcademicLevelId = academicLevelId,
-                        GroupId = groupId,
-                        ProgramId = programId
+                        GroupId = groupId
+                        
                     });
 
             var maxRoll =
