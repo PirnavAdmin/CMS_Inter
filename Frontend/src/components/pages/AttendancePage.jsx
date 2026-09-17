@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { CalendarClock, CalendarDays, ClipboardClock, Clock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -46,7 +46,7 @@ const staffType = (v) => {
 };
 const ATTENDANCE_PAGE_SIZE = 5;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
-function Select({ label, value, onChange, items = [], all, disabled = false }) { return <Field label={label}><select value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
+function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
 
 function AttendancePagination({ page, totalRows, onPageChange }) {
  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
@@ -242,17 +242,22 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId)
 
 function Screen({ staff = false, say }) {
  const navigate = useNavigate();
+ const location = useLocation();
  const { selectedBoardId: navbarBoardId, selectedAcademicYearId: navbarAcademicYearId } = useAcademicContext();
- const [f, setF] = useState({ date: getTodayDate(), level: "", group: "", section: "", program: "", department: "", type: "", person: "", status: "", view: "Attendance" });
- const [rows, setRows] = useState([]);
- const [report, setReport] = useState(null);
- const [loaded, setLoaded] = useState(false);
+ const restoredState = !staff ? location.state?.attendanceState : null;
+ const defaultFilters = { date: getTodayDate(), level: "", group: "", section: "", program: "", department: "", type: "", person: "", status: "", view: "Attendance" };
+ const [f, setF] = useState(() => restoredState?.filters || defaultFilters);
+ const [rows, setRows] = useState(() => restoredState?.rows || []);
+ const [report, setReport] = useState(() => restoredState?.report || null);
+ const [loaded, setLoaded] = useState(() => Boolean(restoredState?.loaded));
  const [busy, setBusy] = useState(false);
  const [editing, setEditing] = useState(null);
- const [search, setSearch] = useState("");
- const [page, setPage] = useState(1);
- const [activeHoliday, setActiveHoliday] = useState(null);
+ const [search, setSearch] = useState(() => restoredState?.search || "");
+ const [page, setPage] = useState(() => restoredState?.page || 1);
+ const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
  const [dirty, setDirty] = useState(false);
+ const initialAcademicContext = useRef(`${staff}:${navbarBoardId}:${navbarAcademicYearId}`);
+ const skipInitialPageReset = useRef(true);
  const staffOptions = useOptions(staff), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
  const options = staff ? staffOptions : studentOptions;
 
@@ -268,6 +273,9 @@ function Screen({ staff = false, say }) {
  };
 
  useEffect(() => {
+   const currentAcademicContext = `${staff}:${navbarBoardId}:${navbarAcademicYearId}`;
+   if (initialAcademicContext.current === currentAcademicContext) return;
+   initialAcademicContext.current = currentAcademicContext;
    if (!staff) setF((old) => ({ ...old, level: "", group: "", program: "", section: "" }));
  }, [staff, navbarBoardId, navbarAcademicYearId]);
 
@@ -294,7 +302,9 @@ function Screen({ staff = false, say }) {
          return targetDate >= start && targetDate <= end;
        });
        setActiveHoliday(match || null);
-     } catch (_) {}
+    } catch {
+      setActiveHoliday(null);
+    }
 
      if (currentView === "Monthly Report") {
        const r = await apiClient.get(staff ? apiEndpoints.staffAttendance.monthlyReport : apiEndpoints.attendance.studentMonthlyReport, { params: monthParams() });
@@ -479,7 +489,13 @@ function Screen({ staff = false, say }) {
  const currentPage = Math.min(page, totalPages);
  const pagedRows = visible.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
 
- useEffect(() => { setPage(1); }, [rows]);
+ useEffect(() => {
+   if (skipInitialPageReset.current) {
+     skipInitialPageReset.current = false;
+     return;
+   }
+   setPage(1);
+ }, [rows]);
  useEffect(() => { setPage((current) => Math.min(current, totalPages)); }, [totalPages]);
 
  return (
@@ -562,7 +578,11 @@ function Screen({ staff = false, say }) {
              }
              view={(record) => {
                const personId = staff ? get(record, "facultyId", "staffId", "id") : get(record, "studentId", "id");
-               if (personId != null) navigate(`/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`);
+               if (personId != null) navigate(`/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`, {
+                 state: staff ? undefined : {
+                   attendanceState: { filters: f, rows, report, loaded, search, page: currentPage, activeHoliday }
+                 }
+               });
              }}
            />
            <AttendancePagination page={currentPage} totalRows={visible.length} onPageChange={setPage} />
@@ -585,16 +605,16 @@ function Filters({ f, update, o, staff, busy, load, exportReport }) {
     <div className={`att-filter-grid ${staff ? "att-staff-filter-grid" : "att-student-filter-grid"}`}>
       {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
       {staff ? <>
-        <Select label="Staff Type" value={f.type} onChange={update("type")} items={[{ id: "1", name: "Teaching Staff" }, { id: "2", name: "Non-Teaching Staff" }]} all="All Staff" />
-        <Select label="Department" value={f.department} onChange={update("department")} items={o.departments} all="All Departments" />
         <Select label="Staff" value={f.person} onChange={update("person")} items={(o.faculty || []).map((item) => ({ id: get(item, "facultyId", "id"), name: `${get(item, "staffName", "name")} (${get(item, "facultyId", "id")})` }))} all="All Staff" />
+        <Select label="Staff Type" value={f.type} onChange={update("type")} items={[{ id: "1", name: "Teaching Staff" }, { id: "2", name: "Non-Teaching Staff" }]} all="All Staff" mutedPlaceholder />
+        <Select label="Department" value={f.department} onChange={update("department")} items={o.departments} all="All Departments" mutedPlaceholder />
       </> : <>
-        <Select label="Academic Level" value={f.level} onChange={update("level")} items={o.levels} all={o.loadingLevels ? "Loading academic levels..." : "All Academic Levels"} disabled={o.loadingLevels} />
-        <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all={o.loadingGroups ? "Loading groups..." : "All Groups"} disabled={o.loadingGroups} />
-        <Select label="Program" value={f.program} onChange={update("program")} items={o.programs} all={o.loadingPrograms ? "Loading programs..." : "All Programs"} disabled={o.loadingPrograms} />
-        <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all={o.loadingSections ? "Loading sections..." : "All Sections"} disabled={o.loadingSections} />
+        <Select label="Academic Level" value={f.level} onChange={update("level")} items={o.levels} all={o.loadingLevels ? "Loading academic levels..." : "All Academic Levels"} disabled={o.loadingLevels} mutedPlaceholder />
+        <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all={o.loadingGroups ? "Loading groups..." : "All Groups"} disabled={o.loadingGroups} mutedPlaceholder />
+        <Select label="Program" value={f.program} onChange={update("program")} items={o.programs} all={o.loadingPrograms ? "Loading programs..." : "All Programs"} disabled={o.loadingPrograms} mutedPlaceholder />
+        <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all={o.loadingSections ? "Loading sections..." : "All Sections"} disabled={o.loadingSections} mutedPlaceholder />
       </>}
-      <Select label="Status" value={f.status} onChange={update("status")} items={staff ? STAFF_STATUSES : STUDENT_STATUSES} all="All Status" />
+      <Select label="Status" value={f.status} onChange={update("status")} items={staff ? STAFF_STATUSES : STUDENT_STATUSES} all="All Status" mutedPlaceholder />
       <div className="att-filter-action"><button className="cms-btn cms-btn-primary" disabled={busy} onClick={() => load()}>{busy ? "Loading..." : "Get Records"}</button>{isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}</div>
     </div>
   </section>;
