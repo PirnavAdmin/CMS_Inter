@@ -285,6 +285,7 @@ export const apiEndpoints = {
     search: "/api/v1/attendance/search",
     students: "/api/v1/attendance/students",
     studentAdminDaily: "/api/v1/attendance/admin/students",
+    studentAdminBulkSave: "/api/v1/attendance/admin/bulk-save",
     studentUpdate: "/api/v1/attendance/update",
     facultySubject: "/api/v1/attendance/faculty-subject",
     academicContext: "/api/v1/attendance/academic-context",
@@ -316,6 +317,14 @@ export const apiEndpoints = {
     leaveAction: (id) => `/api/v1/staff-attendance/leave/${id}/action`,
     importTemplate: "/api/v1/staff-attendance/import/template",
     importExcel: "/api/v1/staff-attendance/import/excel",
+  },
+  attendanceTimingConfig: {
+    list: "/api/v1/attendance-timing-config",
+    effective: "/api/v1/attendance-timing-config/effective",
+    getById: (id) => `/api/v1/attendance-timing-config/${id}`,
+    create: "/api/v1/attendance-timing-config",
+    update: (id) => `/api/v1/attendance-timing-config/${id}`,
+    delete: (id) => `/api/v1/attendance-timing-config/${id}`,
   },
   leaveCategories: {
     getAll: "/api/v1/leave-categories",
@@ -514,6 +523,14 @@ export const apiEndpoints = {
     create: "/api/v1/holidays",
     update: (id) => `/api/v1/holidays/${id}`,
     delete: (id) => `/api/v1/holidays/${id}`,
+  },
+  attendanceTimingConfig: {
+    list: "/api/v1/attendance-timing-config",
+    effective: "/api/v1/attendance-timing-config/effective",
+    getById: (id) => `/api/v1/attendance-timing-config/${id}`,
+    create: "/api/v1/attendance-timing-config",
+    update: (id) => `/api/v1/attendance-timing-config/${id}`,
+    delete: (id) => `/api/v1/attendance-timing-config/${id}`,
   },
 };
 

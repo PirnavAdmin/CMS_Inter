@@ -370,5 +370,74 @@ namespace CollegeManagement.API.Repositories.Implementations
             var rows = await conn.ExecuteAsync(sql, new { Id = id });
             return rows > 0;
         }
+
+        public async Task<(bool IsHoliday, string? HolidayName, string? HolidayType)> IsHolidayAsync(DateTime date, int? boardId = null, int? academicYearId = null, string? appliesTo = null)
+        {
+            await EnsureTableAndSeedsAsync();
+            var conn = await GetOpenConnectionAsync();
+
+            var queryDate = date.Date;
+            var sql = @"
+                SELECT HolidayName, HolidayType
+                FROM `Holidays`
+                WHERE IsDeleted = 0 
+                  AND Status = 'Active'
+                  AND @QueryDate >= StartDate AND @QueryDate <= EndDate
+                  AND (@BoardId IS NULL OR BoardId IS NULL OR BoardId = @BoardId)
+                  AND (@AcademicYearId IS NULL OR AcademicYearId IS NULL OR AcademicYearId = @AcademicYearId)
+                  AND (
+                      @AppliesTo IS NULL 
+                      OR AppliesTo = 'All Students & Staff' 
+                      OR AppliesTo = @AppliesTo
+                  )
+                LIMIT 1;
+            ";
+
+            var result = await conn.QueryFirstOrDefaultAsync<dynamic>(sql, new
+            {
+                QueryDate = queryDate,
+                BoardId = boardId,
+                AcademicYearId = academicYearId,
+                AppliesTo = appliesTo
+            });
+
+            if (result != null)
+            {
+                return (true, (string)result.HolidayName, (string)result.HolidayType);
+            }
+
+            return (false, null, null);
+        }
+
+        public async Task<IEnumerable<Holiday>> GetHolidaysBetweenDatesAsync(DateTime startDate, DateTime endDate, int? boardId = null, int? academicYearId = null, string? appliesTo = null)
+        {
+            await EnsureTableAndSeedsAsync();
+            var conn = await GetOpenConnectionAsync();
+
+            var sql = @"
+                SELECT *
+                FROM `Holidays`
+                WHERE IsDeleted = 0 
+                  AND Status = 'Active'
+                  AND StartDate <= @EndDate AND EndDate >= @StartDate
+                  AND (@BoardId IS NULL OR BoardId IS NULL OR BoardId = @BoardId)
+                  AND (@AcademicYearId IS NULL OR AcademicYearId IS NULL OR AcademicYearId = @AcademicYearId)
+                  AND (
+                      @AppliesTo IS NULL 
+                      OR AppliesTo = 'All Students & Staff' 
+                      OR AppliesTo = @AppliesTo
+                  )
+                ORDER BY StartDate ASC;
+            ";
+
+            return await conn.QueryAsync<Holiday>(sql, new
+            {
+                StartDate = startDate.Date,
+                EndDate = endDate.Date,
+                BoardId = boardId,
+                AcademicYearId = academicYearId,
+                AppliesTo = appliesTo
+            });
+        }
     }
 }
