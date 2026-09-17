@@ -1214,20 +1214,16 @@ function useStaffTypeOptions(staffType) {
         }
 
         const filteredDepts = deptData.filter((d) => {
+          if (!d) return false;
+          if (d.isActive === false || d.status === "Inactive") return false;
           const deptName = typeof d === "object" ? d.name || d.departmentName || "" : String(d || "");
           if (!deptName) return false;
           const st = typeof d === "object" ? (d.staffType || d.StaffType) : null;
           if (st) {
             const stNorm = String(st).toLowerCase().replace(/[-_\s]/g, "");
-            if (stNorm !== targetNorm && stNorm !== "both" && stNorm !== "all") {
-              return false;
-            }
+            return stNorm === targetNorm || stNorm === "both" || stNorm === "all";
           }
-          if (isTeaching) {
-            return !isNonTeachingDeptName(deptName);
-          } else {
-            return isNonTeachingDeptName(deptName);
-          }
+          return isTeaching ? !isNonTeachingDeptName(deptName) : isNonTeachingDeptName(deptName);
         });
         deptOpts = filteredDepts.map((d) => (typeof d === "object" ? d.name || d.departmentName : d)).filter(Boolean);
       } catch (e) {
@@ -1252,20 +1248,16 @@ function useStaffTypeOptions(staffType) {
         }
 
         const filteredDesigs = desigData.filter((d) => {
+          if (!d) return false;
+          if (d.isActive === false || d.status === "Inactive") return false;
           const desigName = typeof d === "object" ? d.name || d.designationName || "" : String(d || "");
           if (!desigName) return false;
           const st = typeof d === "object" ? (d.staffType || d.StaffType) : null;
           if (st) {
             const stNorm = String(st).toLowerCase().replace(/[-_\s]/g, "");
-            if (stNorm !== targetNorm && stNorm !== "both" && stNorm !== "all") {
-              return false;
-            }
+            return stNorm === targetNorm || stNorm === "both" || stNorm === "all";
           }
-          if (isTeaching) {
-            return !isNonTeachingDesigName(desigName);
-          } else {
-            return isNonTeachingDesigName(desigName);
-          }
+          return isTeaching ? !isNonTeachingDesigName(desigName) : isNonTeachingDesigName(desigName);
         });
         desigOpts = filteredDesigs
           .map((d) =>
@@ -1277,7 +1269,13 @@ function useStaffTypeOptions(staffType) {
                   departmentId: d.departmentId || null,
                   staffType: d.staffType || d.StaffType,
                 }
-              : d
+              : {
+                  name: String(d),
+                  designationName: String(d),
+                  departmentName: "",
+                  departmentId: null,
+                  staffType: apiStaffType,
+                }
           )
           .filter(Boolean);
       } catch (e) {
@@ -1576,68 +1574,72 @@ function Field({
     if (name === "board") return contextBoardOpts;
 
     if (name === "department") {
-      const base = Array.isArray(departmentOptions) && departmentOptions.length > 0
-        ? departmentOptions
-        : (Array.isArray(options) && options.length > 0 ? options : (isTeaching ? teachingDepartments : nonTeachingDepartments));
-      const filtered = base.filter((d) => {
-        const dName = typeof d === "object" ? d.name || d.departmentName : String(d || "");
-        return isTeaching ? !isNonTeachingDeptName(dName) : isNonTeachingDeptName(dName);
-      });
-      return filtered.length > 0 ? filtered : (isTeaching ? teachingDepartments : nonTeachingDepartments);
+      if (Array.isArray(departmentOptions) && departmentOptions.length > 0) {
+        const liveDepts = departmentOptions
+          .map((d) => (typeof d === "object" ? d.name || d.departmentName : d))
+          .filter(Boolean);
+        return Array.from(new Set(liveDepts));
+      }
+      const fallbackDepts = Array.isArray(options) && options.length > 0 ? options : (isTeaching ? teachingDepartments : nonTeachingDepartments);
+      return Array.from(new Set(fallbackDepts.filter(Boolean)));
     }
 
     if (name === "designation") {
       const currentDept = String(safeValues.department || "").trim();
       const currentDeptNorm = currentDept.toLowerCase().replace(/[-_\s&]/g, "");
 
-      // 1. Check API designations specifically matching this department
-      let apiMatching = [];
-      if (currentDept && Array.isArray(designationOptions) && designationOptions.length > 0) {
-        apiMatching = designationOptions
-          .filter((d) => {
-            if (!d) return false;
-            const dDeptName = typeof d === "object" ? String(d.departmentName || d.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "") : "";
-            if (dDeptName && (dDeptName === currentDeptNorm || currentDeptNorm.includes(dDeptName) || dDeptName.includes(currentDeptNorm))) {
-              return true;
-            }
-            return false;
-          })
-          .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
-          .filter(Boolean);
+      // If we have live designations from API:
+      if (Array.isArray(designationOptions) && designationOptions.length > 0) {
+        const liveDesigs = designationOptions.filter(Boolean);
+
+        if (currentDept) {
+          // 1. Live designations specifically linked to this department
+          const deptMatching = liveDesigs
+            .filter((d) => {
+              if (!d) return false;
+              const dDeptName = typeof d === "object" ? String(d.departmentName || d.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "") : "";
+              return dDeptName && (dDeptName === currentDeptNorm || currentDeptNorm.includes(dDeptName) || dDeptName.includes(currentDeptNorm));
+            })
+            .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+            .filter(Boolean);
+
+          // 2. Unassigned / general designations in DB (e.g. Cleaner, Attender where department is not fixed)
+          const generalMatching = liveDesigs
+            .filter((d) => {
+              if (!d) return false;
+              const dDeptName = typeof d === "object" ? String(d.departmentName || d.department || "").trim() : "";
+              const dDeptId = typeof d === "object" ? d.departmentId : null;
+              return !dDeptName && !dDeptId;
+            })
+            .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+            .filter(Boolean);
+
+          // If there are department-specific designations or general unassigned designations from DB, combine them!
+          const combined = Array.from(new Set([...deptMatching, ...generalMatching]));
+          if (combined.length > 0) {
+            return combined;
+          }
+        }
+
+        // If no department is selected or no specific mapping, return all live designations for this staffType from DB
+        return Array.from(new Set(liveDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean)));
       }
 
-      // 2. Check map matching for this department
-      let mapMatching = [];
+      // Fallback ONLY when API returned no designations (e.g. network offline):
       if (currentDept) {
         const activeMap = isTeaching ? teachingDesignationMap : nonTeachingDesignationMap;
         for (const [deptKey, desigs] of Object.entries(activeMap)) {
           const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
           if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
-            mapMatching = [...mapMatching, ...(Array.isArray(desigs) ? desigs : [])];
+            return Array.isArray(desigs) ? desigs : [];
           }
         }
       }
 
-      const deptSpecific = Array.from(new Set([...apiMatching, ...mapMatching]));
-      // If a department is selected and has specific designations, return ONLY those!
-      if (currentDept && deptSpecific.length > 0) {
-        return deptSpecific;
-      }
-
-      // 3. Fallback to general designations if no department is selected or no specific mapping
-      const baseList = Array.isArray(designationOptions) && designationOptions.length > 0
-        ? designationOptions
-        : (Array.isArray(options) && options.length > 0 ? options : (isTeaching ? teachingDesignations : nonTeachingDesignations));
-
-      const filteredBase = baseList
-        .filter((d) => {
-          const dName = typeof d === "object" ? d.name || d.designationName : String(d || "");
-          return isTeaching ? !isNonTeachingDesigName(dName) : isNonTeachingDesigName(dName);
-        })
-        .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
-        .filter(Boolean);
-
-      return Array.from(new Set(filteredBase));
+      const fallbackList = Array.isArray(options) && options.length > 0
+        ? options
+        : (isTeaching ? teachingDesignations : nonTeachingDesignations);
+      return Array.from(new Set(fallbackList.filter(Boolean)));
     }
 
     return options;

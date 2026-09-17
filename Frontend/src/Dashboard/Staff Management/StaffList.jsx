@@ -249,18 +249,22 @@ const StaffList = () => {
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  // Merged Department Options (Fixed + DB)
+  // Department Options (Live DB data prioritized)
   const departmentOptions = useMemo(() => {
+    if (dbDepartments && dbDepartments.length > 0) {
+      return Array.from(new Set(dbDepartments.map((d) => d.departmentName || d.name).filter(Boolean))).sort();
+    }
     const baseList = activeTab === "Teaching" ? TEACHING_DEPARTMENTS : NON_TEACHING_DEPARTMENTS;
-    const dbNames = dbDepartments.map((d) => d.departmentName);
-    return Array.from(new Set([...baseList, ...dbNames])).sort();
+    return baseList.sort();
   }, [activeTab, dbDepartments]);
 
-  // Merged Designation Options (Fixed + DB)
+  // Designation Options (Live DB data prioritized)
   const designationOptions = useMemo(() => {
+    if (dbDesignations && dbDesignations.length > 0) {
+      return Array.from(new Set(dbDesignations.map((d) => d.name || d.designationName).filter(Boolean))).sort();
+    }
     const baseList = activeTab === "Teaching" ? TEACHING_DESIGNATIONS : NON_TEACHING_DESIGNATIONS;
-    const dbNames = dbDesignations.map((d) => d.name);
-    return Array.from(new Set([...baseList, ...dbNames])).sort();
+    return baseList.sort();
   }, [activeTab, dbDesignations]);
 
   // Handle Tab Switch
