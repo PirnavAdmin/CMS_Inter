@@ -42,9 +42,9 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("dashboard-stats")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(StaffDashboardStatsDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetDashboardStats()
+        public async Task<IActionResult> GetDashboardStats([FromQuery] int? boardId = null)
         {
-            var stats = await _staffService.GetDashboardStatsAsync();
+            var stats = await _staffService.GetDashboardStatsAsync(boardId);
             return Ok(stats);
         }
 

@@ -166,9 +166,9 @@ namespace CollegeManagement.API.Services.Implementations
             return await _staffRepository.GenerateNextEmployeeIdAsync(staffType);
         }
 
-        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync()
+        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null)
         {
-            return await _staffRepository.GetDashboardStatsAsync();
+            return await _staffRepository.GetDashboardStatsAsync(boardId);
         }
 
         public async Task<StaffResponseDto> CreateStaffAsync(CreateStaffDto dto)

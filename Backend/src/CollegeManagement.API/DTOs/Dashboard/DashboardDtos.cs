@@ -295,13 +295,16 @@ public class StudentsAttendanceTodayResponseDto
     public int PresentCount => Present;
     public int Absent { get; set; }
     public int AbsentCount => Absent;
-    public int Late { get; set; }
-    public int LateCount => Late;
+    public int HalfDay { get; set; }
+    public int HalfDayCount => HalfDay;
+    public int Late { get => HalfDay; set => HalfDay = value; }
+    public int LateCount => HalfDay;
     public decimal AttendancePercentage { get; set; }
     public decimal Percentage => AttendancePercentage;
     public decimal PresentPercentage { get; set; }
     public decimal AbsentPercentage { get; set; }
-    public decimal LatePercentage { get; set; }
+    public decimal HalfDayPercentage { get; set; }
+    public decimal LatePercentage { get => HalfDayPercentage; set => HalfDayPercentage = value; }
     public string LastUpdated { get; set; } = "Today";
     
     // Donut chart data pre-formatted
@@ -309,7 +312,7 @@ public class StudentsAttendanceTodayResponseDto
     {
         new { name = "Present", value = Present, color = "#22a447" },
         new { name = "Absent", value = Absent, color = "#ef4444" },
-        new { name = "Late", value = Late, color = "#f59e0b" }
+        new { name = "Half-day", value = HalfDay, color = "#f59e0b" }
     };
 
     public IReadOnlyList<AttendanceCategoryBreakdownDto> Breakdown { get; set; } = new List<AttendanceCategoryBreakdownDto>();
@@ -368,7 +371,9 @@ public class AttendanceCategoryBreakdownDto
     public int StudentsCount => TotalStudents;
     public int Present { get; set; }
     public int Absent { get; set; }
-    public int Late { get; set; }
+    public int HalfDay { get; set; }
+    public int HalfDayCount => HalfDay;
+    public int Late { get => HalfDay; set => HalfDay = value; }
     public decimal AttendancePercentage { get; set; }
     public decimal Percentage => AttendancePercentage;
     public string Color { get; set; } = "#22a447";
@@ -538,4 +543,38 @@ public class TodaysHighlightsResponseDto
     public int Exams => ExaminationsToday;
     public int BirthdaysToday { get; set; }
     public int Birthdays => BirthdaysToday;
+}
+
+public class UpcomingHolidayItemDto
+{
+    public int Id { get; set; }
+    public string HolidayCode { get; set; } = string.Empty;
+    public string HolidayName { get; set; } = string.Empty;
+    public string Name => HolidayName;
+    public string Title => HolidayName;
+    public string HolidayType { get; set; } = "Festival Holiday";
+    public string Type => HolidayType;
+    public string AppliesTo { get; set; } = "All Students & Staff";
+    public string DateType { get; set; } = "Single Day";
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public string FormattedDateRange { get; set; } = string.Empty;
+    public string DateRange => FormattedDateRange;
+    public string DayOfWeek { get; set; } = string.Empty;
+    public int TotalDays { get; set; } = 1;
+    public string DurationText => TotalDays > 1 ? $"{TotalDays} Days" : "1 Day";
+    public string Status { get; set; } = "Active";
+    public string LifecycleStatus { get; set; } = "Upcoming";
+    public string CountdownText { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public int? AcademicYearId { get; set; }
+    public int? BoardId { get; set; }
+}
+
+public class DashboardHolidaysResponseDto
+{
+    public IReadOnlyList<UpcomingHolidayItemDto> Items { get; set; } = new List<UpcomingHolidayItemDto>();
+    public int TotalUpcoming { get; set; }
+    public int TotalCompleted { get; set; }
+    public int TotalHolidays { get; set; }
 }

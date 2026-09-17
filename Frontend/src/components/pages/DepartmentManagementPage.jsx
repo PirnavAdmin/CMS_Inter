@@ -220,6 +220,8 @@ export const normalizeDepartment = (row) => {
 export const normalizeDesignation = (row) => {
   const idVal = pick(row, "id", "Id", "designationId", "DesignationId");
   const name = String(pick(row, "designationName", "DesignationName", "name", "Name") || "").trim();
+  const deptId = pick(row, "departmentId", "DepartmentId");
+  const deptName = pick(row, "departmentName", "DepartmentName");
   const rawStaffType = pick(row, "staffType", "StaffType");
   const staffType = rawStaffType
     ? String(rawStaffType).trim()
@@ -229,6 +231,8 @@ export const normalizeDesignation = (row) => {
     designationId: idVal,
     name,
     designationName: name,
+    departmentId: deptId || null,
+    departmentName: deptName ? String(deptName).trim() : "",
     code: String(pick(row, "designationCode", "DesignationCode", "code", "Code") || "—").trim(),
     designationCode: String(pick(row, "designationCode", "DesignationCode", "code", "Code") || "—").trim(),
     staffType,
@@ -583,9 +587,11 @@ export default function DepartmentManagementPage() {
       const norm = dName.toLowerCase();
       if (isOther(norm)) continue;
 
-      const isNonTeaching = isNonTeachingDeptName(norm);
-      if (isTeaching && isNonTeaching) continue;
-      if (!isTeaching && !isNonTeaching) continue;
+      const matchesStaffType = item.staffType
+        ? isStaffTypeMatch(item.staffType, staffType)
+        : (isTeaching ? !isNonTeachingDeptName(norm) : isNonTeachingDeptName(norm));
+
+      if (!matchesStaffType) continue;
 
       if (!seen.has(norm)) {
         seen.add(norm);
@@ -624,9 +630,11 @@ export default function DepartmentManagementPage() {
       const norm = dName.toLowerCase();
       if (isOther(norm)) continue;
 
-      const isNonTeaching = isNonTeachingDesigName(norm);
-      if (isTeaching && isNonTeaching) continue;
-      if (!isTeaching && !isNonTeaching) continue;
+      const matchesStaffType = item.staffType
+        ? isStaffTypeMatch(item.staffType, staffType)
+        : (isTeaching ? !isNonTeachingDesigName(norm) : isNonTeachingDesigName(norm));
+
+      if (!matchesStaffType) continue;
 
       if (!seen.has(norm)) {
         seen.add(norm);
@@ -637,7 +645,7 @@ export default function DepartmentManagementPage() {
     const q = designationQuery.trim().toLowerCase();
     if (!q) return result;
     return result.filter((item) =>
-      [item.name, item.code, item.staffType].some((val) =>
+      [item.name, item.code, item.staffType, item.departmentName].some((val) =>
         String(val || "").toLowerCase().includes(q)
       )
     );

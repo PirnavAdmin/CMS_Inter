@@ -203,7 +203,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             // 4. Board filter
             if (queryParams.BoardId.HasValue && queryParams.BoardId.Value > 0)
             {
-                query = query.Where(s => s.BoardId == queryParams.BoardId.Value);
+                query = query.Where(s => s.BoardId == queryParams.BoardId.Value || s.BoardId == null);
             }
             else if (!string.IsNullOrWhiteSpace(queryParams.BoardName) &&
                      !queryParams.BoardName.Equals("All", StringComparison.OrdinalIgnoreCase) &&
@@ -384,12 +384,18 @@ namespace CollegeManagement.API.Repositories.Implementations
             return $"{prefix}{(maxNumber + 1):D4}";
         }
 
-        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync()
+        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null)
         {
-            var activeStaff = await _context.Staffs
+            var query = _context.Staffs
                 .AsNoTracking()
-                .Where(s => !s.IsDeleted)
-                .ToListAsync();
+                .Where(s => !s.IsDeleted);
+
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                query = query.Where(s => s.BoardId == boardId.Value || s.BoardId == null);
+            }
+
+            var activeStaff = await query.ToListAsync();
 
             var totalStaff = activeStaff.Count;
             var teachingStaff = activeStaff.Count(s => !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));

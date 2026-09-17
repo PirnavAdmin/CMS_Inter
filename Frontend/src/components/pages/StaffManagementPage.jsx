@@ -611,12 +611,12 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
 
   // 1. Direct Board ID match
   const recordBoardId = staffRecord.boardId || staffRecord.BoardId;
-  if (recordBoardId && targetId && String(recordBoardId) === String(targetId)) {
-    return true;
+  if (recordBoardId) {
+    return targetId ? String(recordBoardId) === String(targetId) : true;
   }
 
-  // 2. Resolve staff board code
-  const recordBoardCode = String(staffRecord.boardCode || staffRecord.BoardCode || resolveBoardCode(staffRecord, boardsList) || "").trim().toUpperCase();
+  // 2. Match staff board code if explicitly present on record
+  const recordBoardCode = String(staffRecord.boardCode || staffRecord.BoardCode || "").trim().toUpperCase();
   if (targetCode && recordBoardCode && recordBoardCode !== "—") {
     if (recordBoardCode === targetCode) return true;
     if ((targetCode.includes("TSBIE") || targetCode.includes("TGBIE") || targetCode.includes("TELANGANA")) &&
@@ -631,9 +631,9 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
     if (targetCode.includes("ICSE") && recordBoardCode.includes("ICSE")) return true;
   }
 
-  // 3. Match staff board name string
+  // 3. Match staff board name string if explicitly present on record
   const recordBoardName = String(staffRecord.board || staffRecord.boardName || staffRecord.BoardName || "").trim().toLowerCase();
-  if (targetName && recordBoardName) {
+  if (targetName && recordBoardName && recordBoardName !== "—") {
     if (recordBoardName === targetName) return true;
     if (targetName.includes("andhra") && recordBoardName.includes("andhra")) return true;
     if (targetName.includes("telangana") && recordBoardName.includes("telangana")) return true;
@@ -642,7 +642,8 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
     if (targetName.includes("central") && recordBoardName.includes("central")) return true;
   }
 
-  return false;
+  // 4. If no specific board is attached to the staff record, they are shared/general across all boards
+  return true;
 };
 
 const teachingFields = [
@@ -1914,7 +1915,6 @@ function Dashboard({ records = [] }) {
             ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
             ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
             ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
-            ["Credentials Generator", "Format", credentialsGeneratorIcon, "modal:credentials"],
           ].map(([l, v, icon, to]) => (
             <article
               key={l}
@@ -3086,7 +3086,8 @@ function TeachingForm({ records, setRecords, existing }) {
         setToast("Teaching staff profile updated successfully.");
         n(`/dashboard/staff/teaching`);
       } else {
-        n(`/dashboard/staff/${record.id}/send-link`);
+        setToast("Teaching staff created and invitation email sent successfully.");
+        n(`/dashboard/staff/teaching`);
       }
     } catch (err) {
       const status = err?.response?.status;
@@ -3117,7 +3118,8 @@ function TeachingForm({ records, setRecords, existing }) {
         setToast("Teaching staff profile updated successfully.");
         n(`/dashboard/staff/teaching`);
       } else {
-        n(`/dashboard/staff/${record.id}/send-link`);
+        setToast("Teaching staff created and invitation email sent successfully.");
+        n(`/dashboard/staff/teaching`);
       }
     } finally {
       setSubmitting(false);
@@ -3133,7 +3135,6 @@ function TeachingForm({ records, setRecords, existing }) {
       <Toast message={toast} onClose={() => setToast("")} />
       <main className="staff-mock-page">
         <Back />
-        <Steps labels={["Basic Details", "Send Link"]} step={0} />
         <form className="staff-form-panel teaching-basic-form" onSubmit={submit}>
           <header>
             <UserRound />
@@ -3162,8 +3163,8 @@ function TeachingForm({ records, setRecords, existing }) {
             <button type="button" className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff")}>
               Cancel
             </button>
-            <button className="cms-btn cms-btn-primary">
-              Save &amp; Next <ChevronRight />
+            <button className="cms-btn cms-btn-primary" disabled={submitting}>
+              {submitting ? "Saving..." : existing ? "Update Teaching Staff" : "Save Teaching Staff"}
             </button>
           </footer>
         </form>
@@ -4893,6 +4894,7 @@ export default function StaffManagementPage() {
   const loc = useLocation();
   const n = useNavigate();
   const { id } = useParams();
+  const { boards, selectedBoard } = useAcademicContext();
 
   const [records, setRaw] = useState(() => []);
   const [activities, setActivityRaw] = useState(() => []);
@@ -4901,8 +4903,9 @@ export default function StaffManagementPage() {
   const [loadingStaff, setLoadingStaff] = useState(false);
 
   const safeRecords = useMemo(() => {
-    return Array.isArray(records) ? records : [];
-  }, [records]);
+    const raw = Array.isArray(records) ? records : [];
+    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards));
+  }, [records, selectedBoard, boards]);
 
   const setRecords = (next) => {
     const rawList = Array.isArray(next) ? next : [];
@@ -4930,15 +4933,20 @@ export default function StaffManagementPage() {
     write(ACTIVITY_STORE, next);
   };
 
-  // Initial Staff Load (GET /api/v1/staff)
+  // Initial Staff Load (GET /api/v1/staff filtered by selected Board)
   useEffect(() => {
     let isMounted = true;
     async function loadInit() {
       try {
-        const listRes = await staffApi.getStaffPaged({ PageNumber: 1, PageSize: 50 });
+        const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const listRes = await staffApi.getStaffPaged({
+          PageNumber: 1,
+          PageSize: 100,
+          BoardId: activeBoardId || undefined,
+        });
         if (isMounted && listRes.data) {
           const listItems = listRes.data.items || listRes.data.data || (Array.isArray(listRes.data) ? listRes.data : []);
-          if (Array.isArray(listItems) && listItems.length > 0) {
+          if (Array.isArray(listItems)) {
             setRecords(listItems);
           }
         }
@@ -4946,7 +4954,7 @@ export default function StaffManagementPage() {
     }
     loadInit();
     return () => { isMounted = false; };
-  }, []);
+  }, [selectedBoard]);
 
   // Fetch staff record from API whenever id changes
   useEffect(() => {

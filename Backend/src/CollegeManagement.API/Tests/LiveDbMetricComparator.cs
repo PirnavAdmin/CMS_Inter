@@ -169,34 +169,49 @@ public class LiveDbMetricComparator
                     DECLARE v_Absent INT DEFAULT 0;
                     DECLARE v_Late INT DEFAULT 0;
                     DECLARE v_OnLeave INT DEFAULT 0;
-                    DECLARE v_TotalSessionMarks INT DEFAULT 0;
                     DECLARE v_AttendancePct DECIMAL(5,2) DEFAULT 0.0;
+                    DECLARE v_AbsentPct DECIMAL(5,2) DEFAULT 0.0;
+                    DECLARE v_LatePct DECIMAL(5,2) DEFAULT 0.0;
+                    DECLARE v_OnLeavePct DECIMAL(5,2) DEFAULT 0.0;
                     DECLARE v_StaffType VARCHAR(50);
                     DECLARE v_LeavesCount INT DEFAULT 0;
+                    DECLARE v_Present_Indiv INT DEFAULT 0;
+                    DECLARE v_Late_Indiv INT DEFAULT 0;
+                    DECLARE v_OnLeave_Indiv INT DEFAULT 0;
+                    DECLARE v_Present_Sess INT DEFAULT 0;
+                    DECLARE v_Late_Sess INT DEFAULT 0;
+                    DECLARE v_OnLeave_Sess INT DEFAULT 0;
 
                     SET v_TargetDate = COALESCE(p_TargetDate, CURDATE());
                     SET v_StaffType = COALESCE(p_StaffType, 'All Staff');
 
+                    -- Total Active Staff
                     SELECT COUNT(*) INTO v_TotalStaff
                     FROM `Staff` st
                     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
-                      AND (st.Status = 'Active' OR st.Status IS NULL);
+                      AND (st.Status = 'Active' OR st.Status IS NULL)
+                      AND (p_BoardId IS NULL OR st.BoardId = p_BoardId);
 
+                    -- Active Teaching Staff
                     SELECT COUNT(*) INTO v_TeachingCount
                     FROM `Staff` st
                     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
                       AND (st.Status = 'Active' OR st.Status IS NULL)
+                      AND (p_BoardId IS NULL OR st.BoardId = p_BoardId)
                       AND (
                           st.StaffType = 'Teaching' 
                           OR st.StaffType = 'Both' 
+                          OR st.FacultyType = 'Teaching'
                           OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching'
                           OR st.StaffType IS NULL
                       );
 
+                    -- Active Non-Teaching Staff
                     SELECT COUNT(*) INTO v_NonTeachingCount
                     FROM `Staff` st
                     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
                       AND (st.Status = 'Active' OR st.Status IS NULL)
+                      AND (p_BoardId IS NULL OR st.BoardId = p_BoardId)
                       AND (
                           st.StaffType = 'Non-Teaching' 
                           OR st.StaffType = 'NonTeaching' 
@@ -204,6 +219,11 @@ public class LiveDbMetricComparator
                           OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'NonTeaching'
                       );
 
+                    IF v_NonTeachingCount = 0 AND v_TotalStaff > v_TeachingCount THEN
+                        SET v_NonTeachingCount = v_TotalStaff - v_TeachingCount;
+                    END IF;
+
+                    -- Determine Filtered Total based on requested StaffType
                     IF LOWER(v_StaffType) IN ('teaching staff', 'teaching') THEN
                         SET v_FilteredTotal = v_TeachingCount;
                     ELSEIF LOWER(v_StaffType) IN ('non-teaching staff', 'non-teaching', 'nonteaching staff', 'nonteaching') THEN
@@ -212,47 +232,85 @@ public class LiveDbMetricComparator
                         SET v_FilteredTotal = v_TotalStaff;
                     END IF;
 
-                    -- Session Attendance counts with Board & Staff Type scoping
+                    -- 1. Source A: Individual records from StaffAttendances joined with Staff
+                    SELECT 
+                        COUNT(DISTINCT CASE WHEN fa.Status = 1 OR fa.Status = 'Present' OR fa.Status = '1' THEN fa.FacultyId END),
+                        COUNT(DISTINCT CASE WHEN fa.Status = 3 OR fa.Status = 'Late' OR fa.Status = '3' THEN fa.FacultyId END),
+                        COUNT(DISTINCT CASE WHEN fa.Status = 4 OR fa.Status = 'Leave' OR fa.Status = '4' THEN fa.FacultyId END)
+                    INTO v_Present_Indiv, v_Late_Indiv, v_OnLeave_Indiv
+                    FROM `StaffAttendances` fa
+                    JOIN `StaffAttendanceSessions` sas ON fa.StaffSessionId = sas.StaffSessionId
+                    JOIN `Staff` st ON (fa.FacultyId = st.StaffId OR fa.FacultyId = st.Id)
+                    WHERE DATE(sas.AttendanceDate) = v_TargetDate
+                      AND (fa.IsActive = 1 OR fa.IsActive IS NULL)
+                      AND (sas.IsActive = 1 OR sas.IsActive IS NULL)
+                      AND (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+                      AND (st.Status = 'Active' OR st.Status IS NULL)
+                      AND (p_BoardId IS NULL OR st.BoardId = p_BoardId)
+                      AND (
+                          LOWER(v_StaffType) IN ('all', 'all staff')
+                          OR (LOWER(v_StaffType) IN ('teaching', 'teaching staff') AND (st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching' OR st.StaffType IS NULL))
+                          OR (LOWER(v_StaffType) IN ('non-teaching', 'non-teaching staff', 'nonteaching', 'nonteaching staff') AND (st.StaffType = 'Non-Teaching' OR st.StaffType = 'NonTeaching' OR st.StaffType = 'Non Teaching' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'NonTeaching'))
+                      );
+
+                    -- 2. Source B: Session Summary Counts from StaffAttendanceSessions
                     SELECT 
                         COALESCE(SUM(sas.PresentCount), 0),
-                        COALESCE(SUM(sas.AbsentCount), 0),
                         COALESCE(SUM(sas.LateCount), 0),
                         COALESCE(SUM(sas.LeaveCount), 0)
-                    INTO v_Present, v_Absent, v_Late, v_OnLeave
+                    INTO v_Present_Sess, v_Late_Sess, v_OnLeave_Sess
                     FROM `StaffAttendanceSessions` sas
                     WHERE DATE(sas.AttendanceDate) = v_TargetDate
                       AND (sas.IsActive = 1 OR sas.IsActive IS NULL)
-                      AND (p_AcademicYearId IS NULL OR sas.AcademicYearId = p_AcademicYearId)
                       AND (
                           LOWER(v_StaffType) IN ('all', 'all staff')
                           OR (LOWER(v_StaffType) IN ('teaching', 'teaching staff') AND (sas.StaffType = 1 OR sas.StaffType = 'Teaching' OR sas.StaffType = '1'))
                           OR (LOWER(v_StaffType) IN ('non-teaching', 'non-teaching staff', 'nonteaching', 'nonteaching staff') AND (sas.StaffType = 2 OR sas.StaffType = 'Non-Teaching' OR sas.StaffType = '2'))
                       );
 
-                    -- Leave Requests
+                    -- 3. Source C: Approved Leave Requests
                     SELECT COUNT(*) INTO v_LeavesCount
                     FROM `StaffLeaveRequests` slr
+                    JOIN `Staff` st ON (slr.FacultyId = st.StaffId OR slr.FacultyId = st.Id)
                     WHERE (slr.IsActive = 1 OR slr.IsActive IS NULL)
                       AND slr.Status = 'Approved'
-                      AND DATE(slr.StartDate) <= v_TargetDate AND DATE(slr.EndDate) >= v_TargetDate;
+                      AND (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+                      AND (st.Status = 'Active' OR st.Status IS NULL)
+                      AND (p_BoardId IS NULL OR st.BoardId = p_BoardId)
+                      AND DATE(slr.StartDate) <= v_TargetDate AND DATE(slr.EndDate) >= v_TargetDate
+                      AND (
+                          LOWER(v_StaffType) IN ('all', 'all staff')
+                          OR (LOWER(v_StaffType) IN ('teaching', 'teaching staff') AND (st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching' OR st.StaffType IS NULL))
+                          OR (LOWER(v_StaffType) IN ('non-teaching', 'non-teaching staff', 'nonteaching', 'nonteaching staff') AND (st.StaffType = 'Non-Teaching' OR st.StaffType = 'NonTeaching' OR st.StaffType = 'Non Teaching' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'NonTeaching'))
+                      );
 
-                    -- Total session marks & normalized attendance calculation
-                    SET v_TotalSessionMarks = v_Present + v_Absent + v_Late + v_OnLeave;
+                    -- Aggregate best available counts
+                    SET v_Present = GREATEST(v_Present_Indiv, v_Present_Sess);
+                    SET v_Late = GREATEST(v_Late_Indiv, v_Late_Sess);
+                    SET v_OnLeave = GREATEST(v_OnLeave_Indiv, v_OnLeave_Sess, v_LeavesCount);
 
-                    IF v_TotalSessionMarks > 0 THEN
-                        SET v_AttendancePct = LEAST(100.0, ROUND((v_Present * 100.0) / v_TotalSessionMarks, 1));
-                    ELSEIF v_FilteredTotal > 0 AND v_Present > 0 THEN
-                        SET v_AttendancePct = LEAST(100.0, ROUND((LEAST(v_Present, v_FilteredTotal) * 100.0) / v_FilteredTotal, 1));
-                    ELSE
-                        SET v_AttendancePct = 0.0;
-                    END IF;
-
-                    -- Normalize Headcounts so Present/Absent never exceed Total Staff
+                    -- Normalize Present/Late/Leave so they do not exceed FilteredTotal
                     IF v_FilteredTotal > 0 THEN
                         SET v_Present = LEAST(v_Present, v_FilteredTotal);
-                        SET v_Absent = LEAST(v_Absent, v_FilteredTotal);
-                        SET v_Late = LEAST(v_Late, v_FilteredTotal);
-                        SET v_OnLeave = LEAST(v_OnLeave, v_FilteredTotal);
+                        SET v_Late = LEAST(v_Late, GREATEST(0, v_FilteredTotal - v_Present));
+                        SET v_OnLeave = LEAST(v_OnLeave, GREATEST(0, v_FilteredTotal - v_Present - v_Late));
+                    END IF;
+
+                    -- CRITICAL LOGIC: If attendance is not marked for any staff, they are counted as ABSENT!
+                    -- When attendance is later marked in time, Present/Late updates and Absent automatically decreases.
+                    SET v_Absent = GREATEST(0, v_FilteredTotal - v_Present - v_Late - v_OnLeave);
+
+                    -- Calculate attendance percentages strictly against FilteredTotal
+                    IF v_FilteredTotal > 0 THEN
+                        SET v_AttendancePct = LEAST(100.0, ROUND(((v_Present + 0.5 * v_Late) * 100.0) / v_FilteredTotal, 1));
+                        SET v_AbsentPct = ROUND((v_Absent * 100.0) / v_FilteredTotal, 1);
+                        SET v_LatePct = ROUND((v_Late * 100.0) / v_FilteredTotal, 1);
+                        SET v_OnLeavePct = ROUND((v_OnLeave * 100.0) / v_FilteredTotal, 1);
+                    ELSE
+                        SET v_AttendancePct = 0.0;
+                        SET v_AbsentPct = 0.0;
+                        SET v_LatePct = 0.0;
+                        SET v_OnLeavePct = 0.0;
                     END IF;
 
                     SELECT 
@@ -272,9 +330,9 @@ public class LiveDbMetricComparator
                         v_AttendancePct AS AttendancePercentage,
                         v_AttendancePct AS Percentage,
                         v_AttendancePct AS PresentPercentage,
-                        CASE WHEN v_TotalSessionMarks > 0 THEN ROUND((v_Absent * 100.0) / v_TotalSessionMarks, 1) ELSE 0.0 END AS AbsentPercentage,
-                        CASE WHEN v_TotalSessionMarks > 0 THEN ROUND((v_Late * 100.0) / v_TotalSessionMarks, 1) ELSE 0.0 END AS LatePercentage,
-                        CASE WHEN v_TotalSessionMarks > 0 THEN ROUND((v_OnLeave * 100.0) / v_TotalSessionMarks, 1) ELSE 0.0 END AS OnLeavePercentage,
+                        v_AbsentPct AS AbsentPercentage,
+                        v_LatePct AS LatePercentage,
+                        v_OnLeavePct AS OnLeavePercentage,
                         v_TeachingCount AS TeachingCount,
                         v_TeachingCount AS TeachingStaffCount,
                         v_NonTeachingCount AS NonTeachingCount,
