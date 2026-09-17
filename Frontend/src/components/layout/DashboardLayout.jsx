@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building,
-  Building2, LayoutDashboard, Users, BarChart3, CalendarDays,
+  Building2, LayoutDashboard, Users, BarChart3,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -12,6 +12,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
+import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import boardAcademicYearIcon from "@/assets/sidebar-3d/board-academic-year.png";
 import subjectsIcon from "@/assets/sidebar-3d/subjects.png";
 import timetableIcon from "@/assets/sidebar-3d/timetable.png";
@@ -122,7 +123,7 @@ export const menu = [
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
-      { to: "/dashboard/holidays", label: "Holiday Management", icon: CalendarDays },
+      { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
     ],
   },
   {
