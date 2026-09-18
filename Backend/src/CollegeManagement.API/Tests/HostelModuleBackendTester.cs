@@ -758,9 +758,9 @@ namespace CollegeManagement.API.Tests
                     SELECT 
                         hsa.AllocationId,
                         hsa.StudentId,
-                        COALESCE(s.AdmissionNumber, '') AS AdmissionNo,
-                        COALESCE(s.RollNumber, '') AS RollNo,
-                        COALESCE(CONCAT(s.FirstName, ' ', s.LastName), 'Student') AS StudentName,
+                        COALESCE(s.AdmissionNo, '') AS AdmissionNo,
+                        COALESCE(s.RollNo, '') AS RollNo,
+                        COALESCE(s.StudentName, 'Student') AS StudentName,
                         hb.HostelId,
                         hb.HostelName,
                         hb.HostelCode,
@@ -770,17 +770,17 @@ namespace CollegeManagement.API.Tests
                         b.BedNumber,
                         hsa.JoiningDate,
                         hsa.Status,
-                        COALESCE(CONCAT(st.FirstName, ' ', st.LastName), '') AS WardenName
+                        COALESCE(CONCAT_WS(' ', st.FirstName, NULLIF(st.MiddleName, ''), st.LastName), '') AS WardenName
                     FROM hostel_student_allocations hsa
                     INNER JOIN hostel_blocks hb ON hsa.HostelId = hb.HostelId
                     INNER JOIN room_masters rm ON hsa.RoomId = rm.RoomId
                     INNER JOIN hostel_beds b ON hsa.BedId = b.BedId
                     LEFT JOIN Students s ON hsa.StudentId = s.StudentId
                     LEFT JOIN hostel_warden_assignments hwa ON hsa.WardenAssignmentId = hwa.WardenAssignmentId
-                    LEFT JOIN Staff st ON hwa.StaffId = st.StaffId
+                    LEFT JOIN Staff st ON hwa.StaffId = st.Id
                     WHERE (p_HostelId IS NULL OR hsa.HostelId = p_HostelId)
                       AND (p_Status IS NULL OR hsa.Status = p_Status)
-                      AND (p_Search IS NULL OR s.FirstName LIKE CONCAT('%', p_Search, '%') OR s.AdmissionNumber LIKE CONCAT('%', p_Search, '%'))
+                      AND (p_Search IS NULL OR s.StudentName LIKE CONCAT('%', p_Search, '%') OR s.AdmissionNo LIKE CONCAT('%', p_Search, '%'))
                     ORDER BY hsa.JoiningDate DESC;
                 END;
 
@@ -797,29 +797,29 @@ namespace CollegeManagement.API.Tests
                     SELECT 
                         ha.AttendanceId,
                         ha.StudentId,
-                        COALESCE(s.AdmissionNumber, '') AS AdmissionNo,
-                        COALESCE(s.RollNumber, '') AS RollNo,
-                        COALESCE(CONCAT(s.FirstName, ' ', s.LastName), 'Student') AS StudentName,
+                        COALESCE(s.AdmissionNo, '') AS AdmissionNo,
+                        COALESCE(s.RollNo, '') AS RollNo,
+                        COALESCE(s.StudentName, 'Student') AS StudentName,
                         hb.HostelName,
                         rm.RoomNumber,
                         b.BedNumber,
                         ha.AttendanceDate,
                         ha.Session,
                         ha.AttendanceStatus,
-                        COALESCE(CONCAT(st.FirstName, ' ', st.LastName), '') AS WardenName
+                        COALESCE(CONCAT_WS(' ', st.FirstName, NULLIF(st.MiddleName, ''), st.LastName), '') AS WardenName
                     FROM hostel_attendance ha
                     INNER JOIN hostel_blocks hb ON ha.HostelId = hb.HostelId
                     INNER JOIN room_masters rm ON ha.RoomId = rm.RoomId
                     INNER JOIN hostel_beds b ON ha.BedId = b.BedId
                     LEFT JOIN Students s ON ha.StudentId = s.StudentId
                     LEFT JOIN hostel_warden_assignments hwa ON ha.WardenAssignmentId = hwa.WardenAssignmentId
-                    LEFT JOIN Staff st ON hwa.StaffId = st.StaffId
+                    LEFT JOIN Staff st ON hwa.StaffId = st.Id
                     WHERE (p_HostelId IS NULL OR ha.HostelId = p_HostelId)
                       AND (p_FromDate IS NULL OR ha.AttendanceDate >= p_FromDate)
                       AND (p_ToDate IS NULL OR ha.AttendanceDate <= p_ToDate)
                       AND (p_Session IS NULL OR ha.Session = p_Session)
                       AND (p_AttendanceStatus IS NULL OR ha.AttendanceStatus = p_AttendanceStatus)
-                      AND (p_Search IS NULL OR s.FirstName LIKE CONCAT('%', p_Search, '%') OR s.AdmissionNumber LIKE CONCAT('%', p_Search, '%'))
+                      AND (p_Search IS NULL OR s.StudentName LIKE CONCAT('%', p_Search, '%') OR s.AdmissionNo LIKE CONCAT('%', p_Search, '%'))
                     ORDER BY ha.AttendanceDate DESC;
                 END;
 
@@ -836,9 +836,9 @@ namespace CollegeManagement.API.Tests
                     SELECT 
                         hol.RequestId,
                         hol.StudentId,
-                        COALESCE(s.AdmissionNumber, '') AS AdmissionNo,
-                        COALESCE(s.RollNumber, '') AS RollNo,
-                        COALESCE(CONCAT(s.FirstName, ' ', s.LastName), 'Student') AS StudentName,
+                        COALESCE(s.AdmissionNo, '') AS AdmissionNo,
+                        COALESCE(s.RollNo, '') AS RollNo,
+                        COALESCE(s.StudentName, 'Student') AS StudentName,
                         hb.HostelName,
                         rm.RoomNumber,
                         hol.RequestType,
@@ -847,19 +847,19 @@ namespace CollegeManagement.API.Tests
                         hol.Reason,
                         hol.Destination,
                         hol.ApprovalStatus,
-                        COALESCE(CONCAT(st.FirstName, ' ', st.LastName), '') AS WardenName
-                    FROM hostel_outpass_leaves hol
+                        COALESCE(CONCAT_WS(' ', st.FirstName, NULLIF(st.MiddleName, ''), st.LastName), '') AS WardenName
+                    FROM hostel_outpass_leave hol
                     INNER JOIN hostel_blocks hb ON hol.HostelId = hb.HostelId
                     INNER JOIN room_masters rm ON hol.RoomId = rm.RoomId
                     LEFT JOIN Students s ON hol.StudentId = s.StudentId
                     LEFT JOIN hostel_warden_assignments hwa ON hol.WardenAssignmentId = hwa.WardenAssignmentId
-                    LEFT JOIN Staff st ON hwa.StaffId = st.StaffId
+                    LEFT JOIN Staff st ON hwa.StaffId = st.Id
                     WHERE (p_HostelId IS NULL OR hol.HostelId = p_HostelId)
                       AND (p_FromDate IS NULL OR hol.FromDateTime >= p_FromDate)
                       AND (p_ToDate IS NULL OR hol.ToDateTime <= p_ToDate)
                       AND (p_RequestType IS NULL OR hol.RequestType = p_RequestType)
                       AND (p_ApprovalStatus IS NULL OR hol.ApprovalStatus = p_ApprovalStatus)
-                      AND (p_Search IS NULL OR s.FirstName LIKE CONCAT('%', p_Search, '%') OR s.AdmissionNumber LIKE CONCAT('%', p_Search, '%'))
+                      AND (p_Search IS NULL OR s.StudentName LIKE CONCAT('%', p_Search, '%') OR s.AdmissionNo LIKE CONCAT('%', p_Search, '%'))
                     ORDER BY hol.CreatedAt DESC;
                 END;
 
@@ -878,9 +878,9 @@ namespace CollegeManagement.API.Tests
                         htv.RequestId,
                         htv.AllocationId,
                         htv.StudentId,
-                        COALESCE(s.AdmissionNumber, '') AS AdmissionNo,
-                        COALESCE(s.RollNumber, '') AS RollNo,
-                        COALESCE(CONCAT(s.FirstName, ' ', s.LastName), 'Student') AS StudentName,
+                        COALESCE(s.AdmissionNo, '') AS AdmissionNo,
+                        COALESCE(s.RollNo, '') AS RollNo,
+                        COALESCE(s.StudentName, 'Student') AS StudentName,
                         htv.RequestType,
                         from_hb.HostelName AS FromHostelName,
                         from_rm.RoomNumber AS FromRoomNumber,
@@ -895,7 +895,7 @@ namespace CollegeManagement.API.Tests
                         htv.RefundAmount,
                         htv.AdditionalChargeAmount,
                         htv.CompletedAt
-                    FROM hostel_transfer_vacates htv
+                    FROM hostel_transfer_vacate htv
                     INNER JOIN hostel_blocks from_hb ON htv.FromHostelId = from_hb.HostelId
                     INNER JOIN room_masters from_rm ON htv.FromRoomId = from_rm.RoomId
                     INNER JOIN hostel_beds from_b ON htv.FromBedId = from_b.BedId
@@ -909,7 +909,7 @@ namespace CollegeManagement.API.Tests
                       AND (p_RequestType IS NULL OR htv.RequestType = p_RequestType)
                       AND (p_ApprovalStatus IS NULL OR htv.ApprovalStatus = p_ApprovalStatus)
                       AND (p_FeeSettlementStatus IS NULL OR htv.FeeSettlementStatus = p_FeeSettlementStatus)
-                      AND (p_Search IS NULL OR s.FirstName LIKE CONCAT('%', p_Search, '%') OR s.AdmissionNumber LIKE CONCAT('%', p_Search, '%'))
+                      AND (p_Search IS NULL OR s.StudentName LIKE CONCAT('%', p_Search, '%') OR s.AdmissionNo LIKE CONCAT('%', p_Search, '%'))
                     ORDER BY htv.CreatedAt DESC;
                 END;
             ";
