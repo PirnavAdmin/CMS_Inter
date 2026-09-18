@@ -7,6 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport-routes")]
+    [Route("api/v1/transport/routes")]
     [AllowAnonymous]
     public class TransportRoutesController : ControllerBase
     {

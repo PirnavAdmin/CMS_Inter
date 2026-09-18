@@ -1242,6 +1242,7 @@ private static void ConfigureTransportRoute(ModelBuilder modelBuilder)
                 entity.Ignore(x => x.PickupPoint);
                 entity.Ignore(x => x.DropPoint);
                 entity.Ignore(x => x.VehicleId);
+                entity.Ignore(x => x.Vehicle);
 
                 entity.Property(x => x.RouteCode)
                     .HasMaxLength(50)
@@ -1327,6 +1328,8 @@ private static void ConfigureTransportVehicle(ModelBuilder modelBuilder)
                 entity.HasKey(x => x.VehicleId);
                 entity.Ignore(x => x.CreatedBy);
                 entity.Ignore(x => x.UpdatedBy);
+                entity.Ignore(x => x.Routes);
+                entity.Ignore(x => x.Drivers);
                 entity.Property(x => x.RegistrationNumber).HasColumnName("VehicleRegistrationNo");
                 entity.Property(x => x.Manufacturer).HasColumnName("Make");
 
@@ -1376,6 +1379,7 @@ private static void ConfigureTransportDriver(ModelBuilder modelBuilder)
                 entity.HasKey(x => x.DriverId);
                 entity.Ignore(x => x.CreatedBy);
                 entity.Ignore(x => x.UpdatedBy);
+                entity.Ignore(x => x.AssignedVehicle);
                 entity.Property(x => x.AlternateMobileNumber).HasColumnName("AlternateMobileNo");
                 entity.Property(x => x.LicenceExpiry).HasColumnName("LicenseExpiry");
 

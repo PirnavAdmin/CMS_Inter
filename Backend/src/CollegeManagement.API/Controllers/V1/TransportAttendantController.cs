@@ -8,6 +8,8 @@ namespace CollegeManagement.API.Controllers
     [ApiController]
     [Route("api/v1/transport-bus-attendants")]
     [Route("api/v1/transport-attendants")]
+    [Route("api/v1/transport/attendants")]
+    [Route("api/v1/transport/bus-attendants")]
     [AllowAnonymous]
     public class TransportAttendantController : ControllerBase
     {

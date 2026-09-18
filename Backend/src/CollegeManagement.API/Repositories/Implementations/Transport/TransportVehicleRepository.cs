@@ -17,7 +17,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _context = context;
         }
 
-        private IDbConnection Connection() => _context.Database.GetDbConnection();
+        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
         public async Task<PagedResult<TransportVehicleDto>> GetAllAsync(TransportVehicleFilterDto filter)
         {
@@ -48,7 +48,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_VehicleNumber = dto.VehicleNumber,
                     p_VehicleType = dto.VehicleType,
                     p_Capacity = dto.Capacity,
-                    p_IsActive = dto.Status,
+                    p_IsActive = dto.Status ? 1 : 0,
                     p_VehicleRegistrationNo = dto.RegistrationNumber,
                     p_MaximumCapacity = dto.Capacity,
                     p_Make = dto.Manufacturer,
@@ -59,8 +59,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_InsuranceExpiry = dto.InsuranceExpiry,
                     p_FitnessExpiry = dto.FitnessExpiry,
                     p_PollutionExpiry = dto.PollutionExpiry,
-                    p_RoadTaxExpiry = (DateTime?)null,
-                    p_Status = dto.Status,
+                    p_GpsDeviceId = dto.GpsDeviceId,
+                    p_IsAC = dto.IsAC ? 1 : 0,
+                    p_InsuranceNumber = dto.InsuranceNumber,
                     p_CreatedBy = userId,
                     p_UpdatedBy = (long?)null
                 },
@@ -78,7 +79,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_VehicleNumber = dto.VehicleNumber,
                     p_VehicleType = dto.VehicleType,
                     p_Capacity = dto.Capacity,
-                    p_IsActive = dto.Status,
+                    p_IsActive = dto.Status ? 1 : 0,
                     p_VehicleRegistrationNo = dto.RegistrationNumber,
                     p_MaximumCapacity = dto.Capacity,
                     p_Make = dto.Manufacturer,
@@ -89,8 +90,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_InsuranceExpiry = dto.InsuranceExpiry,
                     p_FitnessExpiry = dto.FitnessExpiry,
                     p_PollutionExpiry = dto.PollutionExpiry,
-                    p_RoadTaxExpiry = (DateTime?)null,
-                    p_Status = dto.Status,
+                    p_GpsDeviceId = dto.GpsDeviceId,
+                    p_IsAC = dto.IsAC ? 1 : 0,
+                    p_InsuranceNumber = dto.InsuranceNumber,
                     p_CreatedBy = (long?)null,
                     p_UpdatedBy = userId
                 },

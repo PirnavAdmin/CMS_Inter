@@ -30,7 +30,7 @@ public class TransportRepository : ITransportRepository
         _context = context;
     } 
 
-        private IDbConnection Connection() => _context.Database.GetDbConnection();
+        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
     // Vehicles
     public async Task<List<TransportVehicle>> GetAllVehiclesAsync() =>

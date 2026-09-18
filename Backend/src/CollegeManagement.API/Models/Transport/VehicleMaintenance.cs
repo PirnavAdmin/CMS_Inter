@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CollegeManagement.API.Models
 {
-    [Table("transport_vehicle_maintenances")]
+    [Table("VehicleMaintenances")]
     public class VehicleMaintenance
     {
         [Key]

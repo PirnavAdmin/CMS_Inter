@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Data;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Dashboard;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
@@ -20,7 +20,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _context = context;
         }
 
-        private IDbConnection Connection() => _context.Database.GetDbConnection();
+        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
         public async Task<TransportDashboardResponseDto> GetDashboardAsync()
         {

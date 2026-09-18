@@ -9,6 +9,8 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [Route("api/v1/transport-vehicle-maintenance")]
     [Route("api/v1/transport-maintenance")]
+    [Route("api/v1/transport/maintenance")]
+    [Route("api/v1/transport/vehicle-maintenance")]
     [AllowAnonymous]
     [Tags("Vehicle Maintenance")]
     public class VehicleMaintenanceController : ControllerBase

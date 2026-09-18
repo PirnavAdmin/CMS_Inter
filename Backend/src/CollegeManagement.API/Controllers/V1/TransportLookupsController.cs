@@ -6,6 +6,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport-lookups")]
+    [Route("api/v1/transport/lookups")]
     [AllowAnonymous]
     public class TransportLookupsController : ControllerBase
     {

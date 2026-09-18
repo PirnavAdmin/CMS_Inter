@@ -21,7 +21,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _context = context;
         }
 
-        private IDbConnection Connection() => _context.Database.GetDbConnection();
+        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
         public async Task<PagedResult<TransportRouteDto>> GetAllAsync(TransportRouteFilterDto filter)
         {

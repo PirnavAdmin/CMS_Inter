@@ -1,4 +1,4 @@
-﻿namespace CollegeManagement.API.Services.Implementations;
+namespace CollegeManagement.API.Services.Implementations;
 
 using Dapper;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +30,7 @@ public class StudentTransportService : IStudentTransportService
     {
         int targetStudentId = studentId ?? 6;
         
-        using var connection = _context.Database.GetDbConnection();
+        using var connection = new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
         var result = await connection.QueryFirstOrDefaultAsync<StudentTransportResponseDto>(
             "sp_GetStudentTransportDetails",
             new { p_StudentId = targetStudentId },

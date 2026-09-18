@@ -7,6 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport-pickup-points")]
+    [Route("api/v1/transport/pickup-points")]
     [AllowAnonymous]
     public class PickupPointController : ControllerBase
     {

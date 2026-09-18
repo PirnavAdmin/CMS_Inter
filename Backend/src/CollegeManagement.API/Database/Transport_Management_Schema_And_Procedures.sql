@@ -2354,7 +2354,7 @@ BEGIN
     SELECT 
         pp.PickupPointId AS StepNo,
         pp.StopName,
-        pp.DistanceKm,
+        COALESCE(pp.DistanceFromSchool, pp.DistanceFromStart, pp.DistanceKm, 0.00) AS DistanceKm,
         TIME_FORMAT(pp.PickupTime, '%h:%i %p') AS ScheduledTime,
         'Active Stop' AS BoardingAlightingInfo,
         pp.Status AS IsActive,

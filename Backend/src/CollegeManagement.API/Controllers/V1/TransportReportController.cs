@@ -7,6 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport-reports")]
+    [Route("api/v1/transport/reports")]
     [AllowAnonymous]
     [Tags("Transport Management Reports")]
     public class TransportReportController : ControllerBase

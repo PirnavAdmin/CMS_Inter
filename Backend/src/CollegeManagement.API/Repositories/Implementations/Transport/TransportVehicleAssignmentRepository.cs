@@ -1,4 +1,4 @@
-﻿namespace CollegeManagement.API.Repositories.Implementations.Transport
+namespace CollegeManagement.API.Repositories.Implementations.Transport
 {
     using System;
     using System.Collections.Generic;
@@ -16,7 +16,7 @@
     {
         private readonly AppDbContext _context;
         public TransportVehicleAssignmentRepository(AppDbContext context) { _context = context; }
-        private IDbConnection Connection() => _context.Database.GetDbConnection();
+        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
         public async Task<PagedResult<TransportVehicleAssignmentDto>> GetAllAsync(TransportVehicleAssignmentFilterDto filter)
         {

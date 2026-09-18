@@ -13,11 +13,11 @@ namespace CollegeManagement.API.Models
         [MaxLength(50)]
         public string? AdmissionNo { get; set; }
 
-        public long RouteId { get; set; }
+        public long? RouteId { get; set; }
 
-        public long PickupPointId { get; set; }
+        public long? PickupPointId { get; set; }
 
-        public long VehicleAssignmentId { get; set; }
+        public long? VehicleAssignmentId { get; set; }
 
         public DateTime EffectiveFrom { get; set; }
 
@@ -49,10 +49,10 @@ namespace CollegeManagement.API.Models
         [System.ComponentModel.DataAnnotations.Schema.NotMapped]
         public DateTime? UpdatedAt { get; set; }
 
-        public TransportRoute Route { get; set; } = null!;
+        public TransportRoute? Route { get; set; }
 
-        public PickupPoint PickupPoint { get; set; } = null!;
+        public PickupPoint? PickupPoint { get; set; }
 
-        public TransportVehicleAssignment VehicleAssignment { get; set; } = null!;
+        public TransportVehicleAssignment? VehicleAssignment { get; set; }
     }
 }

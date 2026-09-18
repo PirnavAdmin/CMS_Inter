@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Operations;
@@ -10,6 +10,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/transport-operations")]
+    [Route("api/v1/transport/operations")]
     [AllowAnonymous]
     public class TransportOperationsController : ControllerBase
     {
@@ -20,7 +21,7 @@ namespace CollegeManagement.API.Controllers.V1
             _context = context;
         }
 
-        private IDbConnection Connection() => _context.Database.GetDbConnection();
+        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
         [HttpGet("trips")]
         [AllowAnonymous]
@@ -198,7 +199,7 @@ namespace CollegeManagement.API.Controllers.V1
 
                 var stops = (await c.QueryAsync<dynamic>(
                     "sp_GetPickupPoints",
-                    new { p_RouteId = (long?)null, p_Search = "" },
+                    new { p_RouteId = (long?)null, p_Search = "", p_Status = (byte?)null },
                     commandType: CommandType.StoredProcedure)).ToList();
 
                 var list = assignments.Select(a =>

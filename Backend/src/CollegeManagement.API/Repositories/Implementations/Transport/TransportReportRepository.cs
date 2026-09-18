@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -7,6 +7,7 @@ using Dapper;
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Reports;
+using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
 using CollegeManagement.API.Repositories.Interfaces;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -20,7 +21,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             _context = context;
         }
 
-        private IDbConnection Connection() => _context.Database.GetDbConnection();
+        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
         public async Task<TransportDashboardReportResponseDto> GetDashboardReportAsync(ReportFilterDto filter)
         {
@@ -288,7 +289,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             using var c = Connection();
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetPickupPoints",
-                new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "" },
+                new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "", p_Status = (byte?)null },
                 commandType: CommandType.StoredProcedure);
 
             return raw.Select(x => new PickupPointReportDto
@@ -344,20 +345,20 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<MonthlyMaintenanceCostDto>> GetMonthlyCostAsync(ReportFilterDto filter)
         {
             using var c = Connection();
-            var raw = await c.QueryAsync<dynamic>(
+            var raw = (await c.QueryAsync<VehicleMaintenanceDto>(
                 "sp_GetVehicleMaintenances",
                 new { p_VehicleId = filter.VehicleId, p_FromDate = filter.FromDate?.Date, p_ToDate = filter.ToDate?.Date, p_Status = (byte?)null, p_Search = filter.Search ?? "" },
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure)).ToList();
 
             return raw
-                .GroupBy(x => new { Year = ((DateTime)x.ServiceDate).Year, Month = ((DateTime)x.ServiceDate).Month })
+                .GroupBy(x => new { Year = x.ServiceDate.Year, Month = x.ServiceDate.Month })
                 .Select(g => new MonthlyMaintenanceCostDto
                 {
                     Year = g.Key.Year,
                     Month = g.Key.Month,
                     MonthName = new DateTime(g.Key.Year, g.Key.Month, 1).ToString("MMMM"),
                     ServiceCount = g.Count(),
-                    TotalCost = g.Sum(x => Convert.ToDecimal(x.Cost ?? 0))
+                    TotalCost = g.Sum(x => x.Cost)
                 }).OrderBy(x => x.Year).ThenBy(x => x.Month).ToList();
         }
     }

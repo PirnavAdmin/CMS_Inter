@@ -9,10 +9,7 @@ public class TransportVehicle
     [Key]
     public long VehicleId { get; set; }
 
-    [Required]
     public string? VehicleNumber { get; set; }
-
-    [Required]
     public string? RegistrationNumber { get; set; }
 
     public string? VehicleName { get; set; }

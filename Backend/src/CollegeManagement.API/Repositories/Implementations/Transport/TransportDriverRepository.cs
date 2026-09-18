@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Data;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Common;
@@ -18,7 +18,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _context = context;
         }
 
-        private IDbConnection Connection() => _context.Database.GetDbConnection();
+        private IDbConnection Connection() => new MySqlConnector.MySqlConnection(_context.Database.GetConnectionString());
 
         public async Task<PagedResult<TransportDriverDto>> GetAllAsync(TransportDriverFilterDto filter)
         {
