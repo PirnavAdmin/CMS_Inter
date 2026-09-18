@@ -1,10 +1,13 @@
-using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
-using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
+using CollegeManagement.API.Common;
+using Dapper;
+using Microsoft.EntityFrameworkCore;
+using System.Data;
+using CollegeManagement.API.Models;
 
-namespace CollegeManagement.API.Repositories.Implementations
+namespace CollegeManagement.API.Repositories.Implementations.Transport
 {
     public class VehicleMaintenanceRepository : IVehicleMaintenanceRepository
     {
@@ -14,179 +17,117 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             _context = context;
         }
+
+        private IDbConnection Connection() => _context.Database.GetDbConnection();
+
         public async Task<(IEnumerable<VehicleMaintenanceDto> Items, int TotalCount)> GetAllAsync(VehicleMaintenanceFilterDto filter)
         {
-            var query = _context.VehicleMaintenances
-                .Include(x => x.Vehicle)
-                .Where(x => !x.IsDeleted)
-                .AsQueryable();
+            using var c = Connection();
+            var sql = @"
+                SELECT 
+                    m.MaintenanceId, m.VehicleId, v.VehicleRegistrationNo AS VehicleNumber,
+                    m.ServiceType, m.ServiceDate, m.Cost, m.VendorCenter, m.NextServiceDue,
+                    m.Remarks, m.Status
+                FROM VehicleMaintenances m
+                LEFT JOIN TransportVehicles v ON m.VehicleId = v.VehicleId
+                WHERE m.IsDeleted = 0";
+                
+            var items = await c.QueryAsync<VehicleMaintenanceDto>(sql);
+            var list = items.AsQueryable();
 
-            if (!string.IsNullOrWhiteSpace(filter.Search))
-            {
+            if (filter.VehicleId.HasValue) list = list.Where(x => x.VehicleId == filter.VehicleId.Value);
+            if (filter.FromDate.HasValue) list = list.Where(x => x.ServiceDate >= filter.FromDate.Value.Date);
+            if (filter.ToDate.HasValue) list = list.Where(x => x.ServiceDate <= filter.ToDate.Value.Date);
+            if (filter.Status.HasValue) list = list.Where(x => x.Status == (filter.Status.Value ? "Active" : "Inactive"));
+            
+            if (!string.IsNullOrWhiteSpace(filter.Search)) {
                 var search = filter.Search.Trim().ToLower();
-
-                query = query.Where(x =>
-                    x.ServiceType.ToLower().Contains(search) ||
-                    (x.Vehicle.VehicleNumber != null &&
-                     x.Vehicle.VehicleNumber.ToLower().Contains(search)) ||
-                    (x.VendorCenter != null &&
-                     x.VendorCenter.ToLower().Contains(search)));
+                list = list.Where(x => x.ServiceType != null && x.ServiceType.ToLower().Contains(search) || x.VendorCenter != null && x.VendorCenter.ToLower().Contains(search) || x.VehicleNumber != null && x.VehicleNumber.ToLower().Contains(search));
             }
-
-            if (filter.VehicleId.HasValue)
-                query = query.Where(x => x.VehicleId == filter.VehicleId);
-
-            if (filter.Status.HasValue)
-                query = query.Where(x => x.Status == filter.Status);
-
-            if (filter.FromDate.HasValue)
-                query = query.Where(x => x.ServiceDate >= filter.FromDate);
-
-            if (filter.ToDate.HasValue)
-                query = query.Where(x => x.ServiceDate <= filter.ToDate);
-
-            query = (filter.SortBy?.ToLower(), filter.SortOrder?.ToLower()) switch
-            {
-                ("vehiclenumber", "desc") => query.OrderByDescending(x => x.Vehicle.VehicleNumber),
-                ("vehiclenumber", _) => query.OrderBy(x => x.Vehicle.VehicleNumber),
-
-                ("cost", "desc") => query.OrderByDescending(x => x.Cost),
-                ("cost", _) => query.OrderBy(x => x.Cost),
-
-                ("servicetype", "desc") => query.OrderByDescending(x => x.ServiceType),
-                ("servicetype", _) => query.OrderBy(x => x.ServiceType),
-
-                ("servicedate", "asc") => query.OrderBy(x => x.ServiceDate),
-
-                _ => query.OrderByDescending(x => x.ServiceDate)
-            };
-
-            var totalCount = await query.CountAsync();
-
-            var items = await query
-                .Skip((filter.PageNumber - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .Select(x => new VehicleMaintenanceDto
-                {
-                    MaintenanceId = x.MaintenanceId,
-                    VehicleId = x.VehicleId,
-                    VehicleNumber = x.Vehicle != null && x.Vehicle.VehicleNumber != null ? x.Vehicle.VehicleNumber : "BUS-101",
-                    ServiceType = x.ServiceType,
-                    ServiceDate = x.ServiceDate,
-                    Cost = x.Cost,
-                    VendorCenter = x.VendorCenter ?? string.Empty,
-                    NextServiceDue = x.NextServiceDue,
-                    Remarks = x.Remarks ?? string.Empty,
-                    StatusBool = x.Status
-                })
-                .ToListAsync();
-
-            return (items, totalCount);
+            
+            var totalCount = list.Count();
+            var paged = list.OrderByDescending(x => x.ServiceDate).Skip((filter.PageNumber - 1) * filter.PageSize).Take(filter.PageSize).ToList();
+            
+            return (paged, totalCount);
         }
+
         public async Task<VehicleMaintenanceDto?> GetByIdAsync(long maintenanceId)
         {
-            return await _context.VehicleMaintenances
-                .Include(x => x.Vehicle)
-                .Where(x => !x.IsDeleted && x.MaintenanceId == maintenanceId)
-                .Select(x => new VehicleMaintenanceDto
-                {
-                    MaintenanceId = x.MaintenanceId,
-                    VehicleId = x.VehicleId,
-                    VehicleNumber = x.Vehicle != null && x.Vehicle.VehicleNumber != null ? x.Vehicle.VehicleNumber : "BUS-101",
-                    ServiceType = x.ServiceType,
-                    ServiceDate = x.ServiceDate,
-                    Cost = x.Cost,
-                    VendorCenter = x.VendorCenter ?? string.Empty,
-                    NextServiceDue = x.NextServiceDue,
-                    Remarks = x.Remarks ?? string.Empty,
-                    StatusBool = x.Status
-                })
-                .FirstOrDefaultAsync();
+            using var c = Connection();
+            var sql = @"
+                SELECT 
+                    m.MaintenanceId, m.VehicleId, v.VehicleRegistrationNo AS VehicleNumber,
+                    m.ServiceType, m.ServiceDate, m.Cost, m.VendorCenter, m.NextServiceDue,
+                    m.Remarks, m.Status
+                FROM VehicleMaintenances m
+                LEFT JOIN TransportVehicles v ON m.VehicleId = v.VehicleId
+                WHERE m.IsDeleted = 0 AND m.MaintenanceId = @Id";
+                
+            return await c.QueryFirstOrDefaultAsync<VehicleMaintenanceDto>(sql, new { Id = maintenanceId });
         }
+
         public async Task<long> CreateAsync(CreateVehicleMaintenanceDto dto, long createdBy)
         {
-            var vehicleId = dto.VehicleId;
-            if (!_context.TransportVehicles.Any(v => v.VehicleId == vehicleId && !v.IsDeleted))
-            {
-                var fallbackVeh = await _context.TransportVehicles.FirstOrDefaultAsync(v => !v.IsDeleted);
-                if (fallbackVeh != null) vehicleId = fallbackVeh.VehicleId;
-            }
-
-            var entity = new VehicleMaintenance
-            {
-                VehicleId = vehicleId,
-                ServiceType = !string.IsNullOrWhiteSpace(dto.ServiceType) ? dto.ServiceType.Trim() : "Regular Maintenance",
-                ServiceDate = dto.ServiceDate,
-                Cost = dto.Cost,
-                VendorCenter = dto.VendorCenter?.Trim() ?? string.Empty,
-                NextServiceDue = dto.NextServiceDue,
-                Remarks = dto.Remarks?.Trim() ?? string.Empty,
-                Status = dto.Status,
-                IsDeleted = false,
-                CreatedBy = createdBy,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.VehicleMaintenances.Add(entity);
-
-            await _context.SaveChangesAsync();
-
-            return entity.MaintenanceId;
+            using var c = Connection();
+            return await c.ExecuteScalarAsync<long>(
+                "sp_CreateVehicleMaintenances",
+                new
+                {
+                    p_VehicleId = dto.VehicleId,
+                    p_ServiceType = dto.ServiceType ?? "Routine",
+                    p_ServiceDate = dto.ServiceDate,
+                    p_Cost = dto.Cost,
+                    p_VendorCenter = dto.VendorCenter,
+                    p_NextServiceDue = dto.NextServiceDue,
+                    p_Remarks = dto.Remarks,
+                    p_Status = dto.Status,
+                    p_CreatedBy = createdBy,
+                    p_UpdatedBy = (long?)null
+                },
+                commandType: CommandType.StoredProcedure);
         }
+
         public async Task<bool> UpdateAsync(long maintenanceId, UpdateVehicleMaintenanceDto dto, long updatedBy)
         {
-            var entity = await _context.VehicleMaintenances
-                .FirstOrDefaultAsync(x => x.MaintenanceId == maintenanceId && !x.IsDeleted);
-
-            if (entity == null)
-                return false;
-
-            if (dto.VehicleId > 0 && _context.TransportVehicles.Any(v => v.VehicleId == dto.VehicleId && !v.IsDeleted))
-            {
-                entity.VehicleId = dto.VehicleId;
-            }
-
-            if (!string.IsNullOrWhiteSpace(dto.ServiceType)) entity.ServiceType = dto.ServiceType.Trim();
-            entity.ServiceDate = dto.ServiceDate;
-            entity.Cost = dto.Cost;
-            entity.VendorCenter = dto.VendorCenter?.Trim() ?? string.Empty;
-            entity.NextServiceDue = dto.NextServiceDue;
-            entity.Remarks = dto.Remarks?.Trim() ?? string.Empty;
-            entity.Status = dto.Status;
-            entity.UpdatedBy = updatedBy;
-            entity.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            return true;
+            using var c = Connection();
+            var rows = await c.ExecuteAsync(
+                "sp_UpdateVehicleMaintenances",
+                new
+                {
+                    p_Id = maintenanceId,
+                    p_VehicleId = dto.VehicleId,
+                    p_ServiceType = dto.ServiceType ?? "Routine",
+                    p_ServiceDate = dto.ServiceDate,
+                    p_Cost = dto.Cost,
+                    p_VendorCenter = dto.VendorCenter,
+                    p_NextServiceDue = dto.NextServiceDue,
+                    p_Remarks = dto.Remarks,
+                    p_Status = dto.Status,
+                    p_CreatedBy = (long?)null,
+                    p_UpdatedBy = updatedBy
+                },
+                commandType: CommandType.StoredProcedure);
+            return rows > 0;
         }
+
         public async Task<bool> DeleteAsync(long maintenanceId, long updatedBy)
         {
-            var entity = await _context.VehicleMaintenances
-                .FirstOrDefaultAsync(x => x.MaintenanceId == maintenanceId && !x.IsDeleted);
-
-            if (entity == null)
-                return false;
-
-            entity.IsDeleted = true;
-            entity.UpdatedBy = updatedBy;
-            entity.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            return true;
+            using var c = Connection();
+            var rows = await c.ExecuteAsync(
+                "sp_DeleteVehicleMaintenances",
+                new { p_Id = maintenanceId },
+                commandType: CommandType.StoredProcedure);
+            return rows > 0;
         }
+        
         public async Task<IEnumerable<VehicleMaintenanceLookupDto>> GetLookupAsync()
         {
-            return await _context.VehicleMaintenances
-                .Where(x => !x.IsDeleted)
-                .OrderByDescending(x => x.ServiceDate)
-                .Select(x => new VehicleMaintenanceLookupDto
-                {
-                    MaintenanceId = x.MaintenanceId,
-                    DisplayName = x.Vehicle.VehicleNumber + " - " + x.ServiceType
-                })
-                .ToListAsync();
+            using var c = Connection();
+            var sql = "SELECT MaintenanceId, ServiceType FROM VehicleMaintenances WHERE IsDeleted = 0";
+            return await c.QueryAsync<VehicleMaintenanceLookupDto>(sql);
         }
     }
 }
+
+
+

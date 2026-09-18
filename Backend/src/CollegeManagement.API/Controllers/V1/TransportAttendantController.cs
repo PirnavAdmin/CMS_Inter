@@ -6,8 +6,8 @@ using CollegeManagement.API.Services.Interfaces;
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
-    [Route("api/transport/bus-attendants")]
-    [Route("api/transport/attendants")]
+    [Route("api/v1/transport-bus-attendants")]
+    [Route("api/v1/transport-attendants")]
     [AllowAnonymous]
     public class TransportAttendantController : ControllerBase
     {

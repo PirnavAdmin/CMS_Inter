@@ -1,14 +1,15 @@
-using Microsoft.EntityFrameworkCore;
-using CollegeManagement.API.Common;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
-using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
+using CollegeManagement.API.Common;
+using Dapper;
+using Microsoft.EntityFrameworkCore;
+using System.Data;
+using CollegeManagement.API.Models;
 
-namespace CollegeManagement.API.Repositories.Implementations
+namespace CollegeManagement.API.Repositories.Implementations.Transport
 {
-    public class StudentTransportAssignmentRepository
-        : IStudentTransportAssignmentRepository
+    public class StudentTransportAssignmentRepository : IStudentTransportAssignmentRepository
     {
         private readonly AppDbContext _context;
 
@@ -17,429 +18,143 @@ namespace CollegeManagement.API.Repositories.Implementations
             _context = context;
         }
 
-        // ---------------------------------------------------------
-        // Get All - Search, Filter, Sort and Pagination
-        // ---------------------------------------------------------
-        public async Task<PagedResult<StudentTransportAssignmentDto>>
-            GetAllAsync(StudentTransportAssignmentFilterDto filter)
+        private IDbConnection Connection() => _context.Database.GetDbConnection();
+
+        public async Task<PagedResult<StudentTransportAssignmentDto>> GetAllAsync(StudentTransportAssignmentFilterDto filter)
         {
-            var query = _context.StudentTransportAssignments
-                .AsNoTracking()
-                .Where(x => !x.IsDeleted && !string.IsNullOrWhiteSpace(x.AdmissionNo))
-                .AsQueryable();
+            using var c = Connection();
+            var sql = @"
+                SELECT 
+                    s.StudentTransportId AS AssignmentId, s.AdmissionNo, 
+                    s.RouteId, r.RouteName,
+                    s.PickupPointId, p.StopName AS PickupPointName,
+                    s.VehicleAssignmentId, v.VehicleRegistrationNo AS VehicleNumber,
+                    s.EffectiveFrom, s.EffectiveTo, s.TransportType, 
+                    s.Status, s.Status AS StatusText, s.Remarks
+                FROM StudentTransportAssignments s
+                LEFT JOIN TransportRoutes r ON s.RouteId = r.RouteId
+                LEFT JOIN PickupPoints p ON s.PickupPointId = p.PickupPointId
+                LEFT JOIN TransportVehicleAssignments va ON s.VehicleAssignmentId = va.AssignmentId
+                LEFT JOIN TransportVehicles v ON va.VehicleId = v.VehicleId
+                WHERE s.IsDeleted = 0";
+                
+            var items = await c.QueryAsync<StudentTransportAssignmentDto>(sql);
+            var list = items.AsQueryable();
 
-            // Search
-            if (!string.IsNullOrWhiteSpace(filter.Search))
-            {
-                var search = filter.Search.Trim();
-
-                query = query.Where(x =>
-                    (x.AdmissionNo != null && x.AdmissionNo.Contains(search)) ||
-                    (x.Route != null && x.Route.RouteName != null && x.Route.RouteName.Contains(search)) ||
-                    (x.PickupPoint != null && x.PickupPoint.PickupPointName != null && x.PickupPoint.PickupPointName.Contains(search)) ||
-                    (x.VehicleAssignment != null && x.VehicleAssignment.Vehicle != null && x.VehicleAssignment.Vehicle.VehicleNumber != null && x.VehicleAssignment.Vehicle.VehicleNumber.Contains(search)) ||
-                    (x.VehicleAssignment != null && x.VehicleAssignment.Driver != null && x.VehicleAssignment.Driver.DriverName != null && x.VehicleAssignment.Driver.DriverName.Contains(search)) ||
-                    (x.TransportType != null && x.TransportType.Contains(search)));
+            if (!string.IsNullOrWhiteSpace(filter.AdmissionNo)) list = list.Where(x => x.AdmissionNo == filter.AdmissionNo.Trim());
+            if (filter.RouteId.HasValue) list = list.Where(x => x.RouteId == filter.RouteId.Value);
+            if (filter.PickupPointId.HasValue) list = list.Where(x => x.PickupPointId == filter.PickupPointId.Value);
+            if (filter.VehicleAssignmentId.HasValue) list = list.Where(x => x.VehicleAssignmentId == filter.VehicleAssignmentId.Value);
+            if (!string.IsNullOrWhiteSpace(filter.TransportType)) list = list.Where(x => x.TransportType == filter.TransportType);
+            if (filter.Status.HasValue) list = list.Where(x => x.Status == filter.Status.Value);
+            
+            if (!string.IsNullOrWhiteSpace(filter.Search)) {
+                var search = filter.Search.Trim().ToLower();
+                list = list.Where(x => x.AdmissionNo.ToLower().Contains(search) || x.RouteName != null && x.RouteName.ToLower().Contains(search) || x.PickupPointName != null && x.PickupPointName.ToLower().Contains(search) || x.VehicleNumber != null && x.VehicleNumber.ToLower().Contains(search));
             }
+            
+            var totalCount = list.Count();
+            var paged = list.Skip((filter.PageNumber - 1) * filter.PageSize).Take(filter.PageSize).ToList();
+            
+            return new PagedResult<StudentTransportAssignmentDto> { Items = paged, TotalCount = totalCount, PageNumber = filter.PageNumber, PageSize = filter.PageSize };
+        }
 
-            // AdmissionNo filter
-            if (!string.IsNullOrWhiteSpace(filter.AdmissionNo))
-            {
-                query = query.Where(x =>
-                    x.AdmissionNo == filter.AdmissionNo.Trim());
-            }
+        public async Task<StudentTransportAssignmentDto?> GetByIdAsync(long assignmentId)
+        {
+            using var c = Connection();
+            var sql = @"
+                SELECT 
+                    s.StudentTransportId AS AssignmentId, s.AdmissionNo, 
+                    s.RouteId, r.RouteName,
+                    s.PickupPointId, p.StopName AS PickupPointName,
+                    s.VehicleAssignmentId, v.VehicleRegistrationNo AS VehicleNumber,
+                    s.EffectiveFrom, s.EffectiveTo, s.TransportType, 
+                    s.Status, s.Status AS StatusText, s.Remarks
+                FROM StudentTransportAssignments s
+                LEFT JOIN TransportRoutes r ON s.RouteId = r.RouteId
+                LEFT JOIN PickupPoints p ON s.PickupPointId = p.PickupPointId
+                LEFT JOIN TransportVehicleAssignments va ON s.VehicleAssignmentId = va.AssignmentId
+                LEFT JOIN TransportVehicles v ON va.VehicleId = v.VehicleId
+                WHERE s.IsDeleted = 0 AND s.StudentTransportId = @Id";
+                
+            return await c.QueryFirstOrDefaultAsync<StudentTransportAssignmentDto>(sql, new { Id = assignmentId });
+        }
 
-            // Route filter
-            if (filter.RouteId.HasValue &&
-                filter.RouteId.Value > 0)
-            {
-                query = query.Where(x =>
-                    x.RouteId == filter.RouteId.Value);
-            }
-
-            // Pickup point filter
-            if (filter.PickupPointId.HasValue &&
-                filter.PickupPointId.Value > 0)
-            {
-                query = query.Where(x =>
-                    x.PickupPointId == filter.PickupPointId.Value);
-            }
-
-            // Vehicle assignment filter
-            if (filter.VehicleAssignmentId.HasValue &&
-                filter.VehicleAssignmentId.Value > 0)
-            {
-                query = query.Where(x =>
-                    x.VehicleAssignmentId ==
-                    filter.VehicleAssignmentId.Value);
-            }
-
-            // Transport type filter
-            if (!string.IsNullOrWhiteSpace(filter.TransportType))
-            {
-                var transportType = filter.TransportType.Trim();
-
-                query = query.Where(x =>
-                    x.TransportType == transportType);
-            }
-
-            // Status filter
-            if (filter.Status.HasValue)
-            {
-                query = query.Where(x =>
-                    x.Status == filter.Status.Value);
-            }
-
-            var totalCount = await query.CountAsync();
-
-            // Sorting
-            query = ApplySorting(
-                query,
-                filter.SortBy,
-                filter.SortOrder);
-
-            var items = await query
-                .Skip((filter.PageNumber - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .Select(x => new StudentTransportAssignmentDto
+        public async Task<long> CreateAsync(CreateStudentTransportAssignmentDto dto, long? userId)
+        {
+            using var c = Connection();
+            return await c.ExecuteScalarAsync<long>(
+                "sp_CreateStudentTransportAssignments",
+                new
                 {
-                    StudentTransportAssignmentId = x.StudentTransportAssignmentId,
-
-                    AdmissionNo = x.AdmissionNo ?? string.Empty,
-
-                    RouteId = x.RouteId,
-                    RouteName = x.Route != null ? x.Route.RouteName : "Main Route",
-
-                    PickupPointId = x.PickupPointId,
-                    PickupPointName = x.PickupPoint != null ? x.PickupPoint.PickupPointName : "Main Stop",
-
-                    VehicleAssignmentId = x.VehicleAssignmentId,
-
-                    VehicleNumber = x.VehicleAssignment != null && x.VehicleAssignment.Vehicle != null ? x.VehicleAssignment.Vehicle.VehicleNumber : "BUS-101",
-
-                    DriverName = x.VehicleAssignment != null && x.VehicleAssignment.Driver != null ? x.VehicleAssignment.Driver.DriverName : "Main Driver",
-
-                    EffectiveFrom = x.EffectiveFrom,
-                    EffectiveTo = x.EffectiveTo,
-
-                    TransportType = x.TransportType ?? "Both",
-                    Remarks = x.Remarks,
-                    Status = x.Status,
-
-                    CreatedBy = x.CreatedBy,
-                    UpdatedBy = x.UpdatedBy,
-                    CreatedAt = x.CreatedAt,
-                    UpdatedAt = x.UpdatedAt
-                })
-                .ToListAsync();
-
-            return new PagedResult<StudentTransportAssignmentDto>
-            {
-                Items = items,
-                TotalCount = totalCount,
-                PageNumber = filter.PageNumber,
-                PageSize = filter.PageSize
-            };
+                    p_AdmissionNo = dto.AdmissionNo,
+                    p_RouteId = dto.RouteId,
+                    p_PickupPointId = dto.PickupPointId,
+                    p_VehicleAssignmentId = dto.VehicleAssignmentId,
+                    p_EffectiveFrom = dto.EffectiveFrom,
+                    p_EffectiveTo = dto.EffectiveTo,
+                    p_TransportType = dto.TransportType ?? "TwoWay",
+                    p_Remarks = dto.Remarks,
+                    p_Status = dto.Status,
+                    p_IsDeleted = false,
+                    p_CreatedBy = userId,
+                    p_UpdatedBy = (long?)null
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
-        // ---------------------------------------------------------
-        // Get By Id
-        // ---------------------------------------------------------
-        public async Task<StudentTransportAssignmentDto?> GetByIdAsync(
-            long studentTransportAssignmentId)
+        public async Task<bool> UpdateAsync(long assignmentId, UpdateStudentTransportAssignmentDto dto, long? userId)
         {
-            return await _context.StudentTransportAssignments
-                .AsNoTracking()
-                .Where(x =>
-                    x.StudentTransportAssignmentId ==
-                    studentTransportAssignmentId &&
-                    !x.IsDeleted)
-                .Select(x => new StudentTransportAssignmentDto
+            using var c = Connection();
+            var rows = await c.ExecuteAsync(
+                "sp_UpdateStudentTransportAssignments",
+                new
                 {
-                    StudentTransportAssignmentId = x.StudentTransportAssignmentId,
-
-                    AdmissionNo = x.AdmissionNo ?? string.Empty,
-
-                    RouteId = x.RouteId,
-                    RouteName = x.Route != null ? x.Route.RouteName : "Main Route",
-
-                    PickupPointId = x.PickupPointId,
-                    PickupPointName = x.PickupPoint != null ? x.PickupPoint.PickupPointName : "Main Stop",
-
-                    VehicleAssignmentId = x.VehicleAssignmentId,
-
-                    VehicleNumber = x.VehicleAssignment != null && x.VehicleAssignment.Vehicle != null ? x.VehicleAssignment.Vehicle.VehicleNumber : "BUS-101",
-
-                    DriverName = x.VehicleAssignment != null && x.VehicleAssignment.Driver != null ? x.VehicleAssignment.Driver.DriverName : "Main Driver",
-
-                    EffectiveFrom = x.EffectiveFrom,
-                    EffectiveTo = x.EffectiveTo,
-
-                    TransportType = x.TransportType ?? "Both",
-                    Remarks = x.Remarks,
-                    Status = x.Status,
-
-                    CreatedBy = x.CreatedBy,
-                    UpdatedBy = x.UpdatedBy,
-                    CreatedAt = x.CreatedAt,
-                    UpdatedAt = x.UpdatedAt
-                })
-                .FirstOrDefaultAsync();
+                    p_Id = assignmentId,
+                    p_AdmissionNo = dto.AdmissionNo,
+                    p_RouteId = dto.RouteId,
+                    p_PickupPointId = dto.PickupPointId,
+                    p_VehicleAssignmentId = dto.VehicleAssignmentId,
+                    p_EffectiveFrom = dto.EffectiveFrom,
+                    p_EffectiveTo = dto.EffectiveTo,
+                    p_TransportType = dto.TransportType ?? "TwoWay",
+                    p_Remarks = dto.Remarks,
+                    p_Status = dto.Status,
+                    p_IsDeleted = false,
+                    p_CreatedBy = (long?)null,
+                    p_UpdatedBy = userId
+                },
+                commandType: CommandType.StoredProcedure);
+            return rows > 0;
         }
 
-        // ---------------------------------------------------------
-        // Create
-        // ---------------------------------------------------------
-        public async Task<long> CreateAsync(
-            CreateStudentTransportAssignmentDto dto,
-            long? userId)
+        public async Task<bool> DeleteAsync(long assignmentId, long? userId)
         {
-            var entity = new StudentTransportAssignment
-            {
-                AdmissionNo = dto.AdmissionNo ?? string.Empty,
-                RouteId = dto.RouteId,
-                PickupPointId = dto.PickupPointId,
-                VehicleAssignmentId = dto.VehicleAssignmentId,
-
-                EffectiveFrom = dto.EffectiveFrom.Date,
-                EffectiveTo = dto.EffectiveTo?.Date,
-
-                TransportType = dto.TransportType,
-                Remarks = dto.Remarks,
-                Status = dto.Status,
-
-                IsDeleted = false,
-                CreatedBy = userId,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _context.StudentTransportAssignments
-                .AddAsync(entity);
-
-            await _context.SaveChangesAsync();
-
-            return entity.StudentTransportAssignmentId;
+            using var c = Connection();
+            var rows = await c.ExecuteAsync("sp_DeleteStudentTransportAssignments", new { p_Id = assignmentId }, commandType: CommandType.StoredProcedure);
+            return rows > 0;
         }
 
-        // ---------------------------------------------------------
-        // Update
-        // ---------------------------------------------------------
-        public async Task<bool> UpdateAsync(
-            long studentTransportAssignmentId,
-            UpdateStudentTransportAssignmentDto dto,
-            long? userId)
+        public async Task<bool> HasActiveAssignmentAsync(string admissionNo, long? excludeAssignmentId = null)
         {
-            var entity = await _context.StudentTransportAssignments
-                .FirstOrDefaultAsync(x =>
-                    x.StudentTransportAssignmentId ==
-                    studentTransportAssignmentId &&
-                    !x.IsDeleted);
-
-            if (entity == null)
-                return false;
-
-            entity.AdmissionNo = dto.AdmissionNo ?? string.Empty;
-            entity.RouteId = dto.RouteId;
-            entity.PickupPointId = dto.PickupPointId;
-            entity.VehicleAssignmentId =
-                dto.VehicleAssignmentId;
-
-            entity.EffectiveFrom = dto.EffectiveFrom.Date;
-            entity.EffectiveTo = dto.EffectiveTo?.Date;
-
-            entity.TransportType = dto.TransportType;
-            entity.Remarks = dto.Remarks;
-            entity.Status = dto.Status;
-
-            entity.UpdatedBy = userId;
-            entity.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            return true;
+            return await HasOverlappingAssignmentAsync(admissionNo, DateTime.UtcNow, null, excludeAssignmentId);
         }
-
-        // ---------------------------------------------------------
-        // Soft Delete
-        // ---------------------------------------------------------
-        public async Task<bool> DeleteAsync(
-            long studentTransportAssignmentId,
-            long? userId)
+        
+        public async Task<bool> HasOverlappingAssignmentAsync(string admissionNo, DateTime effectiveFrom, DateTime? effectiveTo, long? excludeAssignmentId = null)
         {
-            var entity = await _context.StudentTransportAssignments
-                .FirstOrDefaultAsync(x =>
-                    x.StudentTransportAssignmentId ==
-                    studentTransportAssignmentId &&
-                    !x.IsDeleted);
-
-            if (entity == null)
-                return false;
-
-            entity.IsDeleted = true;
-            entity.Status = false;
-            entity.UpdatedBy = userId;
-            entity.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            return true;
+            using var c = Connection();
+            var sql = "SELECT COUNT(*) FROM StudentTransportAssignments WHERE IsDeleted = 0 AND Status = 1 AND AdmissionNo = @Adm AND (@ExcludeId IS NULL OR StudentTransportId != @ExcludeId) AND (EffectiveTo IS NULL OR EffectiveTo >= @From) AND (@To IS NULL OR EffectiveFrom <= @To)";
+            return await c.ExecuteScalarAsync<int>(sql, new { Adm = admissionNo, ExcludeId = excludeAssignmentId, From = effectiveFrom, To = effectiveTo }) > 0;
         }
-
-        // ---------------------------------------------------------
-        // Lookup
-        // ---------------------------------------------------------
-        public async Task<IEnumerable<
-            StudentTransportAssignmentLookupDto>>
-            GetLookupAsync()
+        
+        public async Task<IEnumerable<StudentTransportAssignmentLookupDto>> GetLookupAsync()
         {
-            var query = from sta in _context.StudentTransportAssignments.AsNoTracking()
-                        where !sta.IsDeleted && sta.Status
-                        join s in _context.Students.AsNoTracking()
-                            on sta.StudentId equals (long?)s.StudentId into studentsGroup
-                        from st in studentsGroup.DefaultIfEmpty()
-                        orderby sta.AdmissionNo
-                        select new StudentTransportAssignmentLookupDto
-                        {
-                            StudentTransportAssignmentId = sta.StudentTransportAssignmentId,
-
-                            StudentId = sta.StudentId,
-                            StudentName = st != null ? st.StudentName : null,
-                            AdmissionNo = sta.AdmissionNo ?? string.Empty,
-
-                            RouteId = sta.RouteId,
-                            RouteName = sta.Route != null ? sta.Route.RouteName : "Main Route",
-
-                            PickupPointId = sta.PickupPointId,
-                            PickupPointName = sta.PickupPoint != null ? sta.PickupPoint.PickupPointName : "Main Stop",
-
-                            VehicleAssignmentId = sta.VehicleAssignmentId,
-
-                            VehicleNumber = sta.VehicleAssignment != null && sta.VehicleAssignment.Vehicle != null ? sta.VehicleAssignment.Vehicle.VehicleNumber : "BUS-101",
-
-                            DriverName = sta.VehicleAssignment != null && sta.VehicleAssignment.Driver != null ? sta.VehicleAssignment.Driver.DriverName : "Main Driver",
-
-                            DisplayName = sta.AdmissionNo + " - " + (sta.Route != null ? sta.Route.RouteName : "Main Route") + " - " + (sta.PickupPoint != null ? sta.PickupPoint.PickupPointName : "Main Stop")
-                        };
-
-            return await query.ToListAsync();
-        }
-
-        // ---------------------------------------------------------
-        // Check Student Assignment Date Overlap
-        // ---------------------------------------------------------
-        public async Task<bool> HasOverlappingAssignmentAsync(
-            string admissionNo,
-            DateTime effectiveFrom,
-            DateTime? effectiveTo,
-            long? excludeAssignmentId = null)
-        {
-            var newStart = effectiveFrom.Date;
-
-            var newEnd = effectiveTo?.Date ??
-                         DateTime.MaxValue.Date;
-
-            var query = _context.StudentTransportAssignments
-                .AsNoTracking()
-                .Where(x =>
-                    x.AdmissionNo == admissionNo &&
-                    !x.IsDeleted &&
-                    x.Status);
-
-            if (excludeAssignmentId.HasValue)
-            {
-                query = query.Where(x =>
-                    x.StudentTransportAssignmentId !=
-                    excludeAssignmentId.Value);
-            }
-
-            return await query.AnyAsync(x =>
-                x.EffectiveFrom.Date <= newEnd &&
-                (x.EffectiveTo == null ||
-                 x.EffectiveTo.Value.Date >= newStart));
-        }
-
-        // ---------------------------------------------------------
-        // Sorting
-        // ---------------------------------------------------------
-        private static IQueryable<StudentTransportAssignment>
-            ApplySorting(
-                IQueryable<StudentTransportAssignment> query,
-                string? sortBy,
-                string? sortOrder)
-        {
-            var descending =
-                string.Equals(
-                    sortOrder,
-                    "desc",
-                    StringComparison.OrdinalIgnoreCase);
-
-            return sortBy?.Trim().ToLowerInvariant() switch
-            {
-                "admissionno" => descending
-                    ? query.OrderByDescending(x => x.AdmissionNo)
-                    : query.OrderBy(x => x.AdmissionNo),
-
-                "routename" => descending
-                    ? query.OrderByDescending(x =>
-                        x.Route.RouteName)
-                    : query.OrderBy(x =>
-                        x.Route.RouteName),
-
-                "pickuppointname" => descending
-                    ? query.OrderByDescending(x =>
-                        x.PickupPoint.PickupPointName)
-                    : query.OrderBy(x =>
-                        x.PickupPoint.PickupPointName),
-
-                "vehiclenumber" => descending
-                    ? query.OrderByDescending(x =>
-                        x.VehicleAssignment
-                            .Vehicle.VehicleNumber)
-                    : query.OrderBy(x =>
-                        x.VehicleAssignment
-                            .Vehicle.VehicleNumber),
-
-                "drivername" => descending
-                    ? query.OrderByDescending(x =>
-                        x.VehicleAssignment
-                            .Driver.DriverName)
-                    : query.OrderBy(x =>
-                        x.VehicleAssignment
-                            .Driver.DriverName),
-
-                "effectivefrom" => descending
-                    ? query.OrderByDescending(x =>
-                        x.EffectiveFrom)
-                    : query.OrderBy(x =>
-                        x.EffectiveFrom),
-
-                "effectiveto" => descending
-                    ? query.OrderByDescending(x =>
-                        x.EffectiveTo)
-                    : query.OrderBy(x =>
-                        x.EffectiveTo),
-
-                "transporttype" => descending
-                    ? query.OrderByDescending(x =>
-                        x.TransportType)
-                    : query.OrderBy(x =>
-                        x.TransportType),
-
-                "status" => descending
-                    ? query.OrderByDescending(x =>
-                        x.Status)
-                    : query.OrderBy(x =>
-                        x.Status),
-
-                "createdat" => descending
-                    ? query.OrderByDescending(x =>
-                        x.CreatedAt)
-                    : query.OrderBy(x =>
-                        x.CreatedAt),
-
-                _ => query.OrderByDescending(x =>
-                    x.StudentTransportAssignmentId)
-            };
+            using var c = Connection();
+            var sql = "SELECT StudentTransportId AS AssignmentId, AdmissionNo FROM StudentTransportAssignments WHERE IsDeleted = 0 AND Status = 1";
+            return await c.QueryAsync<StudentTransportAssignmentLookupDto>(sql);
         }
     }
 }
+
+
+

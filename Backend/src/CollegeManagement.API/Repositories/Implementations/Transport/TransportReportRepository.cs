@@ -1,6 +1,19 @@
 using Microsoft.EntityFrameworkCore;
+using Dapper;
+using System.Data;
 using CollegeManagement.API.Data;
+using CollegeManagement.API.Dtos.Transport;
+using CollegeManagement.API.Dtos.Transport.Attendant;
+using CollegeManagement.API.Dtos.Transport.Dashboard;
+using CollegeManagement.API.Dtos.Transport.Driver;
+using CollegeManagement.API.Dtos.Transport.Operations;
+using CollegeManagement.API.Dtos.Transport.PickupPoint;
 using CollegeManagement.API.Dtos.Transport.Reports;
+using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
+using CollegeManagement.API.Dtos.Transport.Vehicle;
+using CollegeManagement.API.Dtos.Transport.VehicleAssignment;
+using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
+
 using CollegeManagement.API.Repositories.Interfaces;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -12,7 +25,9 @@ namespace CollegeManagement.API.Repositories.Implementations
         public TransportReportRepository(AppDbContext context)
         {
             _context = context;
-        }
+        } 
+
+        private IDbConnection Connection() => _context.Database.GetDbConnection();
 
         // -------------------------------------------------------
         // Vehicle-wise student report
@@ -739,3 +754,6 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
     }
 }
+
+
+

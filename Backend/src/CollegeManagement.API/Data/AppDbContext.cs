@@ -136,7 +136,7 @@ namespace CollegeManagement.API.Data
             ConfigureTransportVehicleAssignment(modelBuilder);
             ConfigureStudentTransportAssignment(modelBuilder);
             ConfigureVehicleMaintenance(modelBuilder);
-            modelBuilder.Entity<TransportAttendant>().ToTable("transport_attendants");
+            modelBuilder.Entity<TransportAttendant>().ToTable("TransportAttendants");
 
 
             #region Attendance
@@ -1227,9 +1227,24 @@ private static void ConfigureTransportRoute(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<TransportRoute>(entity =>
             {
-                entity.ToTable("transport_routes");
+                entity.ToTable("TransportRoutes");
 
                 entity.HasKey(x => x.RouteId);
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
+                entity.Property(x => x.RouteCode).HasColumnName("RouteNumber");
+                entity.Property(x => x.DistanceKm).HasColumnName("Distance");
+                entity.Property(x => x.MonthlyFee).HasColumnName("DefaultMonthlyFee");
+                entity.Ignore(x => x.MinRangeKm);
+                entity.Ignore(x => x.NonAcBaseFare);
+                entity.Ignore(x => x.NonAcRatePerKm);
+                entity.Ignore(x => x.AcBaseFare);
+                entity.Ignore(x => x.AcRatePerKm);
+                entity.Ignore(x => x.PickupPoint);
+                entity.Ignore(x => x.DropPoint);
+                entity.Ignore(x => x.Description);
+                entity.Ignore(x => x.VehicleId);
+                entity.Ignore(x => x.EstimatedDurationMinutes);
 
                 entity.Property(x => x.RouteCode)
                     .HasMaxLength(30)
@@ -1267,9 +1282,15 @@ private static void ConfigurePickupPoint(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<PickupPoint>(entity =>
             {
-                entity.ToTable("transport_pickup_points");
+                entity.ToTable("PickupPoints");
 
                 entity.HasKey(x => x.PickupPointId);
+                entity.Property(x => x.PickupPointName).HasColumnName("StopName");
+                entity.Property(x => x.Landmark).HasColumnName("StopAddress");
+                entity.Property(x => x.SequenceNo).HasColumnName("StopOrder");
+                entity.Property(x => x.DistanceFromStart).HasColumnName("DistanceFromSchool");
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
 
                 entity.Property(x => x.PickupPointName)
                     .HasMaxLength(150)
@@ -1304,9 +1325,17 @@ private static void ConfigureTransportVehicle(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<TransportVehicle>(entity =>
             {
-                entity.ToTable("transport_vehicles");
+                entity.ToTable("TransportVehicles");
 
                 entity.HasKey(x => x.VehicleId);
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
+                entity.Property(x => x.RegistrationNumber).HasColumnName("VehicleRegistrationNo");
+                entity.Property(x => x.Manufacturer).HasColumnName("Make");
+                entity.Ignore(x => x.VehicleName);
+                entity.Ignore(x => x.GpsDeviceId);
+                entity.Ignore(x => x.InsuranceNumber);
+                entity.Ignore(x => x.IsAC);
 
                 entity.HasIndex(x => x.VehicleNumber)
                     .IsUnique();
@@ -1349,9 +1378,13 @@ private static void ConfigureTransportDriver(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<TransportDriver>(entity =>
             {
-                entity.ToTable("transport_drivers");
+                entity.ToTable("TransportDrivers");
 
                 entity.HasKey(x => x.DriverId);
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
+                entity.Property(x => x.AlternateMobileNumber).HasColumnName("AlternateMobileNo");
+                entity.Property(x => x.LicenceExpiry).HasColumnName("LicenseExpiry");
 
                 entity.HasIndex(x => x.LicenceNumber)
                     .IsUnique();
@@ -1362,11 +1395,11 @@ private static void ConfigureTransportDriver(ModelBuilder modelBuilder)
                     .IsRequired()
                     .HasMaxLength(100);
 
-                entity.Property(x => x.MobileNumber)
+                entity.Property(x => x.MobileNumber).HasColumnName("MobileNo")
                     .IsRequired()
                     .HasMaxLength(20);
 
-                entity.Property(x => x.LicenceNumber)
+                entity.Property(x => x.LicenceNumber).HasColumnName("LicenseNo")
                     .IsRequired()
                     .HasMaxLength(50);
 
@@ -1383,9 +1416,11 @@ private static void ConfigureTransportVehicleAssignment(ModelBuilder modelBuilde
             modelBuilder.Entity<TransportVehicleAssignment>(
                 entity =>
                 {
-                    entity.ToTable("transport_vehicle_assignments");
+                    entity.ToTable("TransportVehicleAssignments");
 
                     entity.HasKey(x => x.AssignmentId);
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
 
                     entity.HasOne(x => x.Route)
                         .WithMany()
@@ -1439,7 +1474,7 @@ private static void ConfigureStudentTransportAssignment(ModelBuilder modelBuilde
             modelBuilder.Entity<StudentTransportAssignment>(
                 entity =>
                 {
-                    entity.ToTable("student_transport_assignments");
+                    entity.ToTable("StudentTransportAssignments");
 
                     entity.HasKey(
                         x => x.StudentTransportAssignmentId);
@@ -1506,66 +1541,66 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
             modelBuilder.Entity<VehicleMaintenance>(entity =>
             {
                 entity.ToTable(
-                    "transport_vehicle_maintenances");
+                    "VehicleMaintenances");
 
                 entity.HasKey(x => x.MaintenanceId);
 
                 entity.Property(x => x.MaintenanceId)
-                    .HasColumnName("maintenance_id")
+
                     .ValueGeneratedOnAdd();
 
                 entity.Property(x => x.VehicleId)
-                    .HasColumnName("vehicle_id")
+
                     .IsRequired();
 
                 entity.Property(x => x.ServiceType)
-                    .HasColumnName("service_type")
+
                     .HasMaxLength(150)
                     .IsRequired();
 
                 entity.Property(x => x.ServiceDate)
-                    .HasColumnName("service_date")
+
                     .HasColumnType("date")
                     .IsRequired();
 
                 entity.Property(x => x.Cost)
-                    .HasColumnName("cost")
+
                     .HasPrecision(12, 2)
                     .HasDefaultValue(0m);
 
                 entity.Property(x => x.VendorCenter)
-                    .HasColumnName("vendor_center")
+
                     .HasMaxLength(150);
 
                 entity.Property(x => x.NextServiceDue)
-                    .HasColumnName("next_service_due")
+
                     .HasColumnType("date");
 
                 entity.Property(x => x.Remarks)
-                    .HasColumnName("remarks")
+
                     .HasMaxLength(500);
 
                 entity.Property(x => x.Status)
-                    .HasColumnName("status")
+
                     .HasDefaultValue(true);
 
                 entity.Property(x => x.IsDeleted)
-                    .HasColumnName("is_deleted")
+
                     .HasDefaultValue(false);
 
                 entity.Property(x => x.CreatedBy)
-                    .HasColumnName("created_by");
+;
 
                 entity.Property(x => x.UpdatedBy)
-                    .HasColumnName("updated_by");
+;
 
                 entity.Property(x => x.CreatedAt)
-                    .HasColumnName("created_at")
+
                     .HasColumnType("datetime")
                     .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                 entity.Property(x => x.UpdatedAt)
-                    .HasColumnName("updated_at")
+
                     .HasColumnType("datetime");
 
                 entity.HasOne(x => x.Vehicle)

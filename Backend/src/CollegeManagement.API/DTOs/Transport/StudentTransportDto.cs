@@ -6,8 +6,8 @@ public class StudentTransportResponseDto
 {
     public int StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
-    public string ClassName { get; set; } = "Class 10-A";
-    public string AdmissionNo { get; set; } = "ADM2024-001";
+    public string ClassName { get; set; } = "Intermediate 2nd Year - MPC";
+    public string AdmissionNo { get; set; } = "COL2026-001";
     public string StudentType { get; set; } = "Non-Residential";
     public bool IsHosteller { get; set; } = false;
     public bool HasTransportAccess { get; set; } = true;
@@ -36,4 +36,6 @@ public class TransportDropdownOptionsDto
 {
     public List<string> AcademicYears { get; set; } = new List<string> { "2027-28", "2026-27", "2025-26" };
 }
+
+
 

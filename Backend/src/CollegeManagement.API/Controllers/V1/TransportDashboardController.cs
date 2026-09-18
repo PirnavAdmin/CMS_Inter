@@ -2,10 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Services.Interfaces;
 
-namespace CollegeManagement.API.Controllers.Transport
+namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
-    [Route("api/transport/dashboard")]
+    [Route("api/v1/transport-dashboard")]
     [AllowAnonymous]
     public class TransportDashboardController : ControllerBase
     {
@@ -33,25 +33,10 @@ namespace CollegeManagement.API.Controllers.Transport
             }
             catch (Exception ex)
             {
-                return Ok(new
+                return StatusCode(500, new
                 {
-                    success = true,
-                    data = new CollegeManagement.API.Dtos.Transport.Dashboard.TransportDashboardResponseDto
-                    {
-                        Summary = new CollegeManagement.API.Dtos.Transport.Dashboard.TransportDashboardDto
-                        {
-                            TotalVehicles = 1,
-                            ActiveVehicles = 1,
-                            TotalRoutes = 1,
-                            ActiveRoutes = 1,
-                            TotalDrivers = 1,
-                            ActiveDrivers = 1,
-                            TotalBusAttendants = 1,
-                            ActiveBusAttendants = 1,
-                            TotalVehicleCapacity = 50,
-                            SeatOccupancyPercentage = 10
-                        }
-                    },
+                    success = false,
+                    message = "An error occurred while retrieving dashboard metrics.",
                     error = ex.Message
                 });
             }
@@ -77,7 +62,7 @@ namespace CollegeManagement.API.Controllers.Transport
             }
             catch (Exception ex)
             {
-                return Ok(new
+                return StatusCode(500, new
                 {
                     success = false,
                     message = "Failed to retrieve operation details.",

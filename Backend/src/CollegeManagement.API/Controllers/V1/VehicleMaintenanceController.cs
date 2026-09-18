@@ -4,11 +4,11 @@ using System.Security.Claims;
 using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
 using CollegeManagement.API.Services.Interfaces;
 
-namespace CollegeManagement.API.Controllers.Transport
+namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
-    [Route("api/transport/vehicle-maintenance")]
-    [Route("api/transport/maintenance")]
+    [Route("api/v1/transport-vehicle-maintenance")]
+    [Route("api/v1/transport-maintenance")]
     [AllowAnonymous]
     [Tags("Vehicle Maintenance")]
     public class VehicleMaintenanceController : ControllerBase

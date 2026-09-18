@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Fees;
+using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -129,11 +129,11 @@ public class FeeController : ControllerBase
     public async Task<IActionResult> ApplyConcession(ApplyFeeConcessionRequest request) => Ok(await _service.ApplyFeeConcessionAsync(request));
 
     // ---------------- Payment Plan / Schedules ----------------
-    /// <summary>Create a Full Payment or Fee Schedule Payment plan for a student fee.</summary>
-   // [HttpPost("payment-plans")]
+    // <summary>Create a Full Payment or Fee Schedule Payment plan for a student fee.</summary>
+    // [HttpPost("payment-plans")]
     //public async Task<IActionResult> CreatePaymentPlan(CreatePaymentPlanRequest request) => Ok(await _service.CreatePaymentPlanAsync(request));
 
-    /// <summary>Add one fee schedule installment and due date.</summary>
+    // <summary>Add one fee schedule installment and due date.</summary>
     //[HttpPost("payment-plans/{id:int}/installments")]
     //public async Task<IActionResult> AddInstallment(int id, CreateInstallmentRequest request) => Ok(await _service.AddPaymentPlanInstallmentAsync(id, request));
 

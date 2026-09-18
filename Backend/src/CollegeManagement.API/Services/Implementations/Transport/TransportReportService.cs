@@ -115,7 +115,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             var sb = new StringBuilder();
             sb.AppendLine("<!DOCTYPE html>");
-            sb.AppendLine("<html><head><meta charset='utf-8'><title>PIRNAV SCHOOLS - Transport Report</title>");
+            sb.AppendLine("<html><head><meta charset='utf-8'><title>PIRNAV COLLEGE - Transport Report</title>");
             sb.AppendLine("<style>");
             sb.AppendLine("body { font-family: 'Segoe UI', Arial, sans-serif; padding: 30px; background: #fff; color: #1e293b; }");
             sb.AppendLine(".header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #2563eb; padding-bottom: 15px; margin-bottom: 25px; }");
@@ -131,7 +131,7 @@ namespace CollegeManagement.API.Services.Implementations
             sb.AppendLine("</style></head><body>");
 
             sb.AppendLine("<div class='header'>");
-            sb.AppendLine("  <div><div class='title'>PIRNAV SCHOOLS</div><div class='subtitle'>Transport Management System - Official Report</div></div>");
+            sb.AppendLine("  <div><div class='title'>PIRNAV COLLEGE</div><div class='subtitle'>Transport Management System - Official Report</div></div>");
             sb.AppendLine($"  <div style='text-align:right;'><div style='font-weight:bold; color:#2563eb;'>{reportType.ToUpper()} REPORT</div><div class='subtitle'>Generated: {DateTime.Now:yyyy-MM-dd HH:mm}</div></div>");
             sb.AppendLine("</div>");
 
@@ -207,7 +207,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             sb.AppendLine("<div class='footer'>");
-            sb.AppendLine("  <div>Confidential - Internal School Management Record</div>");
+            sb.AppendLine("  <div>Confidential - Internal College Management Record</div>");
             sb.AppendLine("  <div>Page 1 of 1</div>");
             sb.AppendLine("</div>");
             sb.AppendLine("<script>window.onload = function() { window.print(); }</script>");

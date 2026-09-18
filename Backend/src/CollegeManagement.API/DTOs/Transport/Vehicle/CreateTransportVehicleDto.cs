@@ -34,7 +34,7 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
         [JsonPropertyName("vehicleName")]
         public string VehicleName
         {
-            get => !string.IsNullOrWhiteSpace(_vehicleName) ? _vehicleName : (!string.IsNullOrWhiteSpace(_vehicleNumber) ? _vehicleNumber : "School Bus");
+            get => !string.IsNullOrWhiteSpace(_vehicleName) ? _vehicleName : (!string.IsNullOrWhiteSpace(_vehicleNumber) ? _vehicleNumber : "College Bus");
             set => _vehicleName = value ?? string.Empty;
         }
 

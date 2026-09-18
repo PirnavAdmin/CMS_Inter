@@ -5,7 +5,7 @@ using CollegeManagement.API.Services.Interfaces;
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
-    [Route("api/transport/lookups")]
+    [Route("api/v1/transport-lookups")]
     [AllowAnonymous]
     public class TransportLookupsController : ControllerBase
     {

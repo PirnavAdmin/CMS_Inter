@@ -6,7 +6,7 @@ using CollegeManagement.API.Services.Interfaces;
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
-    [Route("api/transport/reports")]
+    [Route("api/v1/transport-reports")]
     [AllowAnonymous]
     [Tags("Transport Management Reports")]
     public class TransportReportController : ControllerBase
@@ -80,7 +80,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = true, message = "Vehicle reports retrieved successfully.", data = new List<VehicleReportDto>(), totalCount = 0, error = ex.Message });
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report data.", error = ex.Message });
             }
         }
 
@@ -101,7 +101,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = true, message = "Driver reports retrieved successfully.", data = new List<DriverReportDto>(), totalCount = 0, error = ex.Message });
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report data.", error = ex.Message });
             }
         }
 
@@ -122,7 +122,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = true, message = "Route reports retrieved successfully.", data = new List<RouteReportDto>(), totalCount = 0, error = ex.Message });
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report data.", error = ex.Message });
             }
         }
 
@@ -143,7 +143,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = true, message = "Student transport reports retrieved successfully.", data = new List<StudentTransportReportDto>(), totalCount = 0, error = ex.Message });
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report data.", error = ex.Message });
             }
         }
 
@@ -158,7 +158,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = true, data = new List<object>(), totalCount = 0, error = ex.Message });
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report data.", error = ex.Message });
             }
         }
 
@@ -173,7 +173,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = true, data = new List<object>(), totalCount = 0, error = ex.Message });
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report data.", error = ex.Message });
             }
         }
 
@@ -188,7 +188,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = true, data = new List<object>(), totalCount = 0, error = ex.Message });
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report data.", error = ex.Message });
             }
         }
 
@@ -203,7 +203,7 @@ namespace CollegeManagement.API.Controllers
             }
             catch (Exception ex)
             {
-                return Ok(new { success = true, data = new List<object>(), totalCount = 0, error = ex.Message });
+                return StatusCode(500, new { success = false, message = "An error occurred while retrieving report data.", error = ex.Message });
             }
         }
 

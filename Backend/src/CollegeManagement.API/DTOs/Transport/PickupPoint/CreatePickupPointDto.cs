@@ -98,8 +98,8 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
         [JsonPropertyName("distanceFromStart")]
         public decimal DistanceFromStart { get; set; }
 
-        [JsonPropertyName("distanceFromSchoolKm")]
-        public decimal? DistanceFromSchoolKm
+        [JsonPropertyName("distanceFromCollegeKm")]
+        public decimal? distanceFromCollegeKm
         {
             get => DistanceFromStart;
             set { if (value.HasValue) DistanceFromStart = value.Value; }
