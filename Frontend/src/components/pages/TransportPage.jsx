@@ -14,6 +14,8 @@ import {
   MapPin,
   PieChart,
   Plus,
+  Printer,
+  RefreshCw,
   Route,
   Search,
   Trash2,
@@ -23,18 +25,8 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, FormModal, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
-import {
-  transportBusAttendants,
-  transportDrivers,
-  transportGpsSnapshots,
-  transportMaintenance,
-  transportPickupPoints,
-  transportRoutes,
-  transportStudentAssignments,
-  transportTrips,
-  transportVehicleAssignments,
-  transportVehicles,
-} from "@/data/mockData.js";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import apiEndpoints from "@/api/apiEndpoints.js";
 import "./TransportPage.css";
 
 const sectionTabs = [
@@ -54,6 +46,7 @@ const setupTabs = [
 
 const operationTabs = [
   { id: "vehicleAssignments", label: "Vehicle Assignment" },
+  { id: "studentAssignments", label: "Student Transport" },
   { id: "trips", label: "Vehicle Trips" },
   { id: "gps", label: "GPS Tracking" },
   { id: "maintenance", label: "Maintenance" },
@@ -152,7 +145,7 @@ function StatCard({ icon: Icon, label, value, hint, tone = "blue" }) {
   );
 }
 
-function Toolbar({ query, onQuery, filters, onAdd, onExport, addLabel = "Add Record", className = "" }) {
+function Toolbar({ query, onQuery, filters, onAdd, onExport, onPrint, addLabel = "Add Record", className = "" }) {
   return (
     <div className={`cms-transport-toolbar ${className}`.trim()}>
       <label className="cms-transport-search">
@@ -161,9 +154,14 @@ function Toolbar({ query, onQuery, filters, onAdd, onExport, addLabel = "Add Rec
       </label>
       {filters ? <div className="cms-transport-filters">{filters}</div> : null}
       <div className="cms-transport-toolbar-actions">
+        {onPrint ? (
+          <button type="button" className="cms-btn cms-btn-ghost" title="Print / PDF Export" onClick={onPrint}>
+            <Printer size={16} /> Print / PDF
+          </button>
+        ) : null}
         {onExport ? (
-          <button type="button" className="cms-btn cms-btn-ghost" onClick={onExport}>
-            <Download size={16} /> Export
+          <button type="button" className="cms-btn cms-btn-ghost" title="Export to CSV" onClick={onExport}>
+            <Download size={16} /> Export CSV
           </button>
         ) : null}
         {onAdd ? (
@@ -191,6 +189,7 @@ function TableSection({
   onEdit,
   onDelete,
   onView,
+  onPrint,
   addLabel,
   toolbarClassName,
 }) {
@@ -248,6 +247,7 @@ function TableSection({
           addLabel={addLabel}
           onAdd={onAdd}
           onExport={() => exportRows(`${title.toLowerCase().replace(/\s+/g, "-")}.csv`, visibleRows, columns)}
+          onPrint={onPrint || (() => window.print())}
           className={toolbarClassName}
         />
         <div className="cms-table-wrap">
@@ -309,6 +309,17 @@ function InfoGrid({ items }) {
   );
 }
 
+function extractList(data) {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.items)) return data.items;
+  if (Array.isArray(data.Items)) return data.Items;
+  if (Array.isArray(data.data)) return data.data;
+  if (Array.isArray(data.data?.items)) return data.data.items;
+  if (Array.isArray(data.data?.Items)) return data.data.Items;
+  return [];
+}
+
 export default function TransportPage() {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeSetupTab, setActiveSetupTab] = useState("routes");
@@ -328,17 +339,258 @@ export default function TransportPage() {
   const [formConfig, setFormConfig] = useState(null);
   const [detailConfig, setDetailConfig] = useState(null);
   const [deleteConfig, setDeleteConfig] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const [routes, setRoutes] = useState(transportRoutes);
-  const [pickupPoints, setPickupPoints] = useState(transportPickupPoints);
-  const [vehicles, setVehicles] = useState(transportVehicles);
-  const [drivers, setDrivers] = useState(transportDrivers);
-  const [attendants, setAttendants] = useState(transportBusAttendants);
-  const [vehicleAssignments, setVehicleAssignments] = useState(transportVehicleAssignments);
-  const [studentAssignments] = useState(transportStudentAssignments);
-  const [trips] = useState(transportTrips);
-  const [maintenance, setMaintenance] = useState(transportMaintenance);
-  const [gpsSnapshots] = useState(transportGpsSnapshots);
+  const [routes, setRoutes] = useState([]);
+  const [pickupPoints, setPickupPoints] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
+  const [attendants, setAttendants] = useState([]);
+  const [vehicleAssignments, setVehicleAssignments] = useState([]);
+  const [studentAssignments, setStudentAssignments] = useState([]);
+  const [trips, setTrips] = useState([]);
+  const [maintenance, setMaintenance] = useState([]);
+  const [gpsSnapshots, setGpsSnapshots] = useState([]);
+  const [dashboardMetrics, setDashboardMetrics] = useState(null);
+
+  const fetchTransportData = async () => {
+    setIsLoading(true);
+    try {
+      const [
+        routesRes,
+        pickupsRes,
+        vehiclesRes,
+        driversRes,
+        attendantsRes,
+        assignmentsRes,
+        tripsRes,
+        gpsRes,
+        maintenanceRes,
+        studentRes,
+        dashboardRes,
+      ] = await Promise.allSettled([
+        apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.drivers}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.attendants}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
+        apiClient.get(apiEndpoints.transport.trips),
+        apiClient.get(apiEndpoints.transport.gps),
+        apiClient.get(apiEndpoints.transport.maintenance),
+        apiClient.get(`${apiEndpoints.transport.studentAssignments}?PageNumber=1&PageSize=1000`),
+        apiClient.get(apiEndpoints.transport.dashboard),
+      ]);
+
+      if (routesRes.status === "fulfilled" && routesRes.value?.data) {
+        const items = extractList(routesRes.value.data);
+        setRoutes(
+          items.map((r) => ({
+            id: r.routeId || r.id,
+            routeCode: r.routeCode || "",
+            routeName: r.routeName || "",
+            routeStart: r.startLocation || r.routeStart || "",
+            routeEnd: r.endLocation || r.routeEnd || "",
+            totalDistanceKm: Number(r.distanceKm || r.totalDistanceKm || r.distance || 0),
+            estimatedTimeMinutes: Number(r.estimatedDurationMinutes || r.estimatedTimeMinutes || 30),
+            minDistanceKm: Number(r.minRangeKm || r.minDistanceKm || 5),
+            minBaseFare: Number(r.nonAcBaseFare || r.defaultMonthlyFee || r.minBaseFare || 1000),
+            ratePerKm: Number(r.nonAcRatePerKm || r.ratePerKm || 100),
+            acMinBaseFare: Number(r.acBaseFare || r.acMinBaseFare || 1200),
+            acRatePerKm: Number(r.acRatePerKm || 150),
+            description: r.description || "",
+            status: r.status === "Active" || r.status === true || r.status === 1 ? "Active" : "Inactive",
+          }))
+        );
+      }
+
+      if (pickupsRes.status === "fulfilled" && pickupsRes.value?.data) {
+        const items = extractList(pickupsRes.value.data);
+        setPickupPoints(
+          items.map((p) => ({
+            id: p.pickupPointId || p.id,
+            routeId: p.routeId,
+            routeName: p.routeName || "",
+            pickupName: p.pickupPointName || p.stopName || p.pickupName || "",
+            landmark: p.landmark || p.stopAddress || "",
+            sequenceNumber: p.sequenceNo || p.sequenceNumber || p.stopOrder || 1,
+            pickupTime: p.pickupTime ? String(p.pickupTime).substring(0, 5) : "07:30",
+            dropTime: p.dropTime ? String(p.dropTime).substring(0, 5) : "16:15",
+            distanceKm: Number(p.distanceFromStart || p.distanceFromSchool || p.distanceKm || 0),
+            monthlyFee: Number(p.monthlyFee || 0),
+            status: p.status === true || p.status === 1 || p.status === "Active" ? "Active" : "Inactive",
+          }))
+        );
+      }
+
+      if (vehiclesRes.status === "fulfilled" && vehiclesRes.value?.data) {
+        const items = extractList(vehiclesRes.value.data);
+        setVehicles(
+          items.map((v) => ({
+            id: v.vehicleId || v.id,
+            vehicleNumber: v.vehicleNumber || "",
+            registrationNumber: v.registrationNumber || v.vehicleRegistrationNo || "",
+            vehicleType: v.vehicleType || "Bus",
+            capacity: Number(v.capacity || 40),
+            isAC: Boolean(v.isAC),
+            gpsDeviceId: v.gpsDeviceId || "",
+            chassisNumber: v.chassisNumber || "",
+            engineNumber: v.engineNumber || "",
+            insuranceExpiry: v.insuranceExpiry ? String(v.insuranceExpiry).split("T")[0] : "",
+            pollutionExpiry: v.pollutionExpiry ? String(v.pollutionExpiry).split("T")[0] : "",
+            fitnessExpiry: v.fitnessExpiry ? String(v.fitnessExpiry).split("T")[0] : "",
+            status: v.status || "Active",
+          }))
+        );
+      }
+
+      if (driversRes.status === "fulfilled" && driversRes.value?.data) {
+        const items = extractList(driversRes.value.data);
+        setDrivers(
+          items.map((d) => ({
+            id: d.driverId || d.id,
+            driverName: d.driverName || d.driverFullName || d.fullName || "",
+            employeeId: d.employeeId || d.empId || "",
+            mobileNumber: d.mobileNumber || d.phone || d.mobileNo || "",
+            email: d.email || "",
+            licenseNumber: d.licenceNumber || d.licenseNumber || d.licenseNo || "",
+            licenseExpiryDate: d.licenceExpiry || d.licenseExpiryDate ? String(d.licenceExpiry || d.licenseExpiryDate).split("T")[0] : "",
+            address: d.address || "",
+            status: d.status === true || d.status === 1 || d.status === "Active" ? "Active" : "Inactive",
+          }))
+        );
+      }
+
+      if (attendantsRes.status === "fulfilled" && attendantsRes.value?.data) {
+        const items = extractList(attendantsRes.value.data);
+        setAttendants(
+          items.map((a) => ({
+            id: a.attendantId || a.id,
+            attendantName: a.attendantName || a.attendantFullName || a.fullName || a.name || "",
+            employeeId: a.employeeId || a.attendantCode || "",
+            mobileNumber: a.mobileNumber || a.phone || "",
+            gender: a.gender || "Female",
+            branch: a.branchName || a.branch || "Main Campus",
+            status: a.status === true || a.status === 1 || a.status === "Active" ? "Active" : "Inactive",
+          }))
+        );
+      }
+
+      if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
+        const items = extractList(assignmentsRes.value.data);
+        setVehicleAssignments(
+          items.map((va) => ({
+            id: va.assignmentId || va.id,
+            routeId: va.routeId,
+            routeName: va.routeName || va.route || "",
+            vehicleId: va.vehicleId,
+            vehicleNumber: va.vehicleNumber || va.busNumber || "",
+            driverId: va.driverId,
+            driverName: va.driverName || va.driver || "",
+            attendantId: va.attendantId,
+            attendantName: va.attendantName || va.attendant || "Unassigned",
+            morningTripTime: va.morningTripTime || "07:00 AM",
+            eveningTripTime: va.eveningTripTime || "03:45 PM",
+            effectiveFrom: va.effectiveFrom ? String(va.effectiveFrom).split("T")[0] : "",
+            status: va.status === true || va.status === 1 || va.status === "Active" ? "Active" : "Inactive",
+          }))
+        );
+      }
+
+      if (tripsRes.status === "fulfilled" && tripsRes.value?.data) {
+        const tripsData = tripsRes.value.data?.data?.trips || tripsRes.value.data?.data || extractList(tripsRes.value.data);
+        if (Array.isArray(tripsData)) {
+          setTrips(
+            tripsData.map((t) => ({
+              id: t.tripId || t.id,
+              assignmentId: t.assignmentId,
+              vehicleNumber: t.vehicleNumber || t.busNumber || "",
+              routeName: t.routeName || "",
+              tripType: t.tripType || (t.startTime ? "Morning" : "Evening"),
+              tripDate: t.tripDate ? String(t.tripDate).split("T")[0] : new Date().toISOString().split("T")[0],
+              startTime: t.startTime || t.morningTripTime || "07:00 AM",
+              endTime: t.endTime || t.eveningTripTime || "03:45 PM",
+              studentsPresent: Number(t.studentsCount || t.studentsPresent || 0),
+              status: t.status || "Completed",
+              driverName: t.driverName || t.driver || "",
+              attendantName: t.attendantName || t.attendant || "",
+            }))
+          );
+        }
+      }
+
+      if (gpsRes.status === "fulfilled" && gpsRes.value?.data) {
+        const gpsData = Array.isArray(gpsRes.value.data?.data)
+          ? gpsRes.value.data.data
+          : extractList(gpsRes.value.data);
+        if (Array.isArray(gpsData)) {
+          setGpsSnapshots(
+            gpsData.map((g) => ({
+              id: g.vehicleId || g.id,
+              vehicleNumber: g.vehicleNumber || g.busNumber || "",
+              routeName: g.routeName || g.route || "",
+              speed: parseInt(String(g.speed || "40").replace(/[^\d]/g, ""), 10) || 40,
+              nextStop: g.nextStop || "Main Gate",
+              lastUpdated: g.eta ? `ETA: ${g.eta}` : (g.gpsSignal || "Active"),
+              latitude: g.latitude || "17.3850",
+              longitude: g.longitude || "78.4867",
+              status: g.tripStatus || "In Transit",
+            }))
+          );
+        }
+      }
+
+      if (maintenanceRes.status === "fulfilled" && maintenanceRes.value?.data) {
+        const items = extractList(maintenanceRes.value.data);
+        setMaintenance(
+          items.map((m) => ({
+            id: m.maintenanceId || m.id,
+            vehicleId: m.vehicleId,
+            vehicleNumber: m.vehicleNumber || m.busNumber || "",
+            category: m.serviceType || m.category || "",
+            serviceDate: m.serviceDate ? String(m.serviceDate).split("T")[0] : "",
+            cost: Number(m.cost || 0),
+            vendor: m.vendorCenter || m.vendor || "",
+            nextDueDate: m.nextServiceDue ? String(m.nextServiceDue).split("T")[0] : (m.nextDueDate ? String(m.nextDueDate).split("T")[0] : ""),
+            status: m.status || (m.statusBool ? "Completed" : "Scheduled"),
+            notes: m.remarks || m.notes || "",
+          }))
+        );
+      }
+
+      if (studentRes.status === "fulfilled" && studentRes.value?.data) {
+        const items = extractList(studentRes.value.data);
+        setStudentAssignments(
+          items.map((s) => ({
+            id: s.assignmentId || s.id,
+            studentName: s.studentName || "Student",
+            admissionNo: s.admissionNo || "",
+            routeId: s.routeId,
+            routeName: s.routeName || "",
+            pickupPointName: s.pickupPointName || s.pickupPoint || "",
+            vehicleNumber: s.vehicleNumber || "Unassigned",
+            vehicleId: s.vehicleId || 1,
+            feePlan: s.feePlan || "Annual",
+            monthlyFee: Number(s.monthlyFee || 1200),
+            annualFee: Number(s.annualFee || (s.monthlyFee ? s.monthlyFee * 10 : 12000)),
+            status: s.status === true || s.status === 1 || s.status === "Active" ? "Active" : "Inactive",
+          }))
+        );
+      }
+
+      if (dashboardRes.status === "fulfilled" && dashboardRes.value?.data?.data?.summary) {
+        setDashboardMetrics(dashboardRes.value.data.data.summary);
+      }
+    } catch (err) {
+      console.error("Error fetching transport data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTransportData();
+  }, []);
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
   const vehicleOptions = vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.vehicleNumber }));
@@ -346,13 +598,15 @@ export default function TransportPage() {
   const attendantOptions = attendants.map((attendant) => ({ value: attendant.id, label: attendant.attendantName }));
 
   const dataMap = {
-    routes: { rows: routes, setRows: setRoutes, prefix: "TR" },
-    pickupPoints: { rows: pickupPoints, setRows: setPickupPoints, prefix: "TP" },
-    vehicles: { rows: vehicles, setRows: setVehicles, prefix: "TV" },
-    drivers: { rows: drivers, setRows: setDrivers, prefix: "TD" },
-    attendants: { rows: attendants, setRows: setAttendants, prefix: "TA" },
-    vehicleAssignments: { rows: vehicleAssignments, setRows: setVehicleAssignments, prefix: "TVA" },
-    maintenance: { rows: maintenance, setRows: setMaintenance, prefix: "TM" },
+    routes: { rows: routes, setRows: setRoutes },
+    pickupPoints: { rows: pickupPoints, setRows: setPickupPoints },
+    vehicles: { rows: vehicles, setRows: setVehicles },
+    drivers: { rows: drivers, setRows: setDrivers },
+    attendants: { rows: attendants, setRows: setAttendants },
+    vehicleAssignments: { rows: vehicleAssignments, setRows: setVehicleAssignments },
+    studentAssignments: { rows: studentAssignments, setRows: setStudentAssignments },
+    trips: { rows: trips, setRows: setTrips },
+    maintenance: { rows: maintenance, setRows: setMaintenance },
   };
 
   const findRoute = (id) => routes.find((route) => route.id === id);
@@ -370,18 +624,18 @@ export default function TransportPage() {
     const totalCapacity = vehicleAssignments.reduce((total, assignment) => total + (findVehicle(assignment.vehicleId)?.capacity || 0), 0);
     const totalAssigned = activeStudents.length;
     return {
-      totalVehicles: vehicles.length,
-      activeVehicles: activeVehicles.length,
-      maintenanceVehicles: vehicles.filter((vehicle) => vehicle.status === "Maintenance").length,
-      totalDrivers: drivers.length,
-      activeDrivers: drivers.filter((driver) => driver.status === "Active").length,
-      totalAttendants: attendants.length,
-      activeRoutes: routes.filter((route) => route.status === "Active").length,
-      activeStudents: activeStudents.length,
+      totalVehicles: dashboardMetrics?.totalVehicles ?? vehicles.length,
+      activeVehicles: dashboardMetrics?.activeVehicles ?? activeVehicles.length,
+      maintenanceVehicles: dashboardMetrics?.vehiclesUnderMaintenance ?? vehicles.filter((vehicle) => vehicle.status === "Maintenance").length,
+      totalDrivers: dashboardMetrics?.totalDrivers ?? drivers.length,
+      activeDrivers: dashboardMetrics?.activeDrivers ?? drivers.filter((driver) => driver.status === "Active").length,
+      totalAttendants: dashboardMetrics?.totalBusAttendants ?? attendants.length,
+      activeRoutes: dashboardMetrics?.activeRoutes ?? routes.filter((route) => route.status === "Active").length,
+      activeStudents: dashboardMetrics?.studentsUsingTransport ?? activeStudents.length,
       runningTrips: trips.filter((trip) => trip.status === "Running").length,
       completedTrips: trips.filter((trip) => trip.status === "Completed").length,
-      expiringDocs: expiringDocs.length,
-      expiringLicenses: expiringLicenses.length,
+      expiringDocs: dashboardMetrics?.expiringVehicleDocuments ?? expiringDocs.length,
+      expiringLicenses: dashboardMetrics?.expiringDriverLicenses ?? expiringLicenses.length,
       utilization: totalCapacity ? Math.round((totalAssigned / totalCapacity) * 100) : 0,
     };
   })();
@@ -392,6 +646,28 @@ export default function TransportPage() {
       return { ...record, routeName: route?.routeName || record.routeName };
     }
     if (key === "vehicleAssignments") {
+      const route = findRoute(record.routeId);
+      const vehicle = findVehicle(record.vehicleId);
+      const driver = findDriver(record.driverId);
+      const attendant = findAttendant(record.attendantId);
+      return {
+        ...record,
+        routeName: route?.routeName || record.routeName,
+        vehicleNumber: vehicle?.vehicleNumber || record.vehicleNumber,
+        driverName: driver?.driverName || record.driverName,
+        attendantName: attendant?.attendantName || record.attendantName,
+      };
+    }
+    if (key === "studentAssignments") {
+      const route = findRoute(record.routeId);
+      const vehicle = findVehicle(record.vehicleId);
+      return {
+        ...record,
+        routeName: route?.routeName || record.routeName,
+        vehicleNumber: vehicle?.vehicleNumber || record.vehicleNumber,
+      };
+    }
+    if (key === "trips") {
       const route = findRoute(record.routeId);
       const vehicle = findVehicle(record.vehicleId);
       const driver = findDriver(record.driverId);
@@ -415,27 +691,213 @@ export default function TransportPage() {
     setFormConfig({ key, title, fields, record });
   };
 
-  const saveForm = (values) => {
+  const saveForm = async (values) => {
     const { key, record } = formConfig;
-    const store = dataMap[key];
-    const nextRecord = enrichRecord(key, { ...record, ...values, id: record?.id || makeId(store.prefix, store.rows) });
-    store.setRows((current) => {
-      if (record?.id) return current.map((item) => (item.id === record.id ? nextRecord : item));
-      return [nextRecord, ...current];
-    });
-    setFormConfig(null);
-    setToast(record?.id ? "Transport record updated." : "Transport record added.");
+    const isEdit = Boolean(record?.id);
+    const numericId = isEdit ? Number(String(record.id).replace(/[^\d]/g, "")) || record.id : null;
+
+    try {
+      if (key === "routes") {
+        const payload = {
+          routeCode: values.routeCode,
+          routeName: values.routeName,
+          startLocation: values.routeStart || "Campus North",
+          endLocation: values.routeEnd || "City Center",
+          distanceKm: Number(values.totalDistanceKm) || 0,
+          estimatedDurationMinutes: Number(values.estimatedTimeMinutes) || 30,
+          nonAcBaseFare: Number(values.minBaseFare) || 1000,
+          acBaseFare: Number(values.acMinBaseFare) || 1200,
+          nonAcRatePerKm: Number(values.ratePerKm) || 100,
+          acRatePerKm: Number(values.acRatePerKm) || 150,
+          description: values.description || "",
+          status: values.status === "Active",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.routeById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.routes, payload);
+        }
+      } else if (key === "pickupPoints") {
+        const payload = {
+          routeId: Number(values.routeId),
+          pickupPointName: values.pickupName,
+          landmark: values.landmark || "Main Landmark",
+          sequenceNo: Number(values.sequenceNumber) || 1,
+          pickupTime: values.pickupTime ? (values.pickupTime.length === 5 ? `${values.pickupTime}:00` : values.pickupTime) : "07:30:00",
+          dropTime: values.dropTime ? (values.dropTime.length === 5 ? `${values.dropTime}:00` : values.dropTime) : "16:15:00",
+          distanceFromStart: Number(values.distanceKm) || 0,
+          monthlyFee: Number(values.monthlyFee) || 1200,
+          status: values.status === "Active",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.pickupPointById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.pickupPoints, payload);
+        }
+      } else if (key === "vehicles") {
+        const payload = {
+          vehicleNumber: values.vehicleNumber,
+          registrationNumber: values.registrationNumber,
+          vehicleName: values.vehicleNumber,
+          vehicleType: values.vehicleType || "Bus",
+          capacity: Number(values.capacity) || 40,
+          isAC: Boolean(values.isAC),
+          gpsDeviceId: values.gpsDeviceId || "",
+          chassisNumber: values.chassisNumber || "",
+          engineNumber: values.engineNumber || "",
+          insuranceExpiry: values.insuranceExpiry || null,
+          pollutionExpiry: values.pollutionExpiry || null,
+          fitnessExpiry: values.fitnessExpiry || null,
+          status: values.status === "Active",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.vehicleById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.vehicles, payload);
+        }
+      } else if (key === "drivers") {
+        const payload = {
+          driverName: values.driverName,
+          employeeId: values.employeeId,
+          mobileNumber: values.mobileNumber,
+          email: values.email || "",
+          licenceNumber: values.licenseNumber,
+          licenceExpiry: values.licenseExpiryDate || null,
+          address: values.address || "",
+          status: values.status === "Active",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.driverById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.drivers, payload);
+        }
+      } else if (key === "attendants") {
+        const payload = {
+          attendantName: values.attendantName,
+          employeeId: values.employeeId,
+          mobileNumber: values.mobileNumber,
+          gender: values.gender || "Female",
+          status: values.status === "Active",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.attendantById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.attendants, payload);
+        }
+      } else if (key === "vehicleAssignments") {
+        const payload = {
+          routeId: Number(values.routeId),
+          vehicleId: Number(values.vehicleId),
+          driverId: Number(values.driverId),
+          attendantId: values.attendantId ? Number(values.attendantId) : null,
+          morningTripTime: values.morningTripTime || "07:00 AM",
+          eveningTripTime: values.eveningTripTime || "03:45 PM",
+          effectiveFrom: values.effectiveFrom ? `${values.effectiveFrom}T00:00:00` : new Date().toISOString(),
+          shift: "Morning",
+          status: values.status === "Active",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.vehicleAssignmentById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.vehicleAssignments, payload);
+        }
+      } else if (key === "studentAssignments") {
+        const payload = {
+          studentId: Number(values.studentId) || (values.admissionNo ? parseInt(values.admissionNo.replace(/[^\d]/g, ""), 10) || 1 : 1),
+          studentName: values.studentName,
+          admissionNo: values.admissionNo,
+          routeId: Number(values.routeId),
+          pickupPointId: Number(values.pickupPointId) || null,
+          pickupPointName: values.pickupPointName || "",
+          vehicleId: Number(values.vehicleId),
+          monthlyFee: Number(values.monthlyFee) || 1200,
+          status: values.status === "Active",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.studentAssignmentById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.studentAssignments, payload);
+        }
+      } else if (key === "trips") {
+        const payload = {
+          vehicleId: Number(values.vehicleId),
+          routeId: Number(values.routeId),
+          driverId: Number(values.driverId),
+          attendantId: values.attendantId ? Number(values.attendantId) : null,
+          morningTripTime: values.startTime || "07:00 AM",
+          eveningTripTime: values.endTime || "03:45 PM",
+          studentsCount: Number(values.studentsPresent) || 0,
+          status: values.status || "Running",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.tripById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.trips, payload);
+        }
+      } else if (key === "maintenance") {
+        const payload = {
+          vehicleId: Number(values.vehicleId),
+          serviceType: values.category || "General Maintenance",
+          serviceDate: values.serviceDate ? `${values.serviceDate}T00:00:00` : new Date().toISOString(),
+          cost: Number(values.cost) || 0,
+          vendorCenter: values.vendor || "",
+          nextServiceDue: values.nextDueDate ? `${values.nextDueDate}T00:00:00` : null,
+          remarks: values.notes || "",
+          status: values.status === "Completed",
+        };
+        if (isEdit) {
+          await apiClient.put(apiEndpoints.transport.maintenanceById(numericId), payload);
+        } else {
+          await apiClient.post(apiEndpoints.transport.maintenance, payload);
+        }
+      }
+
+      setToast(isEdit ? "Transport record updated successfully." : "Transport record added successfully.");
+      await fetchTransportData();
+    } catch (err) {
+      console.error("API error saving transport record:", err);
+      setToast(`Error saving record: ${getApiErrorMessage(err)}`);
+    } finally {
+      setFormConfig(null);
+    }
   };
 
   const requestDelete = (key, row, label) => {
     setDeleteConfig({ key, row, label });
   };
 
-  const confirmDelete = () => {
-    const store = dataMap[deleteConfig.key];
-    store.setRows((current) => current.filter((item) => item.id !== deleteConfig.row.id));
-    setDeleteConfig(null);
-    setToast("Transport record deleted.");
+  const confirmDelete = async () => {
+    const { key, row } = deleteConfig;
+    const numericId = Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
+
+    try {
+      if (key === "routes") {
+        await apiClient.delete(apiEndpoints.transport.routeById(numericId));
+      } else if (key === "pickupPoints") {
+        await apiClient.delete(apiEndpoints.transport.pickupPointById(numericId));
+      } else if (key === "vehicles") {
+        await apiClient.delete(apiEndpoints.transport.vehicleById(numericId));
+      } else if (key === "drivers") {
+        await apiClient.delete(apiEndpoints.transport.driverById(numericId));
+      } else if (key === "attendants") {
+        await apiClient.delete(apiEndpoints.transport.attendantById(numericId));
+      } else if (key === "vehicleAssignments") {
+        await apiClient.delete(apiEndpoints.transport.vehicleAssignmentById(numericId));
+      } else if (key === "studentAssignments") {
+        await apiClient.delete(apiEndpoints.transport.studentAssignmentById(numericId));
+      } else if (key === "trips") {
+        await apiClient.delete(apiEndpoints.transport.tripById(numericId));
+      } else if (key === "maintenance") {
+        await apiClient.delete(apiEndpoints.transport.maintenanceById(numericId));
+      }
+      setToast("Transport record deleted successfully.");
+      await fetchTransportData();
+    } catch (err) {
+      console.error("API error deleting transport record:", err);
+      setToast(`Error deleting record: ${getApiErrorMessage(err)}`);
+    } finally {
+      setDeleteConfig(null);
+    }
   };
 
   const routeFields = [
@@ -528,6 +990,38 @@ export default function TransportPage() {
     { name: "nextDueDate", label: "Next Service Due", type: "date" },
     { name: "status", label: "Status", type: "select", options: ["Scheduled", "In Progress", "Completed"], required: true },
     { name: "notes", label: "Remarks", type: "textarea", full: true },
+  ];
+
+  const studentTransportReportColumns = [
+    { key: "studentName", label: "Student & Class", strong: true, value: (row) => `${row.studentName} (${row.admissionNo || ""})` },
+    { key: "admissionNo", label: "Adm No" },
+    { key: "routeName", label: "Transit Route" },
+    { key: "pickupPointName", label: "Pickup Point" },
+    { key: "vehicleNumber", label: "Assigned Vehicle" },
+    { key: "feePlan", label: "Fee Plan" },
+    { key: "monthlyFee", label: "Fee Amount", currency: true },
+    { key: "status", label: "Status", badge: true },
+  ];
+
+  const tripFields = [
+    { name: "vehicleId", label: "Select Vehicle", type: "select", options: vehicleOptions, required: true },
+    { name: "routeId", label: "Select Route", type: "select", options: routeOptions, required: true },
+    { name: "driverId", label: "Select Driver", type: "select", options: driverOptions, required: true },
+    { name: "attendantId", label: "Select Bus Attendant", type: "select", options: attendantOptions },
+    { name: "startTime", label: "Trip Start Time", type: "time" },
+    { name: "endTime", label: "Trip End Time", type: "time" },
+    { name: "studentsPresent", label: "Students Present", type: "number", min: 0 },
+    { name: "status", label: "Status", type: "select", options: ["Running", "Completed", "Delayed", "Cancelled"], required: true },
+  ];
+
+  const studentAssignmentFields = [
+    { name: "studentName", label: "Student Full Name", required: true, placeholder: "Enter student name..." },
+    { name: "admissionNo", label: "Admission Number", required: true, placeholder: "e.g. ADM-2026-001" },
+    { name: "routeId", label: "Select Route", type: "select", options: routeOptions, required: true },
+    { name: "vehicleId", label: "Select Vehicle", type: "select", options: vehicleOptions, required: true },
+    { name: "pickupPointName", label: "Pickup Point Name", placeholder: "e.g. Clock Tower Circle" },
+    { name: "monthlyFee", label: "Monthly Fare (\u20b9)", type: "number", min: 0, placeholder: "e.g. 1500" },
+    { name: "status", label: "Status", type: "select", options: ["Active", "Inactive"], required: true },
   ];
 
   const tableConfigs = {
@@ -628,10 +1122,20 @@ export default function TransportPage() {
         { key: "effectiveFrom", label: "Effective Date" },
       ],
     },
+    studentAssignments: {
+      title: "Student Transport Allotment",
+      subtitle: "Manage student route allocations, pickup stops and transport fee plans.",
+      rows: studentAssignments,
+      fields: studentAssignmentFields,
+      addLabel: "Allot Transport",
+      columns: studentTransportReportColumns,
+    },
     trips: {
       title: "Vehicle Trips",
       subtitle: "Track daily morning and evening trip movement.",
       rows: trips,
+      fields: tripFields,
+      addLabel: "Add Trip",
       columns: [
         { key: "vehicleNumber", label: "Vehicle", strong: true },
         { key: "routeName", label: "Route" },
@@ -712,12 +1216,22 @@ export default function TransportPage() {
         ],
       },
     ],
+    studentAssignments: [
+      {
+        name: "studentAssignments",
+        label: "Filter by Route",
+        options: [
+          { value: "All", label: "All Routes" },
+          ...routes.map((route) => ({ value: route.id, label: `${route.routeName} (${route.routeCode})` })),
+        ],
+      },
+    ],
   };
 
   const filterSetupRow = (key, row) => {
     const selected = setupFilters[key];
     if (!selected || selected === "All") return true;
-    if (key === "pickupPoints") return String(row.routeId) === String(selected);
+    if (key === "pickupPoints" || key === "studentAssignments") return String(row.routeId) === String(selected);
     return String(row.id) === String(selected);
   };
 
@@ -786,17 +1300,6 @@ export default function TransportPage() {
     return { assigned, capacity, percent };
   };
 
-  const studentTransportReportColumns = [
-    { key: "studentName", label: "Student & Class", strong: true, value: (row) => `${row.studentName} (${row.group || "-"} ${row.section || ""})` },
-    { key: "admissionNo", label: "Adm No" },
-    { key: "routeName", label: "Transit Route" },
-    { key: "pickupPointName", label: "Pickup Point" },
-    { key: "vehicleNumber", label: "Assigned Vehicle" },
-    { key: "feePlan", label: "Fee Plan" },
-    { key: "monthlyFee", label: "Fee Amount", currency: true },
-    { key: "status", label: "Status", badge: true },
-  ];
-
   const renderTable = (key) => {
     const config = tableConfigs[key];
     const isTripsTable = key === "trips";
@@ -816,9 +1319,9 @@ export default function TransportPage() {
               : undefined
         }
         rowFilter={isTripsTable ? filterTripRow : isSetupFilterTable ? (row) => filterSetupRow(key, row) : undefined}
-        onAdd={!isTripsTable ? () => openForm(key, config.addLabel, config.fields) : undefined}
-        onEdit={!isTripsTable ? (row) => openForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
-        onDelete={!isTripsTable ? (row) => requestDelete(key, row, config.title) : undefined}
+        onAdd={config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
+        onEdit={config.fields ? (row) => openForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
+        onDelete={(row) => requestDelete(key, row, config.title)}
         onView={(row) => setDetailConfig({ title: config.title, row })}
       />
     );
@@ -849,7 +1352,7 @@ export default function TransportPage() {
           <div className="cms-card-head cms-transport-status-head">
             <div>
               <h2>Today's Transport Status</h2>
-              <p>Current mock trip activity and assignment readiness.</p>
+              <p>Current trip activity and assignment readiness from live operations.</p>
             </div>
             <button type="button" className="cms-btn cms-btn-primary cms-transport-open-ops" onClick={openTransportOperations}>
               Open Transport Operations <ArrowRight size={15} />
@@ -865,24 +1368,30 @@ export default function TransportPage() {
               ))}
             </div>
             <div className="cms-transport-trip-list">
-              {trips.map((trip) => {
-                const assignment = findAssignment(trip.assignmentId);
-                return (
-                <div key={trip.id} className="cms-transport-trip">
-                  <span className="cms-transport-trip-info">
-                    <strong>{trip.vehicleNumber}</strong>
-                    <small>{trip.routeName} - {trip.tripType}</small>
-                    <small>Driver: {trip.driverName || assignment?.driverName || "-"} &middot; Attendant: {trip.attendantName || assignment?.attendantName || "-"}</small>
-                  </span>
-                  <span className="cms-transport-trip-actions">
-                    <StatusBadge value={trip.status} />
-                    <button type="button" className="cms-transport-details-btn" onClick={() => openTripDetails(trip)}>
-                      <Eye size={14} /> Details
-                    </button>
-                  </span>
+              {trips.length === 0 ? (
+                <div className="cms-transport-empty" style={{ padding: "1.5rem", textAlign: "center" }}>
+                  No vehicle trip activity recorded today.
                 </div>
-                );
-              })}
+              ) : (
+                trips.map((trip) => {
+                  const assignment = findAssignment(trip.assignmentId);
+                  return (
+                    <div key={trip.id} className="cms-transport-trip">
+                      <span className="cms-transport-trip-info">
+                        <strong>{trip.vehicleNumber}</strong>
+                        <small>{trip.routeName} - {trip.tripType}</small>
+                        <small>Driver: {trip.driverName || assignment?.driverName || "-"} &middot; Attendant: {trip.attendantName || assignment?.attendantName || "-"}</small>
+                      </span>
+                      <span className="cms-transport-trip-actions">
+                        <StatusBadge value={trip.status} />
+                        <button type="button" className="cms-transport-details-btn" onClick={() => openTripDetails(trip)}>
+                          <Eye size={14} /> Details
+                        </button>
+                      </span>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
       </div>
@@ -892,15 +1401,19 @@ export default function TransportPage() {
           <div className="cms-card-head"><h2><BarChart3 size={20} /> Vehicle Seat Occupancy Matrix</h2></div>
           <div className="cms-card-body">
             <div className="cms-transport-occupancy">
-              {vehicles.map((vehicle) => {
-                const { assigned, capacity, percent } = getVehicleOccupancy(vehicle);
-                return (
-                  <div key={vehicle.id}>
-                    <span><strong>{vehicle.vehicleNumber} ({vehicle.vehicleType})</strong><small>{assigned} / {capacity} Seats ({percent}%)</small></span>
-                    <div className="cms-transport-progress"><i style={{ width: `${Math.min(percent, 100)}%` }} /></div>
-                  </div>
-                );
-              })}
+              {vehicles.length === 0 ? (
+                <p className="cms-transport-empty" style={{ margin: "1rem 0" }}>No vehicles registered yet.</p>
+              ) : (
+                vehicles.map((vehicle) => {
+                  const { assigned, capacity, percent } = getVehicleOccupancy(vehicle);
+                  return (
+                    <div key={vehicle.id}>
+                      <span><strong>{vehicle.vehicleNumber} ({vehicle.vehicleType})</strong><small>{assigned} / {capacity} Seats ({percent}%)</small></span>
+                      <div className="cms-transport-progress"><i style={{ width: `${Math.min(percent, 100)}%` }} /></div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -909,18 +1422,22 @@ export default function TransportPage() {
           <div className="cms-card-head"><h2><PieChart size={20} /> Route-wise Student Distribution</h2></div>
           <div className="cms-card-body">
             <div className="cms-transport-route-distribution">
-              {routes.map((route) => {
-                const students = studentAssignments.filter((student) => student.routeId === route.id && student.status === "Active").length;
-                return (
-                  <div key={route.id}>
-                    <span>
-                      <strong>{route.routeName}</strong>
-                      <small>{route.routeCode} &bull; {route.totalDistanceKm} KM</small>
-                    </span>
-                    <em>{students} Student{students === 1 ? "" : "s"}</em>
-                  </div>
-                );
-              })}
+              {routes.length === 0 ? (
+                <p className="cms-transport-empty" style={{ margin: "1rem 0" }}>No transport routes registered yet.</p>
+              ) : (
+                routes.map((route) => {
+                  const students = studentAssignments.filter((student) => student.routeId === route.id && student.status === "Active").length;
+                  return (
+                    <div key={route.id}>
+                      <span>
+                        <strong>{route.routeName}</strong>
+                        <small>{route.routeCode} &bull; {route.totalDistanceKm} KM</small>
+                      </span>
+                      <em>{students} Student{students === 1 ? "" : "s"}</em>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -930,28 +1447,34 @@ export default function TransportPage() {
 
   const renderGpsCards = () => (
     <div className="cms-transport-gps-grid">
-      {gpsSnapshots.map((snapshot) => (
-        <div key={snapshot.id} className="cms-transport-gps-card">
-          <div>
-            <strong>{snapshot.vehicleNumber}</strong>
-            <StatusBadge value={snapshot.status} />
-          </div>
-          <p>{snapshot.routeName}</p>
-          <InfoGrid
-            items={[
-              { label: "Speed", value: `${snapshot.speed} km/h` },
-              { label: "Next Stop", value: snapshot.nextStop },
-              { label: "Last Sync", value: snapshot.lastUpdated },
-              { label: "Coordinates", value: `${snapshot.latitude}, ${snapshot.longitude}` },
-            ]}
-          />
-          <div className="cms-transport-mapline">
-            <span />
-            <span />
-            <span />
-          </div>
+      {gpsSnapshots.length === 0 ? (
+        <div className="cms-transport-empty" style={{ gridColumn: "1 / -1", padding: "2rem", textAlign: "center" }}>
+          No active GPS vehicle tracking telemetry available.
         </div>
-      ))}
+      ) : (
+        gpsSnapshots.map((snapshot) => (
+          <div key={snapshot.id} className="cms-transport-gps-card">
+            <div>
+              <strong>{snapshot.vehicleNumber}</strong>
+              <StatusBadge value={snapshot.status} />
+            </div>
+            <p>{snapshot.routeName}</p>
+            <InfoGrid
+              items={[
+                { label: "Speed", value: `${snapshot.speed} km/h` },
+                { label: "Next Stop", value: snapshot.nextStop },
+                { label: "Last Sync", value: snapshot.lastUpdated },
+                { label: "Coordinates", value: `${snapshot.latitude}, ${snapshot.longitude}` },
+              ]}
+            />
+            <div className="cms-transport-mapline">
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 
@@ -1081,14 +1604,14 @@ export default function TransportPage() {
         {activeReportTab === "transport-dashboard-report" ? (
           <div className="cms-transport-stat-grid">
             <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(totalTransportRevenue)} hint="from active assignments" tone="green" />
-            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(activeMaintenanceCost)} hint="current mock logs" tone="amber" />
+            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(activeMaintenanceCost)} hint="logged fleet service costs" tone="amber" />
             <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0))} hint="total seats" tone="blue" />
             <StatCard icon={UserCheck} label="Drivers & Attendants" value={drivers.length + attendants.length} hint="staff profiles" tone="violet" />
           </div>
         ) : null}
         <TableSection
           title="Transport Report"
-          subtitle="Mock report data derived from the selected transport records."
+          subtitle="Live transport report data derived from fleet records."
           rows={reportRows}
           columns={reportColumns}
           query={query}
@@ -1124,7 +1647,7 @@ export default function TransportPage() {
               <div className="cms-card-head">
                 <div>
                   <h2>GPS Tracking</h2>
-                  <p>Mock live location status for active transport vehicles.</p>
+                  <p>Real-time location status and telemetry for active transport vehicles.</p>
                 </div>
               </div>
               <div className="cms-card-body">{renderGpsCards()}</div>
@@ -1144,7 +1667,20 @@ export default function TransportPage() {
       breadcrumb={["Student"]}
     >
       <div className="cms-transport-page">
-        <TransportTabs active={activeSection} tabs={sectionTabs} onChange={(tab) => { setActiveSection(tab); setQuery(""); }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "0.5rem" }}>
+          <TransportTabs active={activeSection} tabs={sectionTabs} onChange={(tab) => { setActiveSection(tab); setQuery(""); }} />
+          <button
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px" }}
+            title="Sync Live Data with Backend"
+            onClick={fetchTransportData}
+            disabled={isLoading}
+          >
+            <RefreshCw size={14} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
+            <span>{isLoading ? "Syncing..." : "Sync Live Data"}</span>
+          </button>
+        </div>
         {renderActiveSection()}
       </div>
 
@@ -1174,7 +1710,7 @@ export default function TransportPage() {
         <ConfirmDialog
           danger
           title="Delete transport record"
-          message={`Delete this ${deleteConfig.label.toLowerCase()} record? This only updates the current mock data view.`}
+          message={`Are you sure you want to delete this ${deleteConfig.label.toLowerCase()} record?`}
           onCancel={() => setDeleteConfig(null)}
           onConfirm={confirmDelete}
           confirmLabel="Delete"

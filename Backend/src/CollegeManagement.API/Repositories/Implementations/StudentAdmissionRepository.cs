@@ -49,6 +49,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
+
         // =========================================================
         // GET CREATED STUDENT BY ADMISSION ID
         // =========================================================
@@ -465,7 +466,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             return result > 0;
         }
 
-
         // =========================================================
         // REJECT ADMISSION
         // =========================================================
@@ -502,26 +502,16 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var connection = _context.Database.GetDbConnection();
 
-            try
-            {
-                var result =
-                    await connection.QuerySingleOrDefaultAsync<int>(
-                        "sp_DeleteStudentAdmission",
-                        new
-                        {
-                            p_AdmissionId = admissionId
-                        },
-                        commandType: CommandType.StoredProcedure);
+            var result =
+                await connection.QuerySingleOrDefaultAsync<int>(
+                    "sp_DeleteStudentAdmission",
+                    new
+                    {
+                        p_AdmissionId = admissionId
+                    },
+                    commandType: CommandType.StoredProcedure);
 
-                return result > 0;
-            }
-            catch (MySqlConnector.MySqlException ex) when (ex.Message.Contains("does not exist"))
-            {
-                var rows = await connection.ExecuteAsync(
-                    "DELETE FROM StudentAdmissions WHERE AdmissionId = @AdmissionId",
-                    new { AdmissionId = admissionId });
-                return rows > 0;
-            }
+            return result > 0;
         }
 
 
