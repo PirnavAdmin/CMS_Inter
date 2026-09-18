@@ -35,6 +35,8 @@ import {
   formatDate,
   todayISO,
 } from "@/data/feeManagementData.js";
+import { transportPickupPoints, transportRoutes } from "@/data/mockData.js";
+import { HOSTEL_BLOCKS, HOSTEL_ROOMS_DATA } from "@/modules/hostel/data/hostelData.js";
 
 const MAX_DOCUMENT_SIZE = 2 * 1024 * 1024;
 const formatAmount = (value) => {
@@ -513,6 +515,11 @@ const feeTypeIdentity = (item) => {
   ].join(" ").toLowerCase();
 };
 
+const isFacilityFeeItem = (item) => {
+  const identity = feeTypeIdentity(item);
+  return identity.includes("hostel") || identity.includes("transport");
+};
+
 const classifyFeeItem = (item) => {
   const identity = feeTypeIdentity(item);
   if (identity.includes("admission")) return "admission";
@@ -868,6 +875,60 @@ const steps = [
     ],
   },
   {
+    title: "Student Type & Residential Allocation",
+    fields: [
+      { name: "studentType", label: "Student Type", type: "select", selectPlaceholder: "Select Type", options: ["Non-Residential", "Residential"], required: true },
+      {
+        name: "transportRequired",
+        label: "School Transport Facility Required?",
+        type: "select",
+        options: ["Yes", "No"],
+        conditional: (values) => values.studentType === "Non-Residential",
+        requiredWhen: (values) => values.studentType === "Non-Residential",
+      },
+      {
+        name: "busRoute",
+        label: "Route",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+        requiredWhen: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+      },
+      {
+        name: "pickupPoint",
+        label: "Pickup Point",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+        requiredWhen: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+      },
+      {
+        name: "hostelBlock",
+        label: "Hostel Block",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Residential",
+        requiredWhen: (values) => values.studentType === "Residential",
+      },
+      {
+        name: "hostelRoom",
+        label: "Room",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Residential",
+        requiredWhen: (values) => values.studentType === "Residential",
+      },
+      {
+        name: "hostelBed",
+        label: "Bed",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Residential",
+        requiredWhen: (values) => values.studentType === "Residential",
+      },
+    ],
+  },
+  {
     title: "Fee",
     custom: "fee",
     fields: [],
@@ -876,8 +937,8 @@ const steps = [
 
 // The stepper adds a final read-only Preview step after all data steps.
 const allSteps = [...steps, { title: "Preview", fields: [] }];
-const ADMISSION_FORM_STEP_COUNT = 6;
 const FEE_STEP_INDEX = steps.findIndex((section) => section.custom === "fee");
+const ADMISSION_FORM_STEP_COUNT = FEE_STEP_INDEX;
 const PREVIEW_STEP_INDEX = allSteps.length - 1;
 const admissionMainTabs = [
   { title: "Admission Form", step: 0, icon: ClipboardList },
@@ -999,6 +1060,89 @@ const sanitizeValue = (field, value) => {
 const fieldByName = steps
   .flatMap((section) => section.fields)
   .reduce((lookup, field) => ({ ...lookup, [field.name]: field }), {});
+
+const transportRouteOptions = transportRoutes
+  .filter((route) => route.status !== "Inactive")
+  .map((route) => ({ value: route.id, label: route.routeName }));
+
+const pickupOptionsForRoute = (routeId) => transportPickupPoints
+  .filter((point) => point.status !== "Inactive" && String(point.routeId) === String(routeId))
+  .map((point) => ({ value: point.id, label: point.pickupName }));
+
+const hostelBlockOptions = HOSTEL_BLOCKS
+  .filter((block) => block.status !== "Inactive")
+  .map((block) => ({ value: block.code, label: block.name }));
+
+const hostelRoomsForBlock = (blockCode) => HOSTEL_ROOMS_DATA
+  .filter((room) => String(room.block) === String(blockCode))
+  .map((room) => ({ value: room.roomNo, label: `Room ${room.roomNo} - ${room.type}` }));
+
+const hostelBedsForRoom = (blockCode, roomNo) => {
+  const room = HOSTEL_ROOMS_DATA.find((item) => String(item.block) === String(blockCode) && String(item.roomNo) === String(roomNo));
+  return (room?.beds || [])
+    .filter((bed) => /vacant/i.test(bed))
+    .map((bed) => {
+      const value = String(bed).replace(/\s*\([^)]*\)\s*$/, "");
+      return { value, label: value };
+    });
+};
+
+const HOSTEL_FEE_CONFIG_STORAGE_KEY = "pirnav_hostel_fee_configs_v1";
+const parseCurrencyNumber = (value) => Number(String(value ?? "").replace(/[^\d.]/g, "")) || 0;
+
+const seedHostelFeeConfigs = () => HOSTEL_ROOMS_DATA.map((room) => {
+  const block = HOSTEL_BLOCKS.find((item) => item.code === room.block);
+  return {
+    id: `${room.block}-${room.roomNo}`,
+    hostelBlock: room.block,
+    hostelName: block?.name || room.block,
+    roomNo: room.roomNo,
+    roomType: room.type,
+    feePlan: "Monthly",
+    feeAmount: parseCurrencyNumber(room.fee),
+    securityDeposit: 0,
+    status: "Active",
+  };
+});
+
+const readHostelFeeConfigs = () => {
+  if (typeof window === "undefined") return seedHostelFeeConfigs();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HOSTEL_FEE_CONFIG_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) && parsed.length ? parsed : seedHostelFeeConfigs();
+  } catch {
+    return seedHostelFeeConfigs();
+  }
+};
+
+const resolveTransportFee = (values) => {
+  if (values.studentType !== "Non-Residential" || values.transportRequired !== "Yes" || !values.busRoute || !values.pickupPoint) return null;
+  const route = transportRoutes.find((item) => String(item.id) === String(values.busRoute));
+  const pickup = transportPickupPoints.find((item) => String(item.id) === String(values.pickupPoint) && String(item.routeId) === String(values.busRoute));
+  if (!pickup) return null;
+  return {
+    type: `Transport Fee${route?.routeName ? ` (${route.routeName})` : ""}`,
+    amount: Number(pickup.monthlyFee || 0),
+    plan: "Monthly",
+    detail: pickup.pickupName,
+  };
+};
+
+const resolveHostelFee = (values) => {
+  if (values.studentType !== "Residential" || !values.hostelBlock || !values.hostelRoom || !values.hostelBed) return null;
+  const config = readHostelFeeConfigs().find((item) => (
+    item.status !== "Inactive"
+    && String(item.hostelBlock) === String(values.hostelBlock)
+    && String(item.roomNo) === String(values.hostelRoom)
+  ));
+  if (!config) return null;
+  return {
+    type: `Hostel Fee (${config.hostelName || values.hostelBlock}, Room ${config.roomNo})`,
+    amount: Number(config.feeAmount || 0) + Number(config.securityDeposit || 0),
+    plan: config.feePlan || "Monthly",
+    detail: values.hostelBed,
+  };
+};
 
 const visibleFieldsFor = (fields, currentValues) => fields.filter((field) => (
   typeof field.conditional === "function" ? field.conditional(currentValues) : true
@@ -1527,7 +1671,7 @@ const findApplicableFeeStructure = async ({ boardId, academicYearId, groupId, pr
 // Derives fee numbers only from backend fee rows loaded into the form state.
 const deriveAdmissionFee = (values) => {
   const baseItems = Array.isArray(values.feeItems) ? values.feeItems : [];
-  const feeItems = baseItems.map((item, index) => {
+  const feeItems = baseItems.filter((item) => !isFacilityFeeItem(item)).map((item, index) => {
     const originalAmount = Number(item.originalAmount ?? item.amount ?? 0);
     const required = Boolean(item.required);
     return {
@@ -1542,6 +1686,19 @@ const deriveAdmissionFee = (values) => {
       kind: item.kind || classifyFeeItem(item),
     };
   });
+  const facilityFeeItems = [resolveHostelFee(values), resolveTransportFee(values)]
+    .filter(Boolean)
+    .map((item, index) => ({
+      id: `${item.type.toLowerCase().includes("hostel") ? "hostel" : "transport"}-fee-${index + 1}`,
+      type: item.type,
+      originalAmount: Number(item.amount || 0),
+      payableAmount: Number(item.amount || 0),
+      selected: true,
+      required: true,
+      kind: item.type.toLowerCase().includes("hostel") ? "hostel" : "transport",
+      plan: item.plan,
+      detail: item.detail,
+    }));
   const selectedItems = feeItems.filter((item) => item.selected);
   const admissionItems = selectedItems.filter((item) => item.kind === "admission");
   const courseItems = selectedItems.filter((item) => item.kind === "course");
@@ -1549,7 +1706,8 @@ const deriveAdmissionFee = (values) => {
   const admissionFee = admissionItems.reduce((sum, item) => sum + item.originalAmount, 0);
   const courseFeeOriginal = courseItems.reduce((sum, item) => sum + item.originalAmount, 0);
   const optionalFeesTotal = optionalItems.reduce((sum, item) => sum + item.originalAmount, 0);
-  const originalTotal = admissionFee + courseFeeOriginal + optionalFeesTotal;
+  const facilityFeesTotal = facilityFeeItems.reduce((sum, item) => sum + item.originalAmount, 0);
+  const originalTotal = admissionFee + courseFeeOriginal + optionalFeesTotal + facilityFeesTotal;
   const concessionType = values.concessionType || values.scholarshipDiscountType || "Fixed";
   const concessionValue = Number(values.concessionValue || 0);
   const rawConcession = concessionType === "Percentage"
@@ -1557,7 +1715,7 @@ const deriveAdmissionFee = (values) => {
     : concessionValue;
   const courseConcession = Math.min(Math.max(Math.round(rawConcession), 0), courseFeeOriginal);
   const courseFeePayable = Math.max(courseFeeOriginal - courseConcession, 0);
-  const totalCommitment = admissionFee + courseFeePayable + optionalFeesTotal;
+  const totalCommitment = admissionFee + courseFeePayable + optionalFeesTotal + facilityFeesTotal;
   const schedule = Array.isArray(values.installments) ? values.installments : [];
   const isInstallment = values.paymentPlan === "Installment Payment";
   const coursePaidToday = 0;
@@ -1572,6 +1730,8 @@ const deriveAdmissionFee = (values) => {
     courseConcession,
     courseFeePayable,
     optionalFeesTotal,
+    facilityFeesTotal,
+    facilityFeeItems,
     totalCommitment,
     admissionFeeDueToday: 0,
     coursePaidToday,
@@ -1944,12 +2104,46 @@ function FeeSummaryRows({ fee }) {
       <div><span>Scholarship / Concession</span><strong>-{formatCurrency(fee.courseConcession)}</strong></div>
       <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
       <div><span>Optional Selected Fees</span><strong>{formatCurrency(fee.optionalFeesTotal)}</strong></div>
+      {(fee.facilityFeeItems || []).map((item) => (
+        <div key={item.id}><span>{item.type}</span><strong>{formatCurrency(item.originalAmount)}</strong></div>
+      ))}
       <div className="is-total"><span>Total Fee Commitment</span><strong>{formatCurrency(fee.totalCommitment)}</strong></div>
       <div><span>Amount Paid Now</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
       <div><span>Future Scheduled Course Fee</span><strong>{formatCurrency(fee.courseScheduleBalance)}</strong></div>
       <div className="is-total"><span>Remaining Balance</span><strong>{formatCurrency(fee.remainingBalance)}</strong></div>
       <div><span>Payment Plan</span><strong>{fee.paymentPlan ? paymentPlanLabel(fee.paymentPlan) : "Not selected"}</strong></div>
     </div>
+  );
+}
+
+function FacilityFeesTable({ feeItems }) {
+  if (!feeItems?.length) return null;
+  return (
+    <section className="cms-fee-block">
+      <h3>Applicable Facility Fees</h3>
+      <div className="cms-fee-scroll">
+        <table className="cms-fee-table">
+          <thead>
+            <tr>
+              <th>Fee Type</th>
+              <th>Plan</th>
+              <th>Details</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {feeItems.map((item) => (
+              <tr key={item.id}>
+                <td><strong>{item.type}</strong></td>
+                <td>{item.plan || "-"}</td>
+                <td>{item.detail || "-"}</td>
+                <td className="num">{formatCurrency(item.originalAmount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -2132,6 +2326,8 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
             <FeeItemsTable feeItems={fee.feeItems} errors={errors} onChange={onChange} />
           </section>
 
+          <FacilityFeesTable feeItems={fee.facilityFeeItems} />
+
           <ConcessionPanel fee={fee} values={values} errors={errors} onChange={onChange} scholarships={scholarships} />
 
           <section className="cms-fee-block">
@@ -2181,6 +2377,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
                 <div><span>Admission Fee</span><strong>{formatCurrency(fee.admissionFee)}</strong></div>
                 <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
                 <div><span>Optional One-Time Fees</span><strong>{formatCurrency(fee.optionalFeesTotal)}</strong></div>
+                <div><span>Facility Fees</span><strong>{formatCurrency(fee.facilityFeesTotal)}</strong></div>
                 <div className="is-total"><span>Total Selected Fee</span><strong>{formatCurrency(fee.totalCommitment)}</strong></div>
               </div>
             </section>
@@ -2206,6 +2403,7 @@ function FeePreview({ fee, values }) {
         <div><span>Course Fee</span><strong>{formatCurrency(fee.courseFeeOriginal)}</strong></div>
         <div><span>Scholarship</span><strong>{fee.concessionName || "No scholarship"}</strong></div>
         <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
+        <div><span>Facility Fees</span><strong>{formatCurrency(fee.facilityFeesTotal)}</strong></div>
         <div><span>Payment Plan</span><strong>{values.paymentPlan ? paymentPlanLabel(values.paymentPlan) : "Not selected"}</strong></div>
         <div><span>Amount Paid Now</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
         <div><span>Future Course Schedules</span><strong>{formatCurrency(fee.courseScheduleBalance)}</strong></div>
@@ -2223,6 +2421,28 @@ function FeePreview({ fee, values }) {
                 {fee.selectedFeeItems.map((item) => (
                   <tr key={item.id}>
                     <td><strong>{item.type}</strong></td>
+                    <td className="num">{formatCurrency(item.originalAmount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+      {fee.facilityFeeItems?.length ? (
+        <div className="cms-fee-preview-schedule">
+          <h4>Facility Fees</h4>
+          <div className="cms-fee-scroll">
+            <table className="cms-fee-table">
+              <thead>
+                <tr><th>Fee Type</th><th>Plan</th><th>Details</th><th className="num">Amount</th></tr>
+              </thead>
+              <tbody>
+                {fee.facilityFeeItems.map((item) => (
+                  <tr key={item.id}>
+                    <td><strong>{item.type}</strong></td>
+                    <td>{item.plan || "-"}</td>
+                    <td>{item.detail || "-"}</td>
                     <td className="num">{formatCurrency(item.originalAmount)}</td>
                   </tr>
                 ))}
@@ -2465,6 +2685,42 @@ export default function AdmissionPage() {
       return { ...field, options: programOptions.length ? programOptions : [{ value: "__no_programs", label: "No programs available", disabled: true }] };
     }
     if (field.name === "bloodGroup") return { ...field, options: bloodGroupOptions };
+    if (field.name === "busRoute") {
+      return {
+        ...field,
+        options: transportRouteOptions.length ? transportRouteOptions : [{ value: "__no_routes", label: "No active routes available", disabled: true }],
+      };
+    }
+    if (field.name === "pickupPoint") {
+      if (!values.busRoute) return { ...field, options: [{ value: "__select_route", label: "Select Route first", disabled: true }] };
+      const pickupOptions = pickupOptionsForRoute(values.busRoute);
+      return {
+        ...field,
+        options: pickupOptions.length ? pickupOptions : [{ value: "__no_pickup_points", label: "No pickup points available", disabled: true }],
+      };
+    }
+    if (field.name === "hostelBlock") {
+      return {
+        ...field,
+        options: hostelBlockOptions.length ? hostelBlockOptions : [{ value: "__no_hostel_blocks", label: "No hostel blocks available", disabled: true }],
+      };
+    }
+    if (field.name === "hostelRoom") {
+      if (!values.hostelBlock) return { ...field, options: [{ value: "__select_hostel_block", label: "Select Hostel Block first", disabled: true }] };
+      const roomOptions = hostelRoomsForBlock(values.hostelBlock);
+      return {
+        ...field,
+        options: roomOptions.length ? roomOptions : [{ value: "__no_hostel_rooms", label: "No rooms available", disabled: true }],
+      };
+    }
+    if (field.name === "hostelBed") {
+      if (!values.hostelRoom) return { ...field, options: [{ value: "__select_hostel_room", label: "Select Room first", disabled: true }] };
+      const bedOptions = hostelBedsForRoom(values.hostelBlock, values.hostelRoom);
+      return {
+        ...field,
+        options: bedOptions.length ? bedOptions : [{ value: "__no_hostel_beds", label: "No available beds", disabled: true }],
+      };
+    }
     return field;
   };
   const currentFields = current.fields.map(enhanceField);
@@ -3425,6 +3681,53 @@ export default function AdmissionPage() {
     if (["board", "year", "level", "group", "program"].includes(name)) {
       feeSelectionInitializedRef.current = false;
       setFeeSelection([]);
+    }
+    if (name === "studentType") {
+      setValues((v) => ({
+        ...v,
+        studentType: val,
+        transportRequired: "",
+        busRoute: "",
+        pickupPoint: "",
+        hostelBlock: "",
+        hostelRoom: "",
+        hostelBed: "",
+      }));
+      setErrors((e) => ({
+        ...e,
+        studentType: undefined,
+        transportRequired: undefined,
+        busRoute: undefined,
+        pickupPoint: undefined,
+        hostelBlock: undefined,
+        hostelRoom: undefined,
+        hostelBed: undefined,
+      }));
+      return;
+    }
+    if (name === "transportRequired") {
+      setValues((v) => ({
+        ...v,
+        transportRequired: val,
+        ...(val === "Yes" ? {} : { busRoute: "", pickupPoint: "" }),
+      }));
+      setErrors((e) => ({ ...e, transportRequired: undefined, busRoute: undefined, pickupPoint: undefined }));
+      return;
+    }
+    if (name === "busRoute") {
+      setValues((v) => ({ ...v, busRoute: val, pickupPoint: "" }));
+      setErrors((e) => ({ ...e, busRoute: undefined, pickupPoint: undefined }));
+      return;
+    }
+    if (name === "hostelBlock") {
+      setValues((v) => ({ ...v, hostelBlock: val, hostelRoom: "", hostelBed: "" }));
+      setErrors((e) => ({ ...e, hostelBlock: undefined, hostelRoom: undefined, hostelBed: undefined }));
+      return;
+    }
+    if (name === "hostelRoom") {
+      setValues((v) => ({ ...v, hostelRoom: val, hostelBed: "" }));
+      setErrors((e) => ({ ...e, hostelRoom: undefined, hostelBed: undefined }));
+      return;
     }
     if (["board", "year", "level"].includes(name)) {
       const labelKey = name === "level" ? "levelName" : null;
