@@ -206,6 +206,27 @@ public class DashboardController : ControllerBase
     }
 
     // =========================================================================
+    // 9B. UPCOMING HOLIDAYS & COLLEGE VACATIONS
+    // =========================================================================
+    /// <summary>
+    /// 9B. GET /api/v1/dashboard/upcoming-holidays and /api/v1/dashboard/holidays
+    /// Retrieves scheduled and upcoming holidays/vacations with date ranges, duration, and countdown badges.
+    /// </summary>
+    [HttpGet("upcoming-holidays")]
+    [HttpGet("holidays")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(List<UpcomingHolidayItemDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpcomingHolidays(
+        [FromQuery] int? academicYearId = null,
+        [FromQuery] int? boardId = null,
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _dashboardService.GetUpcomingHolidaysAsync(academicYearId, boardId, limit, ct);
+        return Ok(result);
+    }
+
+    // =========================================================================
     // 10. TODAY'S HIGHLIGHTS
     // =========================================================================
     /// <summary>

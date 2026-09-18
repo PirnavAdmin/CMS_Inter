@@ -1,3 +1,6 @@
+using System.Data;
+using System.Text;
+using System.Reflection;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Implementations;
 using CollegeManagement.API.Repositories.Implementations.Transport;
@@ -9,15 +12,17 @@ using CollegeManagement.API.Middleware;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Profiles;
 using CollegeManagement.API.Repositories;
-
-using System.Data;
-using MySqlConnector;
-
-
+using CollegeManagement.API.Repositories.Implementations;
+using CollegeManagement.API.Repositories.Implementations.Hostel;
+using CollegeManagement.API.Repositories.Interfaces;
+using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Implementations;
+using CollegeManagement.API.Services.Implementations.Hostel;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Location;
+using CollegeManagement.API.Tests;
 using CollegeManagement.API.Validators.StaffValidators;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -25,130 +30,155 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using System.Reflection;
-using System.Text;
-
-using CollegeManagement.API.Tests;
+using MySqlConnector;
 
 var builder = WebApplication.CreateBuilder(args);
 
-if (args.Contains("--test-staff-module"))
+#region CLI Test & Maintenance Handlers
+if (args.Length > 0)
 {
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var tester = new StaffModuleBackendTester(connStr!);
-    var success = await tester.RunAllTestsAsync();
-    Environment.Exit(success ? 0 : 1);
-    return;
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection")!;
+
+    if (args.Contains("--compare-live-db"))
+    {
+        var comparator = new LiveDbMetricComparator(connStr);
+        var success = await comparator.CompareAllMetricsAsync();
+        Environment.Exit(success ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--test-staff-module"))
+    {
+        var tester = new StaffModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--validate-staff-db"))
+    {
+        var validator = new StaffDbValidator(connStr);
+        await validator.ValidateAndSeedCleanDataAsync();
+        Environment.Exit(0);
+        return;
+    }
+    if (args.Contains("--inspect-certificates-db"))
+    {
+        var inspector = new CertificateDbInspector(connStr);
+        await inspector.InspectAsync();
+        Environment.Exit(0);
+        return;
+    }
+    if (args.Contains("--test-certificates-module"))
+    {
+        var tester = new CertificateModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--test-settings-module"))
+    {
+        var tester = new SettingsModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--inspect-dashboard-db"))
+    {
+        var inspector = new DashboardDbInspector(connStr);
+        await inspector.InspectAsync();
+        Environment.Exit(0);
+        return;
+    }
+    if (args.Contains("--inspect-duplicates"))
+    {
+        var inspector = new DuplicateDataInspector(connStr);
+        await inspector.InspectAsync();
+        Environment.Exit(0);
+        return;
+    }
+    if (args.Contains("--test-dashboard-module"))
+    {
+        var tester = new DashboardModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--test-master-data"))
+    {
+        var tester = new MasterDataBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--test-reports-module"))
+    {
+        var tester = new ReportModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--audit-reports-forensic"))
+    {
+        var auditor = new ReportForensicAuditor(connStr);
+        Environment.Exit(await auditor.RunForensicAuditAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--diagnose-reports-db"))
+    {
+        var diagnostic = new ReportDbDiagnostic(connStr);
+        await diagnostic.RunDiagnosticAsync();
+        Environment.Exit(0);
+        return;
+    }
+    if (args.Contains("--test-number-series"))
+    {
+        var tester = new NumberSeriesBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--test-hostel-module"))
+    {
+        var tester = new HostelModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--test-staff-attendance-module"))
+    {
+        builder.Services.AddDbContext<AppDbContext>(opt => opt.UseMySql(connStr, ServerVersion.AutoDetect(connStr)));
+        builder.Services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
+        builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
+        var testApp = builder.Build();
+        var success = await StaffAttendanceModuleBackendTester.RunAsync(testApp.Services);
+        Environment.Exit(success ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--test-sections-module"))
+    {
+        var tester = new SectionModuleBackendTester(connStr);
+        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
+        return;
+    }
+    if (args.Contains("--test-db-all"))
+    {
+        builder.Services.AddDbContext<AppDbContext>(opt => opt.UseMySql(connStr, ServerVersion.AutoDetect(connStr)));
+        var testApp = builder.Build();
+        var exitCode = await DbSchemaAndSpTester.RunAsync(testApp.Services);
+        Environment.Exit(exitCode);
+        return;
+    }
+    if (args.Contains("--validate-certificates-sql"))
+    {
+        var validator = new CertificateSqlValidator(connStr);
+        await validator.ValidateAndExecuteScriptAsync();
+        Environment.Exit(0);
+        return;
+    }
+    if (args.Contains("--inspect-certificate-deps"))
+    {
+        var inspector = new CertificateDependencyInspector(connStr);
+        await inspector.RunInspectionAsync();
+        Environment.Exit(0);
+        return;
+    }
 }
+#endregion
 
-if (args.Contains("--validate-staff-db"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var validator = new StaffDbValidator(connStr!);
-    await validator.ValidateAndSeedCleanDataAsync();
-    Environment.Exit(0);
-    return;
-}
-
-if (args.Contains("--inspect-certificates-db"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var inspector = new CertificateDbInspector(connStr!);
-    await inspector.InspectAsync();
-    Environment.Exit(0);
-    return;
-}
-
-if (args.Contains("--test-certificates-module"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var tester = new CertificateModuleBackendTester(connStr!);
-    var success = await tester.RunAllTestsAsync();
-    Environment.Exit(success ? 0 : 1);
-    return;
-}
-
-if (args.Contains("--inspect-dashboard-db"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var inspector = new DashboardDbInspector(connStr!);
-    await inspector.InspectAsync();
-    Environment.Exit(0);
-    return;
-}
-
-if (args.Contains("--inspect-duplicates"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var inspector = new DuplicateDataInspector(connStr!);
-    await inspector.InspectAsync();
-    Environment.Exit(0);
-    return;
-}
-
-if (args.Contains("--test-dashboard-module"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var tester = new DashboardModuleBackendTester(connStr!);
-    var success = await tester.RunAllTestsAsync();
-    Environment.Exit(success ? 0 : 1);
-    return;
-}
-
-if (args.Contains("--test-master-data"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var tester = new MasterDataBackendTester(connStr!);
-    var success = await tester.RunAllTestsAsync();
-    Environment.Exit(success ? 0 : 1);
-    return;
-}
-
-if (args.Contains("--test-reports-module"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var tester = new ReportModuleBackendTester(connStr!);
-    var success = await tester.RunAllTestsAsync();
-    Environment.Exit(success ? 0 : 1);
-    return;
-}
-
-if (args.Contains("--test-number-series"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var tester = new NumberSeriesBackendTester(connStr!);
-    var success = await tester.RunAllTestsAsync();
-    Environment.Exit(success ? 0 : 1);
-    return;
-}
-
-
-
-if (args.Contains("--validate-certificates-sql"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var validator = new CertificateSqlValidator(connStr!);
-    await validator.ValidateAndExecuteScriptAsync();
-    Environment.Exit(0);
-    return;
-}
-
-if (args.Contains("--inspect-certificate-deps"))
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-    var inspector = new CertificateDependencyInspector(connStr!);
-    await inspector.RunInspectionAsync();
-    Environment.Exit(0);
-    return;
-}
-
-
-// Register QuestPDF Community License
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
-
-#region Controllers
-
+#region Controllers & JSON
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -156,37 +186,30 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
     });
-
 #endregion
 
 #region CORS
-
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy
-            .SetIsOriginAllowed(origin => true)
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+        policy.SetIsOriginAllowed(origin => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy
-            .SetIsOriginAllowed(origin => true)
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+        policy.SetIsOriginAllowed(origin => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
-
 #endregion
 
-#region Database
-
-// EF Core
+#region Database Configuration
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var serverVersion = new MySqlServerVersion(new Version(8, 0, 30));
 
@@ -201,25 +224,18 @@ builder.Services.AddDbContext<AppDbContext>(options =>
                 maxRetryDelay: TimeSpan.FromSeconds(3),
                 errorNumbersToAdd: null)));
 
-// Dapper
 builder.Services.AddSingleton<DatabaseContext>();
 
-
-// IDbConnection
 builder.Services.AddScoped<IDbConnection>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
-
-    return new MySqlConnection(
-        config.GetConnectionString("DefaultConnection"));
+    return new MySqlConnection(config.GetConnectionString("DefaultConnection"));
 });
-// Caching
-builder.Services.AddMemoryCache();
 
+builder.Services.AddMemoryCache();
 #endregion
 
-#region AutoMapper & FluentValidation
-
+#region AutoMapper & Validators
 builder.Services.AddAutoMapper(
     typeof(StaffMappingProfile),
     typeof(MarksMappingProfile),
@@ -228,54 +244,34 @@ builder.Services.AddAutoMapper(
     typeof(SectionMappingProfile));
 
 builder.Services.AddValidatorsFromAssemblyContaining<CreateStaffDtoValidator>();
-
 #endregion
 
 #region Repositories
-
-// Authentication
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IOtpRepository, OtpRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
-
-// Academic Year
 builder.Services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
-
-// Board (Dapper)
 builder.Services.AddScoped<IBoardRepository, BoardRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
-
-// Staff, Designations & Departments
 builder.Services.AddScoped<IDesignationRepository, DesignationRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IStaffSubjectAllocationRepository, StaffSubjectAllocationRepository>();
 builder.Services.AddScoped<IDepartmentRepository, DepartmentRepository>();
-
-
-// Group, Section & Subject
 builder.Services.AddScoped<IGroupRepository, GroupRepository>();
 builder.Services.AddScoped<CollegeManagement.API.Repositories.IProgramRepository, CollegeManagement.API.Repositories.ProgramRepository>();
 builder.Services.AddScoped<ISectionRepository, SectionRepository>();
 builder.Services.AddScoped<ISubjectRepository, SubjectRepository>();
-
-// Attendance (Dapper)
 builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
 builder.Services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
-
-// Student & Student Admissions
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IStudentAdmissionRepository, StudentAdmissionRepository>();
-
-// Assignments, Exams, Marks, Results, Promotions
 builder.Services.AddScoped<IAssignmentRepository, AssignmentRepository>();
 builder.Services.AddScoped<IAssignmentSubmissionRepository, AssignmentSubmissionRepository>();
 builder.Services.AddScoped<IExaminationRepository, ExaminationRepository>();
 builder.Services.AddScoped<IMarksRepository, MarksRepository>();
 builder.Services.AddScoped<IResultRepository, ResultRepository>();
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
-
-// Timetable, Period, Room
 builder.Services.AddScoped<ITimetableRepository, TimetableRepository>();
 builder.Services.AddScoped<ITimetableSubstitutionRepository, TimetableSubstitutionRepository>();
 builder.Services.AddScoped<ITimetableBackupRepository, TimetableBackupRepository>();
@@ -283,19 +279,46 @@ builder.Services.AddScoped<IPeriodRepository, PeriodRepository>();
 builder.Services.AddScoped<IPeriodStructureRepository, PeriodStructureRepository>();
 builder.Services.AddScoped<IBreakTypeRepository, BreakTypeRepository>();
 builder.Services.AddScoped<IRoomRepository, RoomRepository>();
-
-// Reports, Study Materials & Certificates
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddScoped<IStudyMaterialRepository, StudyMaterialRepository>();
 builder.Services.AddScoped<ICertificateRepository, CertificateRepository>();
+builder.Services.AddScoped<IFeeRepository, FeeRepository>();
+builder.Services.AddScoped<ISectionRepository, SectionRepository>();
+builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocationRepository>();
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
 builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
+builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
+builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
 
+// Hostel Repositories
+builder.Services.AddScoped<IHostelBlockRepository, HostelBlockRepository>();
+builder.Services.AddScoped<IRoomTypeConfigRepository, RoomTypeConfigRepository>();
+builder.Services.AddScoped<IRoomMasterRepository, RoomMasterRepository>();
+builder.Services.AddScoped<IHostelBedRepository, HostelBedRepository>();
+builder.Services.AddScoped<IHostelWardenAssignmentRepository, HostelWardenAssignmentRepository>();
+builder.Services.AddScoped<IHostelStudentAllocationRepository, HostelStudentAllocationRepository>();
+builder.Services.AddScoped<IHostelAttendanceRepository, HostelAttendanceRepository>();
+builder.Services.AddScoped<IHostelOutpassLeaveRepository, HostelOutpassLeaveRepository>();
+builder.Services.AddScoped<IHostelTransferVacateRepository, HostelTransferVacateRepository>();
+builder.Services.AddScoped<IHostelDashboardRepository, HostelDashboardRepository>();
+builder.Services.AddScoped<IHostelReportRepository, HostelReportRepository>();
+
+// Transport Repositories
+builder.Services.AddScoped<ITransportRouteRepository, TransportRouteRepository>();
+builder.Services.AddScoped<IPickupPointRepository, PickupPointRepository>();
+builder.Services.AddScoped<ITransportVehicleRepository, TransportVehicleRepository>();
+builder.Services.AddScoped<ITransportDriverRepository, TransportDriverRepository>();
+builder.Services.AddScoped<ITransportAttendantRepository, TransportAttendantRepository>();
+builder.Services.AddScoped<ITransportVehicleAssignmentRepository, TransportVehicleAssignmentRepository>();
+builder.Services.AddScoped<IStudentTransportAssignmentRepository, StudentTransportAssignmentRepository>();
+builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepository>();
+builder.Services.AddScoped<ITransportDashboardRepository, TransportDashboardRepository>();
+builder.Services.AddScoped<ITransportReportRepository, TransportReportRepository>();
+builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 #endregion
 
 #region Services
-
 builder.Services.AddScoped<IJwtTokenHelper, JwtTokenHelper>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IRoleManagementService, RoleManagementService>();
@@ -306,49 +329,36 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
 builder.Services.AddScoped<ITemplateService, TemplateService>();
-
+builder.Services.AddScoped<IHolidayService, HolidayService>();
+builder.Services.AddScoped<IAttendanceTimingConfigService, AttendanceTimingConfigService>();
+builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
-
 builder.Services.AddScoped<IBoardService, BoardService>();
 builder.Services.AddScoped<ILookupCacheService, LookupCacheService>();
 builder.Services.AddScoped<IBoardExportService, BoardExportService>();
-
 builder.Services.AddScoped<IDesignationService, DesignationService>();
 builder.Services.AddScoped<IStaffService, StaffService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
-
-
-builder.Services.AddScoped<IFeeRepository, FeeRepository>();
 builder.Services.AddScoped<IFeeService, FeeService>();
-
-// Group, Section & Subject
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<CollegeManagement.API.Services.IProgramService, CollegeManagement.API.Services.ProgramService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
 builder.Services.AddScoped<ISubjectService, SubjectService>();
-
 builder.Services.AddSingleton<IAttendanceCacheService, AttendanceCacheService>();
 builder.Services.AddScoped<IAttendanceService, AttendanceService>();
 builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
 builder.Services.AddScoped<ILeaveManagementService, LeaveManagementService>();
 builder.Services.AddScoped<ILeaveCategoryService, LeaveCategoryService>();
-
-// Student & Student Admissions
 builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<IStudentAdmissionService, StudentAdmissionService>();
-
-// Assignments, Exams, Marks, Results, Promotions, Fee
 builder.Services.AddScoped<IAssignmentService, AssignmentService>();
 builder.Services.AddScoped<IAssignmentSubmissionService, AssignmentSubmissionService>();
 builder.Services.AddScoped<IExaminationService, ExaminationService>();
 builder.Services.AddScoped<IExaminationExportService, ExaminationExportService>();
-// builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
 builder.Services.AddScoped<IMarksService, MarksService>();
 builder.Services.AddScoped<IEvaluationService, EvaluationService>();
 builder.Services.AddScoped<IResultService, ResultService>();
 builder.Services.AddScoped<IPromotionService, PromotionService>();
-
-// Timetable, Period, Room
 builder.Services.AddScoped<ITimetableService, TimetableService>();
 builder.Services.AddScoped<ITimetableSubstitutionService, TimetableSubstitutionService>();
 builder.Services.AddScoped<ITimetableExportService, TimetableExportService>();
@@ -358,45 +368,35 @@ builder.Services.AddScoped<IPeriodService, PeriodService>();
 builder.Services.AddScoped<IPeriodStructureService, PeriodStructureService>();
 builder.Services.AddScoped<IBreakTypeService, BreakTypeService>();
 builder.Services.AddScoped<IRoomService, RoomService>();
-
-// Reports, Study Materials & Certificates
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IStudyMaterialService, StudyMaterialService>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
-// Section & Roll Allocation
-builder.Services.AddScoped<ISectionRepository, SectionRepository>();
-builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocationRepository>();
-builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 
-// Transport Module
-builder.Services.AddScoped<IPickupPointRepository, PickupPointRepository>();
+// Hostel Services
+builder.Services.AddScoped<IHostelBlockService, HostelBlockService>();
+builder.Services.AddScoped<IRoomTypeConfigService, RoomTypeConfigService>();
+builder.Services.AddScoped<IRoomMasterService, RoomMasterService>();
+builder.Services.AddScoped<IHostelBedService, HostelBedService>();
+builder.Services.AddScoped<IHostelWardenAssignmentService, HostelWardenAssignmentService>();
+builder.Services.AddScoped<IHostelStudentAllocationService, HostelStudentAllocationService>();
+builder.Services.AddScoped<IHostelAttendanceService, HostelAttendanceService>();
+builder.Services.AddScoped<IHostelOutpassLeaveService, HostelOutpassLeaveService>();
+builder.Services.AddScoped<IHostelTransferVacateService, HostelTransferVacateService>();
+builder.Services.AddScoped<IHostelDashboardService, HostelDashboardService>();
+builder.Services.AddScoped<IHostelReportService, HostelReportService>();
 
-builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepository>();
-builder.Services.AddScoped<ITransportRouteRepository, TransportRouteRepository>();
-builder.Services.AddScoped<IPickupPointRepository, PickupPointRepository>();
-builder.Services.AddScoped<ITransportVehicleRepository, TransportVehicleRepository>();
-builder.Services.AddScoped<ITransportDriverRepository, TransportDriverRepository>();
-builder.Services.AddScoped<ITransportAttendantRepository, TransportAttendantRepository>();
-builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepository>();
-builder.Services.AddScoped<ITransportVehicleAssignmentRepository, TransportVehicleAssignmentRepository>();
-builder.Services.AddScoped<IStudentTransportAssignmentRepository, StudentTransportAssignmentRepository>();
-builder.Services.AddScoped<ITransportDashboardRepository, TransportDashboardRepository>();
-builder.Services.AddScoped<ITransportReportRepository, TransportReportRepository>();
-builder.Services.AddScoped<ITransportRepository, TransportRepository>();
-
-builder.Services.AddScoped<IPickupPointService, PickupPointService>();
-builder.Services.AddScoped<IStudentTransportAssignmentService, StudentTransportAssignmentService>();
-builder.Services.AddScoped<IVehicleMaintenanceService, VehicleMaintenanceService>();
+// Transport Services
 builder.Services.AddScoped<ITransportRouteService, TransportRouteService>();
 builder.Services.AddScoped<IPickupPointService, PickupPointService>();
 builder.Services.AddScoped<ITransportVehicleService, TransportVehicleService>();
 builder.Services.AddScoped<ITransportDriverService, TransportDriverService>();
 builder.Services.AddScoped<ITransportAttendantService, TransportAttendantService>();
-builder.Services.AddScoped<IVehicleMaintenanceService, VehicleMaintenanceService>();
 builder.Services.AddScoped<ITransportVehicleAssignmentService, TransportVehicleAssignmentService>();
-builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
+builder.Services.AddScoped<IStudentTransportAssignmentService, StudentTransportAssignmentService>();
+builder.Services.AddScoped<IVehicleMaintenanceService, VehicleMaintenanceService>();
 builder.Services.AddScoped<ITransportDashboardService, TransportDashboardService>();
 builder.Services.AddScoped<ITransportReportService, TransportReportService>();
+builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
 builder.Services.AddScoped<ITransportService, TransportService>();
 
 // Location Service
@@ -404,83 +404,55 @@ builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");
 });
-
 #endregion
 
-#region Email
-
-builder.Services.Configure<EmailSettings>(
-    builder.Configuration.GetSection("EmailSettings"));
-
+#region Email Configuration
+builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 #endregion
 
 #region JWT Authentication
-
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var key = Encoding.UTF8.GetBytes(jwtSettings["Key"] ?? "a_very_long_secure_secret_key_of_at_least_32_characters_long");
 
-var key = Encoding.UTF8.GetBytes(
-    jwtSettings["Key"] ??
-    "a_very_long_secure_secret_key_of_at_least_32_characters_long");
-
-builder.Services
-    .AddAuthentication(options =>
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.DefaultAuthenticateScheme =
-            JwtBearerDefaults.AuthenticationScheme;
-
-        options.DefaultChallengeScheme =
-            JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddJwtBearer(options =>
-    {
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-
-        options.SaveToken = true;
-
-        options.TokenValidationParameters =
-            new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
-
-                ValidIssuer = jwtSettings["Issuer"],
-                ValidAudience = jwtSettings["Audience"],
-
-                IssuerSigningKey =
-                    new SymmetricSecurityKey(key),
-
-                ClockSkew = TimeSpan.Zero
-            };
-    });
-
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidAudience = jwtSettings["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(key),
+        ClockSkew = TimeSpan.Zero
+    };
+});
 #endregion
 
-#region API Versioning
-
-builder.Services
-    .AddApiVersioning(options =>
-    {
-        options.DefaultApiVersion = new ApiVersion(1, 0);
-
-        options.AssumeDefaultVersionWhenUnspecified = true;
-
-        options.ReportApiVersions = true;
-    })
-    .AddApiExplorer(options =>
-    {
-        options.GroupNameFormat = "'v'VVV";
-
-        options.SubstituteApiVersionInUrl = true;
-    });
-
+#region API Versioning & Explorer
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+})
+.AddApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV";
+    options.SubstituteApiVersionInUrl = true;
+});
 #endregion
 
 #region Swagger
-
 builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
@@ -495,12 +467,8 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
-    var xmlFile =
-        $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
-
-    var xmlPath =
-        Path.Combine(AppContext.BaseDirectory, xmlFile);
-
+    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     if (File.Exists(xmlPath))
     {
         c.IncludeXmlComments(xmlPath);
@@ -508,44 +476,70 @@ builder.Services.AddSwaggerGen(c =>
 
     c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
 
-    c.AddSecurityDefinition("Bearer",
-        new OpenApiSecurityScheme
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
         {
-            Description =
-                "JWT Authorization header using the Bearer scheme.",
-
-            Name = "Authorization",
-
-            In = ParameterLocation.Header,
-
-            Type = SecuritySchemeType.Http,
-
-            Scheme = "bearer",
-
-            BearerFormat = "JWT"
-        });
-
-    c.AddSecurityRequirement(
-        new OpenApiSecurityRequirement
-        {
+            new OpenApiSecurityScheme
             {
-                new OpenApiSecurityScheme
+                Reference = new OpenApiReference
                 {
-                    Reference =
-                        new OpenApiReference
-                        {
-                            Type = ReferenceType.SecurityScheme,
-                            Id = "Bearer"
-                        }
-                },
-                Array.Empty<string>()
-            }
-        });
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
 });
-
 #endregion
 
 var app = builder.Build();
+
+if (args.Contains("--trace-detailed"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var tracer = new LiveVerificationDetailedTrace(connStr!, app.Services);
+    await tracer.RunDetailedTraceAsync();
+    Environment.Exit(0);
+    return;
+}
+
+if (args.Contains("--verify-reports-live"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var runner = new LiveReportsVerificationRunner(connStr!, app.Services);
+    var pass = await runner.RunAllTestsAsync();
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--reverify-senior-qa"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var runner = new SeniorQaReverificationRunner(connStr!, app.Services);
+    var pass = await runner.RunVerificationAsync();
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--discrepancy-audit"))
+{
+    var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+    var auditor = new DiscrepancyForensicAuditor(connStr!, app.Services);
+    var pass = await auditor.RunAuditAsync();
+    Environment.Exit(pass ? 0 : 1);
+    return;
+}
 
 if (args.Contains("--test-staff-attendance-module"))
 {
@@ -650,7 +644,8 @@ using (var scope = app.Services.CreateScope())
 {
     try
     {
-        var db = scope.ServiceProvider.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
         db.Database.ExecuteSqlRaw(@"
             CREATE TABLE IF NOT EXISTS `ExamCodeSequences` (
                 `AcademicYear` VARCHAR(20) NOT NULL PRIMARY KEY,
@@ -663,17 +658,15 @@ using (var scope = app.Services.CreateScope())
             SET @idx_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Examinations' AND INDEX_NAME = 'IX_Examinations_ExamCode');
             SET @ddl = IF(@idx_exists = 0, 'ALTER TABLE `Examinations` ADD UNIQUE INDEX `IX_Examinations_ExamCode` (`ExamCode`);', 'SELECT 1;');
             PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+            SET @col_exists_ds = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Staff' AND COLUMN_NAME = 'DepartmentSpecificJson');
+            SET @ddl_ds = IF(@col_exists_ds = 0, 'ALTER TABLE `Staff` ADD COLUMN `DepartmentSpecificJson` LONGTEXT NULL;', 'SELECT 1;');
+            PREPARE stmt FROM @ddl_ds; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+            SET @col_exists_cf = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Staff' AND COLUMN_NAME = 'CustomFieldsJson');
+            SET @ddl_cf = IF(@col_exists_cf = 0, 'ALTER TABLE `Staff` ADD COLUMN `CustomFieldsJson` LONGTEXT NULL;', 'SELECT 1;');
+            PREPARE stmt FROM @ddl_cf; EXECUTE stmt; DEALLOCATE PREPARE stmt;
         ");
-        var logger = scope.ServiceProvider.GetService<ILogger<Program>>();
-        var firstYear = db.AcademicYears.FirstOrDefault();
-        var firstBoard = db.Boards.FirstOrDefault();
-        var firstGroup = db.Groups.FirstOrDefault();
-        var firstLevel = db.AcademicLevels.FirstOrDefault();
-        logger?.LogInformation("DB State: AcademicYear={YearId} ({YearName}), Board={BoardId} ({BoardName}), Group={GroupId} ({GroupName}), Level={LevelId} ({LevelName})",
-            firstYear?.AcademicYearId, firstYear?.AcademicYearName,
-            firstBoard?.BoardId, firstBoard?.BoardName,
-            firstGroup?.GroupId, firstGroup?.GroupName,
-            firstLevel?.AcademicLevelId, firstLevel?.LevelName);
     }
     catch (Exception ex)
     {
@@ -683,49 +676,35 @@ using (var scope = app.Services.CreateScope())
 }
 #endregion
 
-#region Forwarded Headers
-
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+#region Pipeline Middleware
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders =
-        ForwardedHeaders.XForwardedFor |
-        ForwardedHeaders.XForwardedProto
-});
-
-#endregion
+    ForwardedHeaders = ForwardedHeaders.All
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseCors("AllowFrontend");
-
-#region Global Exception Middleware
-
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-#endregion
-
 #region Swagger UI
-
-if (app.Environment.IsDevelopment())
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint(
-            "/swagger/v1/swagger.json",
-            "College Management API v1");
-
-        c.RoutePrefix = "swagger";
-    });
-}
-
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "College Management API v1");
+    c.RoutePrefix = "swagger";
+});
 #endregion
 
-app.UseHttpsRedirection();
-
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseStaticFiles();
-
 app.UseAuthentication();
 
+#region Legacy Route Rewrite Middleware
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value ?? "";
@@ -770,42 +749,49 @@ app.Use(async (context, next) =>
     {
         context.Request.Path = "/api/Evaluations/admin/list";
     }
-    else if (path.StartsWith("/api/reports", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/reports", StringComparison.OrdinalIgnoreCase))
+    else if (path.StartsWith("/api/reports", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/reports", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
-    else if (path.StartsWith("/api/staff", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/staff", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/staff-attendance", StringComparison.OrdinalIgnoreCase))
+    else if (path.StartsWith("/api/staff", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/staff", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/staff-attendance", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
-    else if (path.StartsWith("/api/dashboard", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/dashboard", StringComparison.OrdinalIgnoreCase))
+    else if (path.StartsWith("/api/subjects", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/subjects", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
-    else if (path.StartsWith("/api/departments", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/departments", StringComparison.OrdinalIgnoreCase))
+    else if (path.StartsWith("/api/dashboard", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/dashboard", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
-    else if (path.StartsWith("/api/designations", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/designations", StringComparison.OrdinalIgnoreCase))
+    else if (path.StartsWith("/api/departments", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/departments", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
-    else if (path.StartsWith("/api/certificates", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/certificates", StringComparison.OrdinalIgnoreCase))
+    else if (path.StartsWith("/api/designations", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/designations", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
-    else if (path.StartsWith("/api/subjects", StringComparison.OrdinalIgnoreCase) && !path.StartsWith("/api/v1/subjects", StringComparison.OrdinalIgnoreCase))
+    else if (path.StartsWith("/api/certificates", StringComparison.OrdinalIgnoreCase) &&
+             !path.StartsWith("/api/v1/certificates", StringComparison.OrdinalIgnoreCase))
     {
         context.Request.Path = "/api/v1" + path.Substring(4);
     }
 
     await next();
 });
+#endregion
 
 app.UseAuthorization();
-
 app.MapControllers();
+#endregion
 
 app.Run();
-
-

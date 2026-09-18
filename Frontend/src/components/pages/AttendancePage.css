@@ -79,6 +79,9 @@
 /* Dropdown-driven attendance and leave screens use the same compact grid. */
 .att-filter-card { display: grid; gap: 16px; }
 .att-filter-grid { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+.att-filter-grid select.is-placeholder { color: var(--cms-muted); font-weight: 500; }
+.att-filter-grid select:not(.is-placeholder) { color: var(--cms-text); }
+.att-filter-grid select option { color: var(--cms-text); font-weight: 400; }
 .att-staff-filter-grid .att-field:nth-child(2) { display: none; }
 .att-filter-action { display: flex; justify-content: flex-end; gap: 10px; }
 .att-filter-action .cms-btn { min-height: 42px; }
@@ -96,10 +99,65 @@
 .att-action-buttons .cms-action-btn { width: 34px; height: 34px; padding: 0; }
 .att-detail-history { display: grid; gap: 5px; padding-top: 10px; border-top: 1px solid var(--cms-border, #e5e7eb); }
 .att-detail-history p { font-size: 12px; color: var(--cms-muted); }
-.att-student-search { display: flex; justify-content: flex-start; padding: 12px 16px; border-bottom: 1px solid var(--cms-border, #e5e7eb); }
-.att-student-search-box { display: flex; align-items: center; gap: 12px; width: min(100%, 440px); min-height: 42px; padding: 0 16px; border: 1px solid var(--cms-border, #dce3ec); border-radius: 14px; background: var(--cms-surface, #fff); color: var(--cms-muted); box-shadow: 0 5px 14px rgb(38 54 27 / 5%); }
-.att-student-search-box:focus-within { border-color: var(--cms-primary); box-shadow: 0 0 0 3px var(--cms-primary-soft); }
-.att-student-search-box input { width: 100%; min-width: 0; min-height: 40px; border: 0; outline: 0; background: transparent; color: var(--cms-text); font: inherit; }
+.att-student-search {
+  display: flex;
+  justify-content: flex-start;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cms-border, #e5e7eb);
+}
+
+.att-student-search-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  width: min(100%, 440px);
+  min-height: 42px;
+
+  padding: 0 14px;
+
+  border: 1px solid var(--cms-border, #dce3ec);
+  border-radius: 8px;
+
+  background: var(--cms-surface, #fff);
+  color: var(--cms-muted);
+
+  box-shadow: none;
+  overflow: hidden;
+
+  transition: border-color 0.15s ease;
+}
+
+.att-student-search-box:focus-within {
+  border-color: var(--cms-primary);
+  box-shadow: none;
+  outline: none;
+}
+
+.att-student-search-box input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+
+  border: 0;
+  outline: none;
+  box-shadow: none;
+
+  background: transparent;
+  color: var(--cms-text);
+  font: inherit;
+}
+
+.att-student-search-box input:focus {
+  border: 0;
+  outline: none;
+  box-shadow: none;
+}
+
+.att-student-search-box input::placeholder {
+  color: var(--cms-muted);
+  opacity: 0.9;
+}
 .att-student-search-box input::placeholder { color: var(--cms-muted); opacity: .9; }
 .att-student-attendance-table th:nth-child(1), .att-student-attendance-table td:nth-child(1) { width: 22%; }
 .att-student-attendance-table th:nth-child(2), .att-student-attendance-table td:nth-child(2) { width: 9%; }
@@ -1505,34 +1563,32 @@
 .att-name-link:focus-visible { border-radius: 3px; outline: 2px solid var(--cms-primary); outline-offset: 2px; }
 .att-pagination {
   justify-content: space-between;
-  gap: 14px;
-  min-height: 54px;
-  padding: 10px 14px;
+  gap: 12px;
+  min-height: 46px;
+  padding: 5px 14px;
   border-top: 1px solid var(--cms-border);
+  background: var(--cms-subtle);
+  color: var(--cms-muted);
+  font-size: 14px;
+  font-weight: 600;
 }
-.att-pagination-summary { color: var(--cms-muted); font-size: 12px; font-weight: 600; }
-.att-pagination-controls { display: flex; align-items: center; gap: 5px; }
-.att-page-arrow,
-.att-page-number {
-  display: inline-grid;
-  min-width: 32px;
-  height: 32px;
-  place-items: center;
-  padding: 0 8px;
+.att-pagination-summary { color: var(--cms-muted); }
+.att-pagination-controls { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.att-pagination-controls > span { color: var(--cms-text); white-space: nowrap; }
+.att-pagination-controls button {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 9px;
   border: 1px solid var(--cms-border);
-  border-radius: 7px;
+  border-radius: 9px;
   background: var(--cms-surface);
   color: var(--cms-text);
   font: inherit;
-  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
-.att-page-number.is-active { border-color: var(--cms-primary); background: var(--cms-primary); color: #fff; }
-.att-page-arrow:hover:not(:disabled),
-.att-page-number:hover:not(.is-active) { border-color: var(--cms-primary); color: var(--cms-primary); }
-.att-page-arrow:disabled { cursor: not-allowed; opacity: .42; }
-.att-page-ellipsis { min-width: 24px; color: var(--cms-muted); text-align: center; }
+.att-pagination-controls button:hover:not(:disabled) { border-color: var(--cms-primary); background: var(--cms-primary-soft); color: var(--cms-primary); }
+.att-pagination-controls button:disabled { cursor: not-allowed; opacity: .45; }
 .att-month-card > .att-pagination,
 .att-staff-table-card > .att-pagination { padding: 10px 14px; }
 
@@ -1555,6 +1611,18 @@
 .att-overview-student { display: grid; grid-template-columns: 54px repeat(3, minmax(0, 1fr)); align-items: center; gap: 16px; padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--cms-border); }
 .att-overview-photo { display: grid; width: 54px; height: 54px; place-items: center; border-radius: 50%; background: var(--cms-primary-soft); color: var(--cms-primary); font-size: 19px; font-weight: 750; }
 .att-overview-section { display: grid; gap: 12px; }
+.att-overview-page-student { gap: 12px; }
+.att-overview-page-student .att-overview-student-card { min-height: 84px; padding: 14px 18px; box-sizing: border-box; }
+.att-overview-student-summary { display: grid; grid-template-columns: minmax(220px, 1.35fr) minmax(120px, .7fr) minmax(110px, .65fr) minmax(240px, 1.35fr); align-items: center; gap: 18px; min-height: 54px; }
+.att-overview-student-identity { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.att-overview-student-identity > div,
+.att-overview-student-detail,
+.att-overview-student-academic { display: grid; min-width: 0; gap: 4px; }
+.att-overview-student-summary strong { overflow: hidden; color: var(--cms-text); font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.att-overview-student-identity strong,
+.att-overview-student-academic > strong { font-size: 15px; }
+.att-overview-student-summary span:not(.att-overview-photo) { color: var(--cms-muted); font-size: 11.5px; line-height: 1.35; }
+.att-overview-student-academic i { padding: 0 4px; color: var(--cms-primary); font-style: normal; }
 .att-overview-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; }
 .att-overview-metric { display: grid; gap: 6px; min-height: 80px; padding: 15px; border: 1px solid var(--cms-border); border-radius: 12px; background: var(--cms-surface); box-shadow: 0 4px 12px rgb(15 23 42 / 4%); }
 .att-overview-metric span { color: var(--cms-muted); font-size: 12px; font-weight: 650; }
@@ -1575,7 +1643,138 @@
 .att-overview-export > div { position: absolute; z-index: 2; top: calc(100% + 5px); right: 0; display: grid; min-width: 110px; padding: 4px; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-surface); box-shadow: var(--cms-shadow); }
 .att-overview-export > div button { padding: 7px 9px; border: 0; border-radius: 5px; background: transparent; color: var(--cms-text); font: inherit; font-size: 12px; text-align: left; }
 .att-overview-export > div button:hover { background: var(--cms-primary-soft); color: var(--cms-primary); }
-@media (max-width: 640px) { .att-overview-card, .att-overview-table-card, .att-overview-records-card { padding: 16px; } .att-overview-student { grid-template-columns: 54px 1fr; } .att-overview-student > div { grid-column: span 1; } }
+@media (max-width: 900px) { .att-overview-student-summary { grid-template-columns: minmax(220px, 1.4fr) repeat(2, minmax(100px, .7fr)); } .att-overview-student-academic { grid-column: 1 / -1; padding-left: 67px; } }
+@media (max-width: 640px) { .att-overview-card, .att-overview-table-card, .att-overview-records-card { padding: 16px; } .att-overview-student { grid-template-columns: 54px 1fr; } .att-overview-student > div { grid-column: span 1; } .att-overview-page-student .att-overview-student-card { padding: 14px; } .att-overview-student-summary { grid-template-columns: 1fr 1fr; gap: 14px; } .att-overview-student-identity { grid-column: 1 / -1; } .att-overview-student-academic { grid-column: 1 / -1; padding-left: 0; } }
+
+/* Compact attendance overview shared by student and staff profiles. */
+.att-overview-page-student,
+.att-overview-page-staff { gap: 16px; }
+.att-overview-profile-card,
+.att-overview-staff-card { min-height: 88px; padding: 14px 18px; box-sizing: border-box; }
+.att-overview-student-summary,
+.att-overview-staff-summary { display: grid; grid-template-columns: minmax(230px, 1.3fr) minmax(130px, .7fr) minmax(130px, .7fr) minmax(250px, 1.25fr); align-items: center; gap: 0; min-height: 58px; }
+.att-overview-student-identity,
+.att-overview-staff-identity { display: flex; align-items: center; gap: 14px; min-width: 0; padding-right: 20px; }
+.att-overview-student-identity > div,
+.att-overview-staff-identity > div,
+.att-overview-student-detail,
+.att-overview-staff-detail,
+.att-overview-student-academic,
+.att-overview-staff-role { display: grid; min-width: 0; gap: 4px; }
+.att-overview-student-detail,
+.att-overview-staff-detail,
+.att-overview-student-academic,
+.att-overview-staff-role { min-height: 48px; align-content: center; padding: 0 20px; border-left: 1px solid var(--cms-border); }
+.att-overview-student-summary strong,
+.att-overview-staff-summary strong { overflow: hidden; color: var(--cms-text); font-size: 14px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+.att-overview-student-identity strong,
+.att-overview-staff-identity strong,
+.att-overview-student-academic > strong,
+.att-overview-staff-role > strong { font-size: 15px; }
+.att-overview-student-summary span:not(.att-overview-photo),
+.att-overview-staff-summary span:not(.att-overview-photo) { color: var(--cms-muted); font-size: 11.5px; line-height: 1.35; }
+.att-overview-student-academic i { padding: 0 4px; color: var(--cms-primary); font-style: normal; }
+.att-overview-section { gap: 10px; }
+.att-overview-section > h3 { font-size: 16px; }
+.att-overview-metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.att-overview-page-staff .att-overview-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.att-overview-metric { display: grid; grid-template-columns: 46px minmax(0, 1fr); grid-template-rows: none; align-items: center; gap: 12px; min-height: 94px; padding: 13px 14px; border-width: 1px; border-left-width: 3px; box-shadow: 0 4px 12px rgb(15 23 42 / 5%); transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.att-overview-metric:hover { transform: translateY(-3px); box-shadow: 0 9px 20px rgb(15 23 42 / 11%); }
+.att-overview-metric > div { display: grid; min-width: 0; gap: 4px; }
+.att-overview-metric-icon { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 11px; }
+.att-overview-metric strong { color: var(--cms-text); font-size: 24px; line-height: 1; }
+.att-overview-metric.is-working { border-left-color: #55a630; background: #fbfff8; }
+.att-overview-metric.is-working .att-overview-metric-icon { background: #eaf7df; color: #55a630; }
+.att-overview-metric.is-present { border-left-color: #2997e8; background: #f8fcff; }
+.att-overview-metric.is-present .att-overview-metric-icon { background: #e2f2ff; color: #168be0; }
+.att-overview-metric.is-absent { border-left-color: #ef6074; background: #fffafb; }
+.att-overview-metric.is-absent .att-overview-metric-icon { background: #ffe8ec; color: #e9425b; }
+.att-overview-metric.is-leave { border-left-color: #eea11b; background: #fffdf8; }
+.att-overview-metric.is-leave .att-overview-metric-icon { background: #fff1d6; color: #e59000; }
+.att-overview-metric.is-late { border-left-color: #9b5de5; background: #fdfaff; }
+.att-overview-metric.is-late .att-overview-metric-icon { background: #f0e7ff; color: #8b45db; }
+.att-overview-attendance-metric { grid-template-columns: 58px minmax(0, 1fr); border-left-color: #9b5de5; background: #fdfaff; }
+.att-overview-attendance-metric:hover { border-color: #9b5de5; }
+.att-overview-ring { width: 58px; height: 58px; background: conic-gradient(#9b5de5 var(--attendance-progress), #eee5fa 0); }
+.att-overview-ring::before { width: 44px; height: 44px; }
+.att-overview-attendance-metric strong { color: #7b2dcc; }
+.att-overview-records-card { padding: 14px 16px 16px; border-radius: 12px; }
+.att-overview-record-head { margin-bottom: 8px; }
+.att-overview-record-head h3 { font-size: 16px; }
+.att-overview-records-card .att-scroll { overflow: hidden auto; border: 1px solid var(--cms-border); border-radius: 9px; }
+.att-overview-records-card .cms-table th,
+.att-overview-records-card .cms-table td { padding: 8px 12px; font-size: 12px; }
+
+@media (max-width: 1150px) { .att-overview-metrics, .att-overview-page-staff .att-overview-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .att-overview-student-summary, .att-overview-staff-summary { grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(120px, .7fr)); row-gap: 12px; } .att-overview-student-academic, .att-overview-staff-role { grid-column: 1 / -1; padding: 10px 0 0 68px; border-top: 1px solid var(--cms-border); border-left: 0; } }
+@media (max-width: 640px) { .att-overview-page-student, .att-overview-page-staff { gap: 12px; } .att-overview-profile-card, .att-overview-staff-card { padding: 14px; } .att-overview-student-summary, .att-overview-staff-summary { grid-template-columns: 1fr 1fr; gap: 14px; } .att-overview-student-identity, .att-overview-staff-identity { grid-column: 1 / -1; padding-right: 0; } .att-overview-student-detail, .att-overview-staff-detail { padding: 0; border-left: 0; } .att-overview-student-academic, .att-overview-staff-role { padding-left: 0; } .att-overview-metrics, .att-overview-page-staff .att-overview-metrics { grid-template-columns: 1fr; } }
+
+/* Keep overview metrics compact at desktop widths. */
+.att-overview-metric {
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-height: 76px;
+  padding: 9px 11px;
+  gap: 9px;
+  box-sizing: border-box;
+  border-radius: 10px;
+}
+.att-overview-metric-icon { width: 38px; height: 38px; border-radius: 9px; }
+.att-overview-metric-icon svg { width: 19px; height: 19px; }
+.att-overview-metric > div { gap: 3px; }
+.att-overview-metric > div > span { font-size: 11px; line-height: 1.25; }
+.att-overview-metric > div > strong { font-size: 20px; }
+.att-overview-attendance-metric { grid-template-columns: 46px minmax(0, 1fr); gap: 9px; }
+.att-overview-ring { width: 46px; height: 46px; }
+.att-overview-ring::before { width: 35px; height: 35px; }
+.att-overview-ring b { font-size: 12px; }
+.att-overview-attendance-metric > div > strong { overflow: hidden; color: #7b2dcc; font-size: 11.5px; line-height: 1.2; text-overflow: ellipsis; white-space: normal; }
+.att-overview-attendance-metric small { font-size: 10px; }
+
+/* Unified compact spacing for Student and Staff Attendance list screens. */
+.cms-content:has(> .attendance-module:not(.att-overview-page)) .cms-page-head {
+  margin-bottom: 14px;
+}
+.attendance-module:not(.att-overview-page) {
+  display: block;
+}
+.attendance-module:not(.att-overview-page) .att-filter-card {
+  padding: 16px;
+  margin: 0;
+}
+.attendance-module:not(.att-overview-page) .attendance-view-section {
+  min-height: 0;
+  margin: 10px 0;
+}
+.attendance-module:not(.att-overview-page) .attendance-view-tabs {
+  margin: 0;
+}
+.attendance-module:not(.att-overview-page) .att-summary,
+.attendance-module:not(.att-overview-page) .att-staff-summary,
+.attendance-module:not(.att-overview-page) .att-student-summary {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+.attendance-module:not(.att-overview-page) .att-table-card,
+.attendance-module:not(.att-overview-page) .att-report-card,
+.attendance-module:not(.att-overview-page) .att-month-card {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.attendance-module:not(.att-overview-page) .att-records-search-toolbar,
+.attendance-module:not(.att-overview-page) .att-staff-table-toolbar {
+  min-height: 50px;
+  padding: 6px 12px;
+}
+.attendance-module:not(.att-overview-page) .att-scroll {
+  margin: 0;
+}
+.attendance-module:not(.att-overview-page) .att-pagination,
+.attendance-module:not(.att-overview-page) .att-staff-table-card > .att-pagination,
+.attendance-module:not(.att-overview-page) .att-month-card > .att-pagination {
+  min-height: 44px;
+  margin: 0;
+  padding: 4px 12px;
+}
 
 .att-row-actions { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .att-row-actions .cms-action-btn { display: inline-flex; align-items: center; justify-content: center; }
@@ -1615,4 +1814,105 @@
 .attendance-import-badge { display: inline-flex; align-items: center; justify-content: center; min-height: 22px; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
 .attendance-import-badge.error { background: #fee2e2; color: #b91c1c; }
 @media (max-width: 560px) { .attendance-import-summary { grid-template-columns: 1fr; } .attendance-import-modal .cms-modal-body { max-height: calc(100vh - 150px); } }
+
+/* Holiday Banner in Attendance Page */
+.att-holiday-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  color: #92400e;
+  font-size: 0.9rem;
+}
+
+.att-holiday-banner-badge {
+  background: #f59e0b;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+/* Monthly Holiday Pill */
+.att-month-h {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  font-weight: 700 !important;
+  border: 1px solid #fde68a !important;
+}
+
+/* Timing Indicators in Daily Table */
+.att-time-late {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.att-time-early {
+  color: #d97706;
+  font-weight: 600;
+}
+
+.att-time-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.att-time-tag.is-late {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.att-time-tag.is-early {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+/* Half-Day Pill & Summary */
+.att-month-hd {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  font-weight: 700 !important;
+  border: 1px solid #fde68a !important;
+}
+
+.att-summary-half-day {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+.att-summary-half-day .att-summary-icon {
+  background: #fef3c7 !important;
+  color: #d97706 !important;
+}
+
+/* Toolbar Quick Actions */
+.att-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.att-toolbar-actions .cms-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+}
 

@@ -108,23 +108,26 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<IEnumerable<TransportVehicleLookupDto>> GetLookupAsync()
         {
             using var c = Connection();
-            var sql = "SELECT VehicleId, VehicleNumber FROM TransportVehicles WHERE IsDeleted = 0";
-            return await c.QueryAsync<TransportVehicleLookupDto>(sql);
+            return await c.QueryAsync<TransportVehicleLookupDto>("sp_GetTransportVehicleLookup", commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransportVehicleDto?> GetByIdOrNumberAsync(string vehicleIdOrNumber)
         {
             using var c = Connection();
-            var sql = "SELECT * FROM TransportVehicles WHERE IsDeleted = 0 AND (VehicleId = @Search OR LOWER(VehicleNumber) = @SearchStr OR LOWER(VehicleRegistrationNo) = @SearchStr) LIMIT 1";
             var id = long.TryParse(vehicleIdOrNumber.Trim(), out var i) ? i : -1;
-            return await c.QueryFirstOrDefaultAsync<TransportVehicleDto>(sql, new { Search = id, SearchStr = vehicleIdOrNumber.Trim().ToLower() });
+            return await c.QueryFirstOrDefaultAsync<TransportVehicleDto>(
+                "sp_GetTransportVehicleByIdOrNumber",
+                new { p_SearchId = id, p_SearchStr = vehicleIdOrNumber.Trim() },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> ExistsAsync(string vehicleNumber, string registrationNumber, long? excludeVehicleId = null)
         {
             using var c = Connection();
-            var sql = "SELECT COUNT(*) FROM TransportVehicles WHERE IsDeleted = 0 AND (LOWER(VehicleNumber) = @Num OR LOWER(VehicleRegistrationNo) = @Reg) AND (@ExcludeId IS NULL OR VehicleId != @ExcludeId)";
-            var count = await c.ExecuteScalarAsync<int>(sql, new { Num = vehicleNumber.Trim().ToLower(), Reg = registrationNumber.Trim().ToLower(), ExcludeId = excludeVehicleId });
+            var count = await c.ExecuteScalarAsync<int>(
+                "sp_CheckTransportVehicleExists",
+                new { p_VehicleNumber = vehicleNumber.Trim(), p_RegistrationNumber = registrationNumber.Trim(), p_ExcludeId = excludeVehicleId },
+                commandType: CommandType.StoredProcedure);
             return count > 0;
         }
     }

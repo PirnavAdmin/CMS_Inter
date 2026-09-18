@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Data;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
@@ -333,6 +333,7 @@ public class FeeRepository : IFeeRepository
             new
             {
                 p_ScholarshipName = request.ScholarshipName,
+                p_Description = request.Description,
                 p_DiscountType = request.DiscountType,
                 p_DiscountValue = request.DiscountValue,
                 p_IsActive = request.IsActive
@@ -379,6 +380,7 @@ public class FeeRepository : IFeeRepository
             {
                 p_ScholarshipId = id,
                 p_ScholarshipName = request.ScholarshipName,
+                p_Description = request.Description,
                 p_DiscountType = request.DiscountType,
                 p_DiscountValue = request.DiscountValue,
                 p_IsActive = request.IsActive

@@ -73,7 +73,10 @@ namespace CollegeManagement.API.DTOs.Staff
         public int TotalRowsRead { get; set; }
         public int SuccessCount { get; set; }
         public int UpdatedCount { get; set; }
+        public int DuplicateCount { get; set; }
         public int FailedRowsCount { get; set; }
+        public int DepartmentsImported { get; set; }
+        public int DesignationsImported { get; set; }
         public System.Collections.Generic.List<MasterImportRowError> Errors { get; set; } = new();
         public System.Collections.Generic.List<object> ImportedItems { get; set; } = new();
     }

@@ -76,11 +76,70 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .GroupBy(a => a.FacultyId)
                 .ToDictionary(g => g.Key, g => g.First());
 
+            // Check if today is an official institution holiday
+            bool isHoliday = await _context.Holidays.AnyAsync(h =>
+                !h.IsDeleted && h.Status == "Active" &&
+                targetDate >= h.StartDate.Date && targetDate <= h.EndDate.Date &&
+                (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"));
+
+            // Check approved leaves for these faculty members on target date
+            var staffIds = facultyList.Select(f => f.Id).ToList();
+            var approvedLeaves = await _context.StaffLeaveRequests
+                .Where(l => l.IsActive && l.Status == LeaveStatus.Approved
+                            && staffIds.Contains(l.StaffId)
+                            && targetDate >= l.StartDate.Date && targetDate <= l.EndDate.Date)
+                .ToDictionaryAsync(l => l.StaffId, l => l);
+
             var result = new List<StaffAttendanceItemResponse>();
+
+            var timingConfig = await _context.AttendanceTimingConfigs
+                .Where(c => c.IsActive && (c.StaffType == null || c.StaffType == request.StaffType))
+                .OrderBy(c => c.StaffType == request.StaffType ? 1 : 2)
+                .FirstOrDefaultAsync();
 
             foreach (var f in facultyList)
             {
                 attendanceByFaculty.TryGetValue(f.FacultyId, out var markedEntry);
+                approvedLeaves.TryGetValue(f.Id, out var leaveEntry);
+
+                bool isLate = false;
+                bool isEarlyCheckout = false;
+                if (timingConfig != null && markedEntry?.InTime != null)
+                {
+                    var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
+                    isLate = markedEntry.InTime.Value > lateThreshold;
+                }
+                if (timingConfig != null && markedEntry?.OutTime != null)
+                {
+                    isEarlyCheckout = markedEntry.OutTime.Value < timingConfig.EarlyCheckoutThreshold;
+                }
+
+                AttendanceStatus? resolvedStatus = null;
+                bool isMarked = false;
+                string? remarks = markedEntry?.Remarks;
+
+                if (markedEntry != null)
+                {
+                    resolvedStatus = markedEntry.Status;
+                    isMarked = true;
+                }
+                else if (leaveEntry != null)
+                {
+                    resolvedStatus = AttendanceStatus.Leave;
+                    isMarked = true;
+                    remarks = string.IsNullOrEmpty(leaveEntry.Reason) ? "Approved Leave" : $"Approved Leave: {leaveEntry.Reason}";
+                }
+                else if (isHoliday)
+                {
+                    resolvedStatus = AttendanceStatus.Holiday;
+                    isMarked = true;
+                    remarks = "Official Holiday";
+                }
+                else
+                {
+                    resolvedStatus = null;
+                    isMarked = false;
+                }
 
                 result.Add(new StaffAttendanceItemResponse
                 {
@@ -92,11 +151,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                     DepartmentId = f.DepartmentId,
                     DepartmentName = f.DepartmentRef?.DepartmentName ?? (!string.IsNullOrEmpty(f.Department) ? f.Department : "General"),
                     DesignationName = f.DesignationRef?.Name ?? (!string.IsNullOrEmpty(f.Designation) ? f.Designation : "Staff"),
-                    Status = markedEntry?.Status ?? AttendanceStatus.Present,
+                    Status = resolvedStatus,
+                    IsAttendanceMarked = isMarked,
                     InTime = markedEntry?.InTime,
                     OutTime = markedEntry?.OutTime,
                     VerificationMethod = markedEntry?.VerificationMethod ?? VerificationMethod.Manual,
-                    Remarks = markedEntry?.Remarks
+                    Remarks = remarks,
+                    IsLate = isLate,
+                    IsEarlyCheckout = isEarlyCheckout
                 });
             }
 
@@ -140,11 +202,43 @@ namespace CollegeManagement.API.Repositories.Implementations
                 await _context.SaveChangesAsync();
             }
 
+            var timingConfig = await _context.AttendanceTimingConfigs
+                .Where(c => c.IsActive && (c.StaffType == null || c.StaffType == request.StaffType))
+                .OrderBy(c => c.StaffType == request.StaffType ? 1 : 2)
+                .FirstOrDefaultAsync();
+
             int present = 0, absent = 0, late = 0, leave = 0;
 
             foreach (var entry in request.StaffAttendances)
             {
-                switch (entry.Status)
+                var effectiveStatus = entry.Status;
+                var effectiveRemarks = entry.Remarks;
+
+                if (timingConfig != null)
+                {
+                    if (entry.InTime.HasValue)
+                    {
+                        var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
+                        if (entry.InTime.Value > lateThreshold && effectiveStatus == AttendanceStatus.Present)
+                        {
+                            effectiveStatus = AttendanceStatus.Late;
+                        }
+                    }
+
+                    if (entry.OutTime.HasValue && entry.OutTime.Value < timingConfig.EarlyCheckoutThreshold)
+                    {
+                        if (string.IsNullOrWhiteSpace(effectiveRemarks))
+                        {
+                            effectiveRemarks = "Early Checkout";
+                        }
+                        else if (!effectiveRemarks.Contains("Early Checkout", StringComparison.OrdinalIgnoreCase))
+                        {
+                            effectiveRemarks = $"{effectiveRemarks} | Early Checkout";
+                        }
+                    }
+                }
+
+                switch (effectiveStatus)
                 {
                     case AttendanceStatus.Present: present++; break;
                     case AttendanceStatus.Absent: absent++; break;
@@ -155,12 +249,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var existingAttendance = session.StaffAttendances.FirstOrDefault(a => a.FacultyId == entry.FacultyId);
                 if (existingAttendance != null)
                 {
-                    existingAttendance.Status = entry.Status;
+                    existingAttendance.Status = effectiveStatus;
                     existingAttendance.InTime = entry.InTime;
                     existingAttendance.OutTime = entry.OutTime;
                     existingAttendance.VerificationMethod = entry.VerificationMethod;
                     existingAttendance.DeviceId = entry.DeviceId;
-                    existingAttendance.Remarks = entry.Remarks;
+                    existingAttendance.Remarks = effectiveRemarks;
                     existingAttendance.UpdatedAt = DateTime.UtcNow;
                 }
                 else
@@ -169,12 +263,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     {
                         StaffSessionId = session.StaffSessionId,
                         FacultyId = entry.FacultyId,
-                        Status = entry.Status,
+                        Status = effectiveStatus,
                         InTime = entry.InTime,
                         OutTime = entry.OutTime,
                         VerificationMethod = entry.VerificationMethod,
                         DeviceId = entry.DeviceId,
-                        Remarks = entry.Remarks,
+                        Remarks = effectiveRemarks,
                         CreatedByUserId = currentUserId,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -219,11 +313,43 @@ namespace CollegeManagement.API.Repositories.Implementations
                     throw new InvalidOperationException("Attendance session is locked and cannot be modified.");
                 }
 
+                var timingConfig = await _context.AttendanceTimingConfigs
+                    .Where(c => c.IsActive && (c.StaffType == null || c.StaffType == request.StaffType))
+                    .OrderBy(c => c.StaffType == request.StaffType ? 1 : 2)
+                    .FirstOrDefaultAsync();
+
+                var effectiveStatus = request.Status;
+                var effectiveRemarks = request.Remarks;
+
+                if (timingConfig != null)
+                {
+                    if (request.InTime.HasValue)
+                    {
+                        var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
+                        if (request.InTime.Value > lateThreshold && effectiveStatus == AttendanceStatus.Present)
+                        {
+                            effectiveStatus = AttendanceStatus.Late;
+                        }
+                    }
+
+                    if (request.OutTime.HasValue && request.OutTime.Value < timingConfig.EarlyCheckoutThreshold)
+                    {
+                        if (string.IsNullOrWhiteSpace(effectiveRemarks))
+                        {
+                            effectiveRemarks = "Early Checkout";
+                        }
+                        else if (!effectiveRemarks.Contains("Early Checkout", StringComparison.OrdinalIgnoreCase))
+                        {
+                            effectiveRemarks = $"{effectiveRemarks} | Early Checkout";
+                        }
+                    }
+                }
+
                 oldStatus = existingAttendance.Status;
-                existingAttendance.Status = request.Status;
+                existingAttendance.Status = effectiveStatus;
                 existingAttendance.InTime = request.InTime;
                 existingAttendance.OutTime = request.OutTime;
-                existingAttendance.Remarks = request.Remarks;
+                existingAttendance.Remarks = effectiveRemarks;
                 existingAttendance.UpdatedAt = DateTime.UtcNow;
 
                 // Deactivate any duplicate records for this faculty on the same date across other sessions
@@ -283,14 +409,46 @@ namespace CollegeManagement.API.Repositories.Implementations
                     await _context.SaveChangesAsync();
                 }
 
+                var timingConfig = await _context.AttendanceTimingConfigs
+                    .Where(c => c.IsActive && (c.StaffType == null || c.StaffType == request.StaffType))
+                    .OrderBy(c => c.StaffType == request.StaffType ? 1 : 2)
+                    .FirstOrDefaultAsync();
+
+                var effectiveStatus = request.Status;
+                var effectiveRemarks = request.Remarks;
+
+                if (timingConfig != null)
+                {
+                    if (request.InTime.HasValue)
+                    {
+                        var lateThreshold = timingConfig.LateThreshold.Add(TimeSpan.FromMinutes(timingConfig.GracePeriodMinutes));
+                        if (request.InTime.Value > lateThreshold && effectiveStatus == AttendanceStatus.Present)
+                        {
+                            effectiveStatus = AttendanceStatus.Late;
+                        }
+                    }
+
+                    if (request.OutTime.HasValue && request.OutTime.Value < timingConfig.EarlyCheckoutThreshold)
+                    {
+                        if (string.IsNullOrWhiteSpace(effectiveRemarks))
+                        {
+                            effectiveRemarks = "Early Checkout";
+                        }
+                        else if (!effectiveRemarks.Contains("Early Checkout", StringComparison.OrdinalIgnoreCase))
+                        {
+                            effectiveRemarks = $"{effectiveRemarks} | Early Checkout";
+                        }
+                    }
+                }
+
                 var newAttendance = new StaffAttendance
                 {
                     StaffSessionId = session.StaffSessionId,
                     FacultyId = request.FacultyId,
-                    Status = request.Status,
+                    Status = effectiveStatus,
                     InTime = request.InTime,
                     OutTime = request.OutTime,
-                    Remarks = request.Remarks,
+                    Remarks = effectiveRemarks,
                     CreatedByUserId = currentUserId,
                     CreatedAt = DateTime.UtcNow
                 };
@@ -372,12 +530,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             int targetYear = request.Year.HasValue && request.Year.Value > 0 ? request.Year.Value : (request.Date?.Year ?? DateTime.UtcNow.Year);
 
             int daysInMonth = DateTime.DaysInMonth(targetYear, targetMonth);
+            var monthStartDate = new DateTime(targetYear, targetMonth, 1);
+            var monthEndDate = new DateTime(targetYear, targetMonth, daysInMonth);
+
+            var monthHolidays = await _context.Holidays
+                .Where(h => !h.IsDeleted && h.Status == "Active"
+                         && h.StartDate <= monthEndDate && h.EndDate >= monthStartDate
+                         && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"))
+                .ToListAsync();
 
             var dayHeaders = new List<DayHeaderDto>();
             for (int day = 1; day <= daysInMonth; day++)
             {
                 var dt = new DateTime(targetYear, targetMonth, day);
-                bool isHoliday = dt.DayOfWeek == DayOfWeek.Sunday;
+                bool isSunday = dt.DayOfWeek == DayOfWeek.Sunday;
+                var matchingHoliday = monthHolidays.FirstOrDefault(h => dt.Date >= h.StartDate.Date && dt.Date <= h.EndDate.Date);
+                bool isOfficialHoliday = matchingHoliday != null;
+                bool isHoliday = isSunday || isOfficialHoliday;
                 string dayNameUpper = dt.ToString("ddd", CultureInfo.InvariantCulture).ToUpper();
 
                 dayHeaders.Add(new DayHeaderDto
@@ -446,8 +615,17 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 for (int day = 1; day <= daysInMonth; day++)
                 {
-                    var header = dayHeaders[day - 1];
-                    if (header.IsHoliday)
+                    var dt = new DateTime(targetYear, targetMonth, day);
+                    bool isSunday = dt.DayOfWeek == DayOfWeek.Sunday;
+                    var matchingHoliday = monthHolidays.FirstOrDefault(h => dt.Date >= h.StartDate.Date && dt.Date <= h.EndDate.Date);
+                    bool isOfficialHoliday = matchingHoliday != null;
+
+                    if (isOfficialHoliday)
+                    {
+                        dailyStatus.Add("H");
+                        continue;
+                    }
+                    if (isSunday)
                     {
                         dailyStatus.Add("-");
                         continue;

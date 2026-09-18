@@ -144,7 +144,9 @@ export function Field({ field = {}, value, error, onChange, onBlur }) {
       </label>
       {type === "select" ? (
         <select id={id} name={name} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
-          <option value="">Select {label}</option>
+          {!normalizedOptions.some((o) => o.value === "" || o.value === null) ? (
+            <option value="">Select {label}</option>
+          ) : null}
           {normalizedOptions.map((o, index) => (
             <option key={`${o.value}-${index}`} value={o.value}>{o.label}</option>
           ))}
@@ -218,6 +220,7 @@ export function Field({ field = {}, value, error, onChange, onBlur }) {
 }
 
 export function useForm(fields, initial) {
+  const flatFields = fields.flatMap((field) => (field?.type === "group" ? field.fields || [] : field));
   const [values, setValues] = useState(initial || {});
   const [errors, setErrors] = useState({});
   const setValue = (name, val) => {
@@ -226,7 +229,7 @@ export function useForm(fields, initial) {
   };
   const validate = () => {
     const next = {};
-    fields.forEach((f) => {
+    flatFields.forEach((f) => {
       const val = values[f.name];
       if (f.required && (val === undefined || val === null || String(val).trim() === "")) {
         next[f.name] = `${f.label} is required`;
@@ -274,7 +277,18 @@ export function FormModal({ title, fields, initial, columns = 2, onCancel, onSav
     >
       <div className={`cms-form-grid ${columns === 3 ? "cols-3" : ""}`}>
         {fields.map((f) => (
-          <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
+          f.type === "group" ? (
+            <div key={f.name || f.title} className={`cms-field-group ${f.className || ""}`.trim()}>
+              {f.title ? <h4>{f.title}</h4> : null}
+              <div className={`cms-form-grid ${f.columns === 3 ? "cols-3" : ""}`}>
+                {(f.fields || []).map((groupField) => (
+                  <Field key={groupField.name} field={groupField} value={values[groupField.name]} error={errors[groupField.name]} onChange={setValue} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
+          )
         ))}
       </div>
     </Modal>

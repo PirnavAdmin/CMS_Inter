@@ -100,6 +100,54 @@ namespace CollegeManagement.API.Controllers
         }
 
         /// <summary>
+        /// Refreshes the JWT access token for an active user session.
+        /// Accepts token in body { "token": "..." } or via Authorization header.
+        /// </summary>
+        [HttpPost("refresh-token")]
+        [HttpPost("refresh")]
+        [AllowAnonymous]
+        public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest? request)
+        {
+            var token = request?.Token;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+                {
+                    token = authHeader.ToString();
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return Unauthorized(new
+                {
+                    Status = false,
+                    Message = "No token provided for refresh."
+                });
+            }
+
+            var result = await _authService.RefreshTokenAsync(token);
+            if (!result.Status)
+            {
+                return Unauthorized(new
+                {
+                    Status = result.Status,
+                    Message = result.Message
+                });
+            }
+
+            return Ok(new
+            {
+                Status = result.Status,
+                Message = result.Message,
+                AccessToken = result.AccessToken,
+                UserId = result.UserId,
+                Name = result.Name,
+                Role = result.Role
+            });
+        }
+
+        /// <summary>
         /// Registers a new user.
         /// </summary>
         [HttpPost("register")]

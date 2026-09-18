@@ -90,4 +90,9 @@ public class DashboardService : IDashboardService
     {
         return await _repository.GetFacultyWorkloadAsync(boardId, academicYearId, ct);
     }
+
+    public async Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(int? academicYearId, int? boardId, int limit = 20, CancellationToken ct = default)
+    {
+        return await _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, ct);
+    }
 }

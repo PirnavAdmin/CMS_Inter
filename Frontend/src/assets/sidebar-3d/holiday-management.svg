@@ -1,0 +1,30 @@
+<svg width="48" height="48" viewBox="6 6 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="body" x1="10" y1="14" x2="35" y2="39" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FEFFF9"/>
+      <stop offset="1" stop-color="#DCE8BF"/>
+    </linearGradient>
+    <linearGradient id="header" x1="10" y1="10" x2="36" y2="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B2CE35"/>
+      <stop offset="1" stop-color="#668600"/>
+    </linearGradient>
+    <filter id="shadow" x="5" y="7" width="39" height="37" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="1.6" dy="2.2" stdDeviation="1.4" flood-color="#3C5700" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <path d="M10 16.5C10 13.46 12.46 11 15.5 11H31.5C34.54 11 37 13.46 37 16.5V33.5C37 36.54 34.54 39 31.5 39H15.5C12.46 39 10 36.54 10 33.5V16.5Z" fill="url(#body)" stroke="#8FA940" stroke-width="1.4"/>
+    <path d="M10.7 17.8V16.5C10.7 13.85 12.85 11.7 15.5 11.7H31.5C34.15 11.7 36.3 13.85 36.3 16.5V17.8H10.7Z" fill="url(#header)"/>
+    <path d="M16 9V15" stroke="#EFF7C8" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M30 9V15" stroke="#EFF7C8" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M16 9V14.5" stroke="#4E6900" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M30 9V14.5" stroke="#4E6900" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M15.5 23H18.5" stroke="#7B9B1A" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M22.5 23H25.5" stroke="#7B9B1A" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M29.5 23H32.5" stroke="#7B9B1A" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M15.5 29H18.5" stroke="#7B9B1A" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M22.5 29H25.5" stroke="#7B9A1A" stroke-width="2.4" stroke-linecap="round"/>
+  </g>
+  <path d="M36.8 27.1L38.25 30.03L41.5 30.5L39.15 32.78L39.7 36L36.8 34.48L33.9 36L34.45 32.78L32.1 30.5L35.35 30.03L36.8 27.1Z" fill="#FFB51A" stroke="#D97A00" stroke-width="1.1" stroke-linejoin="round"/>
+  <path d="M36.8 28.7L37.73 30.58L39.8 30.88L38.3 32.34L38.65 34.4L36.8 33.43V28.7Z" fill="#FFE17A"/>
+</svg>

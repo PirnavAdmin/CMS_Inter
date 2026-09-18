@@ -13,5 +13,6 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<(bool Success, string Message)> ChangePasswordAsync(int userId, string oldPassword, string newPassword, string confirmPassword);
         Task<List<UserDto>> GetAllUsersAsync();
         Task<UserDto?> GetUserByIdAsync(int id);
+        Task<AuthResult> RefreshTokenAsync(string token);
     }
 }

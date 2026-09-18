@@ -174,5 +174,38 @@ namespace CollegeManagement.API.Helpers
         {
             return principal?.FindFirst(ClaimTypes.Role)?.Value;
         }
+
+        public int? GetUserIdFromToken(string? token)
+        {
+            if (string.IsNullOrWhiteSpace(token)) return null;
+            try
+            {
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var rawToken = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                    ? token.Substring(7).Trim()
+                    : token.Trim();
+
+                if (!tokenHandler.CanReadToken(rawToken)) return null;
+
+                var jwt = tokenHandler.ReadJwtToken(rawToken);
+                var sub = jwt.Claims.FirstOrDefault(c =>
+                    c.Type == JwtRegisteredClaimNames.Sub ||
+                    c.Type == "sub" ||
+                    c.Type == ClaimTypes.NameIdentifier ||
+                    c.Type == "nameid")?.Value;
+
+                if (int.TryParse(sub, out var userId) && userId > 0)
+                {
+                    return userId;
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse UserId from JWT token string.");
+                return null;
+            }
+        }
     }
 }

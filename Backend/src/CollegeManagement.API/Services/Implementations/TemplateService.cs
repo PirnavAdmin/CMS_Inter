@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Settings;
+using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Settings;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
@@ -71,6 +72,13 @@ namespace CollegeManagement.API.Services.Implementations
                 placeholders = new List<string>();
             }
 
+            int ver = 1;
+            if (!string.IsNullOrWhiteSpace(t.Version))
+            {
+                int.TryParse(t.Version.Trim().TrimStart('v', 'V'), out ver);
+                if (ver < 1) ver = 1;
+            }
+
             return new TemplateResponseDto
             {
                 Id = t.Id,
@@ -80,7 +88,7 @@ namespace CollegeManagement.API.Services.Implementations
                 ContentBody = t.ContentBody,
                 Placeholders = placeholders,
                 IsActive = t.IsActive,
-                Version = t.Version,
+                Version = ver,
                 CreatedAt = t.CreatedAt,
                 UpdatedAt = t.UpdatedAt
             };
@@ -144,7 +152,7 @@ namespace CollegeManagement.API.Services.Implementations
                 ContentBody = dto.ContentBody,
                 PlaceholdersJson = JsonSerializer.Serialize(placeholders),
                 IsActive = dto.IsActive,
-                Version = 1,
+                Version = "1",
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -206,7 +214,29 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (!string.IsNullOrWhiteSpace(request.TemplateCode))
             {
-                template = await _repository.GetByCodeAsync(request.TemplateCode, ct);
+                var code = request.TemplateCode.Trim();
+                template = await _repository.GetByCodeAsync(code, ct);
+                if (template == null)
+                {
+                    var alias = code.ToUpperInvariant() switch
+                    {
+                        "BONAFIDE_CERT" => "BC",
+                        "CONDUCT_CERT" => "CC",
+                        "STUDY_CERT" => "SC",
+                        "TRANSFER_CERT" => "TC",
+                        "CUSTOM_CERT" => "OC",
+                        "BC" => "BONAFIDE_CERT",
+                        "CC" => "CONDUCT_CERT",
+                        "SC" => "STUDY_CERT",
+                        "TC" => "TRANSFER_CERT",
+                        "OC" => "CUSTOM_CERT",
+                        _ => null
+                    };
+                    if (!string.IsNullOrEmpty(alias))
+                    {
+                        template = await _repository.GetByCodeAsync(alias, ct);
+                    }
+                }
             }
 
             if (template == null && request.TemplateId.HasValue && request.TemplateId.Value > 0)
@@ -214,10 +244,12 @@ namespace CollegeManagement.API.Services.Implementations
                 template = await _repository.GetByIdAsync(request.TemplateId.Value, ct);
             }
 
-            // Fallback default
+            // Fallback default: BC or BONAFIDE_CERT or any first active Certificate template
             if (template == null)
             {
-                template = await _repository.GetByCodeAsync("BONAFIDE_CERT", ct);
+                template = await _repository.GetByCodeAsync("BC", ct)
+                    ?? await _repository.GetByCodeAsync("BONAFIDE_CERT", ct)
+                    ?? (await _repository.GetActiveByCategoryAsync("Certificate", ct)).FirstOrDefault();
             }
 
             if (template == null)
@@ -240,9 +272,10 @@ namespace CollegeManagement.API.Services.Implementations
             string bloodGroup = "O+";
             string mobile = "9876543210";
 
+            Student? s = null;
             if (request.StudentId.HasValue && request.StudentId.Value > 0)
             {
-                var s = await _context.Students
+                s = await _context.Students
                     .AsNoTracking()
                     .Include(st => st.GroupNavigation)
                     .Include(st => st.AcademicLevelNavigation)
@@ -250,27 +283,10 @@ namespace CollegeManagement.API.Services.Implementations
                     .Include(st => st.BoardNavigation)
                     .Include(st => st.SectionNavigation)
                     .FirstOrDefaultAsync(st => st.StudentId == request.StudentId.Value, ct);
-
-                if (s != null)
-                {
-                    studentName = s.StudentName;
-                    fatherName = s.FatherName ?? "—";
-                    motherName = s.MotherName ?? "—";
-                    admissionNo = s.AdmissionNo ?? admissionNo;
-                    rollNo = s.RollNo ?? s.AdmissionNo ?? rollNo;
-                    academicLevel = s.AcademicLevelNavigation?.LevelName ?? academicLevel;
-                    groupName = s.GroupNavigation?.GroupName ?? groupName;
-                    sectionName = s.SectionNavigation?.SectionName ?? sectionName;
-                    academicYear = s.AcademicYear?.AcademicYearName ?? academicYear;
-                    boardName = s.BoardNavigation?.BoardName ?? boardName;
-                    dob = s.DateOfBirth != default ? s.DateOfBirth.ToString("dd/MM/yyyy") : dob;
-                    bloodGroup = s.BloodGroup ?? bloodGroup;
-                    mobile = s.MobileNumber ?? mobile;
-                }
             }
             else if (!string.IsNullOrWhiteSpace(request.AdmissionNo))
             {
-                var s = await _context.Students
+                s = await _context.Students
                     .AsNoTracking()
                     .Include(st => st.GroupNavigation)
                     .Include(st => st.AcademicLevelNavigation)
@@ -278,38 +294,42 @@ namespace CollegeManagement.API.Services.Implementations
                     .Include(st => st.BoardNavigation)
                     .Include(st => st.SectionNavigation)
                     .FirstOrDefaultAsync(st => st.AdmissionNo == request.AdmissionNo.Trim(), ct);
+            }
 
-                if (s != null)
-                {
-                    studentName = s.StudentName;
-                    fatherName = s.FatherName ?? "—";
-                    motherName = s.MotherName ?? "—";
-                    admissionNo = s.AdmissionNo ?? admissionNo;
-                    rollNo = s.RollNo ?? s.AdmissionNo ?? rollNo;
-                    academicLevel = s.AcademicLevelNavigation?.LevelName ?? academicLevel;
-                    groupName = s.GroupNavigation?.GroupName ?? groupName;
-                    sectionName = s.SectionNavigation?.SectionName ?? sectionName;
-                    academicYear = s.AcademicYear?.AcademicYearName ?? academicYear;
-                    boardName = s.BoardNavigation?.BoardName ?? boardName;
-                    dob = s.DateOfBirth != default ? s.DateOfBirth.ToString("dd/MM/yyyy") : dob;
-                    bloodGroup = s.BloodGroup ?? bloodGroup;
-                    mobile = s.MobileNumber ?? mobile;
-                }
+            if (s != null)
+            {
+                studentName = s.StudentName;
+                fatherName = s.FatherName ?? "—";
+                motherName = s.MotherName ?? "—";
+                admissionNo = s.AdmissionNo ?? admissionNo;
+                rollNo = s.RollNo ?? s.AdmissionNo ?? rollNo;
+                academicLevel = s.AcademicLevelNavigation?.LevelName ?? academicLevel;
+                groupName = s.GroupNavigation?.GroupName ?? groupName;
+                sectionName = s.SectionNavigation?.SectionName ?? sectionName;
+                academicYear = s.AcademicYear?.AcademicYearName ?? academicYear;
+                boardName = s.BoardNavigation?.BoardName ?? boardName;
+                dob = s.DateOfBirth != default ? s.DateOfBirth.ToString("dd/MM/yyyy") : dob;
+                bloodGroup = s.BloodGroup ?? bloodGroup;
+                mobile = s.MobileNumber ?? mobile;
             }
 
             var issueDateStr = (request.IssueDate ?? DateTime.UtcNow).ToString("dd/MM/yyyy");
             var certNo = !string.IsNullOrWhiteSpace(request.CertificateNo)
                 ? request.CertificateNo
                 : $"CERT-{DateTime.UtcNow.Year}-" + new Random().Next(1000, 9999);
+            var studentIdStr = s != null ? s.StudentId.ToString() : (request.StudentId?.ToString() ?? "518");
 
             var placeholderValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["{{college_name}}"] = "Pirnav Junior College",
-                ["{{college_address}}"] = "Madhapur, Hyderabad, Telangana - 500081",
+                ["{{college_name}}"] = "Pirnav College",
+                ["{{college_address}}"] = "D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh",
                 ["{{board_name}}"] = boardName,
                 ["{{certificate_no}}"] = certNo,
+                ["{{certificate_number}}"] = certNo,
+                ["{{place}}"] = "Vijayawada",
                 ["{{issue_date}}"] = issueDateStr,
                 ["{{student_name}}"] = studentName,
+                ["{{student_id}}"] = studentIdStr,
                 ["{{father_name}}"] = fatherName,
                 ["{{mother_name}}"] = motherName,
                 ["{{admission_no}}"] = admissionNo,
@@ -319,10 +339,14 @@ namespace CollegeManagement.API.Services.Implementations
                 ["{{section_name}}"] = sectionName,
                 ["{{academic_year}}"] = academicYear,
                 ["{{dob}}"] = dob,
+                ["{{date_of_birth}}"] = dob,
+                ["{{study_from}}"] = "June 2025",
+                ["{{study_to}}"] = "May 2027",
                 ["{{blood_group}}"] = bloodGroup,
                 ["{{mobile}}"] = mobile,
                 ["{{valid_upto}}"] = $"31/05/{DateTime.UtcNow.Year + 1}",
-                ["{{conduct}}"] = !string.IsNullOrWhiteSpace(request.Conduct) ? request.Conduct : "Exemplary",
+                ["{{conduct}}"] = !string.IsNullOrWhiteSpace(request.Conduct) ? request.Conduct : "Good",
+                ["{{conduct_rating}}"] = !string.IsNullOrWhiteSpace(request.Conduct) ? request.Conduct : "Good",
                 ["{{purpose}}"] = !string.IsNullOrWhiteSpace(request.Purpose) ? request.Purpose : "Higher Education / Verification",
                 ["{{remarks}}"] = request.Remarks ?? string.Empty,
                 ["{{issued_by}}"] = !string.IsNullOrWhiteSpace(request.IssuedBy) ? request.IssuedBy : "Principal"
@@ -351,6 +375,13 @@ namespace CollegeManagement.API.Services.Implementations
                     RegexOptions.IgnoreCase);
             }
 
+            int ver = 1;
+            if (!string.IsNullOrWhiteSpace(template.Version))
+            {
+                int.TryParse(template.Version.Trim().TrimStart('v', 'V'), out ver);
+                if (ver < 1) ver = 1;
+            }
+
             return new RenderedTemplateResponseDto
             {
                 TemplateCode = template.TemplateCode,
@@ -358,7 +389,7 @@ namespace CollegeManagement.API.Services.Implementations
                 Category = template.Category,
                 RenderedHtml = renderedHtml,
                 AppliedPlaceholders = placeholderValues,
-                Version = template.Version
+                Version = ver
             };
         }
     }

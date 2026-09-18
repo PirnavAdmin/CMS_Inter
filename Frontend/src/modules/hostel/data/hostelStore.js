@@ -893,6 +893,16 @@ export function updateAllHostelAttendanceStatus(mode, studentIds, status) {
   });
 }
 
+export function markAllHostelAttendance(mode, status) {
+  const store = getHostelStore();
+  const ids = (store.attendanceStudents || []).map((s) => s.id);
+  return updateAllHostelAttendanceStatus(mode, ids, status);
+}
+
+export function resetHostelAttendance(mode) {
+  return markAllHostelAttendance(mode, "Present");
+}
+
 export function saveHostelAttendanceLog(arg1, arg2, records) {
   const mode =
     arg1 === "morning" || arg1 === "night"
@@ -912,3 +922,4 @@ export function saveHostelAttendanceLog(arg1, arg2, records) {
     },
   }));
 }
+

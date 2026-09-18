@@ -221,6 +221,17 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? Resume { get; set; }
         public string? BankProof { get; set; }
         public string? DrivingLicence { get; set; }
+        public string? DrivingLicenseNumber
+        {
+            get => DrivingLicence;
+            set => DrivingLicence = value;
+        }
+        public string? DrivingLicenseExpiryDate { get; set; }
+        public string? LicenseExpiryDate
+        {
+            get => DrivingLicenseExpiryDate;
+            set => DrivingLicenseExpiryDate = value;
+        }
         public string? OtherDocuments { get; set; }
         public string? Photo { get; set; }
         public string? Signature { get; set; }
@@ -231,5 +242,17 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? DocumentsJson { get; set; }
         public string? BankDetailsJson { get; set; }
         public string? EmergencyContactJson { get; set; }
+        public string? DepartmentSpecificJson { get; set; }
+
+        // Dynamic Department & Role Specific Fields from Frontend
+        public Dictionary<string, object>? DepartmentSpecific { get; set; }
+        public Dictionary<string, object>? CustomFields
+        {
+            get => DepartmentSpecific;
+            set => DepartmentSpecific = value;
+        }
+
+        // Dynamic Role Documents Dictionary from Frontend
+        public Dictionary<string, string>? Documents { get; set; }
     }
 }

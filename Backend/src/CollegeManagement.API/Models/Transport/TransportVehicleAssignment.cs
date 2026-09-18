@@ -14,7 +14,6 @@ namespace CollegeManagement.API.Models
 
         public long DriverId { get; set; }
 
-        [NotMapped]
         public long? AttendantId { get; set; }
 
         [NotMapped]
@@ -23,10 +22,8 @@ namespace CollegeManagement.API.Models
         [NotMapped]
         public string? AcademicYear { get; set; }
 
-        [NotMapped]
         public string? MorningTripTime { get; set; }
 
-        [NotMapped]
         public string? EveningTripTime { get; set; }
 
         [System.ComponentModel.DataAnnotations.Schema.NotMapped]

@@ -1,15 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   BarChart3,
   Bus,
   CalendarClock,
+  CheckCircle,
   Download,
   Edit3,
   Eye,
+  FileText,
   IndianRupee,
   MapPin,
-  Navigation,
+  PieChart,
   Plus,
   Route,
   Search,
@@ -23,7 +26,6 @@ import { ConfirmDialog, FormModal, Modal, StatusBadge, Toast } from "@/component
 import {
   transportBusAttendants,
   transportDrivers,
-  transportFeeConfigs,
   transportGpsSnapshots,
   transportMaintenance,
   transportPickupPoints,
@@ -37,35 +39,34 @@ import "./TransportPage.css";
 
 const sectionTabs = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-  { id: "setup", label: "Setup Masters", icon: Route },
+  { id: "setup", label: "Setup", icon: Route },
   { id: "operations", label: "Operations", icon: Bus },
   { id: "reports", label: "Reports", icon: Download },
-  { id: "portals", label: "Portals", icon: Users },
 ];
 
 const setupTabs = [
-  { id: "routes", label: "Routes" },
+  { id: "routes", label: "Route Management" },
   { id: "pickupPoints", label: "Pickup Points" },
-  { id: "vehicles", label: "Vehicles" },
-  { id: "drivers", label: "Drivers" },
-  { id: "attendants", label: "Attendants" },
-  { id: "feeConfigs", label: "Fee Config" },
+  { id: "vehicles", label: "Vehicle Management" },
+  { id: "drivers", label: "Driver Management" },
+  { id: "attendants", label: "Bus Attendants" },
 ];
 
 const operationTabs = [
   { id: "vehicleAssignments", label: "Vehicle Assignment" },
-  { id: "studentAssignments", label: "Student Assignment" },
   { id: "trips", label: "Vehicle Trips" },
   { id: "gps", label: "GPS Tracking" },
   { id: "maintenance", label: "Maintenance" },
 ];
 
 const reportTabs = [
-  { id: "summary", label: "Summary" },
-  { id: "students", label: "Students" },
-  { id: "routes", label: "Routes" },
-  { id: "vehicles", label: "Vehicles" },
-  { id: "maintenance", label: "Maintenance" },
+  { id: "transport-dashboard-report", label: "Transport Dashboard" },
+  { id: "trip-reports", label: "Trip Reports" },
+  { id: "vehicle-reports", label: "Vehicle Reports" },
+  { id: "driver-reports", label: "Driver Reports" },
+  { id: "route-reports", label: "Route Reports" },
+  { id: "student-transport-reports", label: "Student Transport Reports" },
+  { id: "maintenance-reports", label: "Maintenance Reports" },
 ];
 
 const currency = new Intl.NumberFormat("en-IN", {
@@ -74,6 +75,7 @@ const currency = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 0,
 });
 
+const TABLE_PAGE_SIZE = 5;
 const today = new Date("2026-09-15T00:00:00");
 
 function formatCurrency(value) {
@@ -150,13 +152,14 @@ function StatCard({ icon: Icon, label, value, hint, tone = "blue" }) {
   );
 }
 
-function Toolbar({ query, onQuery, onAdd, onExport, addLabel = "Add Record" }) {
+function Toolbar({ query, onQuery, filters, onAdd, onExport, addLabel = "Add Record", className = "" }) {
   return (
-    <div className="cms-transport-toolbar">
+    <div className={`cms-transport-toolbar ${className}`.trim()}>
       <label className="cms-transport-search">
         <Search size={16} />
         <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search transport records..." />
       </label>
+      {filters ? <div className="cms-transport-filters">{filters}</div> : null}
       <div className="cms-transport-toolbar-actions">
         {onExport ? (
           <button type="button" className="cms-btn cms-btn-ghost" onClick={onExport}>
@@ -173,8 +176,61 @@ function Toolbar({ query, onQuery, onAdd, onExport, addLabel = "Add Record" }) {
   );
 }
 
-function TableSection({ title, subtitle, rows, columns, query, onQuery, onAdd, onEdit, onDelete, onView, addLabel }) {
-  const visibleRows = rows.filter((row) => textMatch(row, query));
+function TableSection({
+  title,
+  subtitle,
+  rows,
+  columns,
+  query,
+  onQuery,
+  filters,
+  filterValues = {},
+  onFilterChange,
+  rowFilter,
+  onAdd,
+  onEdit,
+  onDelete,
+  onView,
+  addLabel,
+  toolbarClassName,
+}) {
+  const [page, setPage] = useState(1);
+  const filterKey = JSON.stringify(filterValues);
+  const visibleRows = rows.filter((row) => textMatch(row, query)).filter((row) => (rowFilter ? rowFilter(row) : true));
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / TABLE_PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const paginatedRows = visibleRows.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, filterKey, rows.length]);
+
+  useEffect(() => {
+    setPage((value) => Math.min(value, totalPages));
+  }, [totalPages]);
+
+  const filterControls = filters?.length ? filters.map((filter) => (
+    <label key={filter.name} className="cms-transport-filter">
+      <span>{filter.label}</span>
+      {filter.type === "date" ? (
+        <input
+          type="date"
+          value={filterValues[filter.name] || ""}
+          onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
+        />
+      ) : (
+        <select
+          value={filterValues[filter.name] || "All"}
+          onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
+        >
+          {filter.options.map((option) => {
+            const normalized = option && typeof option === "object" ? option : { value: option, label: option };
+            return <option key={normalized.value} value={normalized.value}>{normalized.label}</option>;
+          })}
+        </select>
+      )}
+    </label>
+  )) : null;
 
   return (
     <div className="cms-card">
@@ -188,9 +244,11 @@ function TableSection({ title, subtitle, rows, columns, query, onQuery, onAdd, o
         <Toolbar
           query={query}
           onQuery={onQuery}
+          filters={filterControls}
           addLabel={addLabel}
           onAdd={onAdd}
           onExport={() => exportRows(`${title.toLowerCase().replace(/\s+/g, "-")}.csv`, visibleRows, columns)}
+          className={toolbarClassName}
         />
         <div className="cms-table-wrap">
           <table className="cms-table cms-transport-table">
@@ -201,7 +259,7 @@ function TableSection({ title, subtitle, rows, columns, query, onQuery, onAdd, o
               </tr>
             </thead>
             <tbody>
-              {visibleRows.length ? visibleRows.map((row) => (
+              {paginatedRows.length ? paginatedRows.map((row) => (
                 <tr key={row.id}>
                   {columns.map((column) => (
                     <td key={column.key} className={column.strong ? "cms-strong" : ""}>
@@ -224,6 +282,15 @@ function TableSection({ title, subtitle, rows, columns, query, onQuery, onAdd, o
             </tbody>
           </table>
         </div>
+        {visibleRows.length ? (
+          <div className="cms-transport-pagination">
+            <span>Page {currentPage} of {totalPages} - {visibleRows.length} record{visibleRows.length === 1 ? "" : "s"}</span>
+            <div>
+              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Previous</button>
+              <button type="button" className="cms-btn cms-btn-ghost" disabled={currentPage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -246,8 +313,17 @@ export default function TransportPage() {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeSetupTab, setActiveSetupTab] = useState("routes");
   const [activeOperationTab, setActiveOperationTab] = useState("vehicleAssignments");
-  const [activeReportTab, setActiveReportTab] = useState("summary");
+  const [activeReportTab, setActiveReportTab] = useState("transport-dashboard-report");
   const [query, setQuery] = useState("");
+  const [tripFilters, setTripFilters] = useState({ route: "All" });
+  const [setupFilters, setSetupFilters] = useState({
+    routes: "All",
+    pickupPoints: "All",
+    vehicles: "All",
+    drivers: "All",
+    attendants: "All",
+  });
+  const [reportFilters, setReportFilters] = useState({ route: "All", vehicle: "All", status: "All" });
   const [toast, setToast] = useState("");
   const [formConfig, setFormConfig] = useState(null);
   const [detailConfig, setDetailConfig] = useState(null);
@@ -259,17 +335,15 @@ export default function TransportPage() {
   const [drivers, setDrivers] = useState(transportDrivers);
   const [attendants, setAttendants] = useState(transportBusAttendants);
   const [vehicleAssignments, setVehicleAssignments] = useState(transportVehicleAssignments);
-  const [studentAssignments, setStudentAssignments] = useState(transportStudentAssignments);
-  const [trips, setTrips] = useState(transportTrips);
+  const [studentAssignments] = useState(transportStudentAssignments);
+  const [trips] = useState(transportTrips);
   const [maintenance, setMaintenance] = useState(transportMaintenance);
-  const [feeConfigs, setFeeConfigs] = useState(transportFeeConfigs);
   const [gpsSnapshots] = useState(transportGpsSnapshots);
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
   const vehicleOptions = vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.vehicleNumber }));
   const driverOptions = drivers.map((driver) => ({ value: driver.id, label: driver.driverName }));
   const attendantOptions = attendants.map((attendant) => ({ value: attendant.id, label: attendant.attendantName }));
-  const pickupOptions = pickupPoints.map((point) => ({ value: point.id, label: `${point.pickupName} (${point.distanceKm} km)` }));
 
   const dataMap = {
     routes: { rows: routes, setRows: setRoutes, prefix: "TR" },
@@ -278,18 +352,14 @@ export default function TransportPage() {
     drivers: { rows: drivers, setRows: setDrivers, prefix: "TD" },
     attendants: { rows: attendants, setRows: setAttendants, prefix: "TA" },
     vehicleAssignments: { rows: vehicleAssignments, setRows: setVehicleAssignments, prefix: "TVA" },
-    studentAssignments: { rows: studentAssignments, setRows: setStudentAssignments, prefix: "TSA" },
-    trips: { rows: trips, setRows: setTrips, prefix: "TT" },
     maintenance: { rows: maintenance, setRows: setMaintenance, prefix: "TM" },
-    feeConfigs: { rows: feeConfigs, setRows: setFeeConfigs, prefix: "TFC" },
   };
 
   const findRoute = (id) => routes.find((route) => route.id === id);
   const findVehicle = (id) => vehicles.find((vehicle) => vehicle.id === id);
   const findDriver = (id) => drivers.find((driver) => driver.id === id);
   const findAttendant = (id) => attendants.find((attendant) => attendant.id === id);
-  const findPickup = (id) => pickupPoints.find((point) => point.id === id);
-
+  const findAssignment = (id) => vehicleAssignments.find((assignment) => assignment.id === id);
   const summary = (() => {
     const activeVehicles = vehicles.filter((vehicle) => vehicle.status === "Active");
     const activeStudents = studentAssignments.filter((student) => student.status === "Active");
@@ -300,8 +370,12 @@ export default function TransportPage() {
     const totalCapacity = vehicleAssignments.reduce((total, assignment) => total + (findVehicle(assignment.vehicleId)?.capacity || 0), 0);
     const totalAssigned = activeStudents.length;
     return {
+      totalVehicles: vehicles.length,
       activeVehicles: activeVehicles.length,
       maintenanceVehicles: vehicles.filter((vehicle) => vehicle.status === "Maintenance").length,
+      totalDrivers: drivers.length,
+      activeDrivers: drivers.filter((driver) => driver.status === "Active").length,
+      totalAttendants: attendants.length,
       activeRoutes: routes.filter((route) => route.status === "Active").length,
       activeStudents: activeStudents.length,
       runningTrips: trips.filter((trip) => trip.status === "Running").length,
@@ -330,27 +404,9 @@ export default function TransportPage() {
         attendantName: attendant?.attendantName || record.attendantName,
       };
     }
-    if (key === "studentAssignments") {
-      const route = findRoute(record.routeId);
-      const pickup = findPickup(record.pickupPointId);
-      const vehicle = findVehicle(record.vehicleId);
-      const monthlyFee = Number(record.monthlyFee) || 0;
-      return {
-        ...record,
-        monthlyFee,
-        annualFee: Number(record.annualFee) || monthlyFee * 12,
-        routeName: route?.routeName || record.routeName,
-        pickupPointName: pickup?.pickupName || record.pickupPointName,
-        vehicleNumber: vehicle?.vehicleNumber || record.vehicleNumber,
-      };
-    }
     if (key === "maintenance") {
       const vehicle = findVehicle(record.vehicleId);
       return { ...record, vehicleNumber: vehicle?.vehicleNumber || record.vehicleNumber };
-    }
-    if (key === "feeConfigs") {
-      const route = findRoute(record.routeId);
-      return { ...record, routeName: route?.routeName || record.routeName };
     }
     return record;
   };
@@ -383,121 +439,95 @@ export default function TransportPage() {
   };
 
   const routeFields = [
-    { name: "routeCode", label: "Route Code", required: true },
-    { name: "routeName", label: "Route Name", required: true },
-    { name: "routeStart", label: "Start Point", required: true },
-    { name: "routeEnd", label: "End Point", required: true },
-    { name: "totalDistanceKm", label: "Distance (km)", type: "number", min: 0, required: true },
-    { name: "estimatedTimeMinutes", label: "Estimated Time (min)", type: "number", min: 0 },
-    { name: "minBaseFare", label: "Base Fare", type: "number", min: 0 },
-    { name: "ratePerKm", label: "Rate / km", type: "number", min: 0 },
+    { name: "routeCode", label: "Route Code (Unique)", required: true, placeholder: "e.g. R-NORTH-101" },
     { name: "status", label: "Status", type: "select", options: ["Active", "Inactive"], required: true },
-    { name: "description", label: "Description", type: "textarea", full: true },
+    { name: "routeName", label: "Route Name", required: true, placeholder: "Enter route name..." },
+    { name: "routeStart", label: "Route Start", placeholder: "Enter route start location..." },
+    { name: "routeEnd", label: "Route End", placeholder: "Enter route end location..." },
+    { name: "totalDistanceKm", label: "Total Distance (KM)", type: "number", min: 0, placeholder: "e.g. 18.5" },
+    { name: "estimatedTimeMinutes", label: "Est Time (Minutes)", type: "number", min: 0, placeholder: "e.g. 45" },
+    {
+      type: "group",
+      name: "routeFareSlab",
+      title: "Distance & Slab Rate Configuration",
+      className: "cms-transport-route-slab",
+      columns: 3,
+      fields: [
+        { name: "minDistanceKm", label: "Min Range (KM)", type: "number", min: 0, placeholder: "e.g. 5" },
+        { name: "minBaseFare", label: "Non-AC Base Fare (\u20b9)", type: "number", min: 0, placeholder: "e.g. 1000" },
+        { name: "ratePerKm", label: "Non-AC Rate/Addl KM", type: "number", min: 0, placeholder: "e.g. 100" },
+        { name: "acMinBaseFare", label: "AC Base Fare (\u20b9)", type: "number", min: 0, placeholder: "e.g. 1200" },
+        { name: "acRatePerKm", label: "AC Rate/Addl KM (\u20b9)", type: "number", min: 0, placeholder: "e.g. 150" },
+      ],
+    },
+    { name: "description", label: "Description", full: true, placeholder: "Enter route description..." },
   ];
 
   const pickupFields = [
-    { name: "routeId", label: "Route", type: "select", options: routeOptions, required: true },
-    { name: "pickupName", label: "Pickup Point", required: true },
-    { name: "area", label: "Area", required: true },
-    { name: "landmark", label: "Landmark" },
-    { name: "sequenceNumber", label: "Sequence", type: "number", min: 1, required: true },
-    { name: "pickupTime", label: "Pickup Time", type: "time", required: true },
-    { name: "dropTime", label: "Drop Time", type: "time", required: true },
-    { name: "distanceKm", label: "Distance (km)", type: "number", min: 0, required: true },
+    { name: "routeId", label: "Select Route", type: "select", options: routeOptions, required: true },
+    { name: "pickupName", label: "Pickup Point Name", required: true, placeholder: "Enter pickup point name..." },
+    { name: "sequenceNumber", label: "Sequence Number", type: "number", min: 1, required: true, placeholder: "e.g. 1" },
+    { name: "distanceKm", label: "Distance from School (KM)", type: "number", min: 0, required: true, placeholder: "e.g. 10.0" },
+    { name: "monthlyFee", label: "Monthly Fare (Auto-Calculated)", type: "number", min: 0, required: true, placeholder: "e.g. 1500" },
+    { name: "pickupTime", label: "Morning Pickup Time", type: "time" },
+    { name: "dropTime", label: "Evening Drop Time", type: "time" },
     { name: "status", label: "Status", type: "select", options: ["Active", "Inactive"], required: true },
   ];
 
   const vehicleFields = [
-    { name: "vehicleNumber", label: "Vehicle Number", required: true },
-    { name: "registrationNumber", label: "Registration No.", required: true },
+    { name: "vehicleNumber", label: "Vehicle Number", required: true, placeholder: "e.g. AP05DC0527" },
+    { name: "registrationNumber", label: "Reg Number", required: true, placeholder: "e.g. REG-SC-2026-213243" },
     { name: "vehicleType", label: "Vehicle Type", type: "select", options: ["Bus", "Mini Bus", "Van"], required: true },
-    { name: "capacity", label: "Capacity", type: "number", min: 1, required: true },
-    { name: "isAC", label: "AC Vehicle", type: "checkbox", placeholder: "Air conditioned" },
+    { name: "isAC", label: "AC Specification", type: "checkbox", placeholder: "AC Vehicle" },
+    { name: "capacity", label: "Seating Capacity", type: "number", min: 1, required: true, placeholder: "e.g. 40" },
+    { name: "status", label: "Status", type: "select", options: ["Active", "Maintenance", "Inactive"], required: true },
+    { name: "chassisNumber", label: "Chassis Number", placeholder: "e.g. CH-88219-Z3" },
+    { name: "engineNumber", label: "Engine Number", placeholder: "e.g. ENG-44102-M" },
+    { name: "gpsDeviceId", label: "GPS Device ID", placeholder: "e.g. GPS-DEV-9003" },
     { name: "insuranceExpiry", label: "Insurance Expiry", type: "date" },
-    { name: "pollutionExpiry", label: "Pollution Expiry", type: "date" },
+    { name: "pollutionExpiry", label: "Pollution (PUC) Expiry", type: "date" },
     { name: "fitnessExpiry", label: "Fitness Expiry", type: "date" },
-    { name: "gpsDeviceId", label: "GPS Device ID" },
-    { name: "status", label: "Status", type: "select", options: ["Active", "Inactive", "Maintenance"], required: true },
   ];
 
   const driverFields = [
-    { name: "employeeId", label: "Employee ID", required: true },
-    { name: "driverName", label: "Driver Name", required: true },
-    { name: "mobileNumber", label: "Mobile", type: "tel", required: true },
+    { name: "driverName", label: "Driver Full Name", required: true },
+    { name: "employeeId", label: "Employee ID", required: true, placeholder: "e.g. EMP-DRV-101" },
+    { name: "mobileNumber", label: "Mobile Number", type: "tel", required: true },
     { name: "email", label: "Email", type: "email" },
-    { name: "licenseNumber", label: "License No.", required: true },
-    { name: "licenseExpiryDate", label: "License Expiry", type: "date" },
-    { name: "status", label: "Status", type: "select", options: ["Active", "Inactive"], required: true },
+    { name: "licenseNumber", label: "Commercial License No", required: true },
+    { name: "licenseExpiryDate", label: "License Expiry Date", type: "date" },
     { name: "address", label: "Address", type: "textarea", full: true },
+    { name: "status", label: "Status", type: "select", options: ["Active", "On Leave", "Inactive"], required: true },
   ];
 
   const attendantFields = [
     { name: "employeeId", label: "Employee ID", required: true },
+    { name: "status", label: "Status", type: "select", options: ["Active", "On Leave", "Inactive"], required: true },
     { name: "attendantName", label: "Attendant Name", required: true },
-    { name: "mobileNumber", label: "Mobile", type: "tel", required: true },
+    { name: "mobileNumber", label: "Mobile Number", type: "tel", required: true },
     { name: "gender", label: "Gender", type: "select", options: ["Female", "Male", "Other"], required: true },
-    { name: "branch", label: "Branch", required: true },
-    { name: "status", label: "Status", type: "select", options: ["Active", "Inactive"], required: true },
   ];
 
   const assignmentFields = [
-    { name: "vehicleId", label: "Vehicle", type: "select", options: vehicleOptions, required: true },
-    { name: "routeId", label: "Route", type: "select", options: routeOptions, required: true },
-    { name: "driverId", label: "Driver", type: "select", options: driverOptions, required: true },
-    { name: "attendantId", label: "Attendant", type: "select", options: attendantOptions, required: true },
-    { name: "shift", label: "Shift", type: "select", options: ["Morning", "Evening", "Morning & Evening"], required: true },
-    { name: "effectiveFrom", label: "Effective From", type: "date", required: true },
-    { name: "status", label: "Status", type: "select", options: ["Active", "Inactive", "Maintenance"], required: true },
-  ];
-
-  const studentAssignmentFields = [
-    { name: "studentName", label: "Student Name", required: true },
-    { name: "admissionNo", label: "Admission No.", required: true },
-    { name: "group", label: "Group", required: true },
-    { name: "section", label: "Section", required: true },
-    { name: "routeId", label: "Route", type: "select", options: routeOptions, required: true },
-    { name: "pickupPointId", label: "Pickup Point", type: "select", options: pickupOptions, required: true },
-    { name: "vehicleId", label: "Vehicle", type: "select", options: vehicleOptions, required: true },
-    { name: "feePlan", label: "Fee Plan", type: "select", options: ["Monthly", "Quarterly", "Half Yearly", "Annual"], required: true },
-    { name: "monthlyFee", label: "Monthly Fee", type: "number", min: 0, required: true },
-    { name: "guardianPhone", label: "Guardian Phone", type: "tel" },
-    { name: "effectiveFrom", label: "Effective From", type: "date", required: true },
+    { name: "routeId", label: "Select Route", type: "select", options: routeOptions, required: true },
+    { name: "vehicleId", label: "Select Active Vehicle", type: "select", options: vehicleOptions, required: true },
+    { name: "driverId", label: "Select Licensed Driver", type: "select", options: driverOptions, required: true },
+    { name: "attendantId", label: "Select Bus Attendant", type: "select", options: attendantOptions },
+    { name: "morningTripTime", label: "Morning Trip Time", type: "time" },
+    { name: "eveningTripTime", label: "Evening Trip Time", type: "time" },
+    { name: "effectiveFrom", label: "Effective From Date", type: "date", required: true },
     { name: "status", label: "Status", type: "select", options: ["Active", "Inactive"], required: true },
-  ];
-
-  const tripFields = [
-    { name: "assignmentId", label: "Assignment", type: "select", options: vehicleAssignments.map((item) => ({ value: item.id, label: `${item.vehicleNumber} - ${item.routeName}` })), required: true },
-    { name: "vehicleNumber", label: "Vehicle No.", required: true },
-    { name: "routeName", label: "Route", required: true },
-    { name: "driverName", label: "Driver", required: true },
-    { name: "tripType", label: "Trip Type", type: "select", options: ["Morning", "Evening"], required: true },
-    { name: "tripDate", label: "Trip Date", type: "date", required: true },
-    { name: "startTime", label: "Start Time", type: "time" },
-    { name: "endTime", label: "End Time", type: "time" },
-    { name: "studentsPresent", label: "Students Present", type: "number", min: 0 },
-    { name: "status", label: "Status", type: "select", options: ["Pending", "Running", "Completed", "Cancelled"], required: true },
-    { name: "remarks", label: "Remarks", type: "textarea", full: true },
   ];
 
   const maintenanceFields = [
-    { name: "vehicleId", label: "Vehicle", type: "select", options: vehicleOptions, required: true },
+    { name: "vehicleId", label: "Select Fleet Vehicle", type: "select", options: vehicleOptions, required: true },
     { name: "category", label: "Service Type", required: true },
     { name: "serviceDate", label: "Service Date", type: "date", required: true },
-    { name: "nextDueDate", label: "Next Due Date", type: "date" },
-    { name: "cost", label: "Cost", type: "number", min: 0 },
-    { name: "vendor", label: "Vendor" },
+    { name: "cost", label: "Cost (₹)", type: "number", min: 0, required: true },
+    { name: "vendor", label: "Vendor Center" },
+    { name: "nextDueDate", label: "Next Service Due", type: "date" },
     { name: "status", label: "Status", type: "select", options: ["Scheduled", "In Progress", "Completed"], required: true },
-    { name: "notes", label: "Notes", type: "textarea", full: true },
-  ];
-
-  const feeFields = [
-    { name: "routeId", label: "Route", type: "select", options: routeOptions, required: true },
-    { name: "minDistanceKm", label: "Minimum Distance", type: "number", min: 0, required: true },
-    { name: "baseFare", label: "Base Fare", type: "number", min: 0, required: true },
-    { name: "ratePerKm", label: "Rate Per Km", type: "number", min: 0, required: true },
-    { name: "acSurcharge", label: "AC Surcharge", type: "number", min: 0 },
-    { name: "billingCycle", label: "Billing Cycle", type: "select", options: ["Monthly", "Quarterly", "Half Yearly", "Annual"], required: true },
-    { name: "status", label: "Status", type: "select", options: ["Active", "Inactive"], required: true },
+    { name: "notes", label: "Remarks", type: "textarea", full: true },
   ];
 
   const tableConfigs = {
@@ -579,22 +609,6 @@ export default function TransportPage() {
         { key: "status", label: "Status", badge: true },
       ],
     },
-    feeConfigs: {
-      title: "Transport Fee Configuration",
-      subtitle: "Configure route-wise base fares and kilometer rates.",
-      rows: feeConfigs,
-      fields: feeFields,
-      addLabel: "Add Fee Rule",
-      columns: [
-        { key: "routeName", label: "Route", strong: true },
-        { key: "minDistanceKm", label: "Min Distance", value: (row) => `${row.minDistanceKm} km` },
-        { key: "baseFare", label: "Base Fare", currency: true },
-        { key: "ratePerKm", label: "Rate/km", currency: true },
-        { key: "acSurcharge", label: "AC Surcharge", currency: true },
-        { key: "billingCycle", label: "Cycle" },
-        { key: "status", label: "Status", badge: true },
-      ],
-    },
     vehicleAssignments: {
       title: "Vehicle Assignment",
       subtitle: "Assign vehicles, drivers and attendants to active routes.",
@@ -602,37 +616,22 @@ export default function TransportPage() {
       fields: assignmentFields,
       addLabel: "Add Assignment",
       columns: [
-        { key: "vehicleNumber", label: "Vehicle", strong: true },
-        { key: "routeName", label: "Route" },
-        { key: "driverName", label: "Driver" },
-        { key: "attendantName", label: "Attendant" },
-        { key: "shift", label: "Shift" },
-        { key: "effectiveFrom", label: "From" },
+        { key: "vehicleNumber", label: "Bus Number", strong: true },
+        { key: "routeName", label: "Route Name" },
+        { key: "driverName", label: "Driver Name" },
+        { key: "attendantName", label: "Bus Attendant" },
+        { key: "capacity", label: "Capacity", value: (row) => findVehicle(row.vehicleId)?.capacity || "-" },
+        { key: "students", label: "Students", value: (row) => studentAssignments.filter((student) => student.vehicleId === row.vehicleId).length },
+        { key: "morningTripTime", label: "Morning Trip", value: (row) => row.morningTripTime || "-" },
+        { key: "eveningTripTime", label: "Evening Trip", value: (row) => row.eveningTripTime || "-" },
         { key: "status", label: "Status", badge: true },
-      ],
-    },
-    studentAssignments: {
-      title: "Student Transport Assignment",
-      subtitle: "Assign students to routes, pickup points, vehicles and fee plans.",
-      rows: studentAssignments,
-      fields: studentAssignmentFields,
-      addLabel: "Assign Student",
-      columns: [
-        { key: "admissionNo", label: "Admission No.", strong: true },
-        { key: "studentName", label: "Student" },
-        { key: "routeName", label: "Route" },
-        { key: "pickupPointName", label: "Pickup" },
-        { key: "vehicleNumber", label: "Vehicle" },
-        { key: "monthlyFee", label: "Monthly Fee", currency: true },
-        { key: "status", label: "Status", badge: true },
+        { key: "effectiveFrom", label: "Effective Date" },
       ],
     },
     trips: {
       title: "Vehicle Trips",
       subtitle: "Track daily morning and evening trip movement.",
       rows: trips,
-      fields: tripFields,
-      addLabel: "Add Trip",
       columns: [
         { key: "vehicleNumber", label: "Vehicle", strong: true },
         { key: "routeName", label: "Route" },
@@ -651,27 +650,175 @@ export default function TransportPage() {
       fields: maintenanceFields,
       addLabel: "Add Service",
       columns: [
-        { key: "vehicleNumber", label: "Vehicle", strong: true },
-        { key: "category", label: "Service" },
+        { key: "vehicleNumber", label: "Vehicle Number", strong: true },
+        { key: "category", label: "Service Type" },
         { key: "serviceDate", label: "Service Date" },
-        { key: "nextDueDate", label: "Next Due" },
         { key: "vendor", label: "Vendor" },
-        { key: "cost", label: "Cost", currency: true },
+        { key: "cost", label: "Cost (₹)", currency: true },
+        { key: "nextDueDate", label: "Next Service Due" },
         { key: "status", label: "Status", badge: true },
       ],
     },
   };
 
+  const setupTableFilters = {
+    routes: [
+      {
+        name: "routes",
+        label: "Filter by Route",
+        options: [
+          { value: "All", label: "All Routes" },
+          ...routes.map((route) => ({ value: route.id, label: `${route.routeName} (${route.routeCode})` })),
+        ],
+      },
+    ],
+    pickupPoints: [
+      {
+        name: "pickupPoints",
+        label: "Filter by Pickup Point",
+        options: [
+          { value: "All", label: "All Pickup Points" },
+          ...routes.map((route) => ({ value: route.id, label: `${route.routeName} (${route.routeCode})` })),
+        ],
+      },
+    ],
+    vehicles: [
+      {
+        name: "vehicles",
+        label: "Filter by Vehicle",
+        options: [
+          { value: "All", label: "All Vehicles" },
+          ...vehicles.map((vehicle) => ({ value: vehicle.id, label: `${vehicle.vehicleNumber} (${vehicle.registrationNumber})` })),
+        ],
+      },
+    ],
+    drivers: [
+      {
+        name: "drivers",
+        label: "Filter by Driver",
+        options: [
+          { value: "All", label: "All Drivers" },
+          ...drivers.map((driver) => ({ value: driver.id, label: `${driver.driverName} (${driver.employeeId})` })),
+        ],
+      },
+    ],
+    attendants: [
+      {
+        name: "attendants",
+        label: "Filter by Bus Attendant",
+        options: [
+          { value: "All", label: "All Bus Attendants" },
+          ...attendants.map((attendant) => ({ value: attendant.id, label: `${attendant.attendantName} (${attendant.employeeId})` })),
+        ],
+      },
+    ],
+  };
+
+  const filterSetupRow = (key, row) => {
+    const selected = setupFilters[key];
+    if (!selected || selected === "All") return true;
+    if (key === "pickupPoints") return String(row.routeId) === String(selected);
+    return String(row.id) === String(selected);
+  };
+
+  const tripFilterFields = [
+    {
+      name: "route",
+      label: "Filter by Route",
+      options: [
+        { value: "All", label: "All Routes" },
+        ...routes.map((route) => ({ value: route.id, label: `${route.routeName} (${route.routeCode})` })),
+      ],
+    },
+  ];
+
+  const filterTripRow = (trip) => {
+    if (tripFilters.route === "All") return true;
+    const assignment = vehicleAssignments.find((item) => item.id === trip.assignmentId);
+    const route = routes.find((item) => item.id === tripFilters.route);
+    return (
+      assignment?.routeId === tripFilters.route ||
+      trip.routeId === tripFilters.route ||
+      trip.routeName === route?.routeName ||
+      trip.routeName === route?.routeCode
+    );
+  };
+
+  const openTransportOperations = () => {
+    setActiveSection("operations");
+    setActiveOperationTab("trips");
+    setQuery("");
+  };
+
+  const getTripDetailRow = (trip) => {
+    const assignment = findAssignment(trip.assignmentId);
+    return {
+      vehicleNumber: trip.vehicleNumber || assignment?.vehicleNumber || "-",
+      routeName: trip.routeName || assignment?.routeName || "-",
+      tripType: trip.tripType || "-",
+      tripDate: trip.tripDate || "-",
+      driver: trip.driverName || assignment?.driverName || "-",
+      busAttendant: trip.attendantName || assignment?.attendantName || "-",
+      startTime: trip.startTime || "-",
+      endTime: trip.endTime || "-",
+      studentsPresent: trip.studentsPresent ?? "-",
+      status: trip.status || "-",
+    };
+  };
+
+  const openTripDetails = (trip) => {
+    setDetailConfig({ title: "Trip Details", row: getTripDetailRow(trip) });
+  };
+
+  const transportStatusMetrics = [
+    { label: "Active Vehicles", value: summary.activeVehicles, tone: "blue" },
+    { label: "Morning Running", value: trips.filter((trip) => trip.tripType === "Morning" && trip.status === "Running").length, tone: "green" },
+    { label: "Morning Completed", value: trips.filter((trip) => trip.tripType === "Morning" && trip.status === "Completed").length, tone: "blue" },
+    { label: "Evening Pending", value: trips.filter((trip) => trip.tripType === "Evening" && trip.status !== "Completed").length, tone: "amber" },
+    { label: "Delayed Trips", value: trips.filter((trip) => ["Delayed", "Cancelled"].includes(trip.status)).length, tone: "muted" },
+    { label: "Under Maintenance", value: summary.maintenanceVehicles, tone: "red" },
+  ];
+
+  const getVehicleOccupancy = (vehicle) => {
+    const assigned = studentAssignments.filter((student) => student.vehicleId === vehicle.id && student.status === "Active").length;
+    const capacity = Number(vehicle.capacity) || 0;
+    const percent = capacity ? Math.round((assigned / capacity) * 100) : 0;
+    return { assigned, capacity, percent };
+  };
+
+  const studentTransportReportColumns = [
+    { key: "studentName", label: "Student & Class", strong: true, value: (row) => `${row.studentName} (${row.group || "-"} ${row.section || ""})` },
+    { key: "admissionNo", label: "Adm No" },
+    { key: "routeName", label: "Transit Route" },
+    { key: "pickupPointName", label: "Pickup Point" },
+    { key: "vehicleNumber", label: "Assigned Vehicle" },
+    { key: "feePlan", label: "Fee Plan" },
+    { key: "monthlyFee", label: "Fee Amount", currency: true },
+    { key: "status", label: "Status", badge: true },
+  ];
+
   const renderTable = (key) => {
     const config = tableConfigs[key];
+    const isTripsTable = key === "trips";
+    const isSetupFilterTable = Boolean(setupTableFilters[key]);
     return (
       <TableSection
         {...config}
         query={query}
         onQuery={setQuery}
-        onAdd={() => openForm(key, config.addLabel, config.fields)}
-        onEdit={(row) => openForm(key, `Edit ${config.title}`, config.fields, row)}
-        onDelete={(row) => requestDelete(key, row, config.title)}
+        filters={isTripsTable ? tripFilterFields : setupTableFilters[key]}
+        filterValues={isTripsTable ? tripFilters : isSetupFilterTable ? setupFilters : undefined}
+        onFilterChange={
+          isTripsTable
+            ? (name, value) => setTripFilters((current) => ({ ...current, [name]: value }))
+            : isSetupFilterTable
+              ? (name, value) => setSetupFilters((current) => ({ ...current, [name]: value }))
+              : undefined
+        }
+        rowFilter={isTripsTable ? filterTripRow : isSetupFilterTable ? (row) => filterSetupRow(key, row) : undefined}
+        onAdd={!isTripsTable ? () => openForm(key, config.addLabel, config.fields) : undefined}
+        onEdit={!isTripsTable ? (row) => openForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
+        onDelete={!isTripsTable ? (row) => requestDelete(key, row, config.title) : undefined}
         onView={(row) => setDetailConfig({ title: config.title, row })}
       />
     );
@@ -680,48 +827,76 @@ export default function TransportPage() {
   const renderDashboard = () => (
     <div className="cms-transport-stack">
       <div className="cms-transport-stat-grid">
-        <StatCard icon={Bus} label="Active Vehicles" value={summary.activeVehicles} hint={`${summary.maintenanceVehicles} under maintenance`} tone="blue" />
+        <StatCard icon={Bus} label="Total Vehicles" value={summary.totalVehicles} hint={`(${summary.activeVehicles} Active)`} tone="blue" />
         <StatCard icon={Route} label="Active Routes" value={summary.activeRoutes} hint={`${pickupPoints.length} pickup points`} tone="green" />
-        <StatCard icon={Users} label="Assigned Students" value={summary.activeStudents} hint={`${summary.utilization}% capacity used`} tone="violet" />
-        <StatCard icon={CalendarClock} label="Today's Trips" value={summary.completedTrips + summary.runningTrips} hint={`${summary.runningTrips} running now`} tone="amber" />
+        <StatCard icon={Users} label="Total Drivers" value={summary.totalDrivers} hint={`(${summary.activeDrivers} Active)`} tone="blue" />
+        <StatCard icon={UserCheck} label="Total Bus Attendants" value={summary.totalAttendants} tone="violet" />
+        <StatCard icon={CheckCircle} label="Students Using Transport" value={summary.activeStudents} hint={`${summary.utilization}% capacity used`} tone="green" />
+        <StatCard icon={Wrench} label="Vehicles Under Maintenance" value={summary.maintenanceVehicles} tone="amber" />
+        <StatCard icon={FileText} label="Expiring Vehicle Documents" value={summary.expiringDocs} tone="red" />
+        <StatCard icon={AlertTriangle} label="Expiring Driver Licenses" value={summary.expiringLicenses} tone="red" />
       </div>
 
       {(summary.expiringDocs || summary.expiringLicenses) ? (
         <div className="cms-transport-warning">
           <AlertTriangle size={18} />
-          <span>{summary.expiringDocs} vehicle document set(s) and {summary.expiringLicenses} driver license(s) need review within the next 45 days.</span>
+          <span><strong>Regulatory Compliance Warning</strong> {summary.expiringDocs} vehicle document(s) and {summary.expiringLicenses} driver license(s) expiring soon.</span>
+          <em>Action Required</em>
         </div>
       ) : null}
 
-      <div className="cms-transport-two-col">
-        <div className="cms-card">
-          <div className="cms-card-head"><h2>Today's Transport Status</h2></div>
+      <div className="cms-card">
+          <div className="cms-card-head cms-transport-status-head">
+            <div>
+              <h2>Today's Transport Status</h2>
+              <p>Current mock trip activity and assignment readiness.</p>
+            </div>
+            <button type="button" className="cms-btn cms-btn-primary cms-transport-open-ops" onClick={openTransportOperations}>
+              Open Transport Operations <ArrowRight size={15} />
+            </button>
+          </div>
           <div className="cms-card-body">
-            <div className="cms-transport-trip-list">
-              {trips.map((trip) => (
-                <button key={trip.id} type="button" className="cms-transport-trip" onClick={() => setDetailConfig({ title: "Trip Details", row: trip })}>
-                  <span>
-                    <strong>{trip.vehicleNumber}</strong>
-                    <small>{trip.routeName} - {trip.tripType}</small>
-                  </span>
-                  <StatusBadge value={trip.status} />
-                </button>
+            <div className="cms-transport-status-metrics">
+              {transportStatusMetrics.map((metric) => (
+                <div key={metric.label} className={`cms-transport-status-metric tone-${metric.tone}`}>
+                  <span>{metric.label}</span>
+                  <strong>{metric.value}</strong>
+                </div>
               ))}
             </div>
+            <div className="cms-transport-trip-list">
+              {trips.map((trip) => {
+                const assignment = findAssignment(trip.assignmentId);
+                return (
+                <div key={trip.id} className="cms-transport-trip">
+                  <span className="cms-transport-trip-info">
+                    <strong>{trip.vehicleNumber}</strong>
+                    <small>{trip.routeName} - {trip.tripType}</small>
+                    <small>Driver: {trip.driverName || assignment?.driverName || "-"} &middot; Attendant: {trip.attendantName || assignment?.attendantName || "-"}</small>
+                  </span>
+                  <span className="cms-transport-trip-actions">
+                    <StatusBadge value={trip.status} />
+                    <button type="button" className="cms-transport-details-btn" onClick={() => openTripDetails(trip)}>
+                      <Eye size={14} /> Details
+                    </button>
+                  </span>
+                </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+      </div>
 
+      <div className="cms-transport-two-col">
         <div className="cms-card">
-          <div className="cms-card-head"><h2>Route Occupancy</h2></div>
+          <div className="cms-card-head"><h2><BarChart3 size={20} /> Vehicle Seat Occupancy Matrix</h2></div>
           <div className="cms-card-body">
             <div className="cms-transport-occupancy">
-              {vehicleAssignments.map((assignment) => {
-                const capacity = findVehicle(assignment.vehicleId)?.capacity || 0;
-                const assigned = studentAssignments.filter((student) => student.vehicleId === assignment.vehicleId && student.status === "Active").length;
-                const percent = capacity ? Math.round((assigned / capacity) * 100) : 0;
+              {vehicles.map((vehicle) => {
+                const { assigned, capacity, percent } = getVehicleOccupancy(vehicle);
                 return (
-                  <div key={assignment.id}>
-                    <span><strong>{assignment.routeName}</strong><small>{assigned}/{capacity} seats</small></span>
+                  <div key={vehicle.id}>
+                    <span><strong>{vehicle.vehicleNumber} ({vehicle.vehicleType})</strong><small>{assigned} / {capacity} Seats ({percent}%)</small></span>
                     <div className="cms-transport-progress"><i style={{ width: `${Math.min(percent, 100)}%` }} /></div>
                   </div>
                 );
@@ -729,12 +904,25 @@ export default function TransportPage() {
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="cms-card">
-        <div className="cms-card-head"><h2>Live GPS Snapshot</h2></div>
-        <div className="cms-card-body">
-          {renderGpsCards()}
+        <div className="cms-card">
+          <div className="cms-card-head"><h2><PieChart size={20} /> Route-wise Student Distribution</h2></div>
+          <div className="cms-card-body">
+            <div className="cms-transport-route-distribution">
+              {routes.map((route) => {
+                const students = studentAssignments.filter((student) => student.routeId === route.id && student.status === "Active").length;
+                return (
+                  <div key={route.id}>
+                    <span>
+                      <strong>{route.routeName}</strong>
+                      <small>{route.routeCode} &bull; {route.totalDistanceKm} KM</small>
+                    </span>
+                    <em>{students} Student{students === 1 ? "" : "s"}</em>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -770,34 +958,134 @@ export default function TransportPage() {
   const renderReports = () => {
     const totalTransportRevenue = studentAssignments.reduce((total, item) => total + (Number(item.annualFee) || 0), 0);
     const activeMaintenanceCost = maintenance.reduce((total, item) => total + (Number(item.cost) || 0), 0);
-    const reportRows = activeReportTab === "students"
+    const reportRows = activeReportTab === "student-transport-reports"
       ? studentAssignments
-      : activeReportTab === "routes"
+      : activeReportTab === "route-reports"
         ? routes
-        : activeReportTab === "vehicles"
+        : activeReportTab === "vehicle-reports"
           ? vehicles
-          : activeReportTab === "maintenance"
+          : activeReportTab === "driver-reports"
+            ? drivers
+            : activeReportTab === "maintenance-reports"
             ? maintenance
-            : vehicleAssignments;
-    const reportColumns = activeReportTab === "students"
-      ? tableConfigs.studentAssignments.columns
-      : activeReportTab === "routes"
+            : activeReportTab === "trip-reports"
+              ? trips
+              : vehicleAssignments;
+    const reportColumns = activeReportTab === "student-transport-reports"
+      ? studentTransportReportColumns
+      : activeReportTab === "route-reports"
         ? tableConfigs.routes.columns
-        : activeReportTab === "vehicles"
+        : activeReportTab === "vehicle-reports"
           ? tableConfigs.vehicles.columns
-          : activeReportTab === "maintenance"
+          : activeReportTab === "driver-reports"
+            ? tableConfigs.drivers.columns
+            : activeReportTab === "maintenance-reports"
             ? tableConfigs.maintenance.columns
-            : tableConfigs.vehicleAssignments.columns;
+            : activeReportTab === "trip-reports"
+              ? tableConfigs.trips.columns
+              : tableConfigs.vehicleAssignments.columns;
+    const filterOption = (value, label) => ({ value, label });
+    const routeFilterOptions = [
+      filterOption("All", "All Routes"),
+      ...routes.map((route) => filterOption(route.id, `${route.routeName} (${route.routeCode})`)),
+    ];
+    const vehicleFilterOptions = [
+      filterOption("All", "All Vehicles"),
+      ...vehicles.map((vehicle) => filterOption(vehicle.id, `${vehicle.vehicleNumber} (${vehicle.registrationNumber})`)),
+    ];
+    const statusFilterOptions = [
+      filterOption("All", "All Statuses"),
+      ...Array.from(new Set(reportRows.map((row) => row.status).filter(Boolean))).map((status) => filterOption(status, status)),
+    ];
+    const reportFilterFields = {
+      "transport-dashboard-report": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "trip-reports": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "vehicle-reports": [
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "driver-reports": [
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "route-reports": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "student-transport-reports": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+      "maintenance-reports": [
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+        { name: "status", label: "Status Filter", options: statusFilterOptions },
+      ],
+    };
+    const matchesReportRoute = (row) => {
+      if (reportFilters.route === "All") return true;
+      const route = findRoute(reportFilters.route);
+      const assignment = findAssignment(row.assignmentId);
+      return (
+        row.id === reportFilters.route ||
+        row.routeId === reportFilters.route ||
+        assignment?.routeId === reportFilters.route ||
+        row.routeName === route?.routeName ||
+        row.routeName === route?.routeCode
+      );
+    };
+    const matchesReportVehicle = (row) => {
+      if (reportFilters.vehicle === "All") return true;
+      const vehicle = findVehicle(reportFilters.vehicle);
+      const assignment = findAssignment(row.assignmentId);
+      return (
+        row.id === reportFilters.vehicle ||
+        row.vehicleId === reportFilters.vehicle ||
+        assignment?.vehicleId === reportFilters.vehicle ||
+        row.vehicleNumber === vehicle?.vehicleNumber ||
+        row.registrationNumber === vehicle?.registrationNumber
+      );
+    };
+    const matchesReportStatus = (row) => reportFilters.status === "All" || row.status === reportFilters.status;
+    const filterReportRow = (row) => {
+      const filters = reportFilterFields[activeReportTab] || [];
+      const needsRoute = filters.some((filter) => filter.name === "route");
+      const needsVehicle = filters.some((filter) => filter.name === "vehicle");
+      const needsStatus = filters.some((filter) => filter.name === "status");
+      return (
+        (!needsRoute || matchesReportRoute(row)) &&
+        (!needsVehicle || matchesReportVehicle(row)) &&
+        (!needsStatus || matchesReportStatus(row))
+      );
+    };
+    const needsCompactReportToolbar = activeReportTab === "trip-reports" || activeReportTab === "student-transport-reports";
 
     return (
       <div className="cms-transport-stack">
-        <TransportTabs tabs={reportTabs} active={activeReportTab} onChange={setActiveReportTab} compact />
-        <div className="cms-transport-stat-grid">
-          <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(totalTransportRevenue)} hint="from active assignments" tone="green" />
-          <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(activeMaintenanceCost)} hint="current mock logs" tone="amber" />
-          <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0))} hint="total seats" tone="blue" />
-          <StatCard icon={UserCheck} label="Drivers & Attendants" value={drivers.length + attendants.length} hint="staff profiles" tone="violet" />
-        </div>
+        <TransportTabs
+          tabs={reportTabs}
+          active={activeReportTab}
+          onChange={(tab) => {
+            setActiveReportTab(tab);
+            setQuery("");
+            setReportFilters({ route: "All", vehicle: "All", status: "All" });
+          }}
+          compact
+        />
+        {activeReportTab === "transport-dashboard-report" ? (
+          <div className="cms-transport-stat-grid">
+            <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(totalTransportRevenue)} hint="from active assignments" tone="green" />
+            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(activeMaintenanceCost)} hint="current mock logs" tone="amber" />
+            <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0))} hint="total seats" tone="blue" />
+            <StatCard icon={UserCheck} label="Drivers & Attendants" value={drivers.length + attendants.length} hint="staff profiles" tone="violet" />
+          </div>
+        ) : null}
         <TableSection
           title="Transport Report"
           subtitle="Mock report data derived from the selected transport records."
@@ -805,79 +1093,13 @@ export default function TransportPage() {
           columns={reportColumns}
           query={query}
           onQuery={setQuery}
+          filters={reportFilterFields[activeReportTab]}
+          filterValues={reportFilters}
+          onFilterChange={(name, value) => setReportFilters((current) => ({ ...current, [name]: value }))}
+          rowFilter={filterReportRow}
+          toolbarClassName={`cms-transport-report-toolbar${needsCompactReportToolbar ? " cms-transport-report-toolbar-compact" : ""}`}
           onExport={() => exportRows("transport-report.csv", reportRows.filter((row) => textMatch(row, query)), reportColumns)}
         />
-      </div>
-    );
-  };
-
-  const renderPortals = () => {
-    const driver = drivers[0];
-    const assignment = vehicleAssignments.find((item) => item.driverId === driver?.id);
-    const assignedStudents = studentAssignments.filter((student) => student.vehicleId === assignment?.vehicleId);
-    const parentStudent = studentAssignments[0];
-    const parentDriver = drivers.find((item) => item.driverName === assignment?.driverName) || driver;
-
-    return (
-      <div className="cms-transport-two-col">
-        <div className="cms-card">
-          <div className="cms-card-head">
-            <div>
-              <h2>Driver Transport Portal</h2>
-              <p>Mock driver view for assigned bus, stops and students.</p>
-            </div>
-          </div>
-          <div className="cms-card-body">
-            <InfoGrid
-              items={[
-                { label: "Driver", value: driver?.driverName },
-                { label: "Vehicle", value: assignment?.vehicleNumber },
-                { label: "Route", value: assignment?.routeName },
-                { label: "Shift", value: assignment?.shift },
-              ]}
-            />
-            <div className="cms-table-wrap cms-transport-portal-table">
-              <table className="cms-table">
-                <thead><tr><th>Student</th><th>Pickup</th><th>Guardian</th><th>Status</th></tr></thead>
-                <tbody>
-                  {assignedStudents.map((student) => (
-                    <tr key={student.id}>
-                      <td className="cms-strong">{student.studentName}</td>
-                      <td>{student.pickupPointName}</td>
-                      <td>{student.guardianPhone}</td>
-                      <td><StatusBadge value={student.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div className="cms-card">
-          <div className="cms-card-head">
-            <div>
-              <h2>Parent Bus Information</h2>
-              <p>Mock parent view of ward route, driver and bus movement.</p>
-            </div>
-          </div>
-          <div className="cms-card-body">
-            <InfoGrid
-              items={[
-                { label: "Student", value: parentStudent?.studentName },
-                { label: "Admission No.", value: parentStudent?.admissionNo },
-                { label: "Vehicle", value: parentStudent?.vehicleNumber },
-                { label: "Pickup", value: parentStudent?.pickupPointName },
-                { label: "Route", value: parentStudent?.routeName },
-                { label: "Driver Contact", value: parentDriver?.mobileNumber },
-              ]}
-            />
-            <div className="cms-transport-parent-track">
-              <Navigation size={18} />
-              <span>Live bus status: {gpsSnapshots[0]?.status} near {gpsSnapshots[0]?.nextStop}</span>
-            </div>
-          </div>
-        </div>
       </div>
     );
   };
@@ -893,10 +1115,11 @@ export default function TransportPage() {
       );
     }
     if (activeSection === "operations") {
+      const activeOperationsTab = operationTabs.some((tab) => tab.id === activeOperationTab) ? activeOperationTab : "vehicleAssignments";
       return (
         <div className="cms-transport-stack">
-          <TransportTabs tabs={operationTabs} active={activeOperationTab} onChange={(tab) => { setActiveOperationTab(tab); setQuery(""); }} compact />
-          {activeOperationTab === "gps" ? (
+          <TransportTabs tabs={operationTabs} active={activeOperationsTab} onChange={(tab) => { setActiveOperationTab(tab); setQuery(""); }} compact />
+          {activeOperationsTab === "gps" ? (
             <div className="cms-card">
               <div className="cms-card-head">
                 <div>
@@ -906,12 +1129,12 @@ export default function TransportPage() {
               </div>
               <div className="cms-card-body">{renderGpsCards()}</div>
             </div>
-          ) : renderTable(activeOperationTab)}
+          ) : renderTable(activeOperationsTab)}
         </div>
       );
     }
     if (activeSection === "reports") return renderReports();
-    return renderPortals();
+    return renderDashboard();
   };
 
   return (
@@ -930,7 +1153,7 @@ export default function TransportPage() {
           title={formConfig.title}
           fields={formConfig.fields}
           initial={formConfig.record || {}}
-          columns={3}
+          columns={formConfig.key === "routes" ? 2 : 3}
           onCancel={() => setFormConfig(null)}
           onSave={saveForm}
         />

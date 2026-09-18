@@ -1,22 +1,10 @@
-using CollegeManagement.API.Data;
+﻿using CollegeManagement.API.Data;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Common;
-using CollegeManagement.API.Dtos.Transport;
 using CollegeManagement.API.Dtos.Transport.Attendant;
-using CollegeManagement.API.Dtos.Transport.Dashboard;
-using CollegeManagement.API.Dtos.Transport.Driver;
-using CollegeManagement.API.Dtos.Transport.Operations;
-using CollegeManagement.API.Dtos.Transport.PickupPoint;
-using CollegeManagement.API.Dtos.Transport.Reports;
-using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
-using CollegeManagement.API.Dtos.Transport.Vehicle;
-using CollegeManagement.API.Dtos.Transport.VehicleAssignment;
-using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
-
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
-using CollegeManagement.API.Models;
 
 namespace CollegeManagement.API.Repositories.Implementations.Transport
 {
@@ -34,40 +22,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<PagedResult<TransportAttendantDto>> GetAllAsync(TransportAttendantFilterDto filter)
         {
             using var c = Connection();
-            var sql = @"
-                SELECT 
-                    a.AttendantId, a.EmployeeId, a.AttendantName, a.MobileNumber,
-                    a.Gender, a.BranchName, a.AlternateMobileNumber, a.Address,
-                    a.BloodGroup, a.EmergencyContactName, a.EmergencyContactNumber,
-                    a.AssignedVehicleId, v.VehicleRegistrationNo AS AssignedVehicleNumber,
-                    a.Status
-                FROM TransportAttendants a
-                LEFT JOIN TransportVehicles v ON a.AssignedVehicleId = v.VehicleId
-                WHERE a.IsDeleted = 0";
+            var all = await c.QueryAsync<TransportAttendantDto>(
+                "sp_GetTransportAttendants",
+                new { p_Search = filter.Search ?? "" },
+                commandType: CommandType.StoredProcedure);
                 
-            var items = await c.QueryAsync<dynamic>(sql);
-            
-            var list = items.Select(x => new TransportAttendantDto {
-                AttendantId = x.AttendantId,
-                EmployeeId = x.EmployeeId,
-                AttendantName = x.AttendantName ?? "",
-                MobileNumber = x.MobileNumber ?? "",
-                Gender = x.Gender,
-                BranchName = x.BranchName,
-                AlternateMobileNumber = x.AlternateMobileNumber,
-                Address = x.Address,
-                BloodGroup = x.BloodGroup,
-                EmergencyContactName = x.EmergencyContactName,
-                EmergencyContactNumber = x.EmergencyContactNumber,
-                AssignedVehicleId = x.AssignedVehicleId,
-                
-                Status = (bool)x.Status ? "Active" : "Inactive"
-            }).AsQueryable();
-
-            if (!string.IsNullOrWhiteSpace(filter.Search)) {
-                var search = filter.Search.Trim().ToLower();
-                list = list.Where(x => x.AttendantName.ToLower().Contains(search) || x.MobileNumber.ToLower().Contains(search) || x.Address != null && x.Address.ToLower().Contains(search));
-            }
+            var list = all.AsQueryable();
             if (filter.Status.HasValue) list = list.Where(x => x.Status == (filter.Status.Value ? "Active" : "Inactive"));
             
             var totalCount = list.Count();
@@ -79,36 +39,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<TransportAttendantDto?> GetByIdAsync(long attendantId)
         {
             using var c = Connection();
-            var sql = @"
-                SELECT 
-                    a.AttendantId, a.EmployeeId, a.AttendantName, a.MobileNumber,
-                    a.Gender, a.BranchName, a.AlternateMobileNumber, a.Address,
-                    a.BloodGroup, a.EmergencyContactName, a.EmergencyContactNumber,
-                    a.AssignedVehicleId, v.VehicleRegistrationNo AS AssignedVehicleNumber,
-                    a.Status
-                FROM TransportAttendants a
-                LEFT JOIN TransportVehicles v ON a.AssignedVehicleId = v.VehicleId
-                WHERE a.IsDeleted = 0 AND a.AttendantId = @Id";
-                
-            var x = await c.QueryFirstOrDefaultAsync<dynamic>(sql, new { Id = attendantId });
-            if (x == null) return null;
-
-            return new TransportAttendantDto {
-                AttendantId = x.AttendantId,
-                EmployeeId = x.EmployeeId,
-                AttendantName = x.AttendantName ?? "",
-                MobileNumber = x.MobileNumber ?? "",
-                Gender = x.Gender,
-                BranchName = x.BranchName,
-                AlternateMobileNumber = x.AlternateMobileNumber,
-                Address = x.Address,
-                BloodGroup = x.BloodGroup,
-                EmergencyContactName = x.EmergencyContactName,
-                EmergencyContactNumber = x.EmergencyContactNumber,
-                AssignedVehicleId = x.AssignedVehicleId,
-                
-                Status = (bool)x.Status ? "Active" : "Inactive"
-            };
+            return await c.QueryFirstOrDefaultAsync<TransportAttendantDto>(
+                "sp_GetTransportAttendantById",
+                new { p_Id = attendantId },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<long> CreateAsync(CreateTransportAttendantDto dto, long? userId)
@@ -178,14 +112,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<IEnumerable<TransportAttendantLookupDto>> GetLookupAsync()
         {
             using var c = Connection();
-            var sql = "SELECT AttendantId, AttendantName, MobileNumber FROM TransportAttendants WHERE IsDeleted = 0 AND Status = 1 ORDER BY AttendantName";
-            var items = await c.QueryAsync<dynamic>(sql);
-            return items.Select(x => new TransportAttendantLookupDto {
-                AttendantId = x.AttendantId,
-                AttendantName = x.AttendantName ?? "",
-                MobileNumber = x.MobileNumber ?? "",
-                DisplayName = $"{x.AttendantName} ({x.MobileNumber})"
-            });
+            return await c.QueryAsync<TransportAttendantLookupDto>("sp_GetTransportAttendantLookup", commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransportAttendantDto?> GetByIdOrNameAsync(string attendantIdOrName)
@@ -193,22 +120,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             if (string.IsNullOrWhiteSpace(attendantIdOrName)) return null;
             string search = attendantIdOrName.Trim();
             
-            if (long.TryParse(search, out long attendantId))
-            {
-                var byId = await GetByIdAsync(attendantId);
-                if (byId != null) return byId;
-            }
+            var id = long.TryParse(search, out long attendantId) ? attendantId : -1;
             
             using var c = Connection();
-            var sql = "SELECT AttendantId FROM TransportAttendants WHERE IsDeleted = 0 AND (LOWER(AttendantName) = @SearchStr OR LOWER(MobileNumber) = @SearchStr) LIMIT 1";
-            var id = await c.QueryFirstOrDefaultAsync<long?>(sql, new { SearchStr = search.ToLower() });
-            if (id.HasValue) return await GetByIdAsync(id.Value);
-            return null;
+            return await c.QueryFirstOrDefaultAsync<TransportAttendantDto>(
+                "sp_GetTransportAttendantByIdOrName",
+                new { p_SearchId = id, p_SearchStr = search },
+                commandType: CommandType.StoredProcedure);
         }
     }
 }
-
-
-
-
-

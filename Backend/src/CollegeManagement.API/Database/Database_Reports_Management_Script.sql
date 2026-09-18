@@ -71,28 +71,33 @@ BEGIN
         ) AS `Attendance`,
 
         -- 3. Fee Collection
-        (SELECT COALESCE(SUM(fc.`PaidAmount`), 0) 
-         FROM `FeeCollections` fc 
-         JOIN `Students` s ON s.`StudentId` = fc.`StudentId` 
-         WHERE (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
-           AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
-           AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
-           AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
-           AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
-           AND (p_FromDate IS NULL OR fc.`PaymentDate` >= p_FromDate) 
-           AND (p_ToDate IS NULL OR fc.`PaymentDate` <= p_ToDate)
+        COALESCE(
+            (SELECT SUM(fp.`Amount`) 
+             FROM `FeePayments` fp 
+             LEFT JOIN `Students` s ON s.`StudentId` = fp.`StudentId` 
+             WHERE fp.`Status` NOT IN ('Cancelled', 'Failed')
+               AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
+               AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
+               AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+               AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
+               AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
+               AND (p_FromDate IS NULL OR fp.`PaymentDate` >= p_FromDate) 
+               AND (p_ToDate IS NULL OR fp.`PaymentDate` <= p_ToDate)), 
+            0.0
         ) AS `FeeCollection`,
 
         -- 4. Due Fees
-        (SELECT COALESCE(SUM(sf.`DueAmount`), 0) 
-         FROM `StudentFees` sf 
-         JOIN `Students` s ON s.`StudentId` = sf.`StudentId` 
-         WHERE sf.`FeeStatus` <> 'Cancelled' 
-           AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
-           AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
-           AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
-           AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
-           AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+        COALESCE(
+            (SELECT SUM(sf.`BalanceAmount`) 
+             FROM `StudentFees` sf 
+             LEFT JOIN `Students` s ON s.`StudentId` = sf.`StudentId` 
+             WHERE sf.`BalanceAmount` > 0 AND sf.`Status` != 'Cancelled'
+               AND (p_BoardId IS NULL OR s.`BoardId` = p_BoardId) 
+               AND (p_AcademicYearId IS NULL OR s.`AcademicYearId` = p_AcademicYearId) 
+               AND (p_AcademicLevelId IS NULL OR s.`AcademicLevelId` = p_AcademicLevelId)
+               AND (p_GroupId IS NULL OR s.`GroupId` = p_GroupId) 
+               AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)), 
+            0.0
         ) AS `DueFees`,
 
         -- 5. Examinations
@@ -101,34 +106,38 @@ BEGIN
          WHERE e.`IsActive` = 1 
            AND (p_BoardId IS NULL OR e.`BoardId` = p_BoardId) 
            AND (p_AcademicYearId IS NULL OR e.`AcademicYearId` = p_AcademicYearId) 
-           AND (p_AcademicLevelId IS NULL OR e.`AcademicLevelId` = p_AcademicLevelId) 
+           AND (p_AcademicLevelId IS NULL OR e.`AcademicLevelId` = p_AcademicLevelId)
            AND (p_GroupId IS NULL OR e.`GroupId` = p_GroupId) 
-           AND (p_FromDate IS NULL OR e.`StartDate` >= DATE(p_FromDate)) 
-           AND (p_ToDate IS NULL OR e.`EndDate` <= DATE(p_ToDate))
+           AND (p_FromDate IS NULL OR e.`StartDate` >= p_FromDate) 
+           AND (p_ToDate IS NULL OR e.`EndDate` <= p_ToDate)
         ) AS `Examinations`,
 
         -- 6. Results Published
-        (SELECT COUNT(DISTINCT r.`ExamId`) 
+        (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`)) 
          FROM `Results` r 
-         JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
+         LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
          WHERE r.`IsPublished` = 1 
            AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
            AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
            AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
            AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-           AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+           AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId) 
+           AND (p_FromDate IS NULL OR r.`PublishedDate` >= p_FromDate) 
+           AND (p_ToDate IS NULL OR r.`PublishedDate` <= p_ToDate)
         ) AS `ResultsPublished`,
 
         -- 7. Staff / Faculty Workload (Hours)
-        (SELECT COALESCE(SUM(TIMESTAMPDIFF(MINUTE, p.`StartTime`, p.`EndTime`)) / 60.0, 0) 
-         FROM `Timetables` t 
-         JOIN `Periods` p ON p.`PeriodId` = t.`PeriodId` 
-         WHERE t.`IsPublished` = 1 AND p.`IsBreak` = 0 
-           AND (p_BoardId IS NULL OR t.`BoardId` = p_BoardId) 
-           AND (p_AcademicYearId IS NULL OR t.`AcademicYearId` = p_AcademicYearId) 
-           AND (p_AcademicLevelId IS NULL OR t.`AcademicLevelId` = p_AcademicLevelId)
-           AND (p_GroupId IS NULL OR t.`GroupId` = p_GroupId) 
-           AND (p_SectionId IS NULL OR t.`SectionId` = p_SectionId)
+        COALESCE(
+            (SELECT ROUND(SUM(TIMESTAMPDIFF(MINUTE, p.`StartTime`, p.`EndTime`) / 60.0), 1) 
+             FROM `Timetables` tt 
+             JOIN `Periods` p ON p.`PeriodId` = tt.`PeriodId`
+             WHERE tt.`IsPublished` = 1 AND p.`IsBreak` = 0
+               AND (p_BoardId IS NULL OR tt.`BoardId` = p_BoardId) 
+               AND (p_AcademicYearId IS NULL OR tt.`AcademicYearId` = p_AcademicYearId) 
+               AND (p_AcademicLevelId IS NULL OR tt.`AcademicLevelId` = p_AcademicLevelId)
+               AND (p_GroupId IS NULL OR tt.`GroupId` = p_GroupId) 
+               AND (p_SectionId IS NULL OR tt.`SectionId` = p_SectionId)), 
+            0.0
         ) AS `FacultyWorkload`,
 
         -- 8. Student Strength
@@ -145,7 +154,7 @@ BEGIN
         -- 9. Pass Percentage
         ROUND(
             CASE 
-                WHEN (SELECT COUNT(*) FROM `Results` r JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
+                WHEN (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`)) FROM `Results` r LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
                       WHERE r.`IsPublished` = 1 
                         AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
                         AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
@@ -153,14 +162,14 @@ BEGIN
                         AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
                         AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)) = 0 
                 THEN 0 
-                ELSE (SELECT COUNT(*) FROM `Results` r JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-                      WHERE r.`IsPublished` = 1 AND r.`ResultStatus` IN ('Pass', 'Passed', 'PASS') 
+                ELSE (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`)) FROM `Results` r LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
+                      WHERE r.`IsPublished` = 1 AND r.`ResultStatus` IN ('Pass', 'Passed', 'PROMOTED') 
                         AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
                         AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
                         AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
                         AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
                         AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)) * 100.0 / 
-                     (SELECT COUNT(*) FROM `Results` r JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
+                     (SELECT COUNT(DISTINCT CONCAT(r.`StudentId`, '_', r.`ExamId`)) FROM `Results` r LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
                       WHERE r.`IsPublished` = 1 
                         AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
                         AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
@@ -171,16 +180,17 @@ BEGIN
         ) AS `PassPercentage`,
 
         -- 10. Toppers Identified
-        (SELECT COUNT(DISTINCT r.`StudentId`) 
-         FROM `Results` r 
-         JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
-         WHERE r.`IsPublished` = 1 
-           AND r.`Rank` IS NOT NULL AND r.`Rank` <= 10 
-           AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
-           AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
-           AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
-           AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
-           AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+        LEAST(
+            (SELECT COUNT(DISTINCT r.`StudentId`) 
+             FROM `Results` r 
+             LEFT JOIN `Students` s ON s.`StudentId` = r.`StudentId` 
+             WHERE r.`IsPublished` = 1 AND r.`ResultStatus` IN ('Pass', 'Passed', 'PROMOTED')
+               AND (p_BoardId IS NULL OR r.`BoardId` = p_BoardId) 
+               AND (p_AcademicYearId IS NULL OR r.`AcademicYearId` = p_AcademicYearId) 
+               AND (p_AcademicLevelId IS NULL OR r.`AcademicLevelId` = p_AcademicLevelId) 
+               AND (p_GroupId IS NULL OR r.`GroupId` = p_GroupId) 
+               AND (p_SectionId IS NULL OR s.`SectionId` = p_SectionId)
+            ), 10
         ) AS `ToppersIdentified`;
 
     -- 1.2 Admissions Trend

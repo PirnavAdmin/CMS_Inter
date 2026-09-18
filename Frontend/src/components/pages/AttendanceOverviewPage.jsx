@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { CalendarDays, ChevronDown, Download } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { CalendarCheck2, CalendarClock, CalendarDays, ChevronDown, Clock3, Coffee, Download, UserCheck, UserRound, UserX } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Loader } from "@/components/common/Ui.jsx";
 import apiClient from "@/api/apiClient.js";
@@ -8,8 +8,9 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./AttendancePage.css";
 
-function Metric({ label, value }) {
-  return <article className="att-overview-metric"><span>{label}</span><strong>{value}</strong></article>;
+function Metric({ label, value, icon: Icon }) {
+  const tone = /present/i.test(label) ? "present" : /absent/i.test(label) ? "absent" : /half|leave/i.test(label) ? "leave" : /late/i.test(label) ? "late" : "working";
+  return <article className={`att-overview-metric is-${tone}`}><span className="att-overview-metric-icon"><Icon size={22} /></span><div><span>{label}</span><strong>{value}</strong></div></article>;
 }
 
 function AttendanceMetric({ percentage, present, total }) {
@@ -31,6 +32,7 @@ function ExportMenu() {
 
 export default function AttendanceOverviewPage() {
   const { area, staffId, studentId } = useParams();
+  const location = useLocation();
   const staff = area === "staff" || Boolean(staffId);
   const id = staff ? staffId : studentId;
   const { selectedAcademicYearId, selectedAcademicYear } = useAcademicContext();
@@ -41,7 +43,7 @@ export default function AttendanceOverviewPage() {
   const [overview, setOverview] = useState(null);
   const [month, setMonth] = useState("All Months");
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -67,14 +69,15 @@ export default function AttendanceOverviewPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, selectedAcademicYearId, staff]);
 
   useEffect(() => {
     if (id) loadData();
-  }, [staff, id, selectedAcademicYearId]);
+  }, [id, loadData]);
 
   const title = staff ? "Staff Attendance Overview" : "Student Attendance Overview";
   const backPath = staff ? "/dashboard/attendance/staff" : "/dashboard/attendance/student";
+  const backState = !staff && location.state?.attendanceState ? { attendanceState: location.state.attendanceState } : undefined;
   const yearLabel = selectedAcademicYear?.name || selectedAcademicYear?.label || profile?.academicYearName || '';
   const subtitle = yearLabel ? `Academic Year: ${yearLabel}` : '';
   
@@ -85,7 +88,7 @@ export default function AttendanceOverviewPage() {
   if (error) {
     return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}>
       <main className="attendance-module att-overview-page">
-        <Link className="cms-back-link" to={backPath}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
+        <Link className="cms-back-link" to={backPath} state={backState}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
         <section className="att-card" style={{ padding: "2rem", textAlign: "center" }}>
           <p style={{ color: "var(--cms-danger, #ef4444)", marginBottom: "1rem" }}>{error}</p>
           <button type="button" className="cms-btn cms-btn-primary" onClick={loadData}>Retry</button>
@@ -96,32 +99,42 @@ export default function AttendanceOverviewPage() {
 
   const months = overview?.monthlyRecords || [];
   const visibleMonths = month === "All Months" ? months : months.filter(m => `${m.monthName} ${m.year}` === month);
+  const profileName = staff
+    ? profile?.fullName || `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim() || profile?.staffName || "N/A"
+    : profile?.studentName || `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim() || profile?.name || "N/A";
 
   return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}>
-    <main className="attendance-module att-overview-page" data-overview-id={id}>
-      <Link className="cms-back-link" to={backPath}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
-      <section className="att-card att-overview-card">
-        <header className="att-overview-head"><h3>{staff ? "Staff Information" : "Student Information"}</h3></header>
-        {staff ? <div className="att-overview-info-grid">
-          <div><span>Staff ID</span><strong>{profile?.employeeId || profile?.staffId || "N/A"}</strong></div><div><span>Staff Name</span><strong>{profile?.fullName || `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim() || profile?.staffName || "N/A"}</strong></div>
-          <div><span>Department</span><strong>{profile?.departmentName || "N/A"}</strong></div><div><span>Designation</span><strong>{profile?.designation || profile?.designationName || "N/A"}</strong></div><div><span>Staff Type</span><strong>{profile?.staffType || profile?.staffTypeName || "N/A"}</strong></div>
-        </div> : <><div className="att-overview-student"><span className="att-overview-photo">{(profile?.studentName || profile?.name || profile?.firstName || "S").charAt(0).toUpperCase()}</span><div><span>Student Name</span><strong>{profile?.studentName || `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim() || profile?.name || "N/A"}</strong></div><div><span>Roll No</span><strong>{profile?.rollNo || profile?.rollNumber || "N/A"}</strong></div><div><span>Admission No</span><strong>{profile?.admissionNo || profile?.admissionNumber || "N/A"}</strong></div></div>
-          <div className="att-overview-info-grid"><div><span>Academic Level</span><strong>{profile?.academicLevelName || "N/A"}</strong></div><div><span>Group</span><strong>{profile?.groupName || "N/A"}</strong></div><div><span>Program</span><strong>{profile?.programName || "N/A"}</strong></div><div><span>Section</span><strong>{profile?.sectionName || "N/A"}</strong></div></div></>}
-      </section>
+    <main className={`attendance-module att-overview-page ${staff ? "att-overview-page-staff" : "att-overview-page-student"}`} data-overview-id={id}>
+      <Link className="cms-back-link" to={backPath} state={backState}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
+      {staff ? <section className="att-card att-overview-card att-overview-staff-card">
+        <div className="att-overview-staff-summary">
+          <div className="att-overview-staff-identity"><span className="att-overview-photo">{profileName.charAt(0).toUpperCase()}</span><div><strong>{profileName}</strong><span>Staff</span></div></div>
+          <div className="att-overview-staff-detail"><span>Staff ID</span><strong>{profile?.employeeId || profile?.staffId || "N/A"}</strong></div>
+          <div className="att-overview-staff-detail"><span>Department</span><strong>{profile?.departmentName || "N/A"}</strong></div>
+          <div className="att-overview-staff-role"><strong>{profile?.designation || profile?.designationName || "N/A"}</strong><span>{profile?.staffType || profile?.staffTypeName || "N/A"}</span></div>
+        </div>
+      </section> : <section className="att-card att-overview-card att-overview-student-card">
+        <div className="att-overview-student-summary">
+          <div className="att-overview-student-identity"><span className="att-overview-photo">{(profile?.studentName || profile?.name || profile?.firstName || "S").charAt(0).toUpperCase()}</span><div><strong>{profile?.studentName || `${profile?.firstName || ''} ${profile?.lastName || ''}`.trim() || profile?.name || "N/A"}</strong><span>Student</span></div></div>
+          <div className="att-overview-student-detail"><span>Admission No</span><strong>{profile?.admissionNo || profile?.admissionNumber || "N/A"}</strong></div>
+          <div className="att-overview-student-detail"><span>Roll No</span><strong>{profile?.rollNo || profile?.rollNumber || "N/A"}</strong></div>
+          <div className="att-overview-student-academic"><strong>{profile?.academicLevelName || "N/A"}</strong><span>{profile?.groupName || "N/A"} <i>•</i> {profile?.programName || "N/A"} <i>•</i> {profile?.sectionName || "N/A"}</span></div>
+        </div>
+      </section>}
 
       <section className="att-overview-section"><h3>{staff ? "Yearly Summary" : "Yearly Attendance Summary"}</h3><div className="att-overview-metrics">
         {staff ? <>
-            <Metric label="Working Days" value={overview?.totalWorkingDays || 0} />
-            <Metric label="Present" value={overview?.totalPresent || 0} />
-            <Metric label="Absent" value={overview?.totalAbsent || 0} />
-            <Metric label="Late" value={overview?.totalLate || 0} />
-            <Metric label="Leave" value={overview?.totalLeave || 0} />
+            <Metric label="Working Days" value={overview?.totalWorkingDays || 0} icon={CalendarCheck2} />
+            <Metric label="Present" value={overview?.totalPresent || 0} icon={UserCheck} />
+            <Metric label="Absent" value={overview?.totalAbsent || 0} icon={UserX} />
+            <Metric label="Late" value={overview?.totalLate || 0} icon={Clock3} />
+            <Metric label="Leave" value={overview?.totalLeave || 0} icon={CalendarClock} />
             <AttendanceMetric percentage={overview?.overallAttendancePercentage || 0} present={overview?.totalPresent || 0} total={overview?.totalWorkingDays || 0} />
         </> : <>
-            <Metric label="Total Working Days" value={overview?.totalWorkingDays || 0} />
-            <Metric label="Present" value={overview?.totalPresent || 0} />
-            <Metric label="Absent" value={overview?.totalAbsent || 0} />
-            <Metric label="Half-Day" value={overview?.totalHalfDays || 0} />
+            <Metric label="Total Working Days" value={overview?.totalWorkingDays || 0} icon={CalendarCheck2} />
+            <Metric label="Present" value={overview?.totalPresent || 0} icon={UserRound} />
+            <Metric label="Absent" value={overview?.totalAbsent || 0} icon={UserX} />
+            <Metric label="Half-Day" value={overview?.totalHalfDays || 0} icon={Coffee} />
             <AttendanceMetric percentage={overview?.overallAttendancePercentage || 0} present={overview?.totalPresent || 0} total={overview?.totalWorkingDays || 0} />
         </>}
       </div></section>

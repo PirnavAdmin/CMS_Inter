@@ -31,6 +31,13 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleMaintenance
         [JsonPropertyName("serviceType")]
         public string ServiceType { get; set; } = "General Service";
 
+        [JsonPropertyName("category")]
+        public string? Category
+        {
+            get => ServiceType;
+            set { if (!string.IsNullOrWhiteSpace(value)) ServiceType = value; }
+        }
+
         [JsonPropertyName("serviceDate")]
         public DateTime ServiceDate
         {
@@ -66,6 +73,13 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleMaintenance
         [JsonConverter(typeof(FlexibleNullableDateTimeConverter))]
         public DateTime? NextServiceDue { get; set; }
 
+        [JsonPropertyName("nextDueDate")]
+        public string? NextDueDate
+        {
+            get => NextServiceDue?.ToString("yyyy-MM-dd");
+            set { if (DateTime.TryParse(value, out var d)) NextServiceDue = d; }
+        }
+
         [JsonPropertyName("nextServiceDueDate")]
         public string? NextServiceDueDate
         {
@@ -75,6 +89,13 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleMaintenance
 
         [JsonPropertyName("remarks")]
         public string? Remarks { get; set; }
+
+        [JsonPropertyName("notes")]
+        public string? Notes
+        {
+            get => Remarks;
+            set { if (!string.IsNullOrWhiteSpace(value)) Remarks = value; }
+        }
 
         [JsonPropertyName("status")]
         [JsonConverter(typeof(FlexibleBoolConverter))]

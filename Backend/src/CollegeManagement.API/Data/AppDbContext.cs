@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Models.Reports;
-using CollegeManagement.API.Models;
+using CollegeManagement.API.Models.Holiday;
 
 
 
@@ -60,6 +60,7 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportVehicleAssignment> TransportVehicleAssignments { get; set; } = null!;
         public DbSet<StudentTransportAssignment> StudentTransportAssignments { get; set; } = null!;
         public DbSet<VehicleMaintenance> VehicleMaintenances { get; set; } = null!;
+        public DbSet<TransportTrip> TransportTrips => Set<TransportTrip>();
         public DbSet<Staff> Staffs { get; set; }
         public DbSet<StaffSubjectAllocation> StaffSubjectAllocations { get; set; }
         public DbSet<Faculty> Faculties { get; set; }
@@ -70,6 +71,8 @@ namespace CollegeManagement.API.Data
         public DbSet<Examination> Examinations { get; set; }
         public DbSet<ExamCodeSequence> ExamCodeSequences { get; set; }
         public DbSet<ExamSchedule> ExamSchedules { get; set; }
+        public DbSet<Holiday> Holidays { get; set; }
+        public DbSet<AttendanceTimingConfig> AttendanceTimingConfigs { get; set; }
         public DbSet<HallTicket> HallTickets { get; set; }
         public DbSet<InvigilatorAssignment> InvigilatorAssignments { get; set; }
         public DbSet<Mark> Marks { get; set; }
@@ -137,6 +140,7 @@ namespace CollegeManagement.API.Data
             ConfigureStudentTransportAssignment(modelBuilder);
             ConfigureVehicleMaintenance(modelBuilder);
             modelBuilder.Entity<TransportAttendant>().ToTable("TransportAttendants");
+            modelBuilder.Entity<TransportTrip>().ToTable("TransportTrips");
 
 
             #region Attendance
@@ -374,9 +378,10 @@ namespace CollegeManagement.API.Data
                 .HasColumnName("ProgramId");
 
             modelBuilder.Entity<StudentAdmission>()
-                .Property(sa => sa.SectionId)
-                .HasColumnName("SectionId");
+                .Ignore(sa => sa.SectionId);
 
+            modelBuilder.Entity<StudentAdmission>()
+                .Ignore(sa => sa.RollNo);
              #endregion
             modelBuilder.Entity<Student>()
                 .HasIndex(s => s.BoardId);
@@ -495,43 +500,43 @@ namespace CollegeManagement.API.Data
             // ============================================================
             modelBuilder.Entity<StudentFee>(entity =>
             {
-                entity.HasKey("StudentFeeId");
+                entity.HasKey(x => x.StudentFeeId);
 
-                entity.Property("TotalAmount")
+                entity.Property(x => x.TotalAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("ConcessionAmount")
+                entity.Property(x => x.ConcessionAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("PayableAmount")
+                entity.Property(x => x.PayableAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("PaidAmount")
+                entity.Property(x => x.PaidAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("BalanceAmount")
+                entity.Property(x => x.BalanceAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("Status")
+                entity.Property(x => x.Status)
                     .IsRequired()
                     .HasMaxLength(30);
 
-                entity.Property("AssignedAt")
+                entity.Property(x => x.AssignedAt)
                     .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
 
-                entity.HasIndex("StudentId", "FeeStructureId")
+                entity.HasIndex(x => new { x.StudentId, x.FeeStructureId })
                     .IsUnique();
 
                 // Student -> StudentFee
-                entity.HasOne<Student>()
+                entity.HasOne(x => x.Student)
                     .WithMany()
-                    .HasForeignKey("StudentId")
+                    .HasForeignKey(x => x.StudentId)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 // FeeStructure -> StudentFee
-                entity.HasOne<FeeStructure>()
-                    .WithMany()
-                    .HasForeignKey("FeeStructureId")
+                entity.HasOne(x => x.FeeStructure)
+                    .WithMany(x => x.StudentFees)
+                    .HasForeignKey(x => x.FeeStructureId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -584,8 +589,8 @@ namespace CollegeManagement.API.Data
             {
                 entity.HasKey(x => x.FeePaymentId);
                 entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
-                entity.Property(x => x.DiscountAmount).HasColumnType("decimal(18,2)");
-                entity.Property(x => x.FineAmount).HasColumnType("decimal(18,2)");
+                entity.Ignore(x => x.DiscountAmount);
+                entity.Ignore(x => x.FineAmount);
                 entity.Property(x => x.PaymentMode).IsRequired().HasMaxLength(30);
                 entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
                 entity.Property(x => x.PaymentDate).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
@@ -1232,22 +1237,14 @@ private static void ConfigureTransportRoute(ModelBuilder modelBuilder)
                 entity.HasKey(x => x.RouteId);
                 entity.Ignore(x => x.CreatedBy);
                 entity.Ignore(x => x.UpdatedBy);
-                entity.Property(x => x.RouteCode).HasColumnName("RouteNumber");
                 entity.Property(x => x.DistanceKm).HasColumnName("Distance");
                 entity.Property(x => x.MonthlyFee).HasColumnName("DefaultMonthlyFee");
-                entity.Ignore(x => x.MinRangeKm);
-                entity.Ignore(x => x.NonAcBaseFare);
-                entity.Ignore(x => x.NonAcRatePerKm);
-                entity.Ignore(x => x.AcBaseFare);
-                entity.Ignore(x => x.AcRatePerKm);
                 entity.Ignore(x => x.PickupPoint);
                 entity.Ignore(x => x.DropPoint);
-                entity.Ignore(x => x.Description);
                 entity.Ignore(x => x.VehicleId);
-                entity.Ignore(x => x.EstimatedDurationMinutes);
 
                 entity.Property(x => x.RouteCode)
-                    .HasMaxLength(30)
+                    .HasMaxLength(50)
                     .IsRequired();
 
                 entity.Property(x => x.RouteName)
@@ -1332,10 +1329,6 @@ private static void ConfigureTransportVehicle(ModelBuilder modelBuilder)
                 entity.Ignore(x => x.UpdatedBy);
                 entity.Property(x => x.RegistrationNumber).HasColumnName("VehicleRegistrationNo");
                 entity.Property(x => x.Manufacturer).HasColumnName("Make");
-                entity.Ignore(x => x.VehicleName);
-                entity.Ignore(x => x.GpsDeviceId);
-                entity.Ignore(x => x.InsuranceNumber);
-                entity.Ignore(x => x.IsAC);
 
                 entity.HasIndex(x => x.VehicleNumber)
                     .IsUnique();

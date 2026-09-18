@@ -1045,5 +1045,111 @@ namespace CollegeManagement.API.Services.Implementations
                 RoleName = u.Role?.RoleName ?? string.Empty
             };
         }
+
+        public async Task<AuthResult> RefreshTokenAsync(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return new AuthResult
+                {
+                    Status = false,
+                    Message = "Token is required for refresh."
+                };
+            }
+
+            var userId = _jwtTokenHelper.GetUserIdFromToken(token);
+            if (!userId.HasValue || userId.Value <= 0)
+            {
+                return new AuthResult
+                {
+                    Status = false,
+                    Message = "Invalid or unparseable token."
+                };
+            }
+
+            var connection = _context.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open)
+            {
+                await connection.OpenAsync();
+            }
+
+            var user = await _userRepository.GetByIdAsync(userId.Value, connection);
+            if (user == null || !user.IsActive)
+            {
+                return new AuthResult
+                {
+                    Status = false,
+                    Message = "User account not found or deactivated."
+                };
+            }
+
+            // Validate domain entity active state
+            if (user.AdminId.HasValue && user.AdminId.Value > 0)
+            {
+                var adminActive = await connection.QueryFirstOrDefaultAsync<bool?>(
+                    "SELECT IsActive FROM `admins` WHERE `id` = @Id LIMIT 1;",
+                    new { Id = user.AdminId.Value });
+
+                if (adminActive != true)
+                {
+                    return new AuthResult
+                    {
+                        Status = false,
+                        Message = "Admin account is inactive."
+                    };
+                }
+            }
+            else if (user.StaffId.HasValue && user.StaffId.Value > 0)
+            {
+                var staffStatus = await connection.QueryFirstOrDefaultAsync<(bool IsDeleted, string Status)?>(
+                    "SELECT IsDeleted, Status FROM `Staff` WHERE `Id` = @Id LIMIT 1;",
+                    new { Id = user.StaffId.Value });
+
+                if (!staffStatus.HasValue || staffStatus.Value.IsDeleted || !string.Equals(staffStatus.Value.Status, "Active", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new AuthResult
+                    {
+                        Status = false,
+                        Message = "Staff account is inactive or deleted."
+                    };
+                }
+            }
+            else if (user.StudentId.HasValue && user.StudentId.Value > 0)
+            {
+                var studentActive = await connection.QueryFirstOrDefaultAsync<bool?>(
+                    "SELECT IsActive FROM `Students` WHERE `StudentId` = @Id LIMIT 1;",
+                    new { Id = user.StudentId.Value });
+
+                if (studentActive != true)
+                {
+                    return new AuthResult
+                    {
+                        Status = false,
+                        Message = "Student account is inactive."
+                    };
+                }
+            }
+
+            // Resolve role
+            if (user.Role == null && user.RoleId > 0)
+            {
+                user.Role = await _userRepository.GetRoleByIdAsync(user.RoleId, connection) ?? null!;
+            }
+
+            var canonicalRoleName = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? "User";
+            var newToken = await _jwtTokenHelper.GenerateTokenAsync(user);
+
+            _logger.LogInformation("Successfully refreshed JWT access token for UserId {UserId} ({Email})", user.UserId, user.Email);
+
+            return new AuthResult
+            {
+                Status = true,
+                Message = "Token refreshed successfully.",
+                AccessToken = newToken,
+                UserId = user.UserId,
+                Name = user.FullName,
+                Role = canonicalRoleName
+            };
+        }
     }
 }

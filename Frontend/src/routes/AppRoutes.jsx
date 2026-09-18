@@ -15,6 +15,7 @@ import StudentAdmissionPage from "@/components/pages/StudentAdmissionPage.jsx";
 import StudentManagementPage, { pageConfig as studentManagementConfig } from "@/components/pages/StudentManagementPage.jsx";
 import SectionAllocationPage from "@/components/pages/SectionAllocationPage.jsx";
 import TimetablePage from "@/components/pages/TimetablePage.jsx";
+import HolidayManagementPage from "@/components/pages/HolidayManagementPage.jsx";
 import AttendancePage from "@/components/pages/AttendancePage.jsx";
 import AttendanceOverviewPage from "@/components/pages/AttendanceOverviewPage.jsx";
 import LeaveManagementPage from "@/components/pages/LeaveManagementPage.jsx";
@@ -30,6 +31,7 @@ import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
+import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
@@ -139,9 +141,12 @@ export default function AppRoutes() {
         <Route path="/dashboard/faculty-allocation" element={<Navigate to="/dashboard/faculty" replace />} />
         <Route path="/dashboard/admission" element={<StudentAdmissionPage />} />
         <Route path="/dashboard/section-allocation" element={<SectionAllocationPage />} />
+        <Route path="/dashboard/section-allocation/allocated" element={<SectionAllocationPage />} />
+        <Route path="/dashboard/section-allocation/roll-numbers" element={<SectionAllocationPage />} />
         <Route path="/dashboard/students" element={<StudentManagementPage />} />
         <Route path="/dashboard/students/:id/enroll" element={<StudentEnrollmentRoute />} />
         <Route path="/dashboard/timetable" element={<TimetablePage />} />
+        <Route path="/dashboard/holidays" element={<HolidayManagementPage />} />
         <Route path="/dashboard/timetable/setup" element={<TimetablePage screen="setup" />} />
         <Route path="/dashboard/timetable/draft" element={<TimetablePage screen="draft" />} />
         <Route path="/dashboard/timetable/generate" element={<TimetablePage screen="generate" />} />
@@ -168,6 +173,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/settings" element={<SettingsPage />} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
         <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
+        <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
         <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
         <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<NumberSeriesPage mode="edit" />} />
         <Route path="/dashboard/settings/number-series/:seriesId" element={<NumberSeriesPage mode="detail" />} />

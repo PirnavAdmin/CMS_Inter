@@ -12,6 +12,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
+import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import boardAcademicYearIcon from "@/assets/sidebar-3d/board-academic-year.png";
 import subjectsIcon from "@/assets/sidebar-3d/subjects.png";
 import timetableIcon from "@/assets/sidebar-3d/timetable.png";
@@ -122,6 +123,7 @@ export const menu = [
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
+      { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
     ],
   },
   {
@@ -139,7 +141,7 @@ export const menu = [
     section: "Staff",
     items: [
       { to: "/dashboard/staff", label: "Staff Management", icon: staffIcon },
-      { to: "/dashboard/departments", label: "Department Management", icon: generatedSidebarIcons.department },
+      { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
     ],
@@ -168,17 +170,7 @@ export const menu = [
   {
     section: "Hostel Management",
     items: [
-      {
-        to: "/hostel",
-        label: "Hostel Management",
-        icon: Building2,
-        children: [
-          { to: "/hostel", label: "Dashboard", icon: LayoutDashboard },
-          { to: "/hostel/master-setup", label: "Hostel Master Setup", icon: Building2 },
-          { to: "/hostel/students", label: "Student Management", icon: Users },
-          { to: "/hostel/reports", label: "Hostel Reports", icon: BarChart3 },
-        ],
-      },
+      { to: "/hostel", label: "Hostel Management", icon: Building2 },
     ],
   },
   {
@@ -336,7 +328,6 @@ export default function DashboardLayout({
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [hostelOpen, setHostelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
@@ -404,9 +395,6 @@ export default function DashboardLayout({
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
   }, [pathname]);
-  useEffect(() => {
-    if (pathname.startsWith("/dashboard/hostel") || pathname.startsWith("/hostel")) setHostelOpen(true);
-  }, [pathname]);
 
   useEffect(() => {
     const onPointer = (e) => {
@@ -465,16 +453,7 @@ export default function DashboardLayout({
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
     if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
-      return pathname === "/hostel" || pathname === "/dashboard/hostel";
-    }
-    if (basePath === "/hostel/master-setup" || basePath === "/dashboard/hostel/master" || basePath === "/dashboard/hostel/master-setup") {
-      return pathname === "/hostel/master-setup" || pathname === "/dashboard/hostel/master" || pathname === "/dashboard/hostel/master-setup";
-    }
-    if (basePath === "/hostel/students" || basePath === "/dashboard/hostel/students") {
-      return pathname === "/hostel/students" || pathname === "/dashboard/hostel/students";
-    }
-    if (basePath === "/hostel/reports" || basePath === "/dashboard/hostel/reports") {
-      return pathname === "/hostel/reports" || pathname === "/dashboard/hostel/reports";
+      return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
     }
     if (searchStr && !location.search.includes(searchStr)) return false;
 
@@ -515,12 +494,11 @@ export default function DashboardLayout({
                   const isFacultyMenu = item.to === "/dashboard/faculty";
                   const isAttendanceMenu = item.to === "/dashboard/attendance";
                   const isSettingsMenu = item.to === "/dashboard/settings";
-                  const isHostelMenu = item.to.startsWith("/dashboard/hostel") || item.to.startsWith("/hostel");
-                  const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : isHostelMenu ? hostelOpen : false;
-                  const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : isHostelMenu ? setHostelOpen : () => {};
+                  const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : false;
+                  const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : () => {};
                   const childIsActive = (child) => isActive(child.to);
                   return (
-                    <div key={item.to} className={isAttendanceMenu || isSettingsMenu || isHostelMenu ? "cms-nav-branch cms-attendance-branch" : "cms-nav-branch"}>
+                    <div key={item.to} className={isAttendanceMenu || isSettingsMenu ? "cms-nav-branch cms-attendance-branch" : "cms-nav-branch"}>
                       <div className="cms-nav-parent">
                         <Link
                           to={item.to}
@@ -530,8 +508,6 @@ export default function DashboardLayout({
                             if (isAttendanceMenu) {
                               event.preventDefault();
                               setOpen((v) => !v);
-                            } else if (isHostelMenu) {
-                              setHostelOpen(true);
                             } else {
                               setAttendanceOpen(false);
                             }

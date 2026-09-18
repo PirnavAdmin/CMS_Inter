@@ -8,6 +8,8 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES } from "@/components/pages/TemplatesPage.jsx";
 import { certificates as mockCertificates, students as mockStudents } from "@/data/mockData.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
+import { generateQrCodeSvg } from "@/utils/qrCodeGenerator.js";
 import createCertificateIcon from "@/assets/sidebar-3d/certificates.png";
 import certificateRecordsIcon from "@/assets/settings-3d/audit-logs.png";
 import reviewIssueIcon from "@/assets/reports-3d/toppers.png";
@@ -32,6 +34,7 @@ const CERTIFICATE_API = {
   templateByCode: (templateCode) => `${CERTIFICATE_BASE}/template-by-code/${encodeURIComponent(templateCode)}`,
   renderTemplate: `${CERTIFICATE_BASE}/render-template`,
   previewTemplate: `${CERTIFICATE_BASE}/preview-template`,
+  preview: (id) => `${CERTIFICATE_BASE}/${encodeURIComponent(id)}/preview`,
   list: CERTIFICATE_BASE,
   workflowStats: `${CERTIFICATE_BASE}/workflow-stats`,
   studentsDropdown: `${CERTIFICATE_BASE}/students-dropdown`,
@@ -510,7 +513,7 @@ function formatDateDdMmYyyy(value) {
 const baseFormFields = [
   { name: "admissionNo", label: "Admission No.", type: "text", placeholder: "Enter admission number", required: true },
   { name: "type", label: "Certificate Type", type: "select", required: true },
-  { name: "purpose", label: "Purpose", required: true },
+  { name: "purpose", label: "Purpose", placeholder: "Purpose", required: false },
   { name: "requestDate", label: "Request Date", type: "date", required: true },
   { name: "remarks", label: "Remarks" },
 ];
@@ -520,9 +523,9 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
   const [highlighted, setHighlighted] = useState(0);
   const query = String(value || "").trim().toLowerCase();
   const matches = useMemo(() => {
-    if (!query) return students.slice(0, 8);
+    if (!query) return students;
     return students.filter((student) => [student.admissionNo, student.name, student.rollNo]
-      .some((entry) => String(entry || "").toLowerCase().includes(query))).slice(0, 8);
+      .some((entry) => String(entry || "").toLowerCase().includes(query)));
   }, [query, students]);
 
   const choose = (student) => {
@@ -913,31 +916,86 @@ export function renderTemplateWithRecord(text, record = {}) {
     sId = record.rollNo && record.rollNo !== "-" ? record.rollNo : (record.admissionNo ? record.admissionNo.replace(/\D/g, "") : "518");
   }
 
+  const studentName = record.student || record.studentName || record.name || "Student Name";
+  const admissionNo = record.admissionNo || record.admission_no || "ADM-2026-0000";
+  const rollNo = record.rollNo && record.rollNo !== "-" ? record.rollNo : (record.admissionNo ? record.admissionNo.replace(/\D/g, "") : "101");
+  const groupName = record.group || record.groupName || record.group_name || "MPC";
+  const academicLevel = record.level || record.academicLevel || record.academic_level || "1st Year";
+  const academicYear = record.academicYear || record.academic_year || "2026-2027";
+  const boardName = record.board || record.boardName || record.board_name || "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
+  const courseName = record.courseName || record.course_name || `Intermediate (${groupName})`;
+  const certNumber = record.number || record.certificateNo || record.certificateNumber || "CERT-001";
+  const issueDateStr = formatDateDdMmYyyy(record.issue || record.issueDate || todayIso());
+  const requestDateStr = formatDateDdMmYyyy(record.requestDate || todayIso());
+  const purposeStr = record.purpose || "Higher Education / Official Purpose";
+  const remarksStr = record.remarks || "";
+
   const merged = {
     ...FALLBACK_PLACEHOLDERS,
-    student_name: record.student || record.studentName || record.name || "Student Name",
+    student_name: studentName,
+    studentname: studentName,
+    student: studentName,
+    name: studentName,
+    fullname: studentName,
     father_name: father || "Parent Name",
+    fathername: father || "Parent Name",
+    father: father || "Parent Name",
+    parent_name: father || "Parent Name",
     mother_name: record.motherName || record.mother_name || "Anita Devi",
+    mothername: record.motherName || record.mother_name || "Anita Devi",
+    mother: record.motherName || record.mother_name || "Anita Devi",
     student_id: String(sId || "518"),
-    admission_no: record.admissionNo || record.admission_no || "ADM-2026-0000",
-    roll_no: record.rollNo && record.rollNo !== "-" ? record.rollNo : (record.admissionNo ? record.admissionNo.replace(/\D/g, "") : "101"),
-    group_name: record.group || record.groupName || record.group_name || "MPC",
-    academic_level: record.level || record.academicLevel || record.academic_level || "I / II Year",
-    academic_year: record.academicYear || record.academic_year || "2026-2027",
-    board_name: record.board || record.boardName || record.board_name || "Board of Intermediate Education, Andhra Pradesh (BIEAP)",
-    course_name: record.courseName || record.course_name || "Intermediate (MPC)",
-    certificate_number: record.number || record.certificateNo || record.certificateNumber || "BC/2026/001",
-    issue_date: formatDateDdMmYyyy(record.issue || record.issueDate || todayIso()),
+    studentid: String(sId || "518"),
+    id: String(sId || "518"),
+    admission_no: admissionNo,
+    admissionno: admissionNo,
+    admission_number: admissionNo,
+    roll_no: rollNo,
+    rollno: rollNo,
+    roll_number: rollNo,
+    group_name: groupName,
+    groupname: groupName,
+    group: groupName,
+    stream: groupName,
+    section: record.section || record.sectionName || "A",
+    section_name: record.section || record.sectionName || "A",
+    academic_level: academicLevel,
+    academiclevel: academicLevel,
+    level: academicLevel,
+    year: academicLevel,
+    academic_year: academicYear,
+    academicyear: academicYear,
+    board_name: boardName,
+    boardname: boardName,
+    board: boardName,
+    course_name: courseName,
+    coursename: courseName,
+    course: "Intermediate",
+    certificate_number: certNumber,
+    certificatenumber: certNumber,
+    certificate_no: certNumber,
+    certificateno: certNumber,
+    number: certNumber,
+    issue_date: issueDateStr,
+    issuedate: issueDateStr,
+    date: issueDateStr,
+    request_date: requestDateStr,
+    requestdate: requestDateStr,
     place: record.place || "Vijayawada",
-    purpose: record.purpose || "Higher Education / Official Purpose",
-    principal_name: record.principalName || "Dr. S. K. Rao",
+    purpose: purposeStr,
+    remarks: remarksStr,
+    status: record.status || "Generated",
+    principal_name: record.principalName || record.issuedBy || "Dr. S. K. Rao (Principal)",
+    issued_by: record.issuedBy || "Dr. S. K. Rao (Principal)",
     study_from: record.studyFrom || "June 2025",
     study_to: record.studyTo || "May 2027",
     conduct_rating: record.conductRating || "Good",
+    conduct: record.conductRating || "Good",
     amount_paid: record.amountPaid || "45,000",
     amount_in_words: record.amountInWords || "Forty Five Thousand Only",
     medium: record.medium || "English",
     dob: record.dob || "14 August 2008",
+    date_of_birth: record.dob || "14 August 2008",
     date_of_admission: record.dateOfAdmission || "10 June 2025",
     reason_for_leaving: record.reasonForLeaving || "Completed Course",
     dues_cleared: record.duesCleared || "YES",
@@ -949,34 +1007,73 @@ export function renderTemplateWithRecord(text, record = {}) {
     fee_type: record.feeType || "Tuition & Examination Fees",
     payment_date: record.paymentDate || "01 Sep 2026",
     receipt_number: record.receiptNumber || "REC-2026-992",
+    college_name: "Pirnav College",
+    college_address: "D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh",
     custom_body: record.customBody || record.purpose || "has demonstrated commendable academic performance and exemplary conduct",
   };
 
-  let interpolated = cleanText.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (match, key) => {
-    if (merged[key] !== undefined && merged[key] !== null && String(merged[key]).trim() !== "") {
-      return String(merged[key]);
+  const resolveTokenValue = (rawKey) => {
+    if (!rawKey) return "";
+    const cleanKey = String(rawKey).trim().replace(/^data\./i, "").replace(/^record\./i, "");
+    const lowerKey = cleanKey.toLowerCase();
+    const snakeKey = cleanKey.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+
+    if (merged[cleanKey] !== undefined && merged[cleanKey] !== null && String(merged[cleanKey]).trim() !== "") {
+      return String(merged[cleanKey]);
     }
-    if (FALLBACK_PLACEHOLDERS[key] !== undefined) {
-      return FALLBACK_PLACEHOLDERS[key];
+    if (merged[lowerKey] !== undefined && merged[lowerKey] !== null && String(merged[lowerKey]).trim() !== "") {
+      return String(merged[lowerKey]);
     }
-    return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    if (merged[snakeKey] !== undefined && merged[snakeKey] !== null && String(merged[snakeKey]).trim() !== "") {
+      return String(merged[snakeKey]);
+    }
+    if (FALLBACK_PLACEHOLDERS[lowerKey] !== undefined) {
+      return FALLBACK_PLACEHOLDERS[lowerKey];
+    }
+    if (FALLBACK_PLACEHOLDERS[snakeKey] !== undefined) {
+      return FALLBACK_PLACEHOLDERS[snakeKey];
+    }
+    return "";
+  };
+
+  // Replace {{token}}
+  let interpolated = cleanText.replace(/\{\{([a-zA-Z0-9_\.\-]+)\}\}/g, (match, key) => {
+    const val = resolveTokenValue(key);
+    return val !== undefined ? val : "";
   });
 
-  // Also sanitize single-bracket placeholders if any
-  interpolated = interpolated.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
-    if (merged[key] !== undefined && merged[key] !== null && String(merged[key]).trim() !== "") {
-      return String(merged[key]);
-    }
-    if (FALLBACK_PLACEHOLDERS[key] !== undefined) {
-      return FALLBACK_PLACEHOLDERS[key];
-    }
-    return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  // Replace ${data.token} or ${token}
+  interpolated = interpolated.replace(/\$\{([a-zA-Z0-9_\.\-]+)\}/g, (match, key) => {
+    const val = resolveTokenValue(key);
+    return val !== undefined ? val : "";
   });
 
-  return interpolated;
+  // Replace {token}
+  interpolated = interpolated.replace(/\{([a-zA-Z0-9_\.\-]+)\}/g, (match, key) => {
+    const val = resolveTokenValue(key);
+    return val !== undefined ? val : "";
+  });
+
+  return interpolated.trim();
 }
 
 function getCertificateTemplate(type, record) {
+  if (record?.paragraphOne && record?.heading) {
+    return {
+      heading: record.heading,
+      paragraphOne: record.paragraphOne,
+      paragraphTwo: record.paragraphTwo || (record.purpose ? `This certificate is issued for the purpose of ${record.purpose}.` : ""),
+      isCustom: true,
+      borderColor: record.borderColor || "#1e3a8a",
+      badgeBgColor: record.badgeBgColor || record.borderColor || "#1e3a8a",
+      badgeTextColor: record.badgeTextColor || "#ffffff",
+      signatureType: record.signatureType || "Principal",
+      seal: record.sealText || "Principal Seal",
+      qrEnabled: record.qrEnabled !== false,
+      templateObj: null,
+    };
+  }
+
   const presentation = resolveCertificatePresentation(type, record?.orientation);
   const rawType = presentation?.type || type || "";
 
@@ -1132,6 +1229,14 @@ const CERTIFICATE_PRINT_CSS = `
   .cert-header-left {
     display: flex;
     justify-content: center;
+    align-items: center;
+  }
+  .cert-logo-img {
+    height: 48px;
+    width: auto;
+    max-width: 85px;
+    object-fit: contain;
+    display: block;
   }
   .cert-default-logo {
     width: 42px;
@@ -1232,30 +1337,57 @@ const CERTIFICATE_PRINT_CSS = `
     color: #334155;
   }
   .cert-footer-col p { margin: 2px 0; }
-  .cert-footer-col.center { text-align: center; }
+  .cert-footer-col.center { text-align: center; display: flex; justify-content: center; align-items: center; }
   .cert-footer-col.right { text-align: right; }
   .cert-seal-stamp {
-    display: inline-block;
     border: 2px dashed #1e3a8a;
     color: #1e3a8a;
     border-radius: 50%;
-    width: 72px;
-    height: 72px;
-    display: flex;
+    width: 76px;
+    height: 76px;
+    min-width: 76px;
+    min-height: 76px;
+    max-width: 76px;
+    max-height: 76px;
+    display: inline-flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: 0.5px;
     text-transform: uppercase;
     margin: 0 auto;
     text-align: center;
+    box-sizing: border-box;
+    padding: 4px;
+    overflow: hidden;
+    word-break: break-word;
+  }
+  .cert-seal-stamp span {
+    display: block;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: 0.5px;
   }
   .cert-qr-placeholder {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 3px;
-    margin-top: 8px;
+    margin-top: 6px;
+  }
+  .cert-qr-svg-wrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cert-qr-svg-wrap svg {
+    display: block;
+    width: 100%;
+    height: 100%;
   }
   .qr-box {
     width: 44px;
@@ -1340,7 +1472,7 @@ function buildPrintHtml(record) {
         <header class="cert-header">
           <div class="cert-header-grid">
             <div class="cert-header-left">
-              <div class="cert-default-logo" style="background-color: ${borderColor}">P</div>
+              <img src="${pirnavCollegeCrest}" alt="Pirnav College" class="cert-logo-img" />
             </div>
             <div class="cert-header-center">
               <h1 class="cert-institution-name" style="color: ${borderColor}">PIRNAV COLLEGE</h1>
@@ -1379,7 +1511,9 @@ function buildPrintHtml(record) {
             <p>Date: <strong>${issueDate}</strong></p>
             ${template.qrEnabled !== false ? `
               <div class="cert-qr-placeholder">
-                <div class="qr-box">QR</div>
+                <div class="cert-qr-svg-wrap" style="width: 48px; height: 48px;">
+                  ${generateQrCodeSvg(`https://pirnavcollege.edu.in/verify-certificate/${encodeURIComponent(certificateNo)}`, 48, borderColor)}
+                </div>
                 <span>Scan to verify</span>
               </div>
             ` : ''}
@@ -1387,7 +1521,7 @@ function buildPrintHtml(record) {
 
           <div class="cert-footer-col center">
             <div class="cert-seal-stamp" style="border-color: ${borderColor}; color: ${borderColor};">
-              <span>PIRNAV COLLEGE<br/>VIJAYAWADA</span>
+              <span>PIRNAV<br/>COLLEGE</span>
             </div>
           </div>
 
@@ -1474,55 +1608,14 @@ export default function CertificatesPage() {
   const filtersReadyRef = useRef(false);
 
   const availableCertificateTypes = useMemo(() => {
-    const excludedTypes = new Set([
-      "study and conduct certificate",
-      "study & conduct certificate",
-      "transfer certificate",
-      "staff management bulk upload template",
-      "student admissions bulk upload template",
-      "student id card template",
-      "bulk upload template",
-      "id card template",
-    ]);
-    const list = [...CERTIFICATE_TYPES];
-    const combined = [...activeTemplates];
-    try {
-      const stored = getStoredCertificateTemplates();
-      if (Array.isArray(stored)) {
-        stored.forEach((st) => {
-          const stTitle = st.title || st.name;
-          const stCode = st.templateCode || st.id;
-          if (!combined.some((c) => (stTitle && (c.title === stTitle || c.name === stTitle)) || (stCode && (c.templateCode === stCode || c.id === stCode)))) {
-            combined.push(st);
-          }
-        });
-      }
-    } catch {}
-
-    if (combined.length) {
-      combined.forEach((tpl) => {
-        const title = formatTemplateTitle(tpl.title || tpl.name, tpl.templateCode || tpl.id);
-        const cat = String(tpl.category || "").toLowerCase();
-        const tLower = String(title || "").toLowerCase();
-        if (
-          title &&
-          !list.includes(title) &&
-          title !== "Others" &&
-          !cat.includes("upload") &&
-          !cat.includes("bulk") &&
-          !cat.includes("document") &&
-          !tLower.includes("bulk upload") &&
-          !tLower.includes("id card")
-        ) {
-          list.splice(list.length - 1, 0, title);
-        }
-      });
-    }
-    return list.filter((item) => {
-      const lower = String(item || "").trim().toLowerCase();
-      return !excludedTypes.has(lower) && !lower.includes("bulk upload") && !lower.includes("id card");
-    });
-  }, [activeTemplates]);
+    return [
+      "Bonafide Certificate",
+      "Study Certificate",
+      "Conduct Certificate",
+      "Transfer Certificate",
+      "Others",
+    ];
+  }, []);
 
   const formFields = useMemo(
     () => baseFormFields.map((field) => {
@@ -1859,14 +1952,15 @@ export default function CertificatesPage() {
   const visibleBulkStudents = useMemo(() => {
     const normalized = (value) => String(value || "").trim().toLocaleLowerCase();
     const search = normalized(bulkStudentSearch);
-    return bulkStudentRows.filter((student) => (
-      (!bulkStudentFilters.academicYear || !student.academicYear || normalized(student.academicYear) === normalized(bulkStudentFilters.academicYear))
-      && (!bulkStudentFilters.board || !student.board || normalized(student.board) === normalized(bulkStudentFilters.board))
-      && (!bulkStudentFilters.group || normalized(student.group) === normalized(bulkStudentFilters.group))
-      && (!bulkStudentFilters.section || normalized(student.section) === normalized(bulkStudentFilters.section))
-      && (!search || [student.admissionNo, student.name, student.rollNo, student.group, student.section]
-        .some((value) => normalized(value).includes(search)))
-    ));
+    return bulkStudentRows.filter((student) => {
+      const yearMatch = !bulkStudentFilters.academicYear || !student.academicYear || normalized(student.academicYear) === normalized(bulkStudentFilters.academicYear);
+      const boardMatch = !bulkStudentFilters.board || !student.board || normalized(student.board) === normalized(bulkStudentFilters.board) || normalized(student.board).includes(normalized(bulkStudentFilters.board)) || normalized(bulkStudentFilters.board).includes(normalized(student.board));
+      const groupMatch = !bulkStudentFilters.group || normalized(student.group) === normalized(bulkStudentFilters.group);
+      const sectionMatch = !bulkStudentFilters.section || normalized(student.section) === normalized(bulkStudentFilters.section);
+      const searchMatch = !search || [student.admissionNo, student.name, student.rollNo, student.group, student.section]
+        .some((value) => normalized(value).includes(search));
+      return yearMatch && boardMatch && groupMatch && sectionMatch && searchMatch;
+    });
   }, [bulkStudentFilters, bulkStudentRows, bulkStudentSearch]);
 
   const selectedBulkAdmissionNumbers = useMemo(
@@ -1923,9 +2017,7 @@ export default function CertificatesPage() {
       next.customType = "Enter the certificate type";
     }
 
-    if (purpose && purpose.length < 5) {
-      next.purpose = "Purpose should be at least 5 characters";
-    } else if (purpose.length > MAX_PURPOSE_LENGTH) {
+    if (purpose && purpose.length > MAX_PURPOSE_LENGTH) {
       next.purpose = `Purpose should not exceed ${MAX_PURPOSE_LENGTH} characters`;
     }
 
@@ -2522,38 +2614,52 @@ export default function CertificatesPage() {
 
   const openPrintPreview = (record) => {
     if (!record) return;
+    const presentation = resolveCertificatePresentation(record.type, record.orientation);
+    if (presentation) {
+      setPrintPreview(record);
+    } else {
+      setToast("Unsupported certificate type.");
+      return;
+    }
+
     (async () => {
       const requestId = ++detailsRequestRef.current;
       const resolvedId = await resolveServerCertificateId(record);
-      if (!resolvedId) {
-        if (requestId === detailsRequestRef.current) {
-          if (resolveCertificatePresentation(record.type, record.orientation)) setPrintPreview(record);
-          else setToast("Unsupported certificate type.");
-        }
-        return;
-      }
+      if (!resolvedId) return;
+
       try {
-        const response = await apiClient.get(CERTIFICATE_API.getById(resolvedId));
+        const previewRes = await apiClient.get(CERTIFICATE_API.preview(resolvedId), { skipGlobalLoader: true });
         if (requestId !== detailsRequestRef.current) return;
-        const details = unwrapSinglePayload(response.data);
-        if (hasCertificateShape(details)) {
-          const normalizedDetails = normalizeCertificate(details);
-          if (!resolveCertificatePresentation(normalizedDetails.type, normalizedDetails.orientation)) {
-            setToast("Unsupported certificate type.");
-            return;
-          }
-          setPrintPreview({
-            ...normalizedDetails,
-            signature: normalizedDetails.signature || getSignatureValue(response.data) || record.signature || "",
+        const previewData = unwrapSinglePayload(previewRes.data);
+        if (previewData && (previewData.paragraphOne || previewData.heading || previewData.certificateNumber)) {
+          setPrintPreview((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              ...previewData,
+              number: previewData.certificateNumber || prev.number,
+              type: previewData.certificateType || prev.type,
+              status: previewData.status || prev.status,
+              issue: previewData.issueDate || prev.issue,
+              requestDate: previewData.requestDate || prev.requestDate,
+              remarks: previewData.remarks || prev.remarks,
+              purpose: previewData.purpose || prev.purpose,
+              paragraphOne: previewData.paragraphOne,
+              paragraphTwo: previewData.paragraphTwo,
+              heading: previewData.heading,
+              borderColor: previewData.borderColor,
+              badgeBgColor: previewData.badgeBgColor,
+              badgeTextColor: previewData.badgeTextColor,
+              signatureType: previewData.signatureType || prev.signatureType || "Principal",
+              sealText: previewData.sealText || "PIRNAV\nCOLLEGE",
+              qrEnabled: previewData.qrEnabled !== false,
+              signature: previewData.signature || getSignatureValue(previewRes.data) || prev.signature || "",
+            };
           });
           return;
         }
       } catch {
-        // keep fallback below
-      }
-      if (requestId === detailsRequestRef.current) {
-        if (resolveCertificatePresentation(record.type, record.orientation)) setPrintPreview(record);
-        else setToast("Unsupported certificate type.");
+        // Ignored, user already has full record preview
       }
     })();
   };
@@ -2801,7 +2907,7 @@ export default function CertificatesPage() {
                                 setErrors((prev) => ({ ...prev, type: undefined, customType: undefined }));
                               }}
                             >
-                              <option value="">Select Certificate Type</option>
+                              <option value="" disabled hidden>Select Certificate Type</option>
                               {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
                             </select>
                             <FaChevronDown size={13} aria-hidden="true" />
@@ -3090,11 +3196,9 @@ export default function CertificatesPage() {
         <footer className="cert-table-footer">
           <span>Showing {filtered.length ? (currentPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} of {filtered.length} records</span>
           <nav aria-label="Certificate records pagination">
-            <button type="button" disabled={currentPage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Prev</button>
-            {Array.from({ length: totalPages }, (_, index) => index + 1).map((pageNumber) => (
-              <button type="button" key={pageNumber} className={pageNumber === currentPage ? "active" : ""} aria-current={pageNumber === currentPage ? "page" : undefined} onClick={() => setPage(pageNumber)}>{pageNumber}</button>
-            ))}
-            <button type="button" disabled={currentPage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
+            <button type="button" disabled={currentPage <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>Prev</button>
+            <button type="button" className="active" aria-current="page">{currentPage}</button>
+            <button type="button" disabled={currentPage >= totalPages || totalPages === 0} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}>Next</button>
           </nav>
         </footer>
         </section>
@@ -3255,11 +3359,9 @@ export default function CertificatesPage() {
             <footer className="cert-table-footer">
               <span>Showing {actionRows.length ? (currentActionPage - 1) * PAGE_SIZE + 1 : 0}–{Math.min(currentActionPage * PAGE_SIZE, actionRows.length)} of {actionRows.length} records</span>
               <nav aria-label="Certificate workflow pagination">
-                <button type="button" disabled={currentActionPage === 1} onClick={() => setActionPage((value) => Math.max(1, value - 1))}>Prev</button>
-                {Array.from({ length: actionTotalPages }, (_, index) => index + 1).map((pageNumber) => (
-                  <button type="button" key={pageNumber} className={pageNumber === currentActionPage ? "active" : ""} aria-current={pageNumber === currentActionPage ? "page" : undefined} onClick={() => setActionPage(pageNumber)}>{pageNumber}</button>
-                ))}
-                <button type="button" disabled={currentActionPage === actionTotalPages} onClick={() => setActionPage((value) => Math.min(actionTotalPages, value + 1))}>Next</button>
+                <button type="button" disabled={currentActionPage <= 1} onClick={() => setActionPage((value) => Math.max(1, value - 1))}>Prev</button>
+                <button type="button" className="active" aria-current="page">{currentActionPage}</button>
+                <button type="button" disabled={currentActionPage >= actionTotalPages || actionTotalPages === 0} onClick={() => setActionPage((value) => Math.min(actionTotalPages, value + 1))}>Next</button>
               </nav>
             </footer>
           </section>
@@ -3299,7 +3401,7 @@ export default function CertificatesPage() {
                   <header className="cert-header">
                     <div className="cert-header-grid">
                       <div className="cert-header-left">
-                        <div className="cert-default-logo" style={{ backgroundColor: printTemplate.borderColor || "#1e3a8a" }}>P</div>
+                        <img src={pirnavCollegeCrest} alt="Pirnav College" className="cert-logo-img" />
                       </div>
                       <div className="cert-header-center">
                         <h1 className="cert-institution-name" style={{ color: printTemplate.borderColor || "#1e3a8a" }}>PIRNAV COLLEGE</h1>
@@ -3340,7 +3442,16 @@ export default function CertificatesPage() {
                       <p>Date: <strong>{formatDateDdMmYyyy(printPreview.issue || printPreview.requestDate || todayIso())}</strong></p>
                       {printTemplate.qrEnabled !== false && (
                         <div className="cert-qr-placeholder">
-                          <div className="qr-box">QR</div>
+                          <div
+                            className="cert-qr-svg-wrap"
+                            dangerouslySetInnerHTML={{
+                              __html: generateQrCodeSvg(
+                                `https://pirnavcollege.edu.in/verify-certificate/${encodeURIComponent(printPreview.number || "CERT-2026-001")}`,
+                                44,
+                                printTemplate.borderColor || "#1e3a8a"
+                              ),
+                            }}
+                          />
                           <span>Scan to verify</span>
                         </div>
                       )}
@@ -3348,7 +3459,7 @@ export default function CertificatesPage() {
 
                     <div className="cert-footer-col center">
                       <div className="cert-seal-stamp" style={{ borderColor: printTemplate.borderColor || "#1e3a8a", color: printTemplate.borderColor || "#1e3a8a" }}>
-                        <span>PIRNAV COLLEGE<br/>VIJAYAWADA</span>
+                        <span>PIRNAV<br/>COLLEGE</span>
                       </div>
                     </div>
 

@@ -464,8 +464,44 @@
 }
 
 /* Students Overview Card */
-.dashboard-area-chart-wrap {
+.dashboard-area-chart-container {
+  display: flex;
+  align-items: stretch;
   width: 100%;
+  height: 135px;
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-area-chart-yaxis {
+  height: 135px;
+  flex-shrink: 0;
+  overflow: visible;
+  user-select: none;
+  pointer-events: none;
+}
+
+.dashboard-area-chart-wrap {
+  flex: 1;
+  min-width: 0;
+  height: 135px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  cursor: grab;
+  user-select: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dashboard-area-chart-wrap:active {
+  cursor: grabbing;
+}
+
+.dashboard-area-chart-wrap::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .dashboard-students-chips {
@@ -903,6 +939,119 @@
   font-size: 9.5px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* Upcoming Holidays Card Styles */
+.dashboard-holiday-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-holiday-item {
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.dashboard-holiday-item:hover {
+  background-color: var(--cms-subtle);
+  border-radius: 8px;
+}
+
+.dashboard-holiday-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dashboard-holiday-title-row strong {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--cms-text);
+}
+
+.holiday-type-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.holiday-type-pill.pill-violet {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.holiday-type-pill.pill-orange {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.holiday-type-pill.pill-cyan {
+  background: #ecfeff;
+  color: #0891b2;
+  border: 1px solid #a5f3fc;
+}
+
+.holiday-type-pill.pill-blue {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.dashboard-holiday-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--cms-muted);
+  margin-top: 1px;
+}
+
+.holiday-meta-dot {
+  color: var(--cms-muted);
+}
+
+.holiday-duration-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  background: var(--cms-subtle);
+  border: 1px solid var(--cms-border);
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin-left: 2px;
+}
+
+.holiday-badge.badge-violet {
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.holiday-badge.badge-orange {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.holiday-badge.badge-cyan {
+  background: #ecfeff;
+  color: #0891b2;
+  border: 1px solid #a5f3fc;
+}
+
+.holiday-badge.badge-blue {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
 }
 
 /* Today's Highlights Strip */

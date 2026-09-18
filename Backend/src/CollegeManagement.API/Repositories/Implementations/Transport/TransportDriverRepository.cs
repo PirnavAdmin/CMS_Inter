@@ -1,19 +1,8 @@
-using CollegeManagement.API.Data;
+﻿using CollegeManagement.API.Data;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Common;
-using CollegeManagement.API.Dtos.Transport;
-using CollegeManagement.API.Dtos.Transport.Attendant;
-using CollegeManagement.API.Dtos.Transport.Dashboard;
 using CollegeManagement.API.Dtos.Transport.Driver;
-using CollegeManagement.API.Dtos.Transport.Operations;
-using CollegeManagement.API.Dtos.Transport.PickupPoint;
-using CollegeManagement.API.Dtos.Transport.Reports;
-using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
-using CollegeManagement.API.Dtos.Transport.Vehicle;
-using CollegeManagement.API.Dtos.Transport.VehicleAssignment;
-using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
-
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
@@ -43,7 +32,6 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             
             var totalCount = all.Count();
             
-            // Pagination in memory because Dapper SP returns everything for simplicity
             var items = all
                 .Skip((filter.PageNumber - 1) * filter.PageSize)
                 .Take(filter.PageSize)
@@ -135,29 +123,27 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> ExistsAsync(string licenceNumber, string mobileNumber, long? excludeDriverId = null)
         {
             using var c = Connection();
-            var sql = "SELECT COUNT(*) FROM TransportDrivers WHERE IsDeleted = 0 AND (LOWER(LicenceNumber) = @Licence OR LOWER(MobileNumber) = @Mobile) AND (@ExcludeId IS NULL OR DriverId != @ExcludeId)";
-            var count = await c.ExecuteScalarAsync<int>(sql, new { Licence = licenceNumber.Trim().ToLower(), Mobile = mobileNumber.Trim().ToLower(), ExcludeId = excludeDriverId });
+            var count = await c.ExecuteScalarAsync<int>(
+                "sp_CheckTransportDriverExists",
+                new { p_LicenceNumber = licenceNumber.Trim(), p_MobileNumber = mobileNumber.Trim(), p_ExcludeId = excludeDriverId },
+                commandType: CommandType.StoredProcedure);
             return count > 0;
         }
 
         public async Task<IEnumerable<TransportDriverLookupDto>> GetLookupAsync()
         {
             using var c = Connection();
-            var sql = "SELECT DriverId, DriverName, MobileNumber, LicenceNumber FROM TransportDrivers WHERE IsDeleted = 0 AND Status = 1 ORDER BY DriverName";
-            return await c.QueryAsync<TransportDriverLookupDto>(sql);
+            return await c.QueryAsync<TransportDriverLookupDto>("sp_GetTransportDriverLookup", commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransportDriverDto?> GetByIdOrNumberAsync(string driverIdOrNumber)
         {
             using var c = Connection();
-            var sql = "SELECT * FROM TransportDrivers WHERE IsDeleted = 0 AND (DriverId = @Search OR LOWER(LicenceNumber) = @SearchStr OR LOWER(DriverName) = @SearchStr OR LOWER(MobileNumber) = @SearchStr) LIMIT 1";
-            return await c.QueryFirstOrDefaultAsync<TransportDriverDto>(sql, new { Search = long.TryParse(driverIdOrNumber, out var id) ? id : -1, SearchStr = driverIdOrNumber.Trim().ToLower() });
+            var id = long.TryParse(driverIdOrNumber.Trim(), out var i) ? i : -1;
+            return await c.QueryFirstOrDefaultAsync<TransportDriverDto>(
+                "sp_GetTransportDriverByIdOrNumber",
+                new { p_SearchId = id, p_SearchStr = driverIdOrNumber.Trim() },
+                commandType: CommandType.StoredProcedure);
         }
     }
 }
-
-
-
-
-
-

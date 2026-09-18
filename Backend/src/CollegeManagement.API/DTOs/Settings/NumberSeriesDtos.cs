@@ -59,6 +59,10 @@ namespace CollegeManagement.API.DTOs.Settings
         public string? Desig { get; set; }
         public string? Cert { get; set; }
         public string? AcademicYear { get; set; }
+        public string? Group { get; set; }
+        public string? Section { get; set; }
+        public string? Level { get; set; }
+        public string? Exam { get; set; }
     }
 
     public class GenerateNumberSeriesResponseDto

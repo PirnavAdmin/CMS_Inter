@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Fees;
 
@@ -97,6 +97,7 @@ public class FeeStructureItemResponse
 public class CreateScholarshipRequest
 {
     [Required, StringLength(100, MinimumLength = 2)] public string ScholarshipName { get; set; } = string.Empty;
+    public string? Description { get; set; }
     [Required, StringLength(20)] public string DiscountType { get; set; } = "Percentage";
     [Range(0.01, double.MaxValue)] public decimal DiscountValue { get; set; }
     public bool IsActive { get; set; } = true;
@@ -105,6 +106,7 @@ public class CreateScholarshipRequest
 public class UpdateScholarshipRequest
 {
     [Required, StringLength(100, MinimumLength = 2)] public string ScholarshipName { get; set; } = string.Empty;
+    public string? Description { get; set; }
     [Required, StringLength(20)] public string DiscountType { get; set; } = "Percentage";
     [Range(0.01, double.MaxValue)] public decimal DiscountValue { get; set; }
     public bool IsActive { get; set; } = true;
@@ -114,6 +116,7 @@ public class ScholarshipResponse
 {
     public int ScholarshipId { get; set; }
     public string ScholarshipName { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public string DiscountType { get; set; } = string.Empty;
     public decimal DiscountValue { get; set; }
     public bool IsActive { get; set; }

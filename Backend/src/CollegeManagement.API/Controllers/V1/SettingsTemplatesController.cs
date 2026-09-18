@@ -35,6 +35,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Fetch all templates with pagination, keyword search, category filter, and active status filter.
         /// </summary>
         [HttpGet]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(TemplatePagedResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
             [FromQuery] int pageNumber = 1,
@@ -53,6 +54,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Fetch available template categories.
         /// </summary>
         [HttpGet("categories")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
         public IActionResult GetCategories()
         {
@@ -65,6 +67,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Fetch a single template by its identifier.
         /// </summary>
         [HttpGet("{id:int}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetById(int id, CancellationToken ct = default)
@@ -82,6 +85,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Fetch a single template by its unique code (e.g. BONAFIDE_CERT, TRANSFER_CERT).
         /// </summary>
         [HttpGet("by-code/{templateCode}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetByCode(string templateCode, CancellationToken ct = default)
@@ -100,6 +104,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Create a new template with dynamic placeholders and HTML content.
         /// </summary>
         [HttpPost]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
@@ -127,6 +132,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Update an existing template (auto-increments Version and updates UpdatedAt).
         /// </summary>
         [HttpPut("{id:int}")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -157,6 +163,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Soft-delete / deactivate a template.
         /// </summary>
         [HttpDelete("{id:int}")]
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Delete(int id, CancellationToken ct = default)
@@ -174,6 +181,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Toggle the active status of a template.
         /// </summary>
         [HttpPatch("{id:int}/toggle-active")]
+        [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> ToggleActive(int id, CancellationToken ct = default)
@@ -191,6 +199,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Dynamically render a template with real or sample placeholders.
         /// </summary>
         [HttpPost("preview")]
+        [AllowAnonymous]
         [ProducesResponseType(typeof(RenderedTemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> Preview([FromBody] RenderCertificateTemplateRequestDto request, CancellationToken ct = default)

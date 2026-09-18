@@ -1,4 +1,4 @@
-using CollegeManagement.API.Data;
+﻿using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Dashboard;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
@@ -7,6 +7,7 @@ using System.Data;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
 namespace CollegeManagement.API.Repositories.Implementations.Transport
 {
@@ -24,88 +25,70 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<TransportDashboardResponseDto> GetDashboardAsync()
         {
             using var c = Connection();
-            var today = DateTime.UtcNow.Date;
-            
-            var sql = @"
-                SELECT COUNT(*) FROM TransportVehicles WHERE IsDeleted = 0;
-                SELECT COUNT(*) FROM TransportVehicles WHERE IsDeleted = 0 AND Status = 1;
-                
-                SELECT COUNT(*) FROM TransportRoutes WHERE IsDeleted = 0;
-                SELECT COUNT(*) FROM TransportRoutes WHERE IsDeleted = 0 AND Status = 1;
-                
-                SELECT COUNT(*) FROM Staff WHERE IsDeleted = 0 AND Designation LIKE '%Driver%';
-                SELECT COUNT(*) FROM Staff WHERE IsDeleted = 0 AND Status = 'Active' AND Designation LIKE '%Driver%';
-                
-                SELECT COUNT(*) FROM StudentTransportAssignments WHERE IsDeleted = 0 AND Status = 1 
-                AND (EndDate IS NULL OR EndDate >= @Today);
-                
-                SELECT COUNT(*) FROM TransportAttendants WHERE IsDeleted = 0;
-                SELECT COUNT(*) FROM TransportAttendants WHERE IsDeleted = 0 AND Status = 1;
-            ";
-            
-            using var multi = await c.QueryMultipleAsync(sql, new { Today = today });
-            var totalVehicles = multi.Read<int>().Single();
-            var activeVehicles = multi.Read<int>().Single();
-            
-            var totalRoutes = multi.Read<int>().Single();
-            var activeRoutes = multi.Read<int>().Single();
-            
-            var totalDrivers = multi.Read<int>().Single();
-            var activeDrivers = multi.Read<int>().Single();
-            
-            var activeStudents = multi.Read<int>().Single();
-            
-            var totalAttendants = multi.Read<int>().Single();
-            var activeAttendants = multi.Read<int>().Single();
-            
-            var summary = new TransportDashboardDto
+            using var multi = await c.QueryMultipleAsync(
+                "sp_GetTransportDashboard",
+                commandType: CommandType.StoredProcedure);
+
+            var kpi = await multi.ReadFirstOrDefaultAsync<dynamic>();
+            var occupancy = (await multi.ReadAsync<VehicleOccupancyDto>()).ToList();
+            var routeStudents = (await multi.ReadAsync<RouteStudentSummaryDto>()).ToList();
+
+            var summary = new TransportDashboardDto();
+            if (kpi != null)
             {
-                TotalVehicles = totalVehicles, 
-                ActiveVehicles = activeVehicles,
-                TotalRoutes = totalRoutes, 
-                ActiveRoutes = activeRoutes,
-                TotalDrivers = totalDrivers, 
-                ActiveDrivers = activeDrivers,
-                StudentsUsingTransport = activeStudents,
-                TotalBusAttendants = totalAttendants,
-                ActiveBusAttendants = activeAttendants
-            };
+                summary.TotalVehicles = (int)(kpi.TotalVehicles ?? 0);
+                summary.ActiveVehicles = (int)(kpi.ActiveVehicles ?? 0);
+                summary.InactiveVehicles = summary.TotalVehicles - summary.ActiveVehicles;
+                summary.TotalRoutes = (int)(kpi.TotalRoutes ?? 0);
+                summary.ActiveRoutes = (int)(kpi.ActiveRoutes ?? 0);
+                summary.TotalDrivers = (int)(kpi.TotalDrivers ?? 0);
+                summary.ActiveDrivers = (int)(kpi.ActiveDrivers ?? 0);
+                summary.TotalBusAttendants = (int)(kpi.TotalAttendants ?? 0);
+                summary.ActiveBusAttendants = (int)(kpi.TotalAttendants ?? 0);
+                summary.StudentsUsingTransport = (int)(kpi.ActiveStudents ?? 0);
+                summary.VehiclesUnderMaintenance = (int)(kpi.MaintenanceVehicles ?? 0);
+                summary.ExpiringVehicleDocuments = (int)(kpi.ExpiringDocs ?? 0);
+                summary.ExpiringDriverLicenses = (int)(kpi.ExpiringLicenses ?? 0);
+                summary.MorningRunningCount = (int)(kpi.RunningTrips ?? 0);
+                summary.MorningCompletedCount = (int)(kpi.CompletedTrips ?? 0);
+                summary.SeatOccupancyPercentage = Convert.ToDecimal(kpi.Utilization ?? 0);
+                summary.WarningMessage = (summary.ExpiringVehicleDocuments + summary.ExpiringDriverLicenses) > 0
+                    ? $"{summary.ExpiringVehicleDocuments + summary.ExpiringDriverLicenses} documents require immediate renewal"
+                    : "All documents and fleet compliance are up to date";
+            }
+
+            foreach (var item in occupancy)
+            {
+                item.AvailableSeats = Math.Max(0, item.Capacity - item.AssignedStudents);
+            }
 
             return new TransportDashboardResponseDto
             {
-                Summary = summary
+                Summary = summary,
+                VehicleOccupancy = occupancy,
+                RouteStudents = routeStudents,
+                TodayOperations = new List<TodayOperationDto>(),
+                MaintenanceDue = new List<MaintenanceDueDto>()
             };
         }
 
         public async Task<OperationDetailsDto?> GetOperationDetailsAsync(long assignmentId)
         {
             using var c = Connection();
-            var sql = @"
-                SELECT 
-                    a.AssignmentId,
-                    a.VehicleId,
-                    v.VehicleNumber AS VehicleNumber, 
-                    v.VehicleRegistrationNo AS RegistrationNumber,
-                    v.Capacity, 
-                    a.RouteId,
-                    r.RouteName, 
-                    CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, '')) AS DriverName, 
-                    st.Mobile AS DriverMobile,
-                    a.AttendantId,
-                    att.AttendantName,
-                    att.MobileNumber AS AttendantMobile,
-                    a.EffectiveFrom,
-                    IF(a.Status, 'Completed', 'Inactive') AS Status,
-                    (SELECT COUNT(*) FROM StudentTransportAssignments sta WHERE sta.VehicleAssignmentId = a.AssignmentId AND sta.IsDeleted = 0) AS AssignedStudentsCount,
-                    (SELECT COUNT(*) FROM StudentTransportAssignments sta WHERE sta.VehicleAssignmentId = a.AssignmentId AND sta.IsDeleted = 0) AS TotalStudents
-                FROM TransportVehicleAssignments a
-                LEFT JOIN TransportVehicles v ON a.VehicleId = v.VehicleId
-                LEFT JOIN Staff st ON a.DriverId = st.Id
-                LEFT JOIN TransportAttendants att ON a.AttendantId = att.AttendantId
-                LEFT JOIN TransportRoutes r ON a.RouteId = r.RouteId
-                WHERE a.AssignmentId = @Id AND a.IsDeleted = 0
-            ";
-            return await c.QueryFirstOrDefaultAsync<OperationDetailsDto>(sql, new { Id = assignmentId });
+            using var multi = await c.QueryMultipleAsync(
+                "sp_GetTransportOperationDetails",
+                new { p_AssignmentId = assignmentId },
+                commandType: CommandType.StoredProcedure);
+
+            var details = await multi.ReadFirstOrDefaultAsync<OperationDetailsDto>();
+            if (details == null) return null;
+
+            details.MorningTripSequence = (await multi.ReadAsync<TripSequenceStopDto>()).ToList();
+            details.EveningTripSequence = details.MorningTripSequence.OrderByDescending(s => s.StepNo).ToList();
+            details.StudentList = (await multi.ReadAsync<OperationStudentDto>()).ToList();
+            details.AvailableSeats = Math.Max(0, details.Capacity - details.AssignedStudentsCount);
+
+            return details;
         }
     }
 }

@@ -142,8 +142,11 @@ namespace CollegeManagement.API.Tests
             services.AddSingleton<IConfiguration>(testConfig);
 
             // Email Service mock / null service
+            services.AddLogging();
             services.AddScoped<IEmailService, NullTestEmailService>();
             services.AddScoped<IBoardRepository, BoardRepository>();
+            services.AddScoped<IUserRepository, UserRepository>();
+            services.AddScoped<IUserProvisioningService, UserProvisioningService>();
 
             // Repositories & Services
             services.AddScoped<IStaffRepository, StaffRepository>();

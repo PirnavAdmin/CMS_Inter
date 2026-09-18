@@ -1,4 +1,4 @@
-using CollegeManagement.API.Data;
+﻿using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Common;
@@ -23,30 +23,20 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<(IEnumerable<VehicleMaintenanceDto> Items, int TotalCount)> GetAllAsync(VehicleMaintenanceFilterDto filter)
         {
             using var c = Connection();
-            var sql = @"
-                SELECT 
-                    m.MaintenanceId, m.VehicleId, v.VehicleRegistrationNo AS VehicleNumber,
-                    m.ServiceType, m.ServiceDate, m.Cost, m.VendorCenter, m.NextServiceDue,
-                    m.Remarks, m.Status
-                FROM VehicleMaintenances m
-                LEFT JOIN TransportVehicles v ON m.VehicleId = v.VehicleId
-                WHERE m.IsDeleted = 0";
-                
-            var items = await c.QueryAsync<VehicleMaintenanceDto>(sql);
-            var list = items.AsQueryable();
+            var all = await c.QueryAsync<VehicleMaintenanceDto>(
+                "sp_GetVehicleMaintenances",
+                new
+                {
+                    p_VehicleId = filter.VehicleId,
+                    p_FromDate = filter.FromDate?.Date,
+                    p_ToDate = filter.ToDate?.Date,
+                    p_Status = filter.Status,
+                    p_Search = filter.Search ?? ""
+                },
+                commandType: CommandType.StoredProcedure);
 
-            if (filter.VehicleId.HasValue) list = list.Where(x => x.VehicleId == filter.VehicleId.Value);
-            if (filter.FromDate.HasValue) list = list.Where(x => x.ServiceDate >= filter.FromDate.Value.Date);
-            if (filter.ToDate.HasValue) list = list.Where(x => x.ServiceDate <= filter.ToDate.Value.Date);
-            if (filter.Status.HasValue) list = list.Where(x => x.Status == (filter.Status.Value ? "Active" : "Inactive"));
-            
-            if (!string.IsNullOrWhiteSpace(filter.Search)) {
-                var search = filter.Search.Trim().ToLower();
-                list = list.Where(x => x.ServiceType != null && x.ServiceType.ToLower().Contains(search) || x.VendorCenter != null && x.VendorCenter.ToLower().Contains(search) || x.VehicleNumber != null && x.VehicleNumber.ToLower().Contains(search));
-            }
-            
-            var totalCount = list.Count();
-            var paged = list.OrderByDescending(x => x.ServiceDate).Skip((filter.PageNumber - 1) * filter.PageSize).Take(filter.PageSize).ToList();
+            var totalCount = all.Count();
+            var paged = all.Skip((filter.PageNumber - 1) * filter.PageSize).Take(filter.PageSize).ToList();
             
             return (paged, totalCount);
         }
@@ -54,16 +44,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<VehicleMaintenanceDto?> GetByIdAsync(long maintenanceId)
         {
             using var c = Connection();
-            var sql = @"
-                SELECT 
-                    m.MaintenanceId, m.VehicleId, v.VehicleRegistrationNo AS VehicleNumber,
-                    m.ServiceType, m.ServiceDate, m.Cost, m.VendorCenter, m.NextServiceDue,
-                    m.Remarks, m.Status
-                FROM VehicleMaintenances m
-                LEFT JOIN TransportVehicles v ON m.VehicleId = v.VehicleId
-                WHERE m.IsDeleted = 0 AND m.MaintenanceId = @Id";
-                
-            return await c.QueryFirstOrDefaultAsync<VehicleMaintenanceDto>(sql, new { Id = maintenanceId });
+            return await c.QueryFirstOrDefaultAsync<VehicleMaintenanceDto>(
+                "sp_GetVehicleMaintenanceById",
+                new { p_Id = maintenanceId },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<long> CreateAsync(CreateVehicleMaintenanceDto dto, long createdBy)
@@ -115,7 +99,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             using var c = Connection();
             var rows = await c.ExecuteAsync(
                 "sp_DeleteVehicleMaintenances",
-                new { p_Id = maintenanceId },
+                new { p_Id = maintenanceId, p_UpdatedBy = updatedBy },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -123,11 +107,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<IEnumerable<VehicleMaintenanceLookupDto>> GetLookupAsync()
         {
             using var c = Connection();
-            var sql = "SELECT MaintenanceId, ServiceType FROM VehicleMaintenances WHERE IsDeleted = 0";
-            return await c.QueryAsync<VehicleMaintenanceLookupDto>(sql);
+            return await c.QueryAsync<VehicleMaintenanceLookupDto>(
+                "sp_GetVehicleMaintenanceLookup",
+                commandType: CommandType.StoredProcedure);
         }
     }
 }
-
-
-
