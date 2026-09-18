@@ -86,7 +86,7 @@
   padding: 5px 8px;
   border: 1px solid var(--cms-border);
   border-radius: 9px;
-  background: var(--cms-subtle);
+  background: var(--cms-surface);
 }
 .master-page-actions article > svg {
   width: 18px;
@@ -127,27 +127,29 @@
   height: 42px;
   flex-basis: 136px;
   padding: 3px 7px;
+  background: var(--cms-surface);
 }
 .master-summary-actions .cms-btn,
 .master-refresh-btn {
+  box-sizing: border-box;
   width: 120px;
-  height: 44px;
-  min-height: 44px;
-  flex-basis: 120px;
+  height: 42px;
+  min-height: 42px;
+  flex: 0 0 120px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer !important;
   pointer-events: auto !important;
   user-select: none;
   border: 1px solid var(--cms-border);
-  border-radius: 14px;
+  border-radius: 9px;
   background: var(--cms-surface);
   color: var(--cms-text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .master-summary-actions .cms-btn:hover,
@@ -155,13 +157,13 @@
   border-color: var(--cms-primary-border, var(--cms-primary));
   background: var(--cms-primary-soft);
   color: var(--cms-primary);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
   transform: translateY(-1px);
 }
 .master-summary-actions .cms-btn:active,
 .master-refresh-btn:active {
-  transform: scale(0.97);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transform: scale(0.98);
+  box-shadow: none;
 }
 .master-summary-actions article > svg {
   width: 22px !important;
@@ -169,11 +171,18 @@
   min-width: 22px;
   stroke-width: 2.25;
 }
-.master-summary-actions .cms-btn svg {
-  width: 21px !important;
-  height: 21px !important;
-  min-width: 21px;
+.master-summary-actions .cms-btn svg,
+.master-refresh-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px;
+  color: var(--cms-text);
   stroke-width: 2.25;
+  transition: color 0.2s ease;
+}
+.master-summary-actions .cms-btn:hover svg,
+.master-refresh-btn:hover svg {
+  color: var(--cms-primary);
 }
 @keyframes master-spin {
   from { transform: rotate(0deg); }
