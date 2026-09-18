@@ -185,47 +185,37 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 using var c = Connection();
-                var assignments = (await c.QueryAsync<dynamic>(
-                    "sp_GetTransportVehicleAssignments",
-                    new
-                    {
-                        p_RouteId = (long?)null,
-                        p_VehicleId = (long?)null,
-                        p_DriverId = (long?)null,
-                        p_Status = (byte)1,
-                        p_Search = ""
-                    },
-                    commandType: CommandType.StoredProcedure)).ToList();
+                using var multi = await c.QueryMultipleAsync(
+                    "sp_GetTransportGpsTracking",
+                    commandType: CommandType.StoredProcedure);
 
-                var stops = (await c.QueryAsync<dynamic>(
-                    "sp_GetPickupPoints",
-                    new { p_RouteId = (long?)null, p_Search = "", p_Status = (byte?)null },
-                    commandType: CommandType.StoredProcedure)).ToList();
+                var assignments = (await multi.ReadAsync<dynamic>()).ToList();
+                var stops = (await multi.ReadAsync<dynamic>()).ToList();
 
                 var list = assignments.Select(a =>
                 {
-                    long rId = (long)a.RouteId;
+                    long rId = Convert.ToInt64(a.RouteId ?? 0);
                     var routeStops = stops
-                        .Where(s => (long)s.RouteId == rId)
+                        .Where(s => Convert.ToInt64(s.RouteId ?? 0) == rId && rId > 0)
                         .Select(s => new RouteStopDto
                         {
-                            StopId = (long)s.PickupPointId,
-                            StopName = (string)(s.StopName ?? ""),
+                            StopId = Convert.ToInt64(s.StopId ?? 0),
+                            StopName = Convert.ToString(s.StopName) ?? "",
                             DistanceKm = Convert.ToDecimal(s.DistanceKm ?? 5),
-                            ScheduledTime = s.PickupTime != null ? ((TimeSpan)s.PickupTime).ToString(@"hh\:mm") : "07:30 AM"
+                            ScheduledTime = Convert.ToString(s.ScheduledTime) ?? "07:30 AM"
                         }).ToList();
 
                     var currentStopName = routeStops.FirstOrDefault()?.StopName ?? "Campus";
 
                     return new GpsVehicleTrackingDto
                     {
-                        VehicleId = (long)a.VehicleId,
-                        VehicleNumber = (string)(a.VehicleNumber ?? ""),
-                        VehicleName = (string)(a.VehicleNumber ?? ""),
-                        RouteName = (string)(a.RouteName ?? ""),
-                        DriverName = (string)(a.DriverName ?? "Unassigned"),
-                        DriverMobile = (string)(a.DriverMobile ?? ""),
-                        AttendantName = (string)(a.AttendantName ?? "Unassigned"),
+                        VehicleId = Convert.ToInt64(a.VehicleId ?? 0),
+                        VehicleNumber = Convert.ToString(a.VehicleNumber) ?? "",
+                        VehicleName = Convert.ToString(a.VehicleName) ?? "",
+                        RouteName = Convert.ToString(a.RouteName) ?? "",
+                        DriverName = Convert.ToString(a.DriverName) ?? "Unassigned",
+                        DriverMobile = Convert.ToString(a.DriverMobile) ?? "",
+                        AttendantName = Convert.ToString(a.AttendantName) ?? "Unassigned",
                         Speed = "42 km/h",
                         Eta = "12 mins",
                         GpsSignal = "Active",

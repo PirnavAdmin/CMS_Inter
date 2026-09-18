@@ -115,7 +115,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             using var c = Connection();
             var rows = await c.ExecuteAsync(
                 "sp_DeleteTransportDrivers",
-                new { p_Id = driverId },
+                new { p_Id = driverId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }

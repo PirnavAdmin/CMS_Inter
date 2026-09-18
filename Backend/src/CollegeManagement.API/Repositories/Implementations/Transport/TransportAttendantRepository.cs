@@ -104,7 +104,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             using var c = Connection();
             var rows = await c.ExecuteAsync(
                 "sp_DeleteTransportAttendants",
-                new { p_Id = attendantId },
+                new { p_Id = attendantId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }

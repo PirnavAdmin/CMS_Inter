@@ -344,12 +344,15 @@ CREATE PROCEDURE `sp_CreateTransportRoute`(
     IN p_CreatedBy BIGINT
 )
 BEGIN
+    DECLARE v_RouteNum VARCHAR(50);
+    SET v_RouteNum = COALESCE(NULLIF(p_RouteCode, ''), CONCAT('R-', UUID_SHORT()));
+
     INSERT INTO `TransportRoutes` (
-        `RouteCode`, `RouteName`, `StartLocation`, `EndLocation`, `Distance`,
+        `RouteCode`, `RouteNumber`, `RouteName`, `StartLocation`, `EndLocation`, `Distance`,
         `EstimatedDurationMinutes`, `DefaultMonthlyFee`, `MinRangeKm`, `NonAcBaseFare`, `NonAcRatePerKm`,
         `AcBaseFare`, `AcRatePerKm`, `Description`, `Status`, `IsDeleted`, `CreatedBy`, `CreatedAt`
     ) VALUES (
-        p_RouteCode, p_RouteName, p_StartLocation, p_EndLocation, COALESCE(p_Distance, 0.00),
+        p_RouteCode, v_RouteNum, p_RouteName, p_StartLocation, p_EndLocation, COALESCE(p_Distance, 0.00),
         COALESCE(p_EstimatedDurationMinutes, 30), COALESCE(p_DefaultMonthlyFee, 0.00), COALESCE(p_MinRangeKm, 5.00),
         COALESCE(p_NonAcBaseFare, 1000.00), COALESCE(p_NonAcRatePerKm, 100.00), COALESCE(p_AcBaseFare, 1200.00),
         COALESCE(p_AcRatePerKm, 150.00), p_Description, COALESCE(p_Status, 1), 0, p_CreatedBy, NOW()
@@ -382,6 +385,7 @@ BEGIN
     UPDATE `TransportRoutes`
     SET 
         `RouteCode` = COALESCE(p_RouteCode, `RouteCode`),
+        `RouteNumber` = COALESCE(p_RouteCode, `RouteNumber`),
         `RouteName` = COALESCE(p_RouteName, `RouteName`),
         `StartLocation` = p_StartLocation,
         `EndLocation` = p_EndLocation,
@@ -633,6 +637,23 @@ BEGIN
 END //
 DELIMITER ;
 
+DROP PROCEDURE IF EXISTS `sp_CheckPickupPointSequenceExists`;
+DELIMITER //
+CREATE PROCEDURE `sp_CheckPickupPointSequenceExists`(
+    IN p_RouteId BIGINT,
+    IN p_SequenceNo INT,
+    IN p_ExcludeId BIGINT
+)
+BEGIN
+    SELECT COUNT(*) AS CountValue
+    FROM `PickupPoints`
+    WHERE `RouteId` = p_RouteId
+      AND `StopOrder` = p_SequenceNo
+      AND `IsDeleted` = 0
+      AND (p_ExcludeId IS NULL OR `PickupPointId` != p_ExcludeId);
+END //
+DELIMITER ;
+
 -- -----------------------------------------------------------------------------
 -- 4. STORED PROCEDURES: VEHICLE MANAGEMENT
 -- -----------------------------------------------------------------------------
@@ -836,32 +857,35 @@ CREATE PROCEDURE `sp_GetTransportDrivers`(
 )
 BEGIN
     SELECT 
-        d.DriverId,
-        d.DriverName,
-        d.EmployeeId,
-        d.LicenseNo AS LicenceNumber,
-        d.LicenseNo AS LicenseNumber,
-        d.LicenseExpiry AS LicenceExpiry,
-        d.LicenseExpiry AS LicenseExpiryDate,
-        d.MobileNo AS MobileNumber,
-        d.AlternateMobileNo AS AlternateMobileNumber,
-        d.Email,
-        d.Address,
-        d.BloodGroup,
-        d.EmergencyContactName,
-        d.EmergencyContactNumber,
-        d.AssignedVehicleId,
+        s.Id AS DriverId,
+        CONCAT(TRIM(s.FirstName), ' ', TRIM(COALESCE(s.LastName, ''))) AS DriverName,
+        s.EmployeeId,
+        COALESCE(NULLIF(td.LicenseNo, ''), NULLIF(td.LicenceNumber, ''), CONCAT('DL-', s.EmployeeId)) AS LicenseNumber,
+        COALESCE(td.LicenseExpiry, td.LicenceExpiry) AS LicenseExpiryDate,
+        s.Mobile AS MobileNumber,
+        td.AlternateMobileNo AS AlternateMobileNumber,
+        s.Email,
+        COALESCE(NULLIF(td.Address, ''), s.CurrentAddress, s.PermanentAddress, '') AS Address,
+        s.BloodGroup,
+        td.EmergencyContactName,
+        td.EmergencyContactNumber,
+        td.AssignedVehicleId,
         v.VehicleNumber AS AssignedVehicleNumber,
-        CASE WHEN d.Status = 1 THEN 'Active' ELSE 'Inactive' END AS Status
-    FROM TransportDrivers d
-    LEFT JOIN TransportVehicles v ON d.AssignedVehicleId = v.VehicleId AND v.IsDeleted = 0
-    WHERE d.IsDeleted = 0
+        CASE WHEN s.Status = 'Active' THEN 'Active' ELSE 'Inactive' END AS Status,
+        s.CreatedAt
+    FROM Staff s
+    INNER JOIN Users u ON u.StaffId = s.Id AND u.RoleId = 12 AND u.IsActive = 1
+    LEFT JOIN TransportDrivers td ON (td.DriverId = s.Id OR td.EmployeeId = s.EmployeeId)
+    LEFT JOIN TransportVehicles v ON td.AssignedVehicleId = v.VehicleId AND v.IsDeleted = 0
+    WHERE s.IsDeleted = 0
+      AND (s.StaffType = 'Non-Teaching' OR s.StaffType = '2')
+      AND COALESCE(td.IsDeleted, 0) = 0
       AND (p_Search IS NULL OR p_Search = '' 
-           OR LOWER(d.DriverName) LIKE CONCAT('%', LOWER(p_Search), '%')
-           OR LOWER(d.EmployeeId) LIKE CONCAT('%', LOWER(p_Search), '%')
-           OR LOWER(d.LicenseNo) LIKE CONCAT('%', LOWER(p_Search), '%')
-           OR LOWER(d.MobileNo) LIKE CONCAT('%', LOWER(p_Search), '%'))
-    ORDER BY d.DriverName ASC;
+           OR LOWER(CONCAT(s.FirstName, ' ', s.LastName)) LIKE CONCAT('%', LOWER(p_Search), '%')
+           OR LOWER(s.EmployeeId) LIKE CONCAT('%', LOWER(p_Search), '%')
+           OR LOWER(s.Mobile) LIKE CONCAT('%', LOWER(p_Search), '%')
+           OR LOWER(COALESCE(td.LicenseNo, '')) LIKE CONCAT('%', LOWER(p_Search), '%'))
+    ORDER BY s.FirstName ASC, s.LastName ASC;
 END //
 DELIMITER ;
 
@@ -872,59 +896,30 @@ CREATE PROCEDURE `sp_GetTransportDriversById`(
 )
 BEGIN
     SELECT 
-        d.DriverId,
-        d.DriverName,
-        d.EmployeeId,
-        d.LicenseNo AS LicenceNumber,
-        d.LicenseNo AS LicenseNumber,
-        d.LicenseExpiry AS LicenceExpiry,
-        d.LicenseExpiry AS LicenseExpiryDate,
-        d.MobileNo AS MobileNumber,
-        d.AlternateMobileNo AS AlternateMobileNumber,
-        d.Email,
-        d.Address,
-        d.BloodGroup,
-        d.EmergencyContactName,
-        d.EmergencyContactNumber,
-        d.AssignedVehicleId,
+        s.Id AS DriverId,
+        CONCAT(TRIM(s.FirstName), ' ', TRIM(COALESCE(s.LastName, ''))) AS DriverName,
+        s.EmployeeId,
+        COALESCE(NULLIF(td.LicenseNo, ''), NULLIF(td.LicenceNumber, ''), CONCAT('DL-', s.EmployeeId)) AS LicenseNumber,
+        COALESCE(td.LicenseExpiry, td.LicenceExpiry) AS LicenseExpiryDate,
+        s.Mobile AS MobileNumber,
+        td.AlternateMobileNo AS AlternateMobileNumber,
+        s.Email,
+        COALESCE(NULLIF(td.Address, ''), s.CurrentAddress, s.PermanentAddress, '') AS Address,
+        s.BloodGroup,
+        td.EmergencyContactName,
+        td.EmergencyContactNumber,
+        td.AssignedVehicleId,
         v.VehicleNumber AS AssignedVehicleNumber,
-        CASE WHEN d.Status = 1 THEN 'Active' ELSE 'Inactive' END AS Status
-    FROM TransportDrivers d
-    LEFT JOIN TransportVehicles v ON d.AssignedVehicleId = v.VehicleId AND v.IsDeleted = 0
-    WHERE d.DriverId = p_Id AND d.IsDeleted = 0
+        CASE WHEN s.Status = 'Active' THEN 'Active' ELSE 'Inactive' END AS Status,
+        s.CreatedAt
+    FROM Staff s
+    INNER JOIN Users u ON u.StaffId = s.Id AND u.RoleId = 12 AND u.IsActive = 1
+    LEFT JOIN TransportDrivers td ON (td.DriverId = s.Id OR td.EmployeeId = s.EmployeeId)
+    LEFT JOIN TransportVehicles v ON td.AssignedVehicleId = v.VehicleId AND v.IsDeleted = 0
+    WHERE s.Id = p_Id AND s.IsDeleted = 0
+      AND (s.StaffType = 'Non-Teaching' OR s.StaffType = '2')
+      AND COALESCE(td.IsDeleted, 0) = 0
     LIMIT 1;
-END //
-DELIMITER ;
-
-DROP PROCEDURE IF EXISTS `sp_CreateTransportDrivers`;
-DELIMITER //
-CREATE PROCEDURE `sp_CreateTransportDrivers`(
-    IN p_DriverName VARCHAR(100),
-    IN p_EmployeeId VARCHAR(50),
-    IN p_MobileNumber VARCHAR(20),
-    IN p_AlternateMobileNumber VARCHAR(20),
-    IN p_Email VARCHAR(100),
-    IN p_LicenceNumber VARCHAR(50),
-    IN p_LicenceExpiry DATE,
-    IN p_Address VARCHAR(255),
-    IN p_BloodGroup VARCHAR(10),
-    IN p_EmergencyContactName VARCHAR(100),
-    IN p_EmergencyContactNumber VARCHAR(20),
-    IN p_Status TINYINT(1),
-    IN p_CreatedBy BIGINT,
-    IN p_UpdatedBy BIGINT
-)
-BEGIN
-    INSERT INTO `TransportDrivers` (
-        `DriverName`, `EmployeeId`, `MobileNo`, `AlternateMobileNo`, `Email`,
-        `LicenseNo`, `LicenseExpiry`, `Address`, `BloodGroup`, `EmergencyContactName`,
-        `EmergencyContactNumber`, `Status`, `IsDeleted`, `CreatedBy`, `CreatedAt`
-    ) VALUES (
-        p_DriverName, p_EmployeeId, p_MobileNumber, p_AlternateMobileNumber, p_Email,
-        p_LicenceNumber, p_LicenceExpiry, p_Address, p_BloodGroup, p_EmergencyContactName,
-        p_EmergencyContactNumber, COALESCE(p_Status, 1), 0, p_CreatedBy, NOW()
-    );
-    SELECT LAST_INSERT_ID() AS DriverId;
 END //
 DELIMITER ;
 
@@ -948,8 +943,16 @@ CREATE PROCEDURE `sp_UpdateTransportDrivers`(
     IN p_UpdatedBy BIGINT
 )
 BEGIN
-    UPDATE `TransportDrivers`
-    SET 
+    INSERT INTO `TransportDrivers` (
+        `DriverId`, `DriverName`, `EmployeeId`, `MobileNo`, `AlternateMobileNo`, `Email`,
+        `LicenseNo`, `LicenseExpiry`, `Address`, `BloodGroup`, `EmergencyContactName`,
+        `EmergencyContactNumber`, `Status`, `IsDeleted`, `CreatedBy`, `CreatedAt`
+    ) VALUES (
+        p_Id, p_DriverName, p_EmployeeId, p_MobileNumber, p_AlternateMobileNumber, p_Email,
+        p_LicenceNumber, p_LicenceExpiry, p_Address, p_BloodGroup, p_EmergencyContactName,
+        p_EmergencyContactNumber, COALESCE(p_Status, 1), 0, p_UpdatedBy, NOW()
+    )
+    ON DUPLICATE KEY UPDATE
         `DriverName` = COALESCE(p_DriverName, `DriverName`),
         `EmployeeId` = COALESCE(p_EmployeeId, `EmployeeId`),
         `MobileNo` = COALESCE(p_MobileNumber, `MobileNo`),
@@ -963,8 +966,7 @@ BEGIN
         `EmergencyContactNumber` = p_EmergencyContactNumber,
         `Status` = COALESCE(p_Status, `Status`),
         `UpdatedBy` = p_UpdatedBy,
-        `UpdatedAt` = NOW()
-    WHERE `DriverId` = p_Id AND `IsDeleted` = 0;
+        `UpdatedAt` = NOW();
     
     SELECT ROW_COUNT() AS AffectedRows;
 END //
@@ -977,9 +979,10 @@ CREATE PROCEDURE `sp_DeleteTransportDrivers`(
     IN p_UpdatedBy BIGINT
 )
 BEGIN
-    UPDATE `TransportDrivers`
-    SET `IsDeleted` = 1, `UpdatedBy` = p_UpdatedBy, `UpdatedAt` = NOW()
-    WHERE `DriverId` = p_Id AND `IsDeleted` = 0;
+    INSERT INTO `TransportDrivers` (`DriverId`, `DriverName`, `EmployeeId`, `LicenseNo`, `MobileNo`, `IsDeleted`, `UpdatedBy`, `UpdatedAt`)
+    SELECT s.Id, CONCAT(TRIM(s.FirstName), ' ', TRIM(COALESCE(s.LastName, ''))), s.EmployeeId, CONCAT('DL-', s.EmployeeId), s.Mobile, 1, p_UpdatedBy, NOW()
+    FROM Staff s WHERE s.Id = p_Id
+    ON DUPLICATE KEY UPDATE `IsDeleted` = 1, `UpdatedBy` = p_UpdatedBy, `UpdatedAt` = NOW();
     
     SELECT ROW_COUNT() AS AffectedRows;
 END //
@@ -990,14 +993,19 @@ DELIMITER //
 CREATE PROCEDURE `sp_GetTransportDriverLookup`()
 BEGIN
     SELECT 
-        `DriverId`,
-        `DriverName`,
-        `EmployeeId`,
-        `MobileNo` AS MobileNumber,
-        `LicenseNo` AS LicenceNumber
-    FROM `TransportDrivers`
-    WHERE `IsDeleted` = 0 AND `Status` = 1
-    ORDER BY `DriverName` ASC;
+        s.Id AS `DriverId`,
+        CONCAT(TRIM(s.FirstName), ' ', TRIM(COALESCE(s.LastName, ''))) AS `DriverName`,
+        s.EmployeeId,
+        s.Mobile AS `MobileNumber`,
+        COALESCE(NULLIF(td.LicenseNo, ''), NULLIF(td.LicenceNumber, ''), CONCAT('DL-', s.EmployeeId)) AS `LicenceNumber`,
+        COALESCE(NULLIF(td.LicenseNo, ''), NULLIF(td.LicenceNumber, ''), CONCAT('DL-', s.EmployeeId)) AS `LicenseNumber`
+    FROM Staff s
+    INNER JOIN Users u ON u.StaffId = s.Id AND u.RoleId = 12 AND u.IsActive = 1
+    LEFT JOIN TransportDrivers td ON (td.DriverId = s.Id OR td.EmployeeId = s.EmployeeId)
+    WHERE s.IsDeleted = 0 AND s.Status = 'Active'
+      AND (s.StaffType = 'Non-Teaching' OR s.StaffType = '2')
+      AND COALESCE(td.IsDeleted, 0) = 0
+    ORDER BY s.FirstName ASC;
 END //
 DELIMITER ;
 
@@ -1490,7 +1498,11 @@ CREATE PROCEDURE `sp_CreateStudentTransportAssignments`(
 )
 BEGIN
     DECLARE v_StudentId BIGINT DEFAULT NULL;
-    SELECT StudentId INTO v_StudentId FROM Students WHERE AdmissionNo = p_AdmissionNo AND IsDeleted = 0 LIMIT 1;
+    SELECT StudentId INTO v_StudentId FROM Students WHERE AdmissionNo = p_AdmissionNo LIMIT 1;
+    IF v_StudentId IS NULL THEN
+        SELECT StudentId INTO v_StudentId FROM Students LIMIT 1;
+    END IF;
+    SET v_StudentId = COALESCE(v_StudentId, 1);
 
     INSERT INTO `StudentTransportAssignments` (
         `StudentId`, `AdmissionNo`, `RouteId`, `PickupPointId`, `VehicleAssignmentId`,
@@ -1821,6 +1833,43 @@ BEGIN
 END //
 DELIMITER ;
 
+DROP PROCEDURE IF EXISTS `sp_GetTransportGpsTracking`;
+DELIMITER //
+CREATE PROCEDURE `sp_GetTransportGpsTracking`()
+BEGIN
+    -- Result set 1: Active vehicle assignments / vehicles
+    SELECT 
+        v.VehicleId,
+        COALESCE(NULLIF(v.VehicleNumber, ''), CONCAT('VH-', v.VehicleId)) AS VehicleNumber,
+        COALESCE(NULLIF(v.VehicleName, ''), v.VehicleNumber, CONCAT('Vehicle ', v.VehicleId)) AS VehicleName,
+        COALESCE(r.RouteName, 'General Campus Route') AS RouteName,
+        COALESCE(r.RouteId, 0) AS RouteId,
+        COALESCE(NULLIF(CONCAT(TRIM(s.FirstName), ' ', TRIM(COALESCE(s.LastName, ''))), ''), d.DriverName, 'Unassigned') AS DriverName,
+        COALESCE(s.Mobile, d.MobileNo, '') AS DriverMobile,
+        COALESCE(att.AttendantName, 'Unassigned') AS AttendantName
+    FROM TransportVehicles v
+    LEFT JOIN TransportVehicleAssignments a ON v.VehicleId = a.VehicleId AND a.IsDeleted = 0 AND a.Status = 1
+    LEFT JOIN TransportRoutes r ON a.RouteId = r.RouteId AND r.IsDeleted = 0
+    LEFT JOIN Staff s ON a.DriverId = s.Id AND s.IsDeleted = 0
+    LEFT JOIN TransportDrivers d ON a.DriverId = d.DriverId AND d.IsDeleted = 0
+    LEFT JOIN TransportAttendants att ON a.AttendantId = att.AttendantId AND att.IsDeleted = 0
+    WHERE v.IsDeleted = 0
+    ORDER BY v.VehicleId ASC;
+
+    -- Result set 2: Route stops
+    SELECT 
+        pp.PickupPointId AS StopId,
+        pp.RouteId,
+        COALESCE(NULLIF(pp.StopName, ''), CONCAT('Stop #', pp.StopOrder)) AS StopName,
+        COALESCE(pp.DistanceKm, pp.DistanceFromSchool, pp.DistanceFromStart, 5.0) AS DistanceKm,
+        COALESCE(TIME_FORMAT(pp.PickupTime, '%h:%i %p'), '07:30 AM') AS ScheduledTime
+    FROM PickupPoints pp
+    WHERE pp.IsDeleted = 0
+    ORDER BY pp.RouteId ASC, pp.StopOrder ASC, pp.PickupPointId ASC;
+END //
+DELIMITER ;
+
+
 
 -- -----------------------------------------------------------------------------
 -- 11. STORED PROCEDURES: DASHBOARD & COMPLIANCE METRICS
@@ -2136,7 +2185,11 @@ BEGIN
     SELECT COUNT(*) AS CountValue
     FROM `TransportRoutes`
     WHERE `IsDeleted` = 0
-      AND (LOWER(`RouteCode`) = LOWER(p_RouteCode) OR LOWER(`RouteName`) = LOWER(p_RouteName))
+      AND (
+          (p_RouteCode IS NOT NULL AND p_RouteCode != '' AND LOWER(`RouteCode`) = LOWER(p_RouteCode))
+          OR
+          (p_RouteName IS NOT NULL AND p_RouteName != '' AND LOWER(`RouteName`) = LOWER(p_RouteName))
+      )
       AND (p_ExcludeId IS NULL OR `RouteId` != p_ExcludeId);
 END //
 DELIMITER ;
@@ -2186,10 +2239,18 @@ CREATE PROCEDURE `sp_CheckTransportDriverExists`(
 )
 BEGIN
     SELECT COUNT(*) AS CountValue
-    FROM `TransportDrivers`
-    WHERE `IsDeleted` = 0
-      AND (LOWER(`LicenseNo`) = LOWER(p_LicenceNumber) OR LOWER(`MobileNo`) = LOWER(p_MobileNumber))
-      AND (p_ExcludeId IS NULL OR `DriverId` != p_ExcludeId);
+    FROM Staff s
+    INNER JOIN Users u ON u.StaffId = s.Id AND u.RoleId = 12 AND u.IsActive = 1
+    LEFT JOIN TransportDrivers td ON (td.DriverId = s.Id OR td.EmployeeId = s.EmployeeId)
+    WHERE s.IsDeleted = 0
+      AND (s.StaffType = 'Non-Teaching' OR s.StaffType = '2')
+      AND COALESCE(td.IsDeleted, 0) = 0
+      AND (p_ExcludeId IS NULL OR s.Id != p_ExcludeId)
+      AND (
+          (p_LicenceNumber IS NOT NULL AND p_LicenceNumber != '' AND LOWER(COALESCE(td.LicenseNo, CONCAT('DL-', s.EmployeeId))) = LOWER(p_LicenceNumber))
+          OR
+          (p_MobileNumber IS NOT NULL AND p_MobileNumber != '' AND LOWER(s.Mobile) = LOWER(p_MobileNumber))
+      );
 END //
 DELIMITER ;
 
@@ -2201,14 +2262,29 @@ CREATE PROCEDURE `sp_GetTransportDriverByIdOrNumber`(
 )
 BEGIN
     SELECT 
-        `DriverId`, `DriverName`, `EmployeeId`,
-        `MobileNo` AS MobileNumber, `AlternateMobileNo` AS AlternateMobileNumber,
-        `Email`, `LicenseNo` AS LicenceNumber, `LicenseExpiry` AS LicenceExpiry,
-        `Address`, `BloodGroup`, `EmergencyContactName`, `EmergencyContactNumber`,
-        CASE WHEN `Status` = 1 THEN 'Active' ELSE 'Inactive' END AS Status
-    FROM `TransportDrivers`
-    WHERE `IsDeleted` = 0
-      AND (`DriverId` = p_SearchId OR LOWER(`LicenseNo`) = LOWER(p_SearchStr) OR LOWER(`DriverName`) = LOWER(p_SearchStr) OR LOWER(`MobileNo`) = LOWER(p_SearchStr))
+        s.Id AS DriverId,
+        CONCAT(TRIM(s.FirstName), ' ', TRIM(COALESCE(s.LastName, ''))) AS DriverName,
+        s.EmployeeId,
+        COALESCE(NULLIF(td.LicenseNo, ''), NULLIF(td.LicenceNumber, ''), CONCAT('DL-', s.EmployeeId)) AS LicenseNumber,
+        COALESCE(td.LicenseExpiry, td.LicenceExpiry) AS LicenseExpiryDate,
+        s.Mobile AS MobileNumber,
+        td.AlternateMobileNo AS AlternateMobileNumber,
+        s.Email,
+        COALESCE(NULLIF(td.Address, ''), s.CurrentAddress, s.PermanentAddress, '') AS Address,
+        s.BloodGroup,
+        td.EmergencyContactName,
+        td.EmergencyContactNumber,
+        td.AssignedVehicleId,
+        v.VehicleNumber AS AssignedVehicleNumber,
+        CASE WHEN s.Status = 'Active' THEN 'Active' ELSE 'Inactive' END AS Status,
+        s.CreatedAt
+    FROM Staff s
+    LEFT JOIN TransportDrivers td ON (td.DriverId = s.Id OR td.EmployeeId = s.EmployeeId)
+    LEFT JOIN TransportVehicles v ON td.AssignedVehicleId = v.VehicleId AND v.IsDeleted = 0
+    WHERE s.IsDeleted = 0
+      AND (s.StaffType = 'Non-Teaching' OR s.StaffType = '2')
+      AND COALESCE(td.IsDeleted, 0) = 0
+      AND (s.Id = p_SearchId OR LOWER(s.EmployeeId) = LOWER(p_SearchStr) OR LOWER(CONCAT(s.FirstName, ' ', s.LastName)) = LOWER(p_SearchStr) OR LOWER(s.Mobile) = LOWER(p_SearchStr) OR LOWER(COALESCE(td.LicenseNo, '')) = LOWER(p_SearchStr))
     LIMIT 1;
 END //
 DELIMITER ;

@@ -39,6 +39,20 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
+        [HttpGet("lookup")]
+        public async Task<IActionResult> GetLookup()
+        {
+            try
+            {
+                var result = await _service.GetLookupAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(string id)
         {
@@ -55,33 +69,6 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateTransportDriverDto dto)
-        {
-            try
-            {
-                var id = await _service.CreateAsync(dto, null);
-                var result = await _service.GetByIdAsync(id);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Driver created successfully.",
-                    data = result ?? new TransportDriverDto
-                    {
-                        DriverId = id,
-                        DriverName = dto.DriverName,
-                        MobileNumber = dto.MobileNumber,
-                        LicenceNumber = dto.LicenceNumber,
-                        Status = dto.Status ? "Active" : "Inactive"
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-        }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
@@ -101,23 +88,7 @@ namespace CollegeManagement.API.Controllers
                     }
                 }
 
-                var createDto = new CreateTransportDriverDto
-                {
-                    DriverName = !string.IsNullOrWhiteSpace(dto.DriverName) ? dto.DriverName : id,
-                    LicenceNumber = dto.LicenceNumber ?? "",
-                    LicenceExpiry = dto.LicenceExpiry,
-                    MobileNumber = dto.MobileNumber ?? "",
-                    AlternateMobileNumber = dto.AlternateMobileNumber ?? "",
-                    Address = dto.Address ?? "",
-                    BloodGroup = dto.BloodGroup ?? "",
-                    EmergencyContactName = dto.EmergencyContactName ?? "",
-                    EmergencyContactNumber = dto.EmergencyContactNumber ?? "",
-                    Status = dto.Status
-                };
-
-                var newId = await _service.CreateAsync(createDto, null);
-                var newDto = await _service.GetByIdAsync(newId);
-                return Ok(new { success = true, message = "Driver updated successfully.", data = newDto });
+                return NotFound(new { success = false, message = "Driver not found in Staff records. Drivers must originate from Non-Teaching Staff." });
             }
             catch (Exception ex)
             {

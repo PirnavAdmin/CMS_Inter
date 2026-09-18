@@ -103,7 +103,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long vehicleId, long? userId)
         {
             using var c = Connection();
-            var rows = await c.ExecuteAsync("sp_DeleteTransportVehicles", new { p_Id = vehicleId }, commandType: CommandType.StoredProcedure);
+            var rows = await c.ExecuteAsync("sp_DeleteTransportVehicles", new { p_Id = vehicleId, p_UpdatedBy = userId }, commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
