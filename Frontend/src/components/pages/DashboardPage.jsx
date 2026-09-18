@@ -139,6 +139,45 @@ function formattedTimestamp(date = new Date()) {
   return `${dateStr}, ${timeStr}`;
 }
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const FULL_MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function parseMonthYearKey(str) {
+  if (!str) return null;
+  if (typeof str !== "string") str = String(str);
+  str = str.trim();
+
+  // 1. Check "YYYY-MM" or "YYYY-MM-DD"
+  const isoMatch = str.match(/^(\d{4})[-/](\d{1,2})/);
+  if (isoMatch) {
+    const y = parseInt(isoMatch[1], 10);
+    const m = parseInt(isoMatch[2], 10) - 1;
+    if (m >= 0 && m < 12) return { year: y, month: m, key: `${y}-${String(m + 1).padStart(2, "0")}` };
+  }
+
+  // 2. Check "Mon YYYY" or "Month YYYY" e.g. "Mar 2026" or "March 2026"
+  for (let m = 0; m < 12; m++) {
+    const shortName = MONTH_NAMES[m];
+    const fullName = FULL_MONTH_NAMES[m];
+    const regex = new RegExp(`(?:${shortName}|${fullName})[\\s,.-]+(\\d{4})`, "i");
+    const mMatch = str.match(regex);
+    if (mMatch) {
+      const y = parseInt(mMatch[1], 10);
+      return { year: y, month: m, key: `${y}-${String(m + 1).padStart(2, "0")}` };
+    }
+  }
+
+  // 3. Fallback to new Date(str)
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    return { year: y, month: m, key: `${y}-${String(m + 1).padStart(2, "0")}` };
+  }
+
+  return null;
+}
+
 function CardHeader({ title, action, children }) {
   return (
     <header className="dashboard-card-head">
@@ -601,15 +640,226 @@ export default function DashboardPage() {
     },
   ];
 
-  // Students Overview Normalized Trend Data
+  // Students Overview chart scroll ref and drag handlers
+  const chartScrollRef = useRef(null);
+  const isDraggingChartRef = useRef(false);
+  const chartStartXRef = useRef(0);
+  const chartScrollStartRef = useRef(0);
+
+  // Students Overview Normalized Trend Data (Consecutive months from Academic Year start up to present month)
   const overviewChartData = useMemo(() => {
     const raw = overviewState.data?.trend || overviewState.data?.admissionTrend || overviewState.data?.items || (Array.isArray(overviewState.data) ? overviewState.data : []);
     if (!Array.isArray(raw)) return [];
-    return raw.map((item) => ({
-      period: item.period || item.month || item.label || "",
-      studentsJoined: Number(item.studentsJoined ?? item.value ?? item.count ?? 0),
-    }));
-  }, [overviewState.data]);
+
+    // 1. Build counts lookup from raw backend trend data
+    const countsMap = new Map();
+    let earliestRaw = null;
+    let latestRaw = null;
+
+    raw.forEach((item) => {
+      const periodStr = item.period || item.Period || item.month || item.Month || item.label || item.sortDate || item.SortDate || item.date || "";
+      const parsed = parseMonthYearKey(periodStr);
+      const count = Number(item.studentsJoined ?? item.StudentsJoined ?? item.value ?? item.count ?? 0);
+      if (parsed) {
+        countsMap.set(parsed.key, (countsMap.get(parsed.key) || 0) + count);
+        const parsedVal = parsed.year * 12 + parsed.month;
+        if (!earliestRaw || parsedVal < earliestRaw.year * 12 + earliestRaw.month) {
+          earliestRaw = parsed;
+        }
+        if (!latestRaw || parsedVal > latestRaw.year * 12 + latestRaw.month) {
+          latestRaw = parsed;
+        }
+      }
+    });
+
+    // 2. Determine Academic Year start (Year & Month)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-11 (e.g. Sep = 8)
+
+    const rawStartDate = selectedAcademicYear?.startDate || selectedAcademicYear?.StartDate;
+    let startY = null;
+    let startM = null;
+
+    if (rawStartDate) {
+      const sDate = new Date(rawStartDate);
+      if (!isNaN(sDate.getTime())) {
+        startY = sDate.getFullYear();
+        startM = sDate.getMonth();
+      }
+    }
+
+    if (startY === null) {
+      const yearName = String(selectedAcademicYear?.name || selectedAcademicYear?.code || selectedAcademicYear?.label || "");
+      const match = yearName.match(/(\d{4})/);
+      if (match) {
+        startY = parseInt(match[1], 10);
+        // Default start month to earliest admission month in that year, or March/June
+        startM = earliestRaw && earliestRaw.year === startY ? earliestRaw.month : (earliestRaw ? Math.min(earliestRaw.month, 2) : 2);
+      } else {
+        startY = earliestRaw ? earliestRaw.year : currentYear;
+        startM = earliestRaw ? earliestRaw.month : 0;
+      }
+    }
+
+    // Ensure start date doesn't miss earlier recorded admissions
+    if (earliestRaw) {
+      const startVal = startY * 12 + startM;
+      const earliestRawVal = earliestRaw.year * 12 + earliestRaw.month;
+      if (earliestRawVal < startVal) {
+        startY = earliestRaw.year;
+        startM = earliestRaw.month;
+      }
+    }
+
+    // 3. Determine End Year & End Month (Present month, or academic year end if past year, or latest raw date)
+    let endY = currentYear;
+    let endM = currentMonth;
+
+    const rawEndDate = selectedAcademicYear?.endDate || selectedAcademicYear?.EndDate;
+    if (rawEndDate) {
+      const eDate = new Date(rawEndDate);
+      if (!isNaN(eDate.getTime()) && eDate < now) {
+        // Entire academic year is in the past
+        endY = eDate.getFullYear();
+        endM = eDate.getMonth();
+      }
+    }
+
+    // If future admissions exist in raw, include up to latest raw date
+    if (latestRaw) {
+      const endVal = endY * 12 + endM;
+      const latestRawVal = latestRaw.year * 12 + latestRaw.month;
+      if (latestRawVal > endVal) {
+        endY = latestRaw.year;
+        endM = latestRaw.month;
+      }
+    }
+
+    // Safety fallback: if start is after end, set start = end
+    if (startY * 12 + startM > endY * 12 + endM) {
+      startY = endY;
+      startM = endM;
+    }
+
+    // 4. Generate every consecutive month with 0 for months without admissions
+    const result = [];
+    let curY = startY;
+    let curM = startM;
+
+    while (curY < endY || (curY === endY && curM <= endM)) {
+      const key = `${curY}-${String(curM + 1).padStart(2, "0")}`;
+      const periodLabel = `${MONTH_NAMES[curM]} ${curY}`;
+      const count = countsMap.get(key) || 0;
+      result.push({
+        period: periodLabel,
+        studentsJoined: count,
+      });
+
+      curM++;
+      if (curM > 11) {
+        curM = 0;
+        curY++;
+      }
+    }
+
+    return result.length > 0 ? result : (raw.length > 0 ? raw.map((i) => ({ period: i.period || i.month || "", studentsJoined: Number(i.studentsJoined || 0) })) : []);
+  }, [overviewState.data, selectedAcademicYear]);
+
+  // Dynamic Y-Axis scale calculation based on student admission numbers
+  const { yMax, yTicks } = useMemo(() => {
+    if (!overviewChartData || overviewChartData.length === 0) {
+      return { yMax: 5, yTicks: [0, 1, 2, 3, 4, 5] };
+    }
+
+    const maxCount = Math.max(...overviewChartData.map((d) => Number(d.studentsJoined) || 0), 0);
+
+    if (maxCount <= 5) {
+      return { yMax: 5, yTicks: [0, 1, 2, 3, 4, 5] };
+    }
+    if (maxCount <= 15) {
+      const ceilMax = Math.ceil(maxCount / 5) * 5;
+      const ticks = [];
+      const step = ceilMax <= 10 ? 2 : 5;
+      for (let i = 0; i <= ceilMax; i += step) ticks.push(i);
+      return { yMax: ceilMax, yTicks: ticks };
+    }
+    if (maxCount <= 30) {
+      const ceilMax = Math.ceil(maxCount / 5) * 5;
+      const ticks = [0, 5, 10, 15, 20, 25, 30].filter((t) => t <= ceilMax);
+      if (ticks[ticks.length - 1] < ceilMax) ticks.push(ceilMax);
+      return { yMax: ceilMax, yTicks: ticks };
+    }
+    if (maxCount <= 60) {
+      const ceilMax = Math.ceil(maxCount / 10) * 10;
+      const ticks = [];
+      for (let i = 0; i <= ceilMax; i += 10) ticks.push(i);
+      return { yMax: ceilMax, yTicks: ticks };
+    }
+    if (maxCount <= 120) {
+      const ceilMax = Math.ceil(maxCount / 20) * 20;
+      const ticks = [];
+      for (let i = 0; i <= ceilMax; i += 20) ticks.push(i);
+      return { yMax: ceilMax, yTicks: ticks };
+    }
+
+    // Larger counts (> 120)
+    const roughStep = maxCount / 5;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const normalizedStep = roughStep / magnitude;
+    let step = 1;
+    if (normalizedStep <= 1) step = 1 * magnitude;
+    else if (normalizedStep <= 2) step = 2 * magnitude;
+    else if (normalizedStep <= 5) step = 5 * magnitude;
+    else step = 10 * magnitude;
+
+    const ceilMax = Math.ceil(maxCount / step) * step;
+    const ticks = [];
+    for (let i = 0; i <= ceilMax; i += step) ticks.push(i);
+    return { yMax: ceilMax, yTicks: ticks };
+  }, [overviewChartData]);
+
+  // Auto-scroll Students Overview chart to the far right (present month & latest 4 months in view) on data load
+  useEffect(() => {
+    if (chartScrollRef.current) {
+      const timer = setTimeout(() => {
+        if (chartScrollRef.current) {
+          chartScrollRef.current.scrollLeft = chartScrollRef.current.scrollWidth;
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [overviewChartData]);
+
+  const handleChartMouseDown = (e) => {
+    if (!chartScrollRef.current) return;
+    isDraggingChartRef.current = true;
+    chartStartXRef.current = e.pageX - chartScrollRef.current.offsetLeft;
+    chartScrollStartRef.current = chartScrollRef.current.scrollLeft;
+  };
+
+  const handleChartMouseMove = (e) => {
+    if (!isDraggingChartRef.current || !chartScrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - chartScrollRef.current.offsetLeft;
+    const walk = (x - chartStartXRef.current) * 1.2;
+    chartScrollRef.current.scrollLeft = chartScrollStartRef.current - walk;
+  };
+
+  const handleChartMouseUp = () => {
+    isDraggingChartRef.current = false;
+  };
+
+  const handleChartMouseLeave = () => {
+    isDraggingChartRef.current = false;
+  };
+
+  const handleChartWheel = (e) => {
+    if (!chartScrollRef.current) return;
+    if (e.deltaY !== 0) {
+      chartScrollRef.current.scrollLeft += e.deltaY;
+    }
+  };
 
   // Group Distribution Normalized Data
   const groupChartData = useMemo(() => {
@@ -783,22 +1033,73 @@ export default function DashboardPage() {
               <EmptyState message="No students overview data available." />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-chart dashboard-area-chart-wrap">
-                  <ResponsiveContainer width="100%" height={135}>
-                    <AreaChart data={overviewChartData} margin={{ top: 10, right: 10, left: -24, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="#22a447" stopOpacity={0.02} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border)" />
-                      <XAxis dataKey="period" tickLine={false} axisLine={false} height={20} tick={{ fontSize: 10 }} />
-                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
-                      <Tooltip formatter={(val) => [formatNumber(val), "Students"]} />
-                      <Area type="monotone" dataKey="studentsJoined" stroke="#22a447" strokeWidth={2.5} fill="url(#admissionGradient)" dot={{ r: 3, fill: "#22a447" }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                <div className="dashboard-area-chart-container">
+                  {/* Fixed Y-Axis column (pinned on the left) */}
+                  <div className="dashboard-area-chart-yaxis" style={{ width: yMax >= 1000 ? 40 : yMax >= 100 ? 34 : 28, flexShrink: 0 }}>
+                    <ResponsiveContainer width="100%" height={135}>
+                      <AreaChart data={overviewChartData} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
+                        <YAxis
+                          width={yMax >= 1000 ? 36 : yMax >= 100 ? 30 : 24}
+                          domain={[0, yMax]}
+                          ticks={yTicks}
+                          allowDecimals={false}
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fontSize: 10, fill: "var(--cms-muted, #64748b)" }}
+                        />
+                        <XAxis height={22} tick={false} axisLine={false} tickLine={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Scrollable Area Chart */}
+                  <div
+                    ref={chartScrollRef}
+                    className="dashboard-chart dashboard-area-chart-wrap"
+                    onMouseDown={handleChartMouseDown}
+                    onMouseMove={handleChartMouseMove}
+                    onMouseUp={handleChartMouseUp}
+                    onMouseLeave={handleChartMouseLeave}
+                    onWheel={handleChartWheel}
+                  >
+                    <div
+                      style={{
+                        width: overviewChartData.length > 5 ? `${Math.round((overviewChartData.length / 5) * 100)}%` : "100%",
+                        minWidth: "100%",
+                        height: 135,
+                      }}
+                    >
+                      <ResponsiveContainer width="100%" height={135}>
+                        <AreaChart data={overviewChartData} margin={{ top: 10, right: 32, left: 32, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
+                              <stop offset="100%" stopColor="#22a447" stopOpacity={0.02} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border)" />
+                          <XAxis
+                            dataKey="period"
+                            tickLine={false}
+                            axisLine={false}
+                            height={22}
+                            tick={{ fontSize: 10, fill: "var(--cms-muted, #64748b)" }}
+                            interval={0}
+                          />
+                          <YAxis hide domain={[0, yMax]} ticks={yTicks} />
+                          <Tooltip formatter={(val) => [formatNumber(val), "Students"]} />
+                          <Area
+                            type="monotone"
+                            dataKey="studentsJoined"
+                            stroke="#22a447"
+                            strokeWidth={2.5}
+                            fill="url(#admissionGradient)"
+                            dot={{ r: 3, fill: "#22a447" }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
                 <div className="dashboard-students-chips">
                   <div className="dashboard-student-chip chip-total">

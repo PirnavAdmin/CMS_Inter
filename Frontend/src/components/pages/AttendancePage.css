@@ -79,6 +79,9 @@
 /* Dropdown-driven attendance and leave screens use the same compact grid. */
 .att-filter-card { display: grid; gap: 16px; }
 .att-filter-grid { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(180px, 1fr)); }
+.att-filter-grid select.is-placeholder { color: var(--cms-muted); font-weight: 500; }
+.att-filter-grid select:not(.is-placeholder) { color: var(--cms-text); }
+.att-filter-grid select option { color: var(--cms-text); font-weight: 400; }
 .att-staff-filter-grid .att-field:nth-child(2) { display: none; }
 .att-filter-action { display: flex; justify-content: flex-end; gap: 10px; }
 .att-filter-action .cms-btn { min-height: 42px; }

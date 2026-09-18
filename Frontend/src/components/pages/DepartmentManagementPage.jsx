@@ -3,14 +3,18 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Building2,
+  Check,
+  ChevronDown,
   Download,
   Eye,
   Info,
   Pencil,
+  RefreshCw,
   Search,
   Trash2,
   Upload,
   Users,
+  X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -21,7 +25,6 @@ import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui
 import "./DepartmentManagementPage.css";
 import departmentsIcon from "@/assets/dashboard-3d/total-sections.png";
 import designationsIcon from "@/assets/dashboard-3d/teaching-staff.png";
-import refreshIcon from "@/assets/settings-3d/board-academic-year.png";
 import importExcelIcon from "@/assets/settings-3d/templates.png";
 import addDepartmentIcon from "@/assets/dashboard-3d/create-section.png";
 import addDesignationIcon from "@/assets/dashboard-3d/add-staff.png";
@@ -304,22 +307,198 @@ const formDefinitions = {
       "select",
       ["Teaching", "Non-Teaching"],
     ],
+    ["departmentId", "Department", false, "Select Department", "department-select"],
     ["status", "Status", true, "Select status", "select", ["Active", "Inactive"]],
   ],
 };
 
-function MasterCreateModal({ kind, staffType, onClose, onSaved }) {
+function CustomDepartmentDropdown({
+  value,
+  onChange,
+  options = [],
+  placeholder = "Select Department",
+  disabled = false,
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const dropdownRef = useRef(null);
+
+  const selectedDept = useMemo(() => {
+    if (!value) return null;
+    return options.find((d) => String(d.id || d.departmentId) === String(value));
+  }, [value, options]);
+
+  // Sync display text when value changes or when selected
+  useEffect(() => {
+    if (selectedDept) {
+      setQuery(selectedDept.name);
+    } else if (!value) {
+      setQuery("");
+    }
+  }, [selectedDept, value]);
+
+  // Filter options based on user typing
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || (selectedDept && selectedDept.name.toLowerCase() === q)) {
+      return options;
+    }
+    return options.filter((d) => (d.name || d.departmentName || "").toLowerCase().includes(q));
+  }, [options, query, selectedDept]);
+
+  // Click outside to close and restore valid name
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+        if (selectedDept) {
+          setQuery(selectedDept.name);
+        } else {
+          setQuery("");
+        }
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen, selectedDept]);
+
+  const handleInputChange = (e) => {
+    const text = e.target.value;
+    setQuery(text);
+    if (!isOpen) setIsOpen(true);
+    if (!text.trim()) {
+      onChange("");
+    }
+  };
+
+  const handleSelectOption = (dept) => {
+    if (!dept) {
+      onChange("");
+      setQuery("");
+    } else {
+      const deptId = dept.id || dept.departmentId;
+      onChange(deptId);
+      setQuery(dept.name);
+    }
+    setIsOpen(false);
+  };
+
+  const handleClear = (e) => {
+    e.stopPropagation();
+    onChange("");
+    setQuery("");
+    setIsOpen(false);
+  };
+
+  return (
+    <div className={`master-custom-dropdown-wrap ${isOpen ? "is-open" : ""}`} ref={dropdownRef}>
+      <div className="master-combobox-input-wrap">
+        <input
+          type="text"
+          className="master-combobox-input"
+          value={query}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={handleInputChange}
+          onFocus={() => !disabled && setIsOpen(true)}
+          autoComplete="off"
+        />
+        <div className="master-dropdown-icons">
+          {value ? (
+            <button
+              type="button"
+              className="master-dropdown-clear"
+              title="Clear selection"
+              onClick={handleClear}
+            >
+              <X size={13} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="master-dropdown-chevron-btn"
+            onClick={() => !disabled && setIsOpen((prev) => !prev)}
+            tabIndex={-1}
+          >
+            <ChevronDown size={15} className={`master-dropdown-chevron ${isOpen ? "is-rotated" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="master-custom-dropdown-menu" role="listbox">
+          <div className="master-dropdown-list-scroll">
+            <button
+              type="button"
+              className={`master-dropdown-item ${!value ? "is-active" : ""}`}
+              onClick={() => handleSelectOption(null)}
+            >
+              <span>{placeholder}</span>
+              {!value && <Check size={14} className="master-item-check" />}
+            </button>
+
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((dept) => {
+                const deptId = dept.id || dept.departmentId;
+                const isSelected = String(value) === String(deptId);
+                return (
+                  <button
+                    key={deptId}
+                    type="button"
+                    className={`master-dropdown-item ${isSelected ? "is-active" : ""}`}
+                    onClick={() => handleSelectOption(dept)}
+                  >
+                    <span>{dept.name}</span>
+                    {isSelected && <Check size={14} className="master-item-check" />}
+                  </button>
+                );
+              })
+            ) : (
+              <div className="master-dropdown-no-results">No matching departments found</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MasterCreateModal({ kind, staffType, departments = [], onClose, onSaved }) {
   const label = kind === "department" ? "Department" : "Designation";
   const [values, setValues] = useState({
     departmentName: "",
     departmentCode: "",
     designationName: "",
+    departmentId: "",
     description: "",
     status: "Active",
     staffType: staffType === "Non-Teaching" ? "Non-Teaching" : "Teaching",
   });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [availableDepartments, setAvailableDepartments] = useState(departments || []);
+
+  useEffect(() => {
+    if (kind === "designation" && (!departments || departments.length === 0)) {
+      apiClient
+        .get(apiEndpoints.departments.getAll, { skipGlobalLoader: true })
+        .then((res) => {
+          setAvailableDepartments(unwrapRows(res.data).map(normalizeDepartment).filter((d) => d.name));
+        })
+        .catch((err) => console.warn("Could not load departments for modal:", err));
+    } else if (departments && departments.length > 0) {
+      setAvailableDepartments(departments);
+    }
+  }, [kind, departments]);
+
+  const currentStaffType = values.staffType || staffType;
+  const filteredDeptOptions = useMemo(() => {
+    return (availableDepartments || []).filter((d) => {
+      if (!d.isActive && d.status !== "Active") return false;
+      return isStaffTypeMatch(d.staffType, currentStaffType);
+    });
+  }, [availableDepartments, currentStaffType]);
 
   const fields = formDefinitions[kind];
 
@@ -352,11 +531,16 @@ function MasterCreateModal({ kind, staffType, onClose, onSaved }) {
       } else {
         const payload = {
           name: values.designationName.trim(),
+          departmentId: values.departmentId ? Number(values.departmentId) : null,
           staffType: toApiStaffType(values.staffType),
           isActive: values.status === "Active",
         };
         const response = await apiClient.post(apiEndpoints.designations.create, payload);
         const created = normalizeDesignation(response.data);
+        if (created.departmentId && !created.departmentName) {
+          const matchedDept = availableDepartments.find((d) => String(d.id) === String(created.departmentId));
+          if (matchedDept) created.departmentName = matchedDept.name;
+        }
         onSaved("Designation created successfully.", created);
       }
       onClose();
@@ -386,7 +570,14 @@ function MasterCreateModal({ kind, staffType, onClose, onSaved }) {
                 {fieldLabel}
                 {required ? <b> *</b> : null}
               </span>
-              {type === "select" ? (
+              {type === "department-select" ? (
+                <CustomDepartmentDropdown
+                  value={values[name] ?? ""}
+                  options={filteredDeptOptions}
+                  placeholder={placeholder || "Select Department"}
+                  onChange={(val) => setValues((v) => ({ ...v, [name]: val }))}
+                />
+              ) : type === "select" ? (
                 <select
                   value={values[name] ?? ""}
                   onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
@@ -490,7 +681,7 @@ export default function DepartmentManagementPage() {
           XLSX.writeFile(book, "Department_Import_Template.xlsx");
         } else {
           const desigSheet = XLSX.utils.aoa_to_sheet([
-            ["Designation Name", "Staff Type", "Status"],
+            ["Designation Name", "Department Name", "Staff Type", "Status"],
           ]);
           XLSX.utils.book_append_sheet(book, desigSheet, "Designations");
           XLSX.writeFile(book, "Designation_Import_Template.xlsx");
@@ -734,7 +925,7 @@ export default function DepartmentManagementPage() {
         title="Click to refresh department and designation data"
         aria-label="Refresh department and designation data"
       >
-        <img className={`master-summary-icon${isRefreshing || departmentsLoading || designationsLoading ? " is-spinning" : ""}`} src={refreshIcon} alt="" aria-hidden="true" width={28} height={28} />
+        <RefreshCw size={18} className={isRefreshing || departmentsLoading || designationsLoading ? "is-spinning" : ""} aria-hidden="true" />
         <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
       </button>
     </div>
@@ -932,19 +1123,27 @@ export default function DepartmentManagementPage() {
                 <thead>
                   <tr>
                     <th>Designation Name</th>
+                    <th>Department</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {designationsLoading ? (
-                    <EmptyTable colSpan={3} text="Loading designations..." />
+                    <EmptyTable colSpan={4} text="Loading designations..." />
                   ) : visibleDesignations.length > 0 ? (
                     visibleDesignations.map((item) => (
                       <tr key={item.id || item.name}>
                         <td>
                           <strong>{item.name}</strong>
                           <small>{item.staffType}</small>
+                        </td>
+                        <td>
+                          {item.departmentName ? (
+                            <span className="master-dept-badge">{item.departmentName}</span>
+                          ) : (
+                            <span className="master-dept-none">—</span>
+                          )}
                         </td>
                         <td>
                           <StatusBadge value={item.status} />
@@ -978,7 +1177,7 @@ export default function DepartmentManagementPage() {
                     ))
                   ) : (
                     <EmptyTable
-                      colSpan={3}
+                      colSpan={4}
                       text={
                         designationQuery
                           ? "No designations match your search."
@@ -1029,6 +1228,7 @@ export default function DepartmentManagementPage() {
         <MasterCreateModal
           kind={createKind}
           staffType={staffType}
+          departments={departments}
           onClose={() => setCreateKind(null)}
           onSaved={(msg, newItem) => {
             setToast(msg);
@@ -1062,55 +1262,80 @@ export function DepartmentDetailsPage() {
   const location = useLocation();
   const { id } = useParams();
   const [department, setDepartment] = useState(location.state?.department || null);
+  const [designations, setDesignations] = useState([]);
   const [loading, setLoading] = useState(!department);
+  const [desigLoading, setDesigLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (department) return;
     let active = true;
-    setLoading(true);
+    if (!department) {
+      setLoading(true);
+      const loadDept = async () => {
+        try {
+          if (apiEndpoints.departments.getById) {
+            const res = await apiClient.get(apiEndpoints.departments.getById(id), { skipGlobalLoader: true });
+            if (!active) return;
+            setDepartment(normalizeDepartment(res.data));
+            return;
+          }
+        } catch (err) {
+          console.warn("Direct department fetch failed, falling back to list:", err);
+        }
 
-    const loadDept = async () => {
-      try {
-        if (apiEndpoints.departments.getById) {
-          const res = await apiClient.get(apiEndpoints.departments.getById(id), { skipGlobalLoader: true });
+        try {
+          const res = await apiClient.get(apiEndpoints.departments.getAll, { skipGlobalLoader: true });
           if (!active) return;
-          setDepartment(normalizeDepartment(res.data));
-          return;
+          const list = unwrapRows(res.data).map(normalizeDepartment);
+          const match = list.find((item) => String(item.id) === String(id));
+          if (match) {
+            setDepartment(match);
+          } else {
+            setError("Department details were not found.");
+          }
+        } catch (requestError) {
+          if (!active) return;
+          setError(getApiErrorMessage(requestError, "Department details could not be loaded."));
+        } finally {
+          if (active) setLoading(false);
         }
-      } catch (err) {
-        console.warn("Direct department fetch failed, falling back to list:", err);
-      }
+      };
+      loadDept();
+    }
 
-      try {
-        const res = await apiClient.get(apiEndpoints.departments.getAll, { skipGlobalLoader: true });
+    // Load designations to display linked designations
+    apiClient
+      .get(apiEndpoints.designations.getAll, { params: { includeInactive: true }, skipGlobalLoader: true })
+      .then((res) => {
         if (!active) return;
-        const list = unwrapRows(res.data).map(normalizeDepartment);
-        const match = list.find((item) => String(item.id) === String(id));
-        if (match) {
-          setDepartment(match);
-        } else {
-          setError("Department details were not found.");
-        }
-      } catch (requestError) {
-        if (!active) return;
-        setError(getApiErrorMessage(requestError, "Department details could not be loaded."));
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    loadDept();
+        const allDesigs = unwrapRows(res.data).map(normalizeDesignation);
+        setDesignations(allDesigs);
+      })
+      .catch((err) => console.warn("Failed to load designations in dept details:", err))
+      .finally(() => {
+        if (active) setDesigLoading(false);
+      });
 
     return () => {
       active = false;
     };
   }, [id, department]);
 
+  const assignedDesignations = useMemo(() => {
+    if (!department) return [];
+    const deptIdStr = String(department.id || department.departmentId);
+    const deptNameLower = (department.name || "").trim().toLowerCase();
+    return designations.filter(
+      (d) =>
+        String(d.departmentId) === deptIdStr ||
+        (d.departmentName && d.departmentName.trim().toLowerCase() === deptNameLower)
+    );
+  }, [department, designations]);
+
   return (
     <DashboardLayout
       title="Department Details"
-      subtitle="View department master information."
+      subtitle="View department master information and assigned designations."
       breadcrumb={["Administration", "Department & Designation"]}
       actions={
         department ? (
@@ -1140,32 +1365,85 @@ export function DepartmentDetailsPage() {
           ) : error ? (
             <p className="master-details-state">{error}</p>
           ) : department ? (
-            <dl>
-              <div>
-                <dt>Department Name</dt>
-                <dd>{department.name}</dd>
-              </div>
-              <div>
-                <dt>Department Code</dt>
-                <dd><code>{department.code}</code></dd>
-              </div>
-              <div>
-                <dt>Staff Type</dt>
-                <dd>{department.staffType}</dd>
-              </div>
-              <div>
-                <dt>Status</dt>
-                <dd>
-                  <StatusBadge value={department.status} />
-                </dd>
-              </div>
-              {department.description && department.description !== "—" ? (
-                <div className="is-wide">
-                  <dt>Description</dt>
-                  <dd>{department.description}</dd>
+            <>
+              <dl>
+                <div>
+                  <dt>Department Name</dt>
+                  <dd>{department.name}</dd>
                 </div>
-              ) : null}
-            </dl>
+                <div>
+                  <dt>Department Code</dt>
+                  <dd><code>{department.code}</code></dd>
+                </div>
+                <div>
+                  <dt>Staff Type</dt>
+                  <dd>{department.staffType}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>
+                    <StatusBadge value={department.status} />
+                  </dd>
+                </div>
+                {department.description && department.description !== "—" ? (
+                  <div className="is-wide">
+                    <dt>Description</dt>
+                    <dd>{department.description}</dd>
+                  </div>
+                ) : null}
+              </dl>
+
+              {/* ASSIGNED DESIGNATIONS SECTION */}
+              <div className="master-assigned-section" style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid var(--cms-border, #e5e7eb)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                    <Users size={18} /> Assigned Designations
+                    <span style={{ fontSize: "12px", background: "var(--cms-primary-soft, #eff6ff)", color: "var(--cms-primary, #2563eb)", padding: "2px 8px", borderRadius: 12, fontWeight: 600 }}>
+                      {assignedDesignations.length}
+                    </span>
+                  </h3>
+                  <button
+                    type="button"
+                    className="cms-btn secondary"
+                    style={{ height: 32, fontSize: "12px", padding: "0 10px" }}
+                    onClick={() => navigate("/dashboard/designations/create")}
+                  >
+                    + Add Designation
+                  </button>
+                </div>
+
+                {desigLoading ? (
+                  <p className="master-details-state" style={{ padding: "12px 0" }}>Loading assigned designations...</p>
+                ) : assignedDesignations.length > 0 ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" }}>
+                    {assignedDesignations.map((desig) => (
+                      <div
+                        key={desig.id || desig.name}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "10px 14px",
+                          borderRadius: 8,
+                          border: "1px solid var(--cms-border, #e5e7eb)",
+                          background: "var(--cms-subtle, #f9fafb)",
+                        }}
+                      >
+                        <div>
+                          <strong style={{ display: "block", fontSize: "13px" }}>{desig.name}</strong>
+                          <small style={{ color: "var(--cms-muted, #6b7280)", fontSize: "11px" }}>{desig.staffType}</small>
+                        </div>
+                        <StatusBadge value={desig.status} />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ color: "var(--cms-muted, #6b7280)", fontSize: "13px", margin: "6px 0 0" }}>
+                    No designations are currently mapped to this department. You can assign designations when creating or editing them.
+                  </p>
+                )}
+              </div>
+            </>
           ) : (
             <p className="master-details-state">Department details could not be found.</p>
           )}
@@ -1247,6 +1525,16 @@ export function DesignationDetailsPage() {
                 <dd>{designation.name}</dd>
               </div>
               <div>
+                <dt>Assigned Department</dt>
+                <dd>
+                  {designation.departmentName ? (
+                    <strong style={{ color: "var(--cms-primary, #2563eb)" }}>{designation.departmentName}</strong>
+                  ) : (
+                    <span style={{ color: "var(--cms-muted, #6b7280)" }}>Unassigned / General</span>
+                  )}
+                </dd>
+              </div>
+              <div>
                 <dt>Designation Code</dt>
                 <dd><code>{designation.code}</code></dd>
               </div>
@@ -1283,6 +1571,7 @@ export function MasterFormPage({ kind }) {
     departmentName: "",
     departmentCode: "",
     designationName: "",
+    departmentId: "",
     description: "",
     status: "Active",
     staffType: "Teaching",
@@ -1290,8 +1579,29 @@ export function MasterFormPage({ kind }) {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(edit);
   const [submitting, setSubmitting] = useState(false);
+  const [availableDepartments, setAvailableDepartments] = useState([]);
 
   const fields = formDefinitions[kind];
+
+  // Load available departments for designation form
+  useEffect(() => {
+    if (kind === "designation") {
+      apiClient
+        .get(apiEndpoints.departments.getAll, { skipGlobalLoader: true })
+        .then((res) => {
+          setAvailableDepartments(unwrapRows(res.data).map(normalizeDepartment).filter((d) => d.name));
+        })
+        .catch((err) => console.warn("Failed to load departments in master form:", err));
+    }
+  }, [kind]);
+
+  const currentStaffType = values.staffType || "Teaching";
+  const filteredDeptOptions = useMemo(() => {
+    return (availableDepartments || []).filter((d) => {
+      if (!d.isActive && d.status !== "Active") return false;
+      return isStaffTypeMatch(d.staffType, currentStaffType);
+    });
+  }, [availableDepartments, currentStaffType]);
 
   useEffect(() => {
     if (!edit) return;
@@ -1343,6 +1653,7 @@ export function MasterFormPage({ kind }) {
           const match = normalizeDesignation(res.data);
           setValues({
             designationName: match.name,
+            departmentId: match.departmentId || "",
             status: match.status,
             staffType: match.staffType === "NonTeaching" ? "Non-Teaching" : match.staffType,
           });
@@ -1395,6 +1706,7 @@ export function MasterFormPage({ kind }) {
       } else {
         const payload = {
           name: values.designationName.trim(),
+          departmentId: values.departmentId ? Number(values.departmentId) : null,
           staffType: toApiStaffType(values.staffType),
           isActive: values.status === "Active",
         };
@@ -1457,7 +1769,14 @@ export function MasterFormPage({ kind }) {
                       {fieldLabel}
                       {required ? <b> *</b> : null}
                     </span>
-                    {type === "select" ? (
+                    {type === "department-select" ? (
+                      <CustomDepartmentDropdown
+                        value={values[name] ?? ""}
+                        options={filteredDeptOptions}
+                        placeholder={placeholder || "Select Department"}
+                        onChange={(val) => setValues((v) => ({ ...v, [name]: val }))}
+                      />
+                    ) : type === "select" ? (
                       <select
                         value={values[name] ?? ""}
                         onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
@@ -1522,6 +1841,7 @@ const importColumns = {
   ],
   designation: [
     "Designation Name",
+    "Department Name",
     "Staff Type",
     "Status",
   ],
@@ -1564,13 +1884,13 @@ export function MasterImportPage({ kind = "department" }) {
       return;
     } catch (error) {
       console.warn("Backend template download failed, using client fallback:", error);
-      // Fallback to client-side XLSX generation with only 3 columns and empty rows
+      // Fallback to client-side XLSX generation
       const book = XLSX.utils.book_new();
       const deptSheet = XLSX.utils.aoa_to_sheet([
         ["Department Name", "Staff Type", "Status"],
       ]);
       const desigSheet = XLSX.utils.aoa_to_sheet([
-        ["Designation Name", "Staff Type", "Status"],
+        ["Designation Name", "Department Name", "Staff Type", "Status"],
       ]);
       XLSX.utils.book_append_sheet(book, deptSheet, "Departments");
       XLSX.utils.book_append_sheet(book, desigSheet, "Designations");
@@ -1657,6 +1977,15 @@ export function MasterImportPage({ kind = "department" }) {
           }
           if (rawName) desigNames.add(desigKey);
 
+          const deptNameVal = String(
+            row["Department Name"] ||
+            row["DepartmentName"] ||
+            row["Department"] ||
+            row["Department Code"] ||
+            row["DepartmentCode"] ||
+            ""
+          ).trim();
+
           const status = String(row["Status"] || "").trim();
           if (status && !["Active", "Inactive", "active", "inactive"].includes(status)) {
             problems.push("Invalid Status (must be Active or Inactive)");
@@ -1672,7 +2001,7 @@ export function MasterImportPage({ kind = "department" }) {
             index: idx + 2,
             entity: "Designation",
             name: rawName || "—",
-            details: `Type: ${staffTypeVal || "Teaching"} | Status: ${status || "Active"}`,
+            details: `Dept: ${deptNameVal || "General"} | Type: ${staffTypeVal || "Teaching"} | Status: ${status || "Active"}`,
             row,
             problems,
           });

@@ -276,6 +276,13 @@
   color: #1c2416;
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.18);
 }
+.cert-admission-options::-webkit-scrollbar {
+  width: 6px;
+}
+.cert-admission-options::-webkit-scrollbar-thumb {
+  background: var(--cms-border, #d1d5db);
+  border-radius: 6px;
+}
 .cert-admission-options button {
   display: grid;
   gap: 3px;
@@ -2874,11 +2881,11 @@
 }
 
 .visual-certificate-canvas .cert-logo-img {
-  height: 48px;
-  width: auto;
-  max-width: 85px;
+  height: 52px;
+  width: 52px;
   object-fit: contain;
   display: block;
+  margin: 0 auto;
 }
 
 .visual-certificate-canvas .cert-header-center {

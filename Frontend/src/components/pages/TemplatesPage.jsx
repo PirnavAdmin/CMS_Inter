@@ -46,9 +46,8 @@ import {
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Toast } from "@/components/common/Ui.jsx";
-import * as templateApi from "@/api/templateApi.js";
-import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import { generateQrCodeSvg } from "@/utils/qrCodeGenerator.js";
+import pirnavCollegeCrest from "@/assets/pirnav-college-crest.png";
 import "./TemplatesPage.css";
 
 // Helper: Returns today's present date formatted as DD Mon YYYY (e.g., 15 Sep 2026)
@@ -1750,7 +1749,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                           customLogoUrl ? (
                             <img src={customLogoUrl} alt="Logo" className="cert-college-logo" style={{ width: logoSize, height: logoSize }} />
                           ) : (
-                            <img src={pirnavCollegesLogo} alt="Pirnav College" className="cert-logo-img" style={{ height: logoSize, width: "auto", maxWidth: logoSize * 2, objectFit: "contain" }} />
+                            <img src={pirnavCollegeCrest} alt="Pirnav College" className="cert-logo-img" style={{ height: logoSize, width: logoSize, objectFit: "contain" }} />
                           )
                         )}
                       </div>
@@ -2444,7 +2443,7 @@ function TemplatePreviewScreen({ template, onDownload, notify }) {
               <header className="cert-header">
                 <div className="cert-header-grid">
                   <div className="cert-header-left">
-                    <img src={pirnavCollegesLogo} alt="Pirnav College" className="cert-logo-img" />
+                    <img src={pirnavCollegeCrest} alt="Pirnav College" className="cert-logo-img" />
                   </div>
                   <div className="cert-header-center">
                     <h1 className="cert-institution-name" style={{ color: template.borderColor || "#1e3a8a" }}>

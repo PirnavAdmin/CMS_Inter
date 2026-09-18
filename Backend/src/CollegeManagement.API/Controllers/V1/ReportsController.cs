@@ -57,11 +57,16 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("filters/academic-years")]
-    public async Task<IActionResult> GetAcademicYears(CancellationToken ct = default)
+    public async Task<IActionResult> GetAcademicYears([FromQuery] int? boardId = null, CancellationToken ct = default)
     {
-        var result = await _db.AcademicYears
-            .AsNoTracking()
-            .Where(x => x.IsActive)
+        var query = _db.AcademicYears.AsNoTracking().Where(x => x.IsActive);
+
+        if (boardId.HasValue && boardId.Value > 0)
+        {
+            query = query.Where(x => x.BoardId == boardId.Value);
+        }
+
+        var result = await query
             .OrderByDescending(x => x.StartDate)
             .Select(x => new
             {
@@ -69,6 +74,7 @@ public class ReportsController : ControllerBase
                 academicYearId = x.AcademicYearId,
                 name = x.AcademicYearName,
                 academicYearName = x.AcademicYearName,
+                boardId = x.BoardId,
                 startDate = x.StartDate,
                 endDate = x.EndDate
             })
@@ -121,16 +127,6 @@ public class ReportsController : ControllerBase
             query = query.Where(x => x.BoardId == boardId.Value);
         }
 
-        if (academicYearId.HasValue && academicYearId.Value > 0)
-        {
-            query = query.Where(x => x.AcademicYearId == academicYearId.Value);
-        }
-
-        if (academicLevelId.HasValue && academicLevelId.Value > 0)
-        {
-            query = query.Where(x => x.AcademicLevelId == academicLevelId.Value);
-        }
-
         var result = await query
             .OrderBy(x => x.GroupName)
             .Select(x => new
@@ -142,10 +138,28 @@ public class ReportsController : ControllerBase
                 code = x.GroupCode,
                 groupCode = x.GroupCode,
                 academicYearId = x.AcademicYearId,
+                academicLevelId = x.AcademicLevelId,
+                boardId = x.BoardId,
                 academicLevel = x.AcademicLevelNavigation != null ? x.AcademicLevelNavigation.LevelName : string.Empty,
                 board = x.BoardNavigation != null ? x.BoardNavigation.BoardName : string.Empty
             })
             .ToListAsync(ct);
+
+        // If level filter was provided and matches exist, refine to that level
+        if (academicLevelId.HasValue && academicLevelId.Value > 0)
+        {
+            var levelFiltered = result.Where(x => x.academicLevelId == academicLevelId.Value).ToList();
+            if (levelFiltered.Count > 0)
+                result = levelFiltered;
+        }
+
+        // If year filter was provided and matches exist, refine to that year
+        if (academicYearId.HasValue && academicYearId.Value > 0)
+        {
+            var yearFiltered = result.Where(x => x.academicYearId == academicYearId.Value).ToList();
+            if (yearFiltered.Count > 0)
+                result = yearFiltered;
+        }
 
         return Ok(result);
     }
@@ -162,15 +176,8 @@ public class ReportsController : ControllerBase
 
         if (groupId.HasValue && groupId.Value > 0)
             query = query.Where(x => x.GroupId == groupId.Value);
-
-        if (boardId.HasValue && boardId.Value > 0)
+        else if (boardId.HasValue && boardId.Value > 0)
             query = query.Where(x => x.BoardId == boardId.Value);
-
-        if (academicYearId.HasValue && academicYearId.Value > 0)
-            query = query.Where(x => x.AcademicYearId == academicYearId.Value);
-
-        if (academicLevelId.HasValue && academicLevelId.Value > 0)
-            query = query.Where(x => x.AcademicLevelId == academicLevelId.Value);
 
         var result = await query
             .OrderBy(x => x.SectionName)
@@ -185,10 +192,27 @@ public class ReportsController : ControllerBase
                 boardId = x.BoardId,
                 board = x.BoardNavigation != null ? x.BoardNavigation.BoardName : string.Empty,
                 academicYearId = x.AcademicYearId,
+                academicLevelId = x.AcademicLevelId,
                 academicLevel = x.AcademicLevelNavigation != null ? x.AcademicLevelNavigation.LevelName : string.Empty,
                 maximumStrength = x.MaximumStrength
             })
             .ToListAsync(ct);
+
+        // If level filter was provided and matches exist, refine to that level
+        if (academicLevelId.HasValue && academicLevelId.Value > 0)
+        {
+            var levelFiltered = result.Where(x => x.academicLevelId == academicLevelId.Value).ToList();
+            if (levelFiltered.Count > 0)
+                result = levelFiltered;
+        }
+
+        // If year filter was provided and matches exist, refine to that year
+        if (academicYearId.HasValue && academicYearId.Value > 0)
+        {
+            var yearFiltered = result.Where(x => x.academicYearId == academicYearId.Value).ToList();
+            if (yearFiltered.Count > 0)
+                result = yearFiltered;
+        }
 
         return Ok(result);
     }
