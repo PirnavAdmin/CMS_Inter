@@ -70,7 +70,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("LevelName")
                         .IsUnique();
 
-                    b.ToTable("AcademicLevels");
+                    b.ToTable("AcademicLevels", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.AcademicPattern", b =>
@@ -121,7 +121,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("PatternName")
                         .IsUnique();
 
-                    b.ToTable("AcademicPatterns");
+                    b.ToTable("AcademicPatterns", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.AcademicProgram", b =>
@@ -197,7 +197,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("BoardId");
 
-                    b.ToTable("AcademicYears");
+                    b.ToTable("AcademicYears", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Admin", b =>
@@ -227,7 +227,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("admins");
+                    b.ToTable("admins", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.AssessmentType", b =>
@@ -261,7 +261,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("AssessmentTypeName")
                         .IsUnique();
 
-                    b.ToTable("AssessmentTypes");
+                    b.ToTable("AssessmentTypes", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Assignment", b =>
@@ -327,7 +327,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SubjectId");
 
-                    b.ToTable("Assignments");
+                    b.ToTable("Assignments", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.AssignmentSubmission", b =>
@@ -398,7 +398,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("AssignmentId");
 
-                    b.ToTable("AssignmentSubmissions");
+                    b.ToTable("AssignmentSubmissions", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Attendance", b =>
@@ -730,7 +730,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("Boards");
+                    b.ToTable("Boards", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.BoardAcademicLevel", b =>
@@ -769,7 +769,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("BoardId", "AcademicLevelId")
                         .IsUnique();
 
-                    b.ToTable("BoardAcademicLevels");
+                    b.ToTable("BoardAcademicLevels", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.BoardAssessment", b =>
@@ -818,7 +818,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("BoardId", "AssessmentTypeId")
                         .IsUnique();
 
-                    b.ToTable("BoardAssessments");
+                    b.ToTable("BoardAssessments", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Certificate", b =>
@@ -976,7 +976,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("IsActive");
 
-                    b.ToTable("Countries");
+                    b.ToTable("Countries", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Department", b =>
@@ -1017,7 +1017,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("DepartmentId");
 
-                    b.ToTable("Departments");
+                    b.ToTable("Departments", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.ExamCodeSequence", b =>
@@ -1035,7 +1035,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("AcademicYear");
 
-                    b.ToTable("ExamCodeSequences");
+                    b.ToTable("ExamCodeSequences", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.ExamSchedule", b =>
@@ -1114,7 +1114,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SubjectId");
 
-                    b.ToTable("ExamSchedules");
+                    b.ToTable("ExamSchedules", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Examination", b =>
@@ -1203,7 +1203,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("ProgramId");
 
-                    b.ToTable("Examinations");
+                    b.ToTable("Examinations", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Faculty.Designation", b =>
@@ -1243,7 +1243,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("Designations");
+                    b.ToTable("Designations", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Faculty.Faculty", b =>
@@ -1345,7 +1345,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("DesignationId");
 
-                    b.ToTable("Faculties");
+                    b.ToTable("Faculties", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Faculty.FacultySubjectAllocation", b =>
@@ -1374,7 +1374,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SubjectId");
 
-                    b.ToTable("FacultySubjectAllocations");
+                    b.ToTable("FacultySubjectAllocations", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.FeeConcession", b =>
@@ -1428,7 +1428,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("StudentId");
 
-                    b.ToTable("FeeConcessions");
+                    b.ToTable("FeeConcessions", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.FeeInstallment", b =>
@@ -1467,7 +1467,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("FeePaymentPlanId", "InstallmentNumber")
                         .IsUnique();
 
-                    b.ToTable("FeeInstallments");
+                    b.ToTable("FeeInstallments", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.FeePayment", b =>
@@ -1534,7 +1534,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("TransactionReference");
 
-                    b.ToTable("FeePayments");
+                    b.ToTable("FeePayments", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.FeePaymentPlan", b =>
@@ -1572,7 +1572,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("StudentFeeId");
 
-                    b.ToTable("FeePaymentPlans");
+                    b.ToTable("FeePaymentPlans", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.FeeReceipt", b =>
@@ -1608,7 +1608,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("ReceiptNumber")
                         .IsUnique();
 
-                    b.ToTable("FeeReceipts");
+                    b.ToTable("FeeReceipts", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.FeeStructure", b =>
@@ -1669,7 +1669,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("BoardId", "AcademicYearId", "GroupId", "ProgramId")
                         .IsUnique();
 
-                    b.ToTable("FeeStructures");
+                    b.ToTable("FeeStructures", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.FeeStructureComponent", b =>
@@ -1714,7 +1714,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("FeeStructureId", "FeeTypeId")
                         .IsUnique();
 
-                    b.ToTable("FeeStructureComponents");
+                    b.ToTable("FeeStructureComponents", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.FeeType", b =>
@@ -1763,7 +1763,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("FeeTypeName")
                         .IsUnique();
 
-                    b.ToTable("FeeTypes");
+                    b.ToTable("FeeTypes", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.Scholarship", b =>
@@ -1805,7 +1805,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("ScholarshipName")
                         .IsUnique();
 
-                    b.ToTable("Scholarships");
+                    b.ToTable("Scholarships", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.StudentFee", b =>
@@ -1867,7 +1867,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("StudentId", "FeeStructureId")
                         .IsUnique();
 
-                    b.ToTable("StudentFees");
+                    b.ToTable("StudentFees", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Fee.StudentFeeComponent", b =>
@@ -1911,7 +1911,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("StudentFeeId", "FeeStructureComponentId")
                         .IsUnique();
 
-                    b.ToTable("StudentFeeComponents");
+                    b.ToTable("StudentFeeComponents", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.GradingSystem", b =>
@@ -1962,7 +1962,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("GradingSystemName")
                         .IsUnique();
 
-                    b.ToTable("GradingSystems");
+                    b.ToTable("GradingSystems", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Group", b =>
@@ -2022,7 +2022,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("BoardId", "AcademicYearId", "AcademicLevelId", "IsActive");
 
-                    b.ToTable("Groups");
+                    b.ToTable("Groups", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.GroupProgram", b =>
@@ -2055,7 +2055,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("GroupId", "ProgramId")
                         .IsUnique();
 
-                    b.ToTable("GroupPrograms");
+                    b.ToTable("GroupPrograms", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.HallTicket", b =>
@@ -2084,7 +2084,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("StudentId");
 
-                    b.ToTable("HallTickets");
+                    b.ToTable("HallTickets", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.InvigilatorAssignment", b =>
@@ -2115,7 +2115,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("InvigilatorId");
 
-                    b.ToTable("InvigilatorAssignments");
+                    b.ToTable("InvigilatorAssignments", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Mark", b =>
@@ -2244,7 +2244,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SubjectId");
 
-                    b.ToTable("Marks");
+                    b.ToTable("Marks", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.OTP", b =>
@@ -2273,7 +2273,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("OTPId");
 
-                    b.ToTable("OTPs");
+                    b.ToTable("OTPs", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Reports.AuditLog", b =>
@@ -2316,7 +2316,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("EntityName", "EntityId");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("AuditLogs", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Result", b =>
@@ -2401,7 +2401,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SubjectId");
 
-                    b.ToTable("Results");
+                    b.ToTable("Results", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Revaluation", b =>
@@ -2465,7 +2465,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("StudentId");
 
-                    b.ToTable("Revaluations");
+                    b.ToTable("Revaluations", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Role", b =>
@@ -2486,7 +2486,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("RoleName")
                         .IsUnique();
 
-                    b.ToTable("Roles");
+                    b.ToTable("Roles", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Section", b =>
@@ -2924,7 +2924,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SubjectId");
 
-                    b.ToTable("StaffSubjectAllocations");
+                    b.ToTable("StaffSubjectAllocations", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendance", b =>
@@ -2983,7 +2983,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("StaffSessionId");
 
-                    b.ToTable("StaffAttendances");
+                    b.ToTable("StaffAttendances", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceSession", b =>
@@ -3041,7 +3041,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("DepartmentId");
 
-                    b.ToTable("StaffAttendanceSessions");
+                    b.ToTable("StaffAttendanceSessions", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.StaffLeaveBalance", b =>
@@ -3224,7 +3224,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("CountryId", "StateName")
                         .IsUnique();
 
-                    b.ToTable("States");
+                    b.ToTable("States", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Student", b =>
@@ -3534,7 +3534,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SectionId");
 
-                    b.ToTable("Students");
+                    b.ToTable("Students", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.StudentAdmission", b =>
@@ -3752,7 +3752,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("AdmissionId");
 
-                    b.ToTable("StudentAdmissions");
+                    b.ToTable("StudentAdmissions", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.StudyMaterial", b =>
@@ -3788,7 +3788,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("StudyMaterialId");
 
-                    b.ToTable("StudyMaterials");
+                    b.ToTable("StudyMaterials", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Subject", b =>
@@ -3892,7 +3892,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SubjectCode");
 
-                    b.ToTable("Subjects");
+                    b.ToTable("Subjects", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.BreakType", b =>
@@ -3922,7 +3922,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.ToTable("BreakTypes");
+                    b.ToTable("BreakTypes", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.Period", b =>
@@ -3961,7 +3961,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("PeriodId");
 
-                    b.ToTable("Periods");
+                    b.ToTable("Periods", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.PeriodStructure", b =>
@@ -3997,7 +3997,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PeriodStructures");
+                    b.ToTable("PeriodStructures", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.PeriodStructureAssignment", b =>
@@ -4044,7 +4044,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("PeriodStructureId");
 
-                    b.ToTable("PeriodStructureAssignments");
+                    b.ToTable("PeriodStructureAssignments", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.PeriodStructureItem", b =>
@@ -4086,7 +4086,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("PeriodStructureId");
 
-                    b.ToTable("PeriodStructureItems");
+                    b.ToTable("PeriodStructureItems", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.Room", b =>
@@ -4142,7 +4142,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("RoomId");
 
-                    b.ToTable("Rooms");
+                    b.ToTable("Rooms", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.Timetable", b =>
@@ -4222,7 +4222,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("SubjectId");
 
-                    b.ToTable("Timetables");
+                    b.ToTable("Timetables", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.TimetableBackup", b =>
@@ -4281,7 +4281,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("BoardId", "AcademicLevelId", "AcademicYearId", "GroupId", "SectionId")
                         .IsUnique();
 
-                    b.ToTable("TimetableBackups");
+                    b.ToTable("TimetableBackups", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.TimetableBackupSlot", b =>
@@ -4370,7 +4370,7 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("TimetableBackupId");
 
-                    b.ToTable("TimetableBackupSlots");
+                    b.ToTable("TimetableBackupSlots", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.TimetableSubstitution", b =>
@@ -4538,7 +4538,7 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("StudentId")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.AcademicYear", b =>

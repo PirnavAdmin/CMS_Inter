@@ -530,14 +530,7 @@ export const apiEndpoints = {
     update: (id) => `/api/v1/holidays/${id}`,
     delete: (id) => `/api/v1/holidays/${id}`,
   },
-  attendanceTimingConfig: {
-    list: "/api/v1/attendance-timing-config",
-    effective: "/api/v1/attendance-timing-config/effective",
-    getById: (id) => `/api/v1/attendance-timing-config/${id}`,
-    create: "/api/v1/attendance-timing-config",
-    update: (id) => `/api/v1/attendance-timing-config/${id}`,
-    delete: (id) => `/api/v1/attendance-timing-config/${id}`,
-  },
+ 
   roles: {
     list: "/api/v1/roles",
     getAll: "/api/v1/roles",
