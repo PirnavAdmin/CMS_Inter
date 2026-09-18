@@ -164,6 +164,7 @@ export default function HostelPage() {
   const [beds, setBeds] = useState([]);
   const [candidateStaff, setCandidateStaff] = useState([]);
   const [candidateAdmissions, setCandidateAdmissions] = useState([]);
+  const [candidateStudents, setCandidateStudents] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
@@ -220,6 +221,7 @@ export default function HostelPage() {
 
   const mapBed = useCallback((bd) => ({
     id: bd.bedId ?? bd.id,
+    bedId: bd.bedId ?? bd.id,
     roomId: bd.roomId,
     roomNumber: bd.roomNumber ?? "",
     hostelId: bd.hostelId,
@@ -326,11 +328,11 @@ export default function HostelPage() {
     setIsLoading(true);
     setApiError(null);
     try {
-      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes] = await Promise.allSettled([
+      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes, studentsRes] = await Promise.allSettled([
         hostelApi.getHostelBlocks(),
         hostelApi.getRoomTypes(),
         hostelApi.getRooms(),
-        hostelApi.getBeds(),
+        hostelApi.getBeds({ pageSize: 1000 }),
         hostelApi.getWardens(),
         hostelApi.getStudentAllocations(),
         hostelApi.getOutpassLeave(),
@@ -338,6 +340,7 @@ export default function HostelPage() {
         hostelApi.getHostelDashboard(),
         apiClient.get("/api/v1/staff?pageSize=100", { skipGlobalLoader: true }),
         apiClient.get("/api/v1/student-admissions?pageSize=100", { skipGlobalLoader: true }),
+        apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true }),
       ]);
 
       if (blocksRes.status === "fulfilled") {
@@ -353,7 +356,7 @@ export default function HostelPage() {
         setRooms(Array.isArray(rawRooms) ? rawRooms.map(mapRoom) : []);
       }
       if (bedsRes.status === "fulfilled") {
-        const rawBeds = bedsRes.value?.data?.data;
+        const rawBeds = bedsRes.value?.data?.data || bedsRes.value?.data?.items || (Array.isArray(bedsRes.value?.data) ? bedsRes.value?.data : []);
         setBeds(Array.isArray(rawBeds) ? rawBeds.map(mapBed) : []);
       }
       if (wardensRes.status === "fulfilled") {
@@ -369,6 +372,7 @@ export default function HostelPage() {
           id: a.admissionNo || a.id,
           admissionNo: a.admissionNo,
           studentId: a.studentId,
+          hostelId: a.hostelId,
           name: a.studentName,
           block: a.blockName,
           blockCode: a.blockCode,
@@ -376,7 +380,8 @@ export default function HostelPage() {
           roomId: a.roomId,
           bed: a.bed,
           bedId: a.bedId,
-          roomBed: a.roomBadge || `${a.room} (${a.bed})`,
+          wardenAssignmentId: a.wardenAssignmentId,
+          roomBadge: a.roomBadge || `${a.room} (${a.bed})`,
           floor: a.floor,
           gender: a.gender,
           inTime: "07:00",
@@ -400,6 +405,10 @@ export default function HostelPage() {
       if (admRes.status === "fulfilled") {
         const rawAdm = admRes.value?.data?.items || admRes.value?.data?.data || admRes.value?.data;
         if (Array.isArray(rawAdm)) setCandidateAdmissions(rawAdm);
+      }
+      if (studentsRes.status === "fulfilled") {
+        const rawStudents = studentsRes.value?.data?.items || studentsRes.value?.data?.data || (Array.isArray(studentsRes.value?.data) ? studentsRes.value?.data : []);
+        if (Array.isArray(rawStudents)) setCandidateStudents(rawStudents);
       }
     } catch (err) {
       console.error("Failed to fetch hostel data:", err);
@@ -440,8 +449,8 @@ export default function HostelPage() {
 
   const refreshBeds = useCallback(async () => {
     try {
-      const res = await hostelApi.getBeds();
-      const raw = res?.data?.data;
+      const res = await hostelApi.getBeds({ pageSize: 1000 });
+      const raw = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res?.data : []);
       if (Array.isArray(raw)) setBeds(raw.map(mapBed));
     } catch (err) { console.error("Refresh beds error:", err); }
   }, [mapBed]);
@@ -465,6 +474,7 @@ export default function HostelPage() {
           id: a.admissionNo || a.id,
           admissionNo: a.admissionNo,
           studentId: a.studentId,
+          hostelId: a.hostelId,
           name: a.studentName,
           block: a.blockName,
           blockCode: a.blockCode,
@@ -472,7 +482,8 @@ export default function HostelPage() {
           roomId: a.roomId,
           bed: a.bed,
           bedId: a.bedId,
-          roomBed: a.roomBadge || `${a.room} (${a.bed})`,
+          wardenAssignmentId: a.wardenAssignmentId,
+          roomBadge: a.roomBadge || `${a.room} (${a.bed})`,
           floor: a.floor,
           gender: a.gender,
           inTime: "07:00",
@@ -977,18 +988,113 @@ export default function HostelPage() {
   // ── Student Allocation CRUD ─────────────────────────────────────────
   const handleSaveAllocation = async (allocData) => {
     try {
-      const blk = blocks.find((b) => b.name === allocData.blockName || b.code === allocData.blockCode || String(b.id) === String(allocData.hostelId));
-      const hostelId = blk ? blk.id : (blocks[0]?.id || 1);
-      const rm = rooms.find((r) => r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room || String(r.id) === String(allocData.roomId));
-      const roomId = rm ? rm.id : (rooms[0]?.id || 1);
+      const blk = blocks.find(
+        (b) => String(b.id) === String(allocData.hostelId) ||
+               b.name === allocData.blockName ||
+               b.code === allocData.blockCode
+      );
+      const hostelId = Number(allocData.hostelId) || (blk ? blk.id : (blocks[0]?.id || 1));
+
+      // Resolve room strictly matching within selected hostel
+      const rm = rooms.find(
+        (r) => (allocData.roomId && String(r.id) === String(allocData.roomId)) ||
+               (String(r.hostelId) === String(hostelId) && (r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room))
+      );
+      const roomId = Number(allocData.roomId) || (rm ? rm.id : (rooms[0]?.id || 1));
+
+      // Resolve bed strictly matching within selected room
+      const roomBeds = beds.filter((b) => String(b.roomId) === String(roomId));
+      let bd = roomBeds.find(
+        (b) => (allocData.bedId && String(b.id || b.bedId) === String(allocData.bedId)) ||
+               b.bedNumber === allocData.bed
+      );
+
+      // If room already has beds in DB, verify bed is available:
+      if (roomBeds.length > 0) {
+        if (!bd || String(bd.bedStatus || bd.status || "").toLowerCase() !== "available") {
+          const availInRoom = roomBeds.filter(
+            (b) => String(b.bedStatus || b.status || "").toLowerCase() === "available"
+          );
+          if (availInRoom.length === 0) {
+            showToast("All beds in the selected room are currently occupied. Please select another room.", "danger");
+            return;
+          }
+          bd = availInRoom[0];
+        }
+      }
+
+      // If room has no beds created in DB yet, auto-create one for this roomId
+      if (!bd) {
+        try {
+          const createBedRes = await hostelApi.createBed({
+            roomId: Number(roomId),
+            bedNumber: allocData.bed || "BED-1",
+            bedStatus: "Available",
+            status: "Active",
+          });
+          const newBedData = createBedRes?.data?.data || createBedRes?.data;
+          if (newBedData && (newBedData.bedId || newBedData.id)) {
+            bd = { id: newBedData.bedId || newBedData.id, bedId: newBedData.bedId || newBedData.id };
+            await refreshBeds();
+          }
+        } catch (bErr) {
+          console.warn("Auto-create bed on allocation error:", bErr);
+        }
+      }
+
+      const bedId = bd ? Number(bd.id || bd.bedId) : null;
+      if (!bedId) {
+        showToast("Unable to assign a valid bed for this room. Please choose an available room.", "danger");
+        return;
+      }
+
+      // Resolve genuine studentId (prioritize candidateStudents from /api/v1/students)
+      let resolvedStudentId = Number(allocData.studentId);
+      if (!resolvedStudentId || isNaN(resolvedStudentId)) {
+        const studentAdmNo = String(allocData.admissionNo || "").trim().toLowerCase();
+        const studentNameClean = String(allocData.studentName || "").trim().toLowerCase();
+        const found = candidateStudents.find(
+          (s) => (studentAdmNo && String(s.admissionNo || s.admissionNumber || "").trim().toLowerCase() === studentAdmNo) ||
+                 (studentNameClean && String(s.studentName || s.fullName || s.name || "").trim().toLowerCase() === studentNameClean)
+        ) || candidateAdmissions.find(
+          (ca) => (studentAdmNo && String(ca.admissionNo || ca.admissionNumber || "").trim().toLowerCase() === studentAdmNo) ||
+                  (studentNameClean && String(ca.studentName || ca.fullName || ca.name || "").trim().toLowerCase() === studentNameClean)
+        );
+        if (found) {
+          resolvedStudentId = Number(found.studentId || found.id || found.studentAdmissionId);
+        }
+      }
+      const studentId = resolvedStudentId || Number(allocData.studentId) || 1;
+
+      // Resolve warden assignment id for this hostel if not explicitly set
+      const warden = wardens.find(
+        (w) => String(w.hostelId) === String(hostelId) || String(w.id) === String(allocData.wardenAssignmentId)
+      );
+      const wardenAssignmentId = allocData.wardenAssignmentId ? Number(allocData.wardenAssignmentId) : (warden ? Number(warden.id) : null);
+
+      // Format ISO Joining Date
+      let joiningDateIso;
+      if (allocData.joinDate) {
+        const now = new Date();
+        const parts = String(allocData.joinDate).split("T")[0].split("-").map(Number);
+        if (parts.length === 3 && !parts.some(isNaN)) {
+          const d = new Date(parts[0], parts[1] - 1, parts[2], now.getHours(), now.getMinutes(), now.getSeconds());
+          joiningDateIso = d.toISOString();
+        } else {
+          const d = new Date(allocData.joinDate);
+          joiningDateIso = !isNaN(d.getTime()) ? d.toISOString() : new Date().toISOString();
+        }
+      } else {
+        joiningDateIso = new Date().toISOString();
+      }
 
       const payload = {
-        studentId: Number(allocData.studentId) || 1,
-        hostelId,
-        roomId,
-        bedId: Number(allocData.bedId) || 1,
-        wardenAssignmentId: allocData.wardenAssignmentId || null,
-        joiningDate: allocData.joinDate ? new Date(allocData.joinDate).toISOString() : new Date().toISOString(),
+        studentId: Number(studentId),
+        hostelId: Number(hostelId),
+        roomId: Number(roomId),
+        bedId: Number(bedId),
+        wardenAssignmentId: wardenAssignmentId ? Number(wardenAssignmentId) : null,
+        joiningDate: joiningDateIso,
         status: allocData.status || "Active",
         remarks: allocData.remarks || "Student hostel room allocation",
       };
@@ -1002,6 +1108,7 @@ export default function HostelPage() {
       }
       await refreshAllocations();
       await refreshRooms();
+      await refreshBeds();
       await refreshBlocks();
       await refreshDashboard();
       closeModal();
@@ -1036,11 +1143,12 @@ export default function HostelPage() {
           String(a.studentId) === String(outData.studentId)
       );
       const blk = blocks.find((b) => b.name === outData.blockName || b.code === outData.blockCode || String(b.id) === String(outData.hostelId));
-      const hostelId = blk ? blk.id : (alloc?.hostelId || blocks[0]?.id || 1);
+      const hostelId = outData.hostelId ? Number(outData.hostelId) : (blk ? blk.id : (alloc?.hostelId || blocks[0]?.id || 1));
       const rm = rooms.find((r) => r.roomNo === outData.roomNo || r.roomNo === outData.roomNumber || String(r.id) === String(outData.roomId));
-      const roomId = rm ? rm.id : (alloc?.roomId || rooms[0]?.id || 1);
+      const roomId = outData.roomId ? Number(outData.roomId) : (rm ? rm.id : (alloc?.roomId || rooms[0]?.id || 1));
       const bedId = Number(outData.bedId) || alloc?.bedId || 1;
       const studentId = Number(outData.studentId) || alloc?.studentId || 1;
+      const wardenAssignmentId = outData.wardenAssignmentId ? Number(outData.wardenAssignmentId) : (alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null);
 
       const fromIso = outData.departureDate
         ? new Date(`${outData.departureDate}T09:00:00Z`).toISOString()
@@ -1055,10 +1163,11 @@ export default function HostelPage() {
       else if (rawType.includes("emergency")) reqType = "Emergency Leave";
 
       const payload = {
-        studentId,
-        hostelId,
-        roomId,
-        bedId,
+        studentId: Number(studentId),
+        hostelId: Number(hostelId),
+        roomId: Number(roomId),
+        bedId: Number(bedId),
+        wardenAssignmentId: wardenAssignmentId ? Number(wardenAssignmentId) : null,
         requestType: reqType,
         fromDateTime: fromIso,
         toDateTime: toIso,
@@ -1125,16 +1234,25 @@ export default function HostelPage() {
       const toBlk = blocks.find((b) => b.name === transData.destinationBlock);
       const alloc = allocations.find((a) => a.admissionNo === transData.admissionNo || a.studentName === transData.studentName);
 
+      const fromHostelId = alloc?.hostelId || (fromBlk ? fromBlk.id : 1);
+      const fromRoomId = alloc?.roomId || transData.fromRoomId || 1;
+      const fromBedId = alloc?.bedId || transData.fromBedId || 1;
+      const toHostelId = isVacate ? null : (transData.toHostelId || (toBlk ? toBlk.id : null));
+      const toRoomId = isVacate ? null : (transData.toRoomId || 1);
+      const toBedId = isVacate ? null : (transData.toBedId || 1);
+      const wardenAssignmentId = alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null;
+
       const payload = {
-        allocationId: alloc ? alloc.id : 1,
-        studentId: alloc?.studentId || 1,
+        allocationId: alloc ? alloc.id : (transData.allocationId || 1),
+        studentId: alloc?.studentId || transData.studentId || 1,
         requestType: isVacate ? "Vacate" : "Transfer",
-        fromHostelId: fromBlk ? fromBlk.id : 1,
-        fromRoomId: alloc?.roomId || 1,
-        fromBedId: alloc?.bedId || 1,
-        toHostelId: isVacate ? null : (toBlk ? toBlk.id : null),
-        toRoomId: isVacate ? null : 1,
-        toBedId: isVacate ? null : 1,
+        fromHostelId: Number(fromHostelId),
+        fromRoomId: Number(fromRoomId),
+        fromBedId: Number(fromBedId),
+        toHostelId: toHostelId ? Number(toHostelId) : null,
+        toRoomId: toRoomId ? Number(toRoomId) : null,
+        toBedId: toBedId ? Number(toBedId) : null,
+        wardenAssignmentId: wardenAssignmentId,
         requestDate: new Date().toISOString(),
         effectiveDate: new Date(Date.now() + 86400000).toISOString(),
         reason: transData.reason || (isVacate ? "Student vacating bed" : "Student room transfer"),
@@ -1256,14 +1374,20 @@ export default function HostelPage() {
       let savedCount = 0;
       for (const stId of markedIds) {
         const record = currentMap[stId];
-        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId);
-        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode);
+        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId || String(s.studentId) === String(stId));
+        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode || String(b.id) === String(student?.hostelId));
+        const resolvedHostelId = student?.hostelId || (blk ? blk.id : 1);
+        const resolvedRoomId = student?.roomId || 1;
+        const resolvedBedId = student?.bedId || 1;
+        const resolvedWardenId = student?.wardenAssignmentId || null;
+
         try {
           await hostelApi.createAttendance({
-            studentId: Number(student?.studentId) || 1,
-            hostelId: blk ? blk.id : 1,
-            roomId: 1,
-            bedId: 1,
+            studentId: Number(student?.studentId) || Number(stId) || 1,
+            hostelId: Number(resolvedHostelId),
+            roomId: Number(resolvedRoomId),
+            bedId: Number(resolvedBedId),
+            wardenAssignmentId: resolvedWardenId ? Number(resolvedWardenId) : null,
             attendanceDate: attDate,
             session: sessionLabel,
             attendanceStatus: record.status || "Present",
@@ -4611,7 +4735,6 @@ export default function HostelPage() {
                   <>
                     <option value="Boys Hostel">Boys Hostel</option>
                     <option value="Girls Hostel">Girls Hostel</option>
-                    <option value="Co-ed">Co-ed</option>
                   </>
                 )}
                 {reportCategory === "Room Report" && (
@@ -5093,7 +5216,6 @@ export default function HostelPage() {
                 <option value="" disabled>Select Category...</option>
                 <option value="Boys">Boys</option>
                 <option value="Girls">Girls</option>
-                <option value="Co-ed">Co-ed</option>
                 <option value="Staff/Guest">Staff/Guest</option>
               </select>
             </div>
@@ -6556,10 +6678,14 @@ export default function HostelPage() {
       modal.data || {
         admissionNo: "",
         studentName: "",
+        studentId: null,
         blockName: "",
         blockCode: "",
+        hostelId: null,
         room: "",
+        roomId: null,
         bed: "",
+        bedId: null,
         joinDate: new Date().toISOString().split("T")[0],
         status: "Active",
       }
@@ -6580,32 +6706,58 @@ export default function HostelPage() {
       return set;
     }, [allocations]);
 
-    // Student candidate suggestions from candidateAdmissions API
+    // Student candidate suggestions enriched with genuine studentId from students API
     const allCandidates = useMemo(() => {
       const list = [];
       const seen = new Set();
 
+      // 1. Process candidateStudents first (highest authority from /api/v1/students)
+      if (Array.isArray(candidateStudents) && candidateStudents.length > 0) {
+        candidateStudents.forEach((st) => {
+          const realStudentId = st.studentId || st.id;
+          const admNo = String(st.admissionNo || st.admissionNumber || "").trim();
+          const fullName = st.studentName || st.fullName || st.name || `Student #${admNo || realStudentId}`;
+          const isAllocated = activeStudentIds.has(String(realStudentId)) || (admNo && activeStudentIds.has(String(admNo)));
+          const key = admNo || String(realStudentId);
+
+          if (!isAllocated && !seen.has(key)) {
+            seen.add(key);
+            list.push({
+              id: realStudentId,
+              studentId: Number(realStudentId) || realStudentId,
+              name: fullName,
+              admissionNo: admNo || `ADM-${realStudentId}`,
+              gender: st.gender || "",
+              className: st.groupName || st.courseName || st.programName || "Student",
+            });
+          }
+        });
+      }
+
+      // 2. Process candidateAdmissions for any newly admitted students not yet in candidateStudents
       if (Array.isArray(candidateAdmissions) && candidateAdmissions.length > 0) {
         candidateAdmissions.forEach((ca) => {
-          const sId = ca.studentAdmissionId || ca.studentId || ca.id;
-          const admNo = ca.admissionNumber || ca.admissionNo || `ADM-${sId}`;
-          const fullName = [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.studentName || `Student #${admNo}`;
-          const isAllocated = activeStudentIds.has(String(sId)) || activeStudentIds.has(String(admNo));
+          const admNo = String(ca.admissionNumber || ca.admissionNo || "").trim();
+          const caName = String(ca.studentName || [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.name || "").trim();
+          const realStudentId = ca.studentId || ca.studentAdmissionId || ca.id;
+          const isAllocated = activeStudentIds.has(String(realStudentId)) || (admNo && activeStudentIds.has(String(admNo)));
+          const key = admNo || String(realStudentId);
 
-          if (!isAllocated && !seen.has(String(admNo))) {
-            seen.add(String(admNo));
+          if (!isAllocated && !seen.has(key)) {
+            seen.add(key);
             list.push({
-              id: sId,
-              studentId: sId,
-              name: fullName,
-              admissionNo: admNo,
+              id: realStudentId,
+              studentId: Number(realStudentId) || realStudentId,
+              name: caName || `Student #${admNo || realStudentId}`,
+              admissionNo: admNo || `ADM-${realStudentId}`,
+              gender: ca.gender || "",
               className: ca.courseName || ca.branchName || "Admitted Student",
             });
           }
         });
       }
 
-      // Fallback if candidateAdmissions is empty
+      // 3. Fallback if both are empty
       if (list.length === 0) {
         allocations.forEach((a) => {
           if (a.admissionNo && !seen.has(String(a.admissionNo))) {
@@ -6615,6 +6767,7 @@ export default function HostelPage() {
               studentId: a.studentId,
               name: a.studentName,
               admissionNo: a.admissionNo,
+              gender: a.gender || "",
               className: "Resident Hosteller",
             });
           }
@@ -6622,7 +6775,7 @@ export default function HostelPage() {
       }
 
       return list;
-    }, [candidateAdmissions, activeStudentIds, allocations]);
+    }, [candidateStudents, candidateAdmissions, activeStudentIds, allocations]);
 
     const filteredCandidates = useMemo(() => {
       if (!studentSearch) return allCandidates;
@@ -6636,34 +6789,52 @@ export default function HostelPage() {
 
     // Available rooms for selected block
     const availableRooms = useMemo(() => {
-      if (!form.blockName) return [];
-      return rooms.filter(
-        (r) => r.blockName === form.blockName || r.block === form.blockName || String(r.hostelId) === String(form.hostelId)
-      );
+      if (!form.blockName && !form.hostelId) return [];
+      return rooms.filter((r) => {
+        if (form.hostelId && r.hostelId) {
+          return String(r.hostelId) === String(form.hostelId);
+        }
+        return r.blockName === form.blockName || r.block === form.blockName;
+      });
     }, [form.blockName, form.hostelId, rooms]);
 
     // Available beds for selected room
     const availableBeds = useMemo(() => {
-      if (!form.roomId && !form.room) return [];
-      const selRoom = rooms.find(
-        (r) => String(r.id) === String(form.roomId) || r.roomNo === form.room || `Room #${r.roomNo}` === form.room
-      );
-      const rId = selRoom ? selRoom.id : form.roomId;
+      let rId = form.roomId;
+      if (!rId && form.room) {
+        const matchedRoom = availableRooms.find(
+          (r) => r.roomNo === form.room || `Room #${r.roomNo}` === form.room
+        );
+        rId = matchedRoom?.id;
+      }
       if (!rId) return [];
 
-      const roomBeds = beds.filter(
-        (b) => String(b.roomId) === String(rId) && (b.bedStatus === "Available" || b.status === "Available")
-      );
-      if (roomBeds.length > 0) return roomBeds;
+      const selRoom = rooms.find((r) => String(r.id) === String(rId));
+      const roomBeds = beds.filter((b) => String(b.roomId) === String(rId));
 
-      // Fallback if beds table has not registered individual beds yet
-      const cap = selRoom?.capacity || 2;
+      // If room already has beds in DB, return ONLY genuinely available ones
+      if (roomBeds.length > 0) {
+        return roomBeds.filter(
+          (b) => String(b.bedStatus || b.status || "").toLowerCase() === "available"
+        );
+      }
+
+      if (Array.isArray(selRoom?.beds) && selRoom.beds.length > 0) {
+        const embedded = selRoom.beds.filter(
+          (b) => typeof b === "object" && String(b.bedStatus || b.status || "").toLowerCase() === "available"
+        );
+        if (embedded.length > 0) return embedded;
+      }
+
+      // If this room has NO beds in DB yet, provide temporary slots (auto-persisted upon save)
+      const cap = Number(selRoom?.capacity || 2);
       return Array.from({ length: cap }, (_, i) => ({
-        id: i + 1,
+        id: `slot-${i + 1}`,
+        bedId: null,
         bedNumber: `BED-${i + 1}`,
         bedStatus: "Available",
       }));
-    }, [beds, form.roomId, form.room, rooms]);
+    }, [availableRooms, beds, form.roomId, form.room, rooms]);
 
     const handleSubmit = (e) => {
       e.preventDefault();
@@ -6675,16 +6846,46 @@ export default function HostelPage() {
         showToast("Please select a hostel block", "error");
         return;
       }
-      if (!form.room) {
+      if (!form.room && !form.roomId) {
         showToast("Please select a room", "error");
         return;
       }
-      if (!form.bed) {
+      // Auto-assign first available bed if available
+      let finalBed = form.bed;
+      let finalBedId = form.bedId;
+      if (!finalBed && availableBeds.length > 0) {
+        finalBed = availableBeds[0].bedNumber;
+        finalBedId = availableBeds[0].bedId || availableBeds[0].id;
+      }
+
+      if (!finalBed && !finalBedId) {
         showToast("Please select a bed number", "error");
         return;
       }
 
-      handleSaveAllocation(form);
+      // Auto-resolve genuine studentId if not explicitly captured
+      let sId = form.studentId;
+      let admNo = form.admissionNo;
+      if (!sId || sId === 1) {
+        const queryName = String(form.studentName || studentSearch || "").trim().toLowerCase();
+        const matched = allCandidates.find(
+          c => c.name?.toLowerCase() === queryName ||
+               c.admissionNo?.toLowerCase() === queryName ||
+               String(c.studentId) === String(sId)
+        );
+        if (matched) {
+          sId = matched.studentId;
+          admNo = matched.admissionNo || admNo;
+        }
+      }
+
+      handleSaveAllocation({
+        ...form,
+        bed: finalBed,
+        bedId: finalBedId,
+        studentId: sId,
+        admissionNo: admNo,
+      });
     };
 
     return (
@@ -6800,28 +7001,28 @@ export default function HostelPage() {
                 <div style={{ position: "relative" }}>
                   <select
                     required
-                    value={form.room}
+                    value={form.roomId ? String(form.roomId) : (availableRooms.find(r => r.roomNo === form.room)?.id ? String(availableRooms.find(r => r.roomNo === form.room)?.id) : "")}
                     onChange={(e) => {
-                      const selRoomNo = e.target.value;
-                      const selRoom = availableRooms.find(r => r.roomNo === selRoomNo || `Room #${r.roomNo}` === selRoomNo);
+                      const selRoomId = e.target.value;
+                      const selRoom = availableRooms.find(r => String(r.id) === String(selRoomId));
                       setForm({
                         ...form,
-                        room: selRoomNo,
-                        roomId: selRoom ? selRoom.id : form.roomId,
+                        roomId: selRoom ? selRoom.id : (selRoomId ? Number(selRoomId) : null),
+                        room: selRoom ? selRoom.roomNo : "",
                         bed: "",
                         bedId: null,
                       });
                     }}
                     className="cms-alloc-modal-select"
-                    style={{ color: form.room ? "var(--cms-text)" : "var(--cms-muted)" }}
+                    style={{ color: form.roomId || form.room ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
-                    {!form.blockName ? (
+                    {!form.blockName && !form.hostelId ? (
                       <option value="">Select Hostel Block first...</option>
                     ) : (
                       <>
                         <option value="">Select Room...</option>
                         {availableRooms.map((rm) => (
-                          <option key={rm.id || rm.roomNo} value={rm.roomNo}>
+                          <option key={rm.id || rm.roomNo} value={String(rm.id)}>
                             Room #{rm.roomNo} {rm.type ? `(${rm.type})` : ""}
                           </option>
                         ))}
@@ -6842,22 +7043,24 @@ export default function HostelPage() {
                 <div style={{ position: "relative" }}>
                   <select
                     required
-                    value={form.bed}
+                    value={form.bed || ""}
                     onChange={(e) => {
-                      const selBedNum = e.target.value;
-                      const bd = availableBeds.find(b => b.bedNumber === selBedNum);
+                      const selBedNumber = e.target.value;
+                      const bd = availableBeds.find(b => b.bedNumber === selBedNumber || String(b.id || b.bedId) === selBedNumber);
                       setForm({
                         ...form,
-                        bed: selBedNum,
-                        bedId: bd ? bd.id : null,
+                        bed: bd ? bd.bedNumber : selBedNumber,
+                        bedId: bd ? (bd.bedId || bd.id) : null,
                       });
                     }}
                     className="cms-alloc-modal-select"
-                    style={{ color: form.bed ? "var(--cms-text)" : "var(--cms-muted)" }}
+                    style={{
+                      color: form.bed ? "var(--cms-text)" : "var(--cms-muted)",
+                    }}
                   >
                     <option value="">Select Bed Number...</option>
                     {availableBeds.map((bd) => (
-                      <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
+                      <option key={bd.id || bd.bedId || bd.bedNumber} value={bd.bedNumber}>
                         {bd.bedNumber} ({bd.bedStatus || "Available"})
                       </option>
                     ))}
@@ -6983,6 +7186,7 @@ export default function HostelPage() {
             roomId: a.roomId,
             bed: a.bed,
             bedId: a.bedId,
+            wardenAssignmentId: a.wardenAssignmentId,
           });
         }
       });
@@ -7001,6 +7205,7 @@ export default function HostelPage() {
         hostelId: blocks[0]?.id || 1,
         roomId: rooms[0]?.id || 1,
         bedId: 1,
+        wardenAssignmentId: null,
         studentId: 1,
       };
 
@@ -7014,6 +7219,7 @@ export default function HostelPage() {
         roomNo: studentObj.room,
         roomNumber: studentObj.room,
         bedId: studentObj.bedId,
+        wardenAssignmentId: studentObj.wardenAssignmentId,
         outpassType: outpassCategory,
         requestType: outpassCategory,
         departureDate: departureDateTime || new Date().toISOString().split("T")[0],
@@ -7223,13 +7429,8 @@ export default function HostelPage() {
         (b) => String(b.roomId) === String(destRoomObj.id) && (b.bedStatus === "Available" || b.status === "Available")
       );
       if (avail.length > 0) return avail;
-      const cap = destRoomObj.capacity || 2;
-      return Array.from({ length: cap }, (_, i) => ({
-        id: i + 1,
-        bedNumber: `BED-${i + 1}`,
-        bedStatus: "Available",
-      }));
-    }, [destRoomObj]);
+      return [];
+    }, [destRoomObj, beds]);
 
     const handleSubmit = (e) => {
       e.preventDefault();
@@ -7397,12 +7598,18 @@ export default function HostelPage() {
                       onChange={(e) => setDestinationBed(e.target.value)}
                       className="cms-alloc-modal-select"
                     >
-                      <option value="">Select Bed Number...</option>
-                      {destBeds.map((bd) => (
-                        <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
-                          {bd.bedNumber} ({bd.bedStatus || "Available"})
-                        </option>
-                      ))}
+                      {destBeds.length === 0 ? (
+                        <option value="">No available beds in this room</option>
+                      ) : (
+                        <>
+                          <option value="">Select Bed Number...</option>
+                          {destBeds.map((bd) => (
+                            <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
+                              {bd.bedNumber} (Available)
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
                     <div className="cms-alloc-modal-chevron">
                       <ChevronDown size={16} />
