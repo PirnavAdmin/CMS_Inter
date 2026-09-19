@@ -5,7 +5,6 @@ using CollegeManagement.API.Services.Interfaces;
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
-    [Route("api/v1/transport-dashboard")]
     [Route("api/v1/transport/dashboard")]
     [AllowAnonymous]
     public class TransportDashboardController : ControllerBase

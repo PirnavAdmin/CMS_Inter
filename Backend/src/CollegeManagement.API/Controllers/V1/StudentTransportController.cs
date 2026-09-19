@@ -6,7 +6,6 @@ using CollegeManagement.API.Services.Interfaces;
 using System.Threading.Tasks;
 
 [ApiController]
-[Route("api/v1/transport-student")]
 [Route("api/v1/transport/student")]
 [Authorize]
 [Tags("Transport Management")]

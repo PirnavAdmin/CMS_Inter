@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
+using CollegeManagement.API.DTOs.Timetable;
 using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
@@ -23,112 +23,46 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<Room>> GetAllAsync()
         {
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Building", null, DbType.String);
+            parameters.Add("p_Floor", null, DbType.String);
+            parameters.Add("p_RoomType", null, DbType.String);
+            parameters.Add("p_IsActive", null, DbType.Boolean);
+            parameters.Add("p_SearchTerm", null, DbType.String);
+            parameters.Add("p_OnlyAvailable", 0, DbType.Int32);
+
             return await Connection.QueryAsync<Room>(
                 "sp_GetRooms",
+                parameters,
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<IEnumerable<Room>> GetAllFilteredAsync(CollegeManagement.API.DTOs.Timetable.RoomFilterDto? filter)
+        public async Task<IEnumerable<Room>> GetAllFilteredAsync(RoomFilterDto? filter)
         {
-            var rooms = await GetAllAsync();
-            if (filter == null) return rooms;
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Building", string.IsNullOrWhiteSpace(filter?.Building) ? null : filter.Building.Trim(), DbType.String);
+            parameters.Add("p_Floor", string.IsNullOrWhiteSpace(filter?.Floor) ? null : filter.Floor.Trim(), DbType.String);
+            parameters.Add("p_RoomType", string.IsNullOrWhiteSpace(filter?.RoomType) ? null : filter.RoomType.Trim(), DbType.String);
+            parameters.Add("p_IsActive", filter?.IsActive, DbType.Boolean);
+            parameters.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter?.SearchTerm) ? null : filter.SearchTerm.Trim(), DbType.String);
+            parameters.Add("p_OnlyAvailable", (filter?.OnlyAvailable == true || filter?.ExcludeAssigned == true) ? 1 : 0, DbType.Int32);
 
-            var query = rooms.AsEnumerable();
-
-            if (!string.IsNullOrWhiteSpace(filter.Building))
-            {
-                var building = filter.Building.Trim();
-                query = query.Where(r => string.Equals(r.BlockName, building, System.StringComparison.OrdinalIgnoreCase) ||
-                                         string.Equals(r.BuildingName, building, System.StringComparison.OrdinalIgnoreCase) ||
-                                         string.Equals(r.Building, building, System.StringComparison.OrdinalIgnoreCase));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filter.Floor))
-            {
-                var floor = filter.Floor.Trim();
-                query = query.Where(r => string.Equals(r.Floor, floor, System.StringComparison.OrdinalIgnoreCase));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filter.RoomType))
-            {
-                var roomType = filter.RoomType.Trim();
-                query = query.Where(r => string.Equals(r.RoomType, roomType, System.StringComparison.OrdinalIgnoreCase));
-            }
-
-            if (filter.IsActive.HasValue)
-            {
-                query = query.Where(r => r.IsActive == filter.IsActive.Value);
-            }
-
-            if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
-            {
-                var search = filter.SearchTerm.Trim().ToLowerInvariant();
-                query = query.Where(r =>
-                    (r.RoomCode != null && r.RoomCode.ToLowerInvariant().Contains(search)) ||
-                    (r.RoomName != null && r.RoomName.ToLowerInvariant().Contains(search)) ||
-                    (r.RoomNumber != null && r.RoomNumber.ToLowerInvariant().Contains(search)) ||
-                    (r.BlockName != null && r.BlockName.ToLowerInvariant().Contains(search)) ||
-                    (r.BuildingName != null && r.BuildingName.ToLowerInvariant().Contains(search)) ||
-                    (r.Floor != null && r.Floor.ToLowerInvariant().Contains(search)) ||
-                    (r.RoomType != null && r.RoomType.ToLowerInvariant().Contains(search))
-                );
-            }
-
-            if (filter.OnlyAvailable == true || filter.ExcludeAssigned == true)
-            {
-                IEnumerable<int> assignedRoomIds;
-                try
-                {
-                    assignedRoomIds = await Connection.QueryAsync<int>(
-                        "sp_GetAssignedRoomIds",
-                        commandType: CommandType.StoredProcedure);
-                }
-                catch (MySqlConnector.MySqlException ex) when (ex.Number == 1305)
-                {
-                    var assignedSql = @"
-                        SELECT DISTINCT RoomId FROM `Sections` WHERE IsActive = 1 AND RoomId IS NOT NULL;";
-                    assignedRoomIds = await Connection.QueryAsync<int>(assignedSql);
-                }
-
-                var assignedSet = assignedRoomIds.ToHashSet();
-                query = query.Where(r => !assignedSet.Contains(r.RoomId));
-            }
-
-            return query;
+            return await Connection.QueryAsync<Room>(
+                "sp_GetRooms",
+                parameters,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<IEnumerable<SectionAssignedDto>> GetAssignedActiveSectionsByRoomAsync(int roomId, string? roomCode)
         {
-            try
-            {
-                return await Connection.QueryAsync<SectionAssignedDto>(
-                    "sp_GetAssignedSectionsByRoom",
-                    new
-                    {
-                        p_RoomId = roomId,
-                        p_RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim()
-                    },
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch (MySqlConnector.MySqlException ex) when (ex.Number == 1305)
-            {
-                var sql = @"
-                    SELECT SectionId, SectionName, MaximumStrength, IsActive
-                    FROM `Sections`
-                    WHERE IsActive = 1
-                      AND (
-                          (@RoomId > 0 AND RoomId = @RoomId)
-                          OR (@RoomCode IS NOT NULL AND @RoomCode <> '' AND RoomId IN (SELECT RoomId FROM `Rooms` WHERE RoomCode = @RoomCode OR RoomNumber = @RoomCode))
-                      )";
-
-                return await Connection.QueryAsync<SectionAssignedDto>(
-                    sql,
-                    new
-                    {
-                        RoomId = roomId,
-                        RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim()
-                    });
-            }
+            return await Connection.QueryAsync<SectionAssignedDto>(
+                "sp_GetAssignedSectionsByRoom",
+                new
+                {
+                    p_RoomId = roomId,
+                    p_RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim()
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<Room?> GetByIdAsync(int id)
@@ -141,11 +75,10 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<Room?> GetByCodeAsync(string roomCode)
         {
-            var rooms = await Connection.QueryAsync<Room>(
-                "sp_GetRooms",
+            return await Connection.QueryFirstOrDefaultAsync<Room>(
+                "sp_GetRoomByCode",
+                new { p_RoomCode = roomCode?.Trim() },
                 commandType: CommandType.StoredProcedure);
-
-            return rooms.FirstOrDefault(r => (r.RoomCode ?? r.RoomNumber).Equals(roomCode, System.StringComparison.OrdinalIgnoreCase));
         }
 
         public async Task<Room> AddAsync(Room room)

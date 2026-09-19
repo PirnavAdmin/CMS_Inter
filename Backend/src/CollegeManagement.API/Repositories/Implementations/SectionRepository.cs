@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Sections;
@@ -25,24 +24,23 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<SectionResponse>> GetAllSectionsAsync(SectionFilterDto? filter = null)
         {
-            // Resolve BoardId
+            // Resolve foreign keys if string names provided
             int? boardId = (filter?.BoardId.HasValue == true && filter.BoardId.Value > 0) 
                 ? filter.BoardId.Value 
                 : await ResolveBoardIdAsync(null, filter?.Board);
 
-            int? academicYearId = (filter?.AcademicYearId.HasValue == true && filter.AcademicYearId.Value > 0) ? filter.AcademicYearId.Value : null;
+            int? academicYearId = (filter?.AcademicYearId.HasValue == true && filter.AcademicYearId.Value > 0) 
+                ? filter.AcademicYearId.Value 
+                : null;
 
-            // Resolve AcademicLevelId
             int? academicLevelId = (filter?.AcademicLevelId.HasValue == true && filter.AcademicLevelId.Value > 0)
                 ? filter.AcademicLevelId.Value
                 : await ResolveAcademicLevelIdAsync(null, filter?.AcademicLevel ?? filter?.YearOfStudy);
 
-            // Resolve GroupId
             int? groupId = (filter?.GroupId.HasValue == true && filter.GroupId.Value > 0)
                 ? filter.GroupId.Value
                 : await ResolveGroupIdAsync(null, filter?.Group);
 
-            // Resolve GroupProgramId & ProgramId
             int? programId = (filter?.ProgramId.HasValue == true && filter.ProgramId.Value > 0)
                 ? filter.ProgramId.Value
                 : await ResolveProgramIdAsync(null, filter?.Programme ?? filter?.Program, groupId);
@@ -51,70 +49,24 @@ namespace CollegeManagement.API.Repositories.Implementations
                 ? filter.GroupProgramId.Value
                 : null;
 
-            string? searchTerm = string.IsNullOrWhiteSpace(filter?.SearchTerm ?? filter?.Search) ? null : (filter?.SearchTerm ?? filter?.Search)!.Trim();
+            string? searchTerm = string.IsNullOrWhiteSpace(filter?.SearchTerm ?? filter?.Search) 
+                ? null 
+                : (filter?.SearchTerm ?? filter?.Search)!.Trim();
 
-            const string sql = @"
-                SELECT 
-                    s.SectionId,
-                    s.BoardId,
-                    b.BoardName,
-                    s.AcademicYearId,
-                    ay.AcademicYearName,
-                    s.AcademicLevelId,
-                    al.LevelName AS AcademicLevelName,
-                    s.GroupId,
-                    g.GroupName,
-                    s.GroupProgramId,
-                    s.ProgramId,
-                    COALESCE(p.ProgramName, '') AS ProgramName,
-                    '' AS ProgramCode,
-                    '' AS Department,
-                    s.SectionName,
-                    s.RoomId,
-                    COALESCE(r.RoomName, '') AS RoomName,
-                    s.InchargeId,
-                    CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, '')) AS InchargeName,
-                    s.MaximumStrength,
-                    s.IsActive,
-                    s.CreatedAt,
-                    s.UpdatedAt
-                FROM `Sections` s
-                LEFT JOIN Boards b ON s.BoardId = b.BoardId
-                LEFT JOIN AcademicYears ay ON s.AcademicYearId = ay.AcademicYearId
-                LEFT JOIN AcademicLevels al ON s.AcademicLevelId = al.AcademicLevelId
-                LEFT JOIN `Groups` g ON s.GroupId = g.GroupId
-                LEFT JOIN Programs p ON s.ProgramId = p.ProgramId
-                LEFT JOIN Rooms r ON s.RoomId = r.RoomId
-                LEFT JOIN Staffs st ON s.InchargeId = st.Id
-                WHERE (@BoardId IS NULL OR @BoardId = 0 OR s.BoardId IS NULL OR s.BoardId = 0 OR s.BoardId = @BoardId)
-                  AND (@AcademicYearId IS NULL OR @AcademicYearId = 0 OR s.AcademicYearId IS NULL OR s.AcademicYearId = 0 OR s.AcademicYearId = @AcademicYearId OR s.AcademicYearId > 0)
-                  AND (@AcademicLevelId IS NULL OR @AcademicLevelId = 0 OR s.AcademicLevelId IS NULL OR s.AcademicLevelId = 0 OR s.AcademicLevelId = 1 OR s.AcademicLevelId = 2 OR s.AcademicLevelId = @AcademicLevelId)
-                  AND (@GroupId IS NULL OR @GroupId = 0 OR s.GroupId IS NULL OR s.GroupId = 0 OR s.GroupId = @GroupId OR (@GroupId = 37 AND s.GroupId = 34) OR (@GroupId = 34 AND s.GroupId = 37))
-                  AND (@GroupProgramId IS NULL OR @GroupProgramId = 0 OR s.GroupProgramId IS NULL OR s.GroupProgramId = 0 OR s.GroupProgramId = @GroupProgramId)
-                  AND (@ProgramId IS NULL OR @ProgramId = 0 OR s.ProgramId IS NULL OR s.ProgramId = 0 OR s.ProgramId = @ProgramId)
-                  AND (@IsActive IS NULL OR s.IsActive = @IsActive)
-                  AND (
-                      @SearchTerm IS NULL OR @SearchTerm = '' 
-                      OR s.SectionName LIKE CONCAT('%', @SearchTerm, '%') 
-                      OR p.ProgramName LIKE CONCAT('%', @SearchTerm, '%')
-                  )
-                ORDER BY s.SectionName ASC;";
+            var parameters = new DynamicParameters();
+            parameters.Add("p_BoardId", boardId, DbType.Int32);
+            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
+            parameters.Add("p_GroupId", groupId, DbType.Int32);
+            parameters.Add("p_GroupProgramId", groupProgramId, DbType.Int32);
+            parameters.Add("p_ProgramId", programId, DbType.Int32);
+            parameters.Add("p_SearchTerm", searchTerm, DbType.String);
+            parameters.Add("p_IsActive", filter?.IsActive, DbType.Boolean);
 
-            var result = await Connection.QueryAsync<SectionResponse>(
-                sql,
-                new
-                {
-                    BoardId = boardId,
-                    AcademicYearId = academicYearId,
-                    AcademicLevelId = academicLevelId,
-                    GroupId = groupId,
-                    GroupProgramId = groupProgramId,
-                    ProgramId = programId,
-                    IsActive = filter?.IsActive,
-                    SearchTerm = searchTerm
-                });
-
-            return result;
+            return await Connection.QueryAsync<SectionResponse>(
+                "sp_GetAllSections",
+                parameters,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<SectionResponse?> GetSectionByIdAsync(int id)
@@ -166,6 +118,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_IsActive = section.IsActive
                 },
                 commandType: CommandType.StoredProcedure);
+
             return affected > 0;
         }
 
@@ -175,25 +128,24 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_DeleteSection",
                 new { p_SectionId = id },
                 commandType: CommandType.StoredProcedure);
+
             return affected > 0;
         }
 
         public async Task<IEnumerable<SectionResponse>> GetSectionsByGroupAsync(int groupId)
         {
-            var result = await Connection.QueryAsync<SectionResponse>(
+            return await Connection.QueryAsync<SectionResponse>(
                 "sp_GetSectionsByGroupId",
                 new { p_GroupId = groupId },
                 commandType: CommandType.StoredProcedure);
-            return result;
         }
 
         public async Task<IEnumerable<SectionResponse>> GetSectionsByGroupProgramAsync(int groupProgramId)
         {
-            var result = await Connection.QueryAsync<SectionResponse>(
+            return await Connection.QueryAsync<SectionResponse>(
                 "sp_GetSectionsByGroupProgramId",
                 new { p_GroupProgramId = groupProgramId },
                 commandType: CommandType.StoredProcedure);
-            return result;
         }
 
         public async Task<bool> IsSectionNameDuplicateAsync(
@@ -206,45 +158,36 @@ namespace CollegeManagement.API.Repositories.Implementations
             string sectionName,
             int? excludeSectionId = null)
         {
-            var sql = @"
-                SELECT COUNT(1) FROM `Sections`
-                WHERE AcademicYearId = @AcademicYearId
-                  AND LOWER(TRIM(SectionName)) = LOWER(TRIM(@SectionName))
-                  AND (@BoardId IS NULL OR BoardId = @BoardId)
-                  AND (@AcademicLevelId IS NULL OR AcademicLevelId = @AcademicLevelId)
-                  AND (@GroupId IS NULL OR GroupId = @GroupId)
-                  AND (@GroupProgramId IS NULL OR GroupProgramId = @GroupProgramId)
-                  AND (@ProgramId IS NULL OR ProgramId = @ProgramId)
-                  AND (@ExcludeSectionId IS NULL OR SectionId <> @ExcludeSectionId);";
-
-            var count = await Connection.ExecuteScalarAsync<int>(sql, new
-            {
-                AcademicYearId = academicYearId,
-                SectionName = sectionName,
-                BoardId = boardId,
-                AcademicLevelId = academicLevelId,
-                GroupId = groupId,
-                GroupProgramId = groupProgramId,
-                ProgramId = programId,
-                ExcludeSectionId = excludeSectionId
-            });
+            var count = await Connection.ExecuteScalarAsync<int>(
+                "sp_ValidateSectionNameDuplicate",
+                new
+                {
+                    p_BoardId = boardId,
+                    p_AcademicYearId = academicYearId,
+                    p_AcademicLevelId = academicLevelId,
+                    p_GroupId = groupId,
+                    p_GroupProgramId = groupProgramId,
+                    p_ProgramId = programId,
+                    p_SectionName = sectionName,
+                    p_ExcludeSectionId = excludeSectionId
+                },
+                commandType: CommandType.StoredProcedure);
 
             return count > 0;
         }
 
         public async Task<bool> AcademicYearExistsAsync(int academicYearId)
         {
-            var count = await Connection.ExecuteScalarAsync<int>(
-                "SELECT COUNT(1) FROM AcademicYears WHERE AcademicYearId = @Id",
-                new { Id = academicYearId });
-            return count > 0;
+            var ay = await GetAcademicYearByIdAsync(academicYearId);
+            return ay != null;
         }
 
         public async Task<AcademicYear?> GetAcademicYearByIdAsync(int academicYearId)
         {
             var row = await Connection.QueryFirstOrDefaultAsync<dynamic>(
-                "SELECT AcademicYearId, AcademicYearName, StartDate, EndDate, AdmissionStartDate, AdmissionEndDate, IsActive FROM AcademicYears WHERE AcademicYearId = @Id",
-                new { Id = academicYearId });
+                "sp_GetAcademicYearValidation",
+                new { p_AcademicYearId = academicYearId },
+                commandType: CommandType.StoredProcedure);
 
             if (row == null) return null;
 
@@ -283,14 +226,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var count = await Connection.ExecuteScalarAsync<int>(
-                    "SELECT COUNT(1) FROM Staffs WHERE Id = @Id AND (IsDeleted = 0 OR IsDeleted IS NULL)",
+                    "SELECT COUNT(1) FROM `Staffs` WHERE Id = @Id AND (IsDeleted = 0 OR IsDeleted IS NULL)",
                     new { Id = facultyId });
                 return count > 0;
             }
             catch
             {
                 var count = await Connection.ExecuteScalarAsync<int>(
-                    "SELECT COUNT(1) FROM Faculties WHERE Id = @Id AND (IsDeleted = 0 OR IsDeleted IS NULL)",
+                    "SELECT COUNT(1) FROM `Faculties` WHERE Id = @Id AND (IsDeleted = 0 OR IsDeleted IS NULL)",
                     new { Id = facultyId });
                 return count > 0;
             }
@@ -298,10 +241,12 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<bool> RoomExistsAsync(int roomId)
         {
-            var count = await Connection.ExecuteScalarAsync<int>(
-                "SELECT COUNT(1) FROM Rooms WHERE RoomId = @Id AND IsActive = 1",
-                new { Id = roomId });
-            return count > 0;
+            var room = await Connection.QueryFirstOrDefaultAsync<CollegeManagement.API.Models.Timetable.Room>(
+                "sp_GetRoomById",
+                new { p_RoomId = roomId },
+                commandType: CommandType.StoredProcedure);
+
+            return room != null && room.IsActive;
         }
 
         public async Task<CollegeManagement.API.Models.Timetable.Room?> GetRoomDetailsAsync(int? roomId, string? roomCode)
@@ -309,16 +254,17 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (roomId.HasValue && roomId.Value > 0)
             {
                 return await Connection.QueryFirstOrDefaultAsync<CollegeManagement.API.Models.Timetable.Room>(
-                    "SELECT RoomId, RoomNumber, RoomCode, RoomName, BlockName, BlockName AS BuildingName, Floor, Capacity, RoomType, IsActive FROM Rooms WHERE RoomId = @Id",
-                    new { Id = roomId.Value });
+                    "sp_GetRoomById",
+                    new { p_RoomId = roomId.Value },
+                    commandType: CommandType.StoredProcedure);
             }
 
             if (!string.IsNullOrWhiteSpace(roomCode))
             {
-                var trimmed = roomCode.Trim();
                 return await Connection.QueryFirstOrDefaultAsync<CollegeManagement.API.Models.Timetable.Room>(
-                    "SELECT RoomId, RoomNumber, RoomCode, RoomName, BlockName, BlockName AS BuildingName, Floor, Capacity, RoomType, IsActive FROM Rooms WHERE RoomCode = @Code OR RoomNumber = @Code LIMIT 1",
-                    new { Code = trimmed });
+                    "sp_GetRoomByCode",
+                    new { p_RoomCode = roomCode.Trim() },
+                    commandType: CommandType.StoredProcedure);
             }
 
             return null;
@@ -326,40 +272,15 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<SectionResponse?> GetActiveSectionAssignedToRoomAsync(int? roomId, string? roomCode, int? excludeSectionId = null)
         {
-            try
-            {
-                return await Connection.QueryFirstOrDefaultAsync<SectionResponse>(
-                    "sp_GetActiveSectionAssignedToRoom",
-                    new
-                    {
-                        p_RoomId = roomId,
-                        p_RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim(),
-                        p_ExcludeSectionId = excludeSectionId
-                    },
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch (MySqlConnector.MySqlException ex) when (ex.Number == 1305)
-            {
-                var sql = @"
-                    SELECT SectionId, SectionName, RoomId, IsActive
-                    FROM `Sections`
-                    WHERE IsActive = 1
-                      AND (
-                          (@RoomId IS NOT NULL AND @RoomId > 0 AND RoomId = @RoomId)
-                          OR (@RoomCode IS NOT NULL AND @RoomCode <> '' AND RoomId IN (SELECT RoomId FROM Rooms WHERE RoomCode = @RoomCode OR RoomNumber = @RoomCode))
-                      )
-                      AND (@ExcludeSectionId IS NULL OR SectionId <> @ExcludeSectionId)
-                    LIMIT 1;";
-
-                return await Connection.QueryFirstOrDefaultAsync<SectionResponse>(
-                    sql,
-                    new
-                    {
-                        RoomId = roomId,
-                        RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim(),
-                        ExcludeSectionId = excludeSectionId
-                    });
-            }
+            return await Connection.QueryFirstOrDefaultAsync<SectionResponse>(
+                "sp_GetActiveSectionAssignedToRoom",
+                new
+                {
+                    p_RoomId = roomId,
+                    p_RoomCode = string.IsNullOrWhiteSpace(roomCode) ? null : roomCode.Trim(),
+                    p_ExcludeSectionId = excludeSectionId
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<int?> ResolveBoardIdAsync(int? boardId, string? boardName)
@@ -367,10 +288,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (boardId.HasValue && boardId.Value > 0) return boardId.Value;
             if (string.IsNullOrWhiteSpace(boardName)) return null;
 
-            var trimmed = boardName.Trim();
-            return await Connection.QueryFirstOrDefaultAsync<int?>(
-                "SELECT BoardId FROM Boards WHERE LOWER(TRIM(BoardName)) = LOWER(TRIM(@Name)) OR LOWER(TRIM(BoardCode)) = LOWER(TRIM(@Name)) LIMIT 1;",
-                new { Name = trimmed });
+            var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                "sp_ResolveSectionForeignKeys",
+                new
+                {
+                    p_BoardId = boardId,
+                    p_BoardName = boardName?.Trim(),
+                    p_AcademicLevelId = (int?)null,
+                    p_LevelName = (string?)null,
+                    p_GroupId = (int?)null,
+                    p_GroupName = (string?)null,
+                    p_ProgramId = (int?)null,
+                    p_ProgramName = (string?)null,
+                    p_GroupProgramId = (int?)null
+                },
+                commandType: CommandType.StoredProcedure);
+
+            return result?.ResolvedBoardId != null ? (int?)result.ResolvedBoardId : null;
         }
 
         public async Task<int?> ResolveGroupIdAsync(int? groupId, string? groupName)
@@ -378,10 +312,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (groupId.HasValue && groupId.Value > 0) return groupId.Value;
             if (string.IsNullOrWhiteSpace(groupName)) return null;
 
-            var trimmed = groupName.Trim();
-            return await Connection.QueryFirstOrDefaultAsync<int?>(
-                "SELECT GroupId FROM `Groups` WHERE LOWER(TRIM(GroupName)) = LOWER(TRIM(@Name)) OR LOWER(TRIM(GroupCode)) = LOWER(TRIM(@Name)) LIMIT 1;",
-                new { Name = trimmed });
+            var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                "sp_ResolveSectionForeignKeys",
+                new
+                {
+                    p_BoardId = (int?)null,
+                    p_BoardName = (string?)null,
+                    p_AcademicLevelId = (int?)null,
+                    p_LevelName = (string?)null,
+                    p_GroupId = groupId,
+                    p_GroupName = groupName?.Trim(),
+                    p_ProgramId = (int?)null,
+                    p_ProgramName = (string?)null,
+                    p_GroupProgramId = (int?)null
+                },
+                commandType: CommandType.StoredProcedure);
+
+            return result?.ResolvedGroupId != null ? (int?)result.ResolvedGroupId : null;
         }
 
         public async Task<int?> ResolveAcademicLevelIdAsync(int? academicLevelId, string? levelName)
@@ -389,55 +336,69 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (academicLevelId.HasValue && academicLevelId.Value > 0) return academicLevelId.Value;
             if (string.IsNullOrWhiteSpace(levelName)) return null;
 
-            var trimmed = levelName.Trim();
-            return await Connection.QueryFirstOrDefaultAsync<int?>(
-                "SELECT AcademicLevelId FROM AcademicLevels WHERE LOWER(TRIM(LevelName)) = LOWER(TRIM(@Name)) OR LOWER(TRIM(LevelCode)) = LOWER(TRIM(@Name)) LIMIT 1;",
-                new { Name = trimmed });
+            var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                "sp_ResolveSectionForeignKeys",
+                new
+                {
+                    p_BoardId = (int?)null,
+                    p_BoardName = (string?)null,
+                    p_AcademicLevelId = academicLevelId,
+                    p_LevelName = levelName?.Trim(),
+                    p_GroupId = (int?)null,
+                    p_GroupName = (string?)null,
+                    p_ProgramId = (int?)null,
+                    p_ProgramName = (string?)null,
+                    p_GroupProgramId = (int?)null
+                },
+                commandType: CommandType.StoredProcedure);
+
+            return result?.ResolvedAcademicLevelId != null ? (int?)result.ResolvedAcademicLevelId : null;
         }
 
         public async Task<int?> ResolveProgramIdAsync(int? programId, string? programName, int? groupId)
         {
             if (programId.HasValue && programId.Value > 0) return programId.Value;
 
-            if (!string.IsNullOrWhiteSpace(programName))
-            {
-                var trimmed = programName.Trim();
-                var id = await Connection.QueryFirstOrDefaultAsync<int?>(
-                    "SELECT ProgramId FROM `Programs` WHERE LOWER(TRIM(ProgramName)) = LOWER(TRIM(@Name)) LIMIT 1;",
-                    new { Name = trimmed });
-                if (id.HasValue && id.Value > 0) return id.Value;
-            }
+            var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                "sp_ResolveSectionForeignKeys",
+                new
+                {
+                    p_BoardId = (int?)null,
+                    p_BoardName = (string?)null,
+                    p_AcademicLevelId = (int?)null,
+                    p_LevelName = (string?)null,
+                    p_GroupId = groupId,
+                    p_GroupName = (string?)null,
+                    p_ProgramId = programId,
+                    p_ProgramName = programName?.Trim(),
+                    p_GroupProgramId = (int?)null
+                },
+                commandType: CommandType.StoredProcedure);
 
-            if (groupId.HasValue && groupId.Value > 0)
-            {
-                return await Connection.QueryFirstOrDefaultAsync<int?>(
-                    "SELECT ProgramId FROM `GroupPrograms` WHERE GroupId = @GroupId AND IsActive = 1 ORDER BY GroupProgramId ASC LIMIT 1;",
-                    new { GroupId = groupId.Value });
-            }
-
-            return null;
+            return result?.ResolvedProgramId != null ? (int?)result.ResolvedProgramId : null;
         }
 
         public async Task<int?> ResolveGroupProgramIdAsync(int? groupProgramId, int? groupId, int? programId)
         {
             if (groupProgramId.HasValue && groupProgramId.Value > 0) return groupProgramId.Value;
 
-            if (groupId.HasValue && groupId.Value > 0 && programId.HasValue && programId.Value > 0)
-            {
-                var id = await Connection.QueryFirstOrDefaultAsync<int?>(
-                    "SELECT GroupProgramId FROM `GroupPrograms` WHERE GroupId = @GroupId AND ProgramId = @ProgramId AND IsActive = 1 LIMIT 1;",
-                    new { GroupId = groupId.Value, ProgramId = programId.Value });
-                if (id.HasValue && id.Value > 0) return id.Value;
-            }
+            var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                "sp_ResolveSectionForeignKeys",
+                new
+                {
+                    p_BoardId = (int?)null,
+                    p_BoardName = (string?)null,
+                    p_AcademicLevelId = (int?)null,
+                    p_LevelName = (string?)null,
+                    p_GroupId = groupId,
+                    p_GroupName = (string?)null,
+                    p_ProgramId = programId,
+                    p_ProgramName = (string?)null,
+                    p_GroupProgramId = groupProgramId
+                },
+                commandType: CommandType.StoredProcedure);
 
-            if (groupId.HasValue && groupId.Value > 0)
-            {
-                return await Connection.QueryFirstOrDefaultAsync<int?>(
-                    "SELECT GroupProgramId FROM `GroupPrograms` WHERE GroupId = @GroupId AND IsActive = 1 ORDER BY GroupProgramId ASC LIMIT 1;",
-                    new { GroupId = groupId.Value });
-            }
-
-            return null;
+            return result?.ResolvedGroupProgramId != null ? (int?)result.ResolvedGroupProgramId : null;
         }
 
         public async Task<(int? GroupId, int? ProgramId)> GetGroupAndProgramByGroupProgramIdAsync(int groupProgramId)
@@ -455,6 +416,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var count = await Connection.ExecuteScalarAsync<int>(
                 "SELECT COUNT(1) FROM `GroupPrograms` WHERE GroupId = @GroupId AND ProgramId = @ProgramId AND IsActive = 1;",
                 new { GroupId = groupId, ProgramId = programId });
+
             return count > 0;
         }
     }
