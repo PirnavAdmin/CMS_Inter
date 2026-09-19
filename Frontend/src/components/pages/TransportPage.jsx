@@ -718,8 +718,8 @@ export default function TransportPage() {
     try {
       if (key === "routes") {
         const payload = {
-          routeCode: values.routeCode,
-          routeName: values.routeName,
+          routeCode: values.routeCode || makeId("RT", routes),
+          routeName: values.routeName || "Route",
           startLocation: values.routeStart || "Campus North",
           endLocation: values.routeEnd || "City Center",
           distanceKm: Number(values.totalDistanceKm) || 0,
@@ -788,29 +788,7 @@ export default function TransportPage() {
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.driverById(numericId), payload);
         } else {
-          const driverUrl = apiEndpoints.transport.drivers;
-          if (import.meta.env.DEV) {
-            console.log("Transport Driver API Request:", { url: driverUrl, method: "POST" });
-            console.log("Transport Driver POST Payload:", payload);
-          }
-          try {
-            const response = await apiClient.post(driverUrl, payload);
-            if (import.meta.env.DEV) {
-              console.log("Transport Driver API Response:", response.data);
-              console.log("Transport Driver API Response Status:", response.status);
-            }
-          } catch (error) {
-            if (import.meta.env.DEV) {
-              console.error("Transport Driver API Error:", {
-                url: driverUrl,
-                method: "POST",
-                status: error.response?.status,
-                response: error.response?.data,
-                error,
-              });
-            }
-            throw error;
-          }
+          throw new Error("Drivers are managed in Non-Teaching Staff. Create new drivers under Staff (Role: Driver).");
         }
       } else if (key === "attendants") {
         const payload = {
@@ -1116,10 +1094,10 @@ export default function TransportPage() {
     },
     drivers: {
       title: "Driver Master",
-      subtitle: "Maintain driver contact details, license details and assignment readiness.",
+      subtitle: "Fetched automatically from Non-Teaching Staff (Role: Driver). Update transport licenses and contact details.",
       rows: drivers,
       fields: driverFields,
-      addLabel: "Add Driver",
+      addLabel: null,
       columns: [
         { key: "employeeId", label: "Employee ID", strong: true },
         { key: "driverName", label: "Driver" },
@@ -1360,7 +1338,7 @@ export default function TransportPage() {
               : undefined
         }
         rowFilter={isTripsTable ? filterTripRow : isSetupFilterTable ? (row) => filterSetupRow(key, row) : undefined}
-        onAdd={config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
+        onAdd={config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
         onEdit={config.fields ? (row) => openForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
         onView={(row) => setDetailConfig({ title: config.title, row })}
