@@ -356,6 +356,10 @@ export default function TransportPage() {
   const fetchTransportData = async () => {
     setIsLoading(true);
     try {
+      const driverListUrl = `${apiEndpoints.transport.drivers}?PageNumber=1&PageSize=1000`;
+      if (import.meta.env.DEV) {
+        console.log("Transport Driver API Request:", { url: driverListUrl, method: "GET" });
+      }
       const [
         routesRes,
         pickupsRes,
@@ -372,7 +376,7 @@ export default function TransportPage() {
         apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.drivers}?PageNumber=1&PageSize=1000`),
+        apiClient.get(driverListUrl),
         apiClient.get(`${apiEndpoints.transport.attendants}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
         apiClient.get(apiEndpoints.transport.trips),
@@ -381,6 +385,21 @@ export default function TransportPage() {
         apiClient.get(`${apiEndpoints.transport.studentAssignments}?PageNumber=1&PageSize=1000`),
         apiClient.get(apiEndpoints.transport.dashboard),
       ]);
+
+      if (import.meta.env.DEV) {
+        if (driversRes.status === "fulfilled") {
+          console.log("Transport Driver API Response:", driversRes.value?.data);
+          console.log("Transport Driver API Response Status:", driversRes.value?.status);
+        } else {
+          console.error("Transport Driver API Error:", {
+            url: driverListUrl,
+            method: "GET",
+            status: driversRes.reason?.response?.status,
+            response: driversRes.reason?.response?.data,
+            error: driversRes.reason,
+          });
+        }
+      }
 
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
         const items = extractList(routesRes.value.data);
@@ -769,7 +788,29 @@ export default function TransportPage() {
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.driverById(numericId), payload);
         } else {
-          await apiClient.post(apiEndpoints.transport.drivers, payload);
+          const driverUrl = apiEndpoints.transport.drivers;
+          if (import.meta.env.DEV) {
+            console.log("Transport Driver API Request:", { url: driverUrl, method: "POST" });
+            console.log("Transport Driver POST Payload:", payload);
+          }
+          try {
+            const response = await apiClient.post(driverUrl, payload);
+            if (import.meta.env.DEV) {
+              console.log("Transport Driver API Response:", response.data);
+              console.log("Transport Driver API Response Status:", response.status);
+            }
+          } catch (error) {
+            if (import.meta.env.DEV) {
+              console.error("Transport Driver API Error:", {
+                url: driverUrl,
+                method: "POST",
+                status: error.response?.status,
+                response: error.response?.data,
+                error,
+              });
+            }
+            throw error;
+          }
         }
       } else if (key === "attendants") {
         const payload = {
@@ -1323,6 +1364,7 @@ export default function TransportPage() {
         onEdit={config.fields ? (row) => openForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
         onView={(row) => setDetailConfig({ title: config.title, row })}
+        toolbarClassName={key === "vehicles" ? "cms-transport-vehicle-toolbar" : undefined}
       />
     );
   };

@@ -308,6 +308,8 @@ export default function DashboardLayout({
   title,
   subtitle,
   breadcrumb = [],
+  backLink,
+  backLinkPosition = "above",
   actions,
   children,
   excludeNotificationSources = EMPTY_NOTIFICATION_SOURCES,
@@ -345,6 +347,7 @@ export default function DashboardLayout({
   const pathname = location.pathname;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname), [pathname]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title) ?? pageMenuItem?.icon;
+  const pageTitleNode = <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>;
 
 
 
@@ -761,7 +764,11 @@ export default function DashboardLayout({
 
         <main className="cms-content">
           <div className="cms-page-head">
-            <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>
+            {backLink ? (
+              <div className="cms-page-heading-with-back">
+                {backLinkPosition === "below" ? <>{pageTitleNode}{backLink}</> : <>{backLink}{pageTitleNode}</>}
+              </div>
+            ) : pageTitleNode}
             {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div> : null}
           </div>
 
