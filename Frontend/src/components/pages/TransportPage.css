@@ -187,8 +187,8 @@
 .cms-transport-search {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: min(360px, 100%);
+  gap: 4px;
+  min-width: min(30px, 100%);
   padding: 8px 11px;
   border: 1px solid var(--cms-border);
   border-radius: 10px;
@@ -279,6 +279,38 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.cms-transport-toolbar.cms-transport-vehicle-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) max-content max-content;
+  align-items: center;
+  justify-content: stretch;
+  flex-wrap: nowrap;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-search {
+  width: 100%;
+  min-width: 0;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-filters,
+.cms-transport-vehicle-toolbar .cms-transport-toolbar-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-filter {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-filter select {
+  min-width: 150px;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-toolbar-actions {
+  margin-left: auto;
 }
 
 .cms-transport-report-toolbar {
@@ -721,6 +753,23 @@
     flex-wrap: wrap;
   }
 
+  .cms-transport-toolbar.cms-transport-vehicle-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .cms-transport-vehicle-toolbar .cms-transport-search,
+  .cms-transport-vehicle-toolbar .cms-transport-filters,
+  .cms-transport-vehicle-toolbar .cms-transport-toolbar-actions {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .cms-transport-vehicle-toolbar .cms-transport-filters,
+  .cms-transport-vehicle-toolbar .cms-transport-toolbar-actions {
+    flex-wrap: wrap;
+  }
+
   .cms-transport-report-toolbar .cms-transport-search,
   .cms-transport-report-toolbar .cms-transport-filters,
   .cms-transport-report-toolbar .cms-transport-toolbar-actions {
@@ -772,3 +821,4 @@
     justify-content: space-between;
   }
 }
+

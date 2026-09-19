@@ -9,6 +9,7 @@ import {
   Eye,
   Info,
   Pencil,
+  RefreshCw,
   Search,
   Trash2,
   Upload,
@@ -24,7 +25,6 @@ import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui
 import "./DepartmentManagementPage.css";
 import departmentsIcon from "@/assets/dashboard-3d/total-sections.png";
 import designationsIcon from "@/assets/dashboard-3d/teaching-staff.png";
-import refreshIcon from "@/assets/settings-3d/board-academic-year.png";
 import importExcelIcon from "@/assets/settings-3d/templates.png";
 import addDepartmentIcon from "@/assets/dashboard-3d/create-section.png";
 import addDesignationIcon from "@/assets/dashboard-3d/add-staff.png";
@@ -925,7 +925,7 @@ export default function DepartmentManagementPage() {
         title="Click to refresh department and designation data"
         aria-label="Refresh department and designation data"
       >
-        <img className={`master-summary-icon${isRefreshing || departmentsLoading || designationsLoading ? " is-spinning" : ""}`} src={refreshIcon} alt="" aria-hidden="true" width={28} height={28} />
+        <RefreshCw size={18} className={isRefreshing || departmentsLoading || designationsLoading ? "is-spinning" : ""} aria-hidden="true" />
         <span>{isRefreshing ? "Refreshing..." : "Refresh"}</span>
       </button>
     </div>

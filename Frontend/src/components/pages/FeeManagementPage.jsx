@@ -41,10 +41,11 @@ import {
   formatDate,
   todayISO,
 } from "@/data/feeManagementData.js";
+import { HOSTEL_BLOCKS, HOSTEL_ROOMS_DATA } from "@/modules/hostel/data/hostelData.js";
 import "./FeeManagementPage.css";
 
 const TABS = ["Overview", "Fee Setup", "Student Fee Ledger"];
-const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Scholarships"];
+const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Scholarships"];
 const LEDGER_TABS = [
   { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Fee Collection", label: "Fee Collection" },
@@ -58,6 +59,8 @@ const OVERVIEW_TABS = [
   { id: "recent", label: "Recent Payments", icon: ReceiptText },
 ];
 const CHART_COLORS = ["var(--cms-primary)", "var(--cms-green)", "var(--cms-amber)"];
+const HOSTEL_FEE_CONFIG_STORAGE_KEY = "pirnav_hostel_fee_configs_v1";
+const FACILITY_FEE_NAMES = ["hostel fee", "transport fee"];
 
 const getCollection = (payload) => {
   const data = payload?.data ?? payload?.Data ?? payload;
@@ -164,6 +167,42 @@ const displayNameFor = (name, id, options = [], fallback = "-") => {
 };
 
 const compactKey = (value) => normalizeKey(value).replace(/[^a-z0-9]/g, "");
+
+const isDedicatedFacilityFeeType = (item) => {
+  const identity = normalizeKey(item?.name || item?.type || item?.feeTypeName);
+  return FACILITY_FEE_NAMES.some((name) => identity === name || identity.startsWith(`${name} `));
+};
+
+const parseCurrencyNumber = (value) => Number(String(value ?? "").replace(/[^\d.]/g, "")) || 0;
+
+const seedHostelFeeConfigs = () => HOSTEL_ROOMS_DATA.map((room) => {
+  const block = HOSTEL_BLOCKS.find((item) => item.code === room.block);
+  return {
+    id: `${room.block}-${room.roomNo}`,
+    hostelBlock: room.block,
+    hostelName: block?.name || room.block,
+    roomNo: room.roomNo,
+    roomType: room.type,
+    feePlan: "Monthly",
+    feeAmount: parseCurrencyNumber(room.fee),
+    securityDeposit: 0,
+    status: "Active",
+  };
+});
+
+const readHostelFeeConfigs = () => {
+  if (typeof window === "undefined") return seedHostelFeeConfigs();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HOSTEL_FEE_CONFIG_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) && parsed.length ? parsed : seedHostelFeeConfigs();
+  } catch {
+    return seedHostelFeeConfigs();
+  }
+};
+
+const writeHostelFeeConfigs = (rows) => {
+  if (typeof window !== "undefined") window.localStorage.setItem(HOSTEL_FEE_CONFIG_STORAGE_KEY, JSON.stringify(rows));
+};
 
 const valueTokens = (...values) => values
   .flatMap((value) => String(value ?? "").split(/[/,|()-]+/))
@@ -627,7 +666,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     grouped.set(key, row);
   });
   return Array.from(grouped.values()).map((row) => {
-    const feeItems = dedupeConfiguredFeeItems(row.feeItems);
+    const feeItems = dedupeConfiguredFeeItems(row.feeItems).filter((feeItem) => !isDedicatedFacilityFeeType(feeItem));
     return {
       ...row,
       feeItems,
@@ -2920,7 +2959,175 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   );
 }
 
-function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, scholarships, onScholarshipsChange, structures, onToast, onRefresh, loading, error, masters, masterErrors }) {
+function HostelFeesTab({ configs, onChange, onToast }) {
+  const [editing, setEditing] = useState(null);
+  const [page, setPage] = useState(1);
+
+  const blockOptions = HOSTEL_BLOCKS.map((block) => ({
+    value: block.code,
+    label: block.name,
+  }));
+  const roomTypeOptions = Array.from(new Set(HOSTEL_ROOMS_DATA.map((room) => room.type).filter(Boolean)));
+  const defaultBlock = blockOptions[0];
+  const defaultRoomType = roomTypeOptions[0] || "";
+
+  const createDraft = (row = null) => ({
+    id: row?.id || `hostel-fee-${Date.now()}`,
+    hostelBlock: row?.hostelBlock || defaultBlock?.value || "",
+    hostelName: row?.hostelName || defaultBlock?.label || "",
+    roomNo: row?.roomNo || "All Rooms",
+    roomType: row?.roomType || defaultRoomType,
+    feePlan: row?.feePlan || "Annual",
+    feeAmount: row?.feeAmount ?? "",
+    securityDeposit: row?.securityDeposit ?? 0,
+    effectiveFrom: row?.effectiveFrom || todayISO(),
+    status: row?.status || "Active",
+  });
+
+  const openAdd = () => setEditing(createDraft());
+  const openEdit = (item) => setEditing(createDraft(item));
+  const totalPages = Math.max(1, Math.ceil(configs.length / PAGE_SIZE));
+  const paginatedConfigs = pageItems(configs, page);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const saveConfig = () => {
+    const feeAmount = Number(editing.feeAmount);
+    if (!editing.hostelBlock || !editing.roomType || !Number.isFinite(feeAmount) || feeAmount <= 0) {
+      onToast("Select hostel block, room type, and enter a valid hostel fee");
+      return;
+    }
+    const block = blockOptions.find((option) => option.value === editing.hostelBlock);
+    const nextConfig = {
+      ...editing,
+      hostelName: block?.label || editing.hostelName || editing.hostelBlock,
+      feeAmount,
+      securityDeposit: Number(editing.securityDeposit) || 0,
+      roomNo: editing.roomNo || "All Rooms",
+    };
+    const exists = configs.some((item) => item.id === nextConfig.id);
+    onChange(exists ? configs.map((item) => (item.id === nextConfig.id ? nextConfig : item)) : [nextConfig, ...configs]);
+    onToast(exists ? "Hostel fee configuration updated" : "Hostel fee configuration added");
+    setEditing(null);
+  };
+
+  return (
+    <div className="cms-card cms-fee-types-card">
+      <div className="cms-card-head">
+        <div>
+          <h2>Hostel Fees</h2>
+          <p>Dedicated hostel fee configuration, separate from normal Fee Types.</p>
+        </div>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd}><Plus size={14} /> Add Hostel Fee</button>
+      </div>
+      <div className="cms-card-body cms-fee-toolbar">
+        <div className="cms-table-wrap cms-fee-config-wrap cms-hostel-fees-wrap">
+          <table className="cms-table cms-fee-config-table cms-fee-setup-table cms-hostel-fees-table">
+            <colgroup>
+              <col className="cms-hostel-block-col" />
+              <col className="cms-hostel-room-type-col" />
+              <col className="cms-hostel-plan-col" />
+              <col className="cms-hostel-amount-col" />
+              <col className="cms-hostel-deposit-col" />
+              <col className="cms-hostel-total-col" />
+              <col className="cms-hostel-status-col" />
+              <col className="cms-hostel-actions-col" />
+            </colgroup>
+            <thead>
+              <tr><th>Hostel Block</th><th>Room Type</th><th>Fee Frequency</th><th className="num">Hostel Fee</th><th className="num">Security Deposit</th><th className="num">Total Fee</th><th>Status</th><th className="cms-fee-actions-col">Actions</th></tr>
+            </thead>
+            <tbody>
+              {paginatedConfigs.map((item) => (
+                <tr key={item.id}>
+                  <td><strong>{item.hostelName}</strong><small>{item.hostelBlock}</small></td>
+                  <td>{item.roomType}</td>
+                  <td>{item.feePlan}</td>
+                  <td className="num">{formatCurrency(item.feeAmount)}</td>
+                  <td className="num">{formatCurrency(item.securityDeposit)}</td>
+                  <td className="num"><strong>{formatCurrency(Number(item.feeAmount || 0) + Number(item.securityDeposit || 0))}</strong></td>
+                  <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
+                  <td className="cms-fee-actions-col">
+                    <div className="cms-actions">
+                      <button type="button" className="cms-action-btn" title="Edit hostel fee" aria-label="Edit hostel fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <TablePagination page={page} totalItems={configs.length} onPageChange={setPage} />
+        <p className="cms-fee-note"><CheckCircle size={14} /> Hostel Fee is resolved from this dedicated configuration when Student Type is Residential.</p>
+      </div>
+      {editing ? (
+        <Modal
+          title={configs.some((item) => item.id === editing.id) ? "Edit Hostel Fee" : "Add Hostel Fee"}
+          onClose={() => setEditing(null)}
+          footer={(
+            <>
+              <button className="cms-btn cms-btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+              <button className="cms-btn cms-btn-primary" onClick={saveConfig}>Save Hostel Fee</button>
+            </>
+          )}
+        >
+          <div className="cms-form-grid">
+            <div className="cms-field full">
+              <label htmlFor="hostel-fee-block">Hostel Block <span className="req">*</span></label>
+              <select
+                id="hostel-fee-block"
+                value={editing.hostelBlock}
+                onChange={(event) => {
+                  const block = blockOptions.find((option) => option.value === event.target.value);
+                  setEditing((current) => ({ ...current, hostelBlock: event.target.value, hostelName: block?.label || "" }));
+                }}
+              >
+                {blockOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-room-type">Room Type <span className="req">*</span></label>
+              <select id="hostel-fee-room-type" value={editing.roomType} onChange={(event) => setEditing((current) => ({ ...current, roomType: event.target.value }))}>
+                {roomTypeOptions.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
+              </select>
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-plan">Fee Frequency <span className="req">*</span></label>
+              <select id="hostel-fee-plan" value={editing.feePlan} onChange={(event) => setEditing((current) => ({ ...current, feePlan: event.target.value }))}>
+                <option value="Monthly">Monthly</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Half Yearly">Half Yearly</option>
+                <option value="Annual">Annual</option>
+              </select>
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-amount">Hostel Fee (₹) <span className="req">*</span></label>
+              <input id="hostel-fee-amount" type="number" min="0" value={editing.feeAmount} onChange={(event) => setEditing((current) => ({ ...current, feeAmount: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-deposit">Security Deposit</label>
+              <input id="hostel-fee-deposit" type="number" min="0" value={editing.securityDeposit} onChange={(event) => setEditing((current) => ({ ...current, securityDeposit: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-effective">Effective Date</label>
+              <input id="hostel-fee-effective" type="date" value={editing.effectiveFrom} onChange={(event) => setEditing((current) => ({ ...current, effectiveFrom: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-status">Status</label>
+              <select id="hostel-fee-status" value={editing.status} onChange={(event) => setEditing((current) => ({ ...current, status: event.target.value }))}>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </div>
+  );
+}
+
+function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, scholarships, onScholarshipsChange, hostelFeeConfigs, onHostelFeeConfigsChange, structures, onToast, onRefresh, loading, error, masters, masterErrors }) {
   return (
     <div className="cms-fee-stack">
       <div className="cms-fee-tabs cms-fee-subtabs" role="tablist" aria-label="Fee setup">
@@ -2950,6 +3157,7 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
           masterErrors={masterErrors}
         />
       ) : null}
+      {setupTab === "Hostel Fees" ? <HostelFeesTab configs={hostelFeeConfigs} onChange={onHostelFeeConfigsChange} onToast={onToast} /> : null}
       {setupTab === "Scholarships" ? <ScholarshipsTab scholarships={scholarships} onChange={onScholarshipsChange} onToast={onToast} onRefresh={onRefresh} /> : null}
     </div>
   );
@@ -3118,6 +3326,7 @@ export default function FeeManagementPage() {
   const [receipt, setReceipt] = useState(null);
   const [toast, setToast] = useState("");
   const [feeTypes, setFeeTypes] = useState([]);
+  const [hostelFeeConfigs, setHostelFeeConfigs] = useState(() => readHostelFeeConfigs());
   const [scholarships, setScholarships] = useState([]);
   const [apiStructures, setApiStructures] = useState([]);
   const [structureLoading, setStructureLoading] = useState(false);
@@ -3193,7 +3402,12 @@ export default function FeeManagementPage() {
   }, [collectionAccounts, dashboardData, ledgerAccounts, paymentHistoryExtras]);
 
   const saveFeeTypes = (nextTypes) => {
-    setFeeTypes(nextTypes);
+    setFeeTypes(nextTypes.filter((item) => !isDedicatedFacilityFeeType(item)));
+  };
+
+  const saveHostelFeeConfigs = (nextConfigs) => {
+    setHostelFeeConfigs(nextConfigs);
+    writeHostelFeeConfigs(nextConfigs);
   };
 
   const saveScholarships = (nextScholarships) => {
@@ -3362,12 +3576,12 @@ export default function FeeManagementPage() {
       : [];
 
     if (typesResult.status === "fulfilled") {
-      const apiTypes = getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id);
+      const apiTypes = getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id && !isDedicatedFacilityFeeType(item));
       setFeeTypes(apiTypes);
     }
     if (structuresResult.status === "fulfilled") {
       const normalizedFeeTypes = typesResult.status === "fulfilled"
-        ? getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id)
+        ? getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id && !isDedicatedFacilityFeeType(item))
         : [];
       const structureLookups = { years: yearOptions, groups: groupOptions, programs: programOptions };
       const listedStructures = normalizeFeeStructureRows(getCollection(structuresResult.value.data), normalizedFeeTypes, structureLookups);
@@ -3542,6 +3756,8 @@ export default function FeeManagementPage() {
           onFeeTypesChange={saveFeeTypes}
           scholarships={scholarships}
           onScholarshipsChange={saveScholarships}
+          hostelFeeConfigs={hostelFeeConfigs}
+          onHostelFeeConfigsChange={saveHostelFeeConfigs}
           structures={structures}
           onToast={setToast}
           onRefresh={loadFeeApiData}
