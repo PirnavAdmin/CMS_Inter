@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { StatusBadge } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -23,6 +24,8 @@ const resolvePhotoUrl = (value, version) => {
 };
 
 export default function StudentProfilePage({ id }) {
+  const location = useLocation();
+  const returnState = location.state?.studentManagement;
   const [student, setStudent] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [photoFailed, setPhotoFailed] = useState(false), [photoObjectUrl, setPhotoObjectUrl] = useState("");
   useEffect(() => {
     let active = true;
@@ -95,7 +98,7 @@ export default function StudentProfilePage({ id }) {
   if (loading) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">Loading student record...</div></div></DashboardLayout>;
   if (!student) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{error || "Student record was not found."}</div></div></DashboardLayout>;
   const initials = student.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
-  return <DashboardLayout title={student.name} subtitle={`Admission No: ${student.admissionNo}`} breadcrumb={["People", "Students"]} actions={<><Link className="cms-btn cms-btn-ghost" to="/dashboard/students">Back to list</Link><Link className="cms-btn cms-btn-primary" to={`/dashboard/students/${student.id}/enroll`}>{student.roll ? "Edit Profile" : "save changes"}</Link></>}>
+  return <DashboardLayout title={student.name} subtitle={`Admission No: ${student.admissionNo}`} breadcrumb={["People", "Students"]} backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Student Management</Link>} actions={<Link className="cms-btn cms-btn-primary" to={`/dashboard/students/${student.id}/enroll`} state={returnState ? { studentManagement: returnState } : undefined}>{student.roll ? "Edit Profile" : "save changes"}</Link>}>
     <Card title="Student Profile"><div className="cms-profile-hero"><div className="cms-photo">{photoObjectUrl && !photoFailed ? <img src={photoObjectUrl} alt={`${student.name}'s profile`} onError={() => setPhotoFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} /> : initials}</div><div><h2>{student.name}</h2><p className="cms-muted">Student ID: {student.studentId} · Admission No: {student.admissionNo} · Roll No: {student.roll || "Not assigned"}</p><StatusBadge value={student.status}/></div></div></Card>
     <div className="cms-grid-2"><Card title="Basic Student Information"><Details items={[["Date of Birth", read(student, "dateOfBirth", "dob")], ["Gender", read(student, "gender")], ["Mobile Number", read(student, "studentMobileNumber", "mobileNumber", "mobile")], ["Email", read(student, "studentEmail", "email")], ["Admission Date", read(student, "admissionDate")], ["Student Status", student.status]]}/></Card><Card title="Academic Assignment"><Details items={[["Board", read(student, "boardName", "board")], ["Academic Year", student.academicYear], ["Academic Level", student.level], ["Group", student.group], ["Programme", student.programme], ["Section", student.section], ["Roll Number", student.roll], ["Enrollment Status", student.status]]}/></Card><Card title="Parent / Guardian Details"><Details items={[["Father Name", read(student, "fatherName", "father")], ["Mother Name", read(student, "motherName", "mother")], ["Guardian Name", read(student, "guardianName", "guardian")], ["Guardian Mobile", read(student, "guardianMobile", "parentMobile", "fatherMobile")], ["Guardian Email", read(student, "guardianEmail", "parentEmail", "fatherEmail")], ["Address", read(student, "address", "addressLine1")]]}/></Card><Card title="Admission Details"><Details items={[["Admission No", student.admissionNo], ["Admission Date", read(student, "admissionDate")], ["Admission Type", student.admissionType], ["Admission Status", read(student, "admissionStatus", "status")], ["Previous School/College", read(student, "previousSchool", "prevSchool")], ["Previous Qualification", read(student, "previousQualification", "qualification", "previousBoard")]]}/></Card></div>
   </DashboardLayout>;

@@ -522,6 +522,48 @@
   margin-left: auto;
   text-align: right;
 }
+.cms-hostel-fees-wrap {
+  overflow-x: auto;
+}
+.cms-fee-config-wrap .cms-hostel-fees-table {
+  min-width: 1000px !important;
+}
+.cms-fee-config-wrap .cms-hostel-fees-table th,
+.cms-fee-config-wrap .cms-hostel-fees-table td {
+  padding-left: 12px;
+  padding-right: 12px;
+  white-space: nowrap;
+}
+.cms-fee-config-wrap .cms-hostel-fees-table th:nth-child(n),
+.cms-fee-config-wrap .cms-hostel-fees-table td:nth-child(n) {
+  width: auto;
+}
+.cms-hostel-fees-table col.cms-hostel-block-col { width: 24%; }
+.cms-hostel-fees-table col.cms-hostel-room-type-col { width: 14%; }
+.cms-hostel-fees-table col.cms-hostel-plan-col { width: 12%; }
+.cms-hostel-fees-table col.cms-hostel-amount-col { width: 11%; }
+.cms-hostel-fees-table col.cms-hostel-deposit-col { width: 14%; }
+.cms-hostel-fees-table col.cms-hostel-total-col { width: 11%; }
+.cms-hostel-fees-table col.cms-hostel-status-col { width: 8%; }
+.cms-hostel-fees-table col.cms-hostel-actions-col { width: 6%; }
+.cms-fee-config-wrap .cms-hostel-fees-table td:first-child strong,
+.cms-fee-config-wrap .cms-hostel-fees-table td:first-child small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cms-fee-config-wrap .cms-hostel-fees-table .cms-fee-actions-col {
+  width: auto;
+  min-width: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+.cms-fee-config-wrap .cms-hostel-fees-table .cms-fee-actions-col .cms-actions {
+  justify-content: flex-start;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
 .cms-fee-structure-items-head span {
   color: var(--cms-muted);
   font-size: 12px;

@@ -1,6 +1,9 @@
 using System.Data;
-using System.Reflection;
 using System.Text;
+using System.Reflection;
+using CollegeManagement.API.Repositories.Interfaces;
+using CollegeManagement.API.Repositories.Implementations;
+using CollegeManagement.API.Repositories.Implementations.Transport;
 using Asp.Versioning;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Helpers;
@@ -157,6 +160,19 @@ builder.Services.AddScoped<IHostelOutpassLeaveRepository, HostelOutpassLeaveRepo
 builder.Services.AddScoped<IHostelTransferVacateRepository, HostelTransferVacateRepository>();
 builder.Services.AddScoped<IHostelDashboardRepository, HostelDashboardRepository>();
 builder.Services.AddScoped<IHostelReportRepository, HostelReportRepository>();
+
+// Transport Repositories
+builder.Services.AddScoped<ITransportRouteRepository, TransportRouteRepository>();
+builder.Services.AddScoped<IPickupPointRepository, PickupPointRepository>();
+builder.Services.AddScoped<ITransportVehicleRepository, TransportVehicleRepository>();
+builder.Services.AddScoped<ITransportDriverRepository, TransportDriverRepository>();
+builder.Services.AddScoped<ITransportAttendantRepository, TransportAttendantRepository>();
+builder.Services.AddScoped<ITransportVehicleAssignmentRepository, TransportVehicleAssignmentRepository>();
+builder.Services.AddScoped<IStudentTransportAssignmentRepository, StudentTransportAssignmentRepository>();
+builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepository>();
+builder.Services.AddScoped<ITransportDashboardRepository, TransportDashboardRepository>();
+builder.Services.AddScoped<ITransportReportRepository, TransportReportRepository>();
+builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 #endregion
 
 #region Services
@@ -226,6 +242,21 @@ builder.Services.AddScoped<IHostelTransferVacateService, HostelTransferVacateSer
 builder.Services.AddScoped<IHostelDashboardService, HostelDashboardService>();
 builder.Services.AddScoped<IHostelReportService, HostelReportService>();
 
+// Transport Services
+builder.Services.AddScoped<ITransportRouteService, TransportRouteService>();
+builder.Services.AddScoped<IPickupPointService, PickupPointService>();
+builder.Services.AddScoped<ITransportVehicleService, TransportVehicleService>();
+builder.Services.AddScoped<ITransportDriverService, TransportDriverService>();
+builder.Services.AddScoped<ITransportAttendantService, TransportAttendantService>();
+builder.Services.AddScoped<ITransportVehicleAssignmentService, TransportVehicleAssignmentService>();
+builder.Services.AddScoped<IStudentTransportAssignmentService, StudentTransportAssignmentService>();
+builder.Services.AddScoped<IVehicleMaintenanceService, VehicleMaintenanceService>();
+builder.Services.AddScoped<ITransportDashboardService, TransportDashboardService>();
+builder.Services.AddScoped<ITransportReportService, TransportReportService>();
+builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
+builder.Services.AddScoped<ITransportService, TransportService>();
+
+// Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");

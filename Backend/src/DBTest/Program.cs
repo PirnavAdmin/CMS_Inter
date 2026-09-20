@@ -1,21 +1,33 @@
 using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Repositories.Implementations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 
 namespace DBTest
 {
     internal class Program
     {
         private const string ConnectionString = "Server=srv1061.hstgr.io;Port=3306;Database=u819242402_CLM_System;User=u819242402_CLM;Password=Clm@2026;SslMode=None;ConnectionTimeout=60;KeepAlive=5;ConvertZeroDateTime=True;Pooling=true;MinimumPoolSize=2;MaximumPoolSize=100;ConnectionLifeTime=300;ConnectionIdleTimeout=120;";
+        private const string BaseUrl = "http://localhost:5167";
+        private static readonly HttpClient Client = new HttpClient();
+        private static int _passed = 0;
+        private static int _failed = 0;
+        private static readonly List<string> FailureDetails = new List<string>();
 
         static async Task Main(string[] args)
         {
-            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.OutputEncoding = Encoding.UTF8;
             Console.WriteLine("================================================================================");
             Console.WriteLine("          LIVE DATABASE INSPECTION & REPORTS CALCULATION VERIFICATION           ");
             Console.WriteLine("================================================================================\n");
@@ -41,7 +53,7 @@ namespace DBTest
                 var minAdm = activeAdmissions.Min(a => a.AdmissionDate);
                 var maxAdm = activeAdmissions.Max(a => a.AdmissionDate);
                 Console.WriteLine($"  Date Range: {minAdm:yyyy-MM-dd} to {maxAdm:yyyy-MM-dd}");
-                
+
                 var monthBreakdown = activeAdmissions
                     .GroupBy(a => new { a.AdmissionDate.Year, a.AdmissionDate.Month })
                     .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
@@ -90,17 +102,13 @@ namespace DBTest
                 Console.WriteLine($"  Payment Date Range: {minPay:yyyy-MM-dd} to {maxPay:yyyy-MM-dd}");
             }
             Console.WriteLine($"  Total StudentFee Records: {studentFees.Count} | Positive Dues Count: {positiveDues.Count} | Outstanding Dues: Rs. {studentFees.Sum(sf => sf.BalanceAmount):N2}");
-            
+
             // Check student link
             var studentIdSet = students.Select(s => s.StudentId).ToHashSet();
             var duesWithValidStudent = positiveDues.Where(sf => studentIdSet.Contains(sf.StudentId)).ToList();
             var duesWithoutValidStudent = positiveDues.Where(sf => !studentIdSet.Contains(sf.StudentId)).ToList();
             Console.WriteLine($"  Positive Dues with Active Enrolled Student: {duesWithValidStudent.Count} (Rs. {duesWithValidStudent.Sum(sf => sf.BalanceAmount):N2})");
             Console.WriteLine($"  Positive Dues without Active Enrolled Student: {duesWithoutValidStudent.Count} (Rs. {duesWithoutValidStudent.Sum(sf => sf.BalanceAmount):N2})");
-            if (duesWithoutValidStudent.Any())
-            {
-                Console.WriteLine($"  Orphan/Inactive Student IDs in StudentFees: {string.Join(", ", duesWithoutValidStudent.Select(sf => $"StudentId={sf.StudentId}, Due={sf.BalanceAmount}"))}");
-            }
 
             // 5. Examinations & Results
             var exams = await db.Examinations.AsNoTracking().Where(e => e.IsActive).ToListAsync();
@@ -114,10 +122,6 @@ namespace DBTest
                 Console.WriteLine($"  Exam Date Range: {minExam:yyyy-MM-dd} to {maxExam:yyyy-MM-dd}");
             }
             Console.WriteLine($"  Total Published Results (Rows): {results.Count} | Distinct Student-Exam: {results.Select(r => new { r.StudentId, r.ExamId }).Distinct().Count()}");
-            foreach (var r in results)
-            {
-                Console.WriteLine($"  Result Row: StudentId={r.StudentId}, ExamId={r.ExamId}, SubjectId={r.SubjectId}, Marks={r.TotalMarks}, Status={r.ResultStatus}, Published={r.PublishedDate:yyyy-MM-dd}");
-            }
 
             // -------------------------------------------------------------------------
             // PART 2: SAMPLE DATE FILTER VERIFICATION ACROSS MULTIPLE SCENARIOS
@@ -182,7 +186,6 @@ namespace DBTest
 
                 // Card 2: Attendance %
                 var calculatedAttPct = attDetails.Any() ? Math.Round((decimal)attDetails.Average(x => (double)x.AttendancePercentage), 2) : 0;
-                // Note: dashboard.Attendance calculates total presents / total logs, while details averages daily %. Both should be very close.
                 PrintResult("2. Average Attendance", $"Dashboard: {dashboard.Attendance:F2}%", $"Details Avg: {calculatedAttPct:F2}% (Total Days: {attDetails.Count})", true);
 
                 // Card 3: Fee Collection
@@ -204,7 +207,6 @@ namespace DBTest
                 PrintResult("6. Results Published", $"Dashboard: {dashboard.ResultsPublished}", $"Details: {resDetails.Count}", resMatch);
 
                 // Card 7: Faculty Workload
-                var sumWorkload = workloadDetails.Sum(x => x.HoursPerWeek);
                 PrintResult("7. Faculty Workload", $"Dashboard: {dashboard.FacultyWorkload} hrs/wk", $"Details Count: {workloadDetails.Count} faculties", true);
 
                 // Card 8: Student Strength
@@ -242,6 +244,72 @@ namespace DBTest
             Console.ResetColor();
             Console.WriteLine($"{title,-26} | {dashboardVal,-32} | {detailsVal}");
         }
+
+        private static string GenerateJwtToken()
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.UTF8.GetBytes("a_very_long_secure_secret_key_of_at_least_32_characters_long");
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(new[]
+                {
+                    new Claim("UserId", "1"),
+                    new Claim(ClaimTypes.NameIdentifier, "1"),
+                    new Claim(ClaimTypes.Name, "AdminUser"),
+                    new Claim(ClaimTypes.Role, "Admin")
+                }),
+                Expires = DateTime.UtcNow.AddHours(2),
+                Issuer = "CollegeManagementAPI",
+                Audience = "CollegeManagementFrontend",
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            return tokenHandler.WriteToken(token);
+        }
+
+        private static async Task TestEndpoint(string name, HttpMethod method, string path, object? body = null, bool expectSuccess = true)
+        {
+            try
+            {
+                var request = new HttpRequestMessage(method, $"{BaseUrl}{path}");
+                if (body != null)
+                {
+                    request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+                }
+
+                var response = await Client.SendAsync(request);
+                var content = await response.Content.ReadAsStringAsync();
+
+                bool isOk = expectSuccess ? response.IsSuccessStatusCode : true;
+                if (isOk)
+                {
+                    _passed++;
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.Write("[PASS] ");
+                    Console.ResetColor();
+                    Console.WriteLine($"{name} -> {(int)response.StatusCode} {response.StatusCode}");
+                }
+                else
+                {
+                    _failed++;
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Write("[FAIL] ");
+                    Console.ResetColor();
+                    Console.WriteLine($"{name} -> {(int)response.StatusCode} {response.StatusCode}");
+                    var snippet = content.Length > 250 ? content.Substring(0, 250) + "..." : content;
+                    Console.WriteLine($"       Response: {snippet}");
+                    FailureDetails.Add($"{name} ({path}): {(int)response.StatusCode} - {snippet}");
+                }
+            }
+            catch (Exception ex)
+            {
+                _failed++;
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.Write("[FAIL] ");
+                Console.ResetColor();
+                Console.WriteLine($"{name} -> Exception: {ex.Message}");
+                FailureDetails.Add($"{name} ({path}): Exception: {ex.Message}");
+            }
+        }
     }
 }
-
