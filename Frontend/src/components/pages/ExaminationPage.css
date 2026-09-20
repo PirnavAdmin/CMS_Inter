@@ -951,125 +951,193 @@
   gap: 4px;
 }
 
-/* Custom Searchable Select Styling */
+/* Custom Searchable Select Styling (Matching Reference Component) */
 .cms-searchable-select {
   position: relative;
   width: 100%;
 }
 
-.cms-searchable-select-trigger {
+.cms-searchable-select-trigger,
+.cms-searchable-select .staff-search-input-wrap {
   width: 100%;
-  height: 36px;
-  padding: 0 12px;
-  background: var(--cms-surface);
-  border: 1px solid var(--cms-border);
-  border-radius: 999px;
+  min-height: 38px;
+  height: 38px;
+  padding: 4px 34px 4px 34px;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border: 1.5px solid var(--cms-border, #d1d5db);
+  border-radius: 9px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--cms-text);
-  text-align: left;
+  position: relative;
+  cursor: text;
   box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+[data-theme="dark"] .cms-searchable-select-trigger,
+.dark .cms-searchable-select-trigger,
+[data-theme="dark"] .cms-searchable-select .staff-search-input-wrap,
+.dark .cms-searchable-select .staff-search-input-wrap {
+  background: #1e293b !important;
+  background-color: #1e293b !important;
+  border-color: #334155;
+}
+
+.cms-searchable-select-trigger:focus-within,
+.cms-searchable-select-trigger.is-active,
+.cms-searchable-select .staff-search-input-wrap:focus-within,
+.cms-searchable-select .staff-search-input-wrap.is-active {
+  border-color: var(--cms-primary, #6F8400) !important;
+  box-shadow: 0 0 0 3px var(--cms-primary-soft, rgba(111, 132, 0, 0.18)) !important;
 }
 
 .cms-searchable-select-trigger:disabled {
-  background: var(--cms-subtle);
+  background: var(--cms-subtle, #f8fafc) !important;
   cursor: not-allowed;
   opacity: 0.65;
 }
 
-.cms-searchable-select-dropdown {
+.cms-searchable-select .staff-search-icon {
   position: absolute;
-  top: calc(100% + 4px);
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--cms-muted, #64748b);
+  pointer-events: none;
+}
+
+.cms-searchable-select .staff-dropdown-caret {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--cms-muted, #64748b);
+  cursor: pointer;
+}
+
+.cms-searchable-select input {
+  flex: 1 1 auto;
+  width: 100% !important;
+  min-width: 0;
+  height: 28px !important;
+  min-height: 28px !important;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: 13px !important;
+  color: var(--cms-text, #1e293b) !important;
+  box-shadow: none !important;
+}
+
+.cms-searchable-select input::placeholder {
+  color: var(--cms-muted, #94a3b8) !important;
+  opacity: 1 !important;
+  font-size: 13px !important;
+}
+
+.cms-searchable-select-dropdown,
+.cms-searchable-select .staff-search-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 5px);
   left: 0;
   right: 0;
-  z-index: 100000;
-  background-color: var(--cms-surface, #ffffff) !important;
+  z-index: 100000 !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
   opacity: 1 !important;
   backdrop-filter: none !important;
-  border: 1px solid var(--cms-border);
+  border: 1.5px solid var(--cms-border, #d1d5db);
   border-radius: 12px;
-  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.25), 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.08) !important;
   overflow: hidden;
   min-width: 160px;
 }
 
 [data-theme="dark"] .cms-searchable-select-dropdown,
-.dark .cms-searchable-select-dropdown {
-  background-color: var(--cms-surface, #1e293b) !important;
+.dark .cms-searchable-select-dropdown,
+[data-theme="dark"] .cms-searchable-select .staff-search-dropdown-menu,
+.dark .cms-searchable-select .staff-search-dropdown-menu {
+  background: #1e293b !important;
+  background-color: #1e293b !important;
+  border-color: #334155;
   opacity: 1 !important;
-}
-
-.cms-searchable-select-search {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--cms-border);
-  gap: 8px;
-  background-color: var(--cms-subtle, #f8fafc) !important;
-  opacity: 1 !important;
-}
-
-[data-theme="dark"] .cms-searchable-select-search,
-.dark .cms-searchable-select-search {
-  background-color: var(--cms-subtle, #0f172a) !important;
-  opacity: 1 !important;
-}
-
-.cms-searchable-select-search input {
-  border: none;
-  outline: none;
-  width: 100%;
-  font-size: 12px;
-  color: var(--cms-text);
-  background: transparent;
 }
 
 .cms-searchable-select-options {
-  max-height: 180px;
+  max-height: 220px;
   overflow-y: auto;
   scrollbar-width: thin;
-  background-color: var(--cms-surface, #ffffff) !important;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
   opacity: 1 !important;
+  padding: 4px 0;
 }
 
 [data-theme="dark"] .cms-searchable-select-options,
 .dark .cms-searchable-select-options {
-  background-color: var(--cms-surface, #1e293b) !important;
+  background: #1e293b !important;
+  background-color: #1e293b !important;
   opacity: 1 !important;
 }
 
-.cms-searchable-select-option {
-  padding: 8px 12px;
-  font-size: 12px;
+.cms-searchable-select-option,
+.cms-searchable-select .staff-search-dropdown-item {
+  padding: 10px 16px;
+  font-size: 13.5px;
   cursor: pointer;
-  color: var(--cms-text);
-  transition: background 0.15s ease;
+  color: var(--cms-text, #1e293b);
+  transition: background 0.12s ease;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: inherit;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
   opacity: 1 !important;
 }
 
-.cms-searchable-select-option:hover {
-  background: var(--cms-hover);
-  color: var(--cms-primary);
+[data-theme="dark"] .cms-searchable-select-option,
+.dark .cms-searchable-select-option,
+[data-theme="dark"] .cms-searchable-select .staff-search-dropdown-item,
+.dark .cms-searchable-select .staff-search-dropdown-item {
+  background: #1e293b !important;
+  background-color: #1e293b !important;
+  color: #f1f5f9;
 }
 
-.cms-searchable-select-option.selected {
-  background: var(--cms-primary-soft);
+.cms-searchable-select-option:hover,
+.cms-searchable-select-option.hover,
+.cms-searchable-select .staff-search-dropdown-item:hover {
+  background: var(--cms-hover, #f1f5f9) !important;
+  background-color: var(--cms-hover, #f1f5f9) !important;
+  color: var(--cms-text, #0f172a);
+}
+
+[data-theme="dark"] .cms-searchable-select-option:hover,
+[data-theme="dark"] .cms-searchable-select .staff-search-dropdown-item:hover {
+  background: #334155 !important;
+  background-color: #334155 !important;
+  color: #ffffff;
+}
+
+.cms-searchable-select-option.selected,
+.cms-searchable-select-option.is-selected,
+.cms-searchable-select .staff-search-dropdown-item.is-selected {
+  background: var(--cms-primary-soft, #f0fdf4) !important;
+  background-color: var(--cms-primary-soft, #f0fdf4) !important;
   font-weight: 600;
-  color: var(--cms-primary);
+  color: var(--cms-primary, #6F8400) !important;
 }
 
-.cms-searchable-no-options {
-  padding: 12px;
-  font-size: 12px;
-  color: var(--cms-muted);
+.cms-searchable-no-options,
+.cms-searchable-select .staff-search-dropdown-empty {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--cms-muted, #64748b);
   text-align: center;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
 }
 
 .cms-truncate {
@@ -1304,7 +1372,7 @@
   border-color: var(--cms-border, #e2e8f0);
 }
 
-/* Examination-scoped Dropdown Opacity Correction */
+/* Examination-scoped Dropdown Opacity & Single Scrollbar Correction */
 .examination-page .cms-searchable-select-dropdown,
 .examination-page .cms-select-dropdown,
 .examination-page [role="listbox"],
@@ -1330,27 +1398,120 @@
 .cms-modal.exam-modal .cms-searchable-select-dropdown,
 .cms-modal.exam-modal [role="listbox"],
 .cms-modal.exam-modal .cms-searchable-select-search,
-.cms-modal.exam-modal .cms-searchable-select-options {
-  background-color: var(--cms-surface, #ffffff);
-  opacity: 1;
+.cms-modal.exam-modal .cms-searchable-select-options,
+.staff-search-dropdown-menu {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  opacity: 1 !important;
   isolation: isolate;
+}
+
+/* Eliminate Double Scrollbars: Dropdown wrapper is overflow hidden, inner options scroll only */
+.cms-searchable-select-dropdown,
+.staff-search-dropdown-menu {
+  overflow: hidden !important;
+  max-height: none !important;
+}
+
+.cms-searchable-select-options {
+  max-height: 220px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  background: #ffffff !important;
 }
 
 .cms-form-page.examination-form-page .cms-searchable-select-option,
 .exam-list-card .cms-searchable-select-option,
 .exam-schedule-card .cms-searchable-select-option,
 .exam-modal .cms-searchable-select-option,
-.cms-modal.exam-modal .cms-searchable-select-option {
-  background-color: var(--cms-surface, #ffffff);
-  opacity: 1;
+.cms-modal.exam-modal .cms-searchable-select-option,
+.staff-search-dropdown-item {
+  background-color: #ffffff !important;
+  opacity: 1 !important;
 }
 
 .cms-form-page.examination-form-page .cms-searchable-select-option:hover,
 .exam-list-card .cms-searchable-select-option:hover,
 .exam-schedule-card .cms-searchable-select-option:hover,
 .exam-modal .cms-searchable-select-option:hover,
-.cms-modal.exam-modal .cms-searchable-select-option:hover {
-  background-color: var(--cms-hover, #f1f5f9);
+.cms-modal.exam-modal .cms-searchable-select-option:hover,
+.staff-search-dropdown-item:hover {
+  background-color: var(--cms-hover, #f1f5f9) !important;
+}
+
+/* ============================================================
+   Inline Table Hall & Invigilator Editor Styles
+   ============================================================ */
+.exam-schedule-inner-table tr.exam-inline-editor-row td {
+  padding: 0;
+  max-width: none;
+  overflow: visible;
+  border-bottom: 2px solid var(--cms-primary, #6f8400);
+  background: color-mix(in srgb, var(--cms-surface) 92%, var(--cms-primary-soft, #f7f9ea));
+}
+
+.exam-inline-table-editor {
+  padding: 16px 20px;
+  background: color-mix(in srgb, var(--cms-surface) 94%, var(--cms-primary-soft, #f7f9ea));
+  border-top: 1px dashed var(--cms-border);
+}
+
+.exam-schedule-inner-table tr.exam-row-editing td {
+  background: var(--cms-subtle, #f8fafc) !important;
+  font-weight: 500;
+}
+
+.exam-inline-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.exam-inline-session-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--cms-text-secondary, #475569);
+}
+
+.exam-inline-session-info strong {
+  color: var(--cms-text, #0f172a);
+}
+
+.exam-inline-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.exam-inline-assignments-list {
+  margin-bottom: 14px;
+}
+
+.exam-inline-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cms-border);
+}
+
+.exam-scope-level-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(111, 132, 0, 0.12);
+  color: var(--cms-primary, #6f8400);
+  margin-right: 4px;
 }
 
 

@@ -31,6 +31,7 @@ import {
   UserCheck,
   Lock,
   KeyRound,
+  X,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -712,7 +713,7 @@ const nonTeachingSteps = [
     ["dateOfBirth", "Date of Birth", "date"],
     ["maritalStatus", "Marital Status", "text", [], false],
     ["bloodGroup", "Blood Group", "select", ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], false],
-    ["nationality", "Nationality"],
+    ["nationality", "Nationality", "text", [], false],
     ["aadhaar", "Aadhaar Number"],
     ["pan", "PAN Number", "text", [], false],
     ["profilePhoto", "Profile Photo", "file", [], false],
@@ -734,7 +735,7 @@ const nonTeachingSteps = [
     ["department", "Department", "search-select", nonTeachingDepartments, true],
     ["designation", "Designation", "search-select", nonTeachingDesignations, true],
     ["dateOfJoining", "Date of Joining", "date"],
-    ["qualification", "Qualification"],
+    ["qualification", "Qualification", "text", [], false],
     ["experience", "Experience", "text", [], false],
     ["status", "Status", "select", ["Active", "Inactive"], true, "start-new-row"],
   ],
@@ -756,14 +757,14 @@ const nonTeachingSteps = [
   */
   // Step 3 (formerly Step 4): Documents
   [
-    ["aadhaarDocument", "Aadhaar", "file", [], false],
-    ["panDocument", "PAN", "file", [], false],
-    ["qualificationCertificate", "Qualification Certificate", "file", [], false],
-    ["experienceCertificate", "Experience Certificate", "file", [], false],
-    ["resume", "Resume", "file", [], false],
-    ["bankProof", "Bank Passbook / Cancelled Cheque", "file", [], false],
-    ["drivingLicence", "Driving Licence", "file", [], false],
-    ["otherDocuments", "Other Documents", "file", [], false],
+    ["aadhaarDocument", "Aadhaar (PDF)", "file", [], false],
+    ["panDocument", "PAN (PDF)", "file", [], false],
+    ["qualificationCertificate", "Qualification Certificate (PDF)", "file", [], false],
+    ["experienceCertificate", "Experience Certificate (PDF)", "file", [], false],
+    ["resume", "Resume (PDF)", "file", [], false],
+    ["bankProof", "Bank Passbook / Cancelled Cheque (PDF)", "file", [], false],
+    ["drivingLicence", "Driving Licence (PDF)", "file", [], false],
+    ["otherDocuments", "Other Documents (PDF)", "file", [], false],
   ],
   // Step 4 (formerly Step 5): Emergency Contact
   [
@@ -793,11 +794,28 @@ export const getNonTeachingStepFields = (stepIndex, values = {}) => {
     }
     base.push(
       ["dateOfJoining", "Date of Joining", "date", [], true],
-      ["qualification", "Qualification", "text", [], true],
+      ["qualification", "Qualification", "text", [], false],
       ["experience", "Experience", "text", [], false],
       ["status", "Status", "select", ["Active", "Inactive"], true, "start-new-row"]
     );
     return base;
+  }
+  if (stepIndex === 3) {
+    const docs = [
+      ["aadhaarDocument", "Aadhaar (PDF)", "file", [], false],
+      ["panDocument", "PAN (PDF)", "file", [], false],
+      ["qualificationCertificate", "Qualification Certificate (PDF)", "file", [], false],
+      ["experienceCertificate", "Experience Certificate (PDF)", "file", [], false],
+      ["resume", "Resume (PDF)", "file", [], false],
+      ["bankProof", "Bank Passbook / Cancelled Cheque (PDF)", "file", [], false],
+    ];
+    if (isTransport) {
+      docs.push(["drivingLicence", "Driving Licence (PDF)", "file", [], true]);
+    } else {
+      docs.push(["drivingLicence", "Driving Licence (PDF)", "file", [], false]);
+    }
+    docs.push(["otherDocuments", "Other Documents (PDF)", "file", [], false]);
+    return docs;
   }
   return nonTeachingSteps[stepIndex] || [];
 };
@@ -1564,9 +1582,16 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
       }
 
       // Driver's License Number
-      if (name === "drivingLicenseNumber" || name === "drivingLicence") {
-        if (strVal.length < 3) {
-          newErrors[name] = "Please enter a valid Driver's License Number";
+      if (name === "drivingLicenseNumber") {
+        const cleanDL = strVal.toUpperCase().replace(/[-/\s]/g, "");
+        if (cleanDL.length > 0) {
+          if (/^\d+$/.test(cleanDL)) {
+            newErrors[name] = "Driving License must start with 2-letter State code (e.g. AP00720240007772)";
+          } else if (cleanDL.length < 15 || cleanDL.length > 16) {
+            newErrors[name] = "Driving License must be 15 to 16 characters (e.g. AP00720240007772)";
+          } else if (!/^[A-Z]{2}[A-Z0-9]{13,14}$/.test(cleanDL)) {
+            newErrors[name] = "Invalid format. Standard format: State(2) + RTO/Year/Number (e.g. AP00720240007772)";
+          }
         }
       }
 
@@ -1575,6 +1600,12 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
         const expDate = new Date(strVal);
         if (isNaN(expDate.getTime())) {
           newErrors[name] = "Please enter a valid License Expiry Date";
+        } else {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (expDate < today) {
+            newErrors[name] = "Driving license has expired. Please select a valid future expiry date.";
+          }
         }
       }
     }
@@ -1595,6 +1626,9 @@ function Field({
   staffType = null,
 }) {
   const { boards, selectedBoard, setSelectedBoard } = useAcademicContext();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [localFile, setLocalFile] = useState(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState("");
   if (!Array.isArray(item) || item.length < 2) return null;
   const name = item[0] || "";
   const label = item[1] || name || "";
@@ -1784,20 +1818,72 @@ function Field({
         change("");
         return;
       }
-      const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-      if (!validTypes.includes(file.type)) {
-        if (typeof setErrors === "function") {
-          setErrors((prev) => ({ ...prev, [name]: "Profile photo must be an image (.jpg, .png, .webp)" }));
+      const isPhoto = name.toLowerCase().includes("photo") || name === "signature";
+      if (isPhoto) {
+        const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+        if (!validTypes.includes(file.type)) {
+          if (typeof setErrors === "function") {
+            setErrors((prev) => ({ ...prev, [name]: `${label} must be an image (.jpg, .png, .webp)` }));
+          }
+          return;
         }
-        return;
+      } else {
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        if (!isPdf) {
+          if (typeof setErrors === "function") {
+            setErrors((prev) => ({ ...prev, [name]: `${label} must be a PDF document (.pdf)` }));
+          }
+          return;
+        }
       }
+
       if (file.size > 5 * 1024 * 1024) {
         if (typeof setErrors === "function") {
-          setErrors((prev) => ({ ...prev, [name]: "Profile photo size must not exceed 5MB" }));
+          setErrors((prev) => ({ ...prev, [name]: "File size must not exceed 5MB" }));
         }
         return;
       }
-      change(file.name);
+
+      let previewUrl = "";
+      try {
+        previewUrl = URL.createObjectURL(file);
+      } catch {}
+      setLocalFile(file);
+      setLocalPreviewUrl(previewUrl);
+
+      if (name === "drivingLicence") {
+        try {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            try {
+              const buffer = ev.target?.result;
+              if (buffer) {
+                const textDecoder = new TextDecoder("latin1");
+                const rawText = textDecoder.decode(buffer);
+                if (typeof setValues === "function") {
+                  setValues((prev) => ({
+                    ...prev,
+                    [name]: file.name,
+                    [name + "_previewUrl"]: previewUrl,
+                    _dlPdfRawText: rawText,
+                  }));
+                }
+              }
+            } catch {}
+          };
+          reader.readAsArrayBuffer(file);
+        } catch {}
+      }
+
+      if (typeof setValues === "function") {
+        setValues((prev) => ({
+          ...prev,
+          [name]: file.name,
+          [name + "_previewUrl"]: previewUrl,
+        }));
+      } else {
+        change(file.name);
+      }
       return;
     }
 
@@ -1813,6 +1899,8 @@ function Field({
       raw = raw.toUpperCase().slice(0, 11);
     } else if (name === "accountNumber") {
       raw = raw.replace(/\D/g, "").slice(0, 18);
+    } else if (name === "drivingLicenseNumber" || name === "drivingLicence") {
+      raw = raw.toUpperCase().replace(/[^A-Z0-9 ]/g, "").slice(0, 16);
     }
 
     change(raw);
@@ -1841,7 +1929,20 @@ function Field({
     inputMaxLength = 11;
   } else if (name === "accountNumber") {
     inputMaxLength = 18;
+  } else if (name === "drivingLicenseNumber" || name === "drivingLicence") {
+    inputMaxLength = 16;
   }
+
+  const isDLField = name === "drivingLicenseNumber" || name === "drivingLicence";
+  const placeholderText = isDLField
+    ? "e.g. AP09 20210001234"
+    : undefined;
+
+  const fileAccept = type === "file"
+    ? (name.toLowerCase().includes("photo") || name === "signature" ? "image/jpeg,image/png,image/webp" : ".pdf,application/pdf")
+    : undefined;
+
+  const activePreviewUrl = localPreviewUrl || safeValues[name + "_previewUrl"] || "";
 
   return (
     <label className={[type === "textarea" ? "is-wide" : "", layoutClass, hasError ? "has-field-error" : ""].filter(Boolean).join(" ")}>
@@ -1883,13 +1984,171 @@ function Field({
         />
       ) : type === "textarea" ? (
         <textarea value={val} onChange={handleInputChange} style={errorStyle} />
+      ) : type === "file" ? (
+        <div
+          className={`cms-custom-file-box ${hasError ? "has-field-error" : ""}`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+            minHeight: 35,
+            height: 35,
+            border: hasError ? "1px solid #ef4444" : "1px solid var(--cms-border)",
+            boxShadow: hasError ? "0 0 0 1px #ef4444" : undefined,
+            borderRadius: 7,
+            background: "var(--cms-surface, #ffffff)",
+            overflow: "hidden",
+            position: "relative",
+            boxSizing: "border-box",
+            ...errorStyle,
+          }}
+        >
+          <input
+            type="file"
+            id={`file-input-${name}`}
+            onChange={handleInputChange}
+            accept={fileAccept}
+            style={{ display: "none" }}
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const inp = document.getElementById(`file-input-${name}`);
+              if (inp) inp.click();
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              height: "100%",
+              padding: "0 10px",
+              background: "var(--cms-subtle, #f3f4f6)",
+              border: "none",
+              borderRight: "1px solid var(--cms-border, #e5e7eb)",
+              fontSize: 10,
+              fontWeight: 600,
+              color: "var(--cms-text, #374151)",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <Upload size={12} style={{ color: "var(--cms-primary, #355e3b)" }} />
+            Choose File
+          </button>
+          <span
+            onClick={val ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setPreviewOpen(true);
+            } : undefined}
+            style={{
+              flex: "1 1 auto",
+              minWidth: 0,
+              padding: "0 8px",
+              fontSize: 10,
+              color: val ? "var(--cms-primary, #355e3b)" : "var(--cms-muted, #9ca3af)",
+              fontWeight: val ? 600 : 400,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              cursor: val ? "pointer" : "default",
+              textDecoration: val ? "underline" : "none",
+              textUnderlineOffset: 2,
+            }}
+            title={val ? `Click to preview: ${val}` : "No file chosen"}
+          >
+            {val || "No file chosen"}
+          </span>
+          {val ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 3, paddingRight: 6, flexShrink: 0 }}>
+              <button
+                type="button"
+                className="cms-file-clear-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  change("");
+                  setLocalFile(null);
+                  setLocalPreviewUrl("");
+                  if (typeof setValues === "function") {
+                    setValues((prev) => ({
+                      ...prev,
+                      [name]: "",
+                      [name + "_previewUrl"]: "",
+                      ...(name === "drivingLicence" ? { _dlPdfRawText: "" } : {}),
+                    }));
+                  }
+                  const inp = document.getElementById(`file-input-${name}`);
+                  if (inp) inp.value = "";
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 22,
+                  height: 22,
+                  border: "none",
+                  borderRadius: "50%",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  color: "#ef4444",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+                title="Remove selected file"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : null}
+          {previewOpen ? (
+            <Modal
+              title={`${label} Preview: ${val}`}
+              onClose={() => setPreviewOpen(false)}
+              size="lg"
+            >
+              <div style={{ width: "100%", height: "70vh", minHeight: 480, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {activePreviewUrl ? (
+                  val.toLowerCase().endsWith(".pdf") ? (
+                    <object
+                      data={activePreviewUrl}
+                      type="application/pdf"
+                      style={{ width: "100%", height: "100%", border: "1px solid var(--cms-border, #e5e7eb)", borderRadius: 8 }}
+                    >
+                      <iframe
+                        src={activePreviewUrl}
+                        title={val}
+                        style={{ width: "100%", height: "100%", border: "none", borderRadius: 8 }}
+                      />
+                    </object>
+                  ) : (
+                    <img
+                      src={activePreviewUrl}
+                      alt={val}
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }}
+                    />
+                  )
+                ) : (
+                  <div style={{ textAlign: "center", color: "var(--cms-muted)", padding: 40 }}>
+                    <FileText size={48} style={{ color: "var(--cms-primary, #355e3b)", marginBottom: 12, margin: "0 auto" }} />
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--cms-text)" }}>{val}</p>
+                    <p style={{ margin: "6px 0 0", fontSize: 12 }}>Document file selected for upload</p>
+                  </div>
+                )}
+              </div>
+            </Modal>
+          ) : null}
+        </div>
       ) : (
         <input
           type={type}
           readOnly={name === "employeeId"}
-          value={type === "file" ? undefined : val}
+          value={val}
           onChange={handleInputChange}
           maxLength={inputMaxLength}
+          placeholder={placeholderText}
           max={maxDate}
           style={errorStyle}
         />
@@ -2984,8 +3243,24 @@ function StaffList({ records = [], setRecords, forced }) {
     return [...new Set([...apiFilterDesigs, ...fallback])];
   }, [apiFilterDesigs, list]);
   const showStaffType = forced !== "Teaching" && forced !== "Non-Teaching";
-  const shown = rows.slice((page - 1) * size, page * size);
-  const totalRowsCount = totalApiCount || rows.length;
+  const shown = useMemo(() => {
+    if (apiItems !== null && Array.isArray(apiItems)) {
+      return apiItems.map((r) => {
+        let empId = r.employeeId;
+        if (!empId || typeof empId === "object" || empId === "[object Object]") {
+          empId = r.id ? `PCTCH00${r.id}` : "PCTCH0001";
+        }
+        return {
+          ...r,
+          employeeId: empId,
+          fullName: r.fullName || `${r.firstName || ""} ${r.middleName ? r.middleName + " " : ""}${r.lastName || ""}`.trim(),
+        };
+      });
+    }
+    return rows.slice((page - 1) * size, page * size);
+  }, [apiItems, rows, page, size]);
+
+  const totalRowsCount = apiItems !== null ? totalApiCount : rows.length;
 
   return (
     <DashboardLayout
@@ -3445,7 +3720,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
     // "Salary & Bank", // Commented out per requirement: salary structure is assigned in separate module
     "Documents",
     "Emergency Contact",
-    "Review",
+    "Preview",
   ];
   const [step, setStep] = useState(0);
   const [values, setValues] = useState(
@@ -3565,6 +3840,34 @@ function NonTeachingForm({ records, setRecords, existing }) {
       }
     }
 
+    const isTransport =
+      String(values?.department || "").trim().toLowerCase().includes("transport") ||
+      String(values?.designation || "").trim().toLowerCase().includes("driver");
+
+    if (isTransport && values.drivingLicenseNumber && values._dlPdfRawText) {
+      const cleanDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const rawText = String(values._dlPdfRawText).toUpperCase();
+      const cleanPdfText = rawText.replace(/[^A-Z0-9]/g, "");
+
+      const isDirectMatch = cleanPdfText.includes(cleanDL) || rawText.includes(cleanDL);
+
+      if (!isDirectMatch) {
+        const dlPatternMatches = rawText.match(/\b([A-Z]{2}\d{2,3}\s?(?:19|20)\d{2}\s?\d{7}|[A-Z]{2}\d{13,14})\b/g);
+        if (dlPatternMatches && dlPatternMatches.length > 0) {
+          const foundDiffDL = dlPatternMatches.some((match) => {
+            const cleanFound = match.replace(/[^A-Z0-9]/g, "");
+            return cleanFound.length >= 15 && cleanFound !== cleanDL;
+          });
+          if (foundDiffDL) {
+            setToast("Entered Driver's License Number does not match the uploaded Driving License PDF document.");
+            setErrors({ drivingLicenseNumber: "Entered number does not match the uploaded Driving License PDF document." });
+            setStep(2);
+            return;
+          }
+        }
+      }
+    }
+
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
@@ -3572,6 +3875,8 @@ function NonTeachingForm({ records, setRecords, existing }) {
 
     const payload = {
       ...values,
+      email: values.email?.trim() ? values.email.trim() : null,
+      qualification: values.qualification?.trim() ? values.qualification.trim() : null,
       role: values.role || "Cleaner",
       roleName: values.roleName || values.role || "Cleaner",
       roleId: Number(resolvedRoleId),
@@ -3609,18 +3914,33 @@ function NonTeachingForm({ records, setRecords, existing }) {
         setToast(errMsg);
         const lower = errMsg.toLowerCase();
         const nextErrors = {};
+        let errorStep = 0;
         if (lower.includes("employee id")) {
           nextErrors.employeeId = errMsg;
+          errorStep = 0;
           try {
             const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records);
             if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
           } catch {}
         }
-        if (lower.includes("email")) nextErrors.email = errMsg;
-        if (lower.includes("mobile")) nextErrors.mobile = errMsg;
-        if (lower.includes("aadhaar")) nextErrors.aadhaar = errMsg;
+        if (lower.includes("aadhaar") || lower.includes("pan") || lower.includes("name")) {
+          if (lower.includes("aadhaar")) nextErrors.aadhaar = errMsg;
+          errorStep = 0;
+        }
+        if (lower.includes("email")) {
+          nextErrors.email = errMsg;
+          errorStep = 1;
+        }
+        if (lower.includes("mobile")) {
+          nextErrors.mobile = errMsg;
+          errorStep = 1;
+        }
+        if (lower.includes("license") || lower.includes("licence") || lower.includes("joining") || lower.includes("department") || lower.includes("designation")) {
+          if (lower.includes("license") || lower.includes("licence")) nextErrors.drivingLicenseNumber = errMsg;
+          errorStep = 2;
+        }
         setErrors(nextErrors);
-        setStep(0);
+        setStep(errorStep);
         return;
       }
       console.warn("Save non-teaching staff API error:", err);
@@ -3695,7 +4015,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
               </button>
             ) : null}
             <button className="cms-btn cms-btn-primary" onClick={step === labels.length - 1 ? save : next}>
-              {step === labels.length - 1 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Review" : "Next"}
+              {step === labels.length - 1 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Preview" : "Next"}
               <ChevronRight />
             </button>
           </footer>

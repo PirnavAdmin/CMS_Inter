@@ -14,7 +14,7 @@ public interface IDashboardService
     Task<dynamic> GetAdmissionTrendAsync(int? academicYearId, int? boardId, CancellationToken ct = default);
     Task<GroupDistributionResponseDto> GetGroupDistributionAsync(int? academicYearId, int? boardId, CancellationToken ct = default);
     Task<StudentsAttendanceTodayResponseDto> GetStudentsAttendanceTodayAsync(int? academicYearId, int? boardId, string? viewBy, CancellationToken ct = default);
-    Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, CancellationToken ct = default);
+    Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, DateTime? date = null, CancellationToken ct = default);
     Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(int? academicYearId, int? boardId, DateTime? date, CancellationToken ct = default);
     Task<IReadOnlyList<UpcomingExaminationItemDto>> GetUpcomingExaminationsAsync(int? academicYearId, int? boardId, CancellationToken ct = default);
     Task<TodaysHighlightsResponseDto> GetTodaysHighlightsAsync(int? academicYearId, int? boardId, CancellationToken ct = default);

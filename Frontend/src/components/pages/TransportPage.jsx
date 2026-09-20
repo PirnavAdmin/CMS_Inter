@@ -356,6 +356,10 @@ export default function TransportPage() {
   const fetchTransportData = async () => {
     setIsLoading(true);
     try {
+      const driverListUrl = `${apiEndpoints.transport.drivers}?PageNumber=1&PageSize=1000`;
+      if (import.meta.env.DEV) {
+        console.log("Transport Driver API Request:", { url: driverListUrl, method: "GET" });
+      }
       const [
         routesRes,
         pickupsRes,
@@ -372,7 +376,7 @@ export default function TransportPage() {
         apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.drivers}?PageNumber=1&PageSize=1000`),
+        apiClient.get(driverListUrl),
         apiClient.get(`${apiEndpoints.transport.attendants}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
         apiClient.get(apiEndpoints.transport.trips),
@@ -381,6 +385,21 @@ export default function TransportPage() {
         apiClient.get(`${apiEndpoints.transport.studentAssignments}?PageNumber=1&PageSize=1000`),
         apiClient.get(apiEndpoints.transport.dashboard),
       ]);
+
+      if (import.meta.env.DEV) {
+        if (driversRes.status === "fulfilled") {
+          console.log("Transport Driver API Response:", driversRes.value?.data);
+          console.log("Transport Driver API Response Status:", driversRes.value?.status);
+        } else {
+          console.error("Transport Driver API Error:", {
+            url: driverListUrl,
+            method: "GET",
+            status: driversRes.reason?.response?.status,
+            response: driversRes.reason?.response?.data,
+            error: driversRes.reason,
+          });
+        }
+      }
 
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
         const items = extractList(routesRes.value.data);
@@ -699,8 +718,8 @@ export default function TransportPage() {
     try {
       if (key === "routes") {
         const payload = {
-          routeCode: values.routeCode,
-          routeName: values.routeName,
+          routeCode: values.routeCode || makeId("RT", routes),
+          routeName: values.routeName || "Route",
           startLocation: values.routeStart || "Campus North",
           endLocation: values.routeEnd || "City Center",
           distanceKm: Number(values.totalDistanceKm) || 0,
@@ -769,7 +788,7 @@ export default function TransportPage() {
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.driverById(numericId), payload);
         } else {
-          await apiClient.post(apiEndpoints.transport.drivers, payload);
+          throw new Error("Drivers are managed in Non-Teaching Staff. Create new drivers under Staff (Role: Driver).");
         }
       } else if (key === "attendants") {
         const payload = {
@@ -1075,10 +1094,10 @@ export default function TransportPage() {
     },
     drivers: {
       title: "Driver Master",
-      subtitle: "Maintain driver contact details, license details and assignment readiness.",
+      subtitle: "Fetched automatically from Non-Teaching Staff (Role: Driver). Update transport licenses and contact details.",
       rows: drivers,
       fields: driverFields,
-      addLabel: "Add Driver",
+      addLabel: null,
       columns: [
         { key: "employeeId", label: "Employee ID", strong: true },
         { key: "driverName", label: "Driver" },
@@ -1319,10 +1338,11 @@ export default function TransportPage() {
               : undefined
         }
         rowFilter={isTripsTable ? filterTripRow : isSetupFilterTable ? (row) => filterSetupRow(key, row) : undefined}
-        onAdd={config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
+        onAdd={config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
         onEdit={config.fields ? (row) => openForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
         onView={(row) => setDetailConfig({ title: config.title, row })}
+        toolbarClassName={key === "vehicles" ? "cms-transport-vehicle-toolbar" : undefined}
       />
     );
   };

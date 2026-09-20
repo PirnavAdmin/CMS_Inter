@@ -10,10 +10,10 @@
 .cms-auth-aside {
   position: relative;
   color: #fff;
-  padding: 40px;
+  padding: 48px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-end;
   background: #1A2114;
   isolation: isolate;
   overflow: hidden;
@@ -269,21 +269,35 @@
     padding: 22px;
   }
 }
-.cms-auth .cms-landing-brand {
+.cms-auth-brand-logo {
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 0;
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  width: 70px;
+  height: 70px;
+  cursor: default;
+  user-select: none;
+  pointer-events: none;
 }
 
-.cms-auth .logo-mark {
-  flex: 0 0 48px;
-  width: 28px;
-  height: 28px;
-  border-radius: 14px;
-  overflow: hidden;
+.cms-auth-crest {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
 }
 
-.cms-auth-aside .logo-mark img,
-.cms-auth .logo-mark img {
+.cms-auth-aside .cms-auth-crest img,
+.cms-auth .cms-auth-crest img {
   position: static !important;
   inset: auto !important;
   z-index: auto !important;
@@ -291,6 +305,35 @@
   width: 100% !important;
   height: 100% !important;
   object-fit: contain !important;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.75)) brightness(1.15) contrast(1.08);
+}
+
+.cms-auth-hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.cms-auth-aside .cms-auth-hero-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 2.7vw, 38px);
+  font-weight: 800;
+  color: #FFFFFF !important;
+  margin: 0 0 14px;
+  line-height: 1.15;
+  letter-spacing: -0.3px;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85);
+}
+
+.cms-auth-aside .cms-auth-hero-desc {
+  color: #F6E6C2 !important;
+  font-size: 15.5px;
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1.7;
+  max-width: 48ch;
+  margin: 0;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
 }
 
 .cms-auth .cms-btn,
@@ -299,14 +342,6 @@
   padding: 0 18px;
   border-radius: 8px;
   width: min(100px, 100%);
-}
-.cms-auth .logo-mark {
-  width: 20px;
-  height: 35px;
-  border-radius: 10px;
-}
-.cms-auth-card {
-  max-width: 460px;
 }
 .auth-register-card {
   max-width: 450px;

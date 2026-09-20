@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.Evaluations;
 using CollegeManagement.API.Models.Enums;
 using CollegeManagement.API.Services.Interfaces;
@@ -12,6 +13,8 @@ using System.Threading.Tasks;
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/evaluations")]
     [Authorize]
     public class EvaluationsController : ControllerBase
     {
@@ -32,7 +35,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Retrieves marks evaluation readiness status for an examination and section before results processing.
         /// </summary>
-        [HttpGet("api/v1/evaluations/readiness")]
+        [HttpGet("readiness")]
         public async Task<IActionResult> GetEvaluationReadiness(
             [FromQuery] int? boardId,
             [FromQuery] int? academicYearId,
@@ -50,7 +53,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Search evaluations by academic context (Board, AcademicYear, AcademicLevel, Group, Section, Examination).
         /// </summary>
-        [HttpPost("api/v1/evaluations/search")]
+        [HttpPost("search")]
         public async Task<IActionResult> SearchEvaluations([FromBody] EvaluationFilterDto filter)
         {
             var items = await _evaluationService.SearchEvaluationsAsync(filter ?? new EvaluationFilterDto());
@@ -63,7 +66,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Retrieves evaluation header metadata and student marks breakdown for a subject.
         /// </summary>
-        [HttpGet("api/v1/evaluations/{evaluationId}/students")]
+        [HttpGet("{evaluationId}/students")]
         public async Task<IActionResult> GetEvaluationStudents([FromRoute] string evaluationId)
         {
             var detail = await _evaluationService.GetEvaluationByCompositeIdAsync(evaluationId);
@@ -81,7 +84,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Admin marks editor. Updates student marks and resets to SUBMITTED for re-verification.
         /// </summary>
-        [HttpPut("api/v1/evaluations/{evaluationId}/marks")]
+        [HttpPut("{evaluationId}/marks")]
         public async Task<IActionResult> UpdateStudentMarks(
             [FromRoute] string evaluationId,
             [FromBody] UpdateEvaluationMarksRequestDto request)
@@ -108,8 +111,8 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Verify evaluation status (Faculty Submitted -> Admin Verified).
         /// </summary>
-        [HttpPatch("api/v1/evaluations/{evaluationId}/verify")]
-        [HttpPost("api/v1/evaluations/{evaluationId}/verify")]
+        [HttpPatch("{evaluationId}/verify")]
+        [HttpPost("{evaluationId}/verify")]
         public async Task<IActionResult> VerifyEvaluation(
             [FromRoute] string evaluationId,
             [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] VerifyEvaluationRequestDto? requestDto = null,
@@ -130,8 +133,8 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Approve evaluation status (Verified -> Admin Approved).
         /// </summary>
-        [HttpPatch("api/v1/evaluations/{evaluationId}/approve")]
-        [HttpPost("api/v1/evaluations/{evaluationId}/approve")]
+        [HttpPatch("{evaluationId}/approve")]
+        [HttpPost("{evaluationId}/approve")]
         public async Task<IActionResult> ApproveEvaluation([FromRoute] string evaluationId)
         {
             var userId = GetCurrentUserId();
@@ -143,8 +146,8 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Reject evaluation status with remarks/reason and notify faculty.
         /// </summary>
-        [HttpPost("api/v1/evaluations/{evaluationId}/reject")]
-        [HttpPatch("api/v1/evaluations/{evaluationId}/reject")]
+        [HttpPost("{evaluationId}/reject")]
+        [HttpPatch("{evaluationId}/reject")]
         public async Task<IActionResult> RejectEvaluation(
             [FromRoute] string evaluationId,
             [FromQuery] string? remarks,
@@ -174,7 +177,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Restore evaluation status back to SUBMITTED.
         /// </summary>
-        [HttpPatch("api/v1/evaluations/{evaluationId}/restore")]
+        [HttpPatch("{evaluationId}/restore")]
         public async Task<IActionResult> RestoreEvaluation([FromRoute] string evaluationId)
         {
             var userId = GetCurrentUserId();
@@ -186,7 +189,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Global bulk verify all submitted subjects in the selected context.
         /// </summary>
-        [HttpPost("api/v1/evaluations/verify-all")]
+        [HttpPost("verify-all")]
         public async Task<IActionResult> VerifyAllEvaluations([FromBody] EvaluationFilterDto? filter = null)
         {
             var userId = GetCurrentUserId();
@@ -204,7 +207,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Global bulk approve all verified subjects in the selected context.
         /// </summary>
-        [HttpPost("api/v1/evaluations/approve-all")]
+        [HttpPost("approve-all")]
         public async Task<IActionResult> ApproveAllEvaluations([FromBody] EvaluationFilterDto? filter = null)
         {
             var userId = GetCurrentUserId();
@@ -222,7 +225,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Calculates and returns the student performance matrix with all subject marks, totals, and grades.
         /// </summary>
-        [HttpGet("api/v1/student-analysis")]
+        [HttpGet("~/api/v{version:apiVersion}/student-analysis")]
         public async Task<IActionResult> GetStudentAnalysis(
             [FromQuery] int? academicYearId,
             [FromQuery] int? groupId,
@@ -240,7 +243,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Retrieves detailed subject-wise marks breakdown (internal, practical, theory) and overall performance summary for a specific student.
         /// </summary>
-        [HttpGet("api/v1/student-analysis/{studentId}/details")]
+        [HttpGet("~/api/v{version:apiVersion}/student-analysis/{studentId}/details")]
         public async Task<IActionResult> GetStudentAnalysisDetail(
             [FromRoute] int studentId,
             [FromQuery] int? examinationId,
@@ -267,7 +270,7 @@ namespace CollegeManagement.API.Controllers
         /// <summary>
         /// Exports evaluation list and metrics to an Excel workbook.
         /// </summary>
-        [HttpGet("api/v1/evaluations/export")]
+        [HttpGet("export")]
         public async Task<IActionResult> ExportEvaluations(
             [FromQuery] int? boardId,
             [FromQuery] int? academicYearId,

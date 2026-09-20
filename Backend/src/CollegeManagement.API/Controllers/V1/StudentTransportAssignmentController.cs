@@ -6,7 +6,6 @@ using CollegeManagement.API.Services.Interfaces;
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
-    [Route("api/v1/transport-student-assignments")]
     [Route("api/v1/transport/student-assignments")]
     [Authorize(Roles = "Admin")]
     public class StudentTransportAssignmentController : ControllerBase

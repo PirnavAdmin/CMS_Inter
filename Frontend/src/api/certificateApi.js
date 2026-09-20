@@ -87,3 +87,19 @@ export const downloadCertificatePdf = (id) => {
 export const verifyCertificate = (certificateNo) => {
   return api.get(`/api/v1/certificates/verify/${encodeURIComponent(certificateNo)}`);
 };
+
+// 15. Export Certificates to Excel / CSV
+export const exportCertificatesExcel = (params) => {
+  return api.get("/api/v1/certificates/export/excel", {
+    params,
+    responseType: "blob",
+  });
+};
+
+// 16. Export Certificates to Multi-Page PDF
+export const exportCertificatesPdf = (params) => {
+  return api.get("/api/v1/certificates/export/pdf", {
+    params,
+    responseType: "blob",
+  });
+};

@@ -142,7 +142,7 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "navy",
     refPrefix: "BC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.",
     purpose: "Higher Studies / Passport / Bank Loan",
     dynamicFields: [
       "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
@@ -175,7 +175,7 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "green",
     refPrefix: "SC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.",
     purpose: "General Verification",
     dynamicFields: [
       "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
@@ -208,7 +208,7 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "maroon",
     refPrefix: "CC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has been a student of this college during the academic year(s) {{academic_year}}.\nTo the best of our knowledge and records, his/her conduct and character have been {{conduct_rating}}.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has been a student of this college during the academic year(s) {{academic_year}}.\nTo the best of our knowledge and records, his/her conduct and character have been {{conduct_rating}}.",
     purpose: "Employment / Higher Education",
     dynamicFields: [
       "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
@@ -241,7 +241,7 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "gold",
     refPrefix: "TC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this college from {{study_from}} to {{study_to}}.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} in {{group_name}} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
     purpose: "Institution Transfer",
     dynamicFields: [
       "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
@@ -255,32 +255,32 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     name: "Others",
     type: "Certificate",
     category: "Student Certificate",
-    status: "Draft",
+    status: "Active",
     format: "PDF",
     version: "1.0",
     lastModified: getPresentDateFormatted(),
     place: "Vijayawada",
     issueDate: getPresentDateFormatted(),
-    description: "Configurable generic certificate template for custom college requirements.",
+    description: "Custom Certificate template for institution verification and requests.",
     orientation: "Landscape",
     pageSize: "A4",
     borderStyle: "Teal Ornate",
     borderColor: "#0f766e",
     badgeBgColor: "#0f766e",
     badgeTextColor: "#ffffff",
-    seal: "College Seal",
+    seal: "Principal Seal",
     sealColor: "#0f766e",
     qrEnabled: true,
     signatureType: "Principal",
     builtIn: true,
     accent: "teal",
     refPrefix: "OC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}}.\nThis is to certify that {{custom_body}}.",
-    purpose: "General Purpose / Custom Event",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} is studying in {{academic_level}} ({{group_name}}) for the Academic Year {{academic_year}}.\nThis is to certify that {{purpose}}.",
+    purpose: "Higher Education / Official Purpose",
     dynamicFields: [
       "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
-      "{{custom_body}}", "{{purpose}}", "{{certificate_number}}",
-      "{{issue_date}}", "{{place}}"
+      "{{academic_level}}", "{{group_name}}", "{{academic_year}}", "{{purpose}}",
+      "{{certificate_number}}", "{{issue_date}}", "{{place}}"
     ],
   },
 ];
@@ -328,24 +328,29 @@ export function getCanonicalSlot(item) {
   const id = String(item.id || item.templateCode || "").toLowerCase().trim();
   const name = String(item.name || item.title || "").toLowerCase().trim();
 
-  // Reject BIEAP or extraneous versions
-  if (name.includes("bieap") || id.includes("bieap") || name.includes("intermediate transfer") || id.includes("intermediate transfer")) {
+  // Reject BIEAP/TSBIE or composite versions
+  if (
+    name.includes("bieap") || id.includes("bieap") ||
+    name.includes("tsbie") || id.includes("tsbie") ||
+    name.includes("study & conduct") || name.includes("study and conduct") || id.includes("study_conduct") ||
+    name.includes("intermediate transfer") || id.includes("intermediate transfer")
+  ) {
     return null;
   }
 
-  if (id === "certificate-bonafide" || (name.includes("bonafide") && !name.includes("study"))) {
+  if (id === "certificate-bonafide" || id === "bc" || id === "bonafide_cert" || (name.includes("bonafide") && !name.includes("study"))) {
     return "certificate-bonafide";
   }
-  if (id === "certificate-study" || (name.includes("study") && !name.includes("bonafide"))) {
+  if (id === "certificate-study" || id === "sc" || id === "study_cert" || (name.includes("study") && !name.includes("bonafide") && !name.includes("conduct"))) {
     return "certificate-study";
   }
-  if (id === "certificate-conduct" || name.includes("conduct")) {
+  if (id === "certificate-conduct" || id === "cc" || id === "conduct_cert" || (name.includes("conduct") && !name.includes("study"))) {
     return "certificate-conduct";
   }
-  if (id === "certificate-transfer" || name.includes("transfer") || name.includes("tc")) {
+  if (id === "certificate-transfer" || id === "tc" || id === "transfer_cert" || name.includes("transfer") || name.includes("tc")) {
     return "certificate-transfer";
   }
-  if (id === "certificate-custom" || name === "others" || name.includes("other") || name.includes("custom")) {
+  if (id === "certificate-custom" || id === "oc" || id === "custom_cert" || name === "others" || name.includes("other") || name.includes("custom")) {
     return "certificate-custom";
   }
   return null;
