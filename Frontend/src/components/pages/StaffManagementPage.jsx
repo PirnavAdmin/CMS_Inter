@@ -674,6 +674,7 @@ export const TEACHING_ROLE_NAMES = [
 ];
 
 export const NON_TEACHING_ROLE_NAMES = [
+  "Attendant",
   "Cleaner",
   "Driver",
   "Hostel Warden",
@@ -1000,8 +1001,9 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             zIndex: 99999,
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
             border: "1px solid var(--cms-border, #d1d5db)",
-            maxHeight: "220px",
+            maxHeight: "180px",
             overflowY: "auto",
+            scrollbarWidth: "thin",
           }}
         >
           {filteredOpts.length > 0 ? (
@@ -1581,16 +1583,14 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
         }
       }
 
-      // Driver's License Number
+      // Driver's License Number (All-India Standard Length: 15-16 alphanumeric characters)
       if (name === "drivingLicenseNumber") {
         const cleanDL = strVal.toUpperCase().replace(/[-/\s]/g, "");
         if (cleanDL.length > 0) {
-          if (/^\d+$/.test(cleanDL)) {
-            newErrors[name] = "Driving License must start with 2-letter State code (e.g. AP00720240007772)";
-          } else if (cleanDL.length < 15 || cleanDL.length > 16) {
-            newErrors[name] = "Driving License must be 15 to 16 characters (e.g. AP00720240007772)";
-          } else if (!/^[A-Z]{2}[A-Z0-9]{13,14}$/.test(cleanDL)) {
-            newErrors[name] = "Invalid format. Standard format: State(2) + RTO/Year/Number (e.g. AP00720240007772)";
+          if (cleanDL.length < 15 || cleanDL.length > 16) {
+            newErrors[name] = "Driving License Number must be 15 to 16 characters";
+          } else if (!/^[A-Z0-9]{15,16}$/.test(cleanDL)) {
+            newErrors[name] = "Driving License Number must contain only letters and numbers";
           }
         }
       }
@@ -1933,10 +1933,7 @@ function Field({
     inputMaxLength = 16;
   }
 
-  const isDLField = name === "drivingLicenseNumber" || name === "drivingLicence";
-  const placeholderText = isDLField
-    ? "e.g. AP09 20210001234"
-    : undefined;
+  const placeholderText = undefined;
 
   const fileAccept = type === "file"
     ? (name.toLowerCase().includes("photo") || name === "signature" ? "image/jpeg,image/png,image/webp" : ".pdf,application/pdf")
@@ -2152,15 +2149,8 @@ function Field({
           max={maxDate}
           style={errorStyle}
         />
-      )}{" "}
-      {name === "employeeId" ? (
-        <small className="field-help" style={{ display: "block", marginTop: 4, fontSize: 11, color: "var(--cms-muted)" }}>
-          Generated using ID &amp; Number Series Settings.{" "}
-          <Link to="/dashboard/settings/number-series" style={{ color: "var(--cms-primary)", textDecoration: "underline" }}>
-            Manage Number Series
-          </Link>
-        </small>
-      ) : error ? (
+      )}
+      {error ? (
         <small className="field-error" style={{ color: "#ef4444", fontSize: 11, display: "block", marginTop: 4, fontWeight: 500 }}>{error}</small>
       ) : null}
     </label>
@@ -2390,9 +2380,9 @@ function Dashboard({ records = [] }) {
 
   const hasStats = stats !== null && stats !== undefined;
 
-  const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.length || 0));
-  const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => r?.staffType === "Teaching").length || 0));
-  const nonTeachingCount = loading ? "—" : (hasStats ? (stats.nonTeachingStaff ?? 0) : (safeRecords.filter((r) => r?.staffType === "Non-Teaching").length || 0));
+  const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.filter((r) => !r?.status || r?.status === "Active").length || 0));
+  const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Teaching").length || 0));
+  const nonTeachingCount = loading ? "—" : (hasStats ? (stats.nonTeachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Non-Teaching").length || 0));
   const completedCount = loading ? "—" : (hasStats ? (stats.completedProfiles ?? stats.completed ?? 0) : (safeRecords.filter((r) => r?.profileStatus === "Completed").length || 0));
   const pendingCount = loading ? "—" : (hasStats ? (stats.pendingProfileCompletion ?? stats.pending ?? 0) : (typeof totalCount === "number" ? Math.max(0, totalCount - completedCount) : 0));
   const pct = typeof totalCount === "number" && totalCount > 0 && typeof completedCount === "number" ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -3871,7 +3861,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
-    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : 13));
+    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
 
     const payload = {
       ...values,
