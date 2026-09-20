@@ -6586,20 +6586,21 @@ export default function HostelPage() {
       const seen = new Set();
 
       if (Array.isArray(candidateAdmissions) && candidateAdmissions.length > 0) {
-        candidateAdmissions.forEach((ca) => {
-          const sId = ca.studentAdmissionId || ca.studentId || ca.id;
-          const admNo = ca.admissionNumber || ca.admissionNo || `ADM-${sId}`;
-          const fullName = [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.studentName || `Student #${admNo}`;
+        candidateAdmissions.forEach((ca, idx) => {
+          const sId = ca.studentAdmissionId || ca.studentId || ca.admissionId || ca.id || `ca-${idx}`;
+          const admNo = ca.admissionNumber || ca.admissionNo || ca.regNumber || ca.regNo || `ADM-${sId}`;
+          const fullName = [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.studentName || ca.name || `Student #${admNo}`;
           const isAllocated = activeStudentIds.has(String(sId)) || activeStudentIds.has(String(admNo));
 
           if (!isAllocated && !seen.has(String(admNo))) {
             seen.add(String(admNo));
             list.push({
+              key: `cand-${sId}-${admNo}-${idx}`,
               id: sId,
               studentId: sId,
               name: fullName,
               admissionNo: admNo,
-              className: ca.courseName || ca.branchName || "Admitted Student",
+              className: ca.courseName || ca.branchName || ca.className || "Admitted Student",
             });
           }
         });
@@ -6607,14 +6608,16 @@ export default function HostelPage() {
 
       // Fallback if candidateAdmissions is empty
       if (list.length === 0) {
-        allocations.forEach((a) => {
-          if (a.admissionNo && !seen.has(String(a.admissionNo))) {
-            seen.add(String(a.admissionNo));
+        allocations.forEach((a, idx) => {
+          const admNo = a.admissionNo || `ADM-${a.studentId || a.id || idx}`;
+          if (admNo && !seen.has(String(admNo))) {
+            seen.add(String(admNo));
             list.push({
-              id: a.studentId || a.admissionNo,
-              studentId: a.studentId,
-              name: a.studentName,
-              admissionNo: a.admissionNo,
+              key: `alloc-cand-${a.id || a.studentId || idx}-${admNo}`,
+              id: a.studentId || a.id || admNo,
+              studentId: a.studentId || a.id,
+              name: a.studentName || a.name || `Student #${admNo}`,
+              admissionNo: admNo,
               className: "Resident Hosteller",
             });
           }
@@ -6726,9 +6729,9 @@ export default function HostelPage() {
                       No matching student found. Type name to assign.
                     </div>
                   ) : (
-                    filteredCandidates.map((st) => (
+                    filteredCandidates.map((st, idx) => (
                       <div
-                        key={st.id}
+                        key={st.key || `st-cand-${st.id || st.admissionNo || idx}`}
                         onMouseDown={() => {
                           setForm({
                             ...form,
@@ -6778,8 +6781,8 @@ export default function HostelPage() {
                   style={{ color: form.blockName ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="">Select Hostel Block</option>
-                  {blocks.map((b) => (
-                    <option key={b.id} value={b.name}>
+                  {blocks.map((b, idx) => (
+                    <option key={b.id || b.code || b.name || `blk-${idx}`} value={b.name}>
                       {b.name}
                     </option>
                   ))}
@@ -6820,8 +6823,8 @@ export default function HostelPage() {
                     ) : (
                       <>
                         <option value="">Select Room...</option>
-                        {availableRooms.map((rm) => (
-                          <option key={rm.id || rm.roomNo} value={rm.roomNo}>
+                        {availableRooms.map((rm, idx) => (
+                          <option key={rm.id || rm.roomNo || `rm-${idx}`} value={rm.roomNo}>
                             Room #{rm.roomNo} {rm.type ? `(${rm.type})` : ""}
                           </option>
                         ))}
@@ -6856,8 +6859,8 @@ export default function HostelPage() {
                     style={{ color: form.bed ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
                     <option value="">Select Bed Number...</option>
-                    {availableBeds.map((bd) => (
-                      <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
+                    {availableBeds.map((bd, idx) => (
+                      <option key={bd.id || bd.bedNumber || `bd-${idx}`} value={bd.bedNumber}>
                         {bd.bedNumber} ({bd.bedStatus || "Available"})
                       </option>
                     ))}
