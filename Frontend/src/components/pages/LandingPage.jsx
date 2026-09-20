@@ -35,7 +35,6 @@ export default function LandingPage() {
           </div>
           <div className="cms-hero-actions landing-hero-actions">
             <Link to="/login" className="cms-btn landing-start-btn">Get Started <ArrowRight size={16} /></Link>
-            <Link to="/login" className="cms-btn landing-start-btn landing-explore-btn">Explore the platform <ArrowRight size={16} /></Link>
           </div>
         </div>
       </section>
