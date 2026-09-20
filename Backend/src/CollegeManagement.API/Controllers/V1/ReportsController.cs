@@ -57,7 +57,6 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("filters/academic-years")]
-    [HttpGet("filters/academic-years")]
     public async Task<IActionResult> GetAcademicYears([FromQuery] int? boardId = null, CancellationToken ct = default)
     {
         var query = _db.AcademicYears.AsNoTracking().Where(x => x.IsActive);

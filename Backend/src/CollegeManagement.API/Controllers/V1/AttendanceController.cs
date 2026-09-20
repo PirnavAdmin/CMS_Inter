@@ -367,15 +367,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="401">Unauthorized access.</response>
         /// <response code="404">Attendance record not found.</response>
         /// <response code="500">Internal server error.</response>
-        /// <summary>
-        /// Soft deletes an existing attendance record.
-        /// </summary>
-        /// <param name="attendanceId">The attendance identifier.</param>
-        /// <returns>A success indicator.</returns>
-        /// <response code="200">Attendance record deleted successfully.</response>
-        /// <response code="401">Unauthorized access.</response>
-        /// <response code="404">Attendance record not found.</response>
-        /// <response code="500">Internal server error.</response>
         [HttpDelete("{attendanceId}")]
         [ProducesResponseType(typeof(bool), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]

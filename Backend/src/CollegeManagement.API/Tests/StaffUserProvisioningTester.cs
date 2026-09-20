@@ -20,7 +20,7 @@ namespace CollegeManagement.API.Tests
 {
     /// <summary>
     /// Comprehensive Verification Test Suite for Phase 4:
-    /// Staff User Provisioning & Security Enforcement.
+    /// Staff User Provisioning and Security Enforcement.
     /// </summary>
     public static class StaffUserProvisioningTester
     {

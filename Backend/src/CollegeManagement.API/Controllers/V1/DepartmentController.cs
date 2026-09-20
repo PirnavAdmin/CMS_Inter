@@ -211,7 +211,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         /// <summary>
         /// 10. POST /api/v1/departments/import
-        /// Flexible Department & Designation import supporting multipart Excel file or JSON payload.
+        /// Flexible Department and Designation import supporting multipart Excel file or JSON payload.
         /// </summary>
         [HttpPost("import")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]

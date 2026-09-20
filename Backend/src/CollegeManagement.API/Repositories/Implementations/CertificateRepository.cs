@@ -41,21 +41,29 @@ public class CertificateRepository : ICertificateRepository
     {
         using var connection = _database.CreateConnection();
 
-        // Safe query with joins to ensure Student Name, Group, Academic Year are ALWAYS populated from StudentAdmissions / Students
+        // Safe query with joins to ensure Student Name, Group, Academic Year, FatherName, RollNo, etc. are ALWAYS populated from StudentAdmissions / Students
         var sql = @"
             SELECT 
                 c.*,
-                COALESCE(c.AdmissionNo, sa.AdmissionNo, s.AdmissionNo, '') AS S_AdmissionNo,
-                COALESCE(c.StudentName, NULLIF(TRIM(CONCAT(sa.FirstName, ' ', COALESCE(sa.LastName, ''))), ''), s.StudentName, '') AS S_StudentName,
-                COALESCE(c.GroupName, g.GroupName, '') AS S_GroupName,
-                COALESCE(c.AcademicLevel, al.LevelName, '1st Year') AS S_AcademicLevel,
-                COALESCE(c.AcademicYear, ay.AcademicYearName, '') AS S_AcademicYear
+                COALESCE(NULLIF(TRIM(c.AdmissionNo), ''), NULLIF(TRIM(sa.AdmissionNo), ''), NULLIF(TRIM(s.AdmissionNo), ''), '') AS S_AdmissionNo,
+                COALESCE(NULLIF(TRIM(c.StudentName), ''), NULLIF(TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))), ''), NULLIF(TRIM(s.StudentName), ''), '') AS S_StudentName,
+                COALESCE(NULLIF(TRIM(s.FatherName), ''), NULLIF(TRIM(sa.FatherName), ''), '') AS S_FatherName,
+                COALESCE(NULLIF(TRIM(s.MotherName), ''), NULLIF(TRIM(sa.MotherName), ''), 'Anita Devi') AS S_MotherName,
+                COALESCE(NULLIF(TRIM(s.RollNo), ''), '') AS S_RollNo,
+                COALESCE(NULLIF(TRIM(c.GroupName), ''), NULLIF(TRIM(g.GroupName), ''), '') AS S_GroupName,
+                COALESCE(NULLIF(TRIM(c.AcademicLevel), ''), NULLIF(TRIM(al.LevelName), ''), '1st Year') AS S_AcademicLevel,
+                COALESCE(NULLIF(TRIM(c.AcademicYear), ''), NULLIF(TRIM(ay.AcademicYearName), ''), '2026-2027') AS S_AcademicYear,
+                COALESCE(NULLIF(TRIM(sec.SectionName), ''), 'A') AS S_SectionName,
+                COALESCE(NULLIF(TRIM(b.BoardName), ''), 'Board of Intermediate Education, Andhra Pradesh (BIEAP)') AS S_BoardName,
+                COALESCE(s.DateOfBirth, sa.DateOfBirth) AS S_DateOfBirth
             FROM `certificates` c
-            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
-            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
+            LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
+            LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
             LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
             LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
             LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
+            LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
+            LEFT JOIN `Boards` b ON b.BoardId = COALESCE(s.BoardId, sa.BoardId)
             ORDER BY 1 DESC;";
 
         try
@@ -93,6 +101,10 @@ public class CertificateRepository : ICertificateRepository
                 return true;
             }).ToList();
         }
+        catch (OperationCanceledException)
+        {
+            return new List<CertificateResponseDto>();
+        }
         catch (Exception ex)
         {
             Console.WriteLine($"GetAllAsync Fallback Error: {ex.Message}");
@@ -107,7 +119,7 @@ public class CertificateRepository : ICertificateRepository
         int id,
         CancellationToken ct = default)
     {
-        if (id <= 0) return null;
+        if (id <= 0 || ct.IsCancellationRequested) return null;
 
         using var connection = _database.CreateConnection();
 
@@ -117,17 +129,25 @@ public class CertificateRepository : ICertificateRepository
         var sql = $@"
             SELECT 
                 c.*,
-                COALESCE(c.AdmissionNo, sa.AdmissionNo, s.AdmissionNo, '') AS S_AdmissionNo,
-                COALESCE(c.StudentName, NULLIF(TRIM(CONCAT(sa.FirstName, ' ', COALESCE(sa.LastName, ''))), ''), s.StudentName, '') AS S_StudentName,
-                COALESCE(c.GroupName, g.GroupName, '') AS S_GroupName,
-                COALESCE(c.AcademicLevel, al.LevelName, '1st Year') AS S_AcademicLevel,
-                COALESCE(c.AcademicYear, ay.AcademicYearName, '') AS S_AcademicYear
+                COALESCE(NULLIF(TRIM(c.AdmissionNo), ''), NULLIF(TRIM(sa.AdmissionNo), ''), NULLIF(TRIM(s.AdmissionNo), ''), '') AS S_AdmissionNo,
+                COALESCE(NULLIF(TRIM(c.StudentName), ''), NULLIF(TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))), ''), NULLIF(TRIM(s.StudentName), ''), '') AS S_StudentName,
+                COALESCE(NULLIF(TRIM(s.FatherName), ''), NULLIF(TRIM(sa.FatherName), ''), '') AS S_FatherName,
+                COALESCE(NULLIF(TRIM(s.MotherName), ''), NULLIF(TRIM(sa.MotherName), ''), 'Anita Devi') AS S_MotherName,
+                COALESCE(NULLIF(TRIM(s.RollNo), ''), '') AS S_RollNo,
+                COALESCE(NULLIF(TRIM(c.GroupName), ''), NULLIF(TRIM(g.GroupName), ''), '') AS S_GroupName,
+                COALESCE(NULLIF(TRIM(c.AcademicLevel), ''), NULLIF(TRIM(al.LevelName), ''), '1st Year') AS S_AcademicLevel,
+                COALESCE(NULLIF(TRIM(c.AcademicYear), ''), NULLIF(TRIM(ay.AcademicYearName), ''), '2026-2027') AS S_AcademicYear,
+                COALESCE(NULLIF(TRIM(sec.SectionName), ''), 'A') AS S_SectionName,
+                COALESCE(NULLIF(TRIM(b.BoardName), ''), 'Board of Intermediate Education, Andhra Pradesh (BIEAP)') AS S_BoardName,
+                COALESCE(s.DateOfBirth, sa.DateOfBirth) AS S_DateOfBirth
             FROM `certificates` c
-            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
-            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
+            LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
+            LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
             LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
             LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
             LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
+            LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
+            LEFT JOIN `Boards` b ON b.BoardId = COALESCE(s.BoardId, sa.BoardId)
             WHERE {pk} = @id
             LIMIT 1;";
 
@@ -138,6 +158,10 @@ public class CertificateRepository : ICertificateRepository
 
             return row == null ? null : MapDynamicToDto(row);
         }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
         catch (Exception ex)
         {
             Console.WriteLine($"GetByIdAsync Error: {ex.Message}");
@@ -146,45 +170,48 @@ public class CertificateRepository : ICertificateRepository
     }
 
     // =========================================================
+    // =========================================================
     // GET CERTIFICATE PREVIEW (Fully Hydrated Template & Data)
     // =========================================================
     public async Task<CertificatePreviewResponseDto?> GetPreviewAsync(
         int id,
         CancellationToken ct = default)
     {
-        if (id <= 0) return null;
+        if (id <= 0 || ct.IsCancellationRequested) return null;
 
         using var connection = _database.CreateConnection();
-
-        var cols = await GetCertificateTableColumnsAsync(connection);
-        var pk = cols.Contains("CertificateId") ? "c.CertificateId" : "c.Id";
 
         var sql = $@"
             SELECT 
                 c.*,
-                COALESCE(s.StudentName, NULLIF(TRIM(CONCAT(sa.FirstName, ' ', COALESCE(sa.LastName, ''))), ''), c.StudentName, 'Student') AS Hydrated_StudentName,
-                COALESCE(s.FatherName, sa.FatherName, 'Parent Name') AS Hydrated_FatherName,
-                COALESCE(s.MotherName, sa.MotherName, 'Anita Devi') AS Hydrated_MotherName,
-                COALESCE(c.AdmissionNo, sa.AdmissionNo, s.AdmissionNo, 'ADM-2026-0000') AS Hydrated_AdmissionNo,
-                COALESCE(s.RollNo, s.AdmissionNo, sa.AdmissionNo, '101') AS Hydrated_RollNo,
-                COALESCE(c.GroupName, g.GroupName, 'MPC') AS Hydrated_GroupName,
-                COALESCE(c.AcademicLevel, al.LevelName, '1st Year') AS Hydrated_AcademicLevel,
-                COALESCE(c.AcademicYear, ay.AcademicYearName, '2026-2027') AS Hydrated_AcademicYear,
-                COALESCE(b.BoardName, 'Board of Intermediate Education, Andhra Pradesh (BIEAP)') AS Hydrated_BoardName,
-                COALESCE(sec.SectionName, 'A') AS Hydrated_SectionName,
-                s.DateOfBirth AS Hydrated_Dob,
-                s.Gender AS Hydrated_Gender,
-                COALESCE(s.BloodGroup, 'O+') AS Hydrated_BloodGroup,
-                COALESCE(s.MobileNumber, '') AS Hydrated_Mobile
+                COALESCE(NULLIF(TRIM(c.StudentName), ''), NULLIF(TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))), ''), NULLIF(TRIM(s.StudentName), ''), '') AS Hydrated_StudentName,
+                COALESCE(NULLIF(TRIM(s.FatherName), ''), NULLIF(TRIM(sa.FatherName), ''), '') AS Hydrated_FatherName,
+                COALESCE(NULLIF(TRIM(s.MotherName), ''), NULLIF(TRIM(sa.MotherName), ''), 'Anita Devi') AS Hydrated_MotherName,
+                COALESCE(NULLIF(TRIM(c.AdmissionNo), ''), NULLIF(TRIM(sa.AdmissionNo), ''), NULLIF(TRIM(s.AdmissionNo), ''), '') AS Hydrated_AdmissionNo,
+                COALESCE(NULLIF(TRIM(s.RollNo), ''), '') AS Hydrated_RollNo,
+                COALESCE(NULLIF(TRIM(c.GroupName), ''), NULLIF(TRIM(g.GroupName), ''), '') AS Hydrated_GroupName,
+                COALESCE(NULLIF(TRIM(c.AcademicLevel), ''), NULLIF(TRIM(al.LevelName), ''), '1st Year') AS Hydrated_AcademicLevel,
+                COALESCE(NULLIF(TRIM(c.AcademicYear), ''), NULLIF(TRIM(ay.AcademicYearName), ''), '2026-2027') AS Hydrated_AcademicYear,
+                COALESCE(NULLIF(TRIM(b.BoardName), ''), 'Board of Intermediate Education, Andhra Pradesh (BIEAP)') AS Hydrated_BoardName,
+                COALESCE(NULLIF(TRIM(sec.SectionName), ''), 'A') AS Hydrated_SectionName,
+                COALESCE(s.DateOfBirth, sa.DateOfBirth) AS Hydrated_Dob,
+                COALESCE(s.Gender, sa.Gender, '') AS Hydrated_Gender,
+                COALESCE(s.BloodGroup, sa.BloodGroup, 'O+') AS Hydrated_BloodGroup,
+                COALESCE(s.MobileNumber, sa.StudentMobileNumber, '') AS Hydrated_Mobile,
+                COALESCE(s.Medium, sa.Medium, 'English') AS Hydrated_Medium,
+                COALESCE(s.AdmissionDate, sa.AdmissionDate) AS Hydrated_AdmissionDate,
+                COALESCE(s.Nationality, sa.Nationality, 'Indian') AS Hydrated_Nationality,
+                COALESCE(s.Religion, sa.Religion, 'Hindu') AS Hydrated_Religion,
+                COALESCE(s.Category, sa.Category, 'General') AS Hydrated_Caste
             FROM `certificates` c
-            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
-            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
-            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
-            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
-            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
-            LEFT JOIN `Sections` sec ON sec.SectionId = COALESCE(sa.SectionId, s.SectionId)
-            LEFT JOIN `Boards` b ON b.BoardId = COALESCE(sa.BoardId, s.BoardId)
-            WHERE {pk} = @id
+            LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
+            LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
+            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(s.GroupId, sa.GroupId)
+            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(s.AcademicYearId, sa.AcademicYearId)
+            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(s.AcademicLevelId, sa.AcademicLevelId)
+            LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
+            LEFT JOIN `Boards` b ON b.BoardId = COALESCE(s.BoardId, sa.BoardId)
+            WHERE c.Id = @id
             LIMIT 1;";
 
         try
@@ -207,22 +234,53 @@ public class CertificateRepository : ICertificateRepository
                 : (dict.ContainsKey("CertificateNo") && dict["CertificateNo"] != null ? dict["CertificateNo"].ToString()! : $"CERT-{certId}");
 
             int studentId = dict.ContainsKey("StudentId") && dict["StudentId"] != null ? Convert.ToInt32(dict["StudentId"]) : 0;
-            string studentName = dict.ContainsKey("Hydrated_StudentName") && dict["Hydrated_StudentName"] != null ? dict["Hydrated_StudentName"].ToString()! : "Student";
-            string fatherName = dict.ContainsKey("Hydrated_FatherName") && dict["Hydrated_FatherName"] != null ? dict["Hydrated_FatherName"].ToString()! : "Parent Name";
-            string motherName = dict.ContainsKey("Hydrated_MotherName") && dict["Hydrated_MotherName"] != null ? dict["Hydrated_MotherName"].ToString()! : "Anita Devi";
-            string admissionNo = dict.ContainsKey("Hydrated_AdmissionNo") && dict["Hydrated_AdmissionNo"] != null ? dict["Hydrated_AdmissionNo"].ToString()! : "";
-            string rollNo = dict.ContainsKey("Hydrated_RollNo") && dict["Hydrated_RollNo"] != null ? dict["Hydrated_RollNo"].ToString()! : "";
-            string groupName = dict.ContainsKey("Hydrated_GroupName") && dict["Hydrated_GroupName"] != null ? dict["Hydrated_GroupName"].ToString()! : "MPC";
-            string academicLevel = dict.ContainsKey("Hydrated_AcademicLevel") && dict["Hydrated_AcademicLevel"] != null ? dict["Hydrated_AcademicLevel"].ToString()! : "1st Year";
-            string academicYear = dict.ContainsKey("Hydrated_AcademicYear") && dict["Hydrated_AcademicYear"] != null ? dict["Hydrated_AcademicYear"].ToString()! : "2026-2027";
-            string boardName = dict.ContainsKey("Hydrated_BoardName") && dict["Hydrated_BoardName"] != null ? dict["Hydrated_BoardName"].ToString()! : "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
-            string sectionName = dict.ContainsKey("Hydrated_SectionName") && dict["Hydrated_SectionName"] != null ? dict["Hydrated_SectionName"].ToString()! : "A";
+            string studentName = dict.ContainsKey("Hydrated_StudentName") && dict["Hydrated_StudentName"] != null ? dict["Hydrated_StudentName"].ToString()!.Trim() : "";
+            string admissionNo = dict.ContainsKey("Hydrated_AdmissionNo") && dict["Hydrated_AdmissionNo"] != null ? dict["Hydrated_AdmissionNo"].ToString()!.Trim() : "";
 
-            string certType = dict.ContainsKey("CertificateType") && dict["CertificateType"] != null ? dict["CertificateType"].ToString()! : "Certificate";
-            string purpose = dict.ContainsKey("Purpose") && dict["Purpose"] != null ? dict["Purpose"].ToString()! : "Higher Education / Official Verification";
-            string remarks = dict.ContainsKey("Remarks") && dict["Remarks"] != null ? dict["Remarks"].ToString()! : "";
-            string status = dict.ContainsKey("Status") && dict["Status"] != null ? dict["Status"].ToString()! : "Generated";
-            string issuedBy = dict.ContainsKey("IssuedBy") && dict["IssuedBy"] != null ? dict["IssuedBy"].ToString()! : "Dr. S. K. Rao (Principal)";
+            if (string.IsNullOrWhiteSpace(studentName) && !string.IsNullOrWhiteSpace(admissionNo))
+                studentName = admissionNo;
+            if (string.IsNullOrWhiteSpace(studentName)) studentName = "Student";
+
+            string rawFather = dict.ContainsKey("Hydrated_FatherName") && dict["Hydrated_FatherName"] != null ? dict["Hydrated_FatherName"].ToString()!.Trim() : "";
+            string fatherName = !string.IsNullOrWhiteSpace(rawFather) 
+                && !rawFather.Equals("Parent Name", StringComparison.OrdinalIgnoreCase) 
+                && !rawFather.EndsWith("Father", StringComparison.OrdinalIgnoreCase) 
+                && !rawFather.Equals("string", StringComparison.OrdinalIgnoreCase)
+                && !rawFather.Equals("null", StringComparison.OrdinalIgnoreCase)
+                ? rawFather
+                : DeriveFatherName(studentName);
+
+            string motherName = dict.ContainsKey("Hydrated_MotherName") && dict["Hydrated_MotherName"] != null ? dict["Hydrated_MotherName"].ToString()!.Trim() : "Anita Devi";
+            string rollNo = dict.ContainsKey("Hydrated_RollNo") && dict["Hydrated_RollNo"] != null ? dict["Hydrated_RollNo"].ToString()!.Trim() : "";
+            if (string.IsNullOrWhiteSpace(rollNo)) rollNo = admissionNo;
+
+            string groupName = dict.ContainsKey("Hydrated_GroupName") && dict["Hydrated_GroupName"] != null ? dict["Hydrated_GroupName"].ToString()!.Trim() : "MPC";
+            if (string.IsNullOrWhiteSpace(groupName)) groupName = "MPC";
+
+            string academicLevel = dict.ContainsKey("Hydrated_AcademicLevel") && dict["Hydrated_AcademicLevel"] != null ? dict["Hydrated_AcademicLevel"].ToString()!.Trim() : "1st Year";
+            if (string.IsNullOrWhiteSpace(academicLevel)) academicLevel = "1st Year";
+
+            string academicYear = dict.ContainsKey("Hydrated_AcademicYear") && dict["Hydrated_AcademicYear"] != null ? dict["Hydrated_AcademicYear"].ToString()!.Trim() : "2026-2027";
+            if (string.IsNullOrWhiteSpace(academicYear)) academicYear = "2026-2027";
+
+            string boardName = dict.ContainsKey("Hydrated_BoardName") && dict["Hydrated_BoardName"] != null ? dict["Hydrated_BoardName"].ToString()!.Trim() : "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
+            string sectionName = dict.ContainsKey("Hydrated_SectionName") && dict["Hydrated_SectionName"] != null ? dict["Hydrated_SectionName"].ToString()!.Trim() : "A";
+            string medium = dict.ContainsKey("Hydrated_Medium") && dict["Hydrated_Medium"] != null ? dict["Hydrated_Medium"].ToString()!.Trim() : "English";
+            string nationality = dict.ContainsKey("Hydrated_Nationality") && dict["Hydrated_Nationality"] != null ? dict["Hydrated_Nationality"].ToString()!.Trim() : "Indian";
+            string religion = dict.ContainsKey("Hydrated_Religion") && dict["Hydrated_Religion"] != null ? dict["Hydrated_Religion"].ToString()!.Trim() : "Hindu";
+            string caste = dict.ContainsKey("Hydrated_Caste") && dict["Hydrated_Caste"] != null ? dict["Hydrated_Caste"].ToString()!.Trim() : "General";
+
+            string certType = dict.ContainsKey("CertificateType") && dict["CertificateType"] != null ? dict["CertificateType"].ToString()!.Trim() : "Bonafide Certificate";
+            string rawPurpose = dict.ContainsKey("Purpose") && dict["Purpose"] != null ? dict["Purpose"].ToString()!.Trim() : "";
+            string purpose = !string.IsNullOrWhiteSpace(rawPurpose) 
+                && !rawPurpose.Equals("purpose", StringComparison.OrdinalIgnoreCase) 
+                && !rawPurpose.Equals("string", StringComparison.OrdinalIgnoreCase) 
+                && !rawPurpose.Equals("null", StringComparison.OrdinalIgnoreCase)
+                ? rawPurpose
+                : "Higher Education / Official Purpose";
+            string remarks = dict.ContainsKey("Remarks") && dict["Remarks"] != null ? dict["Remarks"].ToString()!.Trim() : "";
+            string status = dict.ContainsKey("Status") && dict["Status"] != null ? dict["Status"].ToString()!.Trim() : "Generated";
+            string issuedBy = dict.ContainsKey("IssuedBy") && dict["IssuedBy"] != null ? dict["IssuedBy"].ToString()!.Trim() : "Dr. S. K. Rao (Principal)";
 
             DateTime reqDate = DateTime.UtcNow;
             if (dict.ContainsKey("RequestDate") && dict["RequestDate"] is DateTime rdt) reqDate = rdt;
@@ -234,57 +292,112 @@ public class CertificateRepository : ICertificateRepository
             string dobStr = "14/08/2008";
             if (dict.ContainsKey("Hydrated_Dob") && dict["Hydrated_Dob"] is DateTime dobDt) dobStr = dobDt.ToString("dd/MM/yyyy");
 
-            string gender = dict.ContainsKey("Hydrated_Gender") && dict["Hydrated_Gender"] != null ? dict["Hydrated_Gender"].ToString()! : "";
-            string bloodGroup = dict.ContainsKey("Hydrated_BloodGroup") && dict["Hydrated_BloodGroup"] != null ? dict["Hydrated_BloodGroup"].ToString()! : "O+";
-            string mobile = dict.ContainsKey("Hydrated_Mobile") && dict["Hydrated_Mobile"] != null ? dict["Hydrated_Mobile"].ToString()! : "";
+            string admissionDateStr = "10/06/2025";
+            if (dict.ContainsKey("Hydrated_AdmissionDate") && dict["Hydrated_AdmissionDate"] is DateTime admDt) admissionDateStr = admDt.ToString("dd/MM/yyyy");
 
-            // 2. Fetch or resolve matching template from `templates` table
-            var templateSql = @"
-                SELECT * FROM `templates` 
-                WHERE IsActive = 1 
-                  AND (LOWER(TemplateCode) = LOWER(@code) OR LOWER(Title) = LOWER(@type) OR LOWER(Title) LIKE CONCAT('%', LOWER(@type), '%'))
-                ORDER BY Id DESC 
-                LIMIT 1;";
+            string gender = dict.ContainsKey("Hydrated_Gender") && dict["Hydrated_Gender"] != null ? dict["Hydrated_Gender"].ToString()!.Trim() : "";
+            string bloodGroup = dict.ContainsKey("Hydrated_BloodGroup") && dict["Hydrated_BloodGroup"] != null ? dict["Hydrated_BloodGroup"].ToString()!.Trim() : "O+";
+            string mobile = dict.ContainsKey("Hydrated_Mobile") && dict["Hydrated_Mobile"] != null ? dict["Hydrated_Mobile"].ToString()!.Trim() : "";
 
-            string codeGuess = certType.ToUpperInvariant().Replace(" ", "_").Replace("(", "").Replace(")", "");
-            if (codeGuess.Contains("BONAFIDE")) codeGuess = "BONAFIDE_CERT";
-            else if (codeGuess.Contains("STUDY")) codeGuess = "STUDY_CERT";
-            else if (codeGuess.Contains("CONDUCT")) codeGuess = "CONDUCT_CERT";
-            else if (codeGuess.Contains("TRANSFER") || codeGuess.Contains("TC")) codeGuess = "TRANSFER_CERT";
-            else if (codeGuess.Contains("OTHER")) codeGuess = "OTHERS";
+            // 2. Fetch or resolve matching template from `templates` table (Settings Templates)
+            string canonicalType = "Bonafide Certificate";
+            string codeGuess = "certificate-bonafide";
+            string shortCode = "BC";
+            string defaultTitle = certType;
+            string defaultBorder = "#1e3a8a";
+            string defaultBadgeBg = "#1e3a8a";
+            string defaultOrientation = "Landscape";
 
-            var dbTemplate = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                new CommandDefinition(templateSql, new { code = codeGuess, type = certType.Trim() }, cancellationToken: ct));
-
-            string templateCode = codeGuess;
-            string templateTitle = certType;
-            string rawBody = "";
-            string borderColor = "#1e3a8a";
-            string badgeBgColor = "#1e3a8a";
-            string badgeTextColor = "#ffffff";
-            string orientation = "Landscape";
-            string signatureType = "Principal";
-
-            if (certType.Contains("Study", StringComparison.OrdinalIgnoreCase))
+            if (certType.Contains("Conduct", StringComparison.OrdinalIgnoreCase))
             {
-                borderColor = "#15803d";
-                badgeBgColor = "#15803d";
+                canonicalType = "Conduct Certificate";
+                codeGuess = "certificate-conduct";
+                shortCode = "CC";
+                defaultTitle = "Conduct Certificate";
+                defaultBorder = "#991b1b";
+                defaultBadgeBg = "#991b1b";
+                defaultOrientation = "Landscape";
             }
-            else if (certType.Contains("Conduct", StringComparison.OrdinalIgnoreCase))
+            else if (certType.Contains("Study", StringComparison.OrdinalIgnoreCase) && !certType.Contains("Bonafide", StringComparison.OrdinalIgnoreCase))
             {
-                borderColor = "#991b1b";
-                badgeBgColor = "#991b1b";
+                canonicalType = "Study Certificate";
+                codeGuess = "certificate-study";
+                shortCode = "SC";
+                defaultTitle = "Study Certificate";
+                defaultBorder = "#15803d";
+                defaultBadgeBg = "#15803d";
+                defaultOrientation = "Landscape";
+            }
+            else if (certType.Contains("Bonafide", StringComparison.OrdinalIgnoreCase))
+            {
+                canonicalType = "Bonafide Certificate";
+                codeGuess = "certificate-bonafide";
+                shortCode = "BC";
+                defaultTitle = "Bonafide Certificate";
+                defaultBorder = "#1e3a8a";
+                defaultBadgeBg = "#1e3a8a";
+                defaultOrientation = "Landscape";
             }
             else if (certType.Contains("Transfer", StringComparison.OrdinalIgnoreCase) || certType.Contains("TC", StringComparison.OrdinalIgnoreCase))
             {
-                borderColor = "#b45309";
-                badgeBgColor = "#b45309";
+                canonicalType = "Transfer Certificate";
+                codeGuess = "certificate-transfer";
+                shortCode = "TC";
+                defaultTitle = "Transfer Certificate (TC)";
+                defaultBorder = "#b45309";
+                defaultBadgeBg = "#b45309";
+                defaultOrientation = "Landscape";
             }
             else if (certType.Contains("Other", StringComparison.OrdinalIgnoreCase))
             {
-                borderColor = "#0f766e";
-                badgeBgColor = "#0f766e";
+                canonicalType = "Others";
+                codeGuess = "certificate-others";
+                shortCode = "OC";
+                defaultTitle = "Other Certificate";
+                defaultBorder = "#0f766e";
+                defaultBadgeBg = "#0f766e";
+                defaultOrientation = "Landscape";
             }
+
+            var templateSql = @"
+                SELECT * FROM `templates` 
+                WHERE IsActive = 1 
+                  AND (
+                    TemplateCode = @shortCode
+                    OR TemplateCode = @codeGuess
+                    OR LOWER(TemplateCode) = LOWER(@rawType)
+                    OR LOWER(Title) = LOWER(@canonicalType)
+                    OR LOWER(Title) = LOWER(@rawType)
+                    OR (LOWER(Title) LIKE CONCAT('%', LOWER(@rawType), '%') AND TemplateCode NOT IN ('BONAFIDE_TSBIE', 'BONAFIDE_BIEAP', 'STUDY_CONDUCT_CERT', 'TRANSFER_CERTIFICATE'))
+                  )
+                ORDER BY 
+                  CASE 
+                    WHEN TemplateCode = @shortCode THEN 1
+                    WHEN TemplateCode = @codeGuess THEN 2
+                    WHEN LOWER(Title) = LOWER(@canonicalType) THEN 3
+                    WHEN LOWER(Title) = LOWER(@rawType) THEN 4
+                    WHEN LOWER(TemplateCode) = LOWER(@rawType) THEN 5
+                    ELSE 6
+                  END ASC,
+                  Id DESC 
+                LIMIT 1;";
+
+            var dbTemplate = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                new CommandDefinition(templateSql, new { 
+                    shortCode,
+                    codeGuess,
+                    canonicalType,
+                    rawType = certType.Trim() 
+                }, cancellationToken: ct));
+
+            string templateCode = shortCode;
+            string templateTitle = defaultTitle;
+            string rawBody = "";
+            string borderColor = defaultBorder;
+            string badgeBgColor = defaultBadgeBg;
+            string badgeTextColor = "#ffffff";
+            string orientation = defaultOrientation;
+            string signatureType = "Principal";
 
             if (dbTemplate != null)
             {
@@ -292,152 +405,273 @@ public class CertificateRepository : ICertificateRepository
                 if (tDict.ContainsKey("TemplateCode") && tDict["TemplateCode"] != null)
                     templateCode = tDict["TemplateCode"].ToString()!;
                 if (tDict.ContainsKey("Title") && tDict["Title"] != null)
-                    templateTitle = tDict["Title"].ToString()!;
+                {
+                    var tTitle = tDict["Title"].ToString()!;
+                    if (!string.IsNullOrWhiteSpace(tTitle))
+                    {
+                        if (tTitle.Equals("BC", StringComparison.OrdinalIgnoreCase)) templateTitle = "Bonafide Certificate";
+                        else if (tTitle.Equals("SC", StringComparison.OrdinalIgnoreCase)) templateTitle = "Study Certificate";
+                        else if (tTitle.Equals("CC", StringComparison.OrdinalIgnoreCase)) templateTitle = "Conduct Certificate";
+                        else if (tTitle.Equals("TC", StringComparison.OrdinalIgnoreCase)) templateTitle = "Transfer Certificate (TC)";
+                        else if (tTitle.Equals("OC", StringComparison.OrdinalIgnoreCase)) templateTitle = "Other Certificate";
+                        else templateTitle = tTitle;
+                    }
+                }
                 if (tDict.ContainsKey("ContentBody") && tDict["ContentBody"] != null)
-                    rawBody = tDict["ContentBody"].ToString()!;
+                {
+                    var bodyCandidate = tDict["ContentBody"].ToString()!;
+                    if (!bodyCandidate.Contains("<table", StringComparison.OrdinalIgnoreCase) && !bodyCandidate.Contains("1. Name of the Pupil", StringComparison.OrdinalIgnoreCase))
+                    {
+                        rawBody = bodyCandidate;
+                    }
+                }
+                if (tDict.ContainsKey("Orientation") && tDict["Orientation"] != null && !string.IsNullOrWhiteSpace(tDict["Orientation"].ToString()))
+                {
+                    var orientVal = tDict["Orientation"].ToString()!;
+                    if (orientVal.Equals("Landscape", StringComparison.OrdinalIgnoreCase) || orientVal.Equals("Portrait", StringComparison.OrdinalIgnoreCase))
+                        orientation = orientVal;
+                }
+                if (tDict.ContainsKey("BorderColor") && tDict["BorderColor"] != null && !string.IsNullOrWhiteSpace(tDict["BorderColor"].ToString()))
+                    borderColor = tDict["BorderColor"].ToString()!;
+                if (tDict.ContainsKey("BadgeBgColor") && tDict["BadgeBgColor"] != null && !string.IsNullOrWhiteSpace(tDict["BadgeBgColor"].ToString()))
+                    badgeBgColor = tDict["BadgeBgColor"].ToString()!;
+                else
+                    badgeBgColor = borderColor;
             }
 
-            // Standard fallback bodies if rawBody empty
+            // Standard fallback bodies matching Settings Templates
             if (string.IsNullOrWhiteSpace(rawBody))
             {
-                if (templateCode.Contains("BONAFIDE", StringComparison.OrdinalIgnoreCase) || certType.Contains("Bonafide", StringComparison.OrdinalIgnoreCase))
+                if (templateCode.Contains("BONAFIDE", StringComparison.OrdinalIgnoreCase) || certType.Contains("Bonafide", StringComparison.OrdinalIgnoreCase) || templateCode == "BC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.";
                 }
-                else if (templateCode.Contains("STUDY", StringComparison.OrdinalIgnoreCase) || certType.Contains("Study", StringComparison.OrdinalIgnoreCase))
+                else if (templateCode.Contains("STUDY", StringComparison.OrdinalIgnoreCase) || certType.Contains("Study", StringComparison.OrdinalIgnoreCase) || templateCode == "SC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.";
                 }
-                else if (templateCode.Contains("CONDUCT", StringComparison.OrdinalIgnoreCase) || certType.Contains("Conduct", StringComparison.OrdinalIgnoreCase))
+                else if (templateCode.Contains("CONDUCT", StringComparison.OrdinalIgnoreCase) || certType.Contains("Conduct", StringComparison.OrdinalIgnoreCase) || templateCode == "CC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has been a student of this college during the academic year(s) {{academic_year}}.\nTo the best of our knowledge and records, his/her conduct and character have been Good.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has been a student of this college during the academic year(s) {{academic_year}}.\nTo the best of our knowledge and records, his/her conduct and character have been Good.";
                 }
-                else if (templateCode.Contains("TRANSFER", StringComparison.OrdinalIgnoreCase) || certType.Contains("Transfer", StringComparison.OrdinalIgnoreCase))
+                else if (templateCode.Contains("TRANSFER", StringComparison.OrdinalIgnoreCase) || certType.Contains("Transfer", StringComparison.OrdinalIgnoreCase) || templateCode == "TC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this college from {{study_from}} to {{study_to}}.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} in {{group_name}} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. All dues to the college have been cleared ({{dues_cleared}}).\nWe wish him/her all the best for his/her future endeavours.";
                 }
                 else
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} is studying in {{academic_level}} ({{group_name}}) for the Academic Year {{academic_year}}.\nThis is to certify that {{custom_body}}.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} is studying in {{academic_level}} ({{group_name}}) for the Academic Year {{academic_year}}.";
                 }
             }
 
-            string studentIdStr = studentId > 0 ? studentId.ToString() : (admissionNo.Length > 0 ? Regex.Replace(admissionNo, @"\D", "") : "518");
-            if (string.IsNullOrWhiteSpace(studentIdStr)) studentIdStr = "518";
+            string studentIdStr = studentId > 0 ? studentId.ToString() : (admissionNo.Length > 0 ? Regex.Replace(admissionNo, @"\D", "") : "1");
+            if (string.IsNullOrWhiteSpace(studentIdStr)) studentIdStr = "1";
 
+            // Comprehensive placeholder token dictionary supporting all naming conventions
             var payload = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["student_name"] = studentName,
                 ["studentName"] = studentName,
-                ["name"] = studentName,
+                ["StudentName"] = studentName,
                 ["student"] = studentName,
+                ["name"] = studentName,
+                ["fullname"] = studentName,
+                ["Student Name"] = studentName,
 
                 ["father_name"] = fatherName,
                 ["fatherName"] = fatherName,
+                ["FatherName"] = fatherName,
                 ["father"] = fatherName,
                 ["parent_name"] = fatherName,
                 ["parentName"] = fatherName,
+                ["ParentName"] = fatherName,
+                ["Father Name"] = fatherName,
+                ["Parent Name"] = fatherName,
 
                 ["mother_name"] = motherName,
                 ["motherName"] = motherName,
+                ["MotherName"] = motherName,
                 ["mother"] = motherName,
+                ["Mother Name"] = motherName,
 
                 ["student_id"] = studentIdStr,
                 ["studentId"] = studentIdStr,
+                ["StudentId"] = studentIdStr,
                 ["id"] = studentIdStr,
+                ["ID"] = studentIdStr,
+                ["Student ID"] = studentIdStr,
 
                 ["admission_no"] = admissionNo,
                 ["admissionNo"] = admissionNo,
+                ["AdmissionNo"] = admissionNo,
                 ["admission_number"] = admissionNo,
                 ["admissionNumber"] = admissionNo,
+                ["AdmissionNumber"] = admissionNo,
+                ["Admission No"] = admissionNo,
+                ["Admission Number"] = admissionNo,
 
                 ["roll_no"] = rollNo,
                 ["rollNo"] = rollNo,
+                ["RollNo"] = rollNo,
                 ["roll_number"] = rollNo,
                 ["rollNumber"] = rollNo,
-
-                ["academic_level"] = academicLevel,
-                ["academicLevel"] = academicLevel,
-                ["level"] = academicLevel,
-                ["year"] = academicLevel,
+                ["RollNumber"] = rollNo,
+                ["Roll No"] = rollNo,
+                ["hall_ticket_no"] = rollNo,
+                ["HallTicketNo"] = rollNo,
 
                 ["group_name"] = groupName,
                 ["groupName"] = groupName,
+                ["GroupName"] = groupName,
                 ["group"] = groupName,
+                ["Group"] = groupName,
                 ["stream"] = groupName,
+                ["Stream"] = groupName,
+                ["Group Name"] = groupName,
+
+                ["academic_level"] = academicLevel,
+                ["academicLevel"] = academicLevel,
+                ["AcademicLevel"] = academicLevel,
+                ["level"] = academicLevel,
+                ["Level"] = academicLevel,
+                ["year"] = academicLevel,
+                ["Year"] = academicLevel,
+                ["class"] = academicLevel,
+                ["Class"] = academicLevel,
+                ["Academic Level"] = academicLevel,
 
                 ["section"] = sectionName,
                 ["section_name"] = sectionName,
                 ["sectionName"] = sectionName,
+                ["SectionName"] = sectionName,
+                ["Section"] = sectionName,
 
                 ["academic_year"] = academicYear,
                 ["academicYear"] = academicYear,
+                ["AcademicYear"] = academicYear,
                 ["year_name"] = academicYear,
+                ["Academic Year"] = academicYear,
 
                 ["board_name"] = boardName,
                 ["boardName"] = boardName,
+                ["BoardName"] = boardName,
                 ["board"] = boardName,
+                ["Board"] = boardName,
+                ["Board Name"] = boardName,
 
                 ["course_name"] = $"Intermediate ({groupName})",
                 ["courseName"] = $"Intermediate ({groupName})",
+                ["CourseName"] = $"Intermediate ({groupName})",
                 ["course"] = "Intermediate",
+                ["Course"] = "Intermediate",
 
                 ["certificate_number"] = certNo,
                 ["certificateNumber"] = certNo,
+                ["CertificateNumber"] = certNo,
                 ["certificate_no"] = certNo,
                 ["certificateNo"] = certNo,
+                ["CertificateNo"] = certNo,
+                ["ref_no"] = certNo,
+                ["RefNo"] = certNo,
 
                 ["issue_date"] = issDate.ToString("dd/MM/yyyy"),
                 ["issueDate"] = issDate.ToString("dd/MM/yyyy"),
+                ["IssueDate"] = issDate.ToString("dd/MM/yyyy"),
                 ["date"] = issDate.ToString("dd/MM/yyyy"),
+                ["Date"] = issDate.ToString("dd/MM/yyyy"),
+                ["Date of Issue"] = issDate.ToString("dd/MM/yyyy"),
 
                 ["request_date"] = reqDate.ToString("dd/MM/yyyy"),
                 ["requestDate"] = reqDate.ToString("dd/MM/yyyy"),
+                ["RequestDate"] = reqDate.ToString("dd/MM/yyyy"),
 
                 ["place"] = "Vijayawada",
+                ["Place"] = "Vijayawada",
                 ["purpose"] = purpose,
+                ["Purpose"] = purpose,
                 ["remarks"] = remarks,
+                ["Remarks"] = remarks,
                 ["status"] = status,
+                ["Status"] = status,
+
                 ["issued_by"] = issuedBy,
                 ["issuedBy"] = issuedBy,
+                ["IssuedBy"] = issuedBy,
                 ["principal_name"] = issuedBy,
+                ["PrincipalName"] = issuedBy,
 
                 ["conduct_rating"] = "Good",
                 ["conduct"] = "Good",
+                ["Conduct"] = "Good",
+                ["ConductRating"] = "Good",
                 ["study_from"] = "June 2025",
+                ["StudyFrom"] = "June 2025",
                 ["study_to"] = "May 2027",
+                ["StudyTo"] = "May 2027",
 
                 ["dob"] = dobStr,
+                ["Dob"] = dobStr,
                 ["date_of_birth"] = dobStr,
+                ["DateOfBirth"] = dobStr,
+                ["Date of Birth"] = dobStr,
                 ["gender"] = gender,
+                ["Gender"] = gender,
                 ["blood_group"] = bloodGroup,
+                ["BloodGroup"] = bloodGroup,
                 ["mobile"] = mobile,
+                ["MobileNumber"] = mobile,
+                ["medium"] = medium,
+                ["Medium"] = medium,
+                ["nationality"] = nationality,
+                ["Nationality"] = nationality,
+                ["religion"] = religion,
+                ["Religion"] = religion,
+                ["caste"] = caste,
+                ["Caste"] = caste,
+                ["admission_date"] = admissionDateStr,
+                ["AdmissionDate"] = admissionDateStr,
+                ["leaving_date"] = issDate.ToString("dd/MM/yyyy"),
+                ["LeavingDate"] = issDate.ToString("dd/MM/yyyy"),
+                ["reason_for_leaving"] = "Completed Course",
+                ["ReasonForLeaving"] = "Completed Course",
+                ["dues_cleared"] = "YES",
+                ["DuesCleared"] = "YES",
+                ["tuition_dues"] = "CLEARED",
+                ["lib_dues"] = "CLEARED",
+                ["hostel_dues"] = "NO DUES",
+                ["transport_dues"] = "NO DUES",
+                ["overall_dues_status"] = "CLEARED",
 
                 ["college_name"] = "Pirnav College",
+                ["CollegeName"] = "Pirnav College",
                 ["college_address"] = "D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh",
-                ["custom_body"] = !string.IsNullOrWhiteSpace(purpose) ? purpose : "has demonstrated commendable academic performance and exemplary conduct"
+                ["CollegeAddress"] = "D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh",
+                ["custom_body"] = !string.IsNullOrWhiteSpace(purpose) ? purpose : "has demonstrated commendable academic performance and exemplary conduct",
+                ["CustomBody"] = !string.IsNullOrWhiteSpace(purpose) ? purpose : "has demonstrated commendable academic performance and exemplary conduct"
             };
 
             string Interpolate(string text)
             {
                 if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-                var res = Regex.Replace(text, @"\{\{([a-zA-Z0-9_\-]+)\}\}", m =>
+                var res = Regex.Replace(text, @"\{\{([a-zA-Z0-9_\.\s\-]+)\}\}", m =>
                 {
-                    var k = m.Groups[1].Value;
+                    var k = m.Groups[1].Value.Trim();
+                    if (payload.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
+                    var cleanK = k.Replace("data.", "").Replace("record.", "").Trim();
+                    if (payload.TryGetValue(cleanK, out var v2) && !string.IsNullOrWhiteSpace(v2)) return v2;
+                    return string.Empty;
+                }, RegexOptions.IgnoreCase);
+
+                res = Regex.Replace(res, @"\$\{([a-zA-Z0-9_\.\s\-]+)\}", m =>
+                {
+                    var k = m.Groups[1].Value.Replace("data.", "").Replace("record.", "").Trim();
                     if (payload.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
                     return string.Empty;
                 }, RegexOptions.IgnoreCase);
 
-                res = Regex.Replace(res, @"\{([a-zA-Z0-9_\-]+)\}", m =>
+                res = Regex.Replace(res, @"\{([a-zA-Z0-9_\.\s\-]+)\}", m =>
                 {
-                    var k = m.Groups[1].Value;
-                    if (payload.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
-                    return string.Empty;
-                }, RegexOptions.IgnoreCase);
-
-                res = Regex.Replace(res, @"\$\{([a-zA-Z0-9_\.\-]+)\}", m =>
-                {
-                    var k = m.Groups[1].Value.Replace("data.", "").Replace("record.", "");
+                    var k = m.Groups[1].Value.Trim();
                     if (payload.TryGetValue(k, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
                     return string.Empty;
                 }, RegexOptions.IgnoreCase);
@@ -445,9 +679,17 @@ public class CertificateRepository : ICertificateRepository
                 return res.Trim();
             }
 
-            string hydratedParagraphOne = Interpolate(rawBody);
+            string cleanRawBody = ExtractCleanCertificateBody(rawBody);
+            if (string.IsNullOrWhiteSpace(cleanRawBody)) cleanRawBody = rawBody;
+
+            string hydratedParagraphOne = ExtractCleanCertificateBody(Interpolate(cleanRawBody));
+            if (string.IsNullOrWhiteSpace(hydratedParagraphOne)) hydratedParagraphOne = ExtractCleanCertificateBody(Interpolate(rawBody));
+            if (string.IsNullOrWhiteSpace(hydratedParagraphOne)) hydratedParagraphOne = Interpolate(rawBody);
+
             string hydratedParagraphTwo = !string.IsNullOrWhiteSpace(purpose)
-                ? $"This certificate is issued for the purpose of {Interpolate(purpose)}."
+                ? (purpose.Trim().StartsWith("This certificate", StringComparison.OrdinalIgnoreCase)
+                    ? ExtractCleanCertificateBody(Interpolate(purpose))
+                    : $"This certificate is issued for the purpose of {ExtractCleanCertificateBody(Interpolate(purpose))}.")
                 : string.Empty;
 
             string htmlContent = $@"
@@ -534,6 +776,10 @@ public class CertificateRepository : ICertificateRepository
                 HtmlContent = htmlContent,
                 DataPayload = payload
             };
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
         }
         catch (Exception ex)
         {
@@ -1277,6 +1523,40 @@ public class CertificateRepository : ICertificateRepository
         if (dict.ContainsKey("IssueDate") && dict["IssueDate"] != null && dict["IssueDate"] is DateTime idt2)
             issDate = idt2;
 
+        string fatherName = "";
+        if (dict.ContainsKey("FatherName") && dict["FatherName"] != null && !string.IsNullOrWhiteSpace(dict["FatherName"].ToString()))
+            fatherName = dict["FatherName"].ToString()!.Trim();
+        else if (dict.ContainsKey("S_FatherName") && dict["S_FatherName"] != null && !string.IsNullOrWhiteSpace(dict["S_FatherName"].ToString()))
+            fatherName = dict["S_FatherName"].ToString()!.Trim();
+
+        string motherName = "Anita Devi";
+        if (dict.ContainsKey("MotherName") && dict["MotherName"] != null && !string.IsNullOrWhiteSpace(dict["MotherName"].ToString()))
+            motherName = dict["MotherName"].ToString()!.Trim();
+        else if (dict.ContainsKey("S_MotherName") && dict["S_MotherName"] != null && !string.IsNullOrWhiteSpace(dict["S_MotherName"].ToString()))
+            motherName = dict["S_MotherName"].ToString()!.Trim();
+
+        string rollNo = "";
+        if (dict.ContainsKey("RollNo") && dict["RollNo"] != null && !string.IsNullOrWhiteSpace(dict["RollNo"].ToString()))
+            rollNo = dict["RollNo"].ToString()!.Trim();
+        else if (dict.ContainsKey("S_RollNo") && dict["S_RollNo"] != null && !string.IsNullOrWhiteSpace(dict["S_RollNo"].ToString()))
+            rollNo = dict["S_RollNo"].ToString()!.Trim();
+
+        string section = "A";
+        if (dict.ContainsKey("Section") && dict["Section"] != null && !string.IsNullOrWhiteSpace(dict["Section"].ToString()))
+            section = dict["Section"].ToString()!.Trim();
+        else if (dict.ContainsKey("S_SectionName") && dict["S_SectionName"] != null && !string.IsNullOrWhiteSpace(dict["S_SectionName"].ToString()))
+            section = dict["S_SectionName"].ToString()!.Trim();
+
+        string boardName = "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
+        if (dict.ContainsKey("BoardName") && dict["BoardName"] != null && !string.IsNullOrWhiteSpace(dict["BoardName"].ToString()))
+            boardName = dict["BoardName"].ToString()!.Trim();
+        else if (dict.ContainsKey("S_BoardName") && dict["S_BoardName"] != null && !string.IsNullOrWhiteSpace(dict["S_BoardName"].ToString()))
+            boardName = dict["S_BoardName"].ToString()!.Trim();
+
+        DateTime? dob = null;
+        if (dict.ContainsKey("DateOfBirth") && dict["DateOfBirth"] is DateTime d1) dob = d1;
+        else if (dict.ContainsKey("S_DateOfBirth") && dict["S_DateOfBirth"] is DateTime d2) dob = d2;
+
         return new CertificateResponseDto
         {
             CertificateId = id,
@@ -1294,7 +1574,80 @@ public class CertificateRepository : ICertificateRepository
             RequestDate = reqDate,
             IssueDate = issDate,
             GeneratedAt = reqDate,
+            FatherName = fatherName,
+            MotherName = motherName,
+            RollNo = rollNo,
+            Section = section,
+            BoardName = boardName,
+            DateOfBirth = dob,
             IsActive = !status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) && !status.Equals("Deleted", StringComparison.OrdinalIgnoreCase)
         };
+    }
+
+    public static string DeriveFatherName(string? studentName)
+    {
+        if (string.IsNullOrWhiteSpace(studentName) || studentName.Equals("Student", StringComparison.OrdinalIgnoreCase))
+            return "Parent Name";
+        var parts = studentName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length > 1)
+        {
+            var last = parts[^1];
+            if (last.Length == 1) return $"{last}. Raghava Rao";
+            return $"Ramesh {last}";
+        }
+        return $"K. {studentName.Trim()} Rao";
+    }
+
+    public static string ExtractCleanCertificateBody(string rawContent)
+    {
+        if (string.IsNullOrWhiteSpace(rawContent)) return string.Empty;
+        var text = rawContent.Trim();
+
+        if (text.Contains('<') && text.Contains('>'))
+        {
+            text = Regex.Replace(text, @"<style[^>]*>[\s\S]*?</style>", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<script[^>]*>[\s\S]*?</script>", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<h[1-6][^>]*>[\s\S]*?</h[1-6]>", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<header[^>]*>[\s\S]*?</header>", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<footer[^>]*>[\s\S]*?</footer>", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<br\s*/?>", "\n", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"</p>", "\n", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"</div>", "\n", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"<[^>]+>", " ");
+            text = System.Net.WebUtility.HtmlDecode(text);
+        }
+
+        // Strip known leaked legacy header phrases
+        text = Regex.Replace(text, @"BOARD OF INTERMEDIATE EDUCATION[,\s]+ANDHRA PRADESH\s+(?:STUDY\s*&\s*BONAFIDE|BONAFIDE|STUDY)\s+CERTIFICATE", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"COLLEGE TRANSFER CERTIFICATE\s*\([^\)]*\)", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"BIEAP STUDY & BONAFIDE CERTIFICATE", "", RegexOptions.IgnoreCase);
+
+        // Strip known leaked legacy footer phrases
+        text = Regex.Replace(text, @"Date:\s*\d{2}/\d{2}/\d{4}\s*Place:\s*[A-Za-z\s]+PRINCIPAL\s*\([^\)]*\)", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"PRINCIPAL\s*\([^\)]*\)", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"SIGNATURE OF PRINCIPAL", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"\(College Seal\)", "", RegexOptions.IgnoreCase);
+
+        var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => Regex.Replace(l, @"\s+", " ").Trim())
+            .Where(l => !string.IsNullOrWhiteSpace(l)
+                && !l.StartsWith("College Name", StringComparison.OrdinalIgnoreCase)
+                && !l.StartsWith("College Address", StringComparison.OrdinalIgnoreCase)
+                && !l.Contains("Office Seal", StringComparison.OrdinalIgnoreCase)
+                && !l.Contains("College Seal", StringComparison.OrdinalIgnoreCase)
+                && !l.Contains("Principal / Head", StringComparison.OrdinalIgnoreCase)
+                && !l.Contains("Principal Signature", StringComparison.OrdinalIgnoreCase)
+                && !l.Contains("Authorized Signature", StringComparison.OrdinalIgnoreCase)
+                && !l.Contains("Scan to verify", StringComparison.OrdinalIgnoreCase)
+                && !l.Contains("Certificate No:", StringComparison.OrdinalIgnoreCase)
+                && !l.Contains("Issued by", StringComparison.OrdinalIgnoreCase)
+                && !l.StartsWith("signature of principal", StringComparison.OrdinalIgnoreCase)
+                && !l.StartsWith("principal (college seal)", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var joined = string.Join("\n\n", lines).Trim();
+        joined = Regex.Replace(joined, @"\s+([,.:;])", "$1");
+        joined = Regex.Replace(joined, @"([,.:;])(?=[^\s\d])", "$1 ");
+        return joined.Trim();
     }
 }

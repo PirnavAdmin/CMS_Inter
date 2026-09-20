@@ -342,6 +342,7 @@ public class StaffAttendanceTodayResponseDto
     public decimal AbsentPercentage { get; set; }
     public decimal LatePercentage { get; set; }
     public decimal OnLeavePercentage { get; set; }
+    public string LastUpdated { get; set; } = "Today";
     public int TeachingCount { get; set; }
     public int TeachingStaffCount => TeachingCount;
     public int NonTeachingCount { get; set; }
