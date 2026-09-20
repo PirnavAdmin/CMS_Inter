@@ -3992,9 +3992,8 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 fullName: [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" "),
               }}
               groups={labels.slice(0, labels.length - 1).map((label, index) => [label, getNonTeachingStepFields(index, values)])}
-              onEdit={(targetStep) => {
-                setEditingFromReview(true);
-                setStep(targetStep);
+              onSave={(updatedRecord) => {
+                setValues((prev) => ({ ...prev, ...updatedRecord }));
               }}
             />
           )}
@@ -5250,7 +5249,23 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     department: ["select", defaultDepartments],
   };
 
-  const renderFieldInput = (key, label) => {
+  const renderFieldInput = (key, label, fieldSpec) => {
+    // fieldSpec = [name, label, type, opts, required, layoutClass?]
+    const specType = fieldSpec?.[2];
+    const specOpts = Array.isArray(fieldSpec?.[3]) && fieldSpec[3].length > 0 ? fieldSpec[3] : null;
+
+    // File fields — read-only display in preview inline edit
+    if (specType === "file") {
+      const rawVal = formData[key] !== undefined ? formData[key] : record[key];
+      const val = rawVal === null || rawVal === undefined ? "" : String(rawVal).trim();
+      return (
+        <span style={{ fontSize: 11, color: val ? "var(--cms-primary, #355e3b)" : "var(--cms-muted)", fontStyle: val ? "normal" : "italic" }}>
+          {val || "No file uploaded"}
+        </span>
+      );
+    }
+
+    // Subject allocation
     if (key === "allocatedSubjects" || key === "subjects") {
       const currentVal = formData.allocatedSubjects || formData.subjects || record.allocatedSubjects || record.subjects || [];
       return (
@@ -5261,22 +5276,39 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         />
       );
     }
-    const config = fieldTypes[key] || ["text"];
-    const [type, options] = config;
+
     const rawVal = formData[key] !== undefined ? formData[key] : record[key];
     const val = rawVal === null || rawVal === undefined ? "" : rawVal;
 
+    // search-select → SearchSelectInput
+    if (specType === "search-select") {
+      const opts = specOpts || [];
+      return (
+        <SearchSelectInput
+          label={label}
+          opts={opts}
+          value={String(val)}
+          onChange={(v) => setFormData((prev) => ({ ...prev, [key]: v }))}
+        />
+      );
+    }
+
+    // Determine type/options from fieldSpec or fieldTypes fallback
+    const config = (specType && specType !== "text" && specType !== "search-select")
+      ? [specType, specOpts]
+      : (fieldTypes[key] || ["text"]);
+    const [type, options] = config;
+
     if (type === "select") {
+      const opts = specOpts || options || [];
       return (
         <select
           value={val}
           onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
         >
           <option value="">Select {label}</option>
-          {(options || []).map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
+          {opts.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
       );
@@ -5291,8 +5323,9 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     }
     return (
       <input
-        type={type}
+        type={type === "date" ? "date" : type === "email" ? "email" : "text"}
         value={val}
+        readOnly={key === "employeeId"}
         onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
       />
     );
@@ -5407,7 +5440,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                   <p key={key}>
                     <span>{label}</span>
                     {isEditing ? (
-                      renderFieldInput(key, label)
+                      renderFieldInput(key, label, Array.isArray(field) ? field : null)
                     ) : (
                       <strong>
                         {key === "allocatedSubjects" || key === "subjects" ? (
