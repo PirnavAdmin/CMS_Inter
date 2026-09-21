@@ -6862,7 +6862,7 @@ export default function HostelPage() {
         });
       }
 
-      // 2. Secondary: candidateAdmissions if studentId exists
+      // 2. Secondary: candidateAdmissions if available
       if (Array.isArray(candidateAdmissions) && candidateAdmissions.length > 0) {
         candidateAdmissions.forEach((ca, idx) => {
           const sId = ca.studentId;
@@ -6879,7 +6879,7 @@ export default function HostelPage() {
               studentId: sId,
               name: fullName,
               admissionNo: admNo,
-              className: ca.courseName || ca.branchName || "Admitted Student",
+              className: ca.courseName || ca.branchName || ca.className || "Admitted Student",
               gender: ca.gender || "",
               contact: ca.contactNumber || ca.mobileNumber || "",
             });

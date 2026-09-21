@@ -451,19 +451,39 @@ const initialSettings = {
   showSignature: true,
 };
 
-export function loadSalaryData() {
-  try {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (e) {
-    console.warn("Could not read salary data from sessionStorage", e);
-  }
+export const initialPayslips = initialAssignments.map((a, idx) => {
+  const basic = Number(a.basicPay || (a.grossSalary ? a.grossSalary * 0.5 : 40000));
+  const employerPf = Math.round(basic * 0.12);
+  const ctc = Number(a.grossSalary || 0) + employerPf;
   return {
+    id: `slip-${a.staffId}-2026-08`,
+    staffId: a.staffId,
+    staffName: a.staffName,
+    staffType: a.staffType,
+    department: a.department,
+    designation: a.designation,
+    month: "2026-08",
+    periodLabel: "August 2026",
+    year: 2026,
+    basicPay: basic,
+    grossSalary: Number(a.grossSalary || 0),
+    totalDeductions: Number(a.totalDeductions || 0),
+    netSalary: Number(a.netSalary || 0),
+    employerPf,
+    ctc,
+    status: idx % 6 === 0 ? "Pending" : "Paid",
+    paymentMode: a.paymentMode || "Bank Transfer",
+    paymentDate: "2026-08-31",
+    generatedAt: "2026-08-31T10:00:00.000Z",
+  };
+});
+
+export function loadSalaryData() {
+  const defaultData = {
     structures: initialStructures,
     assignments: initialAssignments,
     payrollMonths: initialPayrollMonths,
+    payslips: initialPayslips,
     revisions: initialRevisions,
     bonuses: initialBonuses,
     loans: initialLoans,
@@ -471,6 +491,30 @@ export function loadSalaryData() {
     overtime: initialOvertime,
     settings: initialSettings,
   };
+
+  try {
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return {
+        ...defaultData,
+        ...parsed,
+        structures: Array.isArray(parsed.structures) && parsed.structures.length > 0 ? parsed.structures : defaultData.structures,
+        assignments: Array.isArray(parsed.assignments) && parsed.assignments.length > 0 ? parsed.assignments : defaultData.assignments,
+        payslips: Array.isArray(parsed.payslips) && parsed.payslips.length > 0 ? parsed.payslips : defaultData.payslips,
+        payrollMonths: Array.isArray(parsed.payrollMonths) ? parsed.payrollMonths : defaultData.payrollMonths,
+        revisions: Array.isArray(parsed.revisions) ? parsed.revisions : defaultData.revisions,
+        bonuses: Array.isArray(parsed.bonuses) ? parsed.bonuses : defaultData.bonuses,
+        loans: Array.isArray(parsed.loans) ? parsed.loans : defaultData.loans,
+        reimbursements: Array.isArray(parsed.reimbursements) ? parsed.reimbursements : defaultData.reimbursements,
+        overtime: Array.isArray(parsed.overtime) ? parsed.overtime : defaultData.overtime,
+        settings: parsed.settings || defaultData.settings,
+      };
+    }
+  } catch (e) {
+    console.warn("Could not read salary data from sessionStorage", e);
+  }
+  return defaultData;
 }
 
 export function saveSalaryData(data) {
@@ -480,4 +524,5 @@ export function saveSalaryData(data) {
     console.warn("Could not write salary data to sessionStorage", e);
   }
 }
+
 
