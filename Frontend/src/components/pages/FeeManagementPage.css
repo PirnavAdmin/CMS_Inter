@@ -384,6 +384,41 @@
 .cms-fee-scholarship-table .cms-fee-actions-col {
   padding-left: 18px;
 }
+.cms-fee-fine-table {
+  min-width: 980px;
+}
+.cms-fee-fine-table th,
+.cms-fee-fine-table td {
+  white-space: nowrap;
+}
+.cms-fee-fine-table th:nth-child(1),
+.cms-fee-fine-table td:nth-child(1) {
+  width: 20%;
+}
+.cms-fee-fine-table th:nth-child(2),
+.cms-fee-fine-table td:nth-child(2) {
+  width: 16%;
+}
+.cms-fee-fine-table th:nth-child(3),
+.cms-fee-fine-table td:nth-child(3) {
+  width: 13%;
+}
+.cms-fee-fine-table th:nth-child(4),
+.cms-fee-fine-table td:nth-child(4),
+.cms-fee-fine-table th:nth-child(6),
+.cms-fee-fine-table td:nth-child(6) {
+  width: 12%;
+}
+.cms-fee-fine-table th:nth-child(5),
+.cms-fee-fine-table td:nth-child(5),
+.cms-fee-fine-table th:nth-child(7),
+.cms-fee-fine-table td:nth-child(7) {
+  width: 10%;
+}
+.cms-fee-fine-table th:nth-child(8),
+.cms-fee-fine-table td:nth-child(8) {
+  width: 7%;
+}
 .cms-fee-structure-table {
   width: 100%;
   min-width: 980px;
