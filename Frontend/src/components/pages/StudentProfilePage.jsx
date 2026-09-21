@@ -34,11 +34,13 @@ export default function StudentProfilePage({ id }) {
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
       const admissionNo = String(read(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim();
       const studentId = String(read(record, "studentId", "StudentId", "id", "Id") ?? id);
-      const [admissionsResponse, sectionsResponse] = await Promise.all([
+      const [admissionsResult, sectionsResult] = await Promise.allSettled([
         apiClient.get(apiEndpoints.admissions.getAll),
         apiClient.get(apiEndpoints.sections.list),
       ]);
-      const admissionSummary = rows(admissionsResponse.data).find((item) => String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === admissionNo || String(read(item, "studentId", "StudentId") ?? "") === studentId);
+      const admissionRows = admissionsResult.status === "fulfilled" ? rows(admissionsResult.value.data) : [];
+      const sectionRows = sectionsResult.status === "fulfilled" ? rows(sectionsResult.value.data) : [];
+      const admissionSummary = admissionRows.find((item) => String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === admissionNo || String(read(item, "studentId", "StudentId") ?? "") === studentId);
       const admissionId = read(admissionSummary, "admissionId", "AdmissionId", "studentAdmissionId", "StudentAdmissionId", "id", "Id");
       let admission = admissionSummary;
       if (admissionId != null) {
@@ -55,7 +57,7 @@ export default function StudentProfilePage({ id }) {
       });
       const sectionValue = read(source, "section", "Section", "allocatedSection", "AllocatedSection", "assignedSection", "AssignedSection", "sectionDetails", "SectionDetails");
       const sectionId = read(source, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId") ?? read(sectionValue, "sectionId", "SectionId", "id", "Id");
-      let sectionRecord = rows(sectionsResponse.data).find((item) => String(read(item, "sectionId", "SectionId", "id", "Id")) === String(sectionId));
+      let sectionRecord = sectionRows.find((item) => String(read(item, "sectionId", "SectionId", "id", "Id")) === String(sectionId));
       if (!sectionRecord && sectionId != null) {
         try {
           const sectionDetail = await apiClient.get(apiEndpoints.sections.getById(sectionId));
