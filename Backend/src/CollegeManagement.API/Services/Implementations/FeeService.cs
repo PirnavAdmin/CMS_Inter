@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Fees;
+using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 
@@ -12,7 +12,7 @@ public class FeeService : IFeeService
     private static void Id(int value, string name) { if (value <= 0) throw new ArgumentException($"{name} must be greater than zero."); }
     private static string Text(string? value, string name) { if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{name} is required."); return value.Trim(); }
     private static void DiscountType(string? type) { var v = Text(type, "DiscountType"); if (!v.Equals("Percentage", StringComparison.OrdinalIgnoreCase) && !v.Equals("Fixed", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("DiscountType must be Percentage or Fixed."); }
-    private static void Category(string? category) { var v = Text(category, "Category"); var allowed = new[] { "Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Miscellaneous" }; if (!allowed.Contains(v, StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("Category must be Admission, Academic, Examination, Transport, Hostel, Activities or Miscellaneous."); }
+    private static void Category(string? category) { var v = Text(category, "Category"); var allowed = new[] { "Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous" }; if (!allowed.Contains(v, StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("Category must be Admission, Academic, Examination, Transport, Hostel, Activities, Activity, Facility, Other or Miscellaneous."); }
 
     public Task<FeeTypeResponse?> CreateFeeTypeAsync(CreateFeeTypeRequest r) { Text(r.FeeTypeName, "FeeTypeName"); Category(r.Category); return _repo.CreateFeeTypeAsync(r); }
     public Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync() => _repo.GetFeeTypesAsync();
@@ -23,7 +23,7 @@ public class FeeService : IFeeService
     public async Task<FeeStructureResponse?> CreateFeeStructureAsync(CreateFeeStructureRequest r)
     {
         Id(r.BoardId, "BoardId"); Id(r.AcademicYearId, "AcademicYearId"); Id(r.GroupId, "GroupId");
-        if (r.Items.Count == 0) throw new ArgumentException("At least one fee type is required.");
+        if (r.Items == null || r.Items.Count == 0) throw new ArgumentException("At least one fee type is required.");
         if (r.Items.Any(x => x.Amount <= 0)) throw new ArgumentException("All fee amounts must be greater than zero.");
         foreach (var item in r.Items) { Id(item.FeeTypeId, "FeeTypeId"); item.Rule = Text(item.Rule, "Rule"); if (!item.Rule.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) && !item.Rule.Equals("Optional", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Rule must be Mandatory or Optional."); }
         return await _repo.CreateFeeStructureAsync(r);
