@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AutoMapper;
 using ClosedXML.Excel;
@@ -278,19 +279,52 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // Uniqueness Validations for new staff
+            // Email handling: Required for Teaching, optional for Non-Teaching (with fallback system login email)
             if (string.IsNullOrWhiteSpace(dto.Email))
-                throw new ValidationException("Email address is required for staff creation.");
+            {
+                if (string.Equals(staffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(staffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(staffType, "Non Teaching", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cleanEmp = Regex.Replace(employeeId.ToLowerInvariant(), @"[^a-z0-9]", "");
+                    dto.Email = $"{cleanEmp}@college.local";
+                }
+                else
+                {
+                    throw new ValidationException("Email address is required for teaching staff creation.");
+                }
+            }
 
             if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
                 throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
 
-            if (!await _staffRepository.IsEmailUniqueAsync(dto.Email))
-                throw new ConflictException($"Email address '{dto.Email}' is already registered to a staff record.");
+            if (!string.IsNullOrWhiteSpace(dto.Email))
+            {
+                if (!await _staffRepository.IsEmailUniqueAsync(dto.Email))
+                {
+                    if (dto.Email.EndsWith("@college.local", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dto.Email = $"{Regex.Replace(employeeId.ToLowerInvariant(), @"[^a-z0-9]", "")}_{Guid.NewGuid().ToString("N").Substring(0, 4)}@college.local";
+                    }
+                    else
+                    {
+                        throw new ConflictException($"Email address '{dto.Email}' is already registered to a staff record.");
+                    }
+                }
 
-            var existingUser = await _userRepository.GetByEmailAsync(dto.Email.Trim());
-            if (existingUser != null)
-                throw new ConflictException($"Email address '{dto.Email}' is already registered to an existing authentication account.");
+                var existingUser = await _userRepository.GetByEmailAsync(dto.Email.Trim());
+                if (existingUser != null)
+                {
+                    if (dto.Email.EndsWith("@college.local", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dto.Email = $"{Regex.Replace(employeeId.ToLowerInvariant(), @"[^a-z0-9]", "")}_{Guid.NewGuid().ToString("N").Substring(0, 4)}@college.local";
+                    }
+                    else
+                    {
+                        throw new ConflictException($"Email address '{dto.Email}' is already registered to an existing authentication account.");
+                    }
+                }
+            }
 
             if (!await _staffRepository.IsMobileUniqueAsync(dto.Mobile))
                 throw new ConflictException($"Mobile number '{dto.Mobile}' is already registered.");
@@ -448,14 +482,31 @@ namespace CollegeManagement.API.Services.Implementations
             if (existingStaff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
+            var staffType = string.IsNullOrWhiteSpace(dto.StaffType) ? existingStaff.StaffType : dto.StaffType.Trim();
+
+            // Email handling for update
+            if (string.IsNullOrWhiteSpace(dto.Email))
+            {
+                if (string.Equals(staffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(staffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(staffType, "Non Teaching", StringComparison.OrdinalIgnoreCase))
+                {
+                    dto.Email = !string.IsNullOrWhiteSpace(existingStaff.Email) ? existingStaff.Email : $"{Regex.Replace(existingStaff.EmployeeId.ToLowerInvariant(), @"[^a-z0-9]", "")}@college.local";
+                }
+                else
+                {
+                    throw new ValidationException("Email address is required for teaching staff.");
+                }
+            }
+
             // Uniqueness Validations
-            if (!await _staffRepository.IsEmailUniqueAsync(dto.Email, id))
+            if (!string.IsNullOrWhiteSpace(dto.Email) && !await _staffRepository.IsEmailUniqueAsync(dto.Email, id))
                 throw new ConflictException($"Email address '{dto.Email}' is already registered to another staff member.");
 
             var normalizedNewEmail = dto.Email.Trim().ToUpperInvariant();
-            var normalizedOldEmail = existingStaff.Email.Trim().ToUpperInvariant();
+            var normalizedOldEmail = existingStaff.Email?.Trim().ToUpperInvariant() ?? string.Empty;
             bool emailChanged = !string.Equals(normalizedNewEmail, normalizedOldEmail, StringComparison.OrdinalIgnoreCase);
-            if (emailChanged)
+            if (emailChanged && !string.IsNullOrWhiteSpace(dto.Email))
             {
                 var existingUserWithNewEmail = await _userRepository.GetByEmailAsync(normalizedNewEmail);
                 if (existingUserWithNewEmail != null && existingUserWithNewEmail.StaffId != id)
@@ -469,8 +520,6 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (!string.IsNullOrWhiteSpace(dto.Aadhaar) && !await _staffRepository.IsAadhaarUniqueAsync(dto.Aadhaar, id))
                 throw new ConflictException($"Aadhaar number '{dto.Aadhaar}' is already registered to another staff member.");
-
-            var staffType = string.IsNullOrWhiteSpace(dto.StaffType) ? existingStaff.StaffType : dto.StaffType.Trim();
 
             // Department resolution
             int? resolvedDepartmentId = dto.DepartmentId;

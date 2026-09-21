@@ -100,10 +100,6 @@ export default function Login() {
           {busy ? "Signing in..." : "Login"}
         </button>
       </form>
-      <div className="cms-auth-links">
-        <span style={{ color: "var(--cms-muted)" }}>New here?</span>
-        <Link to="/register">Create an account</Link>
-      </div>
     </AuthLayout>
   );
 }

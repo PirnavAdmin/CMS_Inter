@@ -9,7 +9,6 @@ using System.Data;
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
-    [Route("api/v1/transport-operations")]
     [Route("api/v1/transport/operations")]
     [AllowAnonymous]
     public class TransportOperationsController : ControllerBase

@@ -1,7 +1,0 @@
-DROP PROCEDURE IF EXISTS sp_DeleteRoom;
-DELIMITER //
-CREATE PROCEDURE sp_DeleteRoom(IN p_RoomId INT)
-BEGIN
-    DELETE FROM Rooms WHERE RoomId = p_RoomId;
-END //
-DELIMITER ;

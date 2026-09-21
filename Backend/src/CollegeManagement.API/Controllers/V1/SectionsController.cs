@@ -6,9 +6,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
+using Asp.Versioning;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/sections")]
+    [Route("api/v1/sections")]
     [Route("api/v1/[controller]")]
     [Produces("application/json")]
     [Authorize]

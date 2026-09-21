@@ -1,7 +1,21 @@
 .cms-transport-page,
 .cms-transport-stack {
   display: grid;
-  gap: 16px;
+  gap: 6px;
+}
+
+.cms-transport-page .cms-card-head {
+  padding: 10px 16px;
+  min-height: auto;
+}
+
+.cms-transport-page .cms-card-head h2 {
+  margin: 0;
+}
+
+.cms-transport-page .cms-card-head p {
+  margin: 3px 0 0;
+  line-height: 1.35;
 }
 
 .cms-transport-tabs {
@@ -25,6 +39,7 @@
   border-radius: 0;
   background: transparent;
   padding: 0;
+  margin-top: -10px;
 }
 
 .cms-transport-tab {
@@ -187,8 +202,8 @@
 .cms-transport-search {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: min(360px, 100%);
+  gap: 4px;
+  min-width: min(30px, 100%);
   padding: 8px 11px;
   border: 1px solid var(--cms-border);
   border-radius: 10px;
@@ -273,12 +288,138 @@
   background: var(--cms-surface);
 }
 
-.cms-transport-toolbar-actions,
-.cms-transport-actions {
+/* Pickup Points form only: a balanced three-column modal without affecting other Transport forms. */
+.cms-modal.cms-transport-pickup-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-width: 720px;
+  max-height: min(720px, calc(100vh - 32px));
+  border: 1px solid var(--cms-border);
+  border-radius: 18px;
+  box-shadow: var(--cms-shadow-lg);
+}
+
+.cms-transport-pickup-modal .cms-modal-head {
+  min-height: 64px;
+  padding: 16px 22px;
+  align-items: center;
+}
+
+.cms-transport-pickup-modal .cms-modal-body {
+  padding: 20px 22px 22px;
+}
+
+.cms-transport-pickup-modal .cms-form-grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px 16px;
+}
+
+.cms-transport-pickup-modal .cms-field {
+  min-width: 0;
+  gap: 7px;
+}
+
+.cms-transport-pickup-modal .cms-field label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  line-height: 1.3;
+}
+
+.cms-transport-pickup-modal .cms-field label .req {
+  color: var(--cms-danger);
+}
+
+.cms-transport-pickup-modal .cms-field input,
+.cms-transport-pickup-modal .cms-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  height: 42px;
+}
+
+.cms-transport-pickup-modal .cms-modal-foot {
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+}
+
+.cms-transport-pickup-modal .cms-modal-foot .cms-btn {
+  min-width: 104px;
+}
+
+.cms-transport-toolbar-actions {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.cms-transport-actions {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: nowrap !important;
+  width: max-content;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.cms-transport-actions .cms-action-btn {
+  flex: 0 0 34px !important;
+}
+
+.cms-transport-action-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cms-transport-action-loading i {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: cms-transport-action-spin 0.7s linear infinite;
+}
+
+@keyframes cms-transport-action-spin {
+  to { transform: rotate(360deg); }
+}
+
+.cms-transport-toolbar.cms-transport-vehicle-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) max-content max-content;
+  align-items: center;
+  justify-content: stretch;
+  flex-wrap: nowrap;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-search {
+  width: 100%;
+  min-width: 0;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-filters,
+.cms-transport-vehicle-toolbar .cms-transport-toolbar-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-filter {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-filter select {
+  min-width: 150px;
+}
+
+.cms-transport-vehicle-toolbar .cms-transport-toolbar-actions {
+  margin-left: auto;
 }
 
 .cms-transport-report-toolbar {
@@ -350,6 +491,37 @@
 .cms-transport-table td {
   white-space: nowrap;
 }
+
+.cms-transport-table th:last-child,
+.cms-transport-table td:last-child {
+  width: 126px;
+  min-width: 126px;
+}
+
+/* Driver data is kept directly below its matching header at desktop widths. */
+.cms-transport-driver-table {
+  min-width: 980px;
+  table-layout: fixed;
+}
+
+.cms-transport-driver-table th,
+.cms-transport-driver-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cms-transport-driver-table th:nth-child(1),
+.cms-transport-driver-table td:nth-child(1) { width: 12%; }
+.cms-transport-driver-table th:nth-child(2),
+.cms-transport-driver-table td:nth-child(2) { width: 22%; }
+.cms-transport-driver-table th:nth-child(3),
+.cms-transport-driver-table td:nth-child(3) { width: 14%; }
+.cms-transport-driver-table th:nth-child(4),
+.cms-transport-driver-table td:nth-child(4) { width: 18%; }
+.cms-transport-driver-table th:nth-child(5),
+.cms-transport-driver-table td:nth-child(5) { width: 14%; }
+.cms-transport-driver-table th:nth-child(6),
+.cms-transport-driver-table td:nth-child(6) { width: 12%; }
 
 .cms-transport-empty {
   padding: 24px !important;
@@ -636,6 +808,110 @@
   overflow-wrap: anywhere;
 }
 
+/* Shared View Details layout for Transport tables only. */
+.cms-modal.cms-transport-detail-modal {
+  width: min(620px, calc(100vw - 32px));
+  max-width: 620px;
+  border: 1px solid var(--cms-border);
+  border-radius: 16px;
+  box-shadow: var(--cms-shadow-lg);
+}
+
+.cms-transport-detail-modal .cms-modal-head {
+  min-height: 58px;
+  padding: 14px 18px;
+  align-items: center;
+}
+
+.cms-transport-detail-modal .cms-modal-body {
+  padding: 16px 18px 18px;
+}
+
+.cms-transport-detail-table {
+  display: block;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+}
+
+.cms-transport-detail-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 38%) minmax(0, 1fr);
+  min-width: 0;
+}
+
+.cms-transport-detail-row + .cms-transport-detail-row {
+  border-top: 1px solid var(--cms-border);
+}
+
+.cms-transport-detail-row dt,
+.cms-transport-detail-row dd {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 38px;
+  margin: 0;
+  padding: 8px 11px;
+  color: var(--cms-text);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.cms-transport-detail-row dt {
+  background: var(--cms-subtle);
+  border-right: 1px solid var(--cms-border);
+  color: var(--cms-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.cms-transport-detail-row dd {
+  background: var(--cms-surface);
+  font-weight: 500;
+}
+
+.cms-transport-detail-row .cms-badge {
+  flex: 0 0 auto;
+}
+
+.cms-modal.cms-transport-trip-detail-modal .cms-modal-body {
+  padding: 10px 18px 14px;
+}
+
+.cms-transport-trip-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 22px;
+}
+
+.cms-transport-trip-detail-grid > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.cms-transport-trip-detail-grid small {
+  color: var(--cms-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cms-transport-trip-detail-grid strong {
+  color: var(--cms-text);
+  font-size: 13px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.cms-transport-trip-detail-grid .cms-badge {
+  justify-self: start;
+  margin-top: 1px;
+}
+
 .cms-transport-mapline {
   position: relative;
   display: flex;
@@ -695,10 +971,48 @@
 }
 
 @media (max-width: 760px) {
+  .cms-modal.cms-transport-detail-modal {
+    width: calc(100vw - 24px);
+  }
+
+  .cms-transport-detail-modal .cms-modal-head,
+  .cms-transport-detail-modal .cms-modal-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .cms-transport-detail-row {
+    grid-template-columns: minmax(116px, 42%) minmax(0, 1fr);
+  }
+
+  .cms-transport-detail-row dt,
+  .cms-transport-detail-row dd {
+    padding: 8px 9px;
+    font-size: 12px;
+  }
+
+  .cms-modal.cms-transport-pickup-modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .cms-transport-pickup-modal .cms-modal-head,
+  .cms-transport-pickup-modal .cms-modal-body,
+  .cms-transport-pickup-modal .cms-modal-foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .cms-transport-pickup-modal .cms-form-grid.cols-3 {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
   .cms-transport-stat-grid,
   .cms-transport-two-col,
   .cms-transport-gps-grid,
   .cms-transport-info-grid,
+  .cms-transport-trip-detail-grid,
   .cms-transport-trip-list,
   .cms-transport-status-metrics {
     grid-template-columns: 1fr;
@@ -718,6 +1032,23 @@
   }
 
   .cms-transport-report-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .cms-transport-toolbar.cms-transport-vehicle-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .cms-transport-vehicle-toolbar .cms-transport-search,
+  .cms-transport-vehicle-toolbar .cms-transport-filters,
+  .cms-transport-vehicle-toolbar .cms-transport-toolbar-actions {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .cms-transport-vehicle-toolbar .cms-transport-filters,
+  .cms-transport-vehicle-toolbar .cms-transport-toolbar-actions {
     flex-wrap: wrap;
   }
 
@@ -772,3 +1103,4 @@
     justify-content: space-between;
   }
 }
+

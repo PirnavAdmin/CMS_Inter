@@ -251,12 +251,20 @@ export function useForm(fields, initial) {
   return { values, errors, setValue, validate, setValues, setErrors };
 }
 
-export function FormModal({ title, fields, initial, columns = 2, onCancel, onSave }) {
+export function FormModal({ title, fields, initial, columns = 2, onCancel, onSave, awaitSave = false, savingLabel = "Saving...", className = "" }) {
   const { values, errors, setValue, validate } = useForm(fields, initial);
   const [saving, setSaving] = useState(false);
-  const submit = () => {
-    if (!validate()) return;
+  const submit = async () => {
+    if (saving || !validate()) return;
     setSaving(true);
+    if (awaitSave) {
+      try {
+        await onSave(values);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     setTimeout(() => {
       setSaving(false);
       onSave(values);
@@ -265,12 +273,13 @@ export function FormModal({ title, fields, initial, columns = 2, onCancel, onSav
   return (
     <Modal
       title={title}
-      onClose={onCancel}
+      className={className}
+      onClose={awaitSave && saving ? () => {} : onCancel}
       footer={
         <>
           <button className="cms-btn cms-btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button>
           <button className="cms-btn cms-btn-primary" onClick={submit} disabled={saving}>
-            {saving ? "Saving..." : "Save"}
+            {saving ? savingLabel : "Save"}
           </button>
         </>
       }
