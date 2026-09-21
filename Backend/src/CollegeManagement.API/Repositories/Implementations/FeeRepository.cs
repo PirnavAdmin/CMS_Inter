@@ -223,6 +223,17 @@ public class FeeRepository : IFeeRepository
     {
         using var c = Connection();
 
+        if (string.IsNullOrWhiteSpace(request.StructureName))
+        {
+            var existing = await c.QueryFirstOrDefaultAsync<(string? StructureName, string? Description)>(
+                "SELECT StructureName, Description FROM FeeStructures WHERE FeeStructureId = @Id LIMIT 1",
+                new { Id = id });
+            if (!string.IsNullOrWhiteSpace(existing.StructureName))
+                request.StructureName = existing.StructureName;
+            if (string.IsNullOrWhiteSpace(request.Description) && !string.IsNullOrWhiteSpace(existing.Description))
+                request.Description = existing.Description;
+        }
+
         return await c.QueryFirstOrDefaultAsync<FeeStructureResponse>(
             "sp_UpdateFeeStructure",
             new
@@ -462,48 +473,19 @@ public class FeeRepository : IFeeRepository
     {
         using var c = Connection();
 
-        const string sql = @"
-        CALL sp_GetStudentFeeDetailsByStudent(
-            @p_StudentId
-        );";
+        // Resolve studentId: id could be a StudentFeeId or a StudentId directly
+        var studentId = await c.QueryFirstOrDefaultAsync<int?>(
+            "SELECT StudentId FROM StudentFees WHERE StudentFeeId = @Id LIMIT 1",
+            new { Id = id });
 
-        using var multi = await c.QueryMultipleAsync(
-            sql,
-            new
-            {
-                p_StudentId = id
-            });
+        var targetStudentId = studentId ?? id;
 
-        // Result Set 1: Student Fee Summary
-        var result =
-            await multi.ReadFirstOrDefaultAsync<StudentFeeDetailsResponse>();
-
-        if (result == null)
-            return null;
-
-        // Result Set 2: Fee Breakdown
-        result.Breakdown =
-            (await multi.ReadAsync<StudentFeeBreakdownResponse>())
-            .ToList();
-
-        // Result Set 3: Payment Schedules
-        result.Schedules =
-            (await multi.ReadAsync<FeeScheduleResponse>())
-            .ToList();
-
-        return result;
+        return await GetStudentFeeDetailsByStudentAsync(targetStudentId);
     }
 
 
     // =========================================================
     // STUDENT FEE BY STUDENT ID
-    //
-    // IMPORTANT:
-    // sp_GetStudentFeeDetailsByStudent returns ONLY 2 result sets:
-    //
-    // 1. Student fee summary
-    // 2. Student fee components
-    //
     // =========================================================
     public async Task<StudentFeeDetailsResponse?>
     GetStudentFeeDetailsByStudentAsync(int studentId)
@@ -525,15 +507,21 @@ public class FeeRepository : IFeeRepository
         if (studentDetails == null)
             return null;
 
-        // Result Set 2: Fee Breakdown
-        studentDetails.Breakdown =
-            (await multi.ReadAsync<StudentFeeBreakdownResponse>())
-            .ToList();
+        // Result Set 2: Fee Breakdown (safely check if consumed)
+        if (!multi.IsConsumed)
+        {
+            studentDetails.Breakdown =
+                (await multi.ReadAsync<StudentFeeBreakdownResponse>())
+                .ToList();
+        }
 
-        // Result Set 3: Payment Schedules
-        studentDetails.Schedules =
-            (await multi.ReadAsync<FeeScheduleResponse>())
-            .ToList();
+        // Result Set 3: Payment Schedules (safely check if consumed)
+        if (!multi.IsConsumed)
+        {
+            studentDetails.Schedules =
+                (await multi.ReadAsync<FeeScheduleResponse>())
+                .ToList();
+        }
 
         return studentDetails;
     }

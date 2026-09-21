@@ -985,26 +985,42 @@ export default function HostelPage() {
     try {
       const studentId = Number(allocData.studentId);
       if (!studentId || isNaN(studentId) || studentId <= 0) {
-        showToast("Please select a valid enrolled student.", "warning");
+        showToast("Please select a valid registered student from the dropdown list.", "warning");
         return;
       }
 
       const blk = blocks.find((b) => b.name === allocData.blockName || b.code === allocData.blockCode || String(b.id) === String(allocData.hostelId));
-      const hostelId = blk ? blk.id : (blocks[0]?.id || 1);
+      const hostelId = blk ? Number(blk.id) : (Number(blocks[0]?.id) || 1);
       const rm = rooms.find((r) => r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room || String(r.id) === String(allocData.roomId));
-      const roomId = rm ? rm.id : (rooms[0]?.id || 1);
-      const bedId = Number(allocData.bedId);
-      if (!bedId || isNaN(bedId) || bedId <= 0) {
-        showToast("Please select a valid bed number.", "warning");
+      const roomId = rm ? Number(rm.id) : (Number(rooms[0]?.id) || 1);
+
+      // Resolve actual database bed ID for this specific room
+      let actualBedId = allocData.bedId ? Number(allocData.bedId) : null;
+      if (!actualBedId && allocData.bed) {
+        const matchingBed = beds.find(b => String(b.roomId) === String(roomId) && (b.bedNumber === allocData.bed || String(b.id) === String(allocData.bed)));
+        if (matchingBed) actualBedId = Number(matchingBed.id);
+      }
+      if (!actualBedId) {
+        const roomBeds = beds.filter(b => String(b.roomId) === String(roomId));
+        if (roomBeds.length > 0) {
+          actualBedId = Number(roomBeds[0].id);
+        }
+      }
+
+      if (!actualBedId || isNaN(actualBedId) || actualBedId <= 0) {
+        showToast("Please select a valid registered bed for this room.", "warning");
         return;
       }
 
+      const warden = wardens.find(w => String(w.hostelId) === String(hostelId));
+      const wardenAssignmentId = allocData.wardenAssignmentId ? Number(allocData.wardenAssignmentId) : (warden?.id ? Number(warden.id) : null);
+
       const payload = {
-        studentId,
-        hostelId,
-        roomId,
-        bedId,
-        wardenAssignmentId: allocData.wardenAssignmentId || null,
+        studentId: Number(allocData.studentId),
+        hostelId: Number(hostelId),
+        roomId: Number(roomId),
+        bedId: Number(actualBedId),
+        wardenAssignmentId: wardenAssignmentId ? Number(wardenAssignmentId) : null,
         joiningDate: allocData.joinDate ? new Date(allocData.joinDate).toISOString() : new Date().toISOString(),
         status: allocData.status || "Active",
         remarks: allocData.remarks || "Student hostel room allocation",
@@ -1020,6 +1036,7 @@ export default function HostelPage() {
       await refreshAllocations();
       await refreshRooms();
       await refreshBlocks();
+      await refreshBeds();
       await refreshDashboard();
       closeModal();
     } catch (err) {
@@ -1053,23 +1070,34 @@ export default function HostelPage() {
           String(a.studentId) === String(outData.studentId)
       );
       const blk = blocks.find((b) => b.name === outData.blockName || b.code === outData.blockCode || String(b.id) === String(outData.hostelId));
-      const hostelId = blk ? blk.id : (alloc?.hostelId || blocks[0]?.id);
       const rm = rooms.find((r) => r.roomNo === outData.roomNo || r.roomNo === outData.roomNumber || String(r.id) === String(outData.roomId));
-      const roomId = rm ? rm.id : (alloc?.roomId || rooms[0]?.id);
-      const bedId = Number(outData.bedId) || alloc?.bedId;
-      const studentId = Number(outData.studentId) || alloc?.studentId;
+      const hostelId = Number(outData.hostelId || alloc?.hostelId || blk?.id || blocks[0]?.id || 1);
+      const roomId = Number(outData.roomId || alloc?.roomId || rm?.id || rooms[0]?.id || 1);
+      const bedId = Number(outData.bedId || alloc?.bedId);
+      const studentId = Number(outData.studentId || alloc?.studentId);
+      const wardenAssignmentId = outData.wardenAssignmentId ? Number(outData.wardenAssignmentId) : (alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null);
 
       if (!studentId || isNaN(studentId) || studentId <= 0) {
         showToast("Please select an active resident student for outpass.", "warning");
         return;
       }
 
-      const fromIso = outData.departureDate
-        ? new Date(`${outData.departureDate}T09:00:00Z`).toISOString()
-        : new Date().toISOString();
-      const toIso = outData.returnDate
-        ? new Date(`${outData.returnDate}T18:00:00Z`).toISOString()
-        : new Date(Date.now() + 86400000).toISOString();
+      if (!bedId || isNaN(bedId) || bedId <= 0) {
+        showToast("Active bed assignment could not be found for this student.", "warning");
+        return;
+      }
+
+      const parseIso = (val, fallbackOffsetMs = 0) => {
+        if (!val) return new Date(Date.now() + fallbackOffsetMs).toISOString();
+        let d = new Date(val);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        d = new Date(`${val}T09:00:00Z`);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        return new Date(Date.now() + fallbackOffsetMs).toISOString();
+      };
+
+      const fromIso = parseIso(outData.departureDate || outData.outDate || outData.fromDateTime, 0);
+      const toIso = parseIso(outData.returnDate || outData.toDateTime, 14400000);
 
       let reqType = "Outpass";
       const rawType = (outData.requestType || outData.outpassType || "").toLowerCase();
@@ -1084,11 +1112,12 @@ export default function HostelPage() {
         hostelId,
         roomId,
         bedId,
+        wardenAssignmentId,
         requestType: reqType,
         fromDateTime: fromIso,
         toDateTime: toIso,
-        reason: outData.reason || "Outpass permission",
-        destination: outData.destination || "City",
+        reason: outData.reason?.trim() || "Outpass permission request",
+        destination: outData.destination?.trim() || "City",
       };
 
       await hostelApi.createOutpassLeave(payload);
@@ -1279,27 +1308,44 @@ export default function HostelPage() {
       const attDate = attendanceDate ? new Date(`${attendanceDate}T00:00:00Z`).toISOString() : new Date().toISOString();
 
       let savedCount = 0;
+      let lastError = null;
       for (const stId of markedIds) {
         const record = currentMap[stId];
-        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId);
-        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode);
+        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId || String(s.studentId) === String(stId));
+        const alloc = allocations.find((a) => String(a.studentId) === String(student?.studentId) || a.admissionNo === student?.admissionNo || a.admissionNo === stId || String(a.id) === String(stId));
+        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode || String(b.id) === String(alloc?.hostelId));
+
+        const hostelId = Number(alloc?.hostelId || blk?.id || 1);
+        const roomId = Number(alloc?.roomId || student?.roomId || 1);
+        const bedId = Number(alloc?.bedId || student?.bedId || 1);
+        const studentId = Number(alloc?.studentId || student?.studentId || 1);
+        const wardenAssignmentId = alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null;
+
+        const payload = {
+          studentId,
+          hostelId,
+          roomId,
+          bedId,
+          wardenAssignmentId,
+          attendanceDate: attDate,
+          session: sessionLabel,
+          attendanceStatus: record.status || "Present",
+          remarks: record.remarks || `Recorded during ${sessionLabel} session`,
+        };
+
         try {
-          await hostelApi.createAttendance({
-            studentId: Number(student?.studentId) || 1,
-            hostelId: blk ? blk.id : 1,
-            roomId: 1,
-            bedId: 1,
-            attendanceDate: attDate,
-            session: sessionLabel,
-            attendanceStatus: record.status || "Present",
-            remarks: record.remarks || `Recorded during ${sessionLabel} session`,
-          });
+          await hostelApi.createAttendance(payload);
           savedCount++;
         } catch (singleErr) {
           console.warn(`Attendance record failed for student ${stId}:`, singleErr);
+          lastError = singleErr;
         }
       }
-      showToast(`Attendance log saved successfully! (${savedCount} records)`, "success");
+      if (savedCount > 0) {
+        showToast(`Attendance log saved successfully! (${savedCount} records)`, "success");
+      } else if (lastError) {
+        showToast(getApiErrorMessage(lastError), "danger");
+      }
     } catch (err) {
       console.error("Save attendance error:", err);
       showToast(getApiErrorMessage(err), "danger");
@@ -6816,9 +6862,9 @@ export default function HostelPage() {
         });
       }
 
-      // 2. Secondary: candidateAdmissions if studentId exists
+      // 2. Secondary: candidateAdmissions if available
       if (Array.isArray(candidateAdmissions) && candidateAdmissions.length > 0) {
-        candidateAdmissions.forEach((ca) => {
+        candidateAdmissions.forEach((ca, idx) => {
           const sId = ca.studentId;
           if (!sId) return;
           const admNo = ca.admissionNumber || ca.admissionNo || `ADM-${sId}`;
@@ -6828,11 +6874,12 @@ export default function HostelPage() {
           if (!isAllocated && !seen.has(String(sId))) {
             seen.add(String(sId));
             list.push({
+              key: `cand-${sId}-${admNo}-${idx}`,
               id: sId,
               studentId: sId,
               name: fullName,
               admissionNo: admNo,
-              className: ca.courseName || ca.branchName || "Admitted Student",
+              className: ca.courseName || ca.branchName || ca.className || "Admitted Student",
               gender: ca.gender || "",
               contact: ca.contactNumber || ca.mobileNumber || "",
             });
@@ -6843,6 +6890,7 @@ export default function HostelPage() {
       // 3. Fallback for edit mode: keep currently selected student
       if (modal.mode === "edit" && modal.data?.studentId && !seen.has(String(modal.data.studentId))) {
         list.push({
+          key: `alloc-edit-${modal.data.studentId}`,
           id: modal.data.studentId,
           studentId: modal.data.studentId,
           name: modal.data.studentName || `Student #${modal.data.studentId}`,
@@ -6953,7 +7001,7 @@ export default function HostelPage() {
                   onFocus={() => setIsStudentDropdownOpen(true)}
                   onChange={(e) => {
                     setStudentSearch(e.target.value);
-                    setForm({ ...form, studentName: e.target.value });
+                    setForm({ ...form, studentName: e.target.value, studentId: null });
                     setIsStudentDropdownOpen(true);
                   }}
                   onBlur={() => {
@@ -6974,13 +7022,13 @@ export default function HostelPage() {
                       No matching student found. Type name to assign.
                     </div>
                   ) : (
-                    filteredCandidates.map((st) => (
+                    filteredCandidates.map((st, idx) => (
                       <div
-                        key={st.id}
+                        key={st.key || `st-cand-${st.id || st.admissionNo || idx}`}
                         onMouseDown={() => {
                           setForm({
                             ...form,
-                            studentId: st.studentId,
+                            studentId: st.studentId || st.id,
                             studentName: st.name,
                             admissionNo: st.admissionNo,
                           });
@@ -7026,8 +7074,8 @@ export default function HostelPage() {
                   style={{ color: form.blockName ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="">Select Hostel Block</option>
-                  {blocks.map((b) => (
-                    <option key={b.id} value={b.name}>
+                  {blocks.map((b, idx) => (
+                    <option key={b.id || b.code || b.name || `blk-${idx}`} value={b.name}>
                       {b.name}
                     </option>
                   ))}
@@ -7051,10 +7099,10 @@ export default function HostelPage() {
                     value={form.room}
                     onChange={(e) => {
                       const selRoomNo = e.target.value;
-                      const selRoom = availableRooms.find(r => r.roomNo === selRoomNo || `Room #${r.roomNo}` === selRoomNo);
+                      const selRoom = availableRooms.find(r => r.roomNo === selRoomNo || `Room #${r.roomNo}` === selRoomNo || String(r.id) === String(selRoomNo));
                       setForm({
                         ...form,
-                        room: selRoomNo,
+                        room: selRoom ? selRoom.roomNo : selRoomNo,
                         roomId: selRoom ? selRoom.id : form.roomId,
                         bed: "",
                         bedId: null,
@@ -7068,8 +7116,8 @@ export default function HostelPage() {
                     ) : (
                       <>
                         <option value="">Select Room...</option>
-                        {availableRooms.map((rm) => (
-                          <option key={rm.id || rm.roomNo} value={rm.roomNo}>
+                        {availableRooms.map((rm, idx) => (
+                          <option key={rm.id || rm.roomNo || `rm-${idx}`} value={rm.roomNo}>
                             Room #{rm.roomNo} {rm.type ? `(${rm.type})` : ""}
                           </option>
                         ))}
@@ -7093,10 +7141,10 @@ export default function HostelPage() {
                     value={form.bed}
                     onChange={(e) => {
                       const selBedNum = e.target.value;
-                      const bd = availableBeds.find(b => b.bedNumber === selBedNum);
+                      const bd = availableBeds.find(b => b.bedNumber === selBedNum || String(b.id) === String(selBedNum));
                       setForm({
                         ...form,
-                        bed: selBedNum,
+                        bed: bd ? bd.bedNumber : selBedNum,
                         bedId: bd ? bd.id : null,
                       });
                     }}
@@ -7106,12 +7154,12 @@ export default function HostelPage() {
                     {!form.room ? (
                       <option value="">Select Room first...</option>
                     ) : availableBeds.length === 0 ? (
-                      <option value="">No beds available in this room</option>
+                      <option value="" disabled>No available beds registered for this room</option>
                     ) : (
                       <>
                         <option value="">Select Bed Number...</option>
-                        {availableBeds.map((bd) => (
-                          <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
+                        {availableBeds.map((bd, idx) => (
+                          <option key={bd.id || bd.bedNumber || `bd-${idx}`} value={bd.bedNumber}>
                             {bd.bedNumber} ({bd.bedStatus || "Available"})
                           </option>
                         ))}
@@ -7239,6 +7287,7 @@ export default function HostelPage() {
             roomId: a.roomId,
             bed: a.bed,
             bedId: a.bedId,
+            wardenAssignmentId: a.wardenAssignmentId,
           });
         }
       });
@@ -7247,8 +7296,12 @@ export default function HostelPage() {
 
     const handleSubmit = (e) => {
       e.preventDefault();
+      if (!selectedStudentId) {
+        showToast("Please select a registered resident student", "error");
+        return;
+      }
       const studentObj = studentCandidates.find(
-        (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId
+        (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId)
       );
 
       if (!studentObj) {
@@ -7266,12 +7319,14 @@ export default function HostelPage() {
         roomNo: studentObj.room,
         roomNumber: studentObj.room,
         bedId: studentObj.bedId,
+        wardenAssignmentId: studentObj.wardenAssignmentId,
         outpassType: outpassCategory,
         requestType: outpassCategory,
-        departureDate: departureDateTime || new Date().toISOString().split("T")[0],
-        outDate: departureDateTime || new Date().toISOString().split("T")[0],
-        returnDate: returnDateTime || new Date().toISOString().split("T")[0],
-        reason: reason,
+        departureDate: departureDateTime || new Date().toISOString().slice(0, 16),
+        outDate: departureDateTime || new Date().toISOString().slice(0, 16),
+        returnDate: returnDateTime || new Date(Date.now() + 14400000).toISOString().slice(0, 16),
+        reason: reason || "Outpass permission request",
+        destination: "City",
       });
     };
 

@@ -136,5 +136,15 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public decimal? PreviousPercentage { get; set; }
 
         public int? PreviousYearOfPassing { get; set; }
+
+        // Residential & Transport Allocation
+        public string? StudentType { get; set; }
+        public string? TransportRequired { get; set; }
+        public string? BusRoute { get; set; }
+        public string? PickupPoint { get; set; }
+        public string? HostelBlock { get; set; }
+        public string? HostelRoom { get; set; }
+        public string? HostelBed { get; set; }
+        public string? HallTicketNumber { get; set; }
     }
 }

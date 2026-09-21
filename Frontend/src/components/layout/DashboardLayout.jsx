@@ -63,6 +63,8 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/settings/audit-logs", icon: settingsAuditLogsIcon },
   { path: "/dashboard/designations", icon: generatedSidebarIcons.department },
   { path: "/dashboard/promotions", icon: promotionIcon },
+  { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
+  { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -158,6 +160,7 @@ export const menu = [
     section: "Finance",
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
+      { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
     ],
   },
   {

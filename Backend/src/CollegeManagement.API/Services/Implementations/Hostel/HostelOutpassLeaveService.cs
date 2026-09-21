@@ -1,4 +1,4 @@
-using CollegeManagement.API.DTOs.Hostel;
+﻿using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
@@ -646,23 +646,16 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 return null;
             }
 
-            var trimmed = requestType.Trim();
-
-            if (trimmed.Equals(
+            if (requestType.Equals(
                     "Outpass",
-                    StringComparison.OrdinalIgnoreCase) ||
-                trimmed.IndexOf("Outpass", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                trimmed.IndexOf("Local", StringComparison.OrdinalIgnoreCase) >= 0)
+                    StringComparison.OrdinalIgnoreCase))
             {
                 return "Outpass";
             }
 
-            if (trimmed.Equals(
+            if (requestType.Equals(
                     "Leave",
-                    StringComparison.OrdinalIgnoreCase) ||
-                trimmed.IndexOf("Leave", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                trimmed.IndexOf("Home", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                trimmed.IndexOf("Emergency", StringComparison.OrdinalIgnoreCase) >= 0)
+                    StringComparison.OrdinalIgnoreCase))
             {
                 return "Leave";
             }

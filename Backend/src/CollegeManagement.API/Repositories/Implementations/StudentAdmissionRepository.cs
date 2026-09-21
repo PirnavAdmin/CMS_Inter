@@ -215,6 +215,51 @@ namespace CollegeManagement.API.Repositories.Implementations
                     "Student admission could not be created.");
             }
 
+            if (result.AdmissionId > 0 && (
+                !string.IsNullOrWhiteSpace(request.StudentType) ||
+                !string.IsNullOrWhiteSpace(request.TransportRequired) ||
+                !string.IsNullOrWhiteSpace(request.BusRoute) ||
+                !string.IsNullOrWhiteSpace(request.PickupPoint) ||
+                !string.IsNullOrWhiteSpace(request.HostelBlock) ||
+                !string.IsNullOrWhiteSpace(request.HostelRoom) ||
+                !string.IsNullOrWhiteSpace(request.HostelBed) ||
+                !string.IsNullOrWhiteSpace(request.HallTicketNumber)))
+            {
+                const string updateSql = @"
+                    UPDATE StudentAdmissions
+                    SET StudentType = COALESCE(@StudentType, StudentType),
+                        TransportRequired = COALESCE(@TransportRequired, TransportRequired),
+                        BusRoute = COALESCE(@BusRoute, BusRoute),
+                        PickupPoint = COALESCE(@PickupPoint, PickupPoint),
+                        HostelBlock = COALESCE(@HostelBlock, HostelBlock),
+                        HostelRoom = COALESCE(@HostelRoom, HostelRoom),
+                        HostelBed = COALESCE(@HostelBed, HostelBed),
+                        HallTicketNumber = COALESCE(@HallTicketNumber, HallTicketNumber)
+                    WHERE AdmissionId = @AdmissionId";
+
+                await connection.ExecuteAsync(updateSql, new
+                {
+                    AdmissionId = result.AdmissionId,
+                    request.StudentType,
+                    request.TransportRequired,
+                    request.BusRoute,
+                    request.PickupPoint,
+                    request.HostelBlock,
+                    request.HostelRoom,
+                    request.HostelBed,
+                    request.HallTicketNumber
+                });
+
+                result.StudentType = request.StudentType;
+                result.TransportRequired = request.TransportRequired;
+                result.BusRoute = request.BusRoute;
+                result.PickupPoint = request.PickupPoint;
+                result.HostelBlock = request.HostelBlock;
+                result.HostelRoom = request.HostelRoom;
+                result.HostelBed = request.HostelBed;
+                result.HallTicketNumber = request.HallTicketNumber;
+            }
+
             return result;
         }
 
@@ -229,7 +274,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var connection = _context.Database.GetDbConnection();
 
-            return await connection
+            var result = await connection
                 .QueryFirstOrDefaultAsync<StudentAdmissionResponseDto>(
                     "sp_UpdateStudentAdmission",
                     new
@@ -414,6 +459,45 @@ namespace CollegeManagement.API.Repositories.Implementations
                             request.SecondLanguage
                     },
                     commandType: CommandType.StoredProcedure);
+
+            if (result != null)
+            {
+                const string updateSql = @"
+                    UPDATE StudentAdmissions
+                    SET StudentType = COALESCE(@StudentType, StudentType),
+                        TransportRequired = COALESCE(@TransportRequired, TransportRequired),
+                        BusRoute = COALESCE(@BusRoute, BusRoute),
+                        PickupPoint = COALESCE(@PickupPoint, PickupPoint),
+                        HostelBlock = COALESCE(@HostelBlock, HostelBlock),
+                        HostelRoom = COALESCE(@HostelRoom, HostelRoom),
+                        HostelBed = COALESCE(@HostelBed, HostelBed),
+                        HallTicketNumber = COALESCE(@HallTicketNumber, HallTicketNumber)
+                    WHERE AdmissionId = @AdmissionId";
+
+                await connection.ExecuteAsync(updateSql, new
+                {
+                    AdmissionId = admissionId,
+                    request.StudentType,
+                    request.TransportRequired,
+                    request.BusRoute,
+                    request.PickupPoint,
+                    request.HostelBlock,
+                    request.HostelRoom,
+                    request.HostelBed,
+                    request.HallTicketNumber
+                });
+
+                result.StudentType = request.StudentType ?? result.StudentType;
+                result.TransportRequired = request.TransportRequired ?? result.TransportRequired;
+                result.BusRoute = request.BusRoute ?? result.BusRoute;
+                result.PickupPoint = request.PickupPoint ?? result.PickupPoint;
+                result.HostelBlock = request.HostelBlock ?? result.HostelBlock;
+                result.HostelRoom = request.HostelRoom ?? result.HostelRoom;
+                result.HostelBed = request.HostelBed ?? result.HostelBed;
+                result.HallTicketNumber = request.HallTicketNumber ?? result.HallTicketNumber;
+            }
+
+            return result;
         }
 
 
