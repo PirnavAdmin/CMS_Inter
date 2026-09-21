@@ -143,7 +143,7 @@ function AttendanceImportModal({ staff, say, onClose }) {
   </div></Modal>;
 }
 
-function useOptions(staff) { const [o, setO] = useState({}); useEffect(() => { if (!staff) return undefined; let mounted = true; const calls = [apiEndpoints.departments.getAll, apiEndpoints.faculty.list]; Promise.allSettled(calls.map((url) => apiClient.get(url))).then((rs) => { if (!mounted) return; const values = rs.map((r) => r.status === "fulfilled" ? asList(body(r.value)) : []); setO({ departments: values[0], faculty: values[1] }); }); return () => { mounted = false; }; }, [staff]); return o; }
+function useOptions(staff, boardId) { const [o, setO] = useState({}); useEffect(() => { if (!staff) return undefined; let mounted = true; const calls = [apiEndpoints.departments.getAll, boardId ? `${apiEndpoints.faculty.list}?boardId=${boardId}` : apiEndpoints.faculty.list]; Promise.allSettled(calls.map((url) => apiClient.get(url))).then((rs) => { if (!mounted) return; const values = rs.map((r) => r.status === "fulfilled" ? asList(body(r.value)) : []); setO({ departments: values[0], faculty: values[1] }); }); return () => { mounted = false; }; }, [staff, boardId]); return o; }
 
 function useStudentOptions(boardId, academicYearId, levelId, groupId, programId) {
   const [options, setOptions] = useState({ levels: [], groups: [], programs: [], sections: [], loadingLevels: false, loadingGroups: false, loadingPrograms: false, loadingSections: false });
@@ -258,7 +258,7 @@ function Screen({ staff = false, say }) {
  const [dirty, setDirty] = useState(false);
  const initialAcademicContext = useRef(`${staff}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
- const staffOptions = useOptions(staff), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
+ const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
  const options = staff ? staffOptions : studentOptions;
 
  const update = (key) => (e) => {
@@ -277,12 +277,15 @@ function Screen({ staff = false, say }) {
    if (initialAcademicContext.current === currentAcademicContext) return;
    initialAcademicContext.current = currentAcademicContext;
    if (!staff) setF((old) => ({ ...old, level: "", group: "", program: "", section: "" }));
+   if (loaded) {
+     load();
+   }
  }, [staff, navbarBoardId, navbarAcademicYearId]);
 
  const monthParams = () => {
    const [year, month] = f.date.slice(0, 7).split("-");
    return staff
-     ? { month: Number(month), year: Number(year), academicYearId: num(navbarAcademicYearId), departmentId: num(f.department), staffType: staffType(f.type), ...(f.person ? { facultyId: num(f.person) } : {}) }
+     ? { month: Number(month), year: Number(year), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), departmentId: num(f.department), staffType: staffType(f.type), ...(f.person ? { facultyId: num(f.person) } : {}) }
      : { month: Number(month), year: Number(year), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), academicLevelId: num(f.level), groupId: num(f.group), sectionId: num(f.section), ...(f.program ? { programId: num(f.program) } : {}) };
  };
 
@@ -315,6 +318,7 @@ function Screen({ staff = false, say }) {
      } else if (staff) {
        const r = await apiClient.post(apiEndpoints.staffAttendance.load, {
          date: f.date,
+         boardId: num(navbarBoardId),
          academicYearId: num(navbarAcademicYearId),
          departmentId: num(f.department),
          staffType: staffType(f.type),

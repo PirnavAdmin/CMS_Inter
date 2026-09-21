@@ -159,33 +159,27 @@ public class ReportRepository : IReportRepository
 
         // 4. Fee Collection (Valid payments from FeePayments joined with Students)
         var feeQuery = _context.FeePayments.AsNoTracking().Where(p => p.Status != "Cancelled" && p.Status != "Failed");
-        if (f.BoardId.HasValue && f.BoardId.Value > 0 || f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0 || f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0 || f.GroupId.HasValue && f.GroupId.Value > 0 || f.SectionId.HasValue && f.SectionId.Value > 0)
-        {
-            feeQuery = feeQuery.Where(p => _context.Students.Any(s => s.StudentId == p.StudentId 
-                && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
-                && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
-                && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
-                && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
-                && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
-            ));
-        }
+        feeQuery = feeQuery.Where(p => _context.Students.Any(s => s.StudentId == p.StudentId && s.IsActive
+            && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
+            && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
+            && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
+            && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
+            && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
+        ));
         if (fromDate.HasValue) feeQuery = feeQuery.Where(p => p.PaymentDate >= fromDate.Value);
         if (toDate.HasValue) feeQuery = feeQuery.Where(p => p.PaymentDate <= toDate.Value);
         decimal feeCollected = 0;
         try { feeCollected = await feeQuery.SumAsync(p => p.Amount, ct); } catch { }
 
-        // 5. Due Fees (Outstanding from StudentFees joined with Students)
+        // 5. Due Fees (Outstanding from StudentFees joined with Active Enrolled Students)
         var dueQuery = _context.StudentFees.AsNoTracking().Where(sf => sf.Status != "Cancelled" && sf.BalanceAmount > 0);
-        if (f.BoardId.HasValue && f.BoardId.Value > 0 || f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0 || f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0 || f.GroupId.HasValue && f.GroupId.Value > 0 || f.SectionId.HasValue && f.SectionId.Value > 0)
-        {
-            dueQuery = dueQuery.Where(sf => _context.Students.Any(s => s.StudentId == sf.StudentId 
-                && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
-                && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
-                && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
-                && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
-                && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
-            ));
-        }
+        dueQuery = dueQuery.Where(sf => _context.Students.Any(s => s.StudentId == sf.StudentId && s.IsActive
+            && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
+            && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
+            && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
+            && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
+            && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
+        ));
         decimal dueFees = 0;
         try { dueFees = await dueQuery.SumAsync(sf => sf.BalanceAmount, ct); } catch { }
 
@@ -199,7 +193,7 @@ public class ReportRepository : IReportRepository
         if (toDate.HasValue) examQuery = examQuery.Where(e => e.EndDate <= DateOnly.FromDateTime(toDate.Value));
         var examsCount = await examQuery.CountAsync(ct);
 
-        // 7. Results Published (Distinct student-exam results published)
+        // 7. Results Published (Published results count)
         var resQuery = _context.Results.AsNoTracking().Where(r => r.IsPublished);
         if (f.BoardId.HasValue && f.BoardId.Value > 0) resQuery = resQuery.Where(r => r.BoardId == f.BoardId.Value);
         if (f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0) resQuery = resQuery.Where(r => r.AcademicYearId == f.AcademicYearId.Value);
@@ -210,7 +204,7 @@ public class ReportRepository : IReportRepository
         if (toDate.HasValue) resQuery = resQuery.Where(r => r.PublishedDate <= toDate.Value);
 
         var rawResults = await resQuery.Select(r => new { r.StudentId, r.ExamId, r.ResultStatus, r.TotalMarks }).ToListAsync(ct);
-        var resultsPublished = rawResults.Select(r => new { r.StudentId, r.ExamId }).Distinct().Count();
+        var resultsPublished = rawResults.Count;
 
         // 8. Pass Percentage (Holistic student evaluation: Passed all subjects in exam)
         var studentExamGroup = rawResults
@@ -577,16 +571,13 @@ public class ReportRepository : IReportRepository
             var query = _context.FeePayments.AsNoTracking()
                 .Where(p => p.Status != "Cancelled" && p.Status != "Failed");
 
-            if (f.BoardId.HasValue && f.BoardId.Value > 0 || f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0 || f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0 || f.GroupId.HasValue && f.GroupId.Value > 0 || f.SectionId.HasValue && f.SectionId.Value > 0)
-            {
-                query = query.Where(p => _context.Students.Any(s => s.StudentId == p.StudentId 
-                    && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
-                    && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
-                    && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
-                    && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
-                    && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
-                ));
-            }
+            query = query.Where(p => _context.Students.Any(s => s.StudentId == p.StudentId && s.IsActive
+                && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
+                && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
+                && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
+                && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
+                && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
+            ));
             if (fromDate.HasValue) query = query.Where(p => p.PaymentDate >= fromDate.Value);
             if (toDate.HasValue) query = query.Where(p => p.PaymentDate <= toDate.Value);
 
@@ -646,16 +637,13 @@ public class ReportRepository : IReportRepository
             var query = _context.StudentFees.AsNoTracking()
                 .Where(sf => sf.Status != "Cancelled" && sf.BalanceAmount > 0);
 
-            if (f.BoardId.HasValue && f.BoardId.Value > 0 || f.AcademicYearId.HasValue && f.AcademicYearId.Value > 0 || f.AcademicLevelId.HasValue && f.AcademicLevelId.Value > 0 || f.GroupId.HasValue && f.GroupId.Value > 0 || f.SectionId.HasValue && f.SectionId.Value > 0)
-            {
-                query = query.Where(sf => _context.Students.Any(s => s.StudentId == sf.StudentId 
-                    && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
-                    && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
-                    && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
-                    && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
-                    && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
-                ));
-            }
+            query = query.Where(sf => _context.Students.Any(s => s.StudentId == sf.StudentId && s.IsActive
+                && (!f.BoardId.HasValue || f.BoardId.Value <= 0 || s.BoardId == f.BoardId.Value)
+                && (!f.AcademicYearId.HasValue || f.AcademicYearId.Value <= 0 || s.AcademicYearId == f.AcademicYearId.Value)
+                && (!f.AcademicLevelId.HasValue || f.AcademicLevelId.Value <= 0 || s.AcademicLevelId == f.AcademicLevelId.Value)
+                && (!f.GroupId.HasValue || f.GroupId.Value <= 0 || s.GroupId == f.GroupId.Value)
+                && (!f.SectionId.HasValue || f.SectionId.Value <= 0 || s.SectionId == f.SectionId.Value)
+            ));
 
             var list = await query.OrderByDescending(sf => sf.BalanceAmount).ToListAsync(ct);
             if (!list.Any()) return Array.Empty<OutstandingFeeReportDto>();

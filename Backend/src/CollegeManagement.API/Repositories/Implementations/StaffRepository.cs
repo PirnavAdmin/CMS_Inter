@@ -362,7 +362,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var prefix = isTeaching ? "PCTCH" : "PCNT";
 
-            // Find maximum existing sequential numeric suffix for the staff type
+            // Find maximum existing sequential numeric suffix for the specific staff prefix
             var existingStaff = await _context.Staffs
                 .Where(s => !s.IsDeleted)
                 .Select(s => new { s.EmployeeId, s.StaffType })
@@ -371,9 +371,19 @@ namespace CollegeManagement.API.Repositories.Implementations
             int maxNumber = 0;
             foreach (var s in existingStaff)
             {
-                var id = s.EmployeeId?.Trim() ?? string.Empty;
+                var id = (s.EmployeeId ?? string.Empty).Trim().ToUpperInvariant();
                 var currentIsTeaching = !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-                if (currentIsTeaching == isTeaching || id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+
+                // Priority 1: Exact prefix match e.g. PCNT0031, PCTCH0056, PCNTCH0029, PJCTCH0022
+                if (id.StartsWith(prefix))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(id, @"\d+");
+                    if (match.Success && int.TryParse(match.Value, out int parsedNum) && parsedNum > maxNumber && parsedNum < 100000)
+                    {
+                        maxNumber = parsedNum;
+                    }
+                }
+                else if (currentIsTeaching == isTeaching && (id.StartsWith("PJCTCH") || id.StartsWith("PJCNTCH") || id.StartsWith("PCNTCH")))
                 {
                     var match = System.Text.RegularExpressions.Regex.Match(id, @"\d+");
                     if (match.Success && int.TryParse(match.Value, out int parsedNum) && parsedNum > maxNumber && parsedNum < 100000)
@@ -399,9 +409,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var activeStaff = await query.ToListAsync();
 
-            var totalStaff = activeStaff.Count;
-            var teachingStaff = activeStaff.Count(s => !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));
-            var nonTeachingStaff = activeStaff.Count(s => string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));
+            var totalStaff = activeStaff.Count(s => s.Status == "Active" || string.IsNullOrEmpty(s.Status));
+            var teachingStaff = activeStaff.Count(s => (s.Status == "Active" || string.IsNullOrEmpty(s.Status)) && !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));
+            var nonTeachingStaff = activeStaff.Count(s => (s.Status == "Active" || string.IsNullOrEmpty(s.Status)) && string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase));
             
             var completedCount = activeStaff.Count(s => string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase));
             var pendingCount = totalStaff - completedCount;
