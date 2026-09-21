@@ -17,6 +17,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> PublishSectionResultsAsync(int sectionId, int examId, DateTime? publishDate = null);
         Task<bool> PublishGroupResultsAsync(int groupId, int examId, DateTime? publishDate = null);
         Task<bool> PublishResultsAsync(PublishResultRequestDto request);
+        Task<IEnumerable<PublishedExamResultGroupDto>> GetPublishedResultsAsync(int? boardId = null, int? academicYearId = null, int? groupId = null);
 
         // --- Student Self-Service Portal ---
         Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId);
