@@ -698,6 +698,7 @@ export const TEACHING_ROLE_NAMES = [
 ];
 
 export const NON_TEACHING_ROLE_NAMES = [
+  "Attendant",
   "Cleaner",
   "Driver",
   "Hostel Warden",
@@ -1024,8 +1025,9 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             zIndex: 99999,
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
             border: "1px solid var(--cms-border, #d1d5db)",
-            maxHeight: "220px",
+            maxHeight: "180px",
             overflowY: "auto",
+            scrollbarWidth: "thin",
           }}
         >
           {filteredOpts.length > 0 ? (
@@ -1605,16 +1607,14 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
         }
       }
 
-      // Driver's License Number
+      // Driver's License Number (All-India Standard Length: 15-16 alphanumeric characters)
       if (name === "drivingLicenseNumber") {
         const cleanDL = strVal.toUpperCase().replace(/[-/\s]/g, "");
         if (cleanDL.length > 0) {
-          if (/^\d+$/.test(cleanDL)) {
-            newErrors[name] = "Driving License must start with 2-letter State code (e.g. AP00720240007772)";
-          } else if (cleanDL.length < 15 || cleanDL.length > 16) {
-            newErrors[name] = "Driving License must be 15 to 16 characters (e.g. AP00720240007772)";
-          } else if (!/^[A-Z]{2}[A-Z0-9]{13,14}$/.test(cleanDL)) {
-            newErrors[name] = "Invalid format. Standard format: State(2) + RTO/Year/Number (e.g. AP00720240007772)";
+          if (cleanDL.length < 15 || cleanDL.length > 16) {
+            newErrors[name] = "Driving License Number must be 15 to 16 characters";
+          } else if (!/^[A-Z0-9]{15,16}$/.test(cleanDL)) {
+            newErrors[name] = "Driving License Number must contain only letters and numbers";
           }
         }
       }
@@ -1971,10 +1971,7 @@ function Field({
     inputMaxLength = 16;
   }
 
-  const isDLField = name === "drivingLicenseNumber" || name === "drivingLicence";
-  const placeholderText = isDLField
-    ? "e.g. AP09 20210001234"
-    : undefined;
+  const placeholderText = undefined;
 
   const fileAccept = type === "file"
     ? (name.toLowerCase().includes("photo") || name === "signature" ? "image/jpeg,image/png,image/webp" : ".pdf,application/pdf")
@@ -2190,15 +2187,8 @@ function Field({
           max={maxDate}
           style={errorStyle}
         />
-      )}{" "}
-      {name === "employeeId" ? (
-        <small className="field-help" style={{ display: "block", marginTop: 4, fontSize: 11, color: "var(--cms-muted)" }}>
-          Generated using ID &amp; Number Series Settings.{" "}
-          <Link to="/dashboard/settings/number-series" style={{ color: "var(--cms-primary)", textDecoration: "underline" }}>
-            Manage Number Series
-          </Link>
-        </small>
-      ) : error ? (
+      )}
+      {error ? (
         <small className="field-error" style={{ color: "#ef4444", fontSize: 11, display: "block", marginTop: 4, fontWeight: 500 }}>{error}</small>
       ) : null}
     </label>
@@ -2428,9 +2418,9 @@ function Dashboard({ records = [] }) {
 
   const hasStats = stats !== null && stats !== undefined;
 
-  const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.length || 0));
-  const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => r?.staffType === "Teaching").length || 0));
-  const nonTeachingCount = loading ? "—" : (hasStats ? (stats.nonTeachingStaff ?? 0) : (safeRecords.filter((r) => r?.staffType === "Non-Teaching").length || 0));
+  const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.filter((r) => !r?.status || r?.status === "Active").length || 0));
+  const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Teaching").length || 0));
+  const nonTeachingCount = loading ? "—" : (hasStats ? (stats.nonTeachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Non-Teaching").length || 0));
   const completedCount = loading ? "—" : (hasStats ? (stats.completedProfiles ?? stats.completed ?? 0) : (safeRecords.filter((r) => r?.profileStatus === "Completed").length || 0));
   const pendingCount = loading ? "—" : (hasStats ? (stats.pendingProfileCompletion ?? stats.pending ?? 0) : (typeof totalCount === "number" ? Math.max(0, totalCount - completedCount) : 0));
   const pct = typeof totalCount === "number" && totalCount > 0 && typeof completedCount === "number" ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -4139,6 +4129,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
       }
     }
 
+<<<<<<< HEAD
     return nextErrors;
   };
 
@@ -4177,6 +4168,33 @@ function NonTeachingForm({ records, setRecords, existing }) {
 
     const fullName = [basic.firstName, basic.middleName, basic.lastName].filter(Boolean).join(" ") || basic.employeeId || "Non-Teaching Staff";
     const resolvedCode = basic.boardCode || resolveBoardCode({ board: basic.board, boardName: basic.boardName }, boards);
+=======
+    // ── Duplicate Driving License Number check ──────────────────────────────
+    if (isTransport && values.drivingLicenseNumber) {
+      const enteredDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const currentId = existing?.id || existing?.employeeId || null;
+      const duplicate = (Array.isArray(records) ? records : []).find((r) => {
+        // Skip self when editing
+        const rId = r?.id || r?.employeeId;
+        if (currentId && String(rId) === String(currentId)) return false;
+        const rDL = String(r?.drivingLicenseNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        return rDL.length > 0 && rDL === enteredDL;
+      });
+      if (duplicate) {
+        const dupName = [duplicate.firstName, duplicate.middleName, duplicate.lastName].filter(Boolean).join(" ") || duplicate.employeeId || "another staff member";
+        setErrors({ drivingLicenseNumber: `This Driving License Number is already registered under ${dupName}.` });
+        setToast(`Driving License '${values.drivingLicenseNumber}' is already registered under ${dupName}. Please verify.`);
+        setStep(2);
+        return;
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
+    const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
+    const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
+    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
+>>>>>>> 020f0f7f8d89939e0d9837efa677283bfabf2e33
 
     const payload = {
       ...basic,
@@ -4329,6 +4347,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 />
               ))}
             </div>
+<<<<<<< HEAD
             <footer>
               <button type="button" className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff")}>
                 Cancel
@@ -4446,6 +4465,23 @@ function NonTeachingForm({ records, setRecords, existing }) {
             </div>
             <footer>
               <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(0)}>
+=======
+          ) : (
+            <Summary
+              record={{
+                ...values,
+                fullName: [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" "),
+              }}
+              groups={labels.slice(0, labels.length - 1).map((label, index) => [label, getNonTeachingStepFields(index, values)])}
+              onSave={(updatedRecord) => {
+                setValues((prev) => ({ ...prev, ...updatedRecord }));
+              }}
+            />
+          )}
+          <footer>
+            {step ? (
+              <button className="cms-btn cms-btn-ghost" onClick={() => setStep((s) => s - 1)}>
+>>>>>>> 020f0f7f8d89939e0d9837efa677283bfabf2e33
                 <ChevronLeft /> Previous
               </button>
               <button type="submit" className="cms-btn cms-btn-primary">
@@ -5921,7 +5957,23 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     department: ["select", defaultDepartments],
   };
 
-  const renderFieldInput = (key, label) => {
+  const renderFieldInput = (key, label, fieldSpec) => {
+    // fieldSpec = [name, label, type, opts, required, layoutClass?]
+    const specType = fieldSpec?.[2];
+    const specOpts = Array.isArray(fieldSpec?.[3]) && fieldSpec[3].length > 0 ? fieldSpec[3] : null;
+
+    // File fields — read-only display in preview inline edit
+    if (specType === "file") {
+      const rawVal = formData[key] !== undefined ? formData[key] : record[key];
+      const val = rawVal === null || rawVal === undefined ? "" : String(rawVal).trim();
+      return (
+        <span style={{ fontSize: 11, color: val ? "var(--cms-primary, #355e3b)" : "var(--cms-muted)", fontStyle: val ? "normal" : "italic" }}>
+          {val || "No file uploaded"}
+        </span>
+      );
+    }
+
+    // Subject allocation
     if (key === "allocatedSubjects" || key === "subjects") {
       const currentVal = formData.allocatedSubjects || formData.subjects || record.allocatedSubjects || record.subjects || [];
       return (
@@ -5932,22 +5984,39 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         />
       );
     }
-    const config = fieldTypes[key] || ["text"];
-    const [type, options] = config;
+
     const rawVal = formData[key] !== undefined ? formData[key] : record[key];
     const val = rawVal === null || rawVal === undefined ? "" : rawVal;
 
+    // search-select → SearchSelectInput
+    if (specType === "search-select") {
+      const opts = specOpts || [];
+      return (
+        <SearchSelectInput
+          label={label}
+          opts={opts}
+          value={String(val)}
+          onChange={(v) => setFormData((prev) => ({ ...prev, [key]: v }))}
+        />
+      );
+    }
+
+    // Determine type/options from fieldSpec or fieldTypes fallback
+    const config = (specType && specType !== "text" && specType !== "search-select")
+      ? [specType, specOpts]
+      : (fieldTypes[key] || ["text"]);
+    const [type, options] = config;
+
     if (type === "select") {
+      const opts = specOpts || options || [];
       return (
         <select
           value={val}
           onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
         >
           <option value="">Select {label}</option>
-          {(options || []).map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
+          {opts.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
       );
@@ -5962,8 +6031,9 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     }
     return (
       <input
-        type={type}
+        type={type === "date" ? "date" : type === "email" ? "email" : "text"}
         value={val}
+        readOnly={key === "employeeId"}
         onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
       />
     );
@@ -6078,7 +6148,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                   <p key={key}>
                     <span>{label}</span>
                     {isEditing ? (
-                      renderFieldInput(key, label)
+                      renderFieldInput(key, label, Array.isArray(field) ? field : null)
                     ) : (
                       <strong>
                         {key === "allocatedSubjects" || key === "subjects" ? (

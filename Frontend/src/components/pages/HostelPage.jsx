@@ -164,6 +164,7 @@ export default function HostelPage() {
   const [beds, setBeds] = useState([]);
   const [candidateStaff, setCandidateStaff] = useState([]);
   const [candidateAdmissions, setCandidateAdmissions] = useState([]);
+  const [candidateStudents, setCandidateStudents] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
@@ -326,7 +327,7 @@ export default function HostelPage() {
     setIsLoading(true);
     setApiError(null);
     try {
-      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes] = await Promise.allSettled([
+      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes, studentsRes] = await Promise.allSettled([
         hostelApi.getHostelBlocks(),
         hostelApi.getRoomTypes(),
         hostelApi.getRooms(),
@@ -7445,8 +7446,8 @@ export default function HostelPage() {
                 >
                   <option value="">Select Student...</option>
                   {studentCandidates.map((st) => (
-                    <option key={st.admissionNo} value={st.admissionNo}>
-                      {st.name} ({st.admissionNo})
+                    <option key={st.studentId} value={String(st.studentId)}>
+                      {st.name} ({st.admissionNo || `ID: ${st.studentId}`}) — {st.blockName || ""} {st.room ? `Room ${st.room}` : ""}
                     </option>
                   ))}
                 </select>
@@ -7553,7 +7554,7 @@ export default function HostelPage() {
   const TransferModal = () => {
     const isView = modal.mode === "view";
     const [selectedStudentId, setSelectedStudentId] = useState(
-      modal.data?.admissionNo || ""
+      modal.data?.studentId ? String(modal.data.studentId) : (modal.data?.admissionNo || "")
     );
     const [actionType, setActionType] = useState(
       modal.data?.actionType || modal.data?.requestType || "Room Transfer (Change Room/Block)"
@@ -7576,8 +7577,8 @@ export default function HostelPage() {
     const residentStudents = useMemo(() => {
       const map = new Map();
       allocations.forEach((a) => {
-        if (a.status !== "Vacated") {
-          map.set(a.admissionNo || a.id, {
+        if (a.status === "Active" && a.studentId) {
+          map.set(String(a.studentId), {
             id: a.id,
             allocationId: a.id,
             studentId: a.studentId,
