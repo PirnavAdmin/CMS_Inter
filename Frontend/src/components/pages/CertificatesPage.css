@@ -3070,6 +3070,14 @@
   align-items: flex-end;
 }
 
+.visual-certificate-canvas .certificate-signature {
+  height: 42px;
+  max-width: 140px;
+  object-fit: contain;
+  margin-bottom: 2px;
+  display: block;
+}
+
 .visual-certificate-canvas .sig-handwritten {
   font-family: 'Dancing Script', 'Brush Script MT', cursive;
   font-size: 17px;
@@ -3081,5 +3089,10 @@
   font-size: 11.5px;
   color: #1e293b;
   font-weight: 700;
+}
+
+.visual-certificate-canvas .cert-sig-line small {
+  font-size: 9.5px;
+  color: #64748b;
 }
 

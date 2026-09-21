@@ -905,6 +905,20 @@ public class DashboardRepository : IDashboardRepository
                     cIdx++;
                 }
 
+                var latestAttTime = await conn.ExecuteScalarAsync<DateTime?>(@"
+                    SELECT MAX(COALESCE(a.UpdatedAt, a.CreatedAt))
+                    FROM `Attendances` a
+                    INNER JOIN `Students` s ON a.StudentId = s.StudentId
+                    WHERE DATE(a.AttendanceDate) = @targetDate
+                      AND (a.IsActive = 1 OR a.IsActive IS NULL)
+                      AND (@academicYearId IS NULL OR s.AcademicYearId = @academicYearId)
+                      AND (@boardId IS NULL OR s.BoardId = @boardId);",
+                    new { targetDate = dateVal.ToString("yyyy-MM-dd"), academicYearId, boardId });
+
+                string formattedLastUpdated = latestAttTime.HasValue
+                    ? $"Today, {latestAttTime.Value.AddHours(5.5):hh:mm tt}"
+                    : "Not marked today";
+
                 return new StudentsAttendanceTodayResponseDto
                 {
                     ViewBy = selectedView,
@@ -916,7 +930,7 @@ public class DashboardRepository : IDashboardRepository
                     PresentPercentage = presentPct,
                     AbsentPercentage = absentPct,
                     HalfDayPercentage = halfDayPct,
-                    LastUpdated = $"Today, {DateTime.Now:hh:mm tt}",
+                    LastUpdated = formattedLastUpdated,
                     Breakdown = breakdown
                 };
             }
@@ -1158,6 +1172,20 @@ public class DashboardRepository : IDashboardRepository
             }
         }
 
+        var latestInlineAttTime = await conn.ExecuteScalarAsync<DateTime?>(@"
+            SELECT MAX(COALESCE(a.UpdatedAt, a.CreatedAt))
+            FROM `Attendances` a
+            INNER JOIN `Students` s ON a.StudentId = s.StudentId
+            WHERE DATE(a.AttendanceDate) = @todayStr
+              AND (a.IsActive = 1 OR a.IsActive IS NULL)
+              AND (@academicYearId IS NULL OR s.AcademicYearId = @academicYearId)
+              AND (@boardId IS NULL OR s.BoardId = @boardId);",
+            new { todayStr, academicYearId, boardId });
+
+        string formattedInlineLastUpdated = latestInlineAttTime.HasValue
+            ? $"Today, {latestInlineAttTime.Value.AddHours(5.5):hh:mm tt}"
+            : "Not marked today";
+
         return new StudentsAttendanceTodayResponseDto
         {
             ViewBy = selectedView,
@@ -1171,7 +1199,7 @@ public class DashboardRepository : IDashboardRepository
             AbsentPercentage = abPct,
             LatePercentage = lPct,
             HalfDayPercentage = lPct,
-            LastUpdated = $"Today, {DateTime.Now:hh:mm tt}",
+            LastUpdated = formattedInlineLastUpdated,
             Breakdown = bkList
         };
     }
@@ -1217,8 +1245,24 @@ public class DashboardRepository : IDashboardRepository
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
-            if (staffAtt != null)
+            if (staffAtt != null && staffAtt.TotalStaff > 0)
             {
+                var latestStaffAttTime = await conn.ExecuteScalarAsync<DateTime?>(@"
+                    SELECT MAX(COALESCE(sa.UpdatedAt, sa.CreatedAt, sas.UpdatedAt, sas.CreatedAt))
+                    FROM `StaffAttendances` sa
+                    INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+                    INNER JOIN `Staff` st ON sa.FacultyId = st.Id
+                    WHERE DATE(sas.AttendanceDate) = @targetDate
+                      AND (sa.IsActive = 1 OR sa.IsActive IS NULL)
+                      AND (sas.IsActive = 1 OR sas.IsActive IS NULL)
+                      AND (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+                      AND (@boardId IS NULL OR st.BoardId = @boardId);",
+                    new { targetDate = dateVal.ToString("yyyy-MM-dd"), boardId });
+
+                staffAtt.LastUpdated = latestStaffAttTime.HasValue
+                    ? $"Today, {latestStaffAttTime.Value.AddHours(5.5):hh:mm tt}"
+                    : "Not marked today";
+
                 return staffAtt;
             }
         }
@@ -1229,99 +1273,110 @@ public class DashboardRepository : IDashboardRepository
 
         var todayStr = dateVal.ToString("yyyy-MM-dd");
 
-        int totalStaff = await conn.ExecuteScalarAsync<int>(@"
-            SELECT COUNT(*) FROM Staff st
-            WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
-              AND (st.Status = 'Active' OR st.Status IS NULL);");
-
         int teachingCount = await conn.ExecuteScalarAsync<int>(@"
-            SELECT COUNT(*) FROM Staff st
+            SELECT COUNT(*) FROM `Staff` st
             WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
               AND (st.Status = 'Active' OR st.Status IS NULL)
-              AND (st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'Teaching' OR st.StaffType IS NULL);");
+              AND (@boardId IS NULL OR st.BoardId = @boardId)
+              AND (st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR st.StaffType IS NULL OR LOWER(st.StaffType) NOT LIKE '%non%');",
+            new { boardId });
 
         int nonTeachingCount = await conn.ExecuteScalarAsync<int>(@"
-            SELECT COUNT(*) FROM Staff st
+            SELECT COUNT(*) FROM `Staff` st
             WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
               AND (st.Status = 'Active' OR st.Status IS NULL)
-              AND (st.StaffType = 'Non-Teaching' OR st.StaffType = 'NonTeaching' OR st.StaffType = 'Non Teaching' OR REPLACE(REPLACE(COALESCE(st.StaffType, ''), '-', ''), ' ', '') = 'NonTeaching');");
-        int present = 0, absent = 0, late = 0, onLeave = 0;
+              AND (@boardId IS NULL OR st.BoardId = @boardId)
+              AND (LOWER(st.StaffType) LIKE '%non%');",
+            new { boardId });
 
-        try
+        int totalStaff = teachingCount + nonTeachingCount;
+
+        var stats = await conn.QueryFirstOrDefaultAsync<dynamic>(@"
+            SELECT 
+                COUNT(DISTINCT st.Id) AS FilteredTotal,
+                COUNT(DISTINCT CASE WHEN att.Status = 1 OR att.Status = 'Present' OR att.Status = '1' THEN st.Id END) AS Present,
+                COUNT(DISTINCT CASE WHEN att.Status = 2 OR att.Status = 'Absent' OR att.Status = '2' THEN st.Id END) AS ExplicitAbsent,
+                COUNT(DISTINCT CASE WHEN att.Status = 3 OR att.Status = 'Late' OR att.Status = '3' THEN st.Id END) AS Late,
+                COUNT(DISTINCT CASE WHEN att.Status = 4 OR att.Status = 'Leave' OR att.Status = '4' OR slr.StaffLeaveRequestId IS NOT NULL THEN st.Id END) AS OnLeave
+            FROM `Staff` st
+            LEFT JOIN (
+                SELECT sa2.FacultyId, sa2.Status
+                FROM `StaffAttendances` sa2
+                JOIN `StaffAttendanceSessions` sas2 ON sa2.StaffSessionId = sas2.StaffSessionId
+                WHERE DATE(sas2.AttendanceDate) = @todayStr
+                  AND (sa2.IsActive = 1 OR sa2.IsActive IS NULL)
+                  AND (sas2.IsActive = 1 OR sas2.IsActive IS NULL)
+            ) att ON st.Id = att.FacultyId
+            LEFT JOIN `StaffLeaveRequests` slr ON (
+                slr.StaffId = st.Id 
+                AND (slr.IsActive = 1 OR slr.IsActive IS NULL)
+                AND slr.Status = 'Approved' 
+                AND DATE(slr.StartDate) <= @todayStr 
+                AND DATE(slr.EndDate) >= @todayStr
+            )
+            WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+              AND (st.Status = 'Active' OR st.Status IS NULL)
+              AND (@boardId IS NULL OR st.BoardId = @boardId)
+              AND (
+                  LOWER(@selectedType) IN ('all', 'all staff')
+                  OR (LOWER(@selectedType) IN ('teaching', 'teaching staff') AND (st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR st.StaffType IS NULL OR LOWER(st.StaffType) NOT LIKE '%non%'))
+                  OR (LOWER(@selectedType) IN ('non-teaching', 'non-teaching staff', 'nonteaching', 'nonteaching staff') AND (LOWER(st.StaffType) LIKE '%non%'))
+              );",
+            new { boardId, todayStr, selectedType });
+
+        int present = 0, explicitAbsent = 0, late = 0, onLeave = 0, filteredTotal = 0;
+        if (stats != null)
         {
-            var attSession = await conn.QueryFirstOrDefaultAsync<dynamic>(@"
-                SELECT 
-                    COALESCE(SUM(sas.PresentCount), 0) AS PresentCount,
-                    COALESCE(SUM(sas.AbsentCount), 0) AS AbsentCount,
-                    COALESCE(SUM(sas.LateCount), 0) AS LateCount,
-                    COALESCE(SUM(sas.LeaveCount), 0) AS LeaveCount
-                FROM `StaffAttendanceSessions` sas
-                WHERE DATE(sas.AttendanceDate) = @todayStr
-                  AND (sas.IsActive = 1 OR sas.IsActive IS NULL)
-                  AND (
-                      LOWER(@selectedType) IN ('all', 'all staff')
-                      OR (LOWER(@selectedType) IN ('teaching', 'teaching staff') AND (sas.StaffType = 1 OR sas.StaffType = 'Teaching' OR sas.StaffType = '1'))
-                      OR (LOWER(@selectedType) IN ('non-teaching', 'non-teaching staff', 'nonteaching', 'nonteaching staff') AND (sas.StaffType = 2 OR sas.StaffType = 'Non-Teaching' OR sas.StaffType = '2'))
-                  );",
-                new { todayStr, selectedType });
-
-            if (attSession != null)
-            {
-                var dict = (IDictionary<string, object>)attSession;
-                if (dict.TryGetValue("PresentCount", out var p) && p != null) present = Convert.ToInt32(p);
-                if (dict.TryGetValue("AbsentCount", out var a) && a != null) absent = Convert.ToInt32(a);
-                if (dict.TryGetValue("LateCount", out var l) && l != null) late = Convert.ToInt32(l);
-                if (dict.TryGetValue("LeaveCount", out var lv) && lv != null) onLeave = Convert.ToInt32(lv);
-            }
-        }
-        catch { }
-
-        try
-        {
-            var leavesToday = await conn.ExecuteScalarAsync<int>(@"
-                SELECT COUNT(*) FROM `StaffLeaveRequests`
-                WHERE (IsActive = 1 OR IsActive IS NULL)
-                  AND Status = 'Approved'
-                  AND DATE(StartDate) <= @todayStr AND DATE(EndDate) >= @todayStr;",
-                new { todayStr });
-
-            if (leavesToday > onLeave) onLeave = leavesToday;
-        }
-        catch { }
-
-        int filteredTotal = totalStaff;
-        if (string.Equals(selectedType, "Teaching Staff", StringComparison.OrdinalIgnoreCase) || string.Equals(selectedType, "Teaching", StringComparison.OrdinalIgnoreCase))
-        {
-            filteredTotal = teachingCount;
-        }
-        else if (string.Equals(selectedType, "Non-Teaching Staff", StringComparison.OrdinalIgnoreCase) || string.Equals(selectedType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) || string.Equals(selectedType, "NonTeaching", StringComparison.OrdinalIgnoreCase))
-        {
-            filteredTotal = nonTeachingCount;
+            var dict = (IDictionary<string, object>)stats;
+            if (dict.TryGetValue("FilteredTotal", out var ft) && ft != null) filteredTotal = Convert.ToInt32(ft);
+            if (dict.TryGetValue("Present", out var p) && p != null) present = Convert.ToInt32(p);
+            if (dict.TryGetValue("ExplicitAbsent", out var ea) && ea != null) explicitAbsent = Convert.ToInt32(ea);
+            if (dict.TryGetValue("Late", out var l) && l != null) late = Convert.ToInt32(l);
+            if (dict.TryGetValue("OnLeave", out var ol) && ol != null) onLeave = Convert.ToInt32(ol);
         }
 
-        int normalizedPresent = filteredTotal > 0 ? Math.Min(present, filteredTotal) : present;
-        int normalizedLate = filteredTotal > 0 ? Math.Min(late, Math.Max(0, filteredTotal - normalizedPresent)) : late;
-        int normalizedOnLeave = filteredTotal > 0 ? Math.Min(onLeave, Math.Max(0, filteredTotal - normalizedPresent - normalizedLate)) : onLeave;
-        int normalizedAbsent = filteredTotal > 0 ? Math.Max(0, filteredTotal - normalizedPresent - normalizedLate - normalizedOnLeave) : 0;
+        int hasSession = await conn.ExecuteScalarAsync<int>(@"
+            SELECT COUNT(*) FROM `StaffAttendanceSessions`
+            WHERE DATE(AttendanceDate) = @todayStr AND (IsActive = 1 OR IsActive IS NULL);",
+            new { todayStr });
 
-        decimal presentPct = filteredTotal > 0 ? Math.Min(100.0m, Math.Round(((decimal)normalizedPresent + 0.5m * (decimal)normalizedLate) * 100m / filteredTotal, 1)) : 0m;
-        decimal absentPct = filteredTotal > 0 ? Math.Round((decimal)normalizedAbsent * 100m / filteredTotal, 1) : 0m;
-        decimal latePct = filteredTotal > 0 ? Math.Round((decimal)normalizedLate * 100m / filteredTotal, 1) : 0m;
-        decimal leavePct = filteredTotal > 0 ? Math.Round((decimal)normalizedOnLeave * 100m / filteredTotal, 1) : 0m;
+        int absent = Math.Max(0, filteredTotal - present - late - onLeave);
+
+        decimal presentPct = filteredTotal > 0 ? Math.Min(100.0m, Math.Round(((decimal)present + 0.5m * (decimal)late) * 100m / filteredTotal, 1)) : 0m;
+        decimal absentPct = filteredTotal > 0 ? Math.Round((decimal)absent * 100m / filteredTotal, 1) : 0m;
+        decimal latePct = filteredTotal > 0 ? Math.Round((decimal)late * 100m / filteredTotal, 1) : 0m;
+        decimal leavePct = filteredTotal > 0 ? Math.Round((decimal)onLeave * 100m / filteredTotal, 1) : 0m;
+
+        var latestStaffAttTimeFallback = await conn.ExecuteScalarAsync<DateTime?>(@"
+            SELECT MAX(COALESCE(sa.UpdatedAt, sa.CreatedAt, sas.UpdatedAt, sas.CreatedAt))
+            FROM `StaffAttendances` sa
+            INNER JOIN `StaffAttendanceSessions` sas ON sa.StaffSessionId = sas.StaffSessionId
+            INNER JOIN `Staff` st ON sa.FacultyId = st.Id
+            WHERE DATE(sas.AttendanceDate) = @todayStr
+              AND (sa.IsActive = 1 OR sa.IsActive IS NULL)
+              AND (sas.IsActive = 1 OR sas.IsActive IS NULL)
+              AND (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+              AND (@boardId IS NULL OR st.BoardId = @boardId);",
+            new { todayStr, boardId });
+
+        string formattedStaffLastUpdated = latestStaffAttTimeFallback.HasValue
+            ? $"Today, {latestStaffAttTimeFallback.Value.AddHours(5.5):hh:mm tt}"
+            : "Not marked today";
 
         return new StaffAttendanceTodayResponseDto
         {
             StaffType = selectedType,
             TotalStaff = filteredTotal,
-            Present = normalizedPresent,
-            Absent = normalizedAbsent,
-            Late = normalizedLate,
-            OnLeave = normalizedOnLeave,
+            Present = present,
+            Absent = absent,
+            Late = late,
+            OnLeave = onLeave,
             AttendancePercentage = presentPct,
             PresentPercentage = presentPct,
             AbsentPercentage = absentPct,
             LatePercentage = latePct,
             OnLeavePercentage = leavePct,
+            LastUpdated = formattedStaffLastUpdated,
             TeachingCount = teachingCount,
             NonTeachingCount = nonTeachingCount
         };

@@ -14,9 +14,10 @@ export const heroSlides = [
 
 export const heroCopy = {
   title: "Pirnav College",
-  headline: "Smart College Management. Simple. Connected.",
+  institutionName: "Pirnav College Of Intermediate",
+  headline: "Pirnav College Of Intermediate",
   subtitle:
-    "Manage academics, students, faculty, examinations, and administration from one centralized platform.",
+    "“Empowering young minds with academic excellence, ethical values, and a strong foundation for a bright future.”",
 };
 
 

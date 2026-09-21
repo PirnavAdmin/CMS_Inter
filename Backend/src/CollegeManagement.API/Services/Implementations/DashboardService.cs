@@ -54,9 +54,9 @@ public class DashboardService : IDashboardService
         return await _repository.GetStudentAttendanceAsync(boardId, academicYearId, null, viewBy, ct);
     }
 
-    public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, CancellationToken ct = default)
+    public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, DateTime? date = null, CancellationToken ct = default)
     {
-        return await _repository.GetStaffAttendanceAsync(boardId, null, staffType, ct);
+        return await _repository.GetStaffAttendanceAsync(boardId, date, staffType, ct);
     }
 
     public async Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(int? academicYearId, int? boardId, DateTime? date, CancellationToken ct = default)

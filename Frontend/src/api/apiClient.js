@@ -149,6 +149,11 @@ apiClient.interceptors.response.use(
     finishApiLoading(error.config);
     const originalRequest = error.config;
 
+    // Gracefully ignore aborted/canceled component cleanup requests
+    if (axios.isCancel(error) || error?.name === "CanceledError" || error?.code === "ERR_CANCELED") {
+      return Promise.reject(error);
+    }
+
     if (import.meta.env.DEV) {
       console.error("API response error:", {
         url: originalRequest?.url,

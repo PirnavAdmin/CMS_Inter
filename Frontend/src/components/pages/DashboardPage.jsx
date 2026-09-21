@@ -219,6 +219,21 @@ function EmptyState({ message = "No data available." }) {
   );
 }
 
+function CustomDonutTooltip({ active, payload }) {
+  if (active && payload && payload.length) {
+    const data = payload[0];
+    const dotColor = data.payload?.color || data.color || "#22a447";
+    return (
+      <div className="dashboard-custom-donut-tooltip">
+        <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
+        <span className="tooltip-name">{data.name}:</span>
+        <span className="tooltip-val">{formatNumber(data.value)}</span>
+      </div>
+    );
+  }
+  return null;
+}
+
 function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, rawPctKeys) {
   const cardObj = summaryData?.[cardKey] || summaryData?.[`${cardKey}Card`] || summaryData?.[`${cardKey}Metric`];
   
@@ -454,9 +469,9 @@ export default function DashboardPage() {
       };
       const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
       if (studentAttSeq.current === seq) {
-        const now = new Date();
-        const timeStr = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }).format(now);
-        setStudentAttState({ loading: false, error: null, data: unwrap(res.data), timestamp: `Today, ${timeStr}` });
+        const unwrapped = unwrap(res.data);
+        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        setStudentAttState({ loading: false, error: null, data: unwrapped, timestamp: serverTime || "Not marked today" });
       }
     } catch (err) {
       if (studentAttSeq.current === seq) {
@@ -482,19 +497,20 @@ export default function DashboardPage() {
       const params = {
         ...(boardId ? { boardId } : {}),
         staffType: staffTypeVal,
+        date: todayDate,
       };
       const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
       if (staffAttSeq.current === seq) {
-        const now = new Date();
-        const timeStr = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }).format(now);
-        setStaffAttState({ loading: false, error: null, data: unwrap(res.data), timestamp: `Today, ${timeStr}` });
+        const unwrapped = unwrap(res.data);
+        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        setStaffAttState({ loading: false, error: null, data: unwrapped, timestamp: serverTime || "Not marked today" });
       }
     } catch (err) {
       if (staffAttSeq.current === seq) {
         setStaffAttState((prev) => ({ ...prev, loading: false, error: getApiErrorMessage(err, "Failed to load staff attendance"), data: null }));
       }
     }
-  }, [boardId, staffType]);
+  }, [boardId, staffType, todayDate]);
 
   // 6. GET /api/v1/dashboard/upcoming-holidays (with fallback to /api/v1/holidays)
   const fetchUpcomingHolidays = useCallback(async () => {
@@ -880,7 +896,7 @@ export default function DashboardPage() {
     const halfDay = metric(data, ["halfDay", "halfDayCount", "halfDays", "late", "lateCount"]);
     const percentage = metric(data, ["percentage", "attendancePercentage"]);
 
-    const chartData = data.chartData || [
+    const chartData = [
       { name: "Present", value: present ?? 0, color: "#22a447" },
       { name: "Absent", value: absent ?? 0, color: "#ef4444" },
       { name: "Half-day", value: halfDay ?? 0, color: "#f59e0b" },
@@ -895,19 +911,27 @@ export default function DashboardPage() {
   const staffAttData = useMemo(() => {
     const data = staffAttState.data || {};
     const total = metric(data, ["total", "totalStaff", "totalCount"]);
-    const present = metric(data, ["present", "presentCount"]);
-    const absent = metric(data, ["absent", "absentCount"]);
-    const late = metric(data, ["late", "lateCount"]);
-    const onLeave = metric(data, ["onLeave", "onLeaveCount", "leaveCount"]);
-    const percentage = metric(data, ["percentage", "attendancePercentage"]);
+    const present = metric(data, ["present", "presentCount"]) ?? 0;
+    let absent = metric(data, ["absent", "absentCount"]);
+    const late = metric(data, ["late", "lateCount"]) ?? 0;
+    const onLeave = metric(data, ["onLeave", "onLeaveCount", "leaveCount"]) ?? 0;
+    const percentage = metric(data, ["percentage", "attendancePercentage"]) ?? 0;
     const teachingCount = metric(data, ["teachingCount", "teachingStaffCount"]);
     const nonTeachingCount = metric(data, ["nonTeachingCount", "nonTeachingStaffCount"]);
 
-    const chartData = data.chartData || [
-      { name: "Present", value: present ?? 0, color: "#22a447" },
-      { name: "Absent", value: absent ?? 0, color: "#ef4444" },
-      { name: "Late", value: late ?? 0, color: "#f59e0b" },
-      { name: "On Leave", value: onLeave ?? 0, color: "#7c3aed" },
+    const numTotal = Number(total ?? 0);
+    // When attendance is not marked today (all 0s) or absent is missing, calculate absent = total - present - late - onLeave
+    if ((absent === undefined || absent === null || (present === 0 && absent === 0 && late === 0 && onLeave === 0)) && numTotal > 0) {
+      absent = Math.max(0, numTotal - present - late - onLeave);
+    } else {
+      absent = Number(absent ?? 0);
+    }
+
+    const chartData = [
+      { name: "Present", value: present, color: "#22a447" },
+      { name: "Absent", value: absent, color: "#ef4444" },
+      { name: "Late", value: late, color: "#f59e0b" },
+      { name: "On Leave", value: onLeave, color: "#7c3aed" },
     ];
 
     return { total, present, absent, late, onLeave, percentage, teachingCount, nonTeachingCount, chartData };
@@ -950,12 +974,37 @@ export default function DashboardPage() {
   const examsList = useMemo(() => {
     const raw = examState.data?.items || examState.data?.examinations || (Array.isArray(examState.data) ? examState.data : []);
     if (!Array.isArray(raw)) return [];
-    return raw.map((item, idx) => ({
-      id: item.id || idx,
-      name: item.name || item.examName || "Examination",
-      context: item.context || item.dateRange || item.groupName || "",
-      badge: item.badge || item.daysLeft || item.status || "",
-    }));
+    return raw.map((item, idx) => {
+      const name = item.examName || item.name || item.title || "Examination";
+      const examCode = item.examCode || item.code || "";
+      const groupName = item.groupName || item.academicLevelName || "";
+      const dateText = item.formattedDate || item.dateRange || item.date || item.startDate || "";
+      const badgeRaw = item.daysRemainingText || item.badge || item.daysLeft || item.status || "Upcoming";
+      
+      const badge = String(badgeRaw).replace(/(\d+)\s+days/i, "$1 Days");
+      const isOngoing = String(badge).toLowerCase().includes("ongoing");
+      const isToday = String(badge).toLowerCase().includes("today");
+
+      let tone = "blue";
+      if (isOngoing || isToday) tone = "green";
+      else if (idx % 2 === 1) tone = "violet";
+      else tone = "blue";
+
+      const typeTag = isOngoing ? "ONGOING EXAM" : (examCode ? examCode : "EXAM");
+      const context = item.context || (groupName && dateText ? `${groupName} • ${dateText}` : dateText || groupName || "Scheduled");
+
+      return {
+        id: item.id || item.examId || idx,
+        name,
+        examCode,
+        typeTag,
+        groupName,
+        dateText,
+        context,
+        badge,
+        tone,
+      };
+    });
   }, [examState.data]);
 
   const greeting = greetingForHour(currentHour);
@@ -969,7 +1018,7 @@ export default function DashboardPage() {
             <h1 className="dashboard-greeting-title">
               <span className="dashboard-greeting-emoji">{greeting.icon}</span> {greeting.message}, Admin!
             </h1>
-            <p className="dashboard-greeting-sub">Here's what's happening in your institution today.</p>
+            <p className="dashboard-greeting-sub">Here's what's happening in your college today.</p>
           </div>
           <div className="dashboard-header-controls">
             <div className="dashboard-last-updated-badge">
@@ -1036,8 +1085,8 @@ export default function DashboardPage() {
                 <div className="dashboard-area-chart-container">
                   {/* Fixed Y-Axis column (pinned on the left) */}
                   <div className="dashboard-area-chart-yaxis" style={{ width: yMax >= 1000 ? 40 : yMax >= 100 ? 34 : 28, flexShrink: 0 }}>
-                    <ResponsiveContainer width="100%" height={135}>
-                      <AreaChart data={overviewChartData} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
+                    <ResponsiveContainer width="100%" height={142}>
+                      <AreaChart data={overviewChartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
                         <YAxis
                           width={yMax >= 1000 ? 36 : yMax >= 100 ? 30 : 24}
                           domain={[0, yMax]}
@@ -1066,11 +1115,11 @@ export default function DashboardPage() {
                       style={{
                         width: overviewChartData.length > 5 ? `${Math.round((overviewChartData.length / 5) * 100)}%` : "100%",
                         minWidth: "100%",
-                        height: 135,
+                        height: 142,
                       }}
                     >
-                      <ResponsiveContainer width="100%" height={135}>
-                        <AreaChart data={overviewChartData} margin={{ top: 10, right: 32, left: 32, bottom: 0 }}>
+                      <ResponsiveContainer width="100%" height={142}>
+                        <AreaChart data={overviewChartData} margin={{ top: 8, right: 32, left: 32, bottom: 0 }}>
                           <defs>
                             <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
@@ -1188,26 +1237,37 @@ export default function DashboardPage() {
                     <EmptyState message="No student attendance data available for today." />
                   ) : (
                     <>
-                      {/* Donut Chart & Legend */}
+                      {/* Donut Chart & Side Status Legend (Centered Together) */}
                       <div className="dashboard-attendance-donut-row">
                         <div className="dashboard-donut-chart-wrap">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
-                                data={studentAttData.chartData}
+                                data={
+                                  studentAttData.chartData.some((d) => d.value > 0)
+                                    ? studentAttData.chartData.filter((d) => d.value > 0)
+                                    : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                }
                                 dataKey="value"
                                 nameKey="name"
                                 innerRadius="65%"
                                 outerRadius="90%"
-                                paddingAngle={3}
+                                paddingAngle={studentAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
                                 stroke="var(--cms-surface)"
                                 strokeWidth={2}
                               >
-                                {studentAttData.chartData.map((entry) => (
+                                {(studentAttData.chartData.some((d) => d.value > 0)
+                                  ? studentAttData.chartData.filter((d) => d.value > 0)
+                                  : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                ).map((entry) => (
                                   <Cell key={entry.name} fill={entry.color} />
                                 ))}
                               </Pie>
-                              <Tooltip formatter={(val) => [formatNumber(val), "Students"]} />
+                              <Tooltip
+                                content={<CustomDonutTooltip />}
+                                wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
+                                allowEscapeViewBox={{ x: true, y: true }}
+                              />
                             </PieChart>
                           </ResponsiveContainer>
                           <div className="dashboard-donut-center">
@@ -1221,24 +1281,15 @@ export default function DashboardPage() {
                             <span className="legend-label">
                               <span className="dot dot-present" /> Present
                             </span>
-                            <span className="legend-val">
-                              <strong>{formatNumber(studentAttData.present)}</strong> <small>({studentAttData.percentage ?? 0}%)</small>
-                            </span>
                           </div>
                           <div className="legend-item">
                             <span className="legend-label">
                               <span className="dot dot-absent" /> Absent
                             </span>
-                            <span className="legend-val">
-                              <strong>{formatNumber(studentAttData.absent)}</strong>
-                            </span>
                           </div>
                           <div className="legend-item">
                             <span className="legend-label">
-                              <span className="dot dot-halfday dot-late" /> Half-day
-                            </span>
-                            <span className="legend-val">
-                              <strong>{formatNumber(studentAttData.halfDay)}</strong>
+                              <span className="dot dot-halfday" /> Half-day
                             </span>
                           </div>
                         </div>
@@ -1262,7 +1313,7 @@ export default function DashboardPage() {
                           <small>Half-day</small>
                           <strong>{formatNumber(studentAttData.halfDay)}</strong>
                         </div>
-                        <div className="att-kpi-chip text-primary">
+                        <div className="att-kpi-chip">
                           <small>Attendance</small>
                           <strong>{formatNumber(studentAttData.percentage)}%</strong>
                         </div>
@@ -1337,26 +1388,37 @@ export default function DashboardPage() {
               <EmptyState message="No staff attendance data available for today." />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
-                {/* Donut Chart & Legend */}
+                {/* Donut Chart & Side Status Legend (Centered Together) */}
                 <div className="dashboard-attendance-donut-row">
                   <div className="dashboard-donut-chart-wrap">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={staffAttData.chartData}
+                          data={
+                            staffAttData.chartData.some((d) => d.value > 0)
+                              ? staffAttData.chartData.filter((d) => d.value > 0)
+                              : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                          }
                           dataKey="value"
                           nameKey="name"
                           innerRadius="65%"
                           outerRadius="90%"
-                          paddingAngle={3}
+                          paddingAngle={staffAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
                           stroke="var(--cms-surface)"
                           strokeWidth={2}
                         >
-                          {staffAttData.chartData.map((entry) => (
+                          {(staffAttData.chartData.some((d) => d.value > 0)
+                            ? staffAttData.chartData.filter((d) => d.value > 0)
+                            : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                          ).map((entry) => (
                             <Cell key={entry.name} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(val) => [formatNumber(val), "Staff"]} />
+                        <Tooltip
+                          content={<CustomDonutTooltip />}
+                          wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
+                          allowEscapeViewBox={{ x: true, y: true }}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="dashboard-donut-center">
@@ -1370,32 +1432,20 @@ export default function DashboardPage() {
                       <span className="legend-label">
                         <span className="dot dot-present" /> Present
                       </span>
-                      <span className="legend-val">
-                        <strong>{formatNumber(staffAttData.present)}</strong>
-                      </span>
                     </div>
                     <div className="legend-item">
                       <span className="legend-label">
                         <span className="dot dot-absent" /> Absent
-                      </span>
-                      <span className="legend-val">
-                        <strong>{formatNumber(staffAttData.absent)}</strong>
                       </span>
                     </div>
                     <div className="legend-item">
                       <span className="legend-label">
                         <span className="dot dot-late" /> Late
                       </span>
-                      <span className="legend-val">
-                        <strong>{formatNumber(staffAttData.late)}</strong>
-                      </span>
                     </div>
                     <div className="legend-item">
                       <span className="legend-label">
                         <span className="dot dot-leave" /> On Leave
-                      </span>
-                      <span className="legend-val">
-                        <strong>{formatNumber(staffAttData.onLeave)}</strong>
                       </span>
                     </div>
                   </div>
@@ -1503,15 +1553,20 @@ export default function DashboardPage() {
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">
                   {examsList.map((item, index) => (
-                    <div key={`exam-${item.id}-${index}`} className="dashboard-info-item">
-                      <span className="dashboard-activity-marker">
+                    <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
+                      <span className={`dashboard-list-icon tone-${item.tone}`}>
                         <CalendarDays size={15} />
                       </span>
                       <div className="dashboard-info-content">
-                        <strong>{item.name}</strong>
-                        <small>{item.context}</small>
+                        <div className="dashboard-exam-title-row">
+                          <strong>{item.name}</strong>
+                          <span className={`exam-type-pill pill-${item.tone}`}>{item.typeTag}</span>
+                        </div>
+                        <small className="dashboard-exam-meta">
+                          <span>{item.context}</span>
+                        </small>
                       </div>
-                      <span className="dashboard-days-badge">{item.badge}</span>
+                      <span className={`dashboard-days-badge exam-badge badge-${item.tone}`}>{item.badge}</span>
                     </div>
                   ))}
                 </div>

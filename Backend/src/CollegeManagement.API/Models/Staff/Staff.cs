@@ -71,10 +71,8 @@ namespace CollegeManagement.API.Models.Staff
         [StringLength(15)]
         public string? AlternateMobile { get; set; }
 
-        [Required]
-        [EmailAddress]
         [StringLength(150)]
-        public string Email { get; set; } = string.Empty;
+        public string? Email { get; set; }
 
         [StringLength(10)]
         public string? BloodGroup { get; set; }
