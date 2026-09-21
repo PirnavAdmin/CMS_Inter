@@ -252,12 +252,14 @@ export default function AppRoutes() {
         <Route path="/student-dashboard" element={<StudentDashboard />} />
       </Route>
       <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
-      <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />
-      <Route path="/mock-staff-portal/:id/complete-profile" element={<StaffManagementPage />} />
-      <Route path="/mock-staff-portal/:id/review" element={<StaffManagementPage />} />
-      <Route path="/staff-portal/:id" element={<StaffManagementPage />} />
-      <Route path="/staff-portal/:id/complete-profile" element={<StaffManagementPage />} />
-      <Route path="/staff-portal/:id/review" element={<StaffManagementPage />} />
+      <Route path="/staff/onboarding/:id" element={<Navigate to="/faculty-dashboard" replace />} />
+      <Route path="/staff/onboarding/:id/complete-profile" element={<Navigate to="/faculty-dashboard" replace />} />
+      <Route path="/mock-staff-portal/:id" element={<Navigate to="/faculty-dashboard" replace />} />
+      <Route path="/mock-staff-portal/:id/complete-profile" element={<Navigate to="/faculty-dashboard" replace />} />
+      <Route path="/mock-staff-portal/:id/review" element={<Navigate to="/faculty-dashboard" replace />} />
+      <Route path="/staff-portal/:id" element={<Navigate to="/faculty-dashboard" replace />} />
+      <Route path="/staff-portal/:id/complete-profile" element={<Navigate to="/faculty-dashboard" replace />} />
+      <Route path="/staff-portal/:id/review" element={<Navigate to="/faculty-dashboard" replace />} />
 
       {listSlugs.map((slug) => <Route key={`${slug}-redirect`} path={`/${slug}`} element={<Navigate to={`/dashboard/${slug}`} replace />} />)}
       {listSlugs.map((slug) => <Route key={`${slug}-add-redirect`} path={`/${slug}/add`} element={<Navigate to={`/dashboard/${slug}/add`} replace />} />)}

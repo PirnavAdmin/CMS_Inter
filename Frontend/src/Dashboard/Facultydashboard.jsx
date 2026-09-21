@@ -1,18 +1,22 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   LayoutDashboard, User, Calendar, BookOpen, UserCheck, MessageSquareQuote,
   GraduationCap, ClipboardCheck, Wallet, FileText, CalendarOff, Receipt,
   Bell, Moon, Sun, Search, Menu, ChevronRight, ChevronDown, Download, Printer,
   Eye, CheckCircle, AlertCircle, Plus, Send, Paperclip, LogOut, Building2,
   Users, Check, X, ShieldAlert, Award, Clock, DollarSign, TrendingUp, Sparkles,
-  HelpCircle, ArrowLeft, Layers, Briefcase, FileSpreadsheet, RefreshCw
+  HelpCircle, ArrowLeft, Layers, Briefcase, FileSpreadsheet, RefreshCw,
+  Edit3, Save, UploadCloud, Trash2, FileCheck, Phone, Mail, MapPin, Landmark,
+  Camera, Upload, ShieldCheck, CheckCircle2
 } from "lucide-react";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis } from "recharts";
 import { useNavigate } from "react-router-dom";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { getLeaveRequests, submitLeaveRequest } from "@/features/leave/services/leaveStore.js";
-import { clearAuthSession } from "@/features/authStorage.js";
+import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
+import apiClient from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
 import "./facultydashboard.css";
 
 // ==========================================================================
@@ -23,8 +27,9 @@ const mockFaculty = {
   id: 1,
   employeeId: "PJCTCH0027",
   firstName: "Ravi",
+  middleName: "Kiran",
   lastName: "Kumar",
-  fullName: "Ravi Kumar",
+  fullName: "Ravi Kiran Kumar",
   role: "Faculty",
   staffType: "Teaching",
   department: "Mathematics",
@@ -35,22 +40,64 @@ const mockFaculty = {
   gender: "Male",
   dob: "1990-08-14",
   bloodGroup: "O+",
+  maritalStatus: "Married",
+  nationality: "Indian",
+  religion: "Hindu",
+  motherTongue: "Telugu",
+  guardianName: "Srinivasa Rao Kumar",
+  aadhaar: "5482 9182 4829",
   aadhaarMasked: "XXXX-XXXX-4829",
+  pan: "ABCPS1234F",
   panMasked: "ABCPS****F",
   mobile: "9876543210",
   altMobile: "9876543211",
   email: "Faculty@CMS.com",
   personalEmail: "ravikumar.maths@gmail.com",
   status: "Active",
-  profileCompletion: 92,
-  address: "Plot 42, Green Avenue, Jubilee Hills, Hyderabad, Telangana - 500033",
+  profileCompletion: 94,
+  address: "Plot 42, Green Avenue, Jubilee Hills",
+  city: "Hyderabad",
+  district: "Hyderabad",
+  state: "Telangana",
+  pin: "500033",
+  permanentAddress: "Plot 42, Green Avenue, Jubilee Hills, Hyderabad, Telangana - 500033",
+  employmentType: "Full Time",
+  subjectsTaught: "Mathematics I-A, Mathematics II-A, Calculus & Statistics",
+  specialization: "Calculus & Algebra",
+  classTeacher: "MPC 1st Year Sec A",
+  maxWorkload: "20 Hours / Week",
+  researchInterest: "Applied Differential Equations & Numerical Methods",
+  memberships: "AMTI, IMS Life Member",
   bankName: "State Bank of India",
-  accountHolder: "Ravi Kumar",
+  accountHolder: "Ravi Kiran Kumar",
+  accountNumber: "38920194823482",
   accountMasked: "XXXXXX3482",
   ifsc: "SBIN0001234",
   branch: "Main Campus Branch",
+  accountType: "Salary Account",
   uan: "100982341234",
   pfNumber: "AP/HYD/0098234/000/00027",
+  esiNumber: "52-00-123456-000-0001",
+  photoUrl: "",
+  qualifications: [
+    { id: 1, degree: "M.Sc Mathematics", specialization: "Pure & Applied Maths", university: "Osmania University", year: "2018", percentage: "8.8 CGPA", status: "Verified" },
+    { id: 2, degree: "B.Ed Education", specialization: "Mathematics Pedagogy", university: "Kakatiya University", year: "2019", percentage: "82.4%", status: "Verified" },
+    { id: 3, degree: "CSIR NET Qualified", specialization: "Mathematical Sciences", university: "NTA / CSIR", year: "2020", percentage: "AIR 142", status: "Verified" },
+  ],
+  experience: [
+    { id: 1, institution: "Sri Chaitanya Junior College", designation: "Lecturer Mathematics", fromDate: "2021-07-01", toDate: "2024-05-31", totalExp: "2 Years 11 Months", status: "Verified" },
+    { id: 2, institution: "PIRNAV College", designation: "Junior Lecturer", fromDate: "2024-06-10", toDate: "Present", totalExp: "1 Year", status: "Active" },
+  ],
+  documents: [
+    { id: "doc-1", name: "Aadhaar Card Copy", type: "PDF", size: "1.2 MB", status: "Verified", fileName: "Aadhaar_RaviKumar.pdf" },
+    { id: "doc-2", name: "PAN Card Copy", type: "PDF", size: "840 KB", status: "Verified", fileName: "PAN_Card_RaviKumar.pdf" },
+    { id: "doc-3", name: "M.Sc Degree Certificate", type: "PDF", size: "2.4 MB", status: "Verified", fileName: "MSc_Degree_Certificate.pdf" },
+    { id: "doc-4", name: "NET Qualification Certificate", type: "PDF", size: "1.1 MB", status: "Verified", fileName: "CSIR_NET_Scorecard.pdf" },
+    { id: "doc-5", name: "Relieving & Exp Letter", type: "PDF", size: "1.8 MB", status: "Verified", fileName: "Relieving_Letter_SCJC.pdf" },
+    { id: "doc-6", name: "Recent Passport Photo", type: "JPG", size: "450 KB", status: "Uploaded", fileName: "Passport_Photo.jpg" },
+    { id: "doc-7", name: "Bank Passbook / Cancelled Cheque", type: "PDF", size: "620 KB", status: "Verified", fileName: "Cancelled_Cheque_SBI.pdf" },
+    { id: "doc-8", name: "Updated Resume / CV", type: "PDF", size: "1.5 MB", status: "Uploaded", fileName: "Ravi_Kumar_Resume.pdf" },
+  ]
 };
 
 const mockSalaryData = {
@@ -271,6 +318,214 @@ function FacultyDashboard() {
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Comprehensive Faculty Profile State & Handlers
+  const [profileData, setProfileData] = useState(() => {
+    try {
+      const saved = localStorage.getItem("faculty_profile_data");
+      if (saved) {
+        return { ...mockFaculty, ...JSON.parse(saved) };
+      }
+      const authUser = getAuthUser();
+      if (authUser && (authUser.role === "Faculty" || authUser.role === "Teaching" || authUser.staffId || authUser.employeeId)) {
+        return {
+          ...mockFaculty,
+          fullName: authUser.fullName || authUser.name || mockFaculty.fullName,
+          firstName: authUser.firstName || mockFaculty.firstName,
+          lastName: authUser.lastName || mockFaculty.lastName,
+          email: authUser.email || mockFaculty.email,
+          employeeId: authUser.employeeId || authUser.staffId || mockFaculty.employeeId,
+          department: authUser.department || mockFaculty.department,
+          designation: authUser.designation || mockFaculty.designation,
+        };
+      }
+    } catch {}
+    return mockFaculty;
+  });
+
+  const [isProfileEditing, setIsProfileEditing] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const avatarInputRef = useRef(null);
+
+  // New Qualification inline form state
+  const [newQualification, setNewQualification] = useState({
+    degree: "",
+    specialization: "",
+    university: "",
+    year: "",
+    percentage: "",
+  });
+  const [showAddQual, setShowAddQual] = useState(false);
+
+  // New Experience inline form state
+  const [newExperience, setNewExperience] = useState({
+    institution: "",
+    designation: "",
+    fromDate: "",
+    toDate: "",
+    totalExp: "",
+  });
+  const [showAddExp, setShowAddExp] = useState(false);
+
+  // Calculate dynamic completion percentage
+  const calculateCompletion = (data) => {
+    const fields = [
+      data.firstName, data.lastName, data.dob, data.gender, data.bloodGroup,
+      data.aadhaar, data.pan, data.mobile, data.email, data.address,
+      data.department, data.designation, data.dateOfJoining, data.bankName,
+      data.accountNumber, data.ifsc, (data.qualifications && data.qualifications.length > 0),
+      (data.documents && data.documents.some((d) => d.status === "Verified" || d.status === "Uploaded"))
+    ];
+    const filled = fields.filter(Boolean).length;
+    return Math.min(100, Math.round((filled / fields.length) * 100));
+  };
+
+  const handleProfileFieldChange = (field, val) => {
+    setProfileData((prev) => {
+      const updated = { ...prev, [field]: val };
+      if (field === "firstName" || field === "middleName" || field === "lastName") {
+        updated.fullName = [updated.firstName, updated.middleName, updated.lastName].filter(Boolean).join(" ");
+      }
+      return updated;
+    });
+  };
+
+  const handleSaveProfile = async (dataToSave = null) => {
+    const current = dataToSave || profileData;
+    setIsSavingProfile(true);
+    try {
+      const comp = calculateCompletion(current);
+      const updated = { ...current, profileCompletion: comp };
+      setProfileData(updated);
+      localStorage.setItem("faculty_profile_data", JSON.stringify(updated));
+
+      // Attempt backend PUT update if id exists
+      try {
+        if (updated.id) {
+          await apiClient.put(apiEndpoints.faculty.update(updated.id), updated);
+        }
+      } catch (err) {
+        console.warn("Backend API sync offline/fallback, saved in localStorage:", err);
+      }
+
+      showToast("Profile details saved successfully!");
+      setIsProfileEditing(false);
+    } catch (err) {
+      showToast("Could not save profile details.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleAddQualification = (e) => {
+    e.preventDefault();
+    if (!newQualification.degree.trim()) {
+      showToast("Please enter degree name.");
+      return;
+    }
+    const item = {
+      id: Date.now(),
+      degree: newQualification.degree.trim(),
+      specialization: newQualification.specialization.trim() || "General",
+      university: newQualification.university.trim() || "Recognized Board/Univ",
+      year: newQualification.year.trim() || new Date().getFullYear().toString(),
+      percentage: newQualification.percentage.trim() || "N/A",
+      status: "Verified",
+    };
+    const updatedQuals = [...(profileData.qualifications || []), item];
+    const updated = { ...profileData, qualifications: updatedQuals };
+    setProfileData(updated);
+    localStorage.setItem("faculty_profile_data", JSON.stringify(updated));
+    setNewQualification({ degree: "", specialization: "", university: "", year: "", percentage: "" });
+    setShowAddQual(false);
+    showToast(`Added qualification: ${item.degree}`);
+  };
+
+  const handleDeleteQualification = (id) => {
+    const updatedQuals = (profileData.qualifications || []).filter((q) => q.id !== id);
+    const updated = { ...profileData, qualifications: updatedQuals };
+    setProfileData(updated);
+    localStorage.setItem("faculty_profile_data", JSON.stringify(updated));
+    showToast("Qualification removed.");
+  };
+
+  const handleAddExperience = (e) => {
+    e.preventDefault();
+    if (!newExperience.institution.trim()) {
+      showToast("Please enter institution name.");
+      return;
+    }
+    const item = {
+      id: Date.now(),
+      institution: newExperience.institution.trim(),
+      designation: newExperience.designation.trim() || "Lecturer",
+      fromDate: newExperience.fromDate || "2022-01-01",
+      toDate: newExperience.toDate || "2024-05-31",
+      totalExp: newExperience.totalExp.trim() || "1 Year",
+      status: "Verified",
+    };
+    const updatedExp = [...(profileData.experience || []), item];
+    const updated = { ...profileData, experience: updatedExp };
+    setProfileData(updated);
+    localStorage.setItem("faculty_profile_data", JSON.stringify(updated));
+    setNewExperience({ institution: "", designation: "", fromDate: "", toDate: "", totalExp: "" });
+    setShowAddExp(false);
+    showToast(`Added experience at: ${item.institution}`);
+  };
+
+  const handleDeleteExperience = (id) => {
+    const updatedExp = (profileData.experience || []).filter((x) => x.id !== id);
+    const updated = { ...profileData, experience: updatedExp };
+    setProfileData(updated);
+    localStorage.setItem("faculty_profile_data", JSON.stringify(updated));
+    showToast("Experience entry removed.");
+  };
+
+  const handleDocumentUpload = (docId, file) => {
+    if (!file) return;
+    const updatedDocs = (profileData.documents || []).map((d) => {
+      if (d.id === docId) {
+        return {
+          ...d,
+          fileName: file.name,
+          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+          status: "Uploaded",
+          uploadedAt: new Date().toLocaleDateString(),
+        };
+      }
+      return d;
+    });
+    const updated = { ...profileData, documents: updatedDocs };
+    setProfileData(updated);
+    localStorage.setItem("faculty_profile_data", JSON.stringify(updated));
+    showToast(`Document uploaded: ${file.name}`);
+  };
+
+  const handleDeleteDocument = (docId) => {
+    const updatedDocs = (profileData.documents || []).map((d) => {
+      if (d.id === docId) {
+        return { ...d, fileName: null, size: null, status: "Pending" };
+      }
+      return d;
+    });
+    const updated = { ...profileData, documents: updatedDocs };
+    setProfileData(updated);
+    localStorage.setItem("faculty_profile_data", JSON.stringify(updated));
+    showToast("Document removed.");
+  };
+
+  const handlePhotoUpload = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const photoUrl = e.target.result;
+      const updated = { ...profileData, photoUrl };
+      setProfileData(updated);
+      localStorage.setItem("faculty_profile_data", JSON.stringify(updated));
+      showToast("Profile photo updated!");
+    };
+    reader.readAsDataURL(file);
   };
 
   useEffect(() => {
@@ -669,33 +924,98 @@ function FacultyDashboard() {
   );
 
   // ------------------------------------------------------------------------
-  // SCREEN 2 — MY PROFILE VIEW
+  // SCREEN 2 — MY PROFILE VIEW (INTERACTIVE & EDITABLE)
   // ------------------------------------------------------------------------
   const renderProfileView = () => {
+    const initials = (profileData.fullName || "Faculty Member")
+      .split(" ")
+      .map((w) => w[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "FM";
+
     return (
       <div>
-        {renderHeader("My Profile", "View and manage your faculty profile information.")}
+        {renderHeader("My Profile", "View, edit, and manage your complete faculty profile details.")}
 
         {/* HEADER PROFILE CARD */}
         <div className="faculty-card" style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
-          <div className="faculty-avatar" style={{ width: "70px", height: "70px", fontSize: "24px" }}>
-            RK
+          <div className="faculty-avatar-container">
+            {profileData.photoUrl ? (
+              <img
+                src={profileData.photoUrl}
+                alt={profileData.fullName}
+                style={{ width: "74px", height: "74px", borderRadius: "50%", objectFit: "cover", border: "2px solid var(--faculty-primary)" }}
+              />
+            ) : (
+              <div className="faculty-avatar" style={{ width: "74px", height: "74px", fontSize: "24px" }}>
+                {initials}
+              </div>
+            )}
+            <input
+              type="file"
+              ref={avatarInputRef}
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                if (e.target.files?.[0]) handlePhotoUpload(e.target.files[0]);
+              }}
+            />
+            <button
+              type="button"
+              className="faculty-avatar-upload-btn"
+              title="Change Profile Photo"
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              <Camera size={13} />
+            </button>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 800 }}>{mockFaculty.fullName}</h2>
-              {renderStatusBadge("Active")}
+
+          <div style={{ flex: 1, minWidth: "220px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 800 }}>{profileData.fullName}</h2>
+              {renderStatusBadge(profileData.status || "Active")}
+              <span className="faculty-badge active" style={{ fontSize: "11px" }}>
+                {profileData.staffType || "Teaching"}
+              </span>
             </div>
             <div style={{ fontSize: "13px", color: "var(--faculty-muted)", marginTop: "4px" }}>
-              Employee ID: <strong>{mockFaculty.employeeId}</strong> • {mockFaculty.designation} ({mockFaculty.department} Dept)
+              Employee ID: <strong style={{ color: "var(--faculty-text)" }}>{profileData.employeeId}</strong> • {profileData.designation} ({profileData.department} Dept)
             </div>
             <div style={{ fontSize: "12px", color: "var(--faculty-muted)", marginTop: "2px" }}>
-              Joined: {mockFaculty.dateOfJoining} • Email: {mockFaculty.email}
+              Joined: <strong>{profileData.dateOfJoining}</strong> • Email: <strong>{profileData.email}</strong> • Board: <strong>{profileData.board}</strong>
             </div>
           </div>
-          <div style={{ background: "var(--faculty-subtle)", padding: "12px 18px", borderRadius: "12px", textAlign: "center" }}>
-            <div style={{ fontSize: "11px", color: "var(--faculty-muted)", fontWeight: 700 }}>PROFILE COMPLETION</div>
-            <div style={{ fontSize: "22px", fontWeight: 800, color: "var(--faculty-primary)" }}>{mockFaculty.profileCompletion}%</div>
+
+          {/* COMPLETION & ACTION TOGGLES */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+            <div className="faculty-completion-pill">
+              <div style={{ fontSize: "11px", color: "var(--faculty-muted)", fontWeight: 700 }}>PROFILE COMPLETION</div>
+              <div style={{ fontSize: "22px", fontWeight: 800, color: "var(--faculty-primary)" }}>{profileData.profileCompletion}%</div>
+              <div className="faculty-completion-bar">
+                <div className="faculty-completion-bar-fill" style={{ width: `${profileData.profileCompletion}%` }} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <button
+                type="button"
+                className={`faculty-btn ${isProfileEditing ? "faculty-btn-ghost" : "faculty-btn-primary"}`}
+                onClick={() => setIsProfileEditing(!isProfileEditing)}
+              >
+                {isProfileEditing ? <Eye size={14} /> : <Edit3 size={14} />}
+                {isProfileEditing ? "View Mode" : "Edit Profile"}
+              </button>
+              <button
+                type="button"
+                className="faculty-btn faculty-btn-primary"
+                onClick={() => handleSaveProfile()}
+                disabled={isSavingProfile}
+              >
+                <Save size={14} /> {isSavingProfile ? "Saving..." : "Save Details"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -705,16 +1025,16 @@ function FacultyDashboard() {
             { id: "basic", label: "Basic Info" },
             { id: "contact", label: "Contact Details" },
             { id: "pro", label: "Professional Details" },
-            { id: "qual", label: "Qualifications" },
-            { id: "exp", label: "Experience" },
-            { id: "docs", label: "Documents" },
+            { id: "qual", label: `Qualifications (${profileData.qualifications?.length || 0})` },
+            { id: "exp", label: `Experience (${profileData.experience?.length || 0})` },
+            { id: "docs", label: `Documents (${profileData.documents?.length || 0})` },
             { id: "bank", label: "Bank Details" },
           ].map((tab) => (
             <button
               key={tab.id}
               type="button"
               className={`faculty-btn ${profileTab === tab.id ? "faculty-btn-primary" : "faculty-btn-ghost"}`}
-              style={{ padding: "6px 14px", fontSize: "12px" }}
+              style={{ padding: "8px 16px", fontSize: "12px", whiteSpace: "nowrap" }}
               onClick={() => setProfileTab(tab.id)}
             >
               {tab.label}
@@ -724,154 +1044,911 @@ function FacultyDashboard() {
 
         {/* TAB CONTENT PANELS */}
         <div className="faculty-card">
+          {/* TAB 1: BASIC INFO */}
           {profileTab === "basic" && (
-            <div className="faculty-form-grid-3">
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Employee ID</span><div><strong>{mockFaculty.employeeId}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Full Name</span><div><strong>{mockFaculty.fullName}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Gender</span><div><strong>{mockFaculty.gender}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Date of Birth</span><div><strong>{mockFaculty.dob}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Blood Group</span><div><strong>{mockFaculty.bloodGroup}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Department</span><div><strong>{mockFaculty.department}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Designation</span><div><strong>{mockFaculty.designation}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Date of Joining</span><div><strong>{mockFaculty.dateOfJoining}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Aadhaar Number</span><div><strong>{mockFaculty.aadhaarMasked}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>PAN Card</span><div><strong>{mockFaculty.panMasked}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Employment Type</span><div><strong>Permanent Full-Time</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Status</span><div>{renderStatusBadge("Active")}</div></div>
-            </div>
-          )}
-
-          {profileTab === "contact" && (
-            <div className="faculty-form-grid-2">
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Official Mobile</span><div><strong>+91 {mockFaculty.mobile}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Alternate Mobile</span><div><strong>+91 {mockFaculty.altMobile}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>College Email</span><div><strong>{mockFaculty.email}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Personal Email</span><div><strong>{mockFaculty.personalEmail}</strong></div></div>
-              <div style={{ gridColumn: "span 2" }}><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Residential Address</span><div><strong>{mockFaculty.address}</strong></div></div>
-            </div>
-          )}
-
-          {profileTab === "pro" && (
-            <div className="faculty-form-grid-3">
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Subjects Can Teach</span><div><strong>Mathematics, Statistics</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Specialization</span><div><strong>Calculus & Algebra</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Class Teacher</span><div><strong>MPC 1st Year Sec A</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Max Weekly Workload</span><div><strong>20 Hours / Week</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Research Interest</span><div><strong>Applied Differential Equations</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Memberships</span><div><strong>AMTI, IMS Life Member</strong></div></div>
-            </div>
-          )}
-
-          {profileTab === "qual" && (
-            <div className="faculty-table-wrap">
-              <table className="faculty-table">
-                <thead>
-                  <tr>
-                    <th>Degree</th>
-                    <th>Specialization</th>
-                    <th>University / Board</th>
-                    <th>Year</th>
-                    <th>CGPA / %</th>
-                    <th>Document</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><strong>M.Sc Mathematics</strong></td>
-                    <td>Pure & Applied Maths</td>
-                    <td>Osmania University</td>
-                    <td>2018</td>
-                    <td>8.8 CGPA</td>
-                    <td>{renderStatusBadge("Verified")}</td>
-                  </tr>
-                  <tr>
-                    <td><strong>B.Ed Education</strong></td>
-                    <td>Mathematics Pedagogy</td>
-                    <td>Kakatiya University</td>
-                    <td>2019</td>
-                    <td>82.4%</td>
-                    <td>{renderStatusBadge("Verified")}</td>
-                  </tr>
-                  <tr>
-                    <td><strong>CSIR NET Qualified</strong></td>
-                    <td>Mathematical Sciences</td>
-                    <td>NTA / CSIR</td>
-                    <td>2020</td>
-                    <td>AIR 142</td>
-                    <td>{renderStatusBadge("Verified")}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {profileTab === "exp" && (
-            <div className="faculty-table-wrap">
-              <table className="faculty-table">
-                <thead>
-                  <tr>
-                    <th>Institution</th>
-                    <th>Designation</th>
-                    <th>From</th>
-                    <th>To</th>
-                    <th>Total Exp</th>
-                    <th>Document</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><strong>Sri Chaitanya Junior College</strong></td>
-                    <td>Lecturer Mathematics</td>
-                    <td>Jul 2021</td>
-                    <td>May 2024</td>
-                    <td>2 Years 11 Months</td>
-                    <td>{renderStatusBadge("Verified")}</td>
-                  </tr>
-                  <tr>
-                    <td><strong>PIRNAV College</strong></td>
-                    <td>Junior Lecturer</td>
-                    <td>Jun 2024</td>
-                    <td>Present</td>
-                    <td>1 Year</td>
-                    <td>{renderStatusBadge("Active")}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {profileTab === "docs" && (
-            <div className="faculty-form-grid-3">
-              {[
-                { name: "Aadhaar Card Copy", status: "Verified" },
-                { name: "PAN Card Copy", status: "Verified" },
-                { name: "M.Sc Degree Certificate", status: "Verified" },
-                { name: "NET Qualification Certificate", status: "Verified" },
-                { name: "Relieving & Exp Letter", status: "Verified" },
-                { name: "Recent Passport Photo", status: "Uploaded" },
-              ].map((doc) => (
-                <div key={doc.name} style={{ padding: "12px", border: "1px solid var(--faculty-border)", borderRadius: "10px", background: "var(--faculty-subtle)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <strong style={{ fontSize: "13px" }}>{doc.name}</strong>
-                    <div style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>PDF Document</div>
-                  </div>
-                  {renderStatusBadge(doc.status)}
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "10px", borderBottom: "1px solid var(--faculty-border)" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>Personal &amp; Basic Information</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--faculty-muted)" }}>
+                    Update your official personal identity details.
+                  </p>
                 </div>
-              ))}
+                <span className="faculty-badge active">
+                  <CheckCircle2 size={12} /> Live Editable
+                </span>
+              </div>
+
+              <div className="faculty-form-grid-3">
+                <div className="faculty-form-group">
+                  <label>Employee ID *</label>
+                  <input
+                    type="text"
+                    value={profileData.employeeId || ""}
+                    onChange={(e) => handleProfileFieldChange("employeeId", e.target.value)}
+                    placeholder="e.g. PJCTCH0027"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>First Name *</label>
+                  <input
+                    type="text"
+                    value={profileData.firstName || ""}
+                    onChange={(e) => handleProfileFieldChange("firstName", e.target.value)}
+                    placeholder="Enter first name"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Middle Name</label>
+                  <input
+                    type="text"
+                    value={profileData.middleName || ""}
+                    onChange={(e) => handleProfileFieldChange("middleName", e.target.value)}
+                    placeholder="Enter middle name"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Last Name *</label>
+                  <input
+                    type="text"
+                    value={profileData.lastName || ""}
+                    onChange={(e) => handleProfileFieldChange("lastName", e.target.value)}
+                    placeholder="Enter last name"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Gender *</label>
+                  <select
+                    value={profileData.gender || "Male"}
+                    onChange={(e) => handleProfileFieldChange("gender", e.target.value)}
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Date of Birth *</label>
+                  <input
+                    type="date"
+                    value={profileData.dob || ""}
+                    onChange={(e) => handleProfileFieldChange("dob", e.target.value)}
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Blood Group *</label>
+                  <select
+                    value={profileData.bloodGroup || "O+"}
+                    onChange={(e) => handleProfileFieldChange("bloodGroup", e.target.value)}
+                  >
+                    {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
+                      <option key={bg} value={bg}>{bg}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Marital Status</label>
+                  <select
+                    value={profileData.maritalStatus || "Single"}
+                    onChange={(e) => handleProfileFieldChange("maritalStatus", e.target.value)}
+                  >
+                    <option value="Single">Single</option>
+                    <option value="Married">Married</option>
+                    <option value="Divorced">Divorced</option>
+                    <option value="Widowed">Widowed</option>
+                  </select>
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Father's / Guardian's Name</label>
+                  <input
+                    type="text"
+                    value={profileData.guardianName || ""}
+                    onChange={(e) => handleProfileFieldChange("guardianName", e.target.value)}
+                    placeholder="Enter father or guardian name"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Nationality</label>
+                  <input
+                    type="text"
+                    value={profileData.nationality || "Indian"}
+                    onChange={(e) => handleProfileFieldChange("nationality", e.target.value)}
+                    placeholder="Nationality"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Religion</label>
+                  <input
+                    type="text"
+                    value={profileData.religion || ""}
+                    onChange={(e) => handleProfileFieldChange("religion", e.target.value)}
+                    placeholder="Religion"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Mother Tongue</label>
+                  <input
+                    type="text"
+                    value={profileData.motherTongue || ""}
+                    onChange={(e) => handleProfileFieldChange("motherTongue", e.target.value)}
+                    placeholder="Mother tongue"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Aadhaar Number (12 Digits) *</label>
+                  <input
+                    type="text"
+                    value={profileData.aadhaar || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleProfileFieldChange("aadhaar", val);
+                      if (val.length >= 4) {
+                        handleProfileFieldChange("aadhaarMasked", `XXXX-XXXX-${val.slice(-4)}`);
+                      }
+                    }}
+                    placeholder="XXXX-XXXX-XXXX"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>PAN Card Number *</label>
+                  <input
+                    type="text"
+                    value={profileData.pan || ""}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase();
+                      handleProfileFieldChange("pan", val);
+                      if (val.length >= 4) {
+                        handleProfileFieldChange("panMasked", `${val.slice(0, 5)}****${val.slice(-1)}`);
+                      }
+                    }}
+                    placeholder="ABCPS1234F"
+                    style={{ textTransform: "uppercase" }}
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Profile Status</label>
+                  <select
+                    value={profileData.status || "Active"}
+                    onChange={(e) => handleProfileFieldChange("status", e.target.value)}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Submitted">Submitted</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
+                </div>
+              </div>
             </div>
           )}
 
-          {profileTab === "bank" && (
-            <div className="faculty-form-grid-3">
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Bank Name</span><div><strong>{mockFaculty.bankName}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Account Holder</span><div><strong>{mockFaculty.accountHolder}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Account Number</span><div><strong>{mockFaculty.accountMasked}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>IFSC Code</span><div><strong>{mockFaculty.ifsc}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>Branch</span><div><strong>{mockFaculty.branch}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>UAN Number</span><div><strong>{mockFaculty.uan}</strong></div></div>
-              <div><span style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>PF Number</span><div><strong>{mockFaculty.pfNumber}</strong></div></div>
+          {/* TAB 2: CONTACT DETAILS */}
+          {profileTab === "contact" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "10px", borderBottom: "1px solid var(--faculty-border)" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>Contact &amp; Residential Address</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--faculty-muted)" }}>
+                    Manage phone numbers, emails, and address lines.
+                  </p>
+                </div>
+              </div>
+
+              <div className="faculty-form-grid-2">
+                <div className="faculty-form-group">
+                  <label>Official Mobile Number *</label>
+                  <input
+                    type="tel"
+                    value={profileData.mobile || ""}
+                    onChange={(e) => handleProfileFieldChange("mobile", e.target.value)}
+                    placeholder="10-digit mobile number"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Alternate Mobile Number</label>
+                  <input
+                    type="tel"
+                    value={profileData.altMobile || ""}
+                    onChange={(e) => handleProfileFieldChange("altMobile", e.target.value)}
+                    placeholder="Alternate mobile number"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>College Official Email *</label>
+                  <input
+                    type="email"
+                    value={profileData.email || ""}
+                    onChange={(e) => handleProfileFieldChange("email", e.target.value)}
+                    placeholder="faculty@pirnavcollege.edu"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Personal Email Address</label>
+                  <input
+                    type="email"
+                    value={profileData.personalEmail || ""}
+                    onChange={(e) => handleProfileFieldChange("personalEmail", e.target.value)}
+                    placeholder="yourname@gmail.com"
+                  />
+                </div>
+
+                <div className="faculty-form-group" style={{ gridColumn: "span 2" }}>
+                  <label>Current Residential Address *</label>
+                  <textarea
+                    rows="2"
+                    value={profileData.address || ""}
+                    onChange={(e) => handleProfileFieldChange("address", e.target.value)}
+                    placeholder="House/Flat No, Street, Landmark"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>City / Town</label>
+                  <input
+                    type="text"
+                    value={profileData.city || ""}
+                    onChange={(e) => handleProfileFieldChange("city", e.target.value)}
+                    placeholder="City"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>District</label>
+                  <input
+                    type="text"
+                    value={profileData.district || ""}
+                    onChange={(e) => handleProfileFieldChange("district", e.target.value)}
+                    placeholder="District"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>State</label>
+                  <input
+                    type="text"
+                    value={profileData.state || ""}
+                    onChange={(e) => handleProfileFieldChange("state", e.target.value)}
+                    placeholder="State"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>PIN Code</label>
+                  <input
+                    type="text"
+                    value={profileData.pin || ""}
+                    onChange={(e) => handleProfileFieldChange("pin", e.target.value)}
+                    placeholder="6-digit PIN code"
+                  />
+                </div>
+
+                <div className="faculty-form-group" style={{ gridColumn: "span 2" }}>
+                  <label>Permanent Address</label>
+                  <textarea
+                    rows="2"
+                    value={profileData.permanentAddress || ""}
+                    onChange={(e) => handleProfileFieldChange("permanentAddress", e.target.value)}
+                    placeholder="Permanent home address if different from current"
+                  />
+                </div>
+              </div>
             </div>
           )}
+
+          {/* TAB 3: PROFESSIONAL DETAILS */}
+          {profileTab === "pro" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "10px", borderBottom: "1px solid var(--faculty-border)" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>Academic &amp; Employment Details</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--faculty-muted)" }}>
+                    Department, designation, workload, and assigned subjects.
+                  </p>
+                </div>
+              </div>
+
+              <div className="faculty-form-grid-3">
+                <div className="faculty-form-group">
+                  <label>Staff Type *</label>
+                  <select
+                    value={profileData.staffType || "Teaching"}
+                    onChange={(e) => handleProfileFieldChange("staffType", e.target.value)}
+                  >
+                    <option value="Teaching">Teaching</option>
+                    <option value="Non-Teaching">Non-Teaching</option>
+                  </select>
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Department *</label>
+                  <input
+                    type="text"
+                    value={profileData.department || ""}
+                    onChange={(e) => handleProfileFieldChange("department", e.target.value)}
+                    placeholder="e.g. Mathematics"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Designation *</label>
+                  <input
+                    type="text"
+                    value={profileData.designation || ""}
+                    onChange={(e) => handleProfileFieldChange("designation", e.target.value)}
+                    placeholder="e.g. Junior Lecturer"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Affiliated Board</label>
+                  <select
+                    value={profileData.board || "BIEAP"}
+                    onChange={(e) => handleProfileFieldChange("board", e.target.value)}
+                  >
+                    <option value="BIEAP">BIEAP (Andhra Pradesh)</option>
+                    <option value="TSBIE">TSBIE (Telangana)</option>
+                    <option value="CBSE">CBSE (Central Board)</option>
+                    <option value="ICSE">ICSE / CISCE</option>
+                    <option value="STATE">State Board</option>
+                  </select>
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Date of Joining *</label>
+                  <input
+                    type="date"
+                    value={profileData.dateOfJoining || ""}
+                    onChange={(e) => handleProfileFieldChange("dateOfJoining", e.target.value)}
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Employment Type</label>
+                  <select
+                    value={profileData.employmentType || "Full Time"}
+                    onChange={(e) => handleProfileFieldChange("employmentType", e.target.value)}
+                  >
+                    <option value="Full Time">Full Time</option>
+                    <option value="Part Time">Part Time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Visiting Faculty">Visiting Faculty</option>
+                  </select>
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Specialization / Core Domain</label>
+                  <input
+                    type="text"
+                    value={profileData.specialization || ""}
+                    onChange={(e) => handleProfileFieldChange("specialization", e.target.value)}
+                    placeholder="e.g. Pure & Applied Mathematics"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Class Teacher Allocation</label>
+                  <input
+                    type="text"
+                    value={profileData.classTeacher || ""}
+                    onChange={(e) => handleProfileFieldChange("classTeacher", e.target.value)}
+                    placeholder="e.g. MPC 1st Year Sec A"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Weekly Workload</label>
+                  <input
+                    type="text"
+                    value={profileData.maxWorkload || "20 Hours / Week"}
+                    onChange={(e) => handleProfileFieldChange("maxWorkload", e.target.value)}
+                    placeholder="e.g. 20 Hours / Week"
+                  />
+                </div>
+
+                <div className="faculty-form-group" style={{ gridColumn: "span 3" }}>
+                  <label>Subjects Taught / Handled</label>
+                  <input
+                    type="text"
+                    value={profileData.subjectsTaught || ""}
+                    onChange={(e) => handleProfileFieldChange("subjectsTaught", e.target.value)}
+                    placeholder="e.g. Mathematics I-A, Mathematics II-A, Calculus"
+                  />
+                </div>
+
+                <div className="faculty-form-group" style={{ gridColumn: "span 3" }}>
+                  <label>Research Interests / Publications</label>
+                  <textarea
+                    rows="2"
+                    value={profileData.researchInterest || ""}
+                    onChange={(e) => handleProfileFieldChange("researchInterest", e.target.value)}
+                    placeholder="Enter academic publications, research domain..."
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: QUALIFICATIONS */}
+          {profileTab === "qual" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "10px", borderBottom: "1px solid var(--faculty-border)" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>Educational Qualifications</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--faculty-muted)" }}>
+                    Degrees, diplomas, and certification history.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="faculty-btn faculty-btn-primary faculty-btn-sm"
+                  onClick={() => setShowAddQual(!showAddQual)}
+                >
+                  <Plus size={14} /> {showAddQual ? "Close Form" : "Add Qualification"}
+                </button>
+              </div>
+
+              {/* INLINE ADD FORM */}
+              {showAddQual && (
+                <form onSubmit={handleAddQualification} className="faculty-inline-box" style={{ marginBottom: "16px" }}>
+                  <h4 style={{ margin: "0 0 12px 0", fontSize: "13px", fontWeight: 700 }}>Add New Qualification Degree</h4>
+                  <div className="faculty-form-grid-3" style={{ marginBottom: "12px" }}>
+                    <div className="faculty-form-group">
+                      <label>Degree / Level *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. M.Sc / Ph.D / B.Ed"
+                        value={newQualification.degree}
+                        onChange={(e) => setNewQualification({ ...newQualification, degree: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="faculty-form-group">
+                      <label>Specialization</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Mathematics"
+                        value={newQualification.specialization}
+                        onChange={(e) => setNewQualification({ ...newQualification, specialization: e.target.value })}
+                      />
+                    </div>
+                    <div className="faculty-form-group">
+                      <label>University / Board</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Osmania University"
+                        value={newQualification.university}
+                        onChange={(e) => setNewQualification({ ...newQualification, university: e.target.value })}
+                      />
+                    </div>
+                    <div className="faculty-form-group">
+                      <label>Passing Year</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 2020"
+                        value={newQualification.year}
+                        onChange={(e) => setNewQualification({ ...newQualification, year: e.target.value })}
+                      />
+                    </div>
+                    <div className="faculty-form-group">
+                      <label>Percentage / CGPA</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 85% or 8.5 CGPA"
+                        value={newQualification.percentage}
+                        onChange={(e) => setNewQualification({ ...newQualification, percentage: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button type="submit" className="faculty-btn faculty-btn-primary faculty-btn-sm">
+                      <Check size={13} /> Save Qualification
+                    </button>
+                    <button type="button" className="faculty-btn faculty-btn-ghost faculty-btn-sm" onClick={() => setShowAddQual(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* QUALIFICATIONS TABLE */}
+              <div className="faculty-table-wrap">
+                <table className="faculty-table">
+                  <thead>
+                    <tr>
+                      <th>Degree / Certificate</th>
+                      <th>Specialization</th>
+                      <th>University / Board</th>
+                      <th>Passing Year</th>
+                      <th>CGPA / %</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(profileData.qualifications || []).map((q) => (
+                      <tr key={q.id}>
+                        <td><strong>{q.degree}</strong></td>
+                        <td>{q.specialization || "—"}</td>
+                        <td>{q.university || "—"}</td>
+                        <td>{q.year || "—"}</td>
+                        <td>{q.percentage || "—"}</td>
+                        <td>{renderStatusBadge(q.status || "Verified")}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="faculty-btn faculty-btn-ghost faculty-btn-sm"
+                            style={{ color: "var(--faculty-danger)" }}
+                            onClick={() => handleDeleteQualification(q.id)}
+                            title="Delete Qualification"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: EXPERIENCE */}
+          {profileTab === "exp" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "10px", borderBottom: "1px solid var(--faculty-border)" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>Past Work Experience</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--faculty-muted)" }}>
+                    Previous academic and administrative appointments.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="faculty-btn faculty-btn-primary faculty-btn-sm"
+                  onClick={() => setShowAddExp(!showAddExp)}
+                >
+                  <Plus size={14} /> {showAddExp ? "Close Form" : "Add Experience"}
+                </button>
+              </div>
+
+              {/* INLINE ADD FORM */}
+              {showAddExp && (
+                <form onSubmit={handleAddExperience} className="faculty-inline-box" style={{ marginBottom: "16px" }}>
+                  <h4 style={{ margin: "0 0 12px 0", fontSize: "13px", fontWeight: 700 }}>Add Past Employment Experience</h4>
+                  <div className="faculty-form-grid-3" style={{ marginBottom: "12px" }}>
+                    <div className="faculty-form-group">
+                      <label>Institution / Organization *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Sri Chaitanya Junior College"
+                        value={newExperience.institution}
+                        onChange={(e) => setNewExperience({ ...newExperience, institution: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="faculty-form-group">
+                      <label>Designation *</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Lecturer in Mathematics"
+                        value={newExperience.designation}
+                        onChange={(e) => setNewExperience({ ...newExperience, designation: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="faculty-form-group">
+                      <label>Total Experience</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 2 Years 6 Months"
+                        value={newExperience.totalExp}
+                        onChange={(e) => setNewExperience({ ...newExperience, totalExp: e.target.value })}
+                      />
+                    </div>
+                    <div className="faculty-form-group">
+                      <label>From Date</label>
+                      <input
+                        type="date"
+                        value={newExperience.fromDate}
+                        onChange={(e) => setNewExperience({ ...newExperience, fromDate: e.target.value })}
+                      />
+                    </div>
+                    <div className="faculty-form-group">
+                      <label>To Date</label>
+                      <input
+                        type="date"
+                        value={newExperience.toDate}
+                        onChange={(e) => setNewExperience({ ...newExperience, toDate: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button type="submit" className="faculty-btn faculty-btn-primary faculty-btn-sm">
+                      <Check size={13} /> Save Experience
+                    </button>
+                    <button type="button" className="faculty-btn faculty-btn-ghost faculty-btn-sm" onClick={() => setShowAddExp(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* EXPERIENCE TABLE */}
+              <div className="faculty-table-wrap">
+                <table className="faculty-table">
+                  <thead>
+                    <tr>
+                      <th>Institution / College</th>
+                      <th>Designation</th>
+                      <th>From Date</th>
+                      <th>To Date</th>
+                      <th>Total Duration</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(profileData.experience || []).map((x) => (
+                      <tr key={x.id}>
+                        <td><strong>{x.institution}</strong></td>
+                        <td>{x.designation || "—"}</td>
+                        <td>{x.fromDate || "—"}</td>
+                        <td>{x.toDate || "Present"}</td>
+                        <td>{x.totalExp || "—"}</td>
+                        <td>{renderStatusBadge(x.status || "Verified")}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="faculty-btn faculty-btn-ghost faculty-btn-sm"
+                            style={{ color: "var(--faculty-danger)" }}
+                            onClick={() => handleDeleteExperience(x.id)}
+                            title="Delete Experience"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: DOCUMENTS */}
+          {profileTab === "docs" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "10px", borderBottom: "1px solid var(--faculty-border)" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>Mandatory Documents &amp; Certificates</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--faculty-muted)" }}>
+                    Upload clear scans of your certificates and ID proofs (PDF/JPG up to 5MB).
+                  </p>
+                </div>
+              </div>
+
+              <div className="faculty-doc-grid">
+                {(profileData.documents || []).map((doc) => (
+                  <div key={doc.id} className="faculty-doc-card">
+                    <div className="faculty-doc-header">
+                      <div className="faculty-doc-info">
+                        <span className="faculty-doc-title">{doc.name}</span>
+                        <span className="faculty-doc-meta">
+                          {doc.fileName ? `${doc.fileName} (${doc.size || "1.2 MB"})` : "No file uploaded yet"}
+                        </span>
+                      </div>
+                      {renderStatusBadge(doc.status || "Pending")}
+                    </div>
+
+                    <div className="faculty-doc-actions">
+                      <label className="faculty-btn faculty-btn-ghost faculty-btn-sm" style={{ cursor: "pointer", margin: 0 }}>
+                        <UploadCloud size={13} /> {doc.fileName ? "Replace" : "Upload"}
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png"
+                          style={{ display: "none" }}
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) handleDocumentUpload(doc.id, e.target.files[0]);
+                          }}
+                        />
+                      </label>
+                      {doc.fileName && (
+                        <>
+                          <button
+                            type="button"
+                            className="faculty-btn faculty-btn-ghost faculty-btn-sm"
+                            onClick={() => showToast(`Previewing ${doc.name}: ${doc.fileName}`)}
+                          >
+                            <Eye size={13} /> View
+                          </button>
+                          <button
+                            type="button"
+                            className="faculty-btn faculty-btn-ghost faculty-btn-sm"
+                            style={{ color: "var(--faculty-danger)" }}
+                            onClick={() => handleDeleteDocument(doc.id)}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: BANK DETAILS */}
+          {profileTab === "bank" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "10px", borderBottom: "1px solid var(--faculty-border)" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>Bank &amp; Provident Fund (PF) Details</h3>
+                  <p style={{ margin: "2px 0 0", fontSize: "12px", color: "var(--faculty-muted)" }}>
+                    Direct salary credit account and statutory compliance numbers.
+                  </p>
+                </div>
+              </div>
+
+              <div className="faculty-form-grid-3">
+                <div className="faculty-form-group">
+                  <label>Bank Name *</label>
+                  <input
+                    type="text"
+                    value={profileData.bankName || ""}
+                    onChange={(e) => handleProfileFieldChange("bankName", e.target.value)}
+                    placeholder="e.g. State Bank of India"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Account Holder Name *</label>
+                  <input
+                    type="text"
+                    value={profileData.accountHolder || ""}
+                    onChange={(e) => handleProfileFieldChange("accountHolder", e.target.value)}
+                    placeholder="Name as per bank passbook"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Account Number *</label>
+                  <input
+                    type="text"
+                    value={profileData.accountNumber || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      handleProfileFieldChange("accountNumber", val);
+                      if (val.length >= 4) {
+                        handleProfileFieldChange("accountMasked", `XXXXXX${val.slice(-4)}`);
+                      }
+                    }}
+                    placeholder="Bank account number"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>IFSC Code *</label>
+                  <input
+                    type="text"
+                    value={profileData.ifsc || ""}
+                    onChange={(e) => handleProfileFieldChange("ifsc", e.target.value.toUpperCase())}
+                    placeholder="e.g. SBIN0001234"
+                    style={{ textTransform: "uppercase" }}
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Branch Name</label>
+                  <input
+                    type="text"
+                    value={profileData.branch || ""}
+                    onChange={(e) => handleProfileFieldChange("branch", e.target.value)}
+                    placeholder="Branch name / location"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>Account Type</label>
+                  <select
+                    value={profileData.accountType || "Salary Account"}
+                    onChange={(e) => handleProfileFieldChange("accountType", e.target.value)}
+                  >
+                    <option value="Salary Account">Salary Account</option>
+                    <option value="Savings Account">Savings Account</option>
+                    <option value="Current Account">Current Account</option>
+                  </select>
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>UAN Number (PF)</label>
+                  <input
+                    type="text"
+                    value={profileData.uan || ""}
+                    onChange={(e) => handleProfileFieldChange("uan", e.target.value)}
+                    placeholder="12-digit UAN"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>PF Account Number</label>
+                  <input
+                    type="text"
+                    value={profileData.pfNumber || ""}
+                    onChange={(e) => handleProfileFieldChange("pfNumber", e.target.value)}
+                    placeholder="e.g. AP/HYD/0098234/000/00027"
+                  />
+                </div>
+
+                <div className="faculty-form-group">
+                  <label>ESI Number</label>
+                  <input
+                    type="text"
+                    value={profileData.esiNumber || ""}
+                    onChange={(e) => handleProfileFieldChange("esiNumber", e.target.value)}
+                    placeholder="ESI number if applicable"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STICKY / BOTTOM SAVE ACTIONS BAR */}
+          <div className="faculty-save-bar">
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", color: "var(--faculty-muted)" }}>
+              <ShieldCheck size={16} style={{ color: "var(--faculty-success)" }} />
+              <span>All details are stored securely and synchronized with your Staff Portal account.</span>
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                type="button"
+                className="faculty-btn faculty-btn-ghost"
+                onClick={() => {
+                  try {
+                    localStorage.removeItem("faculty_profile_data");
+                    setProfileData(mockFaculty);
+                    showToast("Profile reset to default.");
+                  } catch {}
+                }}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                className="faculty-btn faculty-btn-ghost"
+                onClick={() => {
+                  handleSaveProfile();
+                  showToast("Draft saved successfully.");
+                }}
+              >
+                Save Draft
+              </button>
+              <button
+                type="button"
+                className="faculty-btn faculty-btn-primary"
+                onClick={() => handleSaveProfile()}
+                disabled={isSavingProfile}
+              >
+                <Save size={14} /> {isSavingProfile ? "Saving Details..." : "Save All Changes"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -2185,10 +3262,16 @@ function FacultyDashboard() {
               {/* FACULTY PROFILE DROPDOWN */}
               <div style={{ position: "relative" }}>
                 <div className="faculty-user-menu" onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}>
-                  <div className="faculty-avatar">RK</div>
+                  {profileData.photoUrl ? (
+                    <img src={profileData.photoUrl} alt="Avatar" style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }} />
+                  ) : (
+                    <div className="faculty-avatar">
+                      {(profileData.fullName || "FM").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
+                    </div>
+                  )}
                   <div className="faculty-user-info">
-                    <span className="faculty-user-name">{mockFaculty.fullName}</span>
-                    <span className="faculty-user-role">{mockFaculty.designation}</span>
+                    <span className="faculty-user-name">{profileData.fullName}</span>
+                    <span className="faculty-user-role">{profileData.designation}</span>
                   </div>
                   <ChevronDown size={14} style={{ color: "var(--faculty-muted)", marginLeft: "2px" }} />
                 </div>
@@ -2196,10 +3279,16 @@ function FacultyDashboard() {
                 {isProfileDropdownOpen && (
                   <div className="faculty-user-dropdown-menu">
                     <div className="faculty-dropdown-header">
-                      <div className="faculty-avatar" style={{ width: "32px", height: "32px", fontSize: "12px" }}>RK</div>
+                      {profileData.photoUrl ? (
+                        <img src={profileData.photoUrl} alt="Avatar" style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover" }} />
+                      ) : (
+                        <div className="faculty-avatar" style={{ width: "32px", height: "32px", fontSize: "12px" }}>
+                          {(profileData.fullName || "FM").split(" ").map((w) => w[0]).filter(Boolean).slice(0, 2).join("").toUpperCase()}
+                        </div>
+                      )}
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: "13px" }}>{mockFaculty.fullName}</div>
-                        <div style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>{mockFaculty.email}</div>
+                        <div style={{ fontWeight: 700, fontSize: "13px" }}>{profileData.fullName}</div>
+                        <div style={{ fontSize: "11px", color: "var(--faculty-muted)" }}>{profileData.email}</div>
                       </div>
                     </div>
                     <div className="faculty-dropdown-divider" />

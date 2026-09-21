@@ -3208,11 +3208,11 @@ function StaffList({ records = [], setRecords, forced }) {
         if (isMounted) {
           if (deptRes.status === "fulfilled" && deptRes.value?.data) {
             const items = deptRes.value.data.items || deptRes.value.data.data || (Array.isArray(deptRes.value.data) ? deptRes.value.data : []);
-            setApiFilterDepts(items.map((d) => (typeof d === "object" ? d.name || d.departmentName : d)).filter(Boolean));
+            setApiFilterDepts(items);
           }
           if (desigRes.status === "fulfilled" && desigRes.value?.data) {
             const items = desigRes.value.data.items || desigRes.value.data.data || (Array.isArray(desigRes.value.data) ? desigRes.value.data : []);
-            setApiFilterDesigs(items.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean));
+            setApiFilterDesigs(items);
           }
         }
       } catch (err) {
@@ -3224,14 +3224,88 @@ function StaffList({ records = [], setRecords, forced }) {
   }, [forced, tab]);
 
   const departmentOptions = useMemo(() => {
-    const fallback = list.map((r) => r?.department).filter(Boolean);
-    return [...new Set([...apiFilterDepts, ...fallback])];
-  }, [apiFilterDepts, list]);
+    const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+    const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+    const fallbackList = isTeaching ? teachingDepartments : isNonTeaching ? nonTeachingDepartments : [...teachingDepartments, ...nonTeachingDepartments];
+    const apiNames = apiFilterDepts.map((d) => (typeof d === "object" ? d.name || d.departmentName : d)).filter(Boolean);
+    const listNames = list.map((r) => r?.department).filter(Boolean);
+    return [...new Set([...apiNames, ...fallbackList, ...listNames])];
+  }, [apiFilterDepts, forced, tab, list]);
 
   const designationOptions = useMemo(() => {
-    const fallback = list.map((r) => r?.designation).filter(Boolean);
-    return [...new Set([...apiFilterDesigs, ...fallback])];
-  }, [apiFilterDesigs, list]);
+    const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+    const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+    const currentDept = String(departmentFilter || "").trim();
+    const currentDeptNorm = currentDept.toLowerCase().replace(/[-_\s&]/g, "");
+
+    if (currentDept) {
+      // 1. Live designations from API matching selected department
+      const matchingApi = apiFilterDesigs
+        .filter((d) => {
+          if (!d) return false;
+          if (typeof d === "object") {
+            const dDeptName = String(d.departmentName || d.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "");
+            return dDeptName && (dDeptName === currentDeptNorm || currentDeptNorm.includes(dDeptName) || dDeptName.includes(currentDeptNorm));
+          }
+          return false;
+        })
+        .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+        .filter(Boolean);
+
+      // 2. Static / fallback designation mapping for this department
+      const activeMap = isTeaching ? teachingDesignationMap : isNonTeaching ? nonTeachingDesignationMap : { ...teachingDesignationMap, ...nonTeachingDesignationMap };
+      let mapDesigs = [];
+      for (const [deptKey, desigs] of Object.entries(activeMap)) {
+        const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
+        if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
+          if (Array.isArray(desigs)) mapDesigs = desigs;
+          break;
+        }
+      }
+
+      // 3. Fallback from local list items matching this department
+      const localMatching = list
+        .filter((r) => r && String(r.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "") === currentDeptNorm)
+        .map((r) => r.designation)
+        .filter(Boolean);
+
+      const combined = [...new Set([...matchingApi, ...mapDesigs, ...localMatching])];
+      if (combined.length > 0) return combined;
+    }
+
+    // When no department is selected, return all designations for this staff type
+    const fallbackList = isTeaching ? teachingDesignations : isNonTeaching ? nonTeachingDesignations : [...teachingDesignations, ...nonTeachingDesignations];
+    const apiNames = apiFilterDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean);
+    const listNames = list.map((r) => r?.designation).filter(Boolean);
+    return [...new Set([...apiNames, ...fallbackList, ...listNames])];
+  }, [apiFilterDesigs, departmentFilter, forced, tab, list]);
+
+  const handleDepartmentFilterChange = (newDept) => {
+    setDepartmentFilter(newDept);
+    setPage(1);
+    if (newDept && designationFilter) {
+      const currentDeptNorm = newDept.toLowerCase().replace(/[-_\s&]/g, "");
+      const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+      const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+      const activeMap = isTeaching ? teachingDesignationMap : isNonTeaching ? nonTeachingDesignationMap : { ...teachingDesignationMap, ...nonTeachingDesignationMap };
+      let validDesigs = [];
+      for (const [deptKey, desigs] of Object.entries(activeMap)) {
+        const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
+        if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
+          validDesigs = desigs;
+          break;
+        }
+      }
+      const matchingApi = apiFilterDesigs
+        .filter((d) => typeof d === "object" && String(d.departmentName || d.department || "").toLowerCase().replace(/[-_\s&]/g, "") === currentDeptNorm)
+        .map((d) => (typeof d === "object" ? d.name || d.designationName : d));
+      const allValid = new Set([...validDesigs, ...matchingApi]);
+      if (allValid.size > 0 && !allValid.has(designationFilter)) {
+        setDesignationFilter("");
+      }
+    }
+  };
+
   const showStaffType = forced !== "Teaching" && forced !== "Non-Teaching";
   const shown = useMemo(() => {
     if (apiItems !== null && Array.isArray(apiItems)) {
@@ -3254,8 +3328,8 @@ function StaffList({ records = [], setRecords, forced }) {
 
   return (
     <DashboardLayout
-      title={forced === "Completed" ? "Completed Profiles" : forced === "All" ? "Staff List" : forced ? `${forced} Staff` : "Staff List"}
-      subtitle={forced === "Completed" ? "View staff members with completed profiles." : "View, edit and manage all staff members."}
+      title={forced === "Completed" ? "Completed Profiles" : forced === "All" ? "Total Staff" : forced ? `${forced} Staff` : "Total Staff"}
+      subtitle={forced === "Completed" ? "View staff members with completed profiles." : forced === "All" || !forced ? "View, edit and manage all staff members across the institution." : `View, edit and manage ${forced.toLowerCase()} staff members.`}
       breadcrumb={["People", "Staff Management"]}
       actions={null}
     >
@@ -3293,7 +3367,7 @@ function StaffList({ records = [], setRecords, forced }) {
                   onChange={(e) => setQ(e.target.value)}
                 />
               </label>
-              <select value={departmentFilter} onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }} aria-label="Filter by department">
+              <select value={departmentFilter} onChange={(e) => handleDepartmentFilterChange(e.target.value)} aria-label="Filter by department">
                 <option value="">Department</option>
                 {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
               </select>
@@ -4128,11 +4202,10 @@ function SendLink({ record, update, activity }) {
       }
     } catch (err) {
       console.warn("POST /api/v1/staff/{id}/send-link fallback handled:", err);
-      // Generate guaranteed functional link even if backend email gateway is offline
-      const fallbackToken = record.profileLinkToken || record.token || record.id || `staff-${record.id}`;
-      finalLink = `${window.location.origin}/staff/onboarding/${fallbackToken}`;
+      // Generate guaranteed functional link for Faculty Dashboard
+      finalLink = `${window.location.origin}/faculty-dashboard`;
       setGeneratedLink(finalLink);
-      receivedToken = fallbackToken;
+      receivedToken = record.profileLinkToken || record.token || record.id || `staff-${record.id}`;
       success = true;
       setFeedback({
         success: true,
@@ -4159,7 +4232,7 @@ function SendLink({ record, update, activity }) {
     }
   };
 
-  const currentActiveLink = generatedLink || `${window.location.origin}/staff/onboarding/${record.profileLinkToken || record.token || record.id || "preview"}`;
+  const currentActiveLink = generatedLink || `${window.location.origin}/faculty-dashboard`;
 
   return (
     <DashboardLayout
@@ -4329,196 +4402,6 @@ function SendLink({ record, update, activity }) {
         </section>
       </main>
     </DashboardLayout>
-  );
-}
-
-// ----------------------------------------------------------------------
-// PORTAL HOME & FORM (GET /api/v1/staff/token/{token}, save-profile-draft, submit-profile)
-// ----------------------------------------------------------------------
-function PortalHome({ record }) {
-  const n = useNavigate();
-  return (
-    <div className="portal-shell">
-      <aside>
-        <GraduationCap />
-        <strong>Pirnav Staff Portal</strong>
-        <span>My Dashboard</span>
-        <span>My Profile</span>
-        <span>Documents</span>
-        <span>Help</span>
-      </aside>
-      <main>
-        <header>
-          <div>
-            <h1>Welcome, {record.fullName}</h1>
-            <p>Complete and submit your professional profile.</p>
-          </div>
-          <Badge value={record.profileStatus} />
-        </header>
-        {record.profileStatus === "Needs Correction" ? (
-          <aside className="correction-banner">
-            Admin requested corrections: {record.correctionNote}
-          </aside>
-        ) : null}
-        <section className="portal-profile">
-          <UserRound />
-          <div>
-            <h2>{record.fullName}</h2>
-            <p>{record.designation} · {record.department}</p>
-          </div>
-          <div className="completion">
-            <strong>{record.profileCompletion}%</strong>
-            <span>Profile completed</span>
-          </div>
-        </section>
-        <section className="portal-sections">
-          {portalSteps.slice(0, 8).map((s, i) => (
-            <article key={s}>
-              <span>
-                {i < Math.floor(record.profileCompletion / 12.5) ? <Check /> : <Clock3 />}
-              </span>
-              <div>
-                <strong>{s}</strong>
-                <small>{i < Math.floor(record.profileCompletion / 12.5) ? "Completed" : "Pending"}</small>
-              </div>
-            </article>
-          ))}
-        </section>
-        <button
-          className="cms-btn cms-btn-primary portal-cta"
-          onClick={() => n(`/mock-staff-portal/${record.id}/complete-profile`)}
-        >
-          Complete Profile <ChevronRight />
-        </button>
-      </main>
-    </div>
-  );
-}
-
-function PortalForm({ record, update, activity }) {
-  const n = useNavigate();
-  const [step, setStep] = useState(0);
-  const [values, setValues] = useState(record);
-  const [errors, setErrors] = useState({});
-  const [confirmed, setConfirmed] = useState(false);
-
-  const handleSaveDraft = async () => {
-    try {
-      // POST /api/v1/staff/{id}/save-profile-draft
-      await apiClient.post(apiEndpoints.faculty.saveProfileDraft(record.id), {
-        sectionName: portalSteps[step],
-        personal: values,
-      });
-    } catch (err) {
-      console.warn("POST /api/v1/staff/{id}/save-profile-draft API offline");
-    }
-    update({ ...values, profileStatus: "In Progress" });
-  };
-
-  const next = () => {
-    handleSaveDraft();
-    update({
-      ...values,
-      profileStatus: "In Progress",
-      profileCompletion: Math.min(95, 35 + (step + 1) * 7),
-    });
-    setStep((s) => s + 1);
-  };
-
-  const submit = async () => {
-    try {
-      // POST /api/v1/staff/{id}/submit-profile
-      await apiClient.post(apiEndpoints.faculty.submitProfile(record.id));
-    } catch (err) {
-      console.warn("POST /api/v1/staff/{id}/submit-profile API offline");
-    }
-
-    update({
-      ...values,
-      profileStatus: "Submitted",
-      profileCompletion: 100,
-      profileSubmitted: true,
-    });
-    if (activity) activity(`${record.fullName} submitted profile`);
-    n(`/mock-staff-portal/${record.id}`);
-  };
-
-  return (
-    <div className="portal-shell">
-      <aside>
-        <GraduationCap />
-        <strong>Pirnav Staff Portal</strong>
-        {portalSteps.map((s, i) => (
-          <button className={i === step ? "is-active" : ""} onClick={() => setStep(i)} key={s}>
-            {i + 1}. {s}
-          </button>
-        ))}
-      </aside>
-      <main>
-        <header>
-          <div>
-            <h1>{portalSteps[step]}</h1>
-            <p>Complete your remaining staff profile.</p>
-          </div>
-          <span>{Math.round(((step + 1) / 8) * 100)}%</span>
-        </header>
-        {step < 7 ? (
-          <section className="staff-form-panel">
-            <div className="staff-form-grid">
-              {portalFields[step].map((f) => (
-                <Field
-                  key={f[0]}
-                  item={f}
-                  values={values}
-                  setValues={setValues}
-                  error={errors[f[0]]}
-                  forceOptional={true}
-                />
-              ))}
-            </div>
-            <footer>
-              {step ? (
-                <button className="cms-btn cms-btn-ghost" onClick={() => setStep((s) => s - 1)}>
-                  Previous
-                </button>
-              ) : null}
-              <button className="cms-btn cms-btn-ghost" onClick={handleSaveDraft}>
-                Save Draft
-              </button>
-              <button className="cms-btn cms-btn-primary" onClick={next}>
-                Save &amp; Continue
-              </button>
-            </footer>
-          </section>
-        ) : (
-          <section className="staff-form-panel">
-            <Summary
-              record={values}
-              onEdit={(groupIndex) => {
-                const map = [0, 1, 2, 5, 6];
-                setStep(map[groupIndex] !== undefined ? map[groupIndex] : groupIndex);
-              }}
-            />
-            <label className="confirm-check">
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />{" "}
-              I confirm that the information provided is correct.
-            </label>
-            <footer>
-              <button className="cms-btn cms-btn-ghost" onClick={() => setStep(6)}>
-                Previous
-              </button>
-              <button className="cms-btn cms-btn-primary" disabled={!confirmed} onClick={submit}>
-                Submit Profile
-              </button>
-            </footer>
-          </section>
-        )}
-      </main>
-    </div>
   );
 }
 
@@ -4703,8 +4586,8 @@ function Pending({ records = [], setRecords, activity }) {
 
   return (
     <DashboardLayout
-      title="Pending Teaching Staff Submissions"
-      subtitle="Track and review Teaching Staff profile completion."
+      title="Pending Staff Submissions"
+      subtitle="Track and review staff profile completion."
       breadcrumb={["People", "Staff Management"]}
     >
       <main className="staff-mock-page">
@@ -5663,6 +5546,8 @@ export default function StaffManagementPage() {
         </main>
       </DashboardLayout>
     );
+  else if ((p.includes("/mock-staff-portal") || p.includes("/staff-portal") || p.includes("/staff/onboarding")) && record)
+    page = <Navigate to="/faculty-dashboard" replace />;
   else if (p.endsWith("/send-link") && record)
     page = <SendLink record={record} update={update} activity={activity} />;
   else if (p.endsWith("/review") && record)
