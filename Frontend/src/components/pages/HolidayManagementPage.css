@@ -10,6 +10,31 @@
 .holiday-stat.is-violet { --holiday-accent: #7c3aed; --holiday-surface: #f8f5ff; --holiday-icon-surface: #ede9fe; }
 .holiday-stat.is-amber { --holiday-accent: #b45309; --holiday-surface: #fffbeb; --holiday-icon-surface: #fef3c7; }
 .holiday-stat.is-completed { --holiday-accent: #167244; --holiday-surface: #f0fbf4; --holiday-icon-surface: #dcfce7; }
+
+/* Keep the light pastel cards above, while using the dashboard card treatment in dark mode. */
+[data-theme="dark"] .holiday-stat {
+  background: var(--cms-surface);
+  border-color: color-mix(in srgb, var(--holiday-accent) 30%, var(--cms-border));
+  box-shadow: var(--cms-shadow);
+}
+
+[data-theme="dark"] .holiday-stat > span {
+  background: color-mix(in srgb, var(--holiday-accent) 18%, var(--cms-surface));
+}
+
+[data-theme="dark"] .holiday-stat small {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .holiday-stat strong {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .holiday-stat.is-primary { --holiday-accent: var(--cms-primary); }
+[data-theme="dark"] .holiday-stat.is-blue { --holiday-accent: var(--cms-info); }
+[data-theme="dark"] .holiday-stat.is-amber { --holiday-accent: var(--cms-amber); }
+[data-theme="dark"] .holiday-stat.is-violet { --holiday-accent: var(--cms-violet); }
+[data-theme="dark"] .holiday-stat.is-completed { --holiday-accent: var(--cms-green); }
 .holiday-list-card { overflow: hidden; }
 .holiday-filters { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--cms-border); flex-wrap: wrap; }
 .holiday-search { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 11px; border: 1px solid var(--cms-border); border-radius: 8px; color: var(--cms-muted); background: var(--cms-surface); }
