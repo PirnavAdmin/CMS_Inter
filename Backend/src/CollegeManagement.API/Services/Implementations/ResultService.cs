@@ -505,6 +505,18 @@ namespace CollegeManagement.API.Services.Implementations
                 m.UpdatedAt = date;
             }
 
+            // Also update Results table for this section's students if records exist
+            var studentIds = marks.Select(m => m.StudentId).Distinct().ToList();
+            var results = await _context.Results
+                .Where(r => r.ExamId == examId && studentIds.Contains(r.StudentId))
+                .ToListAsync();
+            foreach (var r in results)
+            {
+                r.IsPublished = true;
+                r.PublishedDate = date;
+                r.UpdatedAt = date;
+            }
+
             await _context.SaveChangesAsync();
             InvalidateResultsCache(examId);
             return true;
@@ -534,6 +546,17 @@ namespace CollegeManagement.API.Services.Implementations
                 m.UpdatedAt = date;
             }
 
+            // Also update Results table for this exam and group if records exist
+            var resultsQuery = _context.Results.Where(r => r.ExamId == examId);
+            if (groupId > 0) resultsQuery = resultsQuery.Where(r => r.GroupId == groupId);
+            var results = await resultsQuery.ToListAsync();
+            foreach (var r in results)
+            {
+                r.IsPublished = true;
+                r.PublishedDate = date;
+                r.UpdatedAt = date;
+            }
+
             await _context.SaveChangesAsync();
             InvalidateResultsCache(examId);
             return true;
@@ -559,9 +582,314 @@ namespace CollegeManagement.API.Services.Implementations
                 m.UpdatedAt = date;
             }
 
+            var resultsQuery = _context.Results.Where(r => r.ExamId == request.ExamId);
+            if (request.GroupId > 0) resultsQuery = resultsQuery.Where(r => r.GroupId == request.GroupId);
+            if (request.BoardId > 0) resultsQuery = resultsQuery.Where(r => r.BoardId == request.BoardId);
+            if (request.AcademicYearId > 0) resultsQuery = resultsQuery.Where(r => r.AcademicYearId == request.AcademicYearId);
+            var results = await resultsQuery.ToListAsync();
+            foreach (var r in results)
+            {
+                r.IsPublished = true;
+                r.PublishedDate = date;
+                r.UpdatedAt = date;
+            }
+
             await _context.SaveChangesAsync();
             InvalidateResultsCache(request.ExamId);
             return true;
+        }
+
+        public async Task<IEnumerable<PublishedExamResultGroupDto>> GetPublishedResultsAsync(int? boardId = null, int? academicYearId = null, int? groupId = null)
+        {
+            var cacheKey = $"published_results_{boardId ?? 0}_{academicYearId ?? 0}_{groupId ?? 0}";
+            if (_cache.TryGetValue(cacheKey, out IEnumerable<PublishedExamResultGroupDto>? cached) && cached != null)
+            {
+                return cached;
+            }
+
+            // 1. Query published marks
+            var marksQuery = _context.Marks
+                .Include(m => m.Subject)
+                .Where(m => m.IsActive && m.IsPublished);
+
+            if (boardId.HasValue && boardId.Value > 0)
+                marksQuery = marksQuery.Where(m => m.BoardId == boardId.Value);
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+                marksQuery = marksQuery.Where(m => m.AcademicYearId == academicYearId.Value);
+            if (groupId.HasValue && groupId.Value > 0)
+                marksQuery = marksQuery.Where(m => m.GroupId == groupId.Value);
+
+            var marks = await marksQuery.ToListAsync();
+
+            // 2. Query published results table
+            var resultsQuery = _context.Results
+                .Include(r => r.Subject)
+                .Where(r => r.IsPublished);
+
+            if (boardId.HasValue && boardId.Value > 0)
+                resultsQuery = resultsQuery.Where(r => r.BoardId == boardId.Value);
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+                resultsQuery = resultsQuery.Where(r => r.AcademicYearId == academicYearId.Value);
+            if (groupId.HasValue && groupId.Value > 0)
+                resultsQuery = resultsQuery.Where(r => r.GroupId == groupId.Value);
+
+            var results = await resultsQuery.ToListAsync();
+
+            if (!marks.Any() && !results.Any())
+            {
+                return Enumerable.Empty<PublishedExamResultGroupDto>();
+            }
+
+            var examIds = marks.Select(m => m.ExaminationId)
+                .Union(results.Select(r => r.ExamId))
+                .Distinct()
+                .ToList();
+
+            var examinations = await _context.Examinations
+                .Include(e => e.Board)
+                .Include(e => e.AcademicYear)
+                .Include(e => e.AcademicLevel)
+                .Include(e => e.Group)
+                .Include(e => e.Program)
+                .Where(e => examIds.Contains(e.ExaminationId))
+                .ToDictionaryAsync(e => e.ExaminationId);
+
+            Dictionary<int, string> sectionNames = new();
+            Dictionary<int, string> inChargeNames = new();
+            try
+            {
+                var sections = await _context.Sections.Include(s => s.InchargeNavigation).ToListAsync();
+                foreach (var s in sections)
+                {
+                    sectionNames[s.SectionId] = s.SectionName;
+                    if (s.InchargeNavigation != null)
+                    {
+                        inChargeNames[s.SectionId] = $"{s.InchargeNavigation.FirstName} {s.InchargeNavigation.LastName}".Trim();
+                    }
+                }
+            }
+            catch { }
+
+            Dictionary<int, string> groupNames = new();
+            try
+            {
+                var grps = await _context.Groups.ToListAsync();
+                foreach (var g in grps)
+                {
+                    groupNames[g.GroupId] = g.GroupName;
+                }
+            }
+            catch { }
+
+            var publishedGroups = new List<PublishedExamResultGroupDto>();
+
+            var examGroupKeys = marks
+                .Select(m => new { ExamId = m.ExaminationId, GroupId = m.GroupId })
+                .Union(results.Select(r => new { ExamId = r.ExamId, GroupId = r.GroupId }))
+                .Distinct()
+                .ToList();
+
+            foreach (var key in examGroupKeys)
+            {
+                var examId = key.ExamId;
+                var gId = key.GroupId;
+
+                examinations.TryGetValue(examId, out var exam);
+
+                var examMarks = marks.Where(m => m.ExaminationId == examId && m.GroupId == gId).ToList();
+                var examResults = results.Where(r => r.ExamId == examId && r.GroupId == gId).ToList();
+
+                DateTime? publishedDate = examMarks.Select(m => m.PublishedAt).FirstOrDefault(d => d.HasValue)
+                    ?? examResults.Select(r => r.PublishedDate).FirstOrDefault(d => d.HasValue)
+                    ?? DateTime.UtcNow;
+
+                var boardIdVal = exam?.BoardId ?? (examMarks.FirstOrDefault()?.BoardId ?? (examResults.FirstOrDefault()?.BoardId ?? 1));
+                var boardName = exam?.Board?.BoardName ?? "Board";
+                var academicYearIdVal = exam?.AcademicYearId ?? (examMarks.FirstOrDefault()?.AcademicYearId ?? (examResults.FirstOrDefault()?.AcademicYearId ?? 1));
+                var academicYearName = exam?.AcademicYear?.AcademicYearName ?? "—";
+                var academicLevelIdVal = exam?.AcademicLevelId ?? (examMarks.FirstOrDefault()?.AcademicLevelId ?? examResults.FirstOrDefault()?.AcademicLevelId);
+                var academicLevelName = exam?.AcademicLevel?.LevelName;
+                var groupName = exam?.Group?.GroupName ?? (groupNames.TryGetValue(gId, out var gn) ? gn : "Group");
+                var programIdVal = exam?.Program?.ProgramName ?? "Regular";
+                var programName = exam?.Program?.ProgramName ?? $"{groupName} Stream";
+                var passPercentage = exam?.PassPercentage ?? 35m;
+
+                var sectionSummaries = new List<SectionResultSummaryDto>();
+
+                if (examMarks.Any())
+                {
+                    var studentGroups = examMarks
+                        .GroupBy(m => m.StudentId)
+                        .Select(g =>
+                        {
+                            var first = g.First();
+                            var rollNo = !string.IsNullOrEmpty(first.RollNo) ? first.RollNo : $"ROLL{first.StudentId:000}";
+                            var studentName = !string.IsNullOrEmpty(first.StudentName) ? first.StudentName : "Student";
+                            var secId = first.SectionId;
+                            var secName = sectionNames.ContainsKey(secId) ? sectionNames[secId] : $"Section-{secId}";
+
+                            decimal grandTotal = g.Sum(m => (decimal)m.TotalMarks);
+                            var maxPossible = exam?.TotalMarks > 0 ? (decimal)exam.TotalMarks : (g.Count() * 100m);
+                            var percentage = maxPossible > 0 ? Math.Round((grandTotal / maxPossible) * 100m, 2) : 0m;
+                            var result = percentage >= passPercentage ? "PASS" : "FAIL";
+
+                            return new SectionStudentResultDto
+                            {
+                                StudentId = g.Key,
+                                RollNo = rollNo,
+                                StudentName = studentName,
+                                SectionId = secId,
+                                SectionName = secName,
+                                Total = grandTotal,
+                                Maximum = maxPossible,
+                                Percentage = percentage,
+                                Grade = GradeFor(percentage),
+                                Result = result,
+                                Status = "PUBLISHED",
+                                IsPublished = true
+                            };
+                        })
+                        .ToList();
+
+                    sectionSummaries = studentGroups
+                        .GroupBy(s => s.SectionId ?? 0)
+                        .Select(sg =>
+                        {
+                            var secId = sg.Key;
+                            var students = sg.ToList();
+                            var secName = sectionNames.ContainsKey(secId) ? sectionNames[secId] : $"Section-{secId}";
+                            var inCharge = inChargeNames.ContainsKey(secId) ? inChargeNames[secId] : "—";
+                            var total = students.Count;
+                            var passed = students.Count(s => s.Result == "PASS");
+                            var failed = total - passed;
+                            var rate = total > 0 ? Math.Round(((decimal)passed / total) * 100m, 2) : 0m;
+                            var avg = total > 0 ? Math.Round(students.Average(s => s.Percentage), 2) : 0m;
+
+                            return new SectionResultSummaryDto
+                            {
+                                Id = secId,
+                                Name = secName,
+                                InChargeId = 1,
+                                InChargeName = inCharge,
+                                Count = total,
+                                Passed = passed,
+                                Failed = failed,
+                                PassRate = rate,
+                                Average = avg,
+                                ResultStatus = "PUBLISHED",
+                                IsPublished = true,
+                                StudentRows = students
+                            };
+                        })
+                        .OrderBy(s => s.Name)
+                        .ToList();
+                }
+                else if (examResults.Any())
+                {
+                    var studentGroups = examResults
+                        .GroupBy(r => r.StudentId)
+                        .Select(g =>
+                        {
+                            var first = g.First();
+                            var rollNo = $"ROLL{first.StudentId:000}";
+                            var secId = 1;
+                            var secName = "Section-1";
+
+                            decimal grandTotal = g.Sum(r => r.TotalMarks);
+                            var maxPossible = exam?.TotalMarks > 0 ? (decimal)exam.TotalMarks : (g.Count() * 100m);
+                            var percentage = maxPossible > 0 ? Math.Round((grandTotal / maxPossible) * 100m, 2) : 0m;
+                            var hasFail = g.Any(r => string.Equals(r.ResultStatus, "Fail", StringComparison.OrdinalIgnoreCase));
+                            var result = !hasFail && percentage >= passPercentage ? "PASS" : "FAIL";
+
+                            return new SectionStudentResultDto
+                            {
+                                StudentId = g.Key,
+                                RollNo = rollNo,
+                                StudentName = $"Student {g.Key}",
+                                SectionId = secId,
+                                SectionName = secName,
+                                Total = grandTotal,
+                                Maximum = maxPossible,
+                                Percentage = percentage,
+                                Grade = GradeFor(percentage),
+                                Result = result,
+                                Status = "PUBLISHED",
+                                IsPublished = true
+                            };
+                        })
+                        .ToList();
+
+                    sectionSummaries = studentGroups
+                        .GroupBy(s => s.SectionId ?? 0)
+                        .Select(sg =>
+                        {
+                            var secId = sg.Key;
+                            var students = sg.ToList();
+                            var total = students.Count;
+                            var passed = students.Count(s => s.Result == "PASS");
+                            var failed = total - passed;
+                            var rate = total > 0 ? Math.Round(((decimal)passed / total) * 100m, 2) : 0m;
+                            var avg = total > 0 ? Math.Round(students.Average(s => s.Percentage), 2) : 0m;
+
+                            return new SectionResultSummaryDto
+                            {
+                                Id = secId,
+                                Name = "Section-1",
+                                InChargeId = 1,
+                                InChargeName = "—",
+                                Count = total,
+                                Passed = passed,
+                                Failed = failed,
+                                PassRate = rate,
+                                Average = avg,
+                                ResultStatus = "PUBLISHED",
+                                IsPublished = true,
+                                StudentRows = students
+                            };
+                        })
+                        .ToList();
+                }
+
+                var totalGroupStudents = sectionSummaries.Sum(s => s.Count);
+                var totalPassed = sectionSummaries.Sum(s => s.Passed);
+                var totalFailed = sectionSummaries.Sum(s => s.Failed);
+                var groupPassRate = totalGroupStudents > 0
+                    ? Math.Round(((decimal)totalPassed / totalGroupStudents) * 100m, 2)
+                    : 0m;
+
+                publishedGroups.Add(new PublishedExamResultGroupDto
+                {
+                    PublishedId = examId,
+                    ExamId = examId,
+                    ExamName = exam?.ExamName ?? $"Exam {examId}",
+                    ExamCode = exam?.ExamCode,
+                    BoardId = boardIdVal,
+                    BoardName = boardName,
+                    AcademicYearId = academicYearIdVal,
+                    AcademicYear = academicYearName,
+                    AcademicLevelId = academicLevelIdVal,
+                    AcademicLevel = academicLevelName,
+                    GroupId = gId,
+                    GroupName = groupName,
+                    ProgramId = programIdVal,
+                    ProgramName = programName,
+                    TotalStudents = totalGroupStudents,
+                    Passed = totalPassed,
+                    Failed = totalFailed,
+                    PassRate = groupPassRate,
+                    ResultStatus = "PUBLISHED",
+                    PublishedDate = publishedDate,
+                    Sections = sectionSummaries
+                });
+            }
+
+            var ordered = publishedGroups
+                .OrderByDescending(g => g.PublishedDate)
+                .ThenBy(g => g.ExamName)
+                .ToList();
+
+            SetCache(cacheKey, ordered, TimeSpan.FromMinutes(5));
+            return ordered;
         }
 
         #endregion
@@ -1150,12 +1478,7 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<GetResultsResponseDto> GetResultsAsync(GetResultsRequestDto request)
         {
-            if (request.BoardId <= 0) throw new ArgumentException("Invalid BoardId.");
-            if (request.AcademicYearId <= 0) throw new ArgumentException("Invalid AcademicYearId.");
-            if (request.AcademicLevelId <= 0) throw new ArgumentException("Invalid AcademicLevelId.");
-            if (request.GroupId <= 0) throw new ArgumentException("Invalid GroupId.");
-            if (request.ExamId <= 0) throw new ArgumentException("Invalid ExamId.");
-
+            request ??= new GetResultsRequestDto();
             if (request.PageNumber <= 0) request.PageNumber = 1;
             if (request.PageSize <= 0) request.PageSize = 10;
 

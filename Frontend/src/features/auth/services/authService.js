@@ -2,6 +2,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 
 const ADMIN_EMAIL = "admin@cms.com";
+const ADMIN_LOGIN_ALIASES = new Set([ADMIN_EMAIL, "admin@cms"]);
 const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
 const ACCOUNT_TYPES = new Set(["admin", "user"]);
 
@@ -20,6 +21,14 @@ export const userLogin = (data) =>
 export const loginUser = async (credentials) => {
   const emailOrMobile = String(credentials.emailOrMobile || credentials.email || "").trim();
   const password = credentials.password;
+  const normalizedIdentifier = emailOrMobile.toLowerCase();
+
+  if (ADMIN_LOGIN_ALIASES.has(normalizedIdentifier)) {
+    logLoginSelection(apiEndpoints.admin.login, ADMIN_EMAIL);
+    const response = await adminLogin({ email: ADMIN_EMAIL, password });
+    logLoginResponse(response.status);
+    return normalizeLoginResponse(response.data, ADMIN_EMAIL, "admin");
+  }
 
   logLoginSelection(apiEndpoints.auth.login, emailOrMobile);
   try {

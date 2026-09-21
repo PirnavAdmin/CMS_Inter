@@ -14,7 +14,6 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/rooms")]
-    [Route("api/v1/rooms")]
     [Produces("application/json")]
     [Authorize]
     public class RoomController : ControllerBase

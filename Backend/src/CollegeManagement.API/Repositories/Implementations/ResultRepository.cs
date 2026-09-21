@@ -102,19 +102,19 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// Retrieves all published results.
         /// </summary>
         public async Task<GetResultsResponseDto> GetResultsAsync(
-    GetResultsRequestDto request)
+            GetResultsRequestDto request)
         {
-
+            request ??= new GetResultsRequestDto();
             var parameters = new DynamicParameters();
 
-            parameters.Add("p_BoardId", request.BoardId);
-            parameters.Add("p_AcademicYearId", request.AcademicYearId);
-            parameters.Add("p_AcademicLevelId", request.AcademicLevelId);
-            parameters.Add("p_GroupId", request.GroupId);
-            parameters.Add("p_ExamId", request.ExamId);
+            parameters.Add("p_BoardId", request.BoardId ?? 0);
+            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
+            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
+            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_ExamId", request.ExamId ?? 0);
             parameters.Add("p_Search", request.Search);
-            parameters.Add("p_PageNumber", request.PageNumber);
-            parameters.Add("p_PageSize", request.PageSize);
+            parameters.Add("p_PageNumber", request.PageNumber <= 0 ? 1 : request.PageNumber);
+            parameters.Add("p_PageSize", request.PageSize <= 0 ? 10 : request.PageSize);
 
             using var multi = await Connection.QueryMultipleAsync(
                 "sp_GetResults",

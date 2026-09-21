@@ -1398,7 +1398,8 @@
 .cms-modal.exam-modal .cms-searchable-select-dropdown,
 .cms-modal.exam-modal [role="listbox"],
 .cms-modal.exam-modal .cms-searchable-select-search,
-.cms-modal.exam-modal .cms-searchable-select-options {
+.cms-modal.exam-modal .cms-searchable-select-options,
+.staff-search-dropdown-menu {
   background-color: #ffffff !important;
   background: #ffffff !important;
   opacity: 1 !important;
@@ -1406,7 +1407,8 @@
 }
 
 /* Eliminate Double Scrollbars: Dropdown wrapper is overflow hidden, inner options scroll only */
-.cms-searchable-select-dropdown {
+.cms-searchable-select-dropdown,
+.staff-search-dropdown-menu {
   overflow: hidden !important;
   max-height: none !important;
 }
