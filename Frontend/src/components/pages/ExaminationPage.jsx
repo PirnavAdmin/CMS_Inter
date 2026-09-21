@@ -45,6 +45,9 @@ const ensureArray = (val) => {
     if (Array.isArray(val.data)) return val.data;
     if (Array.isArray(val.results)) return val.results;
     if (Array.isArray(val.result)) return val.result;
+    if (Array.isArray(val.rooms)) return val.rooms;
+    if (Array.isArray(val.halls)) return val.halls;
+    if (Array.isArray(val.availableHalls)) return val.availableHalls;
   }
   // Wrap single primitive/object into an array if not empty
   return [val];
@@ -61,6 +64,9 @@ const unwrap = (res) => {
   if (Array.isArray(payload?.Items)) return payload.Items;
   if (Array.isArray(payload?.results)) return payload.results;
   if (Array.isArray(payload?.result)) return payload.result;
+  if (Array.isArray(payload?.rooms)) return payload.rooms;
+  if (Array.isArray(payload?.halls)) return payload.halls;
+  if (Array.isArray(payload?.availableHalls)) return payload.availableHalls;
   if (Array.isArray(payload?.$values)) return payload.$values;
   if (Array.isArray(payload?.records)) return payload.records;
   if (Array.isArray(payload?.schedules)) return payload.schedules;
@@ -68,6 +74,9 @@ const unwrap = (res) => {
   if (Array.isArray(payload?.subjects)) return payload.subjects;
   if (Array.isArray(payload?.data?.items)) return payload.data.items;
   if (Array.isArray(payload?.data?.result)) return payload.data.result;
+  if (Array.isArray(payload?.data?.rooms)) return payload.data.rooms;
+  if (Array.isArray(payload?.data?.halls)) return payload.data.halls;
+  if (Array.isArray(payload?.data?.availableHalls)) return payload.data.availableHalls;
   if (Array.isArray(payload?.data?.schedules)) return payload.data.schedules;
   if (Array.isArray(payload?.data?.examinationSchedules)) return payload.data.examinationSchedules;
   if (Array.isArray(payload?.data?.subjects)) return payload.data.subjects;
@@ -479,14 +488,50 @@ const isSameSessionOrSelf = (s, entry, editingId = null, exam = null) => {
   return false;
 };
 
+// Verification helper: Checks if a room/venue is suitable for examination conduction (Active Classrooms and Examination Halls)
+const isExamEligibleRoom = (room) => {
+  if (!room) return false;
+  const isAct =
+    room.isActive !== false &&
+    !["INACTIVE", "DISABLED", "0", "FALSE"].includes(normalizeStatus(room.status));
+  if (!isAct) return false;
+
+  const type = String(room.roomType || room.type || "").trim().toLowerCase();
+  const name = String(room.name || room.roomName || room.roomNumber || "").trim().toLowerCase();
+
+  // Exclude non-exam venues: Laboratories, computer labs, libraries, staff rooms, offices, canteens, restrooms
+  const isExcluded = ["laboratory", "lab", "computer lab", "library", "staff room", "office", "store", "canteen", "restroom"].some(
+    (ex) => type === ex || (type.includes(ex) && !type.includes("hall") && !type.includes("exam"))
+  );
+  if (isExcluded) return false;
+
+  // Must be a Classroom, Examination Hall, Exam Hall, Seminar Hall, Auditorium, or general classroom/room
+  const isClassroomOrHall =
+    !type ||
+    type.includes("class") ||
+    type.includes("exam") ||
+    type.includes("hall") ||
+    type.includes("auditorium") ||
+    type === "room" ||
+    name.includes("room") ||
+    name.includes("hall") ||
+    name.includes("class");
+
+  return isClassroomOrHall;
+};
+
 // Strict Hall Conflict Semantics: Room is UNAVAILABLE if another schedule uses it during overlapping time
 const getEligibleRooms = (schedules, entry, editingId = null, exam = null, roomsList = []) => {
   const selectedLevels = (exam?.levelIds || [exam?.levelId]).filter(Boolean).map(normalizeId);
   const entryDate = canonicalDate(entry?.date || entry?.examDate);
-  return roomsList.filter((room) => {
-    if (room.status !== "Active" && room.isActive === false) return false;
-    // Level filtering: If room is level specific, exam must include that level
-    if (room.levelId && room.levelId !== "ALL") {
+  return ensureArray(roomsList).filter((room) => {
+    if (!room) return false;
+    // Must be active and suitable for examinations (Classroom or Examination Hall)
+    if (!isExamEligibleRoom(room)) return false;
+
+    // Level filtering: If room is level specific (not ALL, not 0, not empty), exam must include that level
+    const roomLevel = normalizeStatus(room.levelId);
+    if (room.levelId && !["ALL", "0", "", "NULL", "UNDEFINED"].includes(roomLevel)) {
       if (selectedLevels.length > 0 && !selectedLevels.includes(normalizeId(room.levelId))) {
         return false;
       }
@@ -1977,7 +2022,9 @@ export default function ExaminationPage() {
         const parsed = JSON.parse(raw);
         return new Map(Object.entries(parsed));
       }
-    } catch { }
+    } catch {
+      /* ignore storage error */
+    }
     return new Map();
   };
 
@@ -1987,7 +2034,9 @@ export default function ExaminationPage() {
       const current = raw ? JSON.parse(raw) : {};
       current[String(id)] = config;
       sessionStorage.setItem("cms_submitted_exam_configs", JSON.stringify(current));
-    } catch { }
+    } catch {
+      /* ignore storage error */
+    }
   };
 
   const submittedExamConfigurations = useRef(loadPersistedExamConfigs());
@@ -2155,19 +2204,119 @@ export default function ExaminationPage() {
     }
   }, []);
 
+  // Robust Room & Exam Hall Fetching for Active Classrooms and Examination Halls
+  const fetchRoomsList = useCallback(async () => {
+    try {
+      const [roomsPrimaryRes, roomsAvailableRes, examHallsRes, legacyRoomsRes] = await Promise.allSettled([
+        apiClient.get("/api/v1/rooms", { params: { IsActive: true } }).catch(() => apiClient.get("/api/v1/rooms")),
+        apiClient.get("/api/v1/rooms/available").catch(() => null),
+        apiClient.get("/api/v1/examinations/available-halls").catch(() => null),
+        apiClient.get("/api/rooms").catch(() => null),
+      ]);
+
+      const rawRoomsList = [];
+      if (roomsPrimaryRes.status === "fulfilled" && roomsPrimaryRes.value) {
+        rawRoomsList.push(...unwrap(roomsPrimaryRes.value));
+      }
+      if (rawRoomsList.length === 0 && roomsAvailableRes.status === "fulfilled" && roomsAvailableRes.value) {
+        rawRoomsList.push(...unwrap(roomsAvailableRes.value));
+      }
+      if (examHallsRes.status === "fulfilled" && examHallsRes.value) {
+        rawRoomsList.push(...unwrap(examHallsRes.value));
+      }
+      if (rawRoomsList.length === 0 && legacyRoomsRes.status === "fulfilled" && legacyRoomsRes.value) {
+        rawRoomsList.push(...unwrap(legacyRoomsRes.value));
+      }
+
+      const seenKeys = new Set();
+      const normalizedRooms = [];
+
+      for (const r of rawRoomsList) {
+        if (!r) continue;
+        const id = normalizeId(r.roomId ?? r.RoomId ?? r.id ?? r.Id ?? r._id);
+        const roomNo = String(r.roomNumber ?? r.RoomNumber ?? r.roomCode ?? r.RoomCode ?? r.roomNo ?? r.RoomNo ?? "").trim();
+        const dedupKey = id || roomNo.toLowerCase();
+        if (!dedupKey || seenKeys.has(dedupKey)) continue;
+        seenKeys.add(dedupKey);
+
+        const roomName = String(r.roomName ?? r.RoomName ?? r.name ?? r.Name ?? (roomNo ? `Room ${roomNo}` : `Room ${id}`)).trim();
+        const roomType = String(r.roomType ?? r.RoomType ?? r.type ?? r.Type ?? r.room_type ?? "Classroom").trim();
+        const capacity = Number(r.capacity ?? r.Capacity ?? r.roomCapacity ?? r.maxCapacity ?? 0) || 0;
+        const blockName = String(r.blockName ?? r.BlockName ?? r.buildingName ?? r.BuildingName ?? r.building ?? r.Building ?? r.block ?? r.Block ?? "").trim();
+        const floor = String(r.floor ?? r.Floor ?? "").trim();
+
+        const rawIsActive = r.isActive ?? r.IsActive;
+        const rawStatus = r.status ?? r.Status;
+        const isAct =
+          rawIsActive === true ||
+          String(rawIsActive) === "1" ||
+          String(rawIsActive).toLowerCase() === "true" ||
+          String(rawStatus || "").toLowerCase() === "active" ||
+          String(rawStatus || "").toLowerCase() === "enabled" ||
+          (rawIsActive == null && rawStatus == null);
+
+        const status = isAct ? "Active" : "Inactive";
+
+        // Exclude non-exam venues: Laboratories, computer labs, libraries, staff rooms, offices, canteens, etc.
+        const rt = roomType.toLowerCase();
+        const rn = roomName.toLowerCase();
+        const isExcluded = ["laboratory", "lab", "computer lab", "library", "staff room", "office", "store", "canteen", "restroom"].some(
+          (ex) => rt === ex || (rt.includes(ex) && !rt.includes("hall") && !rt.includes("exam"))
+        );
+        if (isExcluded) continue;
+
+        // Must be a classroom or examination hall (or seminar hall / auditorium / general classroom/room)
+        const isClassroomOrHall =
+          !rt ||
+          rt.includes("class") ||
+          rt.includes("exam") ||
+          rt.includes("hall") ||
+          rt.includes("auditorium") ||
+          rt === "room" ||
+          rn.includes("room") ||
+          rn.includes("hall") ||
+          rn.includes("class");
+
+        if (isAct && isClassroomOrHall) {
+          normalizedRooms.push({
+            id: id || `room-${dedupKey}`,
+            roomId: id,
+            name: roomName,
+            roomName,
+            roomNumber: roomNo || roomName,
+            capacity: capacity || 40,
+            roomType: roomType || "Classroom",
+            type: roomType || "Classroom",
+            blockName,
+            building: blockName,
+            floor,
+            levelId: r.levelId || r.LevelId ? normalizeId(r.levelId ?? r.LevelId) : "ALL",
+            status,
+            isActive: true,
+          });
+        }
+      }
+
+      setRooms(normalizedRooms);
+      return normalizedRooms;
+    } catch (e) {
+      console.warn("fetchRoomsList encountered an issue:", e);
+      return [];
+    }
+  }, []);
+
   // 1. Initial Mount: Active Boards, Patterns, Exam Types, Rooms, Faculty, Academic Levels, Groups, Students
   useEffect(() => {
     let isMounted = true;
     const fetchInitialMasterData = async () => {
       setLoading(true);
       try {
-        const [boardsRes, yearsRes, patternsRes, typesRes, roomsRes, facultyRes, levelsRes, groupsRes, subjectsRes] =
+        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, groupsRes, subjectsRes] =
           await Promise.allSettled([
             apiClient.get("/api/v1/boards/active").catch(() => apiClient.get("/api/v1/boards")),
             apiClient.get("/api/v1/academic-years").catch(() => null),
             apiClient.get("/api/v1/examinations/patterns"),
             apiClient.get("/api/v1/examinations/types"),
-            apiClient.get("/api/v1/rooms"),
             apiClient.get("/api/v1/staff", { params: { staffType: "Teaching" } }),
             apiClient.get("/api/v1/academic-levels"),
             apiClient.get("/api/v1/groups"),
@@ -2178,6 +2327,8 @@ export default function ExaminationPage() {
 
         // Fetch students and enrich with admissions
         await fetchStudentsList();
+        // Fetch active classrooms and examination halls
+        await fetchRoomsList();
 
         if (boardsRes.status === "fulfilled") {
           const rawBoards = unwrap(boardsRes.value);
@@ -2216,24 +2367,6 @@ export default function ExaminationPage() {
 
         if (typesRes.status === "fulfilled") {
           setExamTypes(unwrap(typesRes.value));
-        }
-
-        if (roomsRes.status === "fulfilled") {
-          const rawRooms = unwrap(roomsRes.value);
-          setRooms(
-            rawRooms
-              .map((r) => ({
-                id: normalizeId(r.roomId ?? r.id),
-                name: r.name || `Room ${r.roomNumber || r.id}`,
-                roomNumber: r.roomNumber || "",
-                capacity: Number(r.capacity) || 0,
-                type: r.type || "Exam Hall",
-                levelId: r.levelId || "ALL",
-                status: r.status || (r.isActive ? "Active" : "Inactive"),
-                isActive: r.isActive !== false && normalizeStatus(r.status) !== "INACTIVE",
-              }))
-              .filter((r) => r.isActive),
-          );
         }
 
         if (facultyRes.status === "fulfilled") {
@@ -2360,7 +2493,7 @@ export default function ExaminationPage() {
         loadExamsAbortRef.current.abort();
       }
     };
-  }, [showToast, loadExaminations]);
+  }, [showToast, loadExaminations, fetchRoomsList, fetchStudentsList]);
 
   const query = search.trim().toLowerCase();
 
@@ -2489,7 +2622,9 @@ export default function ExaminationPage() {
               if (sId) {
                 try {
                   await deleteScheduleFromBackend(editingExamId, sId);
-                } catch { }
+                } catch {
+                  /* ignore deletion error */
+                }
               }
             }
           }
@@ -2557,7 +2692,9 @@ export default function ExaminationPage() {
                 },
               ];
               await saveSchedulesToBackend(editingExamId, remapped, faculty);
-            } catch { }
+            } catch {
+              /* ignore save error */
+            }
           }
           submittedExamConfigurations.current.set(normalizeId(editingExamId), { ...newRecord });
           savePersistedExamConfig(normalizeId(editingExamId), { ...newRecord });
@@ -3306,7 +3443,9 @@ export default function ExaminationPage() {
               setErrors({});
               try {
                 window.scrollTo({ top: 0, behavior: "smooth" });
-              } catch { }
+              } catch {
+                /* ignore scroll error */
+              }
             }}
             onCancelEdit={() => setEditing(null)}
             onSave={handleSaveSchedules}
@@ -3320,6 +3459,8 @@ export default function ExaminationPage() {
             students={students}
             onRefreshStudents={fetchStudentsList}
             rooms={rooms}
+            onRefreshRooms={fetchRoomsList}
+            setSchedules={setSchedules}
             faculty={faculty}
             eligibleSubjects={eligibleSubjects}
             masterPatterns={masterPatterns}
@@ -3508,6 +3649,8 @@ function SearchableSingleSelect({
   error,
   placeholder,
   showSearch = true,
+  emptyText,
+  onRefresh,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -3592,6 +3735,9 @@ function SearchableSingleSelect({
           style={{ ...(error ? { borderColor: "#ef4444" } : {}), cursor: disabled ? "not-allowed" : "pointer" }}
           onClick={() => {
             if (disabled) return;
+            if (options.length === 0 && onRefresh) {
+              onRefresh();
+            }
             setOpen((prev) => !prev);
             const inputEl = ref.current?.querySelector("input");
             if (inputEl) inputEl.focus();
@@ -3611,7 +3757,9 @@ function SearchableSingleSelect({
               setOpen(true);
               try {
                 e.target.select();
-              } catch { }
+              } catch {
+                /* ignore focus error */
+              }
             }}
             onChange={(e) => {
               const val = e.target.value;
@@ -3693,8 +3841,21 @@ function SearchableSingleSelect({
                   );
                 })
               ) : (
-                <div className="cms-searchable-no-options staff-search-dropdown-empty" style={{ backgroundColor: "#ffffff" }}>
-                  No options found
+                <div className="cms-searchable-no-options staff-search-dropdown-empty" style={{ backgroundColor: "#ffffff", padding: "12px 14px", display: "flex", flexDirection: "column", gap: "6px", alignItems: "center", textAlign: "center" }}>
+                  <span>{emptyText || "No options found"}</span>
+                  {onRefresh && (
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      style={{ fontSize: "11px", padding: "2px 8px", height: "auto", minHeight: "22px" }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRefresh();
+                      }}
+                    >
+                      <RefreshCw size={11} style={{ marginRight: "4px" }} /> Refresh Options
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -5477,6 +5638,7 @@ function ScheduleSection({
   exam,
   exams,
   schedules,
+  setSchedules,
   examId,
   setExamId,
   sch,
@@ -5503,6 +5665,7 @@ function ScheduleSection({
   masterPatterns = [],
   showToast,
   onRefreshStudents = null,
+  onRefreshRooms = null,
 }) {
   const entries = useMemo(() => {
     if (!exam) return [];
@@ -5579,6 +5742,13 @@ function ScheduleSection({
       setSch((prev) => ({ ...prev, groupId: selectedGroupId, subjectId: "", patternName: "", hallAssignments: [] }));
     }
   }, [selectedGroupId, sch.groupId, editing, setSch]);
+
+  // Auto-fetch active classrooms and examination halls if not yet loaded
+  useEffect(() => {
+    if (rooms.length === 0 && onRefreshRooms) {
+      onRefreshRooms();
+    }
+  }, [rooms.length, onRefreshRooms]);
 
   // Dynamically load eligible subjects for the current scheduling context
   const [sectionSubjects, setSectionSubjects] = useState([]);
@@ -5990,7 +6160,7 @@ function ScheduleSection({
           const saved = await onSave(generated, null, true);
           if (saved) {
             if (detectedConflicts.length > 0) {
-              setSchedules((prev) => [...prev, ...detectedConflicts]);
+              setSchedules?.((prev) => [...prev, ...detectedConflicts]);
             }
             break;
           } else {
@@ -6025,7 +6195,7 @@ function ScheduleSection({
               ],
             };
             detectedConflicts.push(conflictEntry);
-            setSchedules((prev) => {
+            setSchedules?.((prev) => {
               if (prev.some((s) => s.id === conflictEntry.id)) return prev;
               return [...prev, conflictEntry];
             });
@@ -6561,6 +6731,7 @@ function ScheduleSection({
                   required={getRequiredCandidateStrength(exam, selectedGroupId, programs, false, students)}
                   enrolledStudentCount={getGroupStudents(exam, selectedGroupId, programs, students).length}
                   onRefreshStudents={onRefreshStudents}
+                  onRefreshRooms={onRefreshRooms}
                   onChange={(hallAssignments) => setSch((x) => ({ ...x, hallAssignments }))}
                   onAutoAssign={handleManualAutoAssignTopForm}
                 />
@@ -6612,6 +6783,7 @@ function ScheduleSection({
                 exam={exam}
                 schedules={schedules}
                 rooms={rooms}
+                onRefreshRooms={onRefreshRooms}
                 faculty={faculty}
                 programs={programs}
                 subjects={sectionSubjects}
@@ -6764,6 +6936,7 @@ function ScheduleSection({
           exam={exam}
           schedules={schedules}
           rooms={rooms}
+          onRefreshRooms={onRefreshRooms}
           faculty={faculty}
           programs={programs}
           subjects={sectionSubjects}
@@ -6788,6 +6961,7 @@ function HallAssignmentEditor({
   required,
   enrolledStudentCount = null,
   onRefreshStudents = null,
+  onRefreshRooms = null,
   onChange,
   onAutoAssign,
 }) {
@@ -6823,7 +6997,7 @@ function HallAssignmentEditor({
         <span>
           Remaining: <strong>{Math.max(0, required - allocated)}</strong>
         </span>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           {onRefreshStudents && (
             <button
               type="button"
@@ -6835,6 +7009,17 @@ function HallAssignmentEditor({
               <RefreshCw size={13} style={{ marginRight: "4px" }} /> Sync Students
             </button>
           )}
+          {onRefreshRooms && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              style={{ fontSize: "12px", padding: "4px 8px" }}
+              onClick={onRefreshRooms}
+              title="Refresh active classrooms and examination halls from system"
+            >
+              <RefreshCw size={13} style={{ marginRight: "4px" }} /> Sync Halls
+            </button>
+          )}
           {onAutoAssign && (
             <button type="button" className="cms-btn cms-btn-ghost" onClick={onAutoAssign}>
               <Wand2 size={14} /> Auto-Assign Halls
@@ -6843,7 +7028,12 @@ function HallAssignmentEditor({
           <button
             type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={() => onChange([...assignments, { hallId: "", candidateCount: "", invigilatorIds: [] }])}
+            onClick={() => {
+              if (rooms.length === 0 && onRefreshRooms) {
+                onRefreshRooms();
+              }
+              onChange([...assignments, { hallId: "", candidateCount: "", invigilatorIds: [] }]);
+            }}
           >
             <Plus size={14} /> Add Room / Hall
           </button>
@@ -6875,11 +7065,18 @@ function HallAssignmentEditor({
                   normalizeId(room.id) === normalizeId(assignment.hallId) ||
                   !selectedHallIds.includes(normalizeId(room.id)),
               )
-              .map((room) => ({
-                ...room,
-                name: `${room.name} (${room.roomNumber}) · Capacity ${room.capacity}`,
-              }))}
+              .map((room) => {
+                const roomTypeLabel = room.roomType || room.type || "Classroom";
+                const blockInfo = room.blockName ? ` · ${room.blockName}` : "";
+                const roomNum = room.roomNumber && !room.name.includes(room.roomNumber) ? ` (${room.roomNumber})` : "";
+                return {
+                  ...room,
+                  name: `${room.name}${roomNum} · ${roomTypeLabel} · Capacity ${room.capacity}${blockInfo}`,
+                };
+              })}
             placeholder="Select Exam Hall or Classroom"
+            emptyText="No active classrooms or examination halls found"
+            onRefresh={onRefreshRooms}
           />
 
           <Field
@@ -6930,6 +7127,7 @@ function ScheduleTable({
   exam = null,
   schedules = [],
   rooms = [],
+  onRefreshRooms = null,
   faculty = [],
   programs = [],
   subjects = [],
@@ -7323,6 +7521,7 @@ function ScheduleTable({
                               faculty={getEligibleInvigilators(schedules, s, s.id, faculty, subjects)}
                               required={getRequiredCandidateStrength(exam, s.groupId, programs, false, students)}
                               enrolledStudentCount={getGroupStudents(exam, s.groupId, programs, students).length}
+                              onRefreshRooms={onRefreshRooms}
                               onChange={(newAssignments) => {
                                 setInlineAssignments(newAssignments);
                                 setInlineError("");
@@ -7409,7 +7608,7 @@ function ScheduleTable({
 }
 
 // ---------- EDIT HALLS & INVIGILATORS MODAL ----------
-function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], programs = [], subjects = [], students = [], onClose, onSave }) {
+function EditHallsModal({ schedule, exam, schedules, rooms = [], onRefreshRooms = null, faculty = [], programs = [], subjects = [], students = [], onClose, onSave }) {
   const eligibleRooms = getEligibleRooms(schedules, schedule, schedule.id, exam, rooms);
   const eligibleFaculty = getEligibleInvigilators(schedules, schedule, schedule.id, faculty, subjects);
   const requiredStrength = getRequiredCandidateStrength(exam, schedule.groupId, programs, false, students);
@@ -7584,6 +7783,7 @@ function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], p
           faculty={eligibleFaculty}
           required={requiredStrength}
           enrolledStudentCount={getGroupStudents(exam, schedule.groupId, programs, students).length}
+          onRefreshRooms={onRefreshRooms}
           onChange={(newAssignments) => {
             setAssignments(newAssignments);
             setError("");

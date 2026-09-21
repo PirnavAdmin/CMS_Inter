@@ -1161,13 +1161,17 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px 20px;
+  gap: 12px 18px;
   color: var(--cms-muted);
   font-size: 13px;
 }
 
-.exam-allocation-summary .cms-btn {
+.exam-allocation-summary > div:last-child {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .exam-hall-row {
