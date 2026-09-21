@@ -1,0 +1,7 @@
+import { Award, CheckCircle2, Download, Percent, Sigma } from "lucide-react";
+import StudentCard from "../components/StudentCard.jsx";
+import StudentDataTable from "../components/StudentDataTable.jsx";
+import StudentPageHeader from "../components/StudentPageHeader.jsx";
+import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
+import { resultSubjects } from "../data/studentMockData.js";
+export default function StudentResults() { const obtained = resultSubjects.reduce((sum, row) => sum + row[4], 0), maximum = resultSubjects.reduce((sum, row) => sum + row[5], 0), percentage = Math.round((obtained / maximum) * 100); return <div className="sp-page"><StudentPageHeader title="Results" subtitle="Published academic results only." action={<button className="sp-btn"><Download size={16}/> Download Marksheet</button>}/><div className="sp-summary-grid five"><StudentSummaryCard icon={Sigma} label="Total Marks" value={maximum}/><StudentSummaryCard icon={CheckCircle2} label="Obtained" value={obtained} tone="blue"/><StudentSummaryCard icon={Percent} label="Percentage" value={`${percentage}%`} tone="orange"/><StudentSummaryCard icon={Award} label="Grade" value="A" tone="purple"/><StudentSummaryCard icon={CheckCircle2} label="Result" value="Pass" tone="green"/></div><StudentCard title="Quarterly Examination Results" subtitle="Published on 15 September 2026"><StudentDataTable columns={["Subject", "Internal", "Practical", "External", "Total", "Max Marks", "Grade", "Result"]} rows={resultSubjects} statusColumns={[7]}/></StudentCard></div>; }

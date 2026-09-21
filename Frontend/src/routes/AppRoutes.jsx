@@ -41,7 +41,7 @@ import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
-import StudentDashboard from "@/Dashboard/StudentDashboard/StudentDashboard.jsx";
+import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
 import FacultyDashboard from "@/Dashboard/Facultydashboard.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
 import {
@@ -282,9 +282,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />
       </Route>
 
-      <Route element={<ProtectedRoute requireStudent />}>
-        <Route path="/student-dashboard" element={<StudentDashboard />} />
-      </Route>
+      <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
       <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
       <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id/complete-profile" element={<StaffManagementPage />} />
