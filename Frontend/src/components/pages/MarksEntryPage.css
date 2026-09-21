@@ -1323,8 +1323,50 @@
 
 /* ---------- Bulk Import Modal (Ref Image 5) ---------- */
 .cms-import-modal {
+  width: min(580px, calc(100vw - 32px));
   max-width: 580px;
-  width: 100%;
+  background: var(--cms-surface, #ffffff);
+  border-radius: 16px;
+  box-shadow: var(--cms-shadow-lg, 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1));
+  overflow: hidden;
+}
+
+.cms-room-modal-subtitle {
+  font-size: 12px;
+  color: var(--cms-muted, #7b8275);
+  margin: 4px 0 0;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+.cms-btn-outline {
+  background: transparent;
+  border: 1px solid var(--cms-border, #d5dcc2);
+  color: var(--cms-text, #171a17);
+  border-radius: var(--cms-radius-md, 8px);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 36px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cms-btn-outline:hover:not(:disabled) {
+  background: var(--cms-hover, #f1f4e2);
+  border-color: var(--cms-primary, #6f8400);
+  color: var(--cms-primary, #6f8400);
+}
+
+.cms-btn-outline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cms-spin {
+  animation: cms-spin 0.8s linear infinite;
 }
 
 .cms-room-template-action {
