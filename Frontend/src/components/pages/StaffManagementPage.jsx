@@ -3858,6 +3858,27 @@ function NonTeachingForm({ records, setRecords, existing }) {
       }
     }
 
+    // ── Duplicate Driving License Number check ──────────────────────────────
+    if (isTransport && values.drivingLicenseNumber) {
+      const enteredDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const currentId = existing?.id || existing?.employeeId || null;
+      const duplicate = (Array.isArray(records) ? records : []).find((r) => {
+        // Skip self when editing
+        const rId = r?.id || r?.employeeId;
+        if (currentId && String(rId) === String(currentId)) return false;
+        const rDL = String(r?.drivingLicenseNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        return rDL.length > 0 && rDL === enteredDL;
+      });
+      if (duplicate) {
+        const dupName = [duplicate.firstName, duplicate.middleName, duplicate.lastName].filter(Boolean).join(" ") || duplicate.employeeId || "another staff member";
+        setErrors({ drivingLicenseNumber: `This Driving License Number is already registered under ${dupName}.` });
+        setToast(`Driving License '${values.drivingLicenseNumber}' is already registered under ${dupName}. Please verify.`);
+        setStep(2);
+        return;
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
