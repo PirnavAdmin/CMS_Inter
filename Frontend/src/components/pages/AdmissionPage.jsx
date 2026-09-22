@@ -25,7 +25,7 @@ import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import * as hostelApi from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
+import { Field, Modal, Skeleton, SkeletonButton, SkeletonInput, SkeletonRow, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
   DEFAULT_INSTALLMENT_COUNT,
@@ -39,6 +39,13 @@ import {
 import { HOSTEL_BLOCKS, HOSTEL_ROOMS_DATA } from "@/modules/hostel/data/hostelData.js";
 
 const MAX_DOCUMENT_SIZE = 2 * 1024 * 1024;
+
+/** Layout-matched placeholders for admission forms, fee details, and records. */
+function AdmissionPageSkeleton({ variant = "form" }) {
+  if (variant === "table") return <SkeletonTable columns={9} rows={6} className="cms-admission-table-skeleton" />;
+  if (variant === "fees") return <div className="cms-fee-block cms-admission-fee-skeleton"><Skeleton style={{ width: 190, height: 20 }} /><div className="cms-skeleton-form">{Array.from({ length: 6 }, (_, index) => <SkeletonInput key={index} />)}</div></div>;
+  return <section className="cms-admission-skeleton" aria-label="Loading admission form"><div className="cms-admission-skeleton-head"><Skeleton style={{ width: 220, height: 25 }} /><SkeletonButton width={132} /></div><div className="cms-skeleton-form">{Array.from({ length: 8 }, (_, index) => <SkeletonInput key={index} />)}</div></section>;
+}
 const formatAmount = (value) => {
   const amount = Number(value || 0);
   return `\u20b9${(Number.isFinite(amount) ? amount : 0).toLocaleString("en-IN")}`;
@@ -917,6 +924,14 @@ const steps = [
         requiredWhen: (values) => values.studentType === "Non-Residential",
       },
       {
+        name: "busType",
+        label: "Bus Type",
+        type: "select",
+        options: ["AC", "Non-AC"],
+        conditional: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+        requiredWhen: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+      },
+      {
         name: "busRoute",
         label: "Route",
         type: "select",
@@ -1136,6 +1151,39 @@ const normalizeTransportPickupOption = (point = {}) => {
     label: readText(point, "stopName", "StopName", "pickupPointName", "PickupPointName", "pickupName", "PickupName") || value,
     monthlyFee: Number(read(point, "monthlyFee", "MonthlyFee", "fare", "Fare") || 0),
     status: isLiveMasterActive(point) ? "Active" : "Inactive",
+  };
+};
+
+const normalizeTransportBusType = (value) => {
+  if (typeof value === "boolean") return value ? "AC" : "Non-AC";
+  if (typeof value === "number") return value === 1 ? "AC" : "Non-AC";
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return "";
+  if (["ac", "a/c", "air conditioned", "air-conditioned", "true", "yes", "1"].includes(text)) return "AC";
+  if (["non-ac", "non ac", "nonac", "false", "no", "0"].includes(text)) return "Non-AC";
+  return "";
+};
+
+const normalizeTransportVehicleOption = (vehicle = {}) => {
+  const id = read(vehicle, "vehicleId", "VehicleId", "id", "Id");
+  if (id === undefined || id === null || id === "") return null;
+  const busType = normalizeTransportBusType(read(vehicle, "isAC", "IsAC", "isAc", "IsAc", "ac", "AC", "busType", "BusType"));
+  return {
+    value: String(id),
+    busType,
+    status: isLiveMasterActive(vehicle) ? "Active" : "Inactive",
+  };
+};
+
+const normalizeTransportVehicleAssignmentOption = (assignment = {}) => {
+  const routeId = read(assignment, "routeId", "RouteId");
+  const vehicleId = read(assignment, "vehicleId", "VehicleId");
+  if (routeId === undefined || routeId === null || routeId === "" || vehicleId === undefined || vehicleId === null || vehicleId === "") return null;
+  return {
+    routeId: String(routeId),
+    vehicleId: String(vehicleId),
+    busType: normalizeTransportBusType(read(assignment, "isAC", "IsAC", "isAc", "IsAc", "ac", "AC", "busType", "BusType")),
+    status: isLiveMasterActive(assignment) ? "Active" : "Inactive",
   };
 };
 
@@ -1626,6 +1674,7 @@ const normalizeAdmissionRow = (item) => {
   const pincode = readText(item, "pincode", "Pincode", "pinCode", "PinCode") || combinedAddressParts[5] || "";
   const studentType = normalizeStudentTypeText(readTextFromSources(allocationSources, "studentType", "StudentType", "residentialType", "ResidentialType", "residenceType", "ResidenceType", "isResidential", "IsResidential"));
   const transportRequired = normalizeYesNoText(readTextFromSources(allocationSources, "transportRequired", "TransportRequired", "isTransportRequired", "IsTransportRequired", "requiresTransport", "RequiresTransport"));
+  const busType = normalizeTransportBusType(readTextFromSources(allocationSources, "busType", "BusType", "vehicleType", "VehicleType", "isAC", "IsAC", "isAc", "IsAc"));
   const busRoute = readIdFromSources([route, ...allocationSources], "routeId", "RouteId", "busRouteId", "BusRouteId", "id", "Id")
     || readTextFromSources(allocationSources, "busRoute", "BusRoute", "route", "Route");
   const busRouteName = readTextFromSources([route, ...allocationSources], "fetchedBusRoute", "FetchedBusRoute", "busRouteName", "BusRouteName", "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber", "routeCode", "RouteCode");
@@ -1713,6 +1762,7 @@ const normalizeAdmissionRow = (item) => {
       hallTicket: readText(item, "hallTicketNumber", "HallTicketNumber"),
       studentType,
       transportRequired,
+      busType,
       busRoute,
       busRouteName,
       pickupPoint,
@@ -2490,9 +2540,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
       </div>
 
       {feeStructureLoading ? (
-        <section className="cms-fee-block">
-          <p className="cms-fee-empty">Loading applicable fee structure...</p>
-        </section>
+        <AdmissionPageSkeleton variant="fees" />
       ) : !hasStructure ? (
         <section className="cms-fee-block">
           <p className="cms-fee-empty">
@@ -2675,6 +2723,8 @@ export default function AdmissionPage() {
   const [allocationMasterData, setAllocationMasterData] = useState({
     routes: [],
     pickupPoints: [],
+    vehicles: [],
+    vehicleAssignments: [],
     hostelBlocks: [],
     hostelRooms: [],
     hostelBeds: [],
@@ -2790,11 +2840,33 @@ export default function AdmissionPage() {
     ));
   }, [masterOptions.boards, masterOptions.groups, masterOptions.levels, masterOptions.sections, values.board, values.group, values.groupName, values.level, values.levelName, values.year]);
   const programOptions = useMemo(() => masterOptions.programs || [], [masterOptions.programs]);
+  const routeBusTypesByRoute = useMemo(() => {
+    const vehicleTypeById = new Map(
+      allocationMasterData.vehicles
+        .filter((vehicle) => vehicle.status !== "Inactive" && vehicle.busType)
+        .map((vehicle) => [String(vehicle.value), vehicle.busType])
+    );
+    return allocationMasterData.vehicleAssignments
+      .filter((assignment) => assignment.status !== "Inactive")
+      .reduce((lookup, assignment) => {
+        const busType = assignment.busType || vehicleTypeById.get(String(assignment.vehicleId));
+        if (!busType) return lookup;
+        const routeKey = String(assignment.routeId);
+        if (!lookup.has(routeKey)) lookup.set(routeKey, new Set());
+        lookup.get(routeKey).add(busType);
+        return lookup;
+      }, new Map());
+  }, [allocationMasterData.vehicleAssignments, allocationMasterData.vehicles]);
   const transportRouteOptions = useMemo(() => (
     allocationMasterData.routes
       .filter((route) => route.status !== "Inactive")
+      .filter((route) => {
+        if (!values.busType) return true;
+        const routeBusTypes = routeBusTypesByRoute.get(String(route.value));
+        return routeBusTypes?.has(values.busType);
+      })
       .map(({ value, label }) => ({ value, label }))
-  ), [allocationMasterData.routes]);
+  ), [allocationMasterData.routes, routeBusTypesByRoute, values.busType]);
   const pickupOptionsForRoute = useCallback((routeId) => (
     allocationMasterData.pickupPoints
       .filter((point) => point.status !== "Inactive" && (
@@ -2921,11 +2993,12 @@ export default function AdmissionPage() {
     }
     if (field.name === "bloodGroup") return { ...field, options: bloodGroupOptions };
     if (field.name === "busRoute") {
+      if (!values.busType) return { ...field, options: [{ value: "__select_bus_type", label: "Select Bus Type first", disabled: true }] };
       if (allocationMasterStatus.loading && !transportRouteOptions.length) return { ...field, options: [{ value: "__loading_routes", label: "Loading routes...", disabled: true }] };
       if (allocationMasterStatus.error && !transportRouteOptions.length) return { ...field, options: [{ value: "__routes_error", label: "Unable to load routes. Please try again.", disabled: true }] };
       return {
         ...field,
-        options: transportRouteOptions.length ? transportRouteOptions : [{ value: "__no_routes", label: "No active routes available", disabled: true }],
+        options: transportRouteOptions.length ? transportRouteOptions : [{ value: "__no_routes", label: `No ${values.busType} routes available`, disabled: true }],
       };
     }
     if (field.name === "pickupPoint") {
@@ -3178,12 +3251,16 @@ export default function AdmissionPage() {
       const [
         routesResult,
         pickupPointsResult,
+        vehiclesResult,
+        vehicleAssignmentsResult,
         hostelBlocksResult,
         hostelRoomsResult,
         hostelBedsResult,
       ] = await Promise.allSettled([
         apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
         hostelApi.getHostelBlocks(),
         hostelApi.getRooms(),
         hostelApi.getBeds(),
@@ -3195,6 +3272,12 @@ export default function AdmissionPage() {
           : [],
         pickupPoints: pickupPointsResult.status === "fulfilled"
           ? getCollection(pickupPointsResult.value.data).map(normalizeTransportPickupOption).filter(Boolean)
+          : [],
+        vehicles: vehiclesResult.status === "fulfilled"
+          ? getCollection(vehiclesResult.value.data).map(normalizeTransportVehicleOption).filter(Boolean)
+          : [],
+        vehicleAssignments: vehicleAssignmentsResult.status === "fulfilled"
+          ? getCollection(vehicleAssignmentsResult.value.data).map(normalizeTransportVehicleAssignmentOption).filter(Boolean)
           : [],
         hostelBlocks: hostelBlocksResult.status === "fulfilled"
           ? getCollection(hostelBlocksResult.value.data).map(normalizeHostelBlockOption).filter(Boolean)
@@ -3210,6 +3293,8 @@ export default function AdmissionPage() {
       const failed = [
         routesResult.status === "rejected" ? "routes" : "",
         pickupPointsResult.status === "rejected" ? "pickup points" : "",
+        vehiclesResult.status === "rejected" ? "vehicles" : "",
+        vehicleAssignmentsResult.status === "rejected" ? "vehicle assignments" : "",
         hostelBlocksResult.status === "rejected" ? "hostel blocks" : "",
         hostelRoomsResult.status === "rejected" ? "hostel rooms" : "",
         hostelBedsResult.status === "rejected" ? "hostel beds" : "",
@@ -3222,6 +3307,8 @@ export default function AdmissionPage() {
         console.log("Admission allocation master data loaded:", {
           routes: nextData.routes.length,
           pickupPoints: nextData.pickupPoints.length,
+          vehicles: nextData.vehicles.length,
+          vehicleAssignments: nextData.vehicleAssignments.length,
           hostelBlocks: nextData.hostelBlocks.length,
           hostelRooms: nextData.hostelRooms.length,
           hostelBeds: nextData.hostelBeds.length,
@@ -3265,6 +3352,18 @@ export default function AdmissionPage() {
         }
         if (!next.busRouteName && selectedRoute.routeName) {
           next.busRouteName = selectedRoute.routeName;
+          changed = true;
+        }
+        const routeBusTypes = routeBusTypesByRoute.get(String(selectedRoute.value));
+        if (!next.busType && routeBusTypes?.size === 1) {
+          next.busType = Array.from(routeBusTypes)[0];
+          changed = true;
+        } else if (next.busType && routeBusTypes?.size && !routeBusTypes.has(next.busType)) {
+          next.busRoute = "";
+          next.busRouteName = "";
+          next.pickupPoint = "";
+          next.pickupPointName = "";
+          next.transportMonthlyFee = "";
           changed = true;
         }
       }
@@ -3330,7 +3429,7 @@ export default function AdmissionPage() {
       }
       return changed ? next : current;
     });
-  }, [allocationMasterData, viewMode]);
+  }, [allocationMasterData, routeBusTypesByRoute, viewMode]);
 
   useEffect(() => {
     const photo = values.photo;
@@ -4064,6 +4163,7 @@ export default function AdmissionPage() {
         ...v,
         studentType: val,
         transportRequired: "",
+        busType: "",
         busRoute: "",
         busRouteName: "",
         pickupPoint: "",
@@ -4081,6 +4181,7 @@ export default function AdmissionPage() {
         ...e,
         studentType: undefined,
         transportRequired: undefined,
+        busType: undefined,
         busRoute: undefined,
         pickupPoint: undefined,
         hostelBlock: undefined,
@@ -4093,9 +4194,24 @@ export default function AdmissionPage() {
       setValues((v) => ({
         ...v,
         transportRequired: val,
-        ...(val === "Yes" ? {} : { busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", transportMonthlyFee: "" }),
+        ...(val === "Yes" ? {} : { busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", transportMonthlyFee: "" }),
       }));
-      setErrors((e) => ({ ...e, transportRequired: undefined, busRoute: undefined, pickupPoint: undefined }));
+      setErrors((e) => ({ ...e, transportRequired: undefined, busType: undefined, busRoute: undefined, pickupPoint: undefined }));
+      return;
+    }
+    if (name === "busType") {
+      setValues((v) => {
+        const routeBusTypes = routeBusTypesByRoute.get(String(v.busRoute || ""));
+        const keepCurrentRoute = v.busRoute && routeBusTypes?.has(val);
+        return {
+          ...v,
+          busType: val,
+          ...(keepCurrentRoute
+            ? { pickupPoint: "", pickupPointName: "", transportMonthlyFee: "" }
+            : { busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", transportMonthlyFee: "" }),
+        };
+      });
+      setErrors((e) => ({ ...e, busType: undefined, busRoute: undefined, pickupPoint: undefined }));
       return;
     }
     if (name === "busRoute") {
@@ -4671,7 +4787,7 @@ export default function AdmissionPage() {
   const submit = async () => {
     if (saving || submitInFlightRef.current) return;
     if (feeStructureLoading) {
-      setToast("Loading applicable fee structure. Please wait.");
+      setToast("Fee structure is being prepared. Please wait.");
       return;
     }
     if (!validateAdmission()) {
@@ -4879,7 +4995,7 @@ export default function AdmissionPage() {
               </thead>
               <tbody>
                 {listLoading ? (
-                  <tr><td colSpan={9}><div className="cms-empty">Loading admissions...</div></td></tr>
+                  Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
                 ) : pagedAdmissions.length ? pagedAdmissions.map((row) => (
                   <tr key={`${row.source}-${row.id}`}>
                     <td className="cms-strong">{row.admissionNo}</td>

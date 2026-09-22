@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { SkeletonPage } from "@/components/common/Ui.jsx";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -489,10 +490,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
 
       {/* Main Content Body */}
       {loading ? (
-        <div className="detailed-att-loading">
-          <span className="dashboard-spinner" />
-          <span>Loading attendance records...</span>
-        </div>
+        <div className="detailed-att-loading"><SkeletonPage variant="table" columns={6} rows={8} /></div>
       ) : error ? (
         <div className="detailed-att-error">
           <AlertTriangle size={24} className="error-icon" />

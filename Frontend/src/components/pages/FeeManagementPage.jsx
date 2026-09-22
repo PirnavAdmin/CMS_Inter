@@ -246,9 +246,7 @@ const calculateFineAmount = (rule, overdueDays) => {
   const fineAmount = Math.max(Number(rule.fineAmount || 0), 0);
   if (fineAmount <= 0 || overdueDays <= 0) return 0;
   if (rule.fineType === "Per Day") {
-    const rawFine = fineAmount * overdueDays;
-    const maxFine = Number(rule.maxFine || 0);
-    return maxFine > 0 ? Math.min(rawFine, maxFine) : rawFine;
+    return fineAmount * overdueDays;
   }
   return fineAmount;
 };
@@ -2965,7 +2963,6 @@ function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
     fineType: initial?.fineType || "Fixed Amount",
     fineAmount: initial?.fineAmount ?? "",
     gracePeriod: initial?.gracePeriod ?? 0,
-    maxFine: initial?.maxFine ?? "",
     status: initial?.status || "Active",
   });
   const [error, setError] = useState("");
@@ -2975,13 +2972,11 @@ function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
     const selectedFeeType = activeFeeTypes.find((item) => String(item.id) === String(draft.feeTypeId));
     const fineAmount = Number(draft.fineAmount || 0);
     const gracePeriod = Number(draft.gracePeriod || 0);
-    const maxFine = draft.fineType === "Per Day" ? Number(draft.maxFine || 0) : 0;
     if (!ruleName) return setError("Fine Rule Name is required");
     if (!selectedFeeType) return setError("Applicable Fee / Fee Type is required");
     if (!draft.fineType) return setError("Fine Type is required");
     if (!Number.isFinite(fineAmount) || fineAmount <= 0) return setError("Fine Amount must be greater than 0");
     if (!Number.isFinite(gracePeriod) || gracePeriod < 0) return setError("Grace Period cannot be negative");
-    if (draft.fineType === "Per Day" && (!Number.isFinite(maxFine) || maxFine < 0)) return setError("Maximum Fine cannot be negative");
     if (fineRules.some((item) => item.id !== initial?.id && normalizeKey(item.ruleName) === normalizeKey(ruleName))) return setError(`${ruleName} already exists`);
 
     const nextRule = {
@@ -2992,7 +2987,7 @@ function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
       fineType: draft.fineType,
       fineAmount,
       gracePeriod,
-      maxFine,
+      maxFine: 0,
       status: draft.status,
     };
     onSaved(initial?.id
@@ -3026,7 +3021,7 @@ function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
         </div>
         <div className="cms-field">
           <label htmlFor="fine-type">Fine Type <span className="req">*</span></label>
-          <select id="fine-type" value={draft.fineType} onChange={(event) => setDraft((current) => ({ ...current, fineType: event.target.value, maxFine: event.target.value === "Per Day" ? current.maxFine : "" }))}>
+          <select id="fine-type" value={draft.fineType} onChange={(event) => setDraft((current) => ({ ...current, fineType: event.target.value }))}>
             <option value="Fixed Amount">Fixed Amount</option>
             <option value="Per Day">Per Day</option>
           </select>
@@ -3039,12 +3034,6 @@ function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
           <label htmlFor="fine-grace">Grace Period</label>
           <input id="fine-grace" type="number" min="0" value={draft.gracePeriod} onChange={(event) => setDraft((current) => ({ ...current, gracePeriod: event.target.value }))} />
         </div>
-        {draft.fineType === "Per Day" ? (
-          <div className="cms-field">
-            <label htmlFor="fine-max">Maximum Fine</label>
-            <input id="fine-max" type="number" min="0" value={draft.maxFine} onChange={(event) => setDraft((current) => ({ ...current, maxFine: event.target.value }))} />
-          </div>
-        ) : null}
         <div className="cms-field">
           <label htmlFor="fine-status">Status</label>
           <select id="fine-status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
@@ -3087,7 +3076,7 @@ function FineTab({ fineRules, feeTypes, onChange, onToast }) {
         <div className="cms-table-wrap">
           <table className="cms-table cms-fee-setup-table cms-fee-fine-table">
             <thead>
-              <tr><th>Fine Rule Name</th><th>Applicable Fee</th><th>Fine Type</th><th className="num">Fine Amount</th><th>Grace Period</th><th className="num">Maximum Fine</th><th>Status</th><th className="cms-fee-actions-col">Actions</th></tr>
+              <tr><th>Fine Rule Name</th><th>Applicable Fee</th><th>Fine Type</th><th className="num">Fine Amount</th><th>Grace Period</th><th>Status</th><th className="cms-fee-actions-col">Actions</th></tr>
             </thead>
             <tbody>
               {paginatedFineRules.map((item) => (
@@ -3097,7 +3086,6 @@ function FineTab({ fineRules, feeTypes, onChange, onToast }) {
                   <td>{item.fineType}</td>
                   <td className="num">{formatCurrency(item.fineAmount)}</td>
                   <td>{Number(item.gracePeriod || 0)} days</td>
-                  <td className="num">{item.fineType === "Per Day" && Number(item.maxFine || 0) > 0 ? formatCurrency(item.maxFine) : "-"}</td>
                   <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
@@ -3106,7 +3094,7 @@ function FineTab({ fineRules, feeTypes, onChange, onToast }) {
                   </td>
                 </tr>
               ))}
-              {!fineRules.length ? <tr><td colSpan={8} className="cms-fee-empty-row">No fine rules configured.</td></tr> : null}
+              {!fineRules.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No fine rules configured.</td></tr> : null}
             </tbody>
           </table>
         </div>

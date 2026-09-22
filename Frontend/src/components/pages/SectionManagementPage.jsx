@@ -12,12 +12,12 @@ import {
   Building2,
   Layers,
   Download,
-  Loader2,
   Upload,
   FileSpreadsheet,
   AlertCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { Skeleton, SkeletonRow } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -2004,7 +2004,6 @@ export default function SectionManagementPage() {
       breadcrumb={pageConfig.breadcrumb}
     >
       <div className="cms-sec-container">
-        {initialLoading && <div className="cms-card cms-sec-loading" role="status">Loading Section and Room Management data...</div>}
         {/* Navigation Tabs - FIRST TAB IS ROOM MANAGEMENT, SECOND TAB IS SECTION MANAGEMENT */}
         <div className="cms-room-tabs" role="tablist" aria-label="Management modules">
           <button
@@ -2118,7 +2117,9 @@ export default function SectionManagementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {shownRooms.length ? (
+                      {initialLoading ? (
+                        Array.from({ length: roomPageSize }, (_, index) => <SkeletonRow key={index} columns={7} />)
+                      ) : shownRooms.length ? (
                         shownRooms.map((room) => (
                           <tr key={room.id}>
                             <td className="cms-sec-name-cell">{room.roomNo}</td>
@@ -2682,7 +2683,9 @@ export default function SectionManagementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {shownSections.length ? (
+                      {initialLoading ? (
+                        Array.from({ length: sectionPageSize }, (_, index) => <SkeletonRow key={index} columns={10} />)
+                      ) : shownSections.length ? (
                         shownSections.map((sec) => {
                           const detail = resolveSection(sec);
                           const teacherCode = detail.facultyEmployeeId;
@@ -3422,8 +3425,7 @@ export default function SectionManagementPage() {
                 >
                   {isValidating ? (
                     <>
-                      <Loader2 size={14} className="cms-spin" />
-                      Validating...
+                      Validating…
                     </>
                   ) : (
                     <>
@@ -3442,8 +3444,7 @@ export default function SectionManagementPage() {
                   >
                     {isImporting ? (
                       <>
-                        <Loader2 size={14} className="cms-spin" />
-                        Importing Rooms...
+                        Importing Rooms…
                       </>
                     ) : (
                       <>
@@ -3479,7 +3480,7 @@ export default function SectionManagementPage() {
                   }`}
                 >
                   {deleteModalState.loading ? (
-                    <Loader2 size={24} className="cms-spin" />
+                    <Skeleton className="cms-skeleton-avatar" style={{ width: 24, height: 24 }} />
                   ) : deleteModalState.studentCount > 0 ? (
                     <AlertCircle size={26} />
                   ) : (
@@ -3537,7 +3538,7 @@ export default function SectionManagementPage() {
                   >
                     {operation === `DELETE_SECTION:${deleteModalState.section?.id}` ? (
                       <>
-                        <Loader2 size={14} className="cms-spin" /> Deleting...
+                        Deleting…
                       </>
                     ) : (
                       <>
@@ -3593,7 +3594,7 @@ export default function SectionManagementPage() {
                 >
                   {operation === `DELETE_ROOM:${deleteRoomModalState.room?.id}` ? (
                     <>
-                      <Loader2 size={14} className="cms-spin" /> Deleting...
+                      Deleting…
                     </>
                   ) : (
                     <>

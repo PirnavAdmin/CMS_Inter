@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { StatusBadge } from "@/components/common/Ui.jsx";
+import { SkeletonPage, StatusBadge } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { env } from "@/config/env.js";
@@ -97,7 +97,7 @@ export default function StudentProfilePage({ id }) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [remotePhotoUrl]);
-  if (loading) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">Loading student record...</div></div></DashboardLayout>;
+  if (loading) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><SkeletonPage /></DashboardLayout>;
   if (!student) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{error || "Student record was not found."}</div></div></DashboardLayout>;
   const initials = student.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
   return <DashboardLayout title={student.name} subtitle={`Admission No: ${student.admissionNo}`} breadcrumb={["People", "Students"]} backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Student Management</Link>} actions={<Link className="cms-btn cms-btn-primary" to={`/dashboard/students/${student.id}/enroll`} state={returnState ? { studentManagement: returnState } : undefined}>{student.roll ? "Edit Profile" : "save changes"}</Link>}>
