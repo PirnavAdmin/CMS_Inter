@@ -3,6 +3,7 @@ import DashboardLayout from "../layout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { SkeletonButton, SkeletonPage, SkeletonRow } from "@/components/common/Ui.jsx";
 import * as XLSX from "xlsx";
 import {
   X,
@@ -11,7 +12,6 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   AlertCircle,
-  Loader2,
 } from "lucide-react";
 import "./MarksEntryPage.css";
 
@@ -3098,12 +3098,7 @@ function Entry({
         />
       ) : (
         <>
-          {loadingWorkspace ? (
-            <div className="cms-workspace-loading">
-              <div className="cms-spinner" />
-              <span>Loading student marks for selected subject...</span>
-            </div>
-          ) : (
+          {loadingWorkspace ? <SkeletonPage variant="table" columns={6} rows={8} /> : (
             <>
               {validateMarksConfiguration(workspace) && (
                 <div className="cms-config-error">{validateMarksConfiguration(workspace)}</div>
@@ -3875,16 +3870,7 @@ const EmptyRow = ({ span, text }) => (
     </td>
   </tr>
 );
-const LoadingRow = ({ span, text = "Loading student marks..." }) => (
-  <tr>
-    <td colSpan={span} className="cms-empty-td">
-      <div className="cms-inline-loader">
-        <div className="cms-spinner" />
-        <span>{text}</span>
-      </div>
-    </td>
-  </tr>
-);
+const LoadingRow = ({ span }) => <SkeletonRow columns={span} />;
 
 const IconEye = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -4241,10 +4227,7 @@ function BulkImportModal({
             disabled={!file || isValidating || isImporting}
           >
             {isValidating ? (
-              <>
-                <Loader2 size={14} className="cms-spin" />
-                Validating...
-              </>
+              <SkeletonButton width={92} />
             ) : (
               <>
                 <CheckCircle2 size={14} />
@@ -4260,10 +4243,7 @@ function BulkImportModal({
               disabled={isImporting}
             >
               {isImporting ? (
-                <>
-                  <Loader2 size={14} className="cms-spin" />
-                  Importing Marks...
-                </>
+                <SkeletonButton width={128} />
               ) : (
                 <>
                   <Upload size={14} />

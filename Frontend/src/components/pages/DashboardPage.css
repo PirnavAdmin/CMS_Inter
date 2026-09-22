@@ -1235,6 +1235,12 @@
   text-align: center;
 }
 
+.dashboard-page-skeleton .dashboard-kpi-card { min-height: 118px; display: flex; align-items: flex-start; gap: 13px; }
+.dashboard-page-skeleton .dashboard-quick-actions { display: grid; gap: 14px; }
+.dashboard-page-skeleton .dashboard-quick-actions-list { min-height: 54px; }
+.dashboard-skeleton-chart { height: 166px; width: 100%; margin-bottom: 18px; border-radius: 10px; }
+.dashboard-skeleton-list { min-height: 250px; }
+
 .dashboard-spinner {
   width: 18px;
   height: 18px;

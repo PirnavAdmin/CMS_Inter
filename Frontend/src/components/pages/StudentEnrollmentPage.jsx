@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { env } from "@/config/env.js";
@@ -243,7 +243,7 @@ export default function StudentEnrollmentPage({ id }) {
     finally { if (!saved) setSaving(false); }
   };
   const field = (key, props = {}) => ({ ...props, error: errors[key], onBlur: blur(key) });
-  if (loading) return <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">Loading student profile...</div></div></DashboardLayout>;
+  if (loading) return <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><SkeletonPage variant="form" rows={8} /></DashboardLayout>;
   if (!student) return <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{loadError || "Student record was not found."}</div></div></DashboardLayout>;
   return <DashboardLayout title="Edit Student Profile" subtitle="Update student details and save the changes." breadcrumb={["People", "Students"]} backLinkPosition="below" backLink={<Link className="cms-back-link" to={`/dashboard/students/${id}`} state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Student Profile</Link>}><form onSubmit={submit} className="cms-card student-profile-edit" noValidate>
     <div className="student-profile-edit-summary"><span><small>Student Name</small><b>{student.name}</b></span><span><small>Roll No.</small><b>{student.rollNo}</b></span><span><small>Admission No.</small><b>{student.admissionNo}</b></span></div>

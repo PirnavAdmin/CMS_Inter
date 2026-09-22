@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import { SkeletonTable } from "@/components/common/Ui.jsx";
 import {
   FiPlus,
   FiDownload,
@@ -771,12 +772,7 @@ const StaffList = () => {
         {/* Table Content */}
         <div className="staff-table-wrapper">
           {loading ? (
-            <div className="staff-loading-state">
-              <div style={{ display: "inline-block", animation: "spin 1s linear infinite", marginBottom: "12px" }}>
-                <FiRefreshCw size={32} />
-              </div>
-              <p>Loading {activeTab} staff records...</p>
-            </div>
+            <SkeletonTable columns={7} rows={6} />
           ) : staffList.length === 0 ? (
             <div className="staff-empty-state">
               <FiUser className="staff-empty-icon" />

@@ -37,7 +37,7 @@ import {
 } from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import totalStudentsIcon from "@/assets/dashboard-3d/total-students.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -187,14 +187,7 @@ function CardHeader({ title, action, children }) {
   );
 }
 
-function LoadingState({ label = "Loading..." }) {
-  return (
-    <div className="dashboard-card-loading">
-      <span className="dashboard-spinner" />
-      <span>{label}</span>
-    </div>
-  );
-}
+function LoadingState() { return <div className="dashboard-card-loading"><SkeletonText lines={2} /></div>; }
 
 function ErrorState({ message = "Unable to load data.", onRetry }) {
   return (
@@ -351,7 +344,6 @@ export default function DashboardPage() {
   const [holidayState, setHolidayState] = useState({ loading: true, error: null, data: null });
   const [certState, setCertState] = useState({ loading: true, error: null, data: null });
   const [examState, setExamState] = useState({ loading: true, error: null, data: null });
-
   // Sequence ref counters for race condition protection
   const summarySeq = useRef(0);
   const overviewSeq = useRef(0);

@@ -3,6 +3,7 @@ using CollegeManagement.API.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Exceptions;
+using Microsoft.EntityFrameworkCore;
 using MySqlConnector;
 
 namespace CollegeManagement.API.Controllers
@@ -322,6 +323,23 @@ namespace CollegeManagement.API.Controllers
                         "Group deleted successfully"
                 });
             }
+            catch (ValidationException)
+            {
+                throw;
+            }
+            catch (NotFoundException)
+            {
+                throw;
+            }
+            catch (ConflictException)
+            {
+                throw;
+            }
+            catch (DbUpdateException ex)
+            {
+                HandleDbUpdateException(ex);
+                throw;
+            }
             catch (MySqlException ex)
             {
                 HandleException(ex);
@@ -395,10 +413,38 @@ namespace CollegeManagement.API.Controllers
         // EXCEPTION HANDLER
         // =========================================================
 
+        private static void HandleDbUpdateException(
+            DbUpdateException exception)
+        {
+            var inner = exception.InnerException;
+            if (inner is MySqlException mySqlEx)
+            {
+                HandleException(mySqlEx);
+            }
+
+            var msg = inner?.Message ?? exception.Message;
+            if (msg.Contains("foreign key constraint fails", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("FOREIGN KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException(
+                    "Cannot delete this group because it is currently referenced by other records (such as sections or students). Please reassign or delete the associated records first.");
+            }
+
+            throw new ValidationException(msg);
+        }
+
         private static void HandleException(
             MySqlException exception)
         {
             var message = exception.Message;
+
+            if (exception.Number == 1451 ||
+                message.Contains("foreign key constraint fails", StringComparison.OrdinalIgnoreCase) ||
+                message.Contains("FOREIGN KEY", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ValidationException(
+                    "Cannot delete this group because it is currently referenced by other records (such as sections or students). Please reassign or delete the associated records first.");
+            }
 
             if (message.Contains(
                     "already exists",
