@@ -15,12 +15,12 @@ import { Modal, Toast } from "@/components/common/Ui.jsx";
 import {
   loadSalaryData, saveSalaryData, formatINR, calculateGrossSalary,
   calculateTotalDeductions, calculateNetSalary, calculateLOP, calculateOvertime
-} from "@/data/salaryManagementData.js";
-import "./SalaryManagementPage.css";
+} from "@/data/payrollData.js";
+import "./PayrollPage.css";
 
 const COLORS = ["#6F8400", "#108E50", "#B7791F", "#6D28D9", "#D93636", "#2563EB"];
 
-export default function SalaryManagementPage({ mode = "payroll" }) {
+export default function PayrollPage({ mode = "payroll" }) {
   const navigate = useNavigate();
   const { id, month, staffId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -262,13 +262,6 @@ function AuthoritativePayrollScreen({
           <button
             type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={() => navigate("/dashboard/payroll/import")}
-          >
-            <Upload size={14} /> Import Salary Data
-          </button>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
             onClick={() => navigate("/dashboard/payroll/assign/teaching")}
           >
             <UserCheck size={14} /> + Assign Teaching
@@ -284,24 +277,7 @@ function AuthoritativePayrollScreen({
       );
     }
     if (activeTab === "structures") {
-      return (
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            onClick={() => setToast("Exporting salary structure templates...")}
-          >
-            <Download size={14} /> Export CSV
-          </button>
-          <button
-            type="button"
-            className="cms-btn cms-btn-primary"
-            onClick={() => navigate("/dashboard/payroll/structures/add")}
-          >
-            <Plus size={14} /> Add Salary Structure
-          </button>
-        </div>
-      );
+      return null;
     }
     if (activeTab === "generate") {
       return (
@@ -465,7 +441,6 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
   const [filterType, setFilterType] = useState("All");
   const [filterDept, setFilterDept] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [search, setSearch] = useState("");
 
   const departments = useMemo(() => {
     const set = new Set();
@@ -483,18 +458,9 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
       if (filterType !== "All" && a.staffType !== filterType) return false;
       if (filterDept !== "All" && a.department !== filterDept) return false;
       if (filterStatus !== "All" && a.status !== filterStatus) return false;
-
-      if (search) {
-        const q = search.toLowerCase();
-        const nameMatch = (a.staffName || "").toLowerCase().includes(q);
-        const idMatch = (a.staffId || "").toLowerCase().includes(q);
-        const deptMatch = (a.department || "").toLowerCase().includes(q);
-        const desigMatch = (a.designation || "").toLowerCase().includes(q);
-        if (!nameMatch && !idMatch && !deptMatch && !desigMatch) return false;
-      }
       return true;
     });
-  }, [store?.assignments, filterType, filterDept, filterStatus, search]);
+  }, [store?.assignments, filterType, filterDept, filterStatus]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -530,36 +496,47 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
         </div>
       </div>
 
-      {/* Filter Toolbar & Table Panel */}
-      <div className="salary-card-panel">
-        <div className="salary-card-header" style={{ flexWrap: "wrap", gap: "12px" }}>
-          {/* Category Pills */}
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {["All", "Teaching", "Non-Teaching"].map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={`cms-btn ${filterType === t ? "cms-btn-primary" : "cms-btn-ghost"}`}
-                style={{ fontSize: "12px", padding: "4px 12px" }}
-                onClick={() => setFilterType(t)}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+      {/* Staff Table with integrated single-row toolbar */}
+      <DataTable
+        rows={filtered}
+        data={filtered}
+        searchPlaceholder="Search records..."
+        toolbarExtra={
+          <>
+            {/* Staff Type Dropdown Filter */}
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                fontWeight: 500,
+                height: "36px",
+                cursor: "pointer",
+              }}
+            >
+              <option value="All">All Staff Types</option>
+              <option value="Teaching">Teaching</option>
+              <option value="Non-Teaching">Non-Teaching</option>
+            </select>
 
-          {/* Department Filter */}
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            {/* Department Filter */}
             <select
               value={filterDept}
               onChange={(e) => setFilterDept(e.target.value)}
               style={{
                 padding: "6px 12px",
-                borderRadius: "6px",
+                borderRadius: "8px",
                 border: "1px solid var(--cms-border)",
                 fontSize: "12px",
                 background: "var(--cms-surface)",
                 color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
               }}
             >
               <option value="All">All Departments</option>
@@ -574,11 +551,13 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
               onChange={(e) => setFilterStatus(e.target.value)}
               style={{
                 padding: "6px 12px",
-                borderRadius: "6px",
+                borderRadius: "8px",
                 border: "1px solid var(--cms-border)",
                 fontSize: "12px",
                 background: "var(--cms-surface)",
                 color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
               }}
             >
               <option value="All">All Statuses</option>
@@ -587,29 +566,17 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
               <option value="On Hold">On Hold</option>
             </select>
 
-            {/* Search Input */}
-            <div style={{ position: "relative", minWidth: "220px" }}>
-              <input
-                type="text"
-                placeholder="Search staff name, ID, role..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "6px 12px",
-                  borderRadius: "6px",
-                  border: "1px solid var(--cms-border)",
-                  fontSize: "12px",
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Staff Table */}
-        <DataTable
-          rows={filtered}
-          data={filtered}
+            {/* Action Buttons */}
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              style={{ fontSize: "12px", padding: "6px 12px", whiteSpace: "nowrap", height: "36px" }}
+              onClick={() => navigate("/dashboard/payroll/import")}
+            >
+              <Upload size={14} /> Import Salary Data
+            </button>
+          </>
+        }
           columns={[
             {
               key: "staffId",
@@ -701,7 +668,6 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
             },
           ]}
         />
-      </div>
     </div>
   );
 }
@@ -711,125 +677,132 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
 // ----------------------------------------------------------------------
 function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDeleteStructure }) {
   const [filterType, setFilterType] = useState("All");
-  const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
     const list = Array.isArray(store?.structures) ? store.structures : [];
     return list.filter((s) => {
       if (!s || typeof s !== "object") return false;
       if (filterType !== "All" && s.staffType !== filterType) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        const nameMatch = (s.name || "").toLowerCase().includes(q);
-        const desigMatch = (s.designation || "").toLowerCase().includes(q);
-        const deptMatch = (s.department || "").toLowerCase().includes(q);
-        if (!nameMatch && !desigMatch && !deptMatch) return false;
-      }
       return true;
     });
-  }, [store?.structures, filterType, search]);
+  }, [store?.structures, filterType]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      <div className="salary-card-panel">
-        <div className="salary-card-header" style={{ flexWrap: "wrap", gap: "10px" }}>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {["All", "Teaching", "Non-Teaching"].map((t) => (
-              <button
-                key={t}
-                type="button"
-                className={`cms-btn ${filterType === t ? "cms-btn-primary" : "cms-btn-ghost"}`}
-                style={{ fontSize: "12px", padding: "4px 12px" }}
-                onClick={() => setFilterType(t)}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+      <DataTable
+        rows={filtered}
+        data={filtered}
+        title="Salary Structures"
+        searchPlaceholder="Search structure by name, role, dept..."
+        toolbarExtra={
+          <>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                fontWeight: 500,
+                height: "36px",
+                cursor: "pointer",
+              }}
+            >
+              <option value="All">All Staff Types</option>
+              <option value="Teaching">Teaching</option>
+              <option value="Non-Teaching">Non-Teaching</option>
+            </select>
 
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <input
-              type="text"
-              placeholder="Search structure by name / role..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--cms-border)", fontSize: "12px" }}
-            />
-          </div>
-        </div>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              style={{ fontSize: "12px", padding: "6px 12px", whiteSpace: "nowrap", height: "36px" }}
+              onClick={() => setToast("Exporting salary structure templates...")}
+            >
+              <Download size={14} /> Export CSV
+            </button>
 
-        <DataTable
-          rows={filtered}
-          data={filtered}
-          columns={[
-            {
-              key: "name",
-              label: "Structure Name",
-              render: (r) => <strong>{r.name}</strong>,
-            },
-            {
-              key: "staffType",
-              label: "Staff Type",
-              render: (r) => (
-                <span className={`cms-badge ${r.staffType === "Teaching" ? "cms-badge-primary" : "cms-badge-neutral"}`}>
-                  {r.staffType}
-                </span>
-              ),
-            },
-            {
-              key: "department",
-              label: "Department & Role",
-              render: (r) => `${r.department || "General"} — ${r.designation || "All"}`,
-            },
-            { key: "basicPay", label: "Basic Pay", render: (r) => formatINR(r.basicPay) },
-            { key: "grossSalary", label: "Gross Salary", render: (r) => <strong style={{ color: "#6F8400" }}>{formatINR(r.grossSalary)}</strong> },
-            { key: "totalDeductions", label: "Deductions", render: (r) => formatINR(r.totalDeductions) },
-            { key: "netSalary", label: "Net Salary", render: (r) => <strong style={{ color: "#108E50" }}>{formatINR(r.netSalary)}</strong> },
-            { key: "assignedCount", label: "Assigned Staff", render: (r) => `${r.assignedCount || 0} Staff` },
-            {
-              key: "status",
-              label: "Status",
-              render: (r) => (
-                <span className={`cms-badge ${r.status === "Active" ? "cms-badge-success" : "cms-badge-neutral"}`}>
-                  {r.status}
-                </span>
-              ),
-            },
-            {
-              key: "actions",
-              label: "Actions",
-              render: (r) => (
-                <div style={{ display: "flex", gap: "4px" }}>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    style={{ padding: "3px 7px", fontSize: "11px" }}
-                    onClick={() => navigate(`/dashboard/payroll/structures/${r.id}`)}
-                  >
-                    <Eye size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    style={{ padding: "3px 7px", fontSize: "11px" }}
-                    onClick={() => navigate(`/dashboard/payroll/structures/${r.id}/edit`)}
-                  >
-                    <Edit3 size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    style={{ padding: "3px 7px", fontSize: "11px", color: "var(--cms-danger)" }}
-                    onClick={() => handleDeleteStructure(r.id)}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ),
-            },
-          ]}
-        />
-      </div>
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              style={{ fontSize: "12px", padding: "6px 12px", whiteSpace: "nowrap", height: "36px" }}
+              onClick={() => navigate("/dashboard/payroll/structures/add")}
+            >
+              <Plus size={14} /> Add Salary Structure
+            </button>
+          </>
+        }
+        columns={[
+          {
+            key: "name",
+            label: "Structure Name",
+            render: (r) => <strong>{r.name}</strong>,
+          },
+          {
+            key: "staffType",
+            label: "Staff Type",
+            render: (r) => (
+              <span className={`cms-badge ${r.staffType === "Teaching" ? "cms-badge-primary" : "cms-badge-neutral"}`}>
+                {r.staffType}
+              </span>
+            ),
+          },
+          {
+            key: "department",
+            label: "Department & Role",
+            render: (r) => `${r.department || "General"} — ${r.designation || "All"}`,
+          },
+          { key: "basicPay", label: "Basic Pay", render: (r) => formatINR(r.basicPay) },
+          { key: "grossSalary", label: "Gross Salary", render: (r) => <strong style={{ color: "#6F8400" }}>{formatINR(r.grossSalary)}</strong> },
+          { key: "totalDeductions", label: "Deductions", render: (r) => formatINR(r.totalDeductions) },
+          { key: "netSalary", label: "Net Salary", render: (r) => <strong style={{ color: "#108E50" }}>{formatINR(r.netSalary)}</strong> },
+          { key: "assignedCount", label: "Assigned Staff", render: (r) => `${r.assignedCount || 0} Staff` },
+          {
+            key: "status",
+            label: "Status",
+            render: (r) => (
+              <span className={`cms-badge ${r.status === "Active" ? "cms-badge-success" : "cms-badge-neutral"}`}>
+                {r.status}
+              </span>
+            ),
+          },
+          {
+            key: "actions",
+            label: "Actions",
+            render: (r) => (
+              <div style={{ display: "flex", gap: "4px" }}>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  style={{ padding: "3px 7px", fontSize: "11px" }}
+                  onClick={() => navigate(`/dashboard/payroll/structures/${r.id}`)}
+                >
+                  <Eye size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  style={{ padding: "3px 7px", fontSize: "11px" }}
+                  onClick={() => navigate(`/dashboard/payroll/structures/${r.id}/edit`)}
+                >
+                  <Edit3 size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  style={{ padding: "3px 7px", fontSize: "11px", color: "var(--cms-danger)" }}
+                  onClick={() => handleDeleteStructure(r.id)}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }
