@@ -30,10 +30,14 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Loader, Modal, StatusBadge, Toast } from "../common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../common/Ui.jsx";
 import "./ExaminationPage.css";
 
 const PAGE_SIZE = 5;
+
+function ExaminationTableSkeleton() {
+  return Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={10} />);
+}
 
 // ---------- DATA NORMALIZATION & UNWRAPPING HELPERS ----------
 // ✅ SAFE ARRAY WRAPPER: Guarantees val is converted to a valid array without throwing
@@ -3225,7 +3229,9 @@ export default function ExaminationPage() {
                 </tr>
               </thead>
               <tbody>
-                {shownExams.length ? (
+                {examsLoading || loading ? (
+                  <ExaminationTableSkeleton />
+                ) : shownExams.length ? (
                   shownExams.map((e) => (
                     <tr key={e.id}>
                       <td>
@@ -3360,9 +3366,7 @@ export default function ExaminationPage() {
                   <tr>
                     <td colSpan="10">
                       <div className="cms-empty">
-                        {examsLoading || loading ? (
-                          <span>Loading examinations...</span>
-                        ) : examsError ? (
+                        {examsError ? (
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
                             <span style={{ color: "var(--cms-danger, #ef4444)", fontWeight: 500 }}>{examsError}</span>
                             <button

@@ -12,12 +12,12 @@ import {
   Building2,
   Layers,
   Download,
-  Loader2,
   Upload,
   FileSpreadsheet,
   AlertCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { Skeleton } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -3422,8 +3422,7 @@ export default function SectionManagementPage() {
                 >
                   {isValidating ? (
                     <>
-                      <Loader2 size={14} className="cms-spin" />
-                      Validating...
+                      Validating…
                     </>
                   ) : (
                     <>
@@ -3442,8 +3441,7 @@ export default function SectionManagementPage() {
                   >
                     {isImporting ? (
                       <>
-                        <Loader2 size={14} className="cms-spin" />
-                        Importing Rooms...
+                        Importing Rooms…
                       </>
                     ) : (
                       <>
@@ -3479,7 +3477,7 @@ export default function SectionManagementPage() {
                   }`}
                 >
                   {deleteModalState.loading ? (
-                    <Loader2 size={24} className="cms-spin" />
+                    <Skeleton className="cms-skeleton-avatar" style={{ width: 24, height: 24 }} />
                   ) : deleteModalState.studentCount > 0 ? (
                     <AlertCircle size={26} />
                   ) : (
@@ -3537,7 +3535,7 @@ export default function SectionManagementPage() {
                   >
                     {operation === `DELETE_SECTION:${deleteModalState.section?.id}` ? (
                       <>
-                        <Loader2 size={14} className="cms-spin" /> Deleting...
+                        Deleting…
                       </>
                     ) : (
                       <>
@@ -3593,7 +3591,7 @@ export default function SectionManagementPage() {
                 >
                   {operation === `DELETE_ROOM:${deleteRoomModalState.room?.id}` ? (
                     <>
-                      <Loader2 size={14} className="cms-spin" /> Deleting...
+                      Deleting…
                     </>
                   ) : (
                     <>

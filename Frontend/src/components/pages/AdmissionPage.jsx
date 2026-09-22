@@ -25,7 +25,7 @@ import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import * as hostelApi from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
+import { Field, Modal, Skeleton, SkeletonButton, SkeletonInput, SkeletonRow, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
   DEFAULT_INSTALLMENT_COUNT,
@@ -39,6 +39,13 @@ import {
 import { HOSTEL_BLOCKS, HOSTEL_ROOMS_DATA } from "@/modules/hostel/data/hostelData.js";
 
 const MAX_DOCUMENT_SIZE = 2 * 1024 * 1024;
+
+/** Layout-matched placeholders for admission forms, fee details, and records. */
+function AdmissionPageSkeleton({ variant = "form" }) {
+  if (variant === "table") return <SkeletonTable columns={9} rows={6} className="cms-admission-table-skeleton" />;
+  if (variant === "fees") return <div className="cms-fee-block cms-admission-fee-skeleton"><Skeleton style={{ width: 190, height: 20 }} /><div className="cms-skeleton-form">{Array.from({ length: 6 }, (_, index) => <SkeletonInput key={index} />)}</div></div>;
+  return <section className="cms-admission-skeleton" aria-label="Loading admission form"><div className="cms-admission-skeleton-head"><Skeleton style={{ width: 220, height: 25 }} /><SkeletonButton width={132} /></div><div className="cms-skeleton-form">{Array.from({ length: 8 }, (_, index) => <SkeletonInput key={index} />)}</div></section>;
+}
 const formatAmount = (value) => {
   const amount = Number(value || 0);
   return `\u20b9${(Number.isFinite(amount) ? amount : 0).toLocaleString("en-IN")}`;
@@ -2490,9 +2497,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
       </div>
 
       {feeStructureLoading ? (
-        <section className="cms-fee-block">
-          <p className="cms-fee-empty">Loading applicable fee structure...</p>
-        </section>
+        <AdmissionPageSkeleton variant="fees" />
       ) : !hasStructure ? (
         <section className="cms-fee-block">
           <p className="cms-fee-empty">
@@ -4671,7 +4676,7 @@ export default function AdmissionPage() {
   const submit = async () => {
     if (saving || submitInFlightRef.current) return;
     if (feeStructureLoading) {
-      setToast("Loading applicable fee structure. Please wait.");
+      setToast("Fee structure is being prepared. Please wait.");
       return;
     }
     if (!validateAdmission()) {
@@ -4879,7 +4884,7 @@ export default function AdmissionPage() {
               </thead>
               <tbody>
                 {listLoading ? (
-                  <tr><td colSpan={9}><div className="cms-empty">Loading admissions...</div></td></tr>
+                  Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
                 ) : pagedAdmissions.length ? pagedAdmissions.map((row) => (
                   <tr key={`${row.source}-${row.id}`}>
                     <td className="cms-strong">{row.admissionNo}</td>
