@@ -39,43 +39,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                     splitOn: "StaffRecordId,SubjectId",
                     commandType: CommandType.StoredProcedure);
 
-                var item = list.FirstOrDefault();
-                if (item != null) return item;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                var sql = @"
-                    SELECT 
-                        a.Id, a.StaffId, a.SubjectId, a.CreatedAt, a.UpdatedAt,
-                        s.Id AS StaffRecordId, s.Id, s.EmployeeId, s.FirstName, s.LastName, s.Email, s.Mobile, s.Designation, s.StaffType,
-                        sub.SubjectId, sub.SubjectName, sub.SubjectCode, sub.SubjectType,
-                        sub.BoardId, sub.GroupId, sub.AcademicLevelId, sub.TotalMarks, sub.PassingMarks, sub.IsActive,
-                        COALESCE(b.BoardName, '') AS Board,
-                        COALESCE(g.GroupName, '') AS `Group`,
-                        COALESCE(al.LevelName, '') AS AcademicLevel
-                    FROM StaffSubjectAllocations a
-                    INNER JOIN Staffs s ON s.Id = a.StaffId
-                    INNER JOIN Subjects sub ON sub.SubjectId = a.SubjectId
-                    LEFT JOIN Boards b ON b.BoardId = sub.BoardId
-                    LEFT JOIN `Groups` g ON g.GroupId = sub.GroupId
-                    LEFT JOIN AcademicLevels al ON al.AcademicLevelId = sub.AcademicLevelId
-                    WHERE a.Id = @id;";
-
-                var list = await Connection.QueryAsync<StaffSubjectAllocation, Staff, Subject, StaffSubjectAllocation>(
-                    sql,
-                    (allocation, staff, subject) =>
-                    {
-                        allocation.Staff = staff;
-                        allocation.Subject = subject;
-                        return allocation;
-                    },
-                    new { id },
-                    splitOn: "StaffRecordId,SubjectId");
-
                 return list.FirstOrDefault();
             }
             catch
@@ -107,44 +70,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                     new { p_StaffId = staffId },
                     splitOn: "StaffRecordId,SubjectId",
                     commandType: CommandType.StoredProcedure);
-
-                var result = list.ToList();
-                if (result.Any()) return result;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                var sql = @"
-                    SELECT 
-                        a.Id, a.StaffId, a.SubjectId, a.CreatedAt, a.UpdatedAt,
-                        s.Id AS StaffRecordId, s.Id, s.EmployeeId, s.FirstName, s.LastName, s.Email, s.Mobile, s.Designation, s.StaffType,
-                        sub.SubjectId, sub.SubjectName, sub.SubjectCode, sub.SubjectType,
-                        sub.BoardId, sub.GroupId, sub.AcademicLevelId, sub.TotalMarks, sub.PassingMarks, sub.IsActive,
-                        COALESCE(b.BoardName, '') AS Board,
-                        COALESCE(g.GroupName, '') AS `Group`,
-                        COALESCE(al.LevelName, '') AS AcademicLevel
-                    FROM StaffSubjectAllocations a
-                    INNER JOIN Staffs s ON s.Id = a.StaffId
-                    INNER JOIN Subjects sub ON sub.SubjectId = a.SubjectId
-                    LEFT JOIN Boards b ON b.BoardId = sub.BoardId
-                    LEFT JOIN `Groups` g ON g.GroupId = sub.GroupId
-                    LEFT JOIN AcademicLevels al ON al.AcademicLevelId = sub.AcademicLevelId
-                    WHERE a.StaffId = @staffId
-                    ORDER BY a.Id DESC;";
-
-                var list = await Connection.QueryAsync<StaffSubjectAllocation, Staff, Subject, StaffSubjectAllocation>(
-                    sql,
-                    (allocation, staff, subject) =>
-                    {
-                        allocation.Staff = staff;
-                        allocation.Subject = subject;
-                        return allocation;
-                    },
-                    new { staffId },
-                    splitOn: "StaffRecordId,SubjectId");
 
                 return list.ToList();
             }
@@ -180,44 +105,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                     splitOn: "StaffRecordId,SubjectId",
                     commandType: CommandType.StoredProcedure);
 
-                var result = list.ToList();
-                if (result.Any()) return result;
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                var sql = @"
-                    SELECT 
-                        a.Id, a.StaffId, a.SubjectId, a.CreatedAt, a.UpdatedAt,
-                        s.Id AS StaffRecordId, s.Id, s.EmployeeId, s.FirstName, s.LastName, s.Email, s.Mobile, s.Designation, s.StaffType,
-                        sub.SubjectId, sub.SubjectName, sub.SubjectCode, sub.SubjectType,
-                        sub.BoardId, sub.GroupId, sub.AcademicLevelId, sub.TotalMarks, sub.PassingMarks, sub.IsActive,
-                        COALESCE(b.BoardName, '') AS Board,
-                        COALESCE(g.GroupName, '') AS `Group`,
-                        COALESCE(al.LevelName, '') AS AcademicLevel
-                    FROM StaffSubjectAllocations a
-                    INNER JOIN Staffs s ON s.Id = a.StaffId
-                    INNER JOIN Subjects sub ON sub.SubjectId = a.SubjectId
-                    LEFT JOIN Boards b ON b.BoardId = sub.BoardId
-                    LEFT JOIN `Groups` g ON g.GroupId = sub.GroupId
-                    LEFT JOIN AcademicLevels al ON al.AcademicLevelId = sub.AcademicLevelId
-                    WHERE a.SubjectId = @subjectId
-                    ORDER BY a.Id DESC;";
-
-                var list = await Connection.QueryAsync<StaffSubjectAllocation, Staff, Subject, StaffSubjectAllocation>(
-                    sql,
-                    (allocation, staff, subject) =>
-                    {
-                        allocation.Staff = staff;
-                        allocation.Subject = subject;
-                        return allocation;
-                    },
-                    new { subjectId },
-                    splitOn: "StaffRecordId,SubjectId");
-
                 return list.ToList();
             }
             catch
@@ -249,26 +136,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             catch
             {
-            }
-
-            try
-            {
-                int count = await Connection.ExecuteScalarAsync<int>(
-                    "sp_CheckStaffSubjectAllocationExists",
-                    new { p_StaffId = staffId, p_SubjectId = subjectId, p_ExcludeId = excludeId },
-                    commandType: CommandType.StoredProcedure);
-
-                return count > 0;
-            }
-            catch
-            {
-                var sql = @"
-                    SELECT COUNT(*) FROM StaffSubjectAllocations 
-                    WHERE StaffId = @staffId AND SubjectId = @subjectId 
-                      AND (@excludeId IS NULL OR Id != @excludeId);";
-
-                int count = await Connection.ExecuteScalarAsync<int>(sql, new { staffId, subjectId, excludeId });
-                return count > 0;
+                return await _context.StaffSubjectAllocations.AnyAsync(a =>
+                    a.StaffId == staffId && a.SubjectId == subjectId &&
+                    (!excludeId.HasValue || a.Id != excludeId.Value));
             }
         }
 
@@ -312,23 +182,14 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             try
             {
-                var sql = @"
-                    SELECT 
-                        sub.SubjectId, sub.SubjectName, sub.SubjectCode, sub.SubjectType,
-                        sub.BoardId, sub.GroupId, sub.AcademicLevelId, sub.TotalMarks, sub.PassingMarks, sub.IsActive,
-                        COALESCE(b.BoardName, '') AS Board,
-                        COALESCE(g.GroupName, '') AS `Group`,
-                        COALESCE(al.LevelName, '') AS AcademicLevel
-                    FROM Subjects sub
-                    LEFT JOIN Boards b ON b.BoardId = sub.BoardId
-                    LEFT JOIN `Groups` g ON g.GroupId = sub.GroupId
-                    LEFT JOIN AcademicLevels al ON al.AcademicLevelId = sub.AcademicLevelId
-                    WHERE sub.SubjectId = @subjectId;";
+                var item = await Connection.QueryFirstOrDefaultAsync<Subject>(
+                    "sp_GetSubjectById",
+                    new { p_SubjectId = subjectId },
+                    commandType: CommandType.StoredProcedure);
 
-                var item = await Connection.QueryFirstOrDefaultAsync<Subject>(sql, new { subjectId });
                 if (item != null) return item;
             }
-            catch {}
+            catch { }
 
             return await _context.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.SubjectId == subjectId);
         }
@@ -353,39 +214,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             catch
             {
-            }
-
-            try
-            {
-                int id = await Connection.ExecuteScalarAsync<int>(
-                    "sp_AssignStaffSubject",
-                    new
-                    {
-                        p_StaffId = sid,
-                        p_SubjectId = allocation.SubjectId
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-                allocation.Id = id;
-                return allocation;
-            }
-            catch
-            {
-                var insertSql = @"
-                    INSERT INTO StaffSubjectAllocations (StaffId, SubjectId, CreatedAt)
-                    VALUES (@sid, @subjectId, UTC_TIMESTAMP());
-                    SELECT LAST_INSERT_ID();";
-
-                int id = await Connection.ExecuteScalarAsync<int>(insertSql, new { sid, subjectId = allocation.SubjectId });
-                allocation.Id = id;
+                allocation.CreatedAt = DateTime.UtcNow;
+                await _context.StaffSubjectAllocations.AddAsync(allocation);
+                await _context.SaveChangesAsync();
                 return allocation;
             }
         }
 
         public async Task UpdateAsync(StaffSubjectAllocation allocation)
         {
-            int sid = allocation.StaffId;
-
             try
             {
                 await Connection.ExecuteAsync(
@@ -396,14 +233,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             catch
             {
+                var existing = await _context.StaffSubjectAllocations.FindAsync(allocation.Id);
+                if (existing != null)
+                {
+                    existing.StaffId = allocation.StaffId;
+                    existing.SubjectId = allocation.SubjectId;
+                    existing.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
             }
-
-            var sql = @"
-                UPDATE StaffSubjectAllocations 
-                SET StaffId = @sid, SubjectId = @subjectId, UpdatedAt = UTC_TIMESTAMP()
-                WHERE Id = @id;";
-
-            await Connection.ExecuteAsync(sql, new { id = allocation.Id, sid, subjectId = allocation.SubjectId });
         }
 
         public async Task DeleteAsync(StaffSubjectAllocation allocation)
@@ -418,10 +256,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             catch
             {
+                var existing = await _context.StaffSubjectAllocations.FindAsync(allocation.Id);
+                if (existing != null)
+                {
+                    _context.StaffSubjectAllocations.Remove(existing);
+                    await _context.SaveChangesAsync();
+                }
             }
-
-            var sql = "DELETE FROM StaffSubjectAllocations WHERE Id = @id;";
-            await Connection.ExecuteAsync(sql, new { id = allocation.Id });
         }
     }
 }

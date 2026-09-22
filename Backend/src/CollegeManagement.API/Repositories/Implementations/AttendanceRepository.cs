@@ -27,6 +27,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         private const string SpChangeAttendanceStatus = "sp_ChangeAttendanceStatus";
         private const string SpGetAttendanceById = "sp_GetAttendanceById";
         private const string SpGetAttendances = "sp_GetAttendances";
+        private const string SpGetAttendancesTotalCount = "sp_GetAttendancesTotalCount";
         private const string SpGetStudentsForAttendance = "sp_GetStudentsForAttendance";
         private const string SpGetAttendanceSummary = "sp_GetAttendanceSummary";
         private const string SpGetAttendancePercentage = "sp_GetAttendancePercentage";
@@ -192,51 +193,12 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// </summary>
         public async Task<int> GetAttendancesTotalCountAsync(AttendanceSearchRequest request)
         {
-            const string sql = @"
-                SELECT COUNT(*)
-                FROM Attendances a
-                INNER JOIN AttendanceSessions ses ON a.AttendanceSessionId = ses.AttendanceSessionId
-                INNER JOIN Students s ON a.StudentId = s.StudentId
-                LEFT JOIN Faculties f ON ses.FacultyId = f.Id
-                WHERE a.IsActive = 1
-                  AND ses.IsActive = 1
-                  AND (@BoardId IS NULL OR @BoardId = 0 OR ses.BoardId = @BoardId)
-                  AND (@AcademicYearId IS NULL OR @AcademicYearId = 0 OR ses.AcademicYearId = @AcademicYearId)
-                  AND (@AcademicLevelId IS NULL OR @AcademicLevelId = 0 OR ses.AcademicLevelId = @AcademicLevelId)
-                  AND (@GroupId IS NULL OR @GroupId = 0 OR ses.GroupId = @GroupId)
-                  AND (@SectionId IS NULL OR @SectionId = 0 OR ses.SectionId = @SectionId)
-                  AND (@SubjectId IS NULL OR @SubjectId = 0 OR ses.SubjectId = @SubjectId)
-                  AND (@FacultyId IS NULL OR @FacultyId = 0 OR ses.FacultyId = @FacultyId)
-                  AND (@StudentId IS NULL OR @StudentId = 0 OR a.StudentId = @StudentId)
-                  AND (@Status IS NULL OR a.Status = @Status)
-                  AND (@FromDate IS NULL OR DATE(ses.AttendanceDate) >= DATE(@FromDate))
-                  AND (@ToDate IS NULL OR DATE(ses.AttendanceDate) <= DATE(@ToDate))
-                  AND (@PeriodId IS NULL OR @PeriodId = 0 OR ses.PeriodId = @PeriodId)
-                  AND (@TimetableId IS NULL OR @TimetableId = 0 OR ses.TimetableId = @TimetableId)
-                  AND (@SearchText IS NULL OR @SearchText = '' OR 
-                       s.StudentName LIKE CONCAT('%', @SearchText, '%') OR 
-                       s.RollNo LIKE CONCAT('%', @SearchText, '%') OR 
-                       CONCAT(f.FirstName,' ',f.LastName) LIKE CONCAT('%', @SearchText, '%'))";
+            var parameters = BuildSearchParameters(request);
 
-            var parameters = new
-            {
-                BoardId = request.BoardId == 0 ? (int?)null : request.BoardId,
-                AcademicYearId = request.AcademicYearId == 0 ? (int?)null : request.AcademicYearId,
-                AcademicLevelId = request.AcademicLevelId == 0 ? (int?)null : request.AcademicLevelId,
-                GroupId = request.GroupId == 0 ? (int?)null : request.GroupId,
-                SectionId = request.SectionId == 0 ? (int?)null : request.SectionId,
-                SubjectId = request.SubjectId == 0 ? (int?)null : request.SubjectId,
-                FacultyId = request.FacultyId == 0 ? (int?)null : request.FacultyId,
-                StudentId = request.StudentId.HasValue && request.StudentId.Value == 0 ? (int?)null : request.StudentId,
-                Status = request.Status.HasValue ? (byte?)request.Status.Value : null,
-                FromDate = request.FromDate,
-                ToDate = request.ToDate,
-                PeriodId = request.PeriodId.HasValue && request.PeriodId.Value == 0 ? (int?)null : request.PeriodId,
-                TimetableId = request.TimetableId.HasValue && request.TimetableId.Value == 0 ? (int?)null : request.TimetableId,
-                SearchText = string.IsNullOrEmpty(request.SearchText) ? null : request.SearchText
-            };
-
-            return await Connection.ExecuteScalarAsync<int>(sql, parameters);
+            return await Connection.ExecuteScalarAsync<int>(
+                SpGetAttendancesTotalCount,
+                parameters,
+                commandType: CommandType.StoredProcedure);
         }
 
         /// <summary>

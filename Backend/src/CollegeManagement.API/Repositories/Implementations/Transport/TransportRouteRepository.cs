@@ -166,15 +166,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> RouteCodeExistsAsync(string routeCode, long? excludeRouteId = null)
         {
             using var c = Connection();
-            var sql = "SELECT COUNT(*) FROM TransportRoutes WHERE IsDeleted = 0 AND LOWER(RouteCode) = @Code AND (@ExcludeId IS NULL OR RouteId != @ExcludeId)";
-            return await c.ExecuteScalarAsync<int>(sql, new { Code = routeCode.Trim().ToLower(), ExcludeId = excludeRouteId }) > 0;
+            return await c.ExecuteScalarAsync<int>(
+                "sp_CheckTransportRouteCodeExists",
+                new { p_RouteCode = routeCode.Trim(), p_ExcludeId = excludeRouteId },
+                commandType: CommandType.StoredProcedure) > 0;
         }
 
         public async Task<bool> RouteNameExistsAsync(string routeName, long? excludeRouteId = null)
         {
             using var c = Connection();
-            var sql = "SELECT COUNT(*) FROM TransportRoutes WHERE IsDeleted = 0 AND LOWER(RouteName) = @Name AND (@ExcludeId IS NULL OR RouteId != @ExcludeId)";
-            return await c.ExecuteScalarAsync<int>(sql, new { Name = routeName.Trim().ToLower(), ExcludeId = excludeRouteId }) > 0;
+            return await c.ExecuteScalarAsync<int>(
+                "sp_CheckTransportRouteNameExists",
+                new { p_RouteName = routeName.Trim(), p_ExcludeId = excludeRouteId },
+                commandType: CommandType.StoredProcedure) > 0;
         }
     }
 }
