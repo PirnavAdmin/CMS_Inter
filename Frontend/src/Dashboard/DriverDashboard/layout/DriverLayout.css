@@ -1,0 +1,85 @@
+/* DriverLayout.css */
+.dp-shell {
+  --dp-sidebar-width: 220px;
+  --dp-primary: #6f8700;
+  --dp-primary-dark: #536600;
+  --dp-primary-hover: #819b08;
+  --dp-primary-soft: #eef3d9;
+  --dp-soft: #f3f6e8;
+  --dp-bg: #f7f9f0;
+  --dp-sidebar: #e1eabb;
+  --dp-header: #dce7b9;
+  --dp-surface: #ffffff;
+  --dp-border: #d7ddc6;
+  --dp-text: #1d2519;
+  --dp-muted: #7b8375;
+  --dp-danger: #d94841;
+  --dp-success: #2e8540;
+  --dp-warning: #cf7900;
+  --dp-purple: #7c35ce;
+  --dp-blue: #1673ca;
+
+  position: fixed;
+  inset: 0;
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--dp-bg);
+  color: var(--dp-text);
+  font-family: inherit;
+}
+
+:root[data-theme="dark"] .dp-shell {
+  --dp-bg: #151b13;
+  --dp-sidebar: #192116;
+  --dp-header: #202a1c;
+  --dp-surface: #1d251a;
+  --dp-border: #35422e;
+  --dp-text: #edf2e7;
+  --dp-muted: #aab5a2;
+  --dp-soft: #29351f;
+  --dp-primary-soft: #29351f;
+}
+
+.dp-shell * {
+  box-sizing: border-box;
+}
+
+.dp-workspace {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dp-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  padding: 18px max(20px, calc((100% - 1600px) / 2 + 20px)) 32px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.dp-overlay {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .dp-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    display: block;
+    border: 0;
+    background: rgba(10, 15, 8, 0.45);
+    backdrop-filter: blur(2px);
+  }
+}
+

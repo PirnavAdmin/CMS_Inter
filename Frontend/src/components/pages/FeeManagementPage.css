@@ -393,31 +393,29 @@
 }
 .cms-fee-fine-table th:nth-child(1),
 .cms-fee-fine-table td:nth-child(1) {
-  width: 20%;
+  width: 22%;
 }
 .cms-fee-fine-table th:nth-child(2),
 .cms-fee-fine-table td:nth-child(2) {
-  width: 16%;
+  width: 18%;
 }
 .cms-fee-fine-table th:nth-child(3),
 .cms-fee-fine-table td:nth-child(3) {
-  width: 13%;
+  width: 14%;
 }
 .cms-fee-fine-table th:nth-child(4),
-.cms-fee-fine-table td:nth-child(4),
+.cms-fee-fine-table td:nth-child(4) {
+  width: 14%;
+}
+.cms-fee-fine-table th:nth-child(5),
+.cms-fee-fine-table td:nth-child(5),
 .cms-fee-fine-table th:nth-child(6),
 .cms-fee-fine-table td:nth-child(6) {
   width: 12%;
 }
-.cms-fee-fine-table th:nth-child(5),
-.cms-fee-fine-table td:nth-child(5),
 .cms-fee-fine-table th:nth-child(7),
 .cms-fee-fine-table td:nth-child(7) {
-  width: 10%;
-}
-.cms-fee-fine-table th:nth-child(8),
-.cms-fee-fine-table td:nth-child(8) {
-  width: 7%;
+  width: 8%;
 }
 .cms-fee-structure-table {
   width: 100%;

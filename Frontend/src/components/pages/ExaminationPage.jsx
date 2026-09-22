@@ -30,7 +30,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Loader, Modal, StatusBadge, Toast } from "../common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../common/Ui.jsx";
 import "./ExaminationPage.css";
 
 const PAGE_SIZE = 5;
@@ -1397,11 +1397,11 @@ const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = []) =>
   const hallName =
     (assignments.length > 0
       ? (firstAssignment?.hallName ||
-         firstAssignment?.roomName ||
-         firstAssignment?.roomNumber ||
-         resolvedRoomName ||
-         assignmentsHallNames ||
-         "")
+        firstAssignment?.roomName ||
+        firstAssignment?.roomNumber ||
+        resolvedRoomName ||
+        assignmentsHallNames ||
+        "")
       : "") ||
     (s.roomName && s.roomName !== "—" && s.roomName !== "-" ? s.roomName : "") ||
     s.roomNumber ||
@@ -1427,10 +1427,10 @@ const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = []) =>
   const invName =
     (assignments.length > 0
       ? (firstAssignment?.invigilatorName ||
-         firstAssignment?.invigilator ||
-         resolvedInvName ||
-         assignmentsInvNames ||
-         "")
+        firstAssignment?.invigilator ||
+        resolvedInvName ||
+        assignmentsInvNames ||
+        "")
       : "") ||
     (s.invigilatorName && s.invigilatorName !== "—" && s.invigilatorName !== "-" ? s.invigilatorName : "") ||
     s.invigilator ||
@@ -2810,7 +2810,9 @@ export default function ExaminationPage() {
                 </tr>
               </thead>
               <tbody>
-                {shownExams.length ? (
+                {examsLoading || loading ? (
+                  <ExaminationTableSkeleton />
+                ) : shownExams.length ? (
                   shownExams.map((e) => (
                     <tr key={e.id}>
                       <td>
@@ -2945,9 +2947,7 @@ export default function ExaminationPage() {
                   <tr>
                     <td colSpan="10">
                       <div className="cms-empty">
-                        {examsLoading || loading ? (
-                          <span>Loading examinations...</span>
-                        ) : examsError ? (
+                        {examsError ? (
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
                             <span style={{ color: "var(--cms-danger, #ef4444)", fontWeight: 500 }}>{examsError}</span>
                             <button
@@ -6802,15 +6802,15 @@ function ScheduleTable({
         ? item.hallAssignments
         : (item.roomId || item.hallId)
           ? [{
-              hallId: item.hallId || item.roomId,
-              roomId: item.hallId || item.roomId,
-              hallName: item.roomNumber || item.roomName || item.hall || "",
-              roomName: item.roomNumber || item.roomName || item.hall || "",
-              roomNumber: item.roomNumber || item.roomName || item.hall || "",
-              candidateCount: item.candidateCount,
-              invigilatorIds: item.invigilatorIds || (item.invigilatorId ? [item.invigilatorId] : []),
-              invigilatorName: item.invigilatorName || item.invigilator || "",
-            }]
+            hallId: item.hallId || item.roomId,
+            roomId: item.hallId || item.roomId,
+            hallName: item.roomNumber || item.roomName || item.hall || "",
+            roomName: item.roomNumber || item.roomName || item.hall || "",
+            roomNumber: item.roomNumber || item.roomName || item.hall || "",
+            candidateCount: item.candidateCount,
+            invigilatorIds: item.invigilatorIds || (item.invigilatorId ? [item.invigilatorId] : []),
+            invigilatorName: item.invigilatorName || item.invigilator || "",
+          }]
           : [];
 
       if (!patternSessionMap.has(slotKey)) {
@@ -6872,21 +6872,21 @@ function ScheduleTable({
 
       const hallDisplay = mergedAssignments.length > 0
         ? mergedAssignments
-            .map((a) => a.hallName || a.roomName || a.roomNumber || (a.hallId ? nameOf(rooms, a.hallId, "") : ""))
-            .filter(Boolean)
-            .join(", ")
+          .map((a) => a.hallName || a.roomName || a.roomNumber || (a.hallId ? nameOf(rooms, a.hallId, "") : ""))
+          .filter(Boolean)
+          .join(", ")
         : item.roomName;
 
       const invDisplay = mergedAssignments.length > 0
         ? mergedAssignments
-            .map((a) => {
-              const hName = a.hallName || a.roomName || a.roomNumber || "";
-              const invIds = ensureArray(a.invigilatorIds || a.facultyIds);
-              const invNameStr = a.invigilatorName || a.invigilator || invIds.map((fid) => nameOf(faculty, fid, "")).filter(Boolean).join(", ");
-              return hName && invNameStr ? `${hName}: ${invNameStr}` : (invNameStr || hName);
-            })
-            .filter(Boolean)
-            .join(" | ")
+          .map((a) => {
+            const hName = a.hallName || a.roomName || a.roomNumber || "";
+            const invIds = ensureArray(a.invigilatorIds || a.facultyIds);
+            const invNameStr = a.invigilatorName || a.invigilator || invIds.map((fid) => nameOf(faculty, fid, "")).filter(Boolean).join(", ");
+            return hName && invNameStr ? `${hName}: ${invNameStr}` : (invNameStr || hName);
+          })
+          .filter(Boolean)
+          .join(" | ")
         : item.invigilatorName;
 
       const combinedCodes = (item.allSubjectCodes && item.allSubjectCodes.length > 0)

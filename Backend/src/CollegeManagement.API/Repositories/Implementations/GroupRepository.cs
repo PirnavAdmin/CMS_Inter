@@ -5,6 +5,7 @@ using CollegeManagement.API.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using Dapper;
+using CollegeManagement.API.Exceptions;
 
 namespace CollegeManagement.API.Repositories
 {
@@ -502,40 +503,102 @@ namespace CollegeManagement.API.Repositories
         public async Task<bool> DeleteAsync(
             int groupId)
         {
+            var entity = await _context.Groups.FindAsync(groupId);
+            if (entity == null)
+                return false;
+
+            var connection = _context.Database.GetDbConnection();
+            if (connection.State != ConnectionState.Open)
+                await connection.OpenAsync();
+
+            // 1. Dependency checks - guard against deleting active academic/student data
+            var deps = await connection.QueryFirstOrDefaultAsync<dynamic>(@"
+                SELECT 
+                    (SELECT COUNT(*) FROM Students WHERE GroupId = @GroupId) AS StudentCount,
+                    (SELECT COUNT(*) FROM StudentAdmissions WHERE GroupId = @GroupId) AS AdmissionCount,
+                    (SELECT COUNT(*) FROM FeeStructures WHERE GroupId = @GroupId) AS FeeStructureCount,
+                    (SELECT COUNT(*) FROM Subjects WHERE GroupId = @GroupId) AS SubjectCount,
+                    (SELECT COUNT(*) FROM Attendances WHERE GroupId = @GroupId) AS AttendanceCount,
+                    (SELECT COUNT(*) FROM Examinations WHERE GroupId = @GroupId) AS ExamCount,
+                    (SELECT COUNT(*) FROM Timetables WHERE GroupId = @GroupId) AS TimetableCount,
+                    (SELECT COUNT(*) FROM Students s INNER JOIN Sections sec ON s.SectionId = sec.SectionId WHERE sec.GroupId = @GroupId) AS SectionStudentCount
+            ", new { GroupId = groupId });
+
+            if (deps != null)
+            {
+                int studentCount = (int)(deps.StudentCount ?? 0) + (int)(deps.SectionStudentCount ?? 0);
+                int admissionCount = (int)(deps.AdmissionCount ?? 0);
+                int feeStructureCount = (int)(deps.FeeStructureCount ?? 0);
+                int subjectCount = (int)(deps.SubjectCount ?? 0);
+                int attendanceCount = (int)(deps.AttendanceCount ?? 0);
+                int examCount = (int)(deps.ExamCount ?? 0);
+                int timetableCount = (int)(deps.TimetableCount ?? 0);
+
+                var blocking = new List<string>();
+                if (studentCount > 0) blocking.Add($"{studentCount} student(s)");
+                if (admissionCount > 0) blocking.Add($"{admissionCount} admission(s)");
+                if (feeStructureCount > 0) blocking.Add($"{feeStructureCount} fee structure(s)");
+                if (subjectCount > 0) blocking.Add($"{subjectCount} subject(s)");
+                if (attendanceCount > 0) blocking.Add($"{attendanceCount} attendance session(s)");
+                if (examCount > 0) blocking.Add($"{examCount} examination(s)");
+                if (timetableCount > 0) blocking.Add($"{timetableCount} timetable(s)");
+
+                if (blocking.Count > 0)
+                {
+                    throw new ValidationException(
+                        $"Cannot delete group '{entity.GroupName}' because it is currently in use by: {string.Join(", ", blocking)}. Please reassign or delete these records first, or deactivate the group.");
+                }
+            }
+
+            // 2. Try stored procedure sp_DeleteGroup
             try
             {
-                var connection =
-                    _context.Database.GetDbConnection();
-
-                var affected =
-                    await connection.ExecuteScalarAsync<int>(
-                        "sp_DeleteGroup",
-                        new
-                        {
-                            p_GroupId = groupId
-                        },
-                        commandType:
-                            CommandType.StoredProcedure);
+                var affected = await connection.ExecuteScalarAsync<int>(
+                    "sp_DeleteGroup",
+                    new { p_GroupId = groupId },
+                    commandType: CommandType.StoredProcedure);
 
                 if (affected > 0)
                     return true;
             }
+            catch (MySqlConnector.MySqlException)
+            {
+                throw;
+            }
             catch
             {
-                // Fallback below
+                // Fallback to EF Core transaction if SP call fails
             }
 
-            var entity =
-                await _context.Groups.FindAsync(groupId);
+            // 3. Fallback EF Core deletion in a transaction (clean up empty child sections & group programs)
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var sections = await _context.Sections.Where(s => s.GroupId == groupId).ToListAsync();
+                if (sections.Count > 0)
+                {
+                    _context.Sections.RemoveRange(sections);
+                    await _context.SaveChangesAsync();
+                }
 
-            if (entity == null)
-                return false;
+                var groupPrograms = await _context.GroupPrograms.Where(gp => gp.GroupId == groupId).ToListAsync();
+                if (groupPrograms.Count > 0)
+                {
+                    _context.GroupPrograms.RemoveRange(groupPrograms);
+                    await _context.SaveChangesAsync();
+                }
 
-            _context.Groups.Remove(entity);
+                _context.Groups.Remove(entity);
+                await _context.SaveChangesAsync();
 
-            await _context.SaveChangesAsync();
-
-            return true;
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
         }
 
 

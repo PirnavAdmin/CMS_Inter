@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { CalendarClock, CalendarDays, ClipboardClock, Clock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Loader, Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
@@ -506,7 +506,7 @@ function Screen({ staff = false, say }) {
    <>
      <Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} />
      <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
-     {busy && !loaded ? <Loader label="Loading attendance..." /> : null}
+     {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
      {loaded && (f.view === "Monthly Report" ? (
        <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
      ) : !staff && f.view === "Defaulters" ? (
@@ -619,7 +619,7 @@ function Filters({ f, update, o, staff, busy, load, exportReport }) {
         <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all={o.loadingSections ? "Loading sections..." : "All Sections"} disabled={o.loadingSections} mutedPlaceholder />
       </>}
       <Select label="Status" value={f.status} onChange={update("status")} items={staff ? STAFF_STATUSES : STUDENT_STATUSES} all="All Status" mutedPlaceholder />
-      <div className="att-filter-action"><button className="cms-btn cms-btn-primary" disabled={busy} onClick={() => load()}>{busy ? "Loading..." : "Get Records"}</button>{isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}</div>
+      <div className="att-filter-action"><button className="cms-btn cms-btn-primary" disabled={busy} onClick={() => load()}>{busy ? "Fetching records…" : "Get Records"}</button>{isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}</div>
     </div>
   </section>;
 }

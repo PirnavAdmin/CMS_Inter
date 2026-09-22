@@ -43,6 +43,7 @@ import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
 import FacultyDashboard from "@/Dashboard/Facultydashboard.jsx";
+import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
 import {
   HostelDashboard,
@@ -284,6 +285,10 @@ export default function AppRoutes() {
 
       <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
       <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
+      <Route path="/driver" element={<DriverDashboard />} />
+      <Route path="/driver/*" element={<DriverDashboard />} />
+      <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
+      <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
       <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id/complete-profile" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id/review" element={<StaffManagementPage />} />

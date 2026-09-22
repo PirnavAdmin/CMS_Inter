@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Eye, Printer, FileSpreadsheet, FileText, ChevronDown, Download } from "lucide-react";
 import Search3DIcon from "./Search3DIcon.jsx";
-import { StatusBadge, Loader } from "./Ui.jsx";
+import { StatusBadge, SkeletonRow } from "./Ui.jsx";
 
 const PAGE_SIZE = 5;
 
@@ -207,9 +207,7 @@ export default function DataTable({
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={colCount}><Loader /></td>
-              </tr>
+              Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={colCount} />)
             ) : pageRows.length === 0 ? (
               <tr>
                 <td colSpan={colCount}>
