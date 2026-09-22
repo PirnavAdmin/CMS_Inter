@@ -58,12 +58,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             IDbTransaction? transaction = null)
         {
             var conn = connection ?? _context.Database.GetDbConnection();
-            const string sql = @"
-                SELECT * FROM Students 
-                WHERE AdmissionId = @AdmissionId 
-                ORDER BY StudentId DESC 
-                LIMIT 1";
-            return await conn.QueryFirstOrDefaultAsync<Student>(sql, new { AdmissionId = admissionId }, transaction: transaction);
+            return await conn.QueryFirstOrDefaultAsync<Student>(
+                "sp_GetStudentByAdmissionId",
+                new { p_AdmissionId = admissionId },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
 
@@ -173,10 +172,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         // -------------------------------------------------
                         // ADDRESS
                         // -------------------------------------------------
-                      p_HouseDoorNumber = request.HouseDoorNumber,
+                        p_HouseDoorNumber = request.HouseDoorNumber,
                         p_StreetVillage = request.StreetVillage,
-
-        
                         p_City = request.City,
                         p_District = request.District,
                         p_State = request.State,
@@ -205,7 +202,16 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_Medium = request.Medium,
 
                         p_SecondLanguage =
-                            request.SecondLanguage
+                            request.SecondLanguage,
+
+                        p_StudentType = request.StudentType,
+                        p_TransportRequired = request.TransportRequired,
+                        p_BusRoute = request.BusRoute,
+                        p_PickupPoint = request.PickupPoint,
+                        p_HostelBlock = request.HostelBlock,
+                        p_HostelRoom = request.HostelRoom,
+                        p_HostelBed = request.HostelBed,
+                        p_HallTicketNumber = request.HallTicketNumber
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -213,51 +219,6 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
                 throw new Exception(
                     "Student admission could not be created.");
-            }
-
-            if (result.AdmissionId > 0 && (
-                !string.IsNullOrWhiteSpace(request.StudentType) ||
-                !string.IsNullOrWhiteSpace(request.TransportRequired) ||
-                !string.IsNullOrWhiteSpace(request.BusRoute) ||
-                !string.IsNullOrWhiteSpace(request.PickupPoint) ||
-                !string.IsNullOrWhiteSpace(request.HostelBlock) ||
-                !string.IsNullOrWhiteSpace(request.HostelRoom) ||
-                !string.IsNullOrWhiteSpace(request.HostelBed) ||
-                !string.IsNullOrWhiteSpace(request.HallTicketNumber)))
-            {
-                const string updateSql = @"
-                    UPDATE StudentAdmissions
-                    SET StudentType = COALESCE(@StudentType, StudentType),
-                        TransportRequired = COALESCE(@TransportRequired, TransportRequired),
-                        BusRoute = COALESCE(@BusRoute, BusRoute),
-                        PickupPoint = COALESCE(@PickupPoint, PickupPoint),
-                        HostelBlock = COALESCE(@HostelBlock, HostelBlock),
-                        HostelRoom = COALESCE(@HostelRoom, HostelRoom),
-                        HostelBed = COALESCE(@HostelBed, HostelBed),
-                        HallTicketNumber = COALESCE(@HallTicketNumber, HallTicketNumber)
-                    WHERE AdmissionId = @AdmissionId";
-
-                await connection.ExecuteAsync(updateSql, new
-                {
-                    AdmissionId = result.AdmissionId,
-                    request.StudentType,
-                    request.TransportRequired,
-                    request.BusRoute,
-                    request.PickupPoint,
-                    request.HostelBlock,
-                    request.HostelRoom,
-                    request.HostelBed,
-                    request.HallTicketNumber
-                });
-
-                result.StudentType = request.StudentType;
-                result.TransportRequired = request.TransportRequired;
-                result.BusRoute = request.BusRoute;
-                result.PickupPoint = request.PickupPoint;
-                result.HostelBlock = request.HostelBlock;
-                result.HostelRoom = request.HostelRoom;
-                result.HostelBed = request.HostelBed;
-                result.HallTicketNumber = request.HallTicketNumber;
             }
 
             return result;
@@ -456,46 +417,18 @@ namespace CollegeManagement.API.Repositories.Implementations
                             request.Medium,
 
                         p_SecondLanguage =
-                            request.SecondLanguage
+                            request.SecondLanguage,
+
+                        p_StudentType = request.StudentType,
+                        p_TransportRequired = request.TransportRequired,
+                        p_BusRoute = request.BusRoute,
+                        p_PickupPoint = request.PickupPoint,
+                        p_HostelBlock = request.HostelBlock,
+                        p_HostelRoom = request.HostelRoom,
+                        p_HostelBed = request.HostelBed,
+                        p_HallTicketNumber = request.HallTicketNumber
                     },
                     commandType: CommandType.StoredProcedure);
-
-            if (result != null)
-            {
-                const string updateSql = @"
-                    UPDATE StudentAdmissions
-                    SET StudentType = COALESCE(@StudentType, StudentType),
-                        TransportRequired = COALESCE(@TransportRequired, TransportRequired),
-                        BusRoute = COALESCE(@BusRoute, BusRoute),
-                        PickupPoint = COALESCE(@PickupPoint, PickupPoint),
-                        HostelBlock = COALESCE(@HostelBlock, HostelBlock),
-                        HostelRoom = COALESCE(@HostelRoom, HostelRoom),
-                        HostelBed = COALESCE(@HostelBed, HostelBed),
-                        HallTicketNumber = COALESCE(@HallTicketNumber, HallTicketNumber)
-                    WHERE AdmissionId = @AdmissionId";
-
-                await connection.ExecuteAsync(updateSql, new
-                {
-                    AdmissionId = admissionId,
-                    request.StudentType,
-                    request.TransportRequired,
-                    request.BusRoute,
-                    request.PickupPoint,
-                    request.HostelBlock,
-                    request.HostelRoom,
-                    request.HostelBed,
-                    request.HallTicketNumber
-                });
-
-                result.StudentType = request.StudentType ?? result.StudentType;
-                result.TransportRequired = request.TransportRequired ?? result.TransportRequired;
-                result.BusRoute = request.BusRoute ?? result.BusRoute;
-                result.PickupPoint = request.PickupPoint ?? result.PickupPoint;
-                result.HostelBlock = request.HostelBlock ?? result.HostelBlock;
-                result.HostelRoom = request.HostelRoom ?? result.HostelRoom;
-                result.HostelBed = request.HostelBed ?? result.HostelBed;
-                result.HallTicketNumber = request.HallTicketNumber ?? result.HallTicketNumber;
-            }
 
             return result;
         }
@@ -586,26 +519,16 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var connection = _context.Database.GetDbConnection();
 
-            try
-            {
-                var result =
-                    await connection.QuerySingleOrDefaultAsync<int>(
-                        "sp_DeleteStudentAdmission",
-                        new
-                        {
-                            p_AdmissionId = admissionId
-                        },
-                        commandType: CommandType.StoredProcedure);
+            var result =
+                await connection.QuerySingleOrDefaultAsync<int>(
+                    "sp_DeleteStudentAdmission",
+                    new
+                    {
+                        p_AdmissionId = admissionId
+                    },
+                    commandType: CommandType.StoredProcedure);
 
-                return result > 0;
-            }
-            catch (MySqlConnector.MySqlException ex) when (ex.Message.Contains("does not exist"))
-            {
-                var rows = await connection.ExecuteAsync(
-                    "DELETE FROM StudentAdmissions WHERE AdmissionId = @AdmissionId",
-                    new { AdmissionId = admissionId });
-                return rows > 0;
-            }
+            return result > 0;
         }
 
 
