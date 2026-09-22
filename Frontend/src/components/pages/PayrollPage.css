@@ -442,7 +442,9 @@
 /* ---------------------------------------------------------------------- */
 
 .payroll-top-tabs-bar {
-  display: flex;
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
   align-items: center;
   gap: 8px;
   background: var(--cms-surface, #ffffff);
@@ -452,6 +454,13 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   overflow-x: auto;
   white-space: nowrap;
+}
+
+.payroll-3d-icon {
+  display: inline-block;
+  object-fit: contain;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .payroll-top-tab {
