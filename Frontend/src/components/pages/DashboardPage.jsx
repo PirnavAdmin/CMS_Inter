@@ -189,17 +189,6 @@ function CardHeader({ title, action, children }) {
 
 function LoadingState() { return <div className="dashboard-card-loading"><SkeletonText lines={2} /></div>; }
 
-function DashboardSkeleton() {
-  return <main className="dashboard-page dashboard-page-skeleton" aria-label="Loading dashboard">
-    <div className="dashboard-header-bar"><div className="dashboard-greeting-wrap"><Skeleton style={{ width: 280, height: 28 }} /><Skeleton style={{ width: 220, height: 14, marginTop: 10 }} /></div><SkeletonButton width={156} /></div>
-    <div className="dashboard-viewing-banner"><Skeleton style={{ width: "78%", height: 14 }} /></div>
-    <section className="dashboard-kpi-grid" aria-hidden="true">{Array.from({ length: 5 }, (_, index) => <article className="dashboard-kpi-card" key={index}><SkeletonAvatar size={42} /><div><Skeleton style={{ width: 92, height: 13 }} /><Skeleton style={{ width: 64, height: 26, marginTop: 9 }} /><Skeleton style={{ width: 78, height: 10, marginTop: 8 }} /></div></article>)}</section>
-    <nav className="dashboard-quick-actions" aria-hidden="true"><Skeleton style={{ width: 108, height: 18 }} /><div className="dashboard-quick-actions-list">{Array.from({ length: 6 }, (_, index) => <SkeletonButton key={index} width={124} />)}</div></nav>
-    <section className="dashboard-grid-row dashboard-row-three" aria-hidden="true">{Array.from({ length: 3 }, (_, index) => <article className="dashboard-card" key={index}><div className="dashboard-card-head"><Skeleton style={{ width: 150, height: 16 }} /></div><div className="dashboard-card-body"><Skeleton className="dashboard-skeleton-chart" /><SkeletonText lines={2} /></div></article>)}</section>
-    <section className="dashboard-grid-row dashboard-row-three" aria-hidden="true">{Array.from({ length: 3 }, (_, index) => <SkeletonCard key={index} className="dashboard-skeleton-list" lines={4} />)}</section>
-  </main>;
-}
-
 function ErrorState({ message = "Unable to load data.", onRetry }) {
   return (
     <div className="dashboard-card-error">
@@ -355,8 +344,6 @@ export default function DashboardPage() {
   const [holidayState, setHolidayState] = useState({ loading: true, error: null, data: null });
   const [certState, setCertState] = useState({ loading: true, error: null, data: null });
   const [examState, setExamState] = useState({ loading: true, error: null, data: null });
-  const initialLoading = summaryState.loading || overviewState.loading || groupState.loading || studentAttState.loading || staffAttState.loading || holidayState.loading || examState.loading;
-
   // Sequence ref counters for race condition protection
   const summarySeq = useRef(0);
   const overviewSeq = useRef(0);
@@ -1016,7 +1003,7 @@ export default function DashboardPage() {
 
   return (
     <DashboardLayout title={null} subtitle={null} actions={null} breadcrumb={["Overview"]}>
-      {initialLoading ? <DashboardSkeleton /> : <main className="dashboard-page">
+      <main className="dashboard-page">
         {/* Top Header Bar & Control Panel */}
         <div className="dashboard-header-bar">
           <div className="dashboard-greeting-wrap">
@@ -1579,7 +1566,7 @@ export default function DashboardPage() {
             )}
           </article>
         </section>
-      </main>}
+      </main>
       <Toast message={toastMessage} onClose={() => setToastMessage("")} />
     </DashboardLayout>
   );
