@@ -170,5 +170,15 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public string? SectionName { get; set; }
 
         public string? RollNo { get; set; }
+
+        // Residential & Transport Allocation
+        public string? StudentType { get; set; }
+        public string? TransportRequired { get; set; }
+        public string? BusRoute { get; set; }
+        public string? PickupPoint { get; set; }
+        public string? HostelBlock { get; set; }
+        public string? HostelRoom { get; set; }
+        public string? HostelBed { get; set; }
+        public string? HallTicketNumber { get; set; }
     }
 }

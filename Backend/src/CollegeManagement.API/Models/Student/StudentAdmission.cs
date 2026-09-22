@@ -170,5 +170,30 @@ namespace CollegeManagement.API.Models
         public DateTime CreatedAt { get; set; }
 
         public DateTime? UpdatedAt { get; set; }
+
+        // Residential & Transport Allocation
+        [MaxLength(30)]
+        public string? StudentType { get; set; }
+
+        [MaxLength(10)]
+        public string? TransportRequired { get; set; }
+
+        [MaxLength(100)]
+        public string? BusRoute { get; set; }
+
+        [MaxLength(100)]
+        public string? PickupPoint { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelBlock { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelRoom { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelBed { get; set; }
+
+        [MaxLength(50)]
+        public string? HallTicketNumber { get; set; }
     }
 }

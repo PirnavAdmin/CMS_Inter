@@ -33,6 +33,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
+#region Dapper Type Handlers
+Dapper.SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new NullableDateOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new TimeOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new NullableTimeOnlyTypeHandler());
+#endregion
+
 #region Controllers & JSON
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
