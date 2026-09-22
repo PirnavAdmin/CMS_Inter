@@ -26,9 +26,18 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<PagedResult<TransportRouteDto>> GetAllAsync(TransportRouteFilterDto filter)
         {
             using var c = Connection();
+            string? busTypeFilter = !string.IsNullOrWhiteSpace(filter.BusType)
+                ? filter.BusType
+                : (filter.IsAc.HasValue ? (filter.IsAc.Value ? "AC" : "Non-AC") : null);
+
             var all = (await c.QueryAsync<TransportRouteDto>(
                 "sp_GetTransportRoutes",
-                new { p_Search = filter.Search ?? "", p_Status = filter.Status },
+                new
+                {
+                    p_Search = filter.Search ?? "",
+                    p_Status = filter.Status,
+                    p_BusType = busTypeFilter
+                },
                 commandType: CommandType.StoredProcedure)).ToList();
 
             var totalCount = all.Count;
@@ -132,12 +141,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             return rows > 0;
         }
 
-        public async Task<IEnumerable<TransportRouteLookupDto>> GetLookupAsync(string? search, int limit)
+        public async Task<IEnumerable<TransportRouteLookupDto>> GetLookupAsync(string? search, string? busType, int limit)
         {
             using var c = Connection();
             return await c.QueryAsync<TransportRouteLookupDto>(
                 "sp_GetTransportRouteLookup",
-                new { p_Search = search ?? "", p_Limit = limit > 0 ? limit : 100 },
+                new
+                {
+                    p_Search = search ?? "",
+                    p_BusType = busType ?? "",
+                    p_Limit = limit > 0 ? limit : 100
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -155,7 +169,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             using var c = Connection();
             var all = await c.QueryAsync<TransportRouteDto>(
                 "sp_GetTransportRoutes",
-                new { p_Search = search, p_Status = (bool?)null },
+                new { p_Search = search, p_Status = (bool?)null, p_BusType = (string?)null },
                 commandType: CommandType.StoredProcedure);
 
             return all.FirstOrDefault(r => 
