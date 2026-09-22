@@ -1,0 +1,7 @@
+DROP PROCEDURE IF EXISTS sp_GetAllAdmins;
+DELIMITER //
+CREATE PROCEDURE sp_GetAllAdmins()
+BEGIN
+    SELECT id, Email, IsActive FROM admins ORDER BY id DESC;
+END //
+DELIMITER ;

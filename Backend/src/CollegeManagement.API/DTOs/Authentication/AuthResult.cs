@@ -1,4 +1,4 @@
-﻿namespace CollegeManagement.API.DTOs.Authentication
+namespace CollegeManagement.API.DTOs.Authentication
 {
     public class AuthResult
     {
@@ -9,5 +9,6 @@
         public string? Name { get; set; }
         public string? Role { get; set; }
         public string? Otp { get; set; }
+        public string? ResetToken { get; set; }
     }
 }

@@ -1,0 +1,19 @@
+export const mockBoards = [{ id: 1, name: "Board of Intermediate Education, Andhra Pradesh" }, { id: 2, name: "Telangana Board of Intermediate Education" }];
+export const mockAcademicYears = [{ id: 1, name: "2026-2027" }];
+export const mockAcademicLevels = [{ id: 1, name: "Intermediate 1st Year" }, { id: 2, name: "Intermediate 2nd Year" }];
+export const mockGroups = [{ id: 1, name: "MPC" }, { id: 2, name: "BiPC" }, { id: 3, name: "CEC" }, { id: 4, name: "MEC" }];
+export const mockSections = [{ id: 1, name: "MPC-A" }, { id: 2, name: "MPC-B" }];
+const names = ["Aarav Kumar", "Rahul Kumar", "Priya Sharma", "Diya Patel", "Kavya Devi", "Nandhini Rao", "Navya Anil", "Neha Gupta", "Nikhitha Das", "Sanjay Reddy"];
+const statuses = ["Present", "Absent", "Present", "Leave", "Present", "Present", "Absent", "Present", "Present", "Present"];
+export const mockStudentAttendance = names.flatMap((studentName, index) => ["Morning", "Afternoon"].map((session, sessionIndex) => ({
+  id: `student-${index + 1}-${sessionIndex}`, studentId: `STU${String(index + 1).padStart(3, "0")}`, admissionNo: `ADM-2026-${String(index + 1).padStart(3, "0")}`,
+  rollNo: String(101 + index), studentName, boardId: 1, academicYearId: 1, academicLevelId: 1, groupId: 1, sectionId: 1,
+  date: "2026-09-02", session, status: sessionIndex ? (index % 4 === 1 ? "Absent" : "Present") : statuses[index], remarks: index === 1 ? "Medical reason" : "",
+  lastModified: "02-Sep-2026 09:35 AM", modifiedBy: "Faculty",
+})));
+export const mockStaffAttendance = [
+  ["FAC001", "Ramesh Kumar", "Mathematics", "Teaching Staff", "Present"], ["FAC002", "Suresh Kumar", "Physics", "Teaching Staff", "Leave"], ["FAC003", "Anitha Rao", "Chemistry", "Teaching Staff", "Late"], ["FAC004", "Priya Sharma", "Languages", "Teaching Staff", "Present"], ["FAC005", "Ravi Kumar", "Mathematics", "Teaching Staff", "Absent"], ["STF006", "Lakshmi Devi", "Administration", "Non-Teaching Staff", "Present"], ["STF007", "Meena Joseph", "Accounts", "Non-Teaching Staff", "Late"], ["STF008", "Arun Kumar", "Library", "Non-Teaching Staff", "Present"], ["STF009", "Sandeep Rao", "Administration", "Non-Teaching Staff", "Leave"], ["STF010", "Vani Reddy", "Accounts", "Non-Teaching Staff", "Present"],
+].map(([staffId, staffName, department, staffType, status], index) => ({ id: `staff-${index + 1}`, staffId, staffName, department, staffType, date: "2026-09-02", status, inTime: status === "Leave" ? "—" : status === "Late" ? "09:18 AM" : "08:48 AM", outTime: status === "Leave" ? "—" : "05:05 PM", verificationMethod: status === "Leave" ? "Leave Approved" : "Biometric", remarks: status === "Leave" ? "Casual Leave" : "" }));
+export const mockLeaveRequests = [{ id: 1, staffId: "FAC003", staffName: "Anitha Rao", department: "Chemistry", staffType: "Teaching Staff", leaveType: "Casual Leave", fromDate: "2026-09-04", toDate: "2026-09-05", days: 2, reason: "Personal work", status: "Pending" }, { id: 2, staffId: "STF009", staffName: "Sandeep Rao", department: "Administration", staffType: "Non-Teaching Staff", leaveType: "Medical Leave", fromDate: "2026-09-01", toDate: "2026-09-02", days: 2, reason: "Medical treatment", status: "Approved" }];
+export const mockSessions = [{ id: 1, date: "2026-09-02", attendanceType: "Student", classSection: "Intermediate 1st Year - MPC-A", session: "Morning", createdBy: "Faculty", createdAt: "09:30 AM", status: "Locked" }, { id: 2, date: "2026-09-02", attendanceType: "Student", classSection: "Intermediate 1st Year - MPC-A", session: "Afternoon", createdBy: "Faculty", createdAt: "02:30 PM", status: "Open" }];
+export const mockAuditHistory = [{ id: 1, dateTime: "02-Sep-2026 10:30 AM", user: "Admin", attendanceType: "Student", person: "Rahul Kumar", attendanceDate: "02-Sep-2026", session: "Morning", oldStatus: "Absent", newStatus: "Present", reason: "Attendance correction", action: "UPDATE" }];

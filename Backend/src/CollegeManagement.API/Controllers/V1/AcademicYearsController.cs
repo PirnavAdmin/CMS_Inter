@@ -1,13 +1,9 @@
-using CollegeManagement.API.DTOs.Authentication;
 using CollegeManagement.API.DTOs.AcademicYear;
 using CollegeManagement.API.Services.Interfaces;
-using CollegeManagement.API.Services.Implementations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-
-using Microsoft.AspNetCore.Authorization;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -24,19 +20,50 @@ namespace CollegeManagement.API.Controllers.V1
             _service = service;
         }
 
+        /// <summary>
+        /// Retrieves academic years with search, status filtering, and pagination support.
+        /// </summary>
         [HttpGet]
-        public async Task<ActionResult> GetAll()
+        [AllowAnonymous]
+        public async Task<ActionResult> GetPaged([FromQuery] AcademicYearSearchRequestDto request)
         {
-            var result = await _service.GetAllAsync();
+            var result = await _service.GetPagedAsync(request);
             return Ok(new
             {
                 Status = true,
                 Message = "Academic years retrieved successfully.",
+                Data = result.Items,
+                Pagination = new
+                {
+                    result.TotalCount,
+                    result.PageNumber,
+                    result.PageSize,
+                    result.TotalPages
+                }
+            });
+        }
+
+        /// <summary>
+        /// Retrieves all currently active academic years.
+        /// </summary>
+        [HttpGet("active")]
+        [AllowAnonymous]
+        public async Task<ActionResult> GetActive()
+        {
+            var result = await _service.GetActiveAsync();
+            return Ok(new
+            {
+                Status = true,
+                Message = "Active academic years retrieved successfully.",
                 Data = result
             });
         }
 
+        /// <summary>
+        /// Retrieves an academic year by its unique identifier.
+        /// </summary>
         [HttpGet("{id}")]
+        [AllowAnonymous]
         public async Task<ActionResult> GetById(int id)
         {
             var result = await _service.GetByIdAsync(id);
@@ -56,8 +83,11 @@ namespace CollegeManagement.API.Controllers.V1
             });
         }
 
+        /// <summary>
+        /// Creates a new academic year.
+        /// </summary>
         [HttpPost]
-        public async Task<ActionResult> Create(CreateAcademicYearDto dto)
+        public async Task<ActionResult> Create([FromBody] CreateAcademicYearDto dto)
         {
             try
             {
@@ -79,8 +109,11 @@ namespace CollegeManagement.API.Controllers.V1
             }
         }
 
+        /// <summary>
+        /// Updates an existing academic year.
+        /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult> Update(int id, UpdateAcademicYearDto dto)
+        public async Task<ActionResult> Update(int id, [FromBody] UpdateAcademicYearDto dto)
         {
             try
             {
@@ -110,29 +143,79 @@ namespace CollegeManagement.API.Controllers.V1
             }
         }
 
+        /// <summary>
+        /// Deletes an academic year by its unique identifier.
+        /// </summary>
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
-            var success = await _service.DeleteAsync(id);
-            if (!success)
+            try
             {
-                return NotFound(new
+                var success = await _service.DeleteAsync(id);
+                if (!success)
                 {
-                    Status = false,
-                    Message = $"Academic year with ID {id} not found."
+                    return NotFound(new
+                    {
+                        Status = false,
+                        Message = $"Academic year with ID {id} not found."
+                    });
+                }
+                return Ok(new
+                {
+                    Status = true,
+                    Message = "Academic year deleted successfully."
                 });
             }
-            return Ok(new
+            catch (InvalidOperationException ex)
             {
-                Status = true,
-                Message = "Academic year deleted successfully."
-            });
+                return BadRequest(new
+                {
+                    Status = false,
+                    Message = ex.Message
+                });
+            }
         }
 
+        /// <summary>
+        /// Activates a specific academic year by its identifier.
+        /// </summary>
         [HttpPatch("{id}/activate")]
         public async Task<IActionResult> Activate(int id)
         {
-            var success = await _service.ActivateAsync(id);
+            try
+            {
+                var success = await _service.ActivateAsync(id);
+                if (!success)
+                {
+                    return NotFound(new
+                    {
+                        Status = false,
+                        Message = $"Academic year with ID {id} not found."
+                    });
+                }
+                return Ok(new
+                {
+                    Status = true,
+                    Message = "Academic year activated successfully."
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new
+                {
+                    Status = false,
+                    Message = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Deactivates a specific academic year by its identifier.
+        /// </summary>
+        [HttpPatch("{id}/deactivate")]
+        public async Task<IActionResult> Deactivate(int id)
+        {
+            var success = await _service.DeactivateAsync(id);
             if (!success)
             {
                 return NotFound(new
@@ -144,8 +227,28 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(new
             {
                 Status = true,
-                Message = "Academic year activated successfully."
+                Message = "Academic year deactivated successfully."
             });
+        }
+
+        /// <summary>
+        /// Exports academic years list to CSV format.
+        /// </summary>
+        [HttpGet("export/csv")]
+        public async Task<IActionResult> ExportCsv([FromQuery] string? search, [FromQuery] bool? status)
+        {
+            var bytes = await _service.ExportToCsvAsync(search, status);
+            return File(bytes, "text/csv", $"AcademicYears_{DateTime.UtcNow:yyyyMMdd}.csv");
+        }
+
+        /// <summary>
+        /// Exports academic years list to Excel format.
+        /// </summary>
+        [HttpGet("export/excel")]
+        public async Task<IActionResult> ExportExcel([FromQuery] string? search, [FromQuery] bool? status)
+        {
+            var bytes = await _service.ExportToExcelAsync(search, status);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"AcademicYears_{DateTime.UtcNow:yyyyMMdd}.xlsx");
         }
     }
 }

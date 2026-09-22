@@ -1,33 +1,118 @@
-﻿using CollegeManagement.API.DTOs.Groups;
+using CollegeManagement.API.DTOs.Groups;
 
 namespace CollegeManagement.API.Services
 {
     public interface IGroupService
     {
-        Task<PagedGroupResponse> GetAllAsync(
-            int pageNumber,
-            int pageSize,
+        // =========================================================
+        // GROUP LIST
+        // =========================================================
+
+        Task<List<GroupListItemDto>> GetAllAsync(
             string? search,
-            string? board,
+            int? boardId,
             int? academicYearId,
-            string? academicLevel,
+            int? academicLevelId,
             bool? isActive);
 
-        Task<GroupResponse?> GetByIdAsync(int groupId);
+        // =========================================================
+        // GROUP DETAILS
+        // =========================================================
 
-        Task<List<GroupListItemDto>> GetByBoardAsync(string board);
+        Task<GroupResponse?> GetByIdAsync(
+            int groupId);
+
+        // =========================================================
+        // GROUPS BY BOARD
+        // =========================================================
+
+        Task<List<GroupListItemDto>> GetByBoardAsync(
+            int boardId);
+
+        // =========================================================
+        // CREATE GROUP
+        // =========================================================
 
         Task<GroupResponse> CreateAsync(
             CreateGroupRequest request);
+
+        // =========================================================
+        // UPDATE GROUP
+        // =========================================================
 
         Task<GroupResponse?> UpdateAsync(
             int groupId,
             UpdateGroupRequest request);
 
-        Task<bool> DeleteAsync(int groupId);
+        // =========================================================
+        // DELETE GROUP
+        // =========================================================
+
+        Task<bool> DeleteAsync(
+            int groupId);
+
+        // =========================================================
+        // ACTIVATE / DEACTIVATE
+        // =========================================================
+
+        Task<bool> ActivateAsync(
+            int groupId,
+            bool isActive = true);
+
+        // =========================================================
+        // GROUP CODE VALIDATION
+        // =========================================================
 
         Task<bool> GroupCodeExistsAsync(
             string groupCode,
             int? excludeGroupId = null);
+
+        // =========================================================
+        // STUDENTS
+        // =========================================================
+
+        Task<List<CollegeManagement.API.DTOs.Students.StudentListItemDto>>
+            GetStudentsAsync(
+                int groupId);
+
+        // =========================================================
+        // SUBJECTS
+        // =========================================================
+
+        Task<List<CollegeManagement.API.Models.Subject>>
+            GetSubjectsAsync(
+                int groupId);
+
+        // =========================================================
+        // GROUP SUMMARY
+        // =========================================================
+
+        Task<GroupSummaryDto?>
+            GetSummaryAsync(
+                int groupId);
+
+        // =========================================================
+        // GROUP DROPDOWN
+        // =========================================================
+
+        Task<List<GroupDropdownDto>>
+            GetDropdownAsync();
+
+        // =========================================================
+        // PROGRAMS BY GROUP
+        // =========================================================
+        //
+        // Example:
+        //
+        // MPC
+        //   ├── Regular
+        //   ├── JEE
+        //   └── EAPCET
+        //
+        // =========================================================
+
+        Task<List<CollegeManagement.API.DTOs.Program.GroupProgramDto>>
+            GetProgramsAsync(
+                int groupId);
     }
 }

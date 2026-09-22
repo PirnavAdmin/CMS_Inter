@@ -1,11 +1,10 @@
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Groups;
-using Microsoft.Data.SqlClient;
+using CollegeManagement.API.DTOs.Program;
+using CollegeManagement.API.Models;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
 using System.Data;
-using System.Threading.Tasks;
+using Dapper;
 
 namespace CollegeManagement.API.Repositories
 {
@@ -18,584 +17,1084 @@ namespace CollegeManagement.API.Repositories
             _context = context;
         }
 
-        private SqlConnection CreateConnection()
-        {
-            var connectionString =
-                _context.Database.GetConnectionString();
+        // =========================================================
+        // GET ALL GROUPS
+        // =========================================================
 
-            if (string.IsNullOrWhiteSpace(connectionString))
-            {
-                throw new InvalidOperationException(
-                    "Database connection string not found.");
-            }
+        // =========================================================
+        // GET ALL GROUPS
+        // =========================================================
 
-            return new SqlConnection(connectionString);
-        }
-
-        public async Task<PagedGroupResponse> GetAllAsync(
-            int pageNumber,
-            int pageSize,
+        public async Task<List<GroupListItemDto>> GetAllAsync(
             string? search,
-            string? board,
+            int? boardId,
             int? academicYearId,
-            string? academicLevel,
+            int? academicLevelId,
             bool? isActive)
         {
-            var response = new PagedGroupResponse
-            {
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            };
+            var connection = _context.Database.GetDbConnection();
 
-            await using var connection = CreateConnection();
+            if (connection.State != ConnectionState.Open)
+                await connection.OpenAsync();
 
-            await connection.OpenAsync();
-
-            await using var command = new SqlCommand(
-                "sp_Groups_GetAll",
-                connection);
-
-            command.CommandType = CommandType.StoredProcedure;
-
-            command.Parameters.Add(
-                new SqlParameter("@PageNumber", SqlDbType.Int)
+            var result = await connection.QueryAsync<GroupListItemDto>(
+                "sp_GetAllGroups",
+                new
                 {
-                    Value = pageNumber
-                });
+                    p_Search = string.IsNullOrWhiteSpace(search)
+                        ? null
+                        : search.Trim(),
 
-            command.Parameters.Add(
-                new SqlParameter("@PageSize", SqlDbType.Int)
-                {
-                    Value = pageSize
-                });
+                    p_BoardId = boardId,
 
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@Search",
-                    SqlDbType.VarChar,
-                    100)
-                {
-                    Value = string.IsNullOrWhiteSpace(search)
-                        ? DBNull.Value
-                        : search.Trim()
-                });
+                    p_AcademicYearId = academicYearId,
 
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@Board",
-                    SqlDbType.VarChar,
-                    100)
-                {
-                    Value = string.IsNullOrWhiteSpace(board)
-                        ? DBNull.Value
-                        : board.Trim()
-                });
+                    p_AcademicLevelId = academicLevelId,
 
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@AcademicYearId",
-                    SqlDbType.Int)
-                {
-                    Value = academicYearId.HasValue
-                        ? academicYearId.Value
-                        : DBNull.Value
-                });
+                    p_IsActive = isActive
+                },
+                commandType: CommandType.StoredProcedure
+            );
 
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@AcademicLevel",
-                    SqlDbType.VarChar,
-                    50)
-                {
-                    Value =
-                        string.IsNullOrWhiteSpace(
-                            academicLevel)
-                            ? DBNull.Value
-                            : academicLevel.Trim()
-                });
+            var list = result.ToList();
 
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@IsActive",
-                    SqlDbType.Bit)
-                {
-                    Value = isActive.HasValue
-                        ? isActive.Value
-                        : DBNull.Value
-                });
+            // Load programs for each group
+            await LoadProgramsForGroupsAsync(list);
 
-            await using var reader =
-                await command.ExecuteReaderAsync();
-
-            while (await reader.ReadAsync())
-            {
-                response.Items.Add(
-                    MapGroupListItem(reader));
-            }
-
-            if (await reader.NextResultAsync() &&
-                await reader.ReadAsync())
-            {
-                response.TotalCount =
-                    reader.GetInt32(
-                        reader.GetOrdinal("TotalCount"));
-            }
-
-            return response;
+            return list;
         }
+
+        // =========================================================
+        // GET GROUP BY ID
+        // =========================================================
 
         public async Task<GroupResponse?> GetByIdAsync(
             int groupId)
         {
-            await using var connection = CreateConnection();
-
-            await connection.OpenAsync();
-
-            await using var command = new SqlCommand(
-                "sp_Groups_GetById",
-                connection);
-
-            command.CommandType = CommandType.StoredProcedure;
-
-            command.Parameters.Add(
-                new SqlParameter("@GroupIdParam", SqlDbType.Int)
-                {
-                    Value = groupId
-                });
-
-            await using var reader =
-                await command.ExecuteReaderAsync();
-
-            if (!await reader.ReadAsync())
+            try
             {
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                var result =
+                    await connection.QueryFirstOrDefaultAsync<GroupResponse>(
+                        "sp_GetGroupById",
+                        new
+                        {
+                            p_GroupId = groupId
+                        },
+                        commandType:
+                            CommandType.StoredProcedure);
+
+                if (result != null)
+                {
+                    result.Programs =
+                        await GetProgramsAsync(groupId);
+
+                    return result;
+                }
+            }
+            catch
+            {
+                // Fallback to EF Core
+            }
+
+            var g = await _context.Groups
+                .AsNoTracking()
+                .Include(x => x.BoardNavigation)
+                .Include(x => x.AcademicYear)
+                .Include(x => x.AcademicLevelNavigation)
+                .FirstOrDefaultAsync(
+                    x => x.GroupId == groupId);
+
+            if (g == null)
                 return null;
-            }
 
-            return MapGroupResponse(reader);
-        }
+            var totalSubjects =
+                await _context.Subjects.CountAsync(
+                    s =>
+                        s.GroupId == groupId &&
+                        s.IsActive);
 
-        public async Task<List<GroupListItemDto>>
-            GetByBoardAsync(string board)
-        {
-            var groups = new List<GroupListItemDto>();
-
-            await using var connection = CreateConnection();
-
-            await connection.OpenAsync();
-
-            await using var command = new SqlCommand(
-                "sp_Groups_GetByBoard",
-                connection);
-
-            command.CommandType = CommandType.StoredProcedure;
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@Board",
-                    SqlDbType.VarChar,
-                    100)
-                {
-                    Value = board.Trim()
-                });
-
-            await using var reader =
-                await command.ExecuteReaderAsync();
-
-            while (await reader.ReadAsync())
+            return new GroupResponse
             {
-                groups.Add(MapGroupListItem(reader));
-            }
+                GroupId = g.GroupId,
 
-            return groups;
+                BoardId = g.BoardId,
+
+                BoardName = g.BoardNavigation != null
+                    ? g.BoardNavigation.BoardName
+                    : string.Empty,
+
+                AcademicYearId = g.AcademicYearId,
+
+                AcademicYearName = g.AcademicYear != null
+                    ? g.AcademicYear.AcademicYearName
+                    : string.Empty,
+
+                AcademicLevelId = g.AcademicLevelId,
+
+                AcademicLevelName =
+                    g.AcademicLevelNavigation != null
+                        ? g.AcademicLevelNavigation.LevelName
+                        : string.Empty,
+
+                GroupName = g.GroupName,
+
+                GroupCode = g.GroupCode,
+
+                Description = g.Description,
+
+                TotalSubjects = totalSubjects,
+
+                IsActive = g.IsActive,
+
+                Status = g.IsActive
+                    ? "Active"
+                    : "Inactive",
+
+                CreatedAt = g.CreatedAt,
+
+                UpdatedAt = g.UpdatedAt,
+
+                Programs =
+                    await GetProgramsAsync(groupId)
+            };
         }
+
+
+        // =========================================================
+        // GET GROUPS BY BOARD
+        // =========================================================
+
+        public async Task<List<GroupListItemDto>> GetByBoardAsync(
+            int boardId)
+        {
+            try
+            {
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                var result =
+                    await connection.QueryAsync<GroupListItemDto>(
+                        "sp_GetGroupsByBoard",
+                        new
+                        {
+                            p_BoardId = boardId
+                        },
+                        commandType:
+                            CommandType.StoredProcedure);
+
+                var groups = result.ToList();
+
+                await LoadProgramsForGroupsAsync(groups);
+
+                return groups;
+            }
+            catch
+            {
+                var groups = await _context.Groups
+                    .AsNoTracking()
+                    .Where(g =>
+                        g.BoardId == boardId &&
+                        g.IsActive)
+                    .Include(g => g.BoardNavigation)
+                    .Include(g => g.AcademicYear)
+                    .Include(g => g.AcademicLevelNavigation)
+                    .OrderByDescending(g => g.GroupId)
+                    .ToListAsync();
+
+                var groupIds =
+                    groups.Select(g => g.GroupId).ToList();
+                var subjectCounts = await _context.Subjects
+                    .Where(s =>
+                        groupIds.Contains(s.GroupId) &&
+                        s.IsActive)
+                                        .GroupBy(s => s.GroupId)
+                        .Select(g => new
+                        {
+                            GroupId = g.Key,
+                            Count = g.Count()
+                        })
+                        .ToDictionaryAsync(
+                            x => x.GroupId,
+                            x => x.Count);
+
+                var result =
+                    groups.Select(g =>
+                        new GroupListItemDto
+                        {
+                            GroupId = g.GroupId,
+
+                            BoardId = g.BoardId,
+
+                            BoardName =
+                                g.BoardNavigation != null
+                                    ? g.BoardNavigation.BoardName
+                                    : string.Empty,
+
+                            AcademicYearId =
+                                g.AcademicYearId,
+
+                            AcademicYearName =
+                                g.AcademicYear != null
+                                    ? g.AcademicYear.AcademicYearName
+                                    : string.Empty,
+
+                            AcademicLevelId =
+                                g.AcademicLevelId,
+
+                            AcademicLevelName =
+                                g.AcademicLevelNavigation != null
+                                    ? g.AcademicLevelNavigation.LevelName
+                                    : string.Empty,
+
+                            GroupName = g.GroupName,
+
+                            GroupCode = g.GroupCode,
+
+                            Description = g.Description,
+
+                            TotalSubjects =
+                                subjectCounts.TryGetValue(
+                                    g.GroupId,
+                                    out var cnt)
+                                    ? cnt
+                                    : 0,
+
+                            IsActive = g.IsActive,
+
+                            Status = g.IsActive
+                                ? "Active"
+                                : "Inactive",
+
+                            CreatedAt = g.CreatedAt,
+
+                            UpdatedAt = g.UpdatedAt,
+
+                            Programs =
+                                new List<GroupProgramDto>()
+                        })
+                        .ToList();
+
+                await LoadProgramsForGroupsAsync(result);
+
+                return result;
+            }
+        }
+
+
+        // =========================================================
+        // CREATE GROUP
+        // =========================================================
 
         public async Task<GroupResponse> CreateAsync(
             CreateGroupRequest request)
         {
-            await using var connection = CreateConnection();
+            GroupResponse? result = null;
 
-            await connection.OpenAsync();
-
-            await using var command = new SqlCommand(
-                "sp_Groups_Create",
-                connection);
-
-            command.CommandType = CommandType.StoredProcedure;
-
-            AddCreateParameters(command, request);
-
-            await using var reader =
-                await command.ExecuteReaderAsync();
-
-            if (!await reader.ReadAsync())
+            try
             {
-                throw new InvalidOperationException(
-                    "Group was created, but no response was returned.");
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                result =
+                    await connection.QueryFirstOrDefaultAsync<GroupResponse>(
+                        "sp_CreateGroup",
+                        new
+                        {
+                            p_BoardId =
+                                request.BoardId,
+
+                            p_AcademicYearId =
+                                request.AcademicYearId,
+
+                            p_AcademicLevelId =
+                                request.AcademicLevelId,
+
+                            p_GroupName =
+                                request.GroupName,
+
+                            p_GroupCode =
+                                request.GroupCode,
+
+                            p_Description =
+                                string.IsNullOrWhiteSpace(
+                                    request.Description)
+                                    ? null
+                                    : request.Description.Trim(),
+
+                            p_IsActive =
+                                request.IsActive
+                        },
+                        commandType:
+                            CommandType.StoredProcedure);
+            }
+            catch
+            {
+                // Fallback below
             }
 
-            return MapGroupResponse(reader);
+            if (result != null)
+            {
+                await SyncGroupProgramsAsync(
+                    result.GroupId,
+                    request.GetResolvedProgramIds());
+
+                return (await GetByIdAsync(
+                    result.GroupId))!;
+            }
+
+            var entity = new Group
+            {
+                BoardId =
+                    request.BoardId,
+
+                AcademicYearId =
+                    request.AcademicYearId,
+
+                AcademicLevelId =
+                    request.AcademicLevelId,
+
+                GroupName =
+                    request.GroupName,
+
+                GroupCode =
+                    request.GroupCode,
+
+                Description =
+                    string.IsNullOrWhiteSpace(
+                        request.Description)
+                        ? null
+                        : request.Description.Trim(),
+
+                IsActive =
+                    request.IsActive,
+
+                CreatedAt =
+                    DateTime.UtcNow
+            };
+
+            _context.Groups.Add(entity);
+
+            await _context.SaveChangesAsync();
+
+            await SyncGroupProgramsAsync(
+                entity.GroupId,
+                request.GetResolvedProgramIds());
+
+            return (await GetByIdAsync(
+                entity.GroupId))!;
         }
+
+
+        // =========================================================
+        // UPDATE GROUP
+        // =========================================================
 
         public async Task<GroupResponse?> UpdateAsync(
             int groupId,
             UpdateGroupRequest request)
         {
-            await using var connection = CreateConnection();
+            GroupResponse? result = null;
 
-            await connection.OpenAsync();
-
-            await using var command = new SqlCommand(
-                "sp_Groups_Update",
-                connection);
-
-            command.CommandType = CommandType.StoredProcedure;
-
-            command.Parameters.Add(
-                new SqlParameter("@GroupId", SqlDbType.Int)
-                {
-                    Value = groupId
-                });
-
-            AddUpdateParameters(command, request);
-
-            await using var reader =
-                await command.ExecuteReaderAsync();
-
-            if (!await reader.ReadAsync())
+            try
             {
-                return null;
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                result =
+                    await connection.QueryFirstOrDefaultAsync<GroupResponse>(
+                        "sp_UpdateGroup",
+                        new
+                        {
+                            p_GroupId =
+                                groupId,
+
+                            p_BoardId =
+                                request.BoardId,
+
+                            p_AcademicYearId =
+                                request.AcademicYearId,
+
+                            p_AcademicLevelId =
+                                request.AcademicLevelId,
+
+                            p_GroupName =
+                                request.GroupName,
+
+                            p_GroupCode =
+                                request.GroupCode,
+
+                            p_Description =
+                                string.IsNullOrWhiteSpace(
+                                    request.Description)
+                                    ? null
+                                    : request.Description.Trim(),
+
+                            p_IsActive =
+                                request.IsActive
+                        },
+                        commandType:
+                            CommandType.StoredProcedure);
+            }
+            catch
+            {
+                // Fallback below
             }
 
-            return MapGroupResponse(reader);
+            if (result != null)
+            {
+                await SyncGroupProgramsAsync(
+                    groupId,
+                    request.GetResolvedProgramIds());
+
+                return await GetByIdAsync(groupId);
+            }
+
+            var existing =
+                await _context.Groups.FindAsync(groupId);
+
+            if (existing == null)
+                return null;
+
+            existing.BoardId =
+                request.BoardId;
+
+            existing.AcademicYearId =
+                request.AcademicYearId;
+
+            existing.AcademicLevelId =
+                request.AcademicLevelId;
+
+            existing.GroupName =
+                request.GroupName;
+
+            existing.GroupCode =
+                request.GroupCode;
+
+            existing.Description =
+                string.IsNullOrWhiteSpace(
+                    request.Description)
+                    ? null
+                    : request.Description.Trim();
+
+            existing.IsActive =
+                request.IsActive;
+
+            existing.UpdatedAt =
+                DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            await SyncGroupProgramsAsync(
+                groupId,
+                request.GetResolvedProgramIds());
+
+            return await GetByIdAsync(groupId);
         }
 
-        public async Task<bool> DeleteAsync(int groupId)
+
+        // =========================================================
+        // DELETE GROUP
+        // =========================================================
+
+        public async Task<bool> DeleteAsync(
+            int groupId)
         {
-            await using var connection = CreateConnection();
+            try
+            {
+                var connection =
+                    _context.Database.GetDbConnection();
 
-            await connection.OpenAsync();
+                var affected =
+                    await connection.ExecuteScalarAsync<int>(
+                        "sp_DeleteGroup",
+                        new
+                        {
+                            p_GroupId = groupId
+                        },
+                        commandType:
+                            CommandType.StoredProcedure);
 
-            await using var command = new SqlCommand(
-                "sp_Groups_Delete",
-                connection);
+                if (affected > 0)
+                    return true;
+            }
+            catch
+            {
+                // Fallback below
+            }
 
-            command.CommandType = CommandType.StoredProcedure;
+            var entity =
+                await _context.Groups.FindAsync(groupId);
 
-            command.Parameters.Add(
-                new SqlParameter("@GroupIdParam", SqlDbType.Int)
-                {
-                    Value = groupId
-                });
+            if (entity == null)
+                return false;
 
-            await using var reader =
-                await command.ExecuteReaderAsync();
+            _context.Groups.Remove(entity);
 
-            return await reader.ReadAsync();
+            await _context.SaveChangesAsync();
+
+            return true;
         }
+
+
+        // =========================================================
+        // ACTIVATE / DEACTIVATE GROUP
+        // =========================================================
+
+        public async Task<bool> ActivateAsync(
+            int groupId,
+            bool isActive = true)
+        {
+            try
+            {
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                var affected =
+                    await connection.ExecuteAsync(
+                        @"UPDATE Groups
+                          SET IsActive = @IsActive,
+                              UpdatedAt = @UpdatedAt
+                          WHERE GroupId = @GroupId",
+                        new
+                        {
+                            GroupId = groupId,
+                            IsActive = isActive,
+                            UpdatedAt = DateTime.UtcNow
+                        });
+
+                if (affected > 0)
+                    return true;
+            }
+            catch
+            {
+                // Fallback below
+            }
+
+            var entity =
+                await _context.Groups.FindAsync(groupId);
+
+            if (entity == null)
+                return false;
+
+            entity.IsActive = isActive;
+
+            entity.UpdatedAt =
+                DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+
+        // =========================================================
+        // GROUP CODE EXISTS
+        // =========================================================
 
         public async Task<bool> GroupCodeExistsAsync(
             string groupCode,
             int? excludeGroupId = null)
         {
-            await using var connection = CreateConnection();
-
-            await connection.OpenAsync();
-
-            await using var command = new SqlCommand(
-                "sp_Groups_ValidateCode",
-                connection);
-
-            command.CommandType = CommandType.StoredProcedure;
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@GroupCode",
-                    SqlDbType.VarChar,
-                    30)
-                {
-                    Value = groupCode.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@ExcludeGroupId",
-                    SqlDbType.Int)
-                {
-                    Value = excludeGroupId.HasValue
-                        ? excludeGroupId.Value
-                        : DBNull.Value
-                });
-
-            var result = await command.ExecuteScalarAsync();
-
-            return result != null &&
-                   result != DBNull.Value &&
-                   Convert.ToBoolean(result);
-        }
-
-        private static void AddCreateParameters(
-            SqlCommand command,
-            CreateGroupRequest request)
-        {
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@Board",
-                    SqlDbType.VarChar,
-                    100)
-                {
-                    Value = request.Board.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@AcademicYearId",
-                    SqlDbType.Int)
-                {
-                    Value = request.AcademicYearId
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@AcademicLevel",
-                    SqlDbType.VarChar,
-                    50)
-                {
-                    Value = request.AcademicLevel.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@GroupName",
-                    SqlDbType.VarChar,
-                    100)
-                {
-                    Value = request.GroupName.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@GroupCode",
-                    SqlDbType.VarChar,
-                    30)
-                {
-                    Value = request.GroupCode.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@Description",
-                    SqlDbType.VarChar,
-                    500)
-                {
-                    Value =
-                        string.IsNullOrWhiteSpace(
-                            request.Description)
-                            ? DBNull.Value
-                            : request.Description.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@IsActive",
-                    SqlDbType.Bit)
-                {
-                    Value = request.IsActive
-                });
-        }
-
-        private static void AddUpdateParameters(
-            SqlCommand command,
-            UpdateGroupRequest request)
-        {
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@Board",
-                    SqlDbType.VarChar,
-                    100)
-                {
-                    Value = request.Board.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@AcademicYearId",
-                    SqlDbType.Int)
-                {
-                    Value = request.AcademicYearId
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@AcademicLevel",
-                    SqlDbType.VarChar,
-                    50)
-                {
-                    Value = request.AcademicLevel.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@GroupName",
-                    SqlDbType.VarChar,
-                    100)
-                {
-                    Value = request.GroupName.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@GroupCode",
-                    SqlDbType.VarChar,
-                    30)
-                {
-                    Value = request.GroupCode.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@Description",
-                    SqlDbType.VarChar,
-                    500)
-                {
-                    Value =
-                        string.IsNullOrWhiteSpace(
-                            request.Description)
-                            ? DBNull.Value
-                            : request.Description.Trim()
-                });
-
-            command.Parameters.Add(
-                new SqlParameter(
-                    "@IsActive",
-                    SqlDbType.Bit)
-                {
-                    Value = request.IsActive
-                });
-        }
-
-        private static GroupListItemDto MapGroupListItem(
-            SqlDataReader reader)
-        {
-            return new GroupListItemDto
+            try
             {
-                GroupId = GetInt32(reader, "GroupId"),
-                Board = GetString(reader, "Board"),
-                AcademicYearId =
-                    GetInt32(reader, "AcademicYearId"),
-                AcademicYearName = null,
-                AcademicLevel =
-                    GetString(reader, "AcademicLevel"),
-                GroupName =
-                    GetString(reader, "GroupName"),
-                GroupCode =
-                    GetString(reader, "GroupCode"),
-                Description =
-                    GetNullableString(
-                        reader,
-                        "Description"),
-                TotalSubjects = 0,
-                IsActive =
-                    GetBoolean(reader, "IsActive"),
-                Status =
-                    GetString(reader, "Status"),
-                CreatedAt =
-                    GetDateTime(reader, "CreatedAt"),
-                UpdatedAt =
-                    GetNullableDateTime(
-                        reader,
-                        "UpdatedAt")
-            };
-        }
+                var connection =
+                    _context.Database.GetDbConnection();
 
-        private static GroupResponse MapGroupResponse(
-            SqlDataReader reader)
-        {
-            return new GroupResponse
+                return await connection
+                    .ExecuteScalarAsync<int>(
+                        "sp_ValidateGroupCode",
+                        new
+                        {
+                            p_GroupCode = groupCode,
+
+                            p_ExcludeGroupId =
+                                excludeGroupId
+                        },
+                        commandType:
+                            CommandType.StoredProcedure) > 0;
+            }
+            catch
             {
-                GroupId = GetInt32(reader, "GroupId"),
-                Board = GetString(reader, "Board"),
-                AcademicYearId =
-                    GetInt32(reader, "AcademicYearId"),
-                AcademicYearName = null,
-                AcademicLevel =
-                    GetString(reader, "AcademicLevel"),
-                GroupName =
-                    GetString(reader, "GroupName"),
-                GroupCode =
-                    GetString(reader, "GroupCode"),
-                Description =
-                    GetNullableString(
-                        reader,
-                        "Description"),
-                TotalSubjects = 0,
-                IsActive =
-                    GetBoolean(reader, "IsActive"),
-                Status =
-                    GetString(reader, "Status"),
-                CreatedAt =
-                    GetDateTime(reader, "CreatedAt"),
-                UpdatedAt =
-                    GetNullableDateTime(
-                        reader,
-                        "UpdatedAt")
-            };
+                var query =
+                    _context.Groups
+                        .Where(g =>
+                            g.GroupCode == groupCode);
+
+                if (excludeGroupId.HasValue)
+                {
+                    query =
+                        query.Where(g =>
+                            g.GroupId !=
+                            excludeGroupId.Value);
+                }
+
+                return await query.AnyAsync();
+            }
         }
 
-        private static int GetInt32(
-            SqlDataReader reader,
-            string columnName)
+
+        // =========================================================
+        // GET STUDENTS
+        // =========================================================
+
+        public async Task<
+            List<CollegeManagement.API.DTOs.Students.StudentListItemDto>>
+            GetStudentsAsync(int groupId)
         {
-            var ordinal = reader.GetOrdinal(columnName);
-            return reader.GetInt32(ordinal);
+            try
+            {
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                var result =
+                    await connection.QueryAsync<
+                        CollegeManagement.API.DTOs.Students.StudentListItemDto>(
+                            "sp_GetGroupStudents",
+                            new
+                            {
+                                p_GroupId = groupId
+                            },
+                            commandType:
+                                CommandType.StoredProcedure);
+
+                return result.ToList();
+            }
+            catch
+            {
+                return await _context.Students
+                    .AsNoTracking()
+                    .Where(s =>
+                        s.GroupId == groupId)
+                    .Select(s =>
+                        new CollegeManagement.API.DTOs.Students.StudentListItemDto
+                        {
+                            StudentId = s.StudentId,
+
+                            AdmissionNo =
+                                s.AdmissionNo,
+
+                            RollNo =
+                                s.RollNo,
+
+                            StudentName =
+                                s.StudentName,
+
+                            Gender =
+                                s.Gender,
+
+                            MobileNumber =
+                                s.MobileNumber,
+
+                            Email =
+                                s.Email,
+
+                            IsActive =
+                                s.IsActive
+                        })
+                    .ToListAsync();
+            }
         }
 
-        private static string GetString(
-            SqlDataReader reader,
-            string columnName)
-        {
-            var ordinal = reader.GetOrdinal(columnName);
 
-            return reader.IsDBNull(ordinal)
-                ? string.Empty
-                : reader.GetString(ordinal);
+        // =========================================================
+        // GET SUBJECTS
+        // =========================================================
+
+        public async Task<List<Subject>>
+            GetSubjectsAsync(int groupId)
+        {
+            try
+            {
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                var result =
+                    await connection.QueryAsync<Subject>(
+                        "sp_GetGroupSubjects",
+                        new
+                        {
+                            p_GroupId = groupId
+                        },
+                        commandType:
+                            CommandType.StoredProcedure);
+
+                return result.ToList();
+            }
+            catch
+            {
+                return await _context.Subjects
+                    .AsNoTracking()
+                    .Where(s =>
+                        s.GroupId == groupId &&
+                        s.IsActive)
+                    .ToListAsync();
+            }
         }
 
-        private static string? GetNullableString(
-            SqlDataReader reader,
-            string columnName)
-        {
-            var ordinal = reader.GetOrdinal(columnName);
 
-            return reader.IsDBNull(ordinal)
-                ? null
-                : reader.GetString(ordinal);
+        // =========================================================
+        // GET GROUP SUMMARY
+        // =========================================================
+
+        public async Task<GroupSummaryDto?>
+            GetSummaryAsync(int groupId)
+        {
+            try
+            {
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                return await connection
+                    .QueryFirstOrDefaultAsync<GroupSummaryDto>(
+                        "sp_GetGroupSummary",
+                        new
+                        {
+                            p_GroupId = groupId
+                        },
+                        commandType:
+                            CommandType.StoredProcedure);
+            }
+            catch
+            {
+                var g =
+                    await _context.Groups
+                        .AsNoTracking()
+                        .Include(x =>
+                            x.BoardNavigation)
+                        .Include(x =>
+                            x.AcademicYear)
+                        .Include(x =>
+                            x.AcademicLevelNavigation)
+                        .FirstOrDefaultAsync(
+                            x =>
+                                x.GroupId ==
+                                groupId);
+
+                if (g == null)
+                    return null;
+
+                var totalStudents =
+                    await _context.Students.CountAsync(
+                        s =>
+                            s.GroupId ==
+                            groupId);
+
+                var activeStudents =
+                    await _context.Students.CountAsync(
+                        s =>
+                            s.GroupId ==
+                                groupId &&
+                            s.IsActive);
+
+                var totalSubjects =
+                    await _context.Subjects.CountAsync(
+                        s =>
+                            s.GroupId ==
+                            groupId);
+
+                var activeSubjects =
+                    await _context.Subjects.CountAsync(
+                        s =>
+                            s.GroupId ==
+                                groupId &&
+                            s.IsActive);
+
+                return new GroupSummaryDto
+                {
+                    GroupId =
+                        g.GroupId,
+
+                    GroupName =
+                        g.GroupName,
+
+                    GroupCode =
+                        g.GroupCode,
+
+                    BoardId =
+                        g.BoardId,
+
+                    BoardName =
+                        g.BoardNavigation != null
+                            ? g.BoardNavigation.BoardName
+                            : string.Empty,
+
+                    AcademicLevelId =
+                        g.AcademicLevelId,
+
+                    AcademicLevelName =
+                        g.AcademicLevelNavigation != null
+                            ? g.AcademicLevelNavigation.LevelName
+                            : string.Empty,
+
+                    AcademicYearId =
+                        g.AcademicYearId,
+
+                    AcademicYearName =
+                        g.AcademicYear != null
+                            ? g.AcademicYear.AcademicYearName
+                            : string.Empty,
+
+                    TotalStudents =
+                        totalStudents,
+
+                    ActiveStudents =
+                        activeStudents,
+
+                    TotalSubjects =
+                        totalSubjects,
+
+                    ActiveSubjects =
+                        activeSubjects
+                };
+            }
         }
 
-        private static bool GetBoolean(
-            SqlDataReader reader,
-            string columnName)
+
+        // =========================================================
+        // GET GROUP DROPDOWN
+        // =========================================================
+
+        public async Task<List<GroupDropdownDto>>
+            GetDropdownAsync()
         {
-            var ordinal = reader.GetOrdinal(columnName);
-            return reader.GetBoolean(ordinal);
+            try
+            {
+                var connection =
+                    _context.Database.GetDbConnection();
+
+                var result =
+                    await connection.QueryAsync<GroupDropdownDto>(
+                        "sp_GetGroupDropdown",
+                        commandType:
+                            CommandType.StoredProcedure);
+
+                return result.ToList();
+            }
+            catch
+            {
+                return await _context.Groups
+                    .AsNoTracking()
+                    .Where(g => g.IsActive)
+                    .Include(g =>
+                        g.BoardNavigation)
+                    .Include(g =>
+                        g.AcademicYear)
+                    .Include(g =>
+                        g.AcademicLevelNavigation)
+                    .OrderBy(g =>
+                        g.GroupName)
+                    .Select(g =>
+                        new GroupDropdownDto
+                        {
+                            GroupId =
+                                g.GroupId,
+
+                            GroupName =
+                                g.GroupName,
+
+                            GroupCode =
+                                g.GroupCode,
+
+                            BoardId =
+                                g.BoardId,
+
+                            BoardName =
+                                g.BoardNavigation != null
+                                    ? g.BoardNavigation.BoardName
+                                    : string.Empty,
+
+                            AcademicYearId =
+                                g.AcademicYearId,
+
+                            AcademicYearName =
+                                g.AcademicYear != null
+                                    ? g.AcademicYear.AcademicYearName
+                                    : string.Empty,
+
+                            AcademicLevelId =
+                                g.AcademicLevelId,
+
+                            AcademicLevelName =
+                                g.AcademicLevelNavigation != null
+                                    ? g.AcademicLevelNavigation.LevelName
+                                    : string.Empty
+                        })
+                    .ToListAsync();
+            }
         }
 
-        private static DateTime GetDateTime(
-            SqlDataReader reader,
-            string columnName)
+
+        // =========================================================
+        // GET PROGRAMS BY GROUP
+        // =========================================================
+
+        public async Task<List<GroupProgramDto>>
+            GetProgramsAsync(int groupId)
         {
-            var ordinal = reader.GetOrdinal(columnName);
-            return reader.GetDateTime(ordinal);
+            var result =
+                await _context.GroupPrograms
+                    .AsNoTracking()
+                    .Where(gp =>
+                        gp.GroupId == groupId &&
+                        gp.IsActive)
+                    .Include(gp =>
+                        gp.AcademicProgram)
+                    .Where(gp =>
+                        gp.AcademicProgram != null &&
+                        gp.AcademicProgram.IsActive)
+                    .OrderBy(gp =>
+                        gp.AcademicProgram.ProgramName)
+                    .Select(gp =>
+                        new GroupProgramDto
+                        {
+                            ProgramId =
+                                gp.ProgramId,
+
+                            ProgramName =
+                                gp.AcademicProgram.ProgramName,
+
+                            IsActive =
+                                gp.AcademicProgram.IsActive
+                        })
+                    .ToListAsync();
+
+            return result;
         }
 
-        private static DateTime? GetNullableDateTime(
-            SqlDataReader reader,
-            string columnName)
-        {
-            var ordinal = reader.GetOrdinal(columnName);
 
-            return reader.IsDBNull(ordinal)
-                ? null
-                : reader.GetDateTime(ordinal);
+        // =========================================================
+        // SYNC GROUP PROGRAMS
+        // =========================================================
+        //
+        // This method handles:
+        //
+        // Existing:
+        // MPC -> Regular, JEE
+        //
+        // New request:
+        // MPC -> Regular, JEE, EAPCET
+        //
+        // Old relationships are removed and the new selection
+        // is inserted.
+        // =========================================================
+
+        private async Task SyncGroupProgramsAsync(
+            int groupId,
+            List<int>? programIds)
+        {
+            programIds ??= new List<int>();
+
+            var distinctProgramIds =
+                programIds
+                    .Where(x => x > 0)
+                    .Distinct()
+                    .ToList();
+
+            var connection = _context.Database.GetDbConnection();
+            if (connection.State != System.Data.ConnectionState.Open)
+                await connection.OpenAsync();
+
+            using var transaction = connection.BeginTransaction();
+            try
+            {
+                await connection.ExecuteAsync(
+                    "DELETE FROM GroupPrograms WHERE GroupId = @GroupId;",
+                    new { GroupId = groupId },
+                    transaction);
+
+                if (distinctProgramIds.Count > 0)
+                {
+                    var insertSql = @"INSERT INTO GroupPrograms (GroupId, ProgramId, IsActive, CreatedAt)
+                                      VALUES (@GroupId, @ProgramId, 1, NOW(6));";
+
+                    foreach (var pid in distinctProgramIds)
+                    {
+                        await connection.ExecuteAsync(
+                            insertSql,
+                            new { GroupId = groupId, ProgramId = pid },
+                            transaction);
+                    }
+                }
+
+                transaction.Commit();
+            }
+            catch (Exception ex)
+            {
+                transaction.Rollback();
+                throw new InvalidOperationException($"Failed to synchronize group programs: {ex.Message}", ex);
+            }
+        }
+        private async Task LoadProgramsForGroupsAsync(
+            List<GroupListItemDto> groups)
+        {
+            if (groups == null ||
+                groups.Count == 0)
+            {
+                return;
+            }
+
+            var groupIds =
+                groups
+                    .Select(g => g.GroupId)
+                    .Distinct()
+                    .ToList();
+
+            var programData =
+                await _context.GroupPrograms
+                    .AsNoTracking()
+                    .Where(gp =>
+                        groupIds.Contains(
+                            gp.GroupId) &&
+                        gp.IsActive)
+                    .Include(gp =>
+                        gp.AcademicProgram)
+                    .Where(gp =>
+                        gp.AcademicProgram != null &&
+                        gp.AcademicProgram.IsActive)
+                    .Select(gp =>
+                        new
+                        {
+                            gp.GroupId,
+
+                            Program =
+                                new GroupProgramDto
+                                {
+                                    ProgramId =
+                                        gp.ProgramId,
+
+                                    ProgramName =
+                                        gp.AcademicProgram.ProgramName,
+
+                                    IsActive =
+                                        gp.AcademicProgram.IsActive
+                                }
+                        })
+                    .ToListAsync();
+
+            var lookup =
+                programData
+                    .GroupBy(x => x.GroupId)
+                    .ToDictionary(
+                        x => x.Key,
+                        x => x
+                            .Select(y =>
+                                y.Program)
+                            .OrderBy(p =>
+                                p.ProgramName)
+                            .ToList());
+
+            foreach (var group in groups)
+            {
+                group.Programs =
+                    lookup.TryGetValue(
+                        group.GroupId,
+                        out var programs)
+                            ? programs
+                            : new List<GroupProgramDto>();
+            }
         }
     }
 }

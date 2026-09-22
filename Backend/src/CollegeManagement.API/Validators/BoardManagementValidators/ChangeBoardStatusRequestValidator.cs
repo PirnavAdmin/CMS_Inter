@@ -17,6 +17,10 @@ namespace CollegeManagement.API.Validators.BoardManagementValidators
 
             RuleFor(x => x.Status)
                 .NotNull().WithMessage("Status is required.");
+
+            RuleFor(x => x.RowVersion)
+                .NotEmpty().WithMessage("RowVersion is required.")
+                .GreaterThan(0u).WithMessage("RowVersion must be greater than 0.");
         }
     }
 }

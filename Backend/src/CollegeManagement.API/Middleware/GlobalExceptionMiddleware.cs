@@ -27,7 +27,14 @@ namespace CollegeManagement.API.Middleware
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An unhandled exception occurred during HTTP request processing at {Path}.", context.Request.Path);
+                if (ex is NotFoundException || ex is ConflictException || ex is ValidationException || ex is UnauthorizedException || ex is ForbiddenException)
+                {
+                    _logger.LogWarning("A client error occurred during HTTP request processing at {Path}: {Message}", context.Request.Path, ex.Message);
+                }
+                else
+                {
+                    _logger.LogError(ex, "An unhandled exception occurred during HTTP request processing at {Path}.", context.Request.Path);
+                }
                 await HandleExceptionAsync(context, ex);
             }
         }
@@ -40,6 +47,10 @@ namespace CollegeManagement.API.Middleware
         {
             ValidationException => (HttpStatusCode.BadRequest, exception.Message),
 
+            InvalidOperationException => (HttpStatusCode.BadRequest, exception.Message),
+
+            ArgumentException => (HttpStatusCode.BadRequest, exception.Message),
+
             NotFoundException => (HttpStatusCode.NotFound, exception.Message),
 
             ConflictException => (HttpStatusCode.Conflict, exception.Message),
@@ -51,12 +62,17 @@ namespace CollegeManagement.API.Middleware
             _ => (HttpStatusCode.InternalServerError, "An unexpected server error occurred.")   
         };
 
-            context.Response.StatusCode = (int)statusCode;
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = (int)statusCode;
+            }
 
             var response = new
             {
                 statusCode = context.Response.StatusCode,
                 message = message,
+                details = exception.InnerException != null ? $"{exception.Message} --> {exception.InnerException.Message}" : exception.Message,
+                stackTrace = exception.StackTrace,
                 path = context.Request.Path.Value,
                 timestamp = DateTime.UtcNow
             };

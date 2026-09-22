@@ -1,58 +1,75 @@
-﻿using CollegeManagement.API.Repositories.Interfaces;
+using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Models;
-using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
     public class OtpRepository : IOtpRepository
     {
         private readonly AppDbContext _context;
-
         public OtpRepository(AppDbContext context)
         {
             _context = context;
         }
 
-        public async Task AddAsync(OTP otp)
+        private IDbConnection Connection => _context.Database.GetDbConnection();
+
+        public async Task AddAsync(OTP otp, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
-            var pEmail = new SqlParameter("@Email", otp.Email);
-            var pCode = new SqlParameter("@OTPCode", otp.OTPCode);
-            var pExpiry = new SqlParameter("@ExpiryTime", otp.ExpiryTime);
-            var pIsUsed = new SqlParameter("@IsUsed", otp.IsUsed);
-
-            var result = await _context.Database
-                .SqlQueryRaw<decimal>("EXEC dbo.usp_AddOtp @Email, @OTPCode, @ExpiryTime, @IsUsed", pEmail, pCode, pExpiry, pIsUsed)
-                .ToListAsync();
-
-            otp.OTPId = (int)result.FirstOrDefault();
+            var conn = connection ?? Connection;
+            var id = await conn.ExecuteScalarAsync<int>(
+                "usp_AddOtp",
+                new
+                {
+                    p_Email = otp.Email,
+                    p_OTPCode = otp.OTPCode,
+                    p_ExpiryTime = otp.ExpiryTime,
+                    p_IsUsed = otp.IsUsed
+                },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+            otp.OTPId = id;
         }
 
-        public async Task<OTP?> GetLatestActiveOtpAsync(string email, string otpCode)
+        public async Task<OTP?> GetLatestActiveOtpAsync(string email, string otpCode, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
-            var pEmail = new SqlParameter("@Email", email);
-            var pCode = new SqlParameter("@OtpCode", otpCode);
-
-            var result = await _context.OTPs
-                .FromSqlRaw("EXEC dbo.usp_GetLatestActiveOtp @Email, @OtpCode", pEmail, pCode)
-                .ToListAsync();
-            return result.FirstOrDefault();
+            var conn = connection ?? Connection;
+            return await conn.QueryFirstOrDefaultAsync<OTP>(
+                "usp_GetLatestActiveOtp",
+                new { p_Email = email, p_OTPCode = otpCode },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
-        public async Task UpdateAsync(OTP otp)
+        public async Task<OTP?> GetByIdAsync(int otpId, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
-            var pOtpId = new SqlParameter("@OTPId", otp.OTPId);
-            var pEmail = new SqlParameter("@Email", otp.Email);
-            var pCode = new SqlParameter("@OTPCode", otp.OTPCode);
-            var pExpiry = new SqlParameter("@ExpiryTime", otp.ExpiryTime);
-            var pIsUsed = new SqlParameter("@IsUsed", otp.IsUsed);
+            var conn = connection ?? Connection;
+            return await conn.QueryFirstOrDefaultAsync<OTP>(
+                "SELECT * FROM OTPs WHERE OTPId = @OTPId LIMIT 1;",
+                new { OTPId = otpId },
+                transaction: transaction);
+        }
 
-            await _context.Database.ExecuteSqlRawAsync(
-                "EXEC dbo.usp_UpdateOtp @OTPId, @Email, @OTPCode, @ExpiryTime, @IsUsed",
-                pOtpId, pEmail, pCode, pExpiry, pIsUsed);
+        public async Task UpdateAsync(OTP otp, IDbConnection? connection = null, IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? Connection;
+            await conn.ExecuteAsync(
+                "usp_UpdateOtp",
+                new
+                {
+                    p_OTPId = otp.OTPId,
+                    p_Email = otp.Email,
+                    p_OTPCode = otp.OTPCode,
+                    p_ExpiryTime = otp.ExpiryTime,
+                    p_IsUsed = otp.IsUsed
+                },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
     }
 }

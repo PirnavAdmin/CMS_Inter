@@ -1,0 +1,34 @@
+# Visual Studio & .NET Build Artifacts
+.vs/
+**/bin/
+**/obj/
+*.exe
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+
+# Node & Frontend
+node_modules/
+Frontend/node_modules/
+Frontend/dist/
+dist/
+.expo/
+
+# Environment & Secrets
+.env
+Frontend/.env
+*.env.local
+
+# Archives
+*.zip
+
+# Local Uploads
+Backend/src/CollegeManagement.API/wwwroot/uploads/student-documents/*
+Backend/src/CollegeManagement.API/wwwroot/uploads/student-photos/*
+!Backend/src/CollegeManagement.API/wwwroot/uploads/.gitkeep
+
+# Screenshots & Reference Images
+hostel screens/
+

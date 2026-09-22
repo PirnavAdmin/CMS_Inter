@@ -1,11 +1,22 @@
+using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CollegeManagement.API.Models.Faculty
 {
+    [Table("Faculties")]
     public class Faculty
     {
         [Key]
         public int Id { get; set; }
+
+        [NotMapped]
+        public int FacultyId
+        {
+            get => Id;
+            set => Id = value;
+        }
 
         [Required]
         [StringLength(50)]
@@ -50,8 +61,18 @@ namespace CollegeManagement.API.Models.Faculty
         [StringLength(100)]
         public string Designation { get; set; } = string.Empty;
 
+        public int? DesignationId { get; set; }
+
+        [ForeignKey(nameof(DesignationId))]
+        public Designation? DesignationRef { get; set; }
+
         [Required]
-        [StringLength(100)]
+        [StringLength(20)]
+        public string FacultyType { get; set; } = "Teaching";
+
+        public int? DepartmentId { get; set; }
+
+        [NotMapped]
         public string Department { get; set; } = string.Empty;
 
         [Required]
@@ -59,14 +80,6 @@ namespace CollegeManagement.API.Models.Faculty
 
         [Required]
         public decimal Experience { get; set; }
-
-        [Required]
-        [StringLength(100)]
-        public string Username { get; set; } = string.Empty;
-
-        [Required]
-        [StringLength(255)]
-        public string Password { get; set; } = string.Empty;
 
         [Required]
         [StringLength(20)]

@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Groups;
+using CollegeManagement.API.DTOs.Groups;
 using CollegeManagement.API.Repositories;
 
 namespace CollegeManagement.API.Services
@@ -12,72 +12,172 @@ namespace CollegeManagement.API.Services
             _groupRepository = groupRepository;
         }
 
+        // =========================================================
+        // GET ALL GROUPS
+        // =========================================================
 
-        public async Task<PagedGroupResponse> GetAllAsync(
-            int pageNumber,
-            int pageSize,
+        public Task<List<GroupListItemDto>> GetAllAsync(
             string? search,
-            string? board,
+            int? boardId,
             int? academicYearId,
-            string? academicLevel,
+            int? academicLevelId,
             bool? isActive)
         {
-            return await _groupRepository.GetAllAsync(
-                pageNumber,
-                pageSize,
+            return _groupRepository.GetAllAsync(
                 search,
-                board,
+                boardId,
                 academicYearId,
-                academicLevel,
-                isActive
-            );
+                academicLevelId,
+                isActive);
         }
 
+        // =========================================================
+        // GET GROUP BY ID
+        // =========================================================
 
-        public async Task<GroupResponse?> GetByIdAsync(int groupId)
+        public Task<GroupResponse?> GetByIdAsync(
+            int groupId)
         {
-            return await _groupRepository.GetByIdAsync(groupId);
+            return _groupRepository.GetByIdAsync(groupId);
         }
 
+        // =========================================================
+        // GET GROUPS BY BOARD
+        // =========================================================
 
-        public async Task<List<GroupListItemDto>> GetByBoardAsync(string board)
+        public Task<List<GroupListItemDto>> GetByBoardAsync(
+            int boardId)
         {
-            return await _groupRepository.GetByBoardAsync(board);
+            return _groupRepository.GetByBoardAsync(
+                boardId);
         }
 
+        // =========================================================
+        // CREATE GROUP
+        // =========================================================
 
-        public async Task<GroupResponse> CreateAsync(
+        public Task<GroupResponse> CreateAsync(
             CreateGroupRequest request)
         {
-            return await _groupRepository.CreateAsync(request);
+            return _groupRepository.CreateAsync(
+                request);
         }
 
+        // =========================================================
+        // UPDATE GROUP
+        // =========================================================
 
-        public async Task<GroupResponse?> UpdateAsync(
+        public Task<GroupResponse?> UpdateAsync(
             int groupId,
             UpdateGroupRequest request)
         {
-            return await _groupRepository.UpdateAsync(
+            return _groupRepository.UpdateAsync(
                 groupId,
-                request
-            );
+                request);
         }
 
+        // =========================================================
+        // DELETE GROUP
+        // =========================================================
 
-        public async Task<bool> DeleteAsync(int groupId)
+        public Task<bool> DeleteAsync(
+            int groupId)
         {
-            return await _groupRepository.DeleteAsync(groupId);
+            return _groupRepository.DeleteAsync(
+                groupId);
         }
 
+        // =========================================================
+        // ACTIVATE / DEACTIVATE
+        // =========================================================
 
-        public async Task<bool> GroupCodeExistsAsync(
+        public Task<bool> ActivateAsync(
+            int groupId,
+            bool isActive = true)
+        {
+            return _groupRepository.ActivateAsync(
+                groupId,
+                isActive);
+        }
+
+        // =========================================================
+        // GROUP CODE EXISTS
+        // =========================================================
+
+        public Task<bool> GroupCodeExistsAsync(
             string groupCode,
             int? excludeGroupId = null)
         {
-            return await _groupRepository.GroupCodeExistsAsync(
+            return _groupRepository.GroupCodeExistsAsync(
                 groupCode,
-                excludeGroupId
-            );
+                excludeGroupId);
+        }
+
+        // =========================================================
+        // GET STUDENTS
+        // =========================================================
+
+        public Task<List<CollegeManagement.API.DTOs.Students.StudentListItemDto>>
+            GetStudentsAsync(
+                int groupId)
+        {
+            return _groupRepository.GetStudentsAsync(
+                groupId);
+        }
+
+        // =========================================================
+        // GET SUBJECTS
+        // =========================================================
+
+        public Task<List<CollegeManagement.API.Models.Subject>>
+            GetSubjectsAsync(
+                int groupId)
+        {
+            return _groupRepository.GetSubjectsAsync(
+                groupId);
+        }
+
+        // =========================================================
+        // GET GROUP SUMMARY
+        // =========================================================
+
+        public Task<GroupSummaryDto?>
+            GetSummaryAsync(
+                int groupId)
+        {
+            return _groupRepository.GetSummaryAsync(
+                groupId);
+        }
+
+        // =========================================================
+        // GET GROUP DROPDOWN
+        // =========================================================
+
+        public Task<List<GroupDropdownDto>>
+            GetDropdownAsync()
+        {
+            return _groupRepository.GetDropdownAsync();
+        }
+
+        // =========================================================
+        // GET PROGRAMS BY GROUP
+        // =========================================================
+        //
+        // Example:
+        //
+        // MPC
+        //   ├── Regular
+        //   ├── JEE
+        //   └── EAPCET
+        //
+        // =========================================================
+
+        public Task<List<CollegeManagement.API.DTOs.Program.GroupProgramDto>>
+            GetProgramsAsync(
+                int groupId)
+        {
+            return _groupRepository.GetProgramsAsync(
+                groupId);
         }
     }
 }

@@ -26,6 +26,13 @@ namespace CollegeManagement.API.Models
         public string BoardCode { get; set; } = string.Empty;
 
         /// <summary>
+        /// Gets or sets the board type (e.g., State Board, Central Board).
+        /// </summary>
+        [Required]
+        [MaxLength(50)]
+        public string BoardType { get; set; } = "State Board";
+
+        /// <summary>
         /// Gets or sets the board name.
         /// </summary>
         [Required]
@@ -50,51 +57,20 @@ namespace CollegeManagement.API.Models
         public int? StateId { get; set; }
 
         /// <summary>
-        /// Gets or sets the academic pattern identifier.
-        /// </summary>
-        [Required]
-        public int AcademicPatternId { get; set; }
-
-        /// <summary>
         /// Gets or sets the grading system identifier.
         /// </summary>
         [Required]
         public int GradingSystemId { get; set; }
 
         /// <summary>
-        /// Gets or sets the internal assessment details.
-        /// </summary>
-       
-        public bool InternalAssessment { get; set; }
-
-        /// <summary>
-        /// Gets or sets the practical exam details.
-        /// </summary>
-        
-        public bool PracticalExams { get; set; }
-
-        /// <summary>
-        /// Gets or sets the board exam details.
-        /// </summary>
-       
-        public bool BoardExams { get; set; }
-
-        /// <summary>
-        /// Gets or sets the minimum pass percentage.
-        /// </summary>
-       
-        public bool PassPercentage { get; set; }
-
-        /// <summary>
-        /// Gets or sets the rank calculation details.
-        /// </summary>
-        [MaxLength(100)]
-        public bool RankCalculation { get; set; }
-
-        /// <summary>
         /// Gets or sets a value indicating whether the board is active.
         /// </summary>
         public bool IsActive { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets the optimistic concurrency row version token.
+        /// </summary>
+        public uint RowVersion { get; set; } = 1;
 
         /// <summary>
         /// Gets or sets the created date.
@@ -113,9 +89,6 @@ namespace CollegeManagement.API.Models
 
         [ForeignKey(nameof(StateId))]
         public virtual State? State { get; set; }
-
-        [ForeignKey(nameof(AcademicPatternId))]
-        public virtual AcademicPattern AcademicPattern { get; set; } = null!;
 
         [ForeignKey(nameof(GradingSystemId))]
         public virtual GradingSystem GradingSystem { get; set; } = null!;

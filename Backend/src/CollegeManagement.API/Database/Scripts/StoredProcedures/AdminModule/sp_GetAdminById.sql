@@ -1,0 +1,7 @@
+DROP PROCEDURE IF EXISTS sp_GetAdminById;
+DELIMITER //
+CREATE PROCEDURE sp_GetAdminById(IN p_Id INT)
+BEGIN
+    SELECT id, Email, IsActive FROM admins WHERE id = p_Id;
+END //
+DELIMITER ;

@@ -2,12 +2,59 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>project</title>
+    <meta name="description" content="Pirnav College Management System" />
+    <meta name="theme-color" content="#6F8400" />
+    <title>Pirnav College</title>
+    <link rel="icon" type="image/png" sizes="any" href="/favicon.png?v=pirnav-crest-2026" />
+    <link rel="shortcut icon" type="image/png" href="/favicon.png?v=pirnav-crest-2026" />
+    <link rel="apple-touch-icon" href="/favicon.png?v=pirnav-crest-2026" />
+    <script>
+      // Global safety handler to prevent third-party extension/content-script crashes (e.g., reportAllChanges, startTime errors)
+      window.addEventListener('error', function (event) {
+        try {
+          var msg = (event && event.message) ? String(event.message).toLowerCase() : '';
+          var filename = (event && event.filename) ? String(event.filename) : '';
+          var stack = (event && event.error && event.error.stack) ? String(event.error.stack).toLowerCase() : '';
+
+          var isExtensionError =
+            (msg.indexOf('starttime') !== -1 && (msg.indexOf('undefined') !== -1 || msg.indexOf('null') !== -1)) ||
+            msg.indexOf('reportallchanges') !== -1 ||
+            stack.indexOf('reportallchanges') !== -1 ||
+            filename.indexOf('extensions::') !== -1 ||
+            filename.indexOf('chrome-extension://') !== -1 ||
+            filename.indexOf('moz-extension://') !== -1;
+
+          if (isExtensionError) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return true;
+          }
+        } catch (e) {}
+      }, true);
+
+      window.addEventListener('unhandledrejection', function (event) {
+        try {
+          var reason = event && event.reason;
+          var msg = reason ? (reason.message || String(reason)).toLowerCase() : '';
+          if (msg.indexOf('starttime') !== -1 || msg.indexOf('reportallchanges') !== -1) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        } catch (e) {}
+      });
+
+      try {
+        var theme = localStorage.getItem('pirnav-theme') || 'light';
+        document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#161916' : '#6F8400');
+      } catch (error) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module" src="/src/app/main.jsx"></script>
   </body>
 </html>

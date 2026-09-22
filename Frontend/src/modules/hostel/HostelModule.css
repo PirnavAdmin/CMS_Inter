@@ -1,0 +1,649 @@
+/* ==========================================================================
+   HOSTEL MANAGEMENT MODULE STYLES — CMS DESIGN SYSTEM
+   Unified Plain CSS Variable System (--cms-*)
+   Modeled after Transport Module Architecture
+   ========================================================================== */
+
+@import "./styles/hostel.css";
+
+.cms-hostel-page,
+.cms-hostel-stack {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* ---------- Navigation Tabs (Main & Subtabs) ---------- */
+.cms-hostel-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--cms-border);
+  border-radius: 999px;
+  background: var(--cms-surface);
+  overflow-x: auto;
+  scrollbar-width: none;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.cms-hostel-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.cms-hostel-tabs.is-compact {
+  justify-self: start;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.cms-hostel-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 8px 15px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cms-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  box-shadow: none !important;
+}
+
+.cms-hostel-tabs.is-compact .cms-hostel-tab {
+  min-height: 30px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.cms-hostel-tab:hover {
+  color: var(--cms-text);
+  background: var(--cms-hover);
+}
+
+.cms-hostel-tab.is-active {
+  background: var(--cms-primary);
+  color: #fff;
+}
+
+.cms-hostel-tab.is-active:hover {
+  background: var(--cms-primary-hover, var(--cms-primary));
+  color: #fff;
+}
+
+.cms-hostel-tabs.is-compact .cms-hostel-tab.is-active {
+  border-color: var(--cms-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
+
+/* ---------- Stat Cards Grid ---------- */
+.cms-hostel-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 1024px) {
+  .cms-hostel-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .cms-hostel-stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cms-hostel-stat {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid var(--cms-border);
+  border-radius: 12px;
+  background: var(--cms-surface);
+  box-shadow: var(--cms-shadow);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.cms-hostel-stat-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
+
+.cms-hostel-stat.tone-green .cms-hostel-stat-icon {
+  background: var(--cms-green-soft);
+  color: var(--cms-green);
+}
+
+.cms-hostel-stat.tone-amber .cms-hostel-stat-icon {
+  background: var(--cms-amber-soft);
+  color: var(--cms-amber);
+}
+
+.cms-hostel-stat.tone-violet .cms-hostel-stat-icon {
+  background: var(--cms-violet-soft);
+  color: var(--cms-violet);
+}
+
+.cms-hostel-stat.tone-rose .cms-hostel-stat-icon {
+  background: var(--cms-red-soft);
+  color: var(--cms-red);
+}
+
+.cms-hostel-stat small,
+.cms-hostel-info-grid small {
+  display: block;
+  color: var(--cms-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.cms-hostel-stat strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--cms-text);
+  font-size: 20px;
+  line-height: 1.1;
+  font-weight: 700;
+}
+
+.cms-hostel-stat em {
+  display: block;
+  margin-top: 3px;
+  color: var(--cms-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+/* ---------- Toolbar & Search ---------- */
+.cms-hostel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.cms-hostel-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-surface);
+  min-width: 240px;
+  flex: 1;
+  max-width: 360px;
+  color: var(--cms-muted);
+  box-sizing: border-box;
+}
+
+.cms-hostel-search input {
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--cms-text);
+  font-size: 13px;
+  width: 100%;
+}
+
+.cms-hostel-search input::placeholder {
+  color: var(--cms-muted);
+}
+
+.cms-hostel-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cms-hostel-select {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  outline: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.cms-hostel-select:focus {
+  border-color: var(--cms-primary);
+}
+
+/* ---------- Table Layouts ---------- */
+.cms-hostel-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--cms-border);
+  border-radius: 12px;
+  background: var(--cms-surface);
+}
+
+.cms-hostel-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.cms-hostel-table thead th {
+  background: var(--cms-table-header) !important;
+  color: var(--cms-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--cms-border);
+  white-space: nowrap;
+}
+
+.cms-hostel-table tbody td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--cms-border);
+  color: var(--cms-text);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.cms-hostel-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cms-hostel-table tbody tr:hover {
+  background: var(--cms-hover);
+}
+
+.cms-hostel-empty {
+  text-align: center;
+  padding: 36px 16px !important;
+  color: var(--cms-muted);
+  font-size: 13px;
+}
+
+/* Action Buttons */
+.cms-hostel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cms-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--cms-border);
+  border-radius: 6px;
+  background: var(--cms-surface);
+  color: var(--cms-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: none !important;
+  padding: 0;
+}
+
+.cms-action-btn:hover {
+  background: var(--cms-hover);
+  color: var(--cms-text);
+}
+
+.cms-action-btn.danger:hover {
+  background: var(--cms-red-soft);
+  color: var(--cms-red);
+  border-color: color-mix(in srgb, var(--cms-red) 40%, var(--cms-border));
+}
+
+.cms-action-btn.success:hover {
+  background: var(--cms-green-soft);
+  color: var(--cms-green);
+  border-color: color-mix(in srgb, var(--cms-green) 40%, var(--cms-border));
+}
+
+/* ---------- Two Column & Grid Layouts ---------- */
+.cms-hostel-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .cms-hostel-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cms-hostel-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--cms-subtle);
+  border: 1px solid var(--cms-border);
+}
+
+@media (max-width: 640px) {
+  .cms-hostel-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cms-hostel-info-grid strong {
+  display: block;
+  color: var(--cms-text);
+  font-size: 13.5px;
+  margin-top: 2px;
+}
+
+/* Progress bar */
+.cms-hostel-progress {
+  height: 6px;
+  width: 100%;
+  background: var(--cms-subtle);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.cms-hostel-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--cms-primary);
+  transition: width 0.3s ease;
+}
+
+/* Quick Actions Card Grid */
+.cms-hostel-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 768px) {
+  .cms-hostel-quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .cms-hostel-quick-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cms-hostel-quick-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  transition: all 0.15s ease;
+  box-shadow: none !important;
+}
+
+.cms-hostel-quick-btn:hover {
+  background: var(--cms-primary-soft);
+  border-color: var(--cms-primary-border, var(--cms-border));
+  color: var(--cms-primary);
+}
+
+.cms-hostel-quick-btn svg {
+  color: var(--cms-primary);
+  flex-shrink: 0;
+}
+
+/* Alerts / Warning banner */
+.cms-hostel-warning {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-amber-soft);
+  color: var(--cms-amber);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* Form Styles inside Modals */
+.cms-hostel-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .cms-hostel-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cms-hostel-form-grid .full {
+  grid-column: 1 / -1;
+}
+
+/* Attendance Shift Toggle */
+.cms-hostel-shift-toggle {
+  display: inline-flex;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  padding: 2px;
+  background: var(--cms-surface);
+}
+
+.cms-hostel-shift-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cms-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: none !important;
+}
+
+.cms-hostel-shift-btn.is-active {
+  background: var(--cms-primary);
+  color: #fff;
+}
+
+/* Button override flat */
+button,
+[role="button"],
+.cms-btn {
+  box-shadow: none !important;
+}
+
+/* Dark theme specific adjustments */
+[data-theme="dark"] .cms-hostel-stat,
+[data-theme="dark"] .cms-hostel-table-wrap,
+[data-theme="dark"] .cms-hostel-tabs {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+}
+
+[data-theme="dark"] .cms-hostel-table thead th {
+  background: var(--cms-table-header) !important;
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .cms-hostel-table tbody tr:hover {
+  background: var(--cms-hover);
+}
+
+/* ---------- Hostel Attendance Register Date / Filter Controls ---------- */
+.cms-att-freq-compact {
+  display: inline-flex;
+  align-items: center;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  border-radius: 9999px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.cms-att-freq-btn-compact {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--cms-muted);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.cms-att-freq-btn-compact:hover {
+  color: var(--cms-text);
+  background: var(--cms-hover);
+}
+
+.cms-att-freq-btn-compact.is-active {
+  background: var(--cms-primary);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.cms-att-filter-card-compact.has-custom-range {
+  grid-template-columns: 1.15fr 1.55fr 1.15fr 0.95fr;
+}
+
+.cms-att-date-range-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.cms-att-date-range-input-wrap {
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+}
+
+.cms-att-range-input {
+  height: 34px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  padding: 0 6px !important;
+  text-align: center;
+  width: 100%;
+  border-radius: 8px !important;
+}
+
+.cms-att-range-input.is-invalid {
+  border-color: var(--cms-red) !important;
+  background-color: #fff5f5 !important;
+}
+
+.cms-att-range-arrow {
+  color: var(--cms-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0 1px;
+}
+
+.cms-att-range-apply-btn {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: none;
+  background: var(--cms-primary);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cms-att-range-apply-btn:hover {
+  background: var(--cms-primary-hover, #5a7400);
+}
+
+.cms-att-range-clear-btn {
+  height: 34px;
+  width: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.cms-att-range-clear-btn:hover {
+  color: var(--cms-red);
+  border-color: var(--cms-red-soft);
+  background: var(--cms-hover);
+}
+
+.cms-att-range-error-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--cms-red);
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 4px;
+  line-height: 1.2;
+}
+

@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CollegeManagement.API.Models.Faculty
 {
+    [Table("FacultySubjectAllocations")]
     public class FacultySubjectAllocation
     {
         [Key]
@@ -13,35 +14,17 @@ namespace CollegeManagement.API.Models.Faculty
         public int FacultyId { get; set; }
 
         [Required]
-        [StringLength(100)]
-        public string Board { get; set; } = string.Empty;
-
-        [Required]
-        [StringLength(50)]
-        public string AcademicYear { get; set; } = string.Empty;
-
-        [Required]
-        [StringLength(100)]
-        public string Group { get; set; } = string.Empty;
-
-        [Required]
-        [StringLength(50)]
-        public string AcademicLevel { get; set; } = string.Empty;
-
-        [Required]
-        [StringLength(50)]
-        public string Section { get; set; } = string.Empty;
-
-        [Required]
-        [StringLength(100)]
-        public string Subject { get; set; } = string.Empty;
+        public int SubjectId { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? UpdatedAt { get; set; }
 
-        // Navigation Property
+        // Navigation Properties
         [ForeignKey(nameof(FacultyId))]
         public Faculty Faculty { get; set; } = null!;
+
+        [ForeignKey(nameof(SubjectId))]
+        public Subject Subject { get; set; } = null!;
     }
 }
