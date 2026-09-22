@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus, Search, Trash2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { ConfirmDialog, Loader, Modal, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
 import { holidayRecords } from "@/data/mockData.js";
@@ -419,7 +419,7 @@ export default function HolidayManagementPage() {
                 {loading ? (
                   <tr>
                     <td colSpan="7" style={{ textAlign: "center", padding: "2rem" }}>
-                      <Loader text="Loading holidays..." />
+                      <SkeletonTable columns={6} rows={5} />
                     </td>
                   </tr>
                 ) : rows.length ? (

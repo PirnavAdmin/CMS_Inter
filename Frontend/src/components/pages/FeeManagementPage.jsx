@@ -743,6 +743,8 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const existing = grouped.get(key);
     const row = existing || {
       id: structureId,
+      structureName: textValue(item, "structureName", "StructureName", "name", "Name"),
+      description: textValue(item, "description", "Description"),
       boardId: textValue(item, "boardId", "BoardId") || textValue(itemBoard, "boardId", "BoardId", "id", "Id"),
       board: textValue(item, "boardName", "BoardName") || textValue(itemBoard, "boardName", "BoardName", "name", "Name") || textValue(item, "boardId", "BoardId"),
       academicYearId,
@@ -992,10 +994,11 @@ const withPaymentContext = (payment, accounts = []) => {
 const normalizeInstallmentRows = (rows, account) => rows.map((item, index) => ({
   id: read(item, "feeInstallmentId", "FeeInstallmentId", "installmentId", "InstallmentId", "id", "Id"),
   feeInstallmentId: read(item, "feeInstallmentId", "FeeInstallmentId", "installmentId", "InstallmentId", "id", "Id"),
-  no: Number(read(item, "installmentNo", "InstallmentNo", "scheduleNo", "ScheduleNo", "no", "No") || index + 1),
+  no: Number(read(item, "installmentNumber", "InstallmentNumber", "installmentNo", "InstallmentNo", "scheduleNo", "ScheduleNo", "no", "No") || index + 1),
+  label: textValue(item, "feeSchedule", "FeeSchedule", "scheduleName", "ScheduleName", "installmentName", "InstallmentName"),
   amount: numberValue(item, "amount", "Amount", "installmentAmount", "InstallmentAmount", "payableAmount", "PayableAmount", "dueAmount", "DueAmount"),
   paid: optionalNumberValue(item, "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid"),
-  balance: optionalNumberValue(item, "balance", "Balance", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"),
+  balance: optionalNumberValue(item, "balance", "Balance", "balanceAmount", "BalanceAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"),
   dueDate: textValue(item, "dueDate", "DueDate", "date", "Date"),
   status: textValue(item, "status", "Status") || account.feeStatus || "Pending",
 })).map((item) => ({
@@ -2026,7 +2029,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                   <tbody>
                     {account.installments.map((item) => (
                       <tr key={item.no}>
-                        <td><strong>Fee Schedule {item.no}</strong></td>
+                        <td><strong>{item.label || `Fee Schedule ${item.no}`}</strong></td>
                         <td>{formatDate(item.dueDate)}</td>
                         <td className="num">{formatCurrency(item.amount)}</td>
                         <td className="num">{formatCurrency(item.paid)}</td>
@@ -2446,6 +2449,8 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
     const programId = Number(values.programId || 0);
     if (initial?.id) {
       return {
+        ...(values.structureName ? { structureName: values.structureName } : {}),
+        ...(values.description ? { description: values.description } : {}),
         ...(programId ? { programId } : {}),
         isActive: values.status !== "Inactive",
       };

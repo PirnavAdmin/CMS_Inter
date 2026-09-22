@@ -796,8 +796,13 @@ namespace CollegeManagement.API.Repositories
         {
             var connection = _context.Database.GetDbConnection();
             var rows = await connection.ExecuteAsync(
-                "UPDATE Students SET Photo = @Photo, UpdatedAt = CURRENT_TIMESTAMP WHERE StudentId = @StudentId",
-                new { Photo = photoPath, StudentId = studentId });
+                "sp_UpdateStudentPhotoPath",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_PhotoPath = photoPath
+                },
+                commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
@@ -813,8 +818,15 @@ namespace CollegeManagement.API.Repositories
                 throw new ArgumentException($"Invalid document column: {documentColumn}");
 
             var connection = _context.Database.GetDbConnection();
-            var sql = $"UPDATE Students SET `{safeColumn}` = @DocumentPath, UpdatedAt = CURRENT_TIMESTAMP WHERE StudentId = @StudentId";
-            var rows = await connection.ExecuteAsync(sql, new { DocumentPath = documentPath, StudentId = studentId });
+            var rows = await connection.ExecuteAsync(
+                "sp_UpdateStudentDocumentPath",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_DocumentColumn = safeColumn,
+                    p_DocumentPath = documentPath
+                },
+                commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
@@ -844,72 +856,37 @@ namespace CollegeManagement.API.Repositories
                 await connection.OpenAsync();
             }
 
-            string? normalizedEmail = null;
-            if (!string.IsNullOrWhiteSpace(request.Email))
-            {
-                normalizedEmail = request.Email.Trim().ToUpperInvariant();
-                var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
-
-                if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
+            var rows = await connection.ExecuteAsync(
+                "sp_UpdateStudentSelfProfile",
+                new
                 {
-                    throw new InvalidOperationException($"Email address '{request.Email}' is already registered to another user account.");
-                }
-            }
+                    p_StudentId = studentId,
+                    p_MobileNumber = request.MobileNumber,
+                    p_Email = request.Email,
+                    p_Address = request.Address,
+                    p_City = request.City,
+                    p_District = request.District,
+                    p_State = request.State,
+                    p_Pincode = request.Pincode,
+                    p_BloodGroup = request.BloodGroup,
+                    p_AadhaarNumber = request.AadhaarNumber,
+                    p_Nationality = request.Nationality,
+                    p_Religion = request.Religion,
+                    p_PreviousSchool = request.PreviousSchool,
+                    p_PreviousHallTicketNumber = request.PreviousHallTicketNumber,
+                    p_PreviousBoard = request.PreviousBoard,
+                    p_PreviousYearOfPassing = request.PreviousYearOfPassing,
+                    p_PreviousPercentage = request.PreviousPercentage,
+                    p_FatherMobile = request.FatherMobile,
+                    p_FatherEmail = request.FatherEmail,
+                    p_MotherMobile = request.MotherMobile,
+                    p_MotherEmail = request.MotherEmail,
+                    p_GuardianMobile = request.GuardianMobile,
+                    p_GuardianEmail = request.GuardianEmail
+                },
+                commandType: CommandType.StoredProcedure);
 
-            using var transaction = connection.BeginTransaction();
-            try
-            {
-                var rows = await connection.ExecuteAsync(
-                    "sp_UpdateStudentSelfProfile",
-                    new
-                    {
-                        p_StudentId = studentId,
-                        p_MobileNumber = request.MobileNumber,
-                        p_Email = request.Email,
-                        p_Address = request.Address,
-                        p_City = request.City,
-                        p_District = request.District,
-                        p_State = request.State,
-                        p_Pincode = request.Pincode,
-                        p_BloodGroup = request.BloodGroup,
-                        p_AadhaarNumber = request.AadhaarNumber,
-                        p_Nationality = request.Nationality,
-                        p_Religion = request.Religion,
-                        p_PreviousSchool = request.PreviousSchool,
-                        p_PreviousHallTicketNumber = request.PreviousHallTicketNumber,
-                        p_PreviousBoard = request.PreviousBoard,
-                        p_PreviousYearOfPassing = request.PreviousYearOfPassing,
-                        p_PreviousPercentage = request.PreviousPercentage,
-                        p_FatherMobile = request.FatherMobile,
-                        p_FatherEmail = request.FatherEmail,
-                        p_MotherMobile = request.MotherMobile,
-                        p_MotherEmail = request.MotherEmail,
-                        p_GuardianMobile = request.GuardianMobile,
-                        p_GuardianEmail = request.GuardianEmail
-                    },
-                    transaction: transaction,
-                    commandType: CommandType.StoredProcedure);
-
-                if (!string.IsNullOrWhiteSpace(normalizedEmail))
-                {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
-                }
-
-                transaction.Commit();
-                return rows > 0;
-            }
-            catch
-            {
-                try { transaction.Rollback(); } catch { }
-                throw;
-            }
+            return rows > 0;
         }
     }
 }

@@ -3,7 +3,16 @@ import DashboardLayout from "../layout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { SkeletonButton, SkeletonPage, SkeletonRow } from "@/components/common/Ui.jsx";
 import * as XLSX from "xlsx";
+import {
+  X,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 import "./MarksEntryPage.css";
 
 const PAGE_SIZE = 5;
@@ -3089,12 +3098,7 @@ function Entry({
         />
       ) : (
         <>
-          {loadingWorkspace ? (
-            <div className="cms-workspace-loading">
-              <div className="cms-spinner" />
-              <span>Loading student marks for selected subject...</span>
-            </div>
-          ) : (
+          {loadingWorkspace ? <SkeletonPage variant="table" columns={6} rows={8} /> : (
             <>
               {validateMarksConfiguration(workspace) && (
                 <div className="cms-config-error">{validateMarksConfiguration(workspace)}</div>
@@ -3866,16 +3870,7 @@ const EmptyRow = ({ span, text }) => (
     </td>
   </tr>
 );
-const LoadingRow = ({ span, text = "Loading student marks..." }) => (
-  <tr>
-    <td colSpan={span} className="cms-empty-td">
-      <div className="cms-inline-loader">
-        <div className="cms-spinner" />
-        <span>{text}</span>
-      </div>
-    </td>
-  </tr>
-);
+const LoadingRow = ({ span }) => <SkeletonRow columns={span} />;
 
 const IconEye = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -4085,136 +4080,141 @@ function BulkImportModal({
   };
 
   return (
-    <div className="cms-overlay">
-      <div className="cms-import-modal">
-        <div className="cms-import-modal-head">
+    <div className="cms-overlay" onClick={onClose}>
+      <div
+        className="cms-modal cms-import-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-marks-title"
+      >
+        <div className="cms-modal-head">
           <div>
-            <h3 className="cms-import-modal-title">Upload &amp; Import Marks</h3>
-            <p className="cms-import-modal-subtitle">
+            <h3 id="upload-marks-title">Upload &amp; Import Marks</h3>
+            <p className="cms-room-modal-subtitle">
               Upload an Excel (.xlsx, .xls) file to validate and bulk import marks for{" "}
               <strong>{workspace?.subject?.name || "the selected subject"}</strong>.
             </p>
           </div>
           <button
             type="button"
-            className="cms-import-close-btn"
+            className="cms-btn cms-btn-ghost"
+            style={{ width: 32, height: 32, padding: 0 }}
             onClick={onClose}
             disabled={isImporting || isValidating}
             aria-label="Close"
           >
-            <IconX />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="cms-room-template-action">
-          <button
-            type="button"
-            className="cms-btn cms-btn-ghost"
-            style={{ fontSize: 12, height: 28, padding: "0 8px", gap: 5 }}
-            onClick={onDownloadTemplate}
-          >
-            <IconDownload />
-            Download Excel Template
-          </button>
-        </div>
-
-        {!file ? (
-          <div
-            className={`cms-room-dropzone ${isDragging ? "drag-active" : ""}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx, .xls, .csv"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                if (e.target.files?.[0]) {
-                  setFile(e.target.files[0]);
-                  setValidationResult(null);
-                }
-              }}
-            />
-            <div className="cms-room-drop-icon">
-              <IconUpload />
-            </div>
-            <p className="cms-room-drop-text">
-              <span className="cms-room-drop-link">Click to upload</span> or drag &amp; drop file
-            </p>
-            <p className="cms-room-drop-hint">Supported formats: .xlsx, .xls, .csv</p>
-          </div>
-        ) : (
-          <div className="cms-room-file-card">
-            <div className="cms-room-file-info">
-              <span className="cms-room-file-icon" style={{ color: "var(--cms-primary, #6F8400)" }}>
-                <IconFileSpreadsheet />
-              </span>
-              <div>
-                <div className="cms-room-file-name">{file.name}</div>
-                <div className="cms-room-file-size">
-                  {(file.size / 1024).toFixed(1)} KB • Ready for validation
-                </div>
-              </div>
-            </div>
+        <div className="cms-modal-body">
+          <div className="cms-room-template-action">
             <button
               type="button"
               className="cms-btn cms-btn-ghost"
-              style={{ height: 28, padding: "0 10px", fontSize: 12 }}
-              onClick={() => {
-                setFile(null);
-                setValidationResult(null);
-              }}
-              disabled={isValidating || isImporting}
+              style={{ fontSize: 12, height: 28, padding: "0 8px", gap: 5 }}
+              onClick={onDownloadTemplate}
             >
-              Change File
+              <Download size={13} />
+              Download Excel Template
             </button>
           </div>
-        )}
 
-        {validationResult && (
-          <>
-            <div className="cms-room-verify-summary">
-              <div className="cms-room-summary-pill total">
-                <span className="cms-room-summary-count">{validationResult.totalRows}</span>
-                <span className="cms-room-summary-label">Total Rows</span>
+          {!file ? (
+            <div
+              className={`cms-room-dropzone ${isDragging ? "is-dragging" : ""}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  if (e.target.files?.[0]) {
+                    setFile(e.target.files[0]);
+                    setValidationResult(null);
+                  }
+                }}
+              />
+              <div className="cms-room-dropzone-icon">
+                <Upload size={20} />
               </div>
-              <div className="cms-room-summary-pill valid">
-                <span className="cms-room-summary-count">{validationResult.validRows}</span>
-                <span className="cms-room-summary-label">Valid</span>
-              </div>
-              <div className="cms-room-summary-pill error">
-                <span className="cms-room-summary-count">{validationResult.invalidRows}</span>
-                <span className="cms-room-summary-label">Errors</span>
-              </div>
-              <div className="cms-room-summary-pill duplicate">
-                <span className="cms-room-summary-count">{validationResult.duplicateRows}</span>
-                <span className="cms-room-summary-label">Duplicates</span>
-              </div>
+              <span className="cms-room-dropzone-title">Click to upload or drag &amp; drop file</span>
+              <span className="cms-room-dropzone-subtitle">Supported formats: .xlsx, .xls, .csv</span>
             </div>
-
-            {validationResult.errors?.length > 0 && (
-              <div className="cms-room-error-log">
-                {validationResult.errors.map((err, i) => (
-                  <div key={i} className="cms-room-error-item" style={{ display: "flex", gap: 6 }}>
-                    <IconAlert />
-                    <span>
-                      {err.row > 0 ? `Row ${err.row}: ` : ""}
-                      {err.message}
-                    </span>
-                  </div>
-                ))}
+          ) : (
+            <div className="cms-room-file-card">
+              <div className="cms-room-file-card-info">
+                <FileSpreadsheet size={24} color="var(--cms-primary, #6F8400)" />
+                <div className="cms-room-file-card-details">
+                  <span className="cms-room-file-name">{file.name}</span>
+                  <span className="cms-room-file-meta">
+                    {(file.size / 1024).toFixed(1)} KB • Ready for validation
+                  </span>
+                </div>
               </div>
-            )}
-          </>
-        )}
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                style={{ height: 28, padding: "0 10px", fontSize: 12 }}
+                onClick={() => {
+                  setFile(null);
+                  setValidationResult(null);
+                }}
+                disabled={isValidating || isImporting}
+              >
+                Change File
+              </button>
+            </div>
+          )}
+
+          {validationResult && (
+            <>
+              <div className="cms-room-verify-summary">
+                <div className="cms-room-summary-pill">
+                  <strong>{validationResult.totalRows}</strong>
+                  <span>Total Rows</span>
+                </div>
+                <div className="cms-room-summary-pill valid">
+                  <strong>{validationResult.validRows}</strong>
+                  <span>Valid</span>
+                </div>
+                <div className="cms-room-summary-pill invalid">
+                  <strong>{validationResult.invalidRows}</strong>
+                  <span>Errors</span>
+                </div>
+                <div className="cms-room-summary-pill duplicate">
+                  <strong>{validationResult.duplicateRows}</strong>
+                  <span>Duplicates</span>
+                </div>
+              </div>
+
+              {validationResult.errors?.length > 0 && (
+                <div className="cms-room-error-log">
+                  {validationResult.errors.map((err, i) => (
+                    <div key={i} className="cms-room-error-item">
+                      <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span>
+                        {err.row > 0 ? `Row ${err.row}: ` : ""}
+                        {err.message}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
         <div className="cms-modal-foot">
           <button
             type="button"
-            className="cms-btn cms-btn-secondary"
+            className="cms-btn cms-btn-ghost"
             onClick={onClose}
             disabled={isImporting || isValidating}
           >
@@ -4222,20 +4222,17 @@ function BulkImportModal({
           </button>
           <button
             type="button"
-            className="cms-btn cms-btn-secondary"
+            className="cms-btn cms-btn-outline"
             onClick={onValidate}
             disabled={!file || isValidating || isImporting}
           >
             {isValidating ? (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <span className="cms-spinner" style={{ width: 14, height: 14 }} />
-                Validating...
-              </span>
+              <SkeletonButton width={92} />
             ) : (
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <IconCheck />
+              <>
+                <CheckCircle2 size={14} />
                 Validate File
-              </span>
+              </>
             )}
           </button>
           {validationResult?.isValid && validationResult?.validPayloads?.length > 0 && (
@@ -4246,12 +4243,12 @@ function BulkImportModal({
               disabled={isImporting}
             >
               {isImporting ? (
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <span className="cms-spinner" style={{ width: 14, height: 14 }} />
-                  Importing Marks...
-                </span>
+                <SkeletonButton width={128} />
               ) : (
-                "Import Marks"
+                <>
+                  <Upload size={14} />
+                  Import {validationResult.validPayloads.length} Marks
+                </>
               )}
             </button>
           )}

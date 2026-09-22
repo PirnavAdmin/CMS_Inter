@@ -15,6 +15,8 @@ namespace CollegeManagement.API.DTOs.Result
         public string InCharge { get => InChargeName; set => InChargeName = value; }
         public int Count { get; set; }
         public int StudentsCount { get => Count; set => Count = value; }
+        public int StudentCount { get => Count; set => Count = value; }
+        public int TotalStudents { get => Count; set => Count = value; }
         public int Students { get => Count; set => Count = value; }
         public int Passed { get; set; }
         public int Failed { get; set; }

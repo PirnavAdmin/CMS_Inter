@@ -358,6 +358,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<int?> ResolveProgramIdAsync(int? programId, string? programName, int? groupId)
         {
             if (programId.HasValue && programId.Value > 0) return programId.Value;
+            if (string.IsNullOrWhiteSpace(programName) && (!groupId.HasValue || groupId.Value <= 0)) return null;
 
             var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_ResolveSectionForeignKeys",
