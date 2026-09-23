@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./Reports.css";
+import { SkeletonTable } from "@/components/common/Ui.jsx";
 import {
   getReportBoards,
   getReportAcademicYears,
@@ -389,7 +390,7 @@ const Reports = () => {
               Board <span className="required">*</span>
             </label>
             <select
-              className="reports-filter-select"
+              className="reports-filter-select app-select"
               value={filters.boardId}
               onChange={(e) => handleFilterChange("boardId", e.target.value)}
             >
@@ -408,7 +409,7 @@ const Reports = () => {
               Academic Year <span className="required">*</span>
             </label>
             <select
-              className="reports-filter-select"
+              className="reports-filter-select app-select"
               value={filters.academicYearId}
               onChange={(e) => handleFilterChange("academicYearId", e.target.value)}
             >
@@ -427,7 +428,7 @@ const Reports = () => {
               Academic Level <span className="required">*</span>
             </label>
             <select
-              className="reports-filter-select"
+              className="reports-filter-select app-select"
               value={filters.academicLevelId}
               onChange={(e) => handleFilterChange("academicLevelId", e.target.value)}
             >
@@ -446,7 +447,7 @@ const Reports = () => {
               Group <span className="required">*</span>
             </label>
             <select
-              className="reports-filter-select"
+              className="reports-filter-select app-select"
               value={filters.groupId}
               onChange={(e) => handleFilterChange("groupId", e.target.value)}
             >
@@ -465,7 +466,7 @@ const Reports = () => {
               Section <span className="required">*</span>
             </label>
             <select
-              className="reports-filter-select"
+              className="reports-filter-select app-select"
               value={filters.sectionId}
               onChange={(e) => handleFilterChange("sectionId", e.target.value)}
             >
@@ -582,10 +583,7 @@ const Reports = () => {
             </div>
 
             {detailsLoading ? (
-              <div className="reports-loading">
-                <div className="spinner"></div>
-                <p>Loading detailed records...</p>
-              </div>
+              <SkeletonTable columns={6} rows={6} />
             ) : detailData.length === 0 ? (
               <div className="reports-empty">
                 <p>No detail records found for current filters.</p>
@@ -831,10 +829,7 @@ const Reports = () => {
           </div>
 
           {loading ? (
-            <div className="reports-loading">
-              <div className="spinner"></div>
-              <p>Loading audit logs...</p>
-            </div>
+            <SkeletonTable columns={5} rows={6} />
           ) : auditLogs.length === 0 ? (
             <div className="reports-empty">
               <p>No audit log events found for current date range.</p>

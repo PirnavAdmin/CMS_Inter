@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { CalendarClock, CalendarDays, ClipboardClock, Clock, Coffee, Download, FileSpreadsheet, Pencil, PieChart, Upload, UserCheck, UserX, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Loader, Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
@@ -46,7 +46,7 @@ const staffType = (v) => {
 };
 const ATTENDANCE_PAGE_SIZE = 5;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
-function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
+function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={(mutedPlaceholder && !value ? "is-placeholder" : undefined) + " app-select"} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
 
 function AttendancePagination({ page, totalRows, onPageChange }) {
  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
@@ -506,7 +506,7 @@ function Screen({ staff = false, say }) {
    <>
      <Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} />
      <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
-     {busy && !loaded ? <Loader label="Loading attendance..." /> : null}
+     {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
      {loaded && (f.view === "Monthly Report" ? (
        <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
      ) : !staff && f.view === "Defaulters" ? (
@@ -523,8 +523,8 @@ function Screen({ staff = false, say }) {
          {staff ? <StaffSummary rows={visible} /> : <StudentSummary rows={visible} />}
          <section className={`att-card att-table-card ${staff ? "att-staff-table-card" : ""}`}>
            <div className={`att-student-search att-records-search-toolbar ${staff ? "att-staff-table-toolbar" : ""}`}>
-             <div className="att-student-search-box">
-               <Search3DIcon size={18} />
+             <div className="att-student-search-box app-search-field">
+               <Search3DIcon className="app-search-field__icon" size={18} />
                <input
                  type="search"
                  value={search}
@@ -619,7 +619,7 @@ function Filters({ f, update, o, staff, busy, load, exportReport }) {
         <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all={o.loadingSections ? "Loading sections..." : "All Sections"} disabled={o.loadingSections} mutedPlaceholder />
       </>}
       <Select label="Status" value={f.status} onChange={update("status")} items={staff ? STAFF_STATUSES : STUDENT_STATUSES} all="All Status" mutedPlaceholder />
-      <div className="att-filter-action"><button className="cms-btn cms-btn-primary" disabled={busy} onClick={() => load()}>{busy ? "Loading..." : "Get Records"}</button>{isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}</div>
+      <div className="att-filter-action"><button className="cms-btn cms-btn-primary" disabled={busy} onClick={() => load()}>{busy ? "Fetching records…" : "Get Records"}</button>{isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}</div>
     </div>
   </section>;
 }
@@ -947,8 +947,8 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
         </div>
       </header>
       <div className="att-student-search att-records-search-toolbar att-month-search-toolbar">
-        <div className="att-student-search-box">
-          <Search3DIcon size={18} />
+        <div className="att-student-search-box app-search-field">
+          <Search3DIcon className="app-search-field__icon" size={18} />
           <input
             type="search"
             value={search}

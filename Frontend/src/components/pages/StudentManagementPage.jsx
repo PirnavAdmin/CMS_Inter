@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -451,7 +451,7 @@ export default function StudentManagementPage() {
           ].map(([label, key, options, disabled]) => (
             <label className="cms-field" key={key}>
               <span>{label}</span>
-              <select
+              <select className="app-select"
                 value={filters[key]}
                 onChange={(event) => updateFilter(key, event.target.value)}
                 disabled={disabled}
@@ -467,8 +467,8 @@ export default function StudentManagementPage() {
         </div>
         <div className="student-management-search-row">
           <div className="cms-card-body student-management-toolbar">
-            <label className="student-management-search">
-              <Search3DIcon size={18} />
+            <label className="student-management-search app-search-field">
+              <Search3DIcon className="app-search-field__icon" size={18} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -510,7 +510,7 @@ export default function StudentManagementPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10"><div className="cms-empty">Loading approved students...</div></td></tr>
+                Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={10} />)
               ) : pageRows.length ? (
                 pageRows.map((s) => (
                   <tr key={s.id} onClick={() => setSelectedStudentId(String(s.id))}>
@@ -600,10 +600,10 @@ export default function StudentManagementPage() {
           <div className="student-credentials-modal">
             <p className="student-credentials-subtitle">Generate onboarding slips for legacy imported students</p>
             <div className="student-credentials-filters">
-              <label className="cms-field"><span>Academic Level</span><select value={credentialFilters.level} onChange={(event) => setCredentialFilters((current) => ({ ...current, level: event.target.value }))}><option value="">All Academic Levels</option>{levelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-              <label className="cms-field"><span>Group</span><select value={credentialFilters.group} disabled={!credentialFilters.level} onChange={(event) => setCredentialFilters((current) => ({ ...current, group: event.target.value }))}><option value="">All Groups</option>{credentialGroups.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-              <label className="cms-field"><span>Program</span><select value={credentialFilters.program} disabled={!credentialFilters.group} onChange={(event) => setCredentialFilters((current) => ({ ...current, program: event.target.value }))}><option value="">All Programs</option>{credentialPrograms.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-              <label className="cms-field"><span>Section</span><select value={credentialFilters.section} disabled={!credentialFilters.program} onChange={(event) => setCredentialFilters((current) => ({ ...current, section: event.target.value }))}><option value="">All Sections</option>{credentialSections.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="cms-field"><span>Academic Level</span><select className="app-select" value={credentialFilters.level} onChange={(event) => setCredentialFilters((current) => ({ ...current, level: event.target.value }))}><option value="">All Academic Levels</option>{levelOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="cms-field"><span>Group</span><select className="app-select" value={credentialFilters.group} disabled={!credentialFilters.level} onChange={(event) => setCredentialFilters((current) => ({ ...current, group: event.target.value }))}><option value="">All Groups</option>{credentialGroups.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="cms-field"><span>Program</span><select className="app-select" value={credentialFilters.program} disabled={!credentialFilters.group} onChange={(event) => setCredentialFilters((current) => ({ ...current, program: event.target.value }))}><option value="">All Programs</option>{credentialPrograms.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+              <label className="cms-field"><span>Section</span><select className="app-select" value={credentialFilters.section} disabled={!credentialFilters.program} onChange={(event) => setCredentialFilters((current) => ({ ...current, section: event.target.value }))}><option value="">All Sections</option>{credentialSections.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
               <label className="cms-field"><span>Admission No</span><input value={credentialFilters.admissionNo} placeholder="Enter Admission No" onChange={(event) => setCredentialFilters((current) => ({ ...current, admissionNo: event.target.value }))} /></label>
             </div>
             <section className="student-credentials-about" aria-label="About the Credential PDF">
@@ -615,7 +615,7 @@ export default function StudentManagementPage() {
           </div>
         </Modal>
       )}
-      {fileAction && <Modal title={fileAction.kind === "photo" ? "Upload Student Photo" : "Upload Student Document"} size="sm" onClose={() => !importBusy && setFileAction(null)} footer={<><button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(importBusy)} onClick={() => setFileAction(null)}>Cancel</button><button className="cms-btn cms-btn-primary" type="button" disabled={!uploadFile || Boolean(importBusy) || (fileAction.kind === "document" && !documentType)} onClick={uploadStudentFile}>{importBusy === "upload" ? "Uploading..." : "Upload"}</button></>}><div className="student-import-modal"><p className="cms-muted">{fileAction.student.name} · {fileAction.student.admissionNo}</p>{fileAction.kind === "document" ? <label className="cms-field"><span>Document Type <span className="req">*</span></span><select value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="">Select document type</option>{["BirthCertificate", "TransferCertificate", "StudyCertificate", "AadhaarDocument", "CommunityCertificate", "IncomeCertificate", "CasteCertificate", "TenthCertificate", "MarksMemo"].map((type) => <option key={type} value={type}>{type}</option>)}</select></label> : null}<label className="cms-field"><span>File <span className="req">*</span></span><input type="file" accept={fileAction.kind === "photo" ? "image/jpeg,image/jpg,image/png" : ".pdf,image/jpeg,image/jpg,image/png"} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /></label></div></Modal>}
+      {fileAction && <Modal title={fileAction.kind === "photo" ? "Upload Student Photo" : "Upload Student Document"} size="sm" onClose={() => !importBusy && setFileAction(null)} footer={<><button className="cms-btn cms-btn-ghost" type="button" disabled={Boolean(importBusy)} onClick={() => setFileAction(null)}>Cancel</button><button className="cms-btn cms-btn-primary" type="button" disabled={!uploadFile || Boolean(importBusy) || (fileAction.kind === "document" && !documentType)} onClick={uploadStudentFile}>{importBusy === "upload" ? "Uploading..." : "Upload"}</button></>}><div className="student-import-modal"><p className="cms-muted">{fileAction.student.name} · {fileAction.student.admissionNo}</p>{fileAction.kind === "document" ? <label className="cms-field"><span>Document Type <span className="req">*</span></span><select className="app-select" value={documentType} onChange={(event) => setDocumentType(event.target.value)}><option value="">Select document type</option>{["BirthCertificate", "TransferCertificate", "StudyCertificate", "AadhaarDocument", "CommunityCertificate", "IncomeCertificate", "CasteCertificate", "TenthCertificate", "MarksMemo"].map((type) => <option key={type} value={type}>{type}</option>)}</select></label> : null}<label className="cms-field"><span>File <span className="req">*</span></span><input type="file" accept={fileAction.kind === "photo" ? "image/jpeg,image/jpg,image/png" : ".pdf,image/jpeg,image/jpg,image/png"} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /></label></div></Modal>}
       <Toast message={error || message} type={error ? "error" : "success"} onClose={() => { setError(""); setMessage(""); }} />
     </DashboardLayout>
   );

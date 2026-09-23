@@ -225,13 +225,9 @@ public class FeeRepository : IFeeRepository
 
         if (string.IsNullOrWhiteSpace(request.StructureName))
         {
-            var existing = await c.QueryFirstOrDefaultAsync<(string? StructureName, string? Description)>(
-                "SELECT StructureName, Description FROM FeeStructures WHERE FeeStructureId = @Id LIMIT 1",
-                new { Id = id });
-            if (!string.IsNullOrWhiteSpace(existing.StructureName))
+            var existing = await GetFeeStructureByIdAsync(id);
+            if (!string.IsNullOrWhiteSpace(existing?.StructureName))
                 request.StructureName = existing.StructureName;
-            if (string.IsNullOrWhiteSpace(request.Description) && !string.IsNullOrWhiteSpace(existing.Description))
-                request.Description = existing.Description;
         }
 
         return await c.QueryFirstOrDefaultAsync<FeeStructureResponse>(
@@ -474,11 +470,12 @@ public class FeeRepository : IFeeRepository
         using var c = Connection();
 
         // Resolve studentId: id could be a StudentFeeId or a StudentId directly
-        var studentId = await c.QueryFirstOrDefaultAsync<int?>(
-            "SELECT StudentId FROM StudentFees WHERE StudentFeeId = @Id LIMIT 1",
-            new { Id = id });
+        var studentFee = await c.QueryFirstOrDefaultAsync<StudentFeeDetailsResponse>(
+            "sp_GetStudentFeeDetails",
+            new { p_StudentFeeId = id },
+            commandType: CommandType.StoredProcedure);
 
-        var targetStudentId = studentId ?? id;
+        var targetStudentId = (studentFee != null && studentFee.StudentId > 0) ? studentFee.StudentId : id;
 
         return await GetStudentFeeDetailsByStudentAsync(targetStudentId);
     }
@@ -570,18 +567,8 @@ public class FeeRepository : IFeeRepository
     {
         using var c = Connection();
 
-        const string sql = @"
-        CALL sp_GetStudentFeeLedger(
-            @p_AcademicYearId,
-            @p_GroupId,
-            @p_SectionId,
-            @p_PaymentPlan,
-            @p_Status,
-            @p_Search
-        );";
-
         return await c.QueryAsync<StudentFeeLedgerResponse>(
-            sql,
+            "sp_GetStudentFeeLedger",
             new
             {
                 p_AcademicYearId = academicYearId,
@@ -591,7 +578,7 @@ public class FeeRepository : IFeeRepository
                 p_Status = status,
                 p_Search = search
             },
-            commandType: CommandType.Text);
+            commandType: CommandType.StoredProcedure);
     }
 
     // =========================================================

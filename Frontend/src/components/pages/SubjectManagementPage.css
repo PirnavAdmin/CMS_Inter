@@ -118,10 +118,7 @@
   font-size: 12px;
   font-weight: 700;
 }
-.subject-select select,
-.subject-search div,
-.mark-input input,
-.assignment-row select {
+.subject-search div, .mark-input input {
   height: 38px;
   border: 1px solid var(--cms-border);
   border-radius: 6px;
@@ -350,8 +347,7 @@
   box-sizing: border-box;
 }
 .subject-master-field { display: grid; gap: 7px; min-width: 0; font-size: 12px; font-weight: 700; }
-.subject-master-field input,
-.subject-master-field select {
+.subject-master-field input {
   width: 100%;
   height: 40px;
   min-width: 0;
@@ -362,8 +358,12 @@
   color: var(--cms-text);
   font: inherit;
 }
-.subject-master-field input:focus,
-.subject-master-field select:focus { border-color: var(--cms-primary); outline: 3px solid var(--cms-primary-soft); }
+.subject-master-field select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+.subject-master-field input:focus { border-color: var(--cms-primary); outline: 3px solid var(--cms-primary-soft); }
 .subject-master-table { min-width: 1080px; }
 .subject-master-actions { display: inline-flex; gap: 6px; }
 .subject-remove-btn { color: var(--cms-red, #b42318); }
@@ -510,7 +510,6 @@
   min-height: 52px;
   padding: 8px 16px;
 }
-.assignment-row select,
 .assignment-field input {
   width: 100%;
   height: 36px;
@@ -520,6 +519,9 @@
   background: var(--cms-surface);
   color: var(--cms-text);
   font-size: 14px;
+}
+.assignment-row select {
+  width: 100%;
 }
 .assignment-field {
   display: grid;
@@ -841,12 +843,6 @@
 }
 .subject-context-select select {
   width: 100%;
-  height: 38px;
-  border: 1px solid var(--cms-border);
-  border-radius: 6px;
-  background: var(--cms-surface);
-  color: var(--cms-text);
-  padding: 0 10px;
 }
 .subject-table-toolbar .subject-search { display: block; grid-column: 1 / -1; grid-row: 2; width: min(394px, 100%); }
 .subject-table-toolbar .cms-btn { min-height: 38px; white-space: nowrap; }

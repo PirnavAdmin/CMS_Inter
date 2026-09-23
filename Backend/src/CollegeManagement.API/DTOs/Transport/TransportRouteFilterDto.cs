@@ -9,6 +9,10 @@ namespace CollegeManagement.API.Dtos.Transport
 
         public bool? Status { get; set; }
 
+        public string? BusType { get; set; }
+
+        public bool? IsAc { get; set; }
+
         public string SortBy { get; set; } = "createdAt";
 
         public string SortOrder { get; set; } = "desc";

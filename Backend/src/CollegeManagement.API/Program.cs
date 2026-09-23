@@ -129,6 +129,7 @@ builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
 builder.Services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IStudentAdmissionRepository, StudentAdmissionRepository>();
+builder.Services.AddScoped<IStudentImportRepository, StudentImportRepository>();
 builder.Services.AddScoped<IAssignmentRepository, AssignmentRepository>();
 builder.Services.AddScoped<IAssignmentSubmissionRepository, AssignmentSubmissionRepository>();
 builder.Services.AddScoped<IExaminationRepository, ExaminationRepository>();

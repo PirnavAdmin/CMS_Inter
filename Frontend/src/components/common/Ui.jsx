@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, X, AlertTriangle, Eye, EyeOff, Info } from "lucide-react";
+export { Skeleton, SkeletonText, SkeletonCard, SkeletonTable, SkeletonRow, SkeletonInput, SkeletonButton, SkeletonAvatar, SkeletonDashboard, SkeletonPage } from "./Skeleton.jsx";
 
 export function StatusBadge({ value }) {
   const v = String(value || "").toLowerCase();
@@ -12,14 +13,7 @@ export function StatusBadge({ value }) {
   return <span className={`cms-badge ${cls}`}>{value}</span>;
 }
 
-export function Loader({ label = "Loading data..." }) {
-  return (
-    <div className="cms-loader">
-      <div className="cms-spinner" />
-      <p style={{ margin: 0, color: "var(--cms-muted)", fontSize: 13 }}>{label}</p>
-    </div>
-  );
-}
+/** @deprecated Use a named Skeleton component. Retained as a visual-skeleton compatibility layer. */
 
 export function Toast({ message, onClose, type = "success" }) {
   useEffect(() => {
@@ -143,7 +137,7 @@ export function Field({ field = {}, value, error, onChange, onBlur }) {
         {label} {required ? <span className="req">*</span> : null}
       </label>
       {type === "select" ? (
-        <select id={id} name={name} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
+        <select className="app-select" id={id} name={name} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
           {!normalizedOptions.some((o) => o.value === "" || o.value === null) ? (
             <option value="">Select {label}</option>
           ) : null}

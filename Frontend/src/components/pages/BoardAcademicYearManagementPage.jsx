@@ -221,8 +221,8 @@ function SearchableApiSelect({ value, options, idKey, nameKey, placeholder, onCh
     <div className="bay-api-picker" onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
     }}>
-      <div className="bay-api-picker-input">
-        <Search3DIcon size={16} />
+      <div className="bay-api-picker-input app-search-field app-select-control">
+        <Search3DIcon className="app-search-field__icon" size={16} />
         <input
           role="combobox"
           aria-expanded={open}
@@ -242,7 +242,7 @@ function SearchableApiSelect({ value, options, idKey, nameKey, placeholder, onCh
           }}
         />
       </div>
-      {open ? <div className="bay-api-options" role="listbox">
+      {open ? <div className="bay-api-options app-select-panel" role="listbox">
         {filtered.map((item) => {
           const id = optionValue(item, idKey, idKey[0].toUpperCase() + idKey.slice(1));
           const name = optionValue(item, nameKey, nameKey[0].toUpperCase() + nameKey.slice(1));
@@ -282,8 +282,8 @@ function ApiLevelMultiSelect({ value, options, onChange }) {
     <div className="bay-level-picker bay-api-level-picker" onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
     }}>
-      <div className="bay-level-combobox">
-        <Search3DIcon size={16} />
+      <div className="bay-level-combobox app-search-field app-select-control">
+        <Search3DIcon className="app-search-field__icon" size={16} />
         <input role="combobox" aria-expanded={open} value={open ? query : selectedNames} placeholder={selected.length ? "Search another level" : "Search academic level"}
           title={!open ? selectedNames : undefined}
           onFocus={() => { setQuery(""); setOpen(true); }} onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
@@ -296,7 +296,7 @@ function ApiLevelMultiSelect({ value, options, onChange }) {
           }} />
         {open && selected.length ? <span className="bay-level-count">{selected.length} selected</span> : null}
       </div>
-      {open ? <div className="bay-level-options" role="listbox">
+      {open ? <div className="bay-level-options app-select-panel" role="listbox">
         {filtered.map((item) => {
           const id = optionValue(item, "academicLevelId", "AcademicLevelId");
           const isSelected = selectedIds.includes(String(id));
@@ -616,8 +616,8 @@ function AcademicYearWorkspace() {
     >
       <section className="bay-card ay-list-card">
         <div className="bay-toolbar">
-          <label className="bay-search">
-            <Search3DIcon size={16} />
+          <label className="bay-search app-search-field">
+            <Search3DIcon className="app-search-field__icon" size={16} />
             <input
               value={query}
               onChange={(event) => {
@@ -812,7 +812,7 @@ function AcademicYearWorkspace() {
               <span>
                 Board Name <b>*</b>
               </span>
-              <select
+              <select className="app-select"
                 value={draft.boardId || ""}
                 disabled={boardsLoading}
                 onChange={(event) => {
@@ -878,7 +878,7 @@ function AcademicYearWorkspace() {
               <span>
                 Status <b>*</b>
               </span>
-              <select
+              <select className="app-select"
                 value={draft.status || ""}
                 onChange={(event) => update("status", event.target.value)}
               >
@@ -1472,8 +1472,8 @@ export default function BoardAcademicYearManagementPage() {
         {!formOpen && !detailsOpen && activeTab === "boards" ? (
           <section className="bay-card bay-board-list-card">
             <div className="bay-toolbar">
-              <label className="bay-search">
-                <Search3DIcon size={16} />
+              <label className="bay-search app-search-field">
+                <Search3DIcon className="app-search-field__icon" size={16} />
                 <input
                   value={query}
                   onChange={(e) => {
@@ -1694,7 +1694,7 @@ export default function BoardAcademicYearManagementPage() {
                       Country <b>*</b>
                     </span>
                     <div className={`bay-country-controls${choosingOtherCountry ? " has-other-country" : ""}`}>
-                      <select
+                      <select className="app-select"
                         value={choosingOtherCountry ? OTHER_COUNTRY_VALUE : form.countryId}
                         disabled={boardFormDataLoading}
                         onChange={(event) => handleCountryChange(event.target.value)}
@@ -1734,7 +1734,7 @@ export default function BoardAcademicYearManagementPage() {
                     <span>
                       Board Type <b>*</b>
                     </span>
-                    <select value={form.boardType} onChange={(e) => update("boardType", e.target.value)}>
+                    <select className="app-select" value={form.boardType} onChange={(e) => update("boardType", e.target.value)}>
                       <option value="">Select type</option>
                       <option>State Board</option>
                       <option>Central Board</option>
@@ -1766,7 +1766,7 @@ export default function BoardAcademicYearManagementPage() {
                   </label>
                   <label>
                     <span>Grading System <b>*</b></span>
-                    <select
+                    <select className="app-select"
                       value={form.gradingSystemId}
                       disabled={boardFormDataLoading}
                       onChange={(e) => update("gradingSystemId", e.target.value)}
@@ -1786,7 +1786,7 @@ export default function BoardAcademicYearManagementPage() {
                     <span>
                       Status <b>*</b>
                     </span>
-                    <select value={form.status} onChange={(e) => update("status", e.target.value)}>
+                    <select className="app-select" value={form.status} onChange={(e) => update("status", e.target.value)}>
                       <option value="">Select Status</option>
                       <option>Active</option>
                       <option>Inactive</option>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import { SkeletonPage, SkeletonRow } from "@/components/common/Ui.jsx";
 import {
   FiFileText,
   FiCheckSquare,
@@ -513,7 +514,7 @@ const CertificateManagement = () => {
                   ADMISSION NO. <span className="text-red">*</span>
                 </label>
                 <select
-                  className="cert-input-select"
+                  className="cert-input-select app-select"
                   value={formData.admissionNo}
                   onChange={handleAdmissionChange}
                   required
@@ -535,7 +536,7 @@ const CertificateManagement = () => {
                   CERTIFICATE TYPE <span className="text-red">*</span>
                 </label>
                 <select
-                  className="cert-input-select"
+                  className="cert-input-select app-select"
                   value={formData.certificateType}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, certificateType: e.target.value }))
@@ -702,8 +703,8 @@ const CertificateManagement = () => {
 
           {/* Search, Filter, Export, New Request Bar */}
           <div className="cert-toolbar">
-            <div className="cert-search-box">
-              <Search3DIcon className="cert-search-icon" size={17} />
+            <div className="cert-search-box app-search-field">
+              <Search3DIcon className="cert-search-icon app-search-field__icon" size={17} />
               <input
                 type="text"
                 placeholder="Search by certificate no., admission no., or student name..."
@@ -768,7 +769,7 @@ const CertificateManagement = () => {
             <div className="cert-filters-drawer">
               <div className="cert-filter-item">
                 <label>Status:</label>
-                <select
+                <select className="app-select"
                   value={selectedStatusFilter}
                   onChange={(e) => {
                     setSelectedStatusFilter(e.target.value);
@@ -786,7 +787,7 @@ const CertificateManagement = () => {
 
               <div className="cert-filter-item">
                 <label>Certificate Type:</label>
-                <select
+                <select className="app-select"
                   value={selectedTypeFilter}
                   onChange={(e) => {
                     setSelectedTypeFilter(e.target.value);
@@ -832,11 +833,7 @@ const CertificateManagement = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan="8" className="table-empty-message">
-                      <div className="cert-spinner-inline"></div> Loading certificates...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
                 ) : paginatedList.length === 0 ? (
                   <tr>
                     <td colSpan="8" className="table-empty-message">
@@ -1058,11 +1055,7 @@ const CertificateManagement = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan="7" className="table-empty-message">
-                      <div className="cert-spinner-inline"></div> Loading workflow items...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                 ) : paginatedList.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="table-empty-message">
@@ -1217,10 +1210,7 @@ const CertificateManagement = () => {
 
             <div className="cert-modal-body">
               {previewLoading ? (
-                <div className="cert-preview-loading" style={{ textAlign: "center", padding: "3rem" }}>
-                  <div className="cert-spinner-inline"></div>
-                  <span>Loading &amp; hydrating certificate template...</span>
-                </div>
+                <SkeletonPage />
               ) : (
                 <div className="cert-preview-card cert-canvas-ornate">
                   <div className="cert-preview-header">

@@ -6,7 +6,10 @@
 @import "./components/common/Badge.css";
 @import "./components/common/Toast.css";
 @import "./components/common/Loader.css";
+@import "./components/common/Skeleton.css";
 @import "./components/common/EmptyState.css";
 @import "./components/common/Details.css";
 @import "./components/common/Logo.css";
 @import "./components/common/DataTable.css";
+@import "./components/common/SearchInput.css";
+@import "./components/common/FilterSelect.css";

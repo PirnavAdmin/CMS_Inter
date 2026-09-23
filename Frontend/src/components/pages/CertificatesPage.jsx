@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FaArrowsRotate, FaAward, FaBan, FaCheck, FaChevronDown, FaClipboardCheck, FaDownload, FaEraser, FaEye, FaFileCirclePlus, FaFileLines, FaFilter, FaPaperPlane, FaPlus, FaPrint, FaRotateLeft, FaTrash, FaUsers, FaXmark } from "react-icons/fa6";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Field, Loader, Toast, useConfirmDialog } from "@/components/common/Ui.jsx";
+import { Field, SkeletonPage, SkeletonRow, SkeletonText, Toast, useConfirmDialog } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES, normalizeApiTemplate } from "@/components/pages/TemplatesPage.jsx";
@@ -542,8 +542,8 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
     }}>
       <label htmlFor="certificate-admissionNo">Admission No. <span className="req">*</span></label>
-      <div className="cert-admission-search-control">
-        <Search3DIcon size={16} />
+      <div className="cert-admission-search-control app-search-field app-select-control">
+        <Search3DIcon className="app-search-field__icon" size={16} />
         <input
           id="certificate-admissionNo"
           type="search"
@@ -580,7 +580,7 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
         />
       </div>
       {open ? (
-        <div id="certificate-student-options" className="cert-admission-options" role="listbox">
+        <div id="certificate-student-options" className="cert-admission-options app-select-panel" role="listbox">
           {matches.length ? matches.map((student, index) => (
             <button
               id={`certificate-student-${student.admissionNo || student.id || index}-${index}`}
@@ -3125,23 +3125,23 @@ export default function CertificatesPage() {
                     <div><h3>Select Students</h3><span>{selectedBulkStudents.length} selected</span></div>
                   </div>
                   <div className="cert-bulk-filter-row">
-                    <label className="cert-bulk-search">
-                      <Search3DIcon size={14} />
+                    <label className="cert-bulk-search app-search-field">
+                      <Search3DIcon className="app-search-field__icon" size={14} />
                       <input type="search" value={bulkStudentSearch} onChange={(event) => setBulkStudentSearch(event.target.value)} placeholder="Search admission no., student, roll no., group or section" />
                     </label>
-                    <select aria-label="Filter students by academic year" value={bulkStudentFilters.academicYear} onChange={(event) => setBulkStudentFilters((current) => ({ ...current, academicYear: event.target.value }))}>
+                    <select className="app-select" aria-label="Filter students by academic year" value={bulkStudentFilters.academicYear} onChange={(event) => setBulkStudentFilters((current) => ({ ...current, academicYear: event.target.value }))}>
                       <option value="">Select Academic Year</option>
                       {bulkStudentFilterOptions.academicYears.map((value, idx) => <option key={`ay-${value}-${idx}`} value={value}>{value}</option>)}
                     </select>
-                    <select aria-label="Filter students by board" value={bulkStudentFilters.board} onChange={(event) => setBulkStudentFilters((current) => ({ ...current, board: event.target.value }))}>
+                    <select className="app-select" aria-label="Filter students by board" value={bulkStudentFilters.board} onChange={(event) => setBulkStudentFilters((current) => ({ ...current, board: event.target.value }))}>
                       <option value="">Select Board</option>
                       {bulkStudentFilterOptions.boards.map((value, idx) => <option key={`bd-${value}-${idx}`} value={value}>{value}</option>)}
                     </select>
-                    <select aria-label="Filter students by group" value={bulkStudentFilters.group} onChange={(event) => setBulkStudentFilters((current) => ({ ...current, group: event.target.value }))}>
+                    <select className="app-select" aria-label="Filter students by group" value={bulkStudentFilters.group} onChange={(event) => setBulkStudentFilters((current) => ({ ...current, group: event.target.value }))}>
                       <option value="">Select Group</option>
                       {bulkStudentFilterOptions.groups.map((value, idx) => <option key={`gp-${value}-${idx}`} value={value}>{value}</option>)}
                     </select>
-                    <select aria-label="Filter students by section" value={bulkStudentFilters.section} onChange={(event) => setBulkStudentFilters((current) => ({ ...current, section: event.target.value }))}>
+                    <select className="app-select" aria-label="Filter students by section" value={bulkStudentFilters.section} onChange={(event) => setBulkStudentFilters((current) => ({ ...current, section: event.target.value }))}>
                       <option value="">Select Section</option>
                       {bulkStudentFilterOptions.sections.map((value, idx) => <option key={`sec-${value}-${idx}`} value={value}>{value}</option>)}
                     </select>
@@ -3160,7 +3160,7 @@ export default function CertificatesPage() {
                       </div>
                     ) : null}
                     <div className="cert-bulk-student-list">
-                      {loadingBulkStudents ? <Loader label="Loading students..." /> : visibleBulkStudents.length ? visibleBulkStudents.map((student, idx) => {
+                      {loadingBulkStudents ? <SkeletonPage variant="form" rows={5} /> : visibleBulkStudents.length ? visibleBulkStudents.map((student, idx) => {
                         const admissionNo = String(student.admissionNo);
                         const selectionKey = admissionNo.trim().toLocaleLowerCase();
                         return (
@@ -3210,7 +3210,7 @@ export default function CertificatesPage() {
                           <div className="cert-type-select-control">
                             <select
                               id="certificate-type"
-                              className={form.type ? "" : "cert-field-placeholder"}
+                              className={(form.type ? "" : "cert-field-placeholder") + " app-select"}
                               value={form.type}
                               onChange={(e) => {
                                 const nextType = e.target.value;
@@ -3290,7 +3290,7 @@ export default function CertificatesPage() {
                     </div>
                     <div className="cms-field">
                       <label htmlFor="certificate-orientation">Certificate Orientation</label>
-                      <select
+                      <select className="app-select"
                         id="certificate-orientation"
                         value={form.orientation}
                         onChange={(e) => setForm((prev) => ({ ...prev, orientation: e.target.value }))}
@@ -3346,8 +3346,8 @@ export default function CertificatesPage() {
         <section className="cert-records-card">
         <div className="cert-records-toolbar">
           <div className="cert-records-toolbar-main">
-            <label className="cms-search cert-search-box">
-              <Search3DIcon size={15} />
+            <label className="cms-search cert-search-box app-search-field">
+              <Search3DIcon className="app-search-field__icon" size={15} />
               <input
                 value={query}
                 placeholder="Search by certificate no., admission no., or student name..."
@@ -3457,14 +3457,14 @@ export default function CertificatesPage() {
           </div>
           {showRecordFilters ? (
             <div className="cert-records-filters">
-              <select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }} aria-label="Filter by certificate type">
+              <select className="app-select" value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setPage(1); }} aria-label="Filter by certificate type">
                 <option value="All">All Certificate Types</option>
                 {recordTypes.map((type, idx) => <option key={`rt-${type}-${idx}`} value={type}>{type}</option>)}
               </select>
-              <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} aria-label="Filter by status">
+              <select className="app-select" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} aria-label="Filter by status">
                 {statusChoices.map((choice, idx) => <option key={`sc-${choice}-${idx}`} value={choice}>{choice === "All" ? "All Status" : choice}</option>)}
               </select>
-              <select value={yearFilter} onChange={(event) => { setYearFilter(event.target.value); setPage(1); }} aria-label="Filter by academic year">
+              <select className="app-select" value={yearFilter} onChange={(event) => { setYearFilter(event.target.value); setPage(1); }} aria-label="Filter by academic year">
                 <option value="All">All Academic Years</option>
                 {recordYears.map((year, idx) => <option key={`ry-${year}-${idx}`} value={year}>{year}</option>)}
               </select>
@@ -3494,9 +3494,7 @@ export default function CertificatesPage() {
             </thead>
             <tbody>
               {loadingList ? (
-                <tr>
-                  <td colSpan={8}><Loader label="Loading certificates..." /></td>
-                </tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
               ) : !pageRows.length ? (
                 <tr>
                   <td colSpan={8}>
@@ -3602,13 +3600,13 @@ export default function CertificatesPage() {
                   title={`${workflowStatusFilter === label ? "Clear" : "Filter by"} ${label} status`}
                 >
                   <strong>{label}</strong>
-                  <span>{loadingStats ? "Loading..." : value}</span>
+                  <span>{loadingStats ? <SkeletonText lines={1} widths={["54px"]} /> : value}</span>
                 </button>
               ))}
             </div>
             <div className="cert-workflow-toolbar">
-              <label className="cert-search-box" htmlFor="certificate-workflow-search">
-                <Search3DIcon size={15} />
+              <label className="cert-search-box app-search-field" htmlFor="certificate-workflow-search">
+                <Search3DIcon className="app-search-field__icon" size={15} />
                 <input
                   id="certificate-workflow-search"
                   type="search"
@@ -3636,7 +3634,7 @@ export default function CertificatesPage() {
                 </thead>
                 <tbody>
                   {loadingList ? (
-                    <tr><td colSpan={7}><Loader label="Loading certificates..." /></td></tr>
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                   ) : !actionPageRows.length ? (
                     <tr><td colSpan={7}><div className="cert-empty-state"><div className="cert-empty-icon"><FaAward size={24} aria-hidden="true" /></div><h4>No matching certificates found</h4><p>{workflowQuery.trim() ? "Try a different certificate number, admission number, student, type, status, or date." : workflowStatusFilter === "All" ? "Certificate requests will appear here as they move through the workflow." : `There are no certificates with ${workflowStatusFilter.toLowerCase()} status.`}</p></div></td></tr>
                   ) : actionPageRows.map((row, index) => (

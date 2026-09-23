@@ -337,9 +337,7 @@
   color: var(--cms-text);
 }
 
-.salary-form-group input,
-.salary-form-group select,
-.salary-form-group textarea {
+.salary-form-group input, .salary-form-group textarea {
   width: 100%;
   padding: 7px 10px;
   border: 1px solid var(--cms-border);
@@ -351,9 +349,12 @@
   outline: none;
 }
 
-.salary-form-group input:focus,
-.salary-form-group select:focus,
-.salary-form-group textarea:focus {
+.salary-form-group select {
+  width: 100%;
+  font: inherit;
+}
+
+.salary-form-group input:focus, .salary-form-group textarea:focus {
   border-color: var(--cms-primary);
   box-shadow: 0 0 0 2px var(--cms-primary-soft);
 }
@@ -442,7 +443,9 @@
 /* ---------------------------------------------------------------------- */
 
 .payroll-top-tabs-bar {
-  display: flex;
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
   align-items: center;
   gap: 8px;
   background: var(--cms-surface, #ffffff);
@@ -452,6 +455,13 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   overflow-x: auto;
   white-space: nowrap;
+}
+
+.payroll-3d-icon {
+  display: inline-block;
+  object-fit: contain;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .payroll-top-tab {

@@ -974,7 +974,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
   return (
     <div className={`staff-custom-search-select ${hasError ? "has-error" : ""}`} ref={ref}>
       <div
-        className="staff-search-input-wrap"
+        className="staff-search-input-wrap app-search-field app-select-control"
         style={{ ...(hasError ? { borderColor: "#ef4444" } : {}), cursor: "pointer" }}
         onClick={() => {
           setOpen((prev) => !prev);
@@ -982,7 +982,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
           if (inputEl) inputEl.focus();
         }}
       >
-        <Search className="staff-search-icon" aria-hidden="true" size={13} />
+        <Search className="staff-search-icon app-search-field__icon" aria-hidden="true" size={13} />
         <input
           type="text"
           value={search}
@@ -1017,18 +1017,8 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
       </div>
       {open ? (
         <div
-          className="staff-search-dropdown-menu"
-          style={{
-            backgroundColor: "#ffffff",
-            background: "#ffffff",
-            opacity: 1,
-            zIndex: 99999,
-            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
-            border: "1px solid var(--cms-border, #d1d5db)",
-            maxHeight: "180px",
-            overflowY: "auto",
-            scrollbarWidth: "thin",
-          }}
+          className="staff-search-dropdown-menu app-select-panel"
+          style={{ opacity: 1, zIndex: 99999, maxHeight: "180px", overflowY: "auto", scrollbarWidth: "thin" }}
         >
           {filteredOpts.length > 0 ? (
             filteredOpts.map((o, idx) => {
@@ -1038,13 +1028,8 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
               return (
                 <div
                   key={`${optVal}-${idx}`}
-                  className={`staff-search-dropdown-item ${isSelected ? "is-selected" : ""}`}
-                  style={{
-                    backgroundColor: isSelected ? "var(--cms-primary-soft, #f0fdf4)" : "#ffffff",
-                    color: isSelected ? "var(--cms-primary, #355e3b)" : "var(--cms-text, #1f2937)",
-                    fontWeight: isSelected ? "600" : "normal",
-                    cursor: "pointer",
-                  }}
+                  className={(`staff-search-dropdown-item ${isSelected ? "is-selected" : ""}`) + " app-select-option"}
+                  style={{ cursor: "pointer" }}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     handleSelect(o);
@@ -1170,13 +1155,13 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
   return (
     <div className="subject-allocation-wrapper" ref={ref}>
       <div
-        className="subject-compact-box"
+        className="subject-compact-box app-search-field app-select-control"
         onClick={() => {
           const input = ref.current?.querySelector("input");
           if (input) input.focus();
         }}
       >
-        <Search className="subject-search-icon" size={13} />
+        <Search className="subject-search-icon app-search-field__icon" size={13} />
         {selectedSubjects.map((sub, idx) => (
           <span key={`${sub}-${idx}`} className="subject-pill">
             {sub}
@@ -1209,10 +1194,10 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
       </div>
 
       {open ? (
-        <div className="subject-dropdown-menu">
+        <div className="subject-dropdown-menu app-select-panel">
           {showCustomAdd ? (
             <div
-              className="subject-dropdown-item is-custom-add"
+              className="subject-dropdown-item is-custom-add app-select-option"
               onMouseDown={(e) => {
                 e.preventDefault();
                 addSubject(search);
@@ -1226,7 +1211,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
             filteredOptions.map((opt, idx) => (
               <div
                 key={`${opt}-${idx}`}
-                className="subject-dropdown-item"
+                className="subject-dropdown-item app-select-option"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   addSubject(opt);
@@ -1985,13 +1970,10 @@ function Field({
         {label} {required ? <b className="required-star" style={{ color: "#ef4444", marginLeft: "2px", fontWeight: "bold" }}>*</b> : null}
       </span>
       {type === "select" ? (
-        <select
+        <select className="app-select"
           value={val}
           onChange={(e) => change(e.target.value)}
-          style={{
-            ...errorStyle,
-            color: val ? "var(--cms-text)" : "var(--cms-muted, #738065)",
-          }}
+          style={{ ...errorStyle }}
         >
           <option value="" disabled hidden style={{ color: "var(--cms-muted, #738065)" }}>
             Select {label}
@@ -2619,8 +2601,8 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
               Errors ({invalidCount})
             </button>
           </div>
-          <div className="staff-import-search">
-            <Search size={14} />
+          <div className="staff-import-search app-search-field">
+            <Search className="app-search-field__icon" size={14} />
             <input
               type="text"
               placeholder="Search in imported rows..."
@@ -3322,25 +3304,25 @@ function StaffList({ records = [], setRecords, forced }) {
             </div>
           ) : null}
           <div className="staff-toolbar">
-            <div className="staff-toolbar-filters">
-              <label>
-                <Search3DIcon size={15} />
+            <div className="staff-toolbar-filters app-search-toolbar">
+              <label className="app-search-field">
+                <Search3DIcon className="app-search-field__icon" size={15} />
                 <input
                   placeholder="Search staff..."
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                 />
               </label>
-              <select value={departmentFilter} onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }} aria-label="Filter by department">
+              <select className="app-select" value={departmentFilter} onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }} aria-label="Filter by department">
                 <option value="">Department</option>
                 {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
               </select>
-              <select value={designationFilter} onChange={(e) => { setDesignationFilter(e.target.value); setPage(1); }} aria-label="Filter by designation">
+              <select className="app-select" value={designationFilter} onChange={(e) => { setDesignationFilter(e.target.value); setPage(1); }} aria-label="Filter by designation">
                 <option value="">Designation</option>
                 {designationOptions.map((designation) => <option key={designation} value={designation}>{designation}</option>)}
               </select>
               {showStaffType ? (
-                <select value={staffTypeFilter} onChange={(e) => { setStaffTypeFilter(e.target.value); setPage(1); }} aria-label="Filter by staff type">
+                <select className="app-select" value={staffTypeFilter} onChange={(e) => { setStaffTypeFilter(e.target.value); setPage(1); }} aria-label="Filter by staff type">
                   <option value="">Staff Type</option>
                   <option value="Teaching">Teaching</option>
                   <option value="Non-Teaching">Non-Teaching</option>
@@ -3815,7 +3797,7 @@ function DepartmentSpecificFields({ fields = [], values = {}, setValues, errors 
               {label} {required ? <b className="required-star">*</b> : null}
             </span>
             {type === "select" ? (
-              <select
+              <select className="app-select"
                 value={val}
                 onChange={(e) => handleChange(name, e.target.value)}
                 style={hasError ? { borderColor: "#ef4444" } : undefined}
@@ -4379,7 +4361,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 <span>
                   Employment Type <b className="required-star">*</b>
                 </span>
-                <select
+                <select className="app-select"
                   value={formData.employment.employmentType}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -4418,7 +4400,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 <span>
                   Status <b className="required-star">*</b>
                 </span>
-                <select
+                <select className="app-select"
                   value={formData.employment.status}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -4803,7 +4785,7 @@ function SendLink({ record, update, activity }) {
               </label>
               <label>
                 <span>Link Validity</span>
-                <select value={days} onChange={(e) => setDays(e.target.value)}>
+                <select className="app-select" value={days} onChange={(e) => setDays(e.target.value)}>
                   {[3, 7, 15, 30].map((x) => (
                     <option key={x} value={`${x} Days`}>{x} Days</option>
                   ))}
@@ -5964,7 +5946,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     if (type === "select") {
       const opts = specOpts || options || [];
       return (
-        <select
+        <select className="app-select"
           value={val}
           onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
         >

@@ -115,12 +115,8 @@
 .student-profile-photo-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 .student-profile-edit .student-profile-photo-upload small { color: var(--cms-muted); font-size: 12px; text-align: center; }
 .cms-field-error { color: var(--cms-danger, #b42318); font-size: 12px; font-weight: 600; }
-.student-profile-edit .cms-field.is-invalid input,
-.student-profile-edit .cms-field.is-invalid select,
-.student-profile-edit .cms-field.is-invalid textarea { border-color: var(--cms-danger, #b42318); }
-.student-profile-edit .cms-field.is-invalid input:focus,
-.student-profile-edit .cms-field.is-invalid select:focus,
-.student-profile-edit .cms-field.is-invalid textarea:focus { outline-color: var(--cms-danger, #b42318); }
+.student-profile-edit .cms-field.is-invalid input, .student-profile-edit .cms-field.is-invalid textarea { border-color: var(--cms-danger, #b42318); }
+.student-profile-edit .cms-field.is-invalid input:focus, .student-profile-edit .cms-field.is-invalid textarea:focus { outline-color: var(--cms-danger, #b42318); }
 .cms-field-counter { justify-self: end; color: var(--cms-muted); font-size: 12px; }
 @media (max-width: 900px) { .student-profile-personal-section .student-profile-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .student-profile-personal-section .student-profile-photo-field { grid-column: 1 / -1; grid-row: auto; justify-self: center; padding: 14px 0 0; border-top: 1px solid var(--cms-border); border-left: 0; } }
 @media (max-width: 640px) { .student-profile-edit-summary { grid-template-columns: 1fr; } .student-profile-section { padding-inline: 14px; } .student-profile-personal-section { padding-inline: 0; } .student-profile-personal-section h2 { padding-inline: 14px; } .student-profile-edit-actions { padding-inline: 14px; } .student-profile-personal-section .student-profile-form-grid { grid-template-columns: 1fr; padding-inline: 14px; } }

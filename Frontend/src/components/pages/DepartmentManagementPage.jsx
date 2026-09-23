@@ -21,7 +21,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import "./DepartmentManagementPage.css";
 import departmentsIcon from "@/assets/dashboard-3d/total-sections.png";
 import designationsIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -251,6 +251,8 @@ export const normalizeDesignation = (row) => {
 };
 
 const PAGE_SIZE = 6;
+const DepartmentTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={3} />);
+const DesignationTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={4} />);
 
 function Pager({ page, total, onChange }) {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -393,7 +395,7 @@ function CustomDepartmentDropdown({
 
   return (
     <div className={`master-custom-dropdown-wrap ${isOpen ? "is-open" : ""}`} ref={dropdownRef}>
-      <div className="master-combobox-input-wrap">
+      <div className="master-combobox-input-wrap app-search-field app-search-field--icon app-select-control">
         <input
           type="text"
           className="master-combobox-input"
@@ -427,7 +429,7 @@ function CustomDepartmentDropdown({
       </div>
 
       {isOpen && (
-        <div className="master-custom-dropdown-menu" role="listbox">
+        <div className="master-custom-dropdown-menu app-select-panel" role="listbox">
           <div className="master-dropdown-list-scroll">
             <button
               type="button"
@@ -578,7 +580,7 @@ function MasterCreateModal({ kind, staffType, departments = [], onClose, onSaved
                   onChange={(val) => setValues((v) => ({ ...v, [name]: val }))}
                 />
               ) : type === "select" ? (
-                <select
+                <select className="app-select"
                   value={values[name] ?? ""}
                   onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
                 >
@@ -995,8 +997,8 @@ export default function DepartmentManagementPage() {
                 </button>
               </div>
             </header>
-            <label className="master-search">
-              <Search3DIcon size={16} />
+            <label className="master-search app-search-field">
+              <Search3DIcon className="app-search-field__icon" size={16} />
               <span className="sr-only">Search departments</span>
               <input
                 value={deptQuery}
@@ -1018,7 +1020,7 @@ export default function DepartmentManagementPage() {
                 </thead>
                 <tbody>
                   {departmentsLoading ? (
-                    <EmptyTable colSpan={3} text="Loading departments..." />
+                    <DepartmentTableSkeleton />
                   ) : visibleDepartments.length > 0 ? (
                     visibleDepartments.map((item) => (
                       <tr key={item.id || item.name}>
@@ -1106,8 +1108,8 @@ export default function DepartmentManagementPage() {
                 </button>
               </div>
             </header>
-            <label className="master-search">
-              <Search3DIcon size={16} />
+            <label className="master-search app-search-field">
+              <Search3DIcon className="app-search-field__icon" size={16} />
               <span className="sr-only">Search designations</span>
               <input
                 value={designationQuery}
@@ -1130,7 +1132,7 @@ export default function DepartmentManagementPage() {
                 </thead>
                 <tbody>
                   {designationsLoading ? (
-                    <EmptyTable colSpan={4} text="Loading designations..." />
+                    <DesignationTableSkeleton />
                   ) : visibleDesignations.length > 0 ? (
                     visibleDesignations.map((item) => (
                       <tr key={item.id || item.name}>
@@ -1777,7 +1779,7 @@ export function MasterFormPage({ kind }) {
                         onChange={(val) => setValues((v) => ({ ...v, [name]: val }))}
                       />
                     ) : type === "select" ? (
-                      <select
+                      <select className="app-select"
                         value={values[name] ?? ""}
                         onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
                       >

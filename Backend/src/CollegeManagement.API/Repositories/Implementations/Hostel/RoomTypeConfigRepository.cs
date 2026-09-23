@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using Dapper;
@@ -18,193 +18,94 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? search = null,
             string? status = null)
         {
-            var sql = @"
-                SELECT
-                    RoomTypeId,
-                    RoomTypeSpecification,
-                    BedCapacity,
-                    AcType,
-                    Status,
-                    Description,
-                    CreatedAt
-                FROM room_type_configs
-                WHERE 1 = 1
-            ";
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                sql += @"
-                    AND (
-                        RoomTypeSpecification LIKE @Search
-                        OR AcType LIKE @Search
-                    )
-                ";
-            }
-
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                sql += @"
-                    AND Status = @Status
-                ";
-            }
-
-            sql += @"
-                ORDER BY RoomTypeSpecification;
-            ";
-
             return await _dbConnection.QueryAsync<RoomTypeConfig>(
-                sql,
+                "sp_GetRoomTypeConfigs",
                 new
                 {
-                    Search = $"%{search}%",
-                    Status = status
-                });
+                    p_Search = search,
+                    p_Status = status
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<RoomTypeConfig?> GetByIdAsync(int roomTypeId)
         {
-            const string sql = @"
-                SELECT
-                    RoomTypeId,
-                    RoomTypeSpecification,
-                    BedCapacity,
-                    AcType,
-                    Status,
-                    Description,
-                    CreatedAt
-                FROM room_type_configs
-                WHERE RoomTypeId = @RoomTypeId;
-            ";
-
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<RoomTypeConfig>(
-                    sql,
-                    new { RoomTypeId = roomTypeId });
+            return await _dbConnection.QueryFirstOrDefaultAsync<RoomTypeConfig>(
+                "sp_GetRoomTypeConfigById",
+                new { p_RoomTypeId = roomTypeId },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<RoomTypeConfig?> GetBySpecificationAsync(
             string roomTypeSpecification)
         {
-            const string sql = @"
-                SELECT
-                    RoomTypeId,
-                    RoomTypeSpecification,
-                    BedCapacity,
-                    AcType,
-                    Status,
-                    Description,
-                    CreatedAt
-                FROM room_type_configs
-                WHERE LOWER(RoomTypeSpecification) =
-                      LOWER(@RoomTypeSpecification)
-                LIMIT 1;
-            ";
-
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<RoomTypeConfig>(
-                    sql,
-                    new
-                    {
-                        RoomTypeSpecification =
-                            roomTypeSpecification
-                    });
+            return await _dbConnection.QueryFirstOrDefaultAsync<RoomTypeConfig>(
+                "sp_GetRoomTypeConfigBySpecification",
+                new { p_RoomTypeSpecification = roomTypeSpecification },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<int> CreateAsync(
             RoomTypeConfig roomTypeConfig)
         {
-            const string sql = @"
-                INSERT INTO room_type_configs
-                (
-                    RoomTypeSpecification,
-                    BedCapacity,
-                    AcType,
-                    Status,
-                    Description
-                )
-                VALUES
-                (
-                    @RoomTypeSpecification,
-                    @BedCapacity,
-                    @AcType,
-                    @Status,
-                    @Description
-                );
-
-                SELECT LAST_INSERT_ID();
-            ";
-
-            return await _dbConnection
-                .ExecuteScalarAsync<int>(
-                    sql,
-                    roomTypeConfig);
+            return await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_CreateRoomTypeConfig",
+                new
+                {
+                    p_RoomTypeSpecification = roomTypeConfig.RoomTypeSpecification,
+                    p_BedCapacity = roomTypeConfig.BedCapacity,
+                    p_AcType = roomTypeConfig.AcType,
+                    p_Status = roomTypeConfig.Status,
+                    p_Description = roomTypeConfig.Description
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> UpdateAsync(
             RoomTypeConfig roomTypeConfig)
         {
-            const string sql = @"
-                UPDATE room_type_configs
-                SET
-                    RoomTypeSpecification = @RoomTypeSpecification,
-                    BedCapacity = @BedCapacity,
-                    AcType = @AcType,
-                    Status = @Status,
-                    Description = @Description
-                WHERE RoomTypeId = @RoomTypeId;
-            ";
-
-            var affectedRows =
-                await _dbConnection.ExecuteAsync(
-                    sql,
-                    roomTypeConfig);
+            var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_UpdateRoomTypeConfig",
+                new
+                {
+                    p_RoomTypeId = roomTypeConfig.RoomTypeId,
+                    p_RoomTypeSpecification = roomTypeConfig.RoomTypeSpecification,
+                    p_BedCapacity = roomTypeConfig.BedCapacity,
+                    p_AcType = roomTypeConfig.AcType,
+                    p_Status = roomTypeConfig.Status,
+                    p_Description = roomTypeConfig.Description
+                },
+                commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
         }
 
         public async Task<bool> DeleteAsync(int roomTypeId)
         {
-            const string sql = @"
-                DELETE FROM room_type_configs
-                WHERE RoomTypeId = @RoomTypeId;
-            ";
-
-            var affectedRows =
-                await _dbConnection.ExecuteAsync(
-                    sql,
-                    new { RoomTypeId = roomTypeId });
+            var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_DeleteRoomTypeConfig",
+                new { p_RoomTypeId = roomTypeId },
+                commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
         }
 
         public async Task<bool> ExistsAsync(int roomTypeId)
         {
-            const string sql = @"
-                SELECT COUNT(1)
-                FROM room_type_configs
-                WHERE RoomTypeId = @RoomTypeId;
-            ";
-
-            var count =
-                await _dbConnection.ExecuteScalarAsync<int>(
-                    sql,
-                    new { RoomTypeId = roomTypeId });
+            var count = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_CheckRoomTypeConfigExists",
+                new { p_RoomTypeId = roomTypeId },
+                commandType: CommandType.StoredProcedure);
 
             return count > 0;
         }
 
         public async Task<bool> IsInUseAsync(int roomTypeId)
         {
-            const string sql = @"
-                SELECT COUNT(1)
-                FROM room_masters
-                WHERE RoomTypeId = @RoomTypeId;
-            ";
-
-            var count =
-                await _dbConnection.ExecuteScalarAsync<int>(
-                    sql,
-                    new { RoomTypeId = roomTypeId });
+            var count = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_CheckRoomTypeConfigIsInUse",
+                new { p_RoomTypeId = roomTypeId },
+                commandType: CommandType.StoredProcedure);
 
             return count > 0;
         }
