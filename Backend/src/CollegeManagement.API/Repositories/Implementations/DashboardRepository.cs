@@ -620,7 +620,8 @@ public class DashboardRepository : IDashboardRepository
 
             var grouped = admissionDates
                 .Where(d => d.HasValue && d.Value.Year > 2000)
-                .GroupBy(d => new { d.Value.Year, d.Value.Month })
+                .Select(d => d!.Value)
+                .GroupBy(d => new { d.Year, d.Month })
                 .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
                 .ToList();
 
@@ -650,14 +651,14 @@ public class DashboardRepository : IDashboardRepository
         {
             var genders = await _db.StudentAdmissions.AsNoTracking()
                 .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId))
-                .Select(sa => sa.Gender)
+                .Select(sa => sa.Gender ?? string.Empty)
                 .ToListAsync(ct);
 
             if (!genders.Any())
             {
                 genders = await _db.Students.AsNoTracking()
                     .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId))
-                    .Select(s => s.Gender)
+                    .Select(s => s.Gender ?? string.Empty)
                     .ToListAsync(ct);
             }
 
