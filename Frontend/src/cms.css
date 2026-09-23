@@ -1518,7 +1518,7 @@ body,
   backdrop-filter: blur(5px);
 }
 
-:where([class$="-card"], [class$="-panel"]:not(.cms-academic-dropdown-panel), [class$="-drawer"]) {
+:where([class$="-card"], [class$="-panel"]:not(.cms-academic-dropdown-panel, .cms-search-panel), [class$="-drawer"]) {
   background: var(--cms-surface) !important;
   border-color: var(--cms-border) !important;
   -webkit-backdrop-filter: blur(16px) saturate(116%);
