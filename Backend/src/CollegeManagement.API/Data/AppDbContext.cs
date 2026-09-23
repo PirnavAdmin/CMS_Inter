@@ -22,6 +22,9 @@ namespace CollegeManagement.API.Data
 
         public DbSet<User> Users { get; set; }
         public DbSet<Role> Roles { get; set; }
+        public DbSet<Permission> Permissions { get; set; }
+        public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<OTP> OTPs { get; set; }
         public DbSet<AcademicYear> AcademicYears { get; set; }
         public DbSet<Group> Groups { get; set; }
@@ -1617,6 +1620,41 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     x.IsDeleted
                 })
                     .HasDatabaseName("IX_VehMaint_Vehicle_ServiceDate_Deleted");
+            });
+
+            // Permissions Configuration
+            modelBuilder.Entity<Permission>(entity =>
+            {
+                entity.HasIndex(e => e.PermissionCode).IsUnique();
+                entity.HasIndex(e => new { e.SubModule, e.Action }).IsUnique();
+            });
+
+            // RolePermissions Configuration
+            modelBuilder.Entity<RolePermission>(entity =>
+            {
+                entity.HasIndex(e => new { e.RoleId, e.PermissionId }).IsUnique();
+                entity.HasOne(e => e.Role)
+                    .WithMany(r => r.RolePermissions)
+                    .HasForeignKey(e => e.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Permission)
+                    .WithMany(p => p.RolePermissions)
+                    .HasForeignKey(e => e.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // UserPermissions Configuration
+            modelBuilder.Entity<UserPermission>(entity =>
+            {
+                entity.HasIndex(e => new { e.UserId, e.PermissionId }).IsUnique();
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.UserPermissions)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Permission)
+                    .WithMany(p => p.UserPermissions)
+                    .HasForeignKey(e => e.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
 
