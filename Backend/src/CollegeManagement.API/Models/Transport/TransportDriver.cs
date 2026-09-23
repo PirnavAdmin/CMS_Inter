@@ -48,4 +48,8 @@ public class TransportDriver
 
     public long? AssignedVehicleId { get; set; }
     public TransportVehicle? AssignedVehicle { get; set; }
+
+    public int? UserId { get; set; }
+    [System.ComponentModel.DataAnnotations.Schema.ForeignKey("UserId")]
+    public virtual User? User { get; set; }
 }

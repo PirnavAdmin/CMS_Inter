@@ -15,23 +15,53 @@ import {
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { routeDetails, driverProfile } from "../data/driverMockData.js";
+import { getRoute, getGps } from "../../../api/transportDriverApi.js";
 
 export default function DriverGpsPage() {
-  const [speed, setSpeed] = useState(32);
-  const [lastPingTime, setLastPingTime] = useState("Just now");
-  const [isSimulating, setIsSimulating] = useState(true);
+  const [routeDetails, setRouteDetails] = useState(null);
+  const [speed, setSpeed] = useState(0);
+  const [lastPingTime, setLastPingTime] = useState("Waiting...");
+  const [isTracking, setIsTracking] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Speed jitter simulation for live effect
   useEffect(() => {
-    if (!isSimulating) return;
-    const interval = setInterval(() => {
-      const delta = Math.floor(Math.random() * 5) - 2; // -2 to +2
-      setSpeed((prev) => Math.max(26, Math.min(38, prev + delta)));
-      setLastPingTime("Just now");
-    }, 3000);
+    const fetchRoute = async () => {
+      try {
+        setLoading(true);
+        const res = await getRoute();
+        const data = res.data || res;
+        setRouteDetails(data.routeDetails || data);
+      } catch (err) {
+        setError(err.response?.data?.message || err.message || "Failed to load route data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRoute();
+  }, []);
+
+  useEffect(() => {
+    if (!isTracking) return;
+    const fetchGps = async () => {
+      try {
+        const res = await getGps();
+        const data = res.data || res;
+        if (data.speed !== undefined) setSpeed(data.speed);
+        setLastPingTime("Just now");
+      } catch (err) {
+        console.error("Failed to fetch GPS", err);
+      }
+    };
+    fetchGps();
+    const interval = setInterval(fetchGps, 5000);
     return () => clearInterval(interval);
-  }, [isSimulating]);
+  }, [isTracking]);
+
+  if (loading) return <div className="dp-page-container"><p>Loading GPS Data...</p></div>;
+  if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
+
+  const stops = routeDetails?.stops || [];
 
   return (
     <div className="dp-page-container">
@@ -50,9 +80,9 @@ export default function DriverGpsPage() {
           <button
             type="button"
             className="dp-btn dp-btn-outline"
-            onClick={() => setIsSimulating((prev) => !prev)}
+            onClick={() => setIsTracking((prev) => !prev)}
           >
-            <Activity size={15} /> {isSimulating ? "Pause Simulation" : "Resume Telemetry"}
+            <Activity size={15} /> {isTracking ? "Pause Tracking" : "Resume Telemetry"}
           </button>
         </div>
       </div>
@@ -266,7 +296,7 @@ export default function DriverGpsPage() {
                 </tr>
               </thead>
               <tbody>
-                {routeDetails.stops.map((stop) => (
+                {stops.map((stop) => (
                   <tr key={stop.id} className={stop.id === 3 ? "dp-row-highlight" : ""}>
                     <td>
                       <span className="dp-stop-seq">{stop.stopNumber}</span>
