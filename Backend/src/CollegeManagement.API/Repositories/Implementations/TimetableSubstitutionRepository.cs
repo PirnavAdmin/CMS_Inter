@@ -84,58 +84,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<TimetableSubstitutionResponseDto?> GetSubstitutionByIdAsync(int id)
         {
-            const string sql = @"
-                SELECT 
-                    ts.Id AS SubstitutionId,
-                    ts.SubstitutionDate,
-                    ts.TimetableId,
-                    ts.StaffLeaveRequestId,
-                    ts.OriginalStaffId,
-                    TRIM(CONCAT(COALESCE(origSt.FirstName, ''), ' ', COALESCE(origSt.LastName, ''))) AS OriginalStaffName,
-                    origSt.EmployeeId AS OriginalStaffEmployeeId,
-                    ts.SubstituteStaffId,
-                    TRIM(CONCAT(COALESCE(subSt.FirstName, ''), ' ', COALESCE(subSt.LastName, ''))) AS SubstituteStaffName,
-                    subSt.EmployeeId AS SubstituteStaffEmployeeId,
-                    t.SubjectId,
-                    sub.SubjectName,
-                    sub.SubjectCode,
-                    b.BoardName,
-                    al.LevelName AS AcademicLevelName,
-                    g.GroupName,
-                    p.ProgramName,
-                    ts.SectionId,
-                    sec.SectionName,
-                    ts.PeriodId,
-                    per.PeriodName,
-                    COALESCE(per.DisplayOrder, per.PeriodId) AS PeriodNumber,
-                    per.StartTime,
-                    per.EndTime,
-                    t.RoomId,
-                    r.RoomNumber,
-                    r.RoomName,
-                    ts.Status,
-                    ts.Remarks,
-                    ts.CreatedAt,
-                    ts.UpdatedAt
-                FROM TimetableSubstitutions ts
-                INNER JOIN Timetables t ON t.Id = ts.TimetableId
-                INNER JOIN Staff origSt ON origSt.Id = ts.OriginalStaffId
-                INNER JOIN Staff subSt ON subSt.Id = ts.SubstituteStaffId
-                LEFT JOIN Subjects sub ON sub.SubjectId = t.SubjectId
-                LEFT JOIN Boards b ON b.BoardId = t.BoardId
-                LEFT JOIN AcademicLevels al ON al.AcademicLevelId = t.AcademicLevelId
-                LEFT JOIN `Groups` g ON g.GroupId = t.GroupId
-                LEFT JOIN Programs p ON p.ProgramId = t.ProgramId
-                LEFT JOIN Sections sec ON sec.SectionId = ts.SectionId
-                LEFT JOIN Periods per ON per.PeriodId = ts.PeriodId
-                LEFT JOIN Rooms r ON r.RoomId = t.RoomId
-                WHERE ts.Id = @Id
-                LIMIT 1;";
-
             return await Connection.QueryFirstOrDefaultAsync<TimetableSubstitutionResponseDto>(
-                sql,
-                new { Id = id },
-                transaction: CurrentTransaction);
+                "sp_GetTimetableSubstitutionById",
+                new { p_Id = id },
+                transaction: CurrentTransaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> CancelSubstitutionAsync(int id, int? userId, string? reason)

@@ -17,7 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { Skeleton } from "@/components/common/Ui.jsx";
+import { Skeleton, SkeletonRow } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -2004,7 +2004,6 @@ export default function SectionManagementPage() {
       breadcrumb={pageConfig.breadcrumb}
     >
       <div className="cms-sec-container">
-        {initialLoading && <div className="cms-card cms-sec-loading" role="status">Loading Section and Room Management data...</div>}
         {/* Navigation Tabs - FIRST TAB IS ROOM MANAGEMENT, SECOND TAB IS SECTION MANAGEMENT */}
         <div className="cms-room-tabs" role="tablist" aria-label="Management modules">
           <button
@@ -2118,7 +2117,9 @@ export default function SectionManagementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {shownRooms.length ? (
+                      {initialLoading ? (
+                        Array.from({ length: roomPageSize }, (_, index) => <SkeletonRow key={index} columns={7} />)
+                      ) : shownRooms.length ? (
                         shownRooms.map((room) => (
                           <tr key={room.id}>
                             <td className="cms-sec-name-cell">{room.roomNo}</td>
@@ -2682,7 +2683,9 @@ export default function SectionManagementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {shownSections.length ? (
+                      {initialLoading ? (
+                        Array.from({ length: sectionPageSize }, (_, index) => <SkeletonRow key={index} columns={10} />)
+                      ) : shownSections.length ? (
                         shownSections.map((sec) => {
                           const detail = resolveSection(sec);
                           const teacherCode = detail.facultyEmployeeId;

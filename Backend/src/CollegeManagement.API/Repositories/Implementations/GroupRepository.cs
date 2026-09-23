@@ -617,16 +617,13 @@ namespace CollegeManagement.API.Repositories
 
                 var affected =
                     await connection.ExecuteAsync(
-                        @"UPDATE Groups
-                          SET IsActive = @IsActive,
-                              UpdatedAt = @UpdatedAt
-                          WHERE GroupId = @GroupId",
+                        "sp_ActivateGroup",
                         new
                         {
-                            GroupId = groupId,
-                            IsActive = isActive,
-                            UpdatedAt = DateTime.UtcNow
-                        });
+                            p_GroupId = groupId,
+                            p_IsActive = isActive
+                        },
+                        commandType: CommandType.StoredProcedure);
 
                 if (affected > 0)
                     return true;
@@ -1064,21 +1061,20 @@ namespace CollegeManagement.API.Repositories
             try
             {
                 await connection.ExecuteAsync(
-                    "DELETE FROM GroupPrograms WHERE GroupId = @GroupId;",
-                    new { GroupId = groupId },
-                    transaction);
+                    "sp_ClearGroupPrograms",
+                    new { p_GroupId = groupId },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 if (distinctProgramIds.Count > 0)
                 {
-                    var insertSql = @"INSERT INTO GroupPrograms (GroupId, ProgramId, IsActive, CreatedAt)
-                                      VALUES (@GroupId, @ProgramId, 1, NOW(6));";
-
                     foreach (var pid in distinctProgramIds)
                     {
                         await connection.ExecuteAsync(
-                            insertSql,
-                            new { GroupId = groupId, ProgramId = pid },
-                            transaction);
+                            "sp_AddGroupProgram",
+                            new { p_GroupId = groupId, p_ProgramId = pid },
+                            transaction,
+                            commandType: CommandType.StoredProcedure);
                     }
                 }
 
