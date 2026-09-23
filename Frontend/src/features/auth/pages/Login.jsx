@@ -11,7 +11,22 @@ const fields = [
   { name: "password", label: "Password", type: "password", required: true, placeholder: "Password", autoComplete: "current-password", full: true },
 ];
 
-const REMEMBER_KEY = "pirnav-remember-email";
+const REMEMBER_KEY = "pirnav-remember-credentials";
+const LEGACY_REMEMBER_KEY = "pirnav-remember-email";
+
+function saveRememberedCredentials(credentials) {
+  try {
+    if (credentials) {
+      window.localStorage.setItem(REMEMBER_KEY, JSON.stringify(credentials));
+    } else {
+      window.localStorage.removeItem(REMEMBER_KEY);
+    }
+    window.localStorage.removeItem(LEGACY_REMEMBER_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export default function Login() {
   const { values, errors, setValue, validate } = useForm(fields, {});
   const [busy, setBusy] = useState(false);
@@ -21,10 +36,17 @@ export default function Login() {
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(REMEMBER_KEY);
-      if (saved) {
-        setValue("email", saved);
+      const saved = JSON.parse(window.localStorage.getItem(REMEMBER_KEY) || "null");
+      if (typeof saved?.emailOrMobile === "string" && typeof saved?.password === "string") {
+        setValue("email", saved.emailOrMobile);
+        setValue("password", saved.password);
         setRemember(true);
+      } else {
+        const savedEmail = window.localStorage.getItem(LEGACY_REMEMBER_KEY);
+        if (savedEmail) {
+          setValue("email", savedEmail);
+          setRemember(true);
+        }
       }
     } catch {
       /* storage unavailable */
@@ -46,12 +68,7 @@ export default function Login() {
       return;
     }
 
-    try {
-      if (remember) window.localStorage.setItem(REMEMBER_KEY, emailOrMobile);
-      else window.localStorage.removeItem(REMEMBER_KEY);
-    } catch {
-      /* storage unavailable */
-    }
+    if (!remember) saveRememberedCredentials(null);
 
     setBusy(true);
     // A login attempt must not inherit authorization from an older session.
@@ -60,6 +77,7 @@ export default function Login() {
       const result = await loginUser({ emailOrMobile, password });
       if (!result.token) throw new Error("The login response did not include an access token.");
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, remember);
+      if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
       const userRole = String(result.user.role || "").toLowerCase();
       if (userRole === "faculty" || userRole === "teacher" || userRole === "hod" || userRole.includes("faculty") || userRole.includes("lecturer")) {
@@ -93,7 +111,10 @@ export default function Login() {
         </div>
         <div className="cms-auth-row">
           <label className="cms-check" htmlFor="remember-me">
-            <input id="remember-me" name="remember" type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            <input id="remember-me" name="remember" type="checkbox" checked={remember} onChange={(e) => {
+              setRemember(e.target.checked);
+              if (!e.target.checked) saveRememberedCredentials(null);
+            }} />
             <span>Remember me</span>
           </label>
           <Link to="/forgot-password" state={{ email: String(values.email || "").trim() }} onClick={clearPasswordResetContext}>Forgot password?</Link>
@@ -105,6 +126,7 @@ export default function Login() {
     </AuthLayout>
   );
 }
+
 
 
 
