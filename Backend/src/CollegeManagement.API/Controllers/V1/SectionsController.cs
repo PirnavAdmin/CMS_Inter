@@ -13,8 +13,6 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/sections")]
-    [Route("api/v1/sections")]
-    [Route("api/v1/[controller]")]
     [Produces("application/json")]
     [Authorize]
     public class SectionsController : ControllerBase

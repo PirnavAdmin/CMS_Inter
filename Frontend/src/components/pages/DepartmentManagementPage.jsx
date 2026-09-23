@@ -21,7 +21,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import "./DepartmentManagementPage.css";
 import departmentsIcon from "@/assets/dashboard-3d/total-sections.png";
 import designationsIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -251,6 +251,8 @@ export const normalizeDesignation = (row) => {
 };
 
 const PAGE_SIZE = 6;
+const DepartmentTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={3} />);
+const DesignationTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={4} />);
 
 function Pager({ page, total, onChange }) {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -286,6 +288,7 @@ function EmptyTable({ text, colSpan = 3 }) {
 
 const formDefinitions = {
   department: [
+    ["departmentCode", "Department Code", false, "e.g. CSE, MAT, ADM"],
     ["departmentName", "Department Name", true, "Enter department name"],
     [
       "staffType",
@@ -298,6 +301,7 @@ const formDefinitions = {
     ["status", "Status", true, "Select status", "select", ["Active", "Inactive"]],
   ],
   designation: [
+    ["designationCode", "Designation Code", false, "e.g. PROF, ASST, CLK"],
     ["designationName", "Designation Name", true, "Enter designation name"],
     [
       "staffType",
@@ -516,7 +520,7 @@ function MasterCreateModal({ kind, staffType, departments = [], onClose, onSaved
     setSubmitting(true);
     try {
       if (kind === "department") {
-        const deptCode = values.departmentCode?.trim() || values.departmentName.trim().toUpperCase().replace(/\s+/g, "_").slice(0, 10);
+        const deptCode = values.departmentCode?.trim() || values.departmentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 10);
         const payload = {
           departmentId: 0,
           departmentName: values.departmentName.trim(),
@@ -527,16 +531,26 @@ function MasterCreateModal({ kind, staffType, departments = [], onClose, onSaved
         };
         const response = await apiClient.post(apiEndpoints.departments.create, payload);
         const created = normalizeDepartment(response.data);
+        if (deptCode && (!created.code || created.code === "—")) {
+          created.code = deptCode;
+          created.departmentCode = deptCode;
+        }
         onSaved("Department created successfully.", created);
       } else {
+        const desigCode = values.designationCode?.trim() || values.designationName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 12);
         const payload = {
           name: values.designationName.trim(),
+          designationCode: desigCode,
           departmentId: values.departmentId ? Number(values.departmentId) : null,
           staffType: toApiStaffType(values.staffType),
           isActive: values.status === "Active",
         };
         const response = await apiClient.post(apiEndpoints.designations.create, payload);
         const created = normalizeDesignation(response.data);
+        if (desigCode && (!created.code || created.code === "—")) {
+          created.code = desigCode;
+          created.designationCode = desigCode;
+        }
         if (created.departmentId && !created.departmentName) {
           const matchedDept = availableDepartments.find((d) => String(d.id) === String(created.departmentId));
           if (matchedDept) created.departmentName = matchedDept.name;
@@ -675,13 +689,13 @@ export default function DepartmentManagementPage() {
         const book = XLSX.utils.book_new();
         if (kind === "department") {
           const deptSheet = XLSX.utils.aoa_to_sheet([
-            ["Department Name", "Staff Type", "Status"],
+            ["Department Code", "Department Name", "Staff Type", "Status"],
           ]);
           XLSX.utils.book_append_sheet(book, deptSheet, "Departments");
           XLSX.writeFile(book, "Department_Import_Template.xlsx");
         } else {
           const desigSheet = XLSX.utils.aoa_to_sheet([
-            ["Designation Name", "Department Name", "Staff Type", "Status"],
+            ["Designation Code", "Designation Name", "Department Name", "Staff Type", "Status"],
           ]);
           XLSX.utils.book_append_sheet(book, desigSheet, "Designations");
           XLSX.writeFile(book, "Designation_Import_Template.xlsx");
@@ -1011,6 +1025,7 @@ export default function DepartmentManagementPage() {
               <table className="department-table">
                 <thead>
                   <tr>
+                    <th>Department Code</th>
                     <th>Department Name</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -1018,10 +1033,13 @@ export default function DepartmentManagementPage() {
                 </thead>
                 <tbody>
                   {departmentsLoading ? (
-                    <EmptyTable colSpan={3} text="Loading departments..." />
+                    <DepartmentTableSkeleton />
                   ) : visibleDepartments.length > 0 ? (
                     visibleDepartments.map((item) => (
                       <tr key={item.id || item.name}>
+                        <td>
+                          <span className="master-code-badge">{item.code || item.departmentCode || "—"}</span>
+                        </td>
                         <td>
                           <strong>{item.name}</strong>
                           <small>{item.staffType}</small>
@@ -1058,7 +1076,7 @@ export default function DepartmentManagementPage() {
                     ))
                   ) : (
                     <EmptyTable
-                      colSpan={3}
+                      colSpan={4}
                       text={
                         deptQuery
                           ? "No departments match your search."
@@ -1122,28 +1140,24 @@ export default function DepartmentManagementPage() {
               <table className="designation-table">
                 <thead>
                   <tr>
+                    <th>Designation Code</th>
                     <th>Designation Name</th>
-                    <th>Department</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {designationsLoading ? (
-                    <EmptyTable colSpan={4} text="Loading designations..." />
+                    <DesignationTableSkeleton />
                   ) : visibleDesignations.length > 0 ? (
                     visibleDesignations.map((item) => (
                       <tr key={item.id || item.name}>
                         <td>
-                          <strong>{item.name}</strong>
-                          <small>{item.staffType}</small>
+                          <span className="master-code-badge">{item.code || item.designationCode || "—"}</span>
                         </td>
                         <td>
-                          {item.departmentName ? (
-                            <span className="master-dept-badge">{item.departmentName}</span>
-                          ) : (
-                            <span className="master-dept-none">—</span>
-                          )}
+                          <strong>{item.name}</strong>
+                          <small>{item.staffType}</small>
                         </td>
                         <td>
                           <StatusBadge value={item.status} />
@@ -1652,6 +1666,7 @@ export function MasterFormPage({ kind }) {
           if (!active) return;
           const match = normalizeDesignation(res.data);
           setValues({
+            designationCode: match.code !== "—" ? match.code : "",
             designationName: match.name,
             departmentId: match.departmentId || "",
             status: match.status,
@@ -1704,8 +1719,10 @@ export function MasterFormPage({ kind }) {
         }
         navigate("/dashboard/departments");
       } else {
+        const desigCode = values.designationCode?.trim() || values.designationName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 12);
         const payload = {
           name: values.designationName.trim(),
+          designationCode: desigCode,
           departmentId: values.departmentId ? Number(values.departmentId) : null,
           staffType: toApiStaffType(values.staffType),
           isActive: values.status === "Active",
@@ -1835,11 +1852,13 @@ export function MasterFormPage({ kind }) {
 // ----------------------------------------------------------------------
 const importColumns = {
   department: [
+    "Department Code",
     "Department Name",
     "Staff Type",
     "Status",
   ],
   designation: [
+    "Designation Code",
     "Designation Name",
     "Department Name",
     "Staff Type",
@@ -1887,10 +1906,10 @@ export function MasterImportPage({ kind = "department" }) {
       // Fallback to client-side XLSX generation
       const book = XLSX.utils.book_new();
       const deptSheet = XLSX.utils.aoa_to_sheet([
-        ["Department Name", "Staff Type", "Status"],
+        ["Department Code", "Department Name", "Staff Type", "Status"],
       ]);
       const desigSheet = XLSX.utils.aoa_to_sheet([
-        ["Designation Name", "Department Name", "Staff Type", "Status"],
+        ["Designation Code", "Designation Name", "Department Name", "Staff Type", "Status"],
       ]);
       XLSX.utils.book_append_sheet(book, deptSheet, "Departments");
       XLSX.utils.book_append_sheet(book, desigSheet, "Designations");

@@ -372,8 +372,9 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const user = readUser();
-  const profileName = user?.name && user.name !== user?.email ? user.name : "CMS Admin";
-  const profileEmail = user?.email || "Admin@CMS.com";
+  const rawEmail = user?.email;
+  const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
   const profileRole = user?.role || "admin";
   const pendingActionCount = MOCK_NOTIFICATIONS.reduce((total, item) => total + item.count, 0);
 

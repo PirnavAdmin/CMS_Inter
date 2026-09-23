@@ -226,16 +226,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var count = await Connection.ExecuteScalarAsync<int>(
-                    "SELECT COUNT(1) FROM `Staffs` WHERE Id = @Id AND (IsDeleted = 0 OR IsDeleted IS NULL)",
-                    new { Id = facultyId });
+                    "sp_CheckFacultyExists",
+                    new { p_Id = facultyId },
+                    commandType: CommandType.StoredProcedure);
                 return count > 0;
             }
             catch
             {
-                var count = await Connection.ExecuteScalarAsync<int>(
-                    "SELECT COUNT(1) FROM `Faculties` WHERE Id = @Id AND (IsDeleted = 0 OR IsDeleted IS NULL)",
-                    new { Id = facultyId });
-                return count > 0;
+                return await _context.Staffs.AnyAsync(s => s.Id == facultyId && !s.IsDeleted);
             }
         }
 
@@ -358,6 +356,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<int?> ResolveProgramIdAsync(int? programId, string? programName, int? groupId)
         {
             if (programId.HasValue && programId.Value > 0) return programId.Value;
+            if (string.IsNullOrWhiteSpace(programName) && (!groupId.HasValue || groupId.Value <= 0)) return null;
 
             var result = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_ResolveSectionForeignKeys",
@@ -403,21 +402,40 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<(int? GroupId, int? ProgramId)> GetGroupAndProgramByGroupProgramIdAsync(int groupProgramId)
         {
-            var row = await Connection.QueryFirstOrDefaultAsync<dynamic>(
-                "SELECT GroupId, ProgramId FROM `GroupPrograms` WHERE GroupProgramId = @Id LIMIT 1;",
-                new { Id = groupProgramId });
+            try
+            {
+                var row = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                    "sp_GetGroupAndProgramByGroupProgramId",
+                    new { p_GroupProgramId = groupProgramId },
+                    commandType: CommandType.StoredProcedure);
 
-            if (row == null) return (null, null);
-            return ((int?)row.GroupId, (int?)row.ProgramId);
+                if (row == null) return (null, null);
+                return ((int?)row.GroupId, (int?)row.ProgramId);
+            }
+            catch
+            {
+                var gp = await _context.Set<GroupProgram>().AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.GroupProgramId == groupProgramId);
+                return (gp?.GroupId, gp?.ProgramId);
+            }
         }
 
         public async Task<bool> IsProgramValidForGroupAsync(int groupId, int programId)
         {
-            var count = await Connection.ExecuteScalarAsync<int>(
-                "SELECT COUNT(1) FROM `GroupPrograms` WHERE GroupId = @GroupId AND ProgramId = @ProgramId AND IsActive = 1;",
-                new { GroupId = groupId, ProgramId = programId });
+            try
+            {
+                var count = await Connection.ExecuteScalarAsync<int>(
+                    "sp_CheckProgramValidForGroup",
+                    new { p_GroupId = groupId, p_ProgramId = programId },
+                    commandType: CommandType.StoredProcedure);
 
-            return count > 0;
+                return count > 0;
+            }
+            catch
+            {
+                return await _context.Set<GroupProgram>().AnyAsync(gp =>
+                    gp.GroupId == groupId && gp.ProgramId == programId && gp.IsActive);
+            }
         }
     }
 }

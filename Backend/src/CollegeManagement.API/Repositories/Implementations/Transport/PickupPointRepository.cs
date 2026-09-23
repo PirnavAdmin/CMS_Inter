@@ -169,8 +169,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> SequenceExistsAsync(long routeId, int sequenceNo, long? excludePickupPointId = null)
         {
             using var c = Connection();
-            var sql = "SELECT COUNT(*) FROM PickupPoints WHERE RouteId = @RouteId AND StopOrder = @Seq AND IsDeleted = 0 AND (@ExcludeId IS NULL OR PickupPointId != @ExcludeId)";
-            return await c.ExecuteScalarAsync<int>(sql, new { RouteId = routeId, Seq = sequenceNo, ExcludeId = excludePickupPointId }) > 0;
+            return await c.ExecuteScalarAsync<int>(
+                "sp_CheckPickupPointSequenceExists",
+                new { p_RouteId = routeId, p_SequenceNo = sequenceNo, p_ExcludeId = excludePickupPointId },
+                commandType: CommandType.StoredProcedure) > 0;
         }
     }
 }

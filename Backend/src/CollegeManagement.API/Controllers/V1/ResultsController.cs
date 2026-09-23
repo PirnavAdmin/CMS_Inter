@@ -194,6 +194,25 @@ namespace CollegeManagement.API.Controllers.V1
             return BadRequest(new { success = false, message = "Failed to publish results." });
         }
 
+        /// <summary>
+        /// Retrieves all previously published examination results grouped by exam and group with section breakdown.
+        /// </summary>
+        /// <param name="boardId">Optional Board ID filter.</param>
+        /// <param name="academicYearId">Optional Academic Year ID filter.</param>
+        /// <param name="groupId">Optional Group ID filter.</param>
+        /// <response code="200">Returns the list of published examination result groups.</response>
+        [HttpGet("published")]
+        [ProducesResponseType(typeof(IEnumerable<PublishedExamResultGroupDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetPublishedResults(
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null,
+            [FromQuery] int? groupId = null)
+        {
+            _logger.LogInformation("Retrieving published results. BoardId: {BoardId}, AcademicYearId: {AcademicYearId}, GroupId: {GroupId}", boardId, academicYearId, groupId);
+            var results = await _resultService.GetPublishedResultsAsync(boardId, academicYearId, groupId);
+            return Ok(results);
+        }
+
         // =========================================================================
         // 3. STUDENT MARKS MEMO (INDIVIDUAL VIEW)
         // =========================================================================
