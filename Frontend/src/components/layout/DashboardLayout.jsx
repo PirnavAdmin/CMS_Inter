@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building,
+  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
@@ -61,6 +61,7 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/settings/number-series", icon: settingsNumberSeriesIcon },
   { path: "/dashboard/settings/templates", icon: settingsTemplatesIcon },
   { path: "/dashboard/settings/audit-logs", icon: settingsAuditLogsIcon },
+  { path: "/dashboard/settings/roles-permissions", icon: ShieldCheck },
   { path: "/dashboard/designations", icon: generatedSidebarIcons.department },
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
@@ -179,7 +180,15 @@ export const menu = [
   {
     section: "Administration",
     items: [
-      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
+      {
+        to: "/dashboard/settings",
+        label: "Settings",
+        icon: boardAcademicYearIcon,
+        children: [
+          { to: "/dashboard/settings", label: "General Settings", icon: Settings },
+          { to: "/dashboard/settings/roles-permissions", label: "Roles & Permissions", icon: ShieldCheck },
+        ],
+      },
     ],
   },
 ];
@@ -458,6 +467,9 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
+    if (basePath === "/dashboard/settings") {
+      return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
+    }
     if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
       return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
     }

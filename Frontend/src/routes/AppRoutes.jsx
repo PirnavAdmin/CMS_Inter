@@ -30,6 +30,7 @@ import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
+import RolesPermissionsPage from "@/components/pages/RolesPermissionsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
 import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
@@ -172,6 +173,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
         <Route path="/dashboard/settings" element={<SettingsPage />} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
+        <Route path="/dashboard/settings/roles-permissions" element={<RolesPermissionsPage />} />
         <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
         <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
         <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
