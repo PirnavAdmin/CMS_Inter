@@ -198,8 +198,9 @@ namespace CollegeManagement.API.Repositories
             {
                 normalizedEmail = request.Email.Trim().ToUpperInvariant();
                 var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
+                    "sp_CheckUserEmailExists",
+                    new { p_Email = normalizedEmail },
+                    commandType: CommandType.StoredProcedure);
 
                 if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
                 {
@@ -273,12 +274,11 @@ namespace CollegeManagement.API.Repositories
 
                 if (!string.IsNullOrWhiteSpace(normalizedEmail))
                 {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                    await connection.ExecuteAsync(
+                        "sp_UpdateUserEmailByLinkedEntity",
+                        new { p_StaffId = (int?)null, p_StudentId = studentId, p_Email = normalizedEmail },
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
@@ -318,12 +318,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 0, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 0 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result == 1;
@@ -378,8 +377,9 @@ namespace CollegeManagement.API.Repositories
             {
                 normalizedEmail = request.Email.Trim().ToUpperInvariant();
                 var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
+                    "sp_CheckUserEmailExists",
+                    new { p_Email = normalizedEmail },
+                    commandType: CommandType.StoredProcedure);
 
                 if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
                 {
@@ -427,12 +427,11 @@ namespace CollegeManagement.API.Repositories
 
                 if (!string.IsNullOrWhiteSpace(normalizedEmail))
                 {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                    await connection.ExecuteAsync(
+                        "sp_UpdateUserEmailByLinkedEntity",
+                        new { p_StaffId = (int?)null, p_StudentId = studentId, p_Email = normalizedEmail },
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
@@ -548,12 +547,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 0, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 0 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result >= 0;
@@ -591,12 +589,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 1, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 1 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result >= 0;
