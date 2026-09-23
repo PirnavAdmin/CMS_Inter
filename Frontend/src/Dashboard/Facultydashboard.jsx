@@ -399,47 +399,64 @@ export default function StaffDashboard() {
   };
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
+  const getStaffStorageKey = (profileOrAuth) => {
+    const rawId = profileOrAuth?.staffId || (profileOrAuth?.role !== "Admin" && profileOrAuth?.role !== "Super Admin" ? profileOrAuth?.id : null);
+    const empId = profileOrAuth?.employeeId;
+    const rawEmail = profileOrAuth?.email;
+    const email = Array.isArray(rawEmail)
+      ? String(rawEmail[0] || "").toLowerCase().trim()
+      : String(rawEmail || "").toLowerCase().trim();
+    if (rawId) return `staff_profile_${rawId}`;
+    if (empId) return `staff_profile_${empId}`;
+    if (email) return `staff_profile_${email}`;
+    return null;
+  };
+
+  const persistStaffProfile = (data) => {
+    try {
+      const key = getStaffStorageKey(data) || getStaffStorageKey(getAuthUser());
+      if (key) {
+        localStorage.setItem(key, JSON.stringify(data));
+      }
+    } catch {}
+  };
+
   // Staff Profile Data (Safe Name Extraction & Clean Initial State)
   const [profileData, setProfileData] = useState(() => {
     try {
       const auth = getAuthUser();
-      const currentId = auth?.employeeId || auth?.staffId || "PJCTCH0027";
-      const saved = localStorage.getItem("staff_profile_data");
-      
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed) {
-          // If mockStaff data leaked onto this staff profile, strip the dummy bank/address/docs
-          const isMockLeak = (parsed.employeeId !== "P345" && parsed.aadhaar === "243440489147" && parsed.bankName === "State Bank of India" && parsed.accountNumber === "38920194823482");
-          if (isMockLeak) {
-            return {
-              ...parsed,
-              aadhaar: "",
-              pan: "",
-              dob: "",
-              bloodGroup: "",
-              maritalStatus: "",
-              mobile: "",
-              houseNumber: "",
-              street: "",
-              city: "",
-              district: "",
-              state: "",
-              pin: "",
-              address: "",
-              bankName: "",
-              accountHolder: "",
-              accountNumber: "",
-              ifsc: "",
-              branch: "",
-              accountType: "Salary Account",
-              uanNumber: "",
-              pfNumber: "",
-              experience: [],
-              documents: [],
-            };
+      const rawEmail = auth?.email;
+      const authEmail = Array.isArray(rawEmail)
+        ? String(rawEmail[0] || "").toLowerCase().trim()
+        : String(rawEmail || "").toLowerCase().trim();
+      const currentId = auth?.employeeId || (auth?.staffId ? `STAFF${auth.staffId}` : "");
+      const authStaffId = auth?.staffId ? String(auth.staffId) : "";
+      const savedKey = getStaffStorageKey(auth);
+
+      // Clean up legacy non-namespaced cache to avoid cross-user data leakage
+      try {
+        localStorage.removeItem("staff_profile_data");
+        sessionStorage.removeItem("staff_profile_data");
+      } catch {}
+
+      if (savedKey) {
+        const saved = localStorage.getItem(savedKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed) {
+            const parsedEmailRaw = parsed?.email;
+            const parsedEmail = Array.isArray(parsedEmailRaw)
+              ? String(parsedEmailRaw[0] || "").toLowerCase().trim()
+              : String(parsedEmailRaw || "").toLowerCase().trim();
+            const parsedId = parsed?.id || parsed?.staffId ? String(parsed.id || parsed.staffId) : "";
+            const isOwner = (authEmail && parsedEmail === authEmail) || (authStaffId && parsedId === authStaffId);
+            if (isOwner) {
+              return {
+                ...parsed,
+                email: parsedEmail,
+              };
+            }
           }
-          return parsed;
         }
       }
 
@@ -449,25 +466,25 @@ export default function StaffDashboard() {
         const fName = auth.firstName || parts[0] || "Staff";
         const lName = auth.lastName || parts.slice(1).join(" ") || "";
         return {
-          id: auth.id || 1,
-          employeeId: currentId,
-          fullName: full || `${fName} ${lName}`.trim(),
+          id: auth.staffId || null,
+          employeeId: auth.employeeId || currentId || "",
+          fullName: full || `${fName} ${lName}`.trim() || "Staff Member",
           firstName: fName,
           middleName: auth.middleName || "",
           lastName: lName,
-          role: auth.role || "Staff",
+          role: auth.role || "Faculty",
           staffType: auth.staffType || "Teaching",
-          department: auth.department || "Mathematics",
-          designation: auth.designation || "Junior Lecturer",
+          department: auth.department || "",
+          designation: auth.designation || "Faculty",
           board: auth.board || "BIEAP",
-          academicYear: auth.academicYear || "2025-2026",
-          dateOfJoining: auth.dateOfJoining || "2026-04-01",
-          gender: "",
-          dob: "",
+          academicYear: auth.academicYear || "2026-2027",
+          dateOfJoining: auth.dateOfJoining || new Date().toISOString().split("T")[0],
+          gender: auth.gender || "Male",
+          dob: auth.dob || "",
           bloodGroup: "",
           maritalStatus: "",
-          mobile: "",
-          email: auth.email || "staff@pirnav.com",
+          mobile: String(auth.mobile || auth.phoneNumber || "").trim(),
+          email: authEmail,
           aadhaar: "",
           pan: "",
           photoUrl: "",
@@ -491,9 +508,116 @@ export default function StaffDashboard() {
           documents: [],
         };
       }
-    } catch {}
+    } catch (e) {
+      console.error("Failed to initialize profileData:", e);
+    }
     return mockStaff;
   });
+
+  // Live Staff Profile Loader from Backend
+  useEffect(() => {
+    const auth = getAuthUser();
+    // CRITICAL: auth.staffId is the staff table ID! auth.id is Users.UserId!
+    // NEVER use auth.id to query /api/v1/staff/{id} because UserId 1 is NOT Staff 1!
+    const staffId = auth?.staffId || null;
+    const rawEmail = auth?.email;
+    const authEmail = Array.isArray(rawEmail)
+      ? String(rawEmail[0] || "").toLowerCase().trim()
+      : String(rawEmail || "").toLowerCase().trim();
+    const employeeId = auth?.employeeId || null;
+
+    if (!staffId && !authEmail && !employeeId) return;
+
+    let isMounted = true;
+
+    const fetchLiveProfile = async () => {
+      try {
+        let staffRecord = null;
+        if (staffId) {
+          try {
+            const res = await apiClient.get(apiEndpoints.faculty.getById(staffId));
+            staffRecord = res?.data?.data || res?.data || res;
+          } catch {}
+        }
+        if (!staffRecord && employeeId) {
+          try {
+            const res = await apiClient.get(apiEndpoints.faculty.getByEmployeeId(employeeId));
+            staffRecord = res?.data?.data || res?.data || res;
+          } catch {}
+        }
+        if (!staffRecord && authEmail) {
+          try {
+            const res = await apiClient.get(apiEndpoints.faculty.getAll);
+            const list = unwrapRecords(res);
+            staffRecord = list.find((s) => {
+              const sEmail = String(s.email || "").toLowerCase().trim();
+              return sEmail && sEmail === authEmail;
+            });
+          } catch {}
+        }
+
+        if (!isMounted || !staffRecord) return;
+
+        const full = (staffRecord.fullName || `${staffRecord.firstName || ""} ${staffRecord.lastName || ""}`).trim();
+        const parts = full.split(/\s+/);
+        const fName = staffRecord.firstName || parts[0] || "Staff";
+        const lName = staffRecord.lastName || parts.slice(1).join(" ") || "";
+        const sEmailRaw = staffRecord.email || authEmail;
+        const sEmail = Array.isArray(sEmailRaw)
+          ? String(sEmailRaw[0] || "").trim()
+          : String(sEmailRaw || "").trim();
+
+        setProfileData((prev) => {
+          const updated = {
+            ...prev,
+            id: staffRecord.id || staffRecord.staffId || prev.id,
+            employeeId: staffRecord.employeeId || prev.employeeId,
+            fullName: full || prev.fullName,
+            firstName: fName,
+            middleName: staffRecord.middleName || prev.middleName || "",
+            lastName: lName,
+            email: sEmail,
+            mobile: String(staffRecord.mobile || staffRecord.alternateMobile || prev.mobile || "").trim(),
+            designation: staffRecord.designation || prev.designation,
+            department: staffRecord.department || prev.department,
+            staffType: staffRecord.staffType || staffRecord.facultyType || prev.staffType,
+            gender: staffRecord.gender || prev.gender,
+            dob: staffRecord.dateOfBirth ? staffRecord.dateOfBirth.split("T")[0] : prev.dob,
+            aadhaar: staffRecord.aadhaar || prev.aadhaar,
+            pan: staffRecord.pan || staffRecord.panNumber || prev.pan,
+            bloodGroup: staffRecord.bloodGroup || prev.bloodGroup,
+            maritalStatus: staffRecord.maritalStatus || prev.maritalStatus,
+            dateOfJoining: staffRecord.dateOfJoining ? staffRecord.dateOfJoining.split("T")[0] : (staffRecord.joiningDate ? staffRecord.joiningDate.split("T")[0] : prev.dateOfJoining),
+            qualification: staffRecord.qualification || staffRecord.highestQualification || prev.qualification,
+            houseNumber: staffRecord.currentAddress || staffRecord.address || prev.houseNumber,
+            city: staffRecord.city || prev.city,
+            district: staffRecord.district || prev.district,
+            state: staffRecord.state || prev.state,
+            pin: staffRecord.pin || staffRecord.pincode || prev.pin,
+            bankName: staffRecord.bankName || staffRecord.bankDetails?.bankName || prev.bankName,
+            accountHolder: staffRecord.accountHolder || staffRecord.accountHolderName || staffRecord.bankDetails?.accountHolderName || prev.accountHolder,
+            accountNumber: staffRecord.accountNumber || staffRecord.bankDetails?.accountNumber || prev.accountNumber,
+            ifsc: staffRecord.ifsc || staffRecord.ifscCode || staffRecord.bankDetails?.ifscCode || prev.ifsc,
+            branch: staffRecord.branch || staffRecord.branchName || staffRecord.bankDetails?.branch || prev.branch,
+            accountType: staffRecord.accountType || staffRecord.bankDetails?.accountType || prev.accountType,
+            photoUrl: staffRecord.photoUrl || staffRecord.photoPath || prev.photoUrl,
+            experience: (Array.isArray(staffRecord.experienceList) && staffRecord.experienceList.length) ? staffRecord.experienceList : (prev.experience || []),
+            documents: (Array.isArray(staffRecord.documentsList) && staffRecord.documentsList.length) ? staffRecord.documentsList : (prev.documents || []),
+          };
+          persistStaffProfile(updated);
+          return updated;
+        });
+      } catch (err) {
+        console.error("Failed to load live staff profile:", err);
+      }
+    };
+
+    fetchLiveProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Profile Wizard Steps (1 to 6)
   const [profileStep, setProfileStep] = useState(1);
@@ -637,9 +761,7 @@ export default function StaffDashboard() {
       if (base64) {
         setProfileData((prev) => {
           const updated = { ...prev, photoUrl: base64 };
-          try {
-            localStorage.setItem("staff_profile_data", JSON.stringify(updated));
-          } catch {}
+          persistStaffProfile(updated);
           return updated;
         });
         notify("Profile photo updated successfully!");
@@ -652,54 +774,61 @@ export default function StaffDashboard() {
     e.stopPropagation();
     setProfileData((prev) => {
       const updated = { ...prev, photoUrl: "" };
-      try {
-        localStorage.setItem("staff_profile_data", JSON.stringify(updated));
-      } catch {}
+      persistStaffProfile(updated);
       return updated;
     });
     notify("Profile photo removed.");
   };
 
+  const hasVal = (val) => {
+    if (val === null || val === undefined) return false;
+    if (typeof val === "string") return val.trim().length > 0;
+    if (typeof val === "number") return true;
+    if (Array.isArray(val)) return val.length > 0;
+    if (typeof val === "object") return Object.keys(val).length > 0;
+    return Boolean(val);
+  };
+
   const profileCompletion = useMemo(() => {
     const checklist = [
       // 1. Personal Information (14 items)
-      Boolean(profileData.firstName?.trim()),
-      Boolean(profileData.lastName?.trim()),
-      Boolean(profileData.dob?.trim()),
-      Boolean(profileData.gender?.trim()),
-      Boolean(profileData.maritalStatus?.trim()),
-      Boolean(profileData.mobile?.trim()),
-      Boolean(profileData.email?.trim()),
-      Boolean(profileData.aadhaar?.trim()),
-      Boolean(profileData.pan?.trim()),
-      Boolean(profileData.department?.trim()),
-      Boolean(profileData.designation?.trim()),
-      Boolean(profileData.dateOfJoining?.trim()),
-      Boolean(profileData.bloodGroup?.trim()),
-      Boolean(profileData.photoUrl?.trim()),
+      hasVal(profileData.firstName),
+      hasVal(profileData.lastName),
+      hasVal(profileData.dob),
+      hasVal(profileData.gender),
+      hasVal(profileData.maritalStatus),
+      hasVal(profileData.mobile),
+      hasVal(profileData.email),
+      hasVal(profileData.aadhaar),
+      hasVal(profileData.pan),
+      hasVal(profileData.department),
+      hasVal(profileData.designation),
+      hasVal(profileData.dateOfJoining),
+      hasVal(profileData.bloodGroup),
+      hasVal(profileData.photoUrl),
 
       // 2. Bank Details (7 items)
-      Boolean(profileData.bankName?.trim()),
-      Boolean(profileData.accountHolder?.trim()),
-      Boolean(profileData.accountNumber?.trim()),
-      Boolean(profileData.ifsc?.trim()),
-      Boolean(profileData.branch?.trim()),
-      Boolean(profileData.accountType?.trim()),
-      Boolean(profileData.uanNumber?.trim() || profileData.pfNumber?.trim()),
+      hasVal(profileData.bankName),
+      hasVal(profileData.accountHolder),
+      hasVal(profileData.accountNumber),
+      hasVal(profileData.ifsc),
+      hasVal(profileData.branch),
+      hasVal(profileData.accountType),
+      hasVal(profileData.uanNumber || profileData.pfNumber),
 
       // 3. Address Information (6 items)
-      Boolean((profileData.houseNumber || profileData.address)?.trim()),
-      Boolean((profileData.street || profileData.streetArea)?.trim()),
-      Boolean((profileData.city || profileData.cityVillage)?.trim()),
-      Boolean((profileData.pin || profileData.pincode)?.trim()),
-      Boolean(profileData.district?.trim()),
-      Boolean(profileData.state?.trim()),
+      hasVal(profileData.houseNumber || profileData.address),
+      hasVal(profileData.street || profileData.streetArea),
+      hasVal(profileData.city || profileData.cityVillage),
+      hasVal(profileData.pin || profileData.pincode),
+      hasVal(profileData.district),
+      hasVal(profileData.state),
 
       // 4. Experience (1 item)
-      Boolean(profileData.experience && profileData.experience.length > 0),
+      hasVal(profileData.experience),
 
       // 5. Uploaded Documents (1 item)
-      Boolean(profileData.documents && profileData.documents.length > 0),
+      hasVal(profileData.documents),
     ];
 
     const filledCount = checklist.filter(Boolean).length;
@@ -1532,7 +1661,7 @@ export default function StaffDashboard() {
     navigate("/login", { replace: true });
   };
 
-  const initials = `${profileData.firstName?.[0] || ""}${profileData.lastName?.[0] || ""}`.toUpperCase();
+  const initials = `${profileData.firstName?.[0] || profileData.fullName?.[0] || "S"}${profileData.lastName?.[0] || ""}`.toUpperCase();
 
   // ─────────────────────────────────────────────────────────────
   // MODULE RENDERERS
@@ -1574,10 +1703,10 @@ export default function StaffDashboard() {
         <div>
           <span className="sp-hero-tag">NEXT UPCOMING LECTURE (10:00 AM – 11:00 AM)</span>
           <div style={{ fontSize: 17, fontWeight: 800, color: "var(--cms-text)" }}>
-            Mathematics I-A — Section A (MPC 1st Year)
+            {profileData.department ? `${profileData.department} — Section A` : "Mathematics I-A — Section A (MPC 1st Year)"}
           </div>
           <div style={{ fontSize: 13, color: "var(--cms-muted)", marginTop: 3 }}>
-            📍 Room 203 · 45 Enrolled Students · Syllabus: Unit 3 (Calculus & Functions)
+            📍 Lecture Hall 203 · 45 Enrolled Students · {profileData.department ? `Department of ${profileData.department}` : "Syllabus: Unit 3 (Calculus & Functions)"}
           </div>
         </div>
         <button
@@ -2927,9 +3056,7 @@ export default function StaffDashboard() {
 
   const handleSaveAndNext = () => {
     if (isEditingProfile) {
-      try {
-        localStorage.setItem("staff_profile_data", JSON.stringify(profileData));
-      } catch {}
+      persistStaffProfile(profileData);
       notify(`Step ${profileStep} (${PROFILE_STEPS[profileStep - 1].title}) updated!`);
     }
     if (profileStep < 6) {
@@ -2946,8 +3073,8 @@ export default function StaffDashboard() {
   const handleFinalProfileSave = () => {
     setIsSavingProfile(true);
     setTimeout(() => {
+      persistStaffProfile(profileData);
       try {
-        localStorage.setItem("staff_profile_data", JSON.stringify(profileData));
         localStorage.setItem("staff_profile_submitted", "true");
       } catch {}
       setIsSavingProfile(false);
@@ -3621,9 +3748,7 @@ export default function StaffDashboard() {
                       };
                       const updatedExp = [...(profileData.experience || []), record];
                       setProfileData({ ...profileData, experience: updatedExp });
-                      try {
-                        localStorage.setItem("staff_profile_data", JSON.stringify({ ...profileData, experience: updatedExp }));
-                      } catch {}
+                      persistStaffProfile({ ...profileData, experience: updatedExp });
                       setNewExp({
                         institution: "",
                         designation: "",
@@ -3682,9 +3807,7 @@ export default function StaffDashboard() {
                                 onClick={() => {
                                   const updated = profileData.experience.filter((item) => item.id !== x.id);
                                   setProfileData({ ...profileData, experience: updated });
-                                  try {
-                                    localStorage.setItem("staff_profile_data", JSON.stringify({ ...profileData, experience: updated }));
-                                  } catch {}
+                                  persistStaffProfile({ ...profileData, experience: updated });
                                   notify("Experience record removed.");
                                 }}
                                 title="Delete Experience"
@@ -3786,9 +3909,7 @@ export default function StaffDashboard() {
                           };
                           const updatedDocs = [...(profileData.documents || []), docRecord];
                           setProfileData({ ...profileData, documents: updatedDocs });
-                          try {
-                            localStorage.setItem("staff_profile_data", JSON.stringify({ ...profileData, documents: updatedDocs }));
-                          } catch {}
+                          persistStaffProfile({ ...profileData, documents: updatedDocs });
                           setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
                           if (docFileRef.current) docFileRef.current.value = "";
                           notify("Document uploaded successfully!");
@@ -3856,9 +3977,7 @@ export default function StaffDashboard() {
                                   onClick={() => {
                                     const updated = profileData.documents.filter((item) => item.id !== d.id);
                                     setProfileData({ ...profileData, documents: updated });
-                                    try {
-                                      localStorage.setItem("staff_profile_data", JSON.stringify({ ...profileData, documents: updated }));
-                                    } catch {}
+                                    persistStaffProfile({ ...profileData, documents: updated });
                                     notify("Document removed.");
                                   }}
                                   title="Delete Document"
@@ -4587,7 +4706,7 @@ export default function StaffDashboard() {
               <button className="cms-profile-btn" onClick={() => setProfileDropOpen((p) => !p)}>
                 <div className="cms-avatar">{initials}</div>
                 <div className="cms-profile-meta">
-                  <strong>{profileData.firstName} {profileData.lastName}</strong>
+                  <strong>{profileData.fullName || `${profileData.firstName || ""} ${profileData.lastName || ""}`.trim() || "Staff Member"}</strong>
                   <span>{profileData.designation || profileData.role || "Staff"}</span>
                 </div>
                 <ChevronDown size={14} />
@@ -4596,9 +4715,9 @@ export default function StaffDashboard() {
               {profileDropOpen && (
                 <div className="cms-dropdown" onClick={() => setProfileDropOpen(false)}>
                   <div className="cms-dropdown-head">
-                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>{profileData.fullName}</div>
-                    <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{profileData.email}</div>
-                    <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>ID: {profileData.employeeId}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>{profileData.fullName || `${profileData.firstName || ""} ${profileData.lastName || ""}`.trim() || "Staff Member"}</div>
+                    <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{typeof profileData.email === "string" ? profileData.email : (Array.isArray(profileData.email) ? profileData.email[0] : "")}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>ID: {profileData.employeeId || profileData.id || "—"}</div>
                   </div>
                   <button
                     className="cms-dropdown-item"

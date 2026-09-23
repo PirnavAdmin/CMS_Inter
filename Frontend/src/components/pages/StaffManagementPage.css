@@ -53,8 +53,11 @@
 .staff-search-input-wrap .staff-dropdown-caret{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--cms-muted);pointer-events:none}
 .staff-search-input-wrap input{flex:1 1 auto;width:100%!important;min-width:0;height:25px!important;min-height:25px!important;border:none!important;outline:none!important;background:transparent!important;padding:0!important;font-size:10px!important;color:var(--cms-text)!important;box-shadow:none!important}
 .staff-search-input-wrap input::placeholder{color:var(--cms-muted)!important;opacity:1!important;font-size:10px!important}
-.staff-search-dropdown-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;width:100%;max-height:180px!important;overflow-y:auto!important;scrollbar-width:thin;background:#ffffff!important;background-color:#ffffff!important;opacity:1!important;border:1px solid var(--cms-border,#d1d5db)!important;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.08)!important;z-index:99999!important}
+.staff-custom-search-select .staff-search-dropdown-menu,
+.staff-form-panel .staff-search-dropdown-menu,
+.staff-search-dropdown-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;width:100%;max-height:165px!important;overflow-y:auto!important;overflow-x:hidden!important;scrollbar-width:thin;scrollbar-color:#cbd5e1 #f8fafc;background:#ffffff!important;background-color:#ffffff!important;opacity:1!important;border:1px solid var(--cms-border,#d1d5db)!important;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18),0 2px 6px rgba(0,0,0,.08)!important;z-index:99999!important}
 .staff-search-dropdown-menu::-webkit-scrollbar{width:6px}
+.staff-search-dropdown-menu::-webkit-scrollbar-track{background:#f8fafc;border-radius:4px}
 .staff-search-dropdown-menu::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
 .staff-search-dropdown-menu::-webkit-scrollbar-thumb:hover{background:#94a3b8}
 .staff-search-dropdown-item{padding:8px 12px;font-size:13px;background:#ffffff;background-color:#ffffff;color:var(--cms-text,#1f2937);cursor:pointer;transition:background .15s ease}

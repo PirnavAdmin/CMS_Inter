@@ -95,6 +95,10 @@ namespace CollegeManagement.API.Controllers
                 AccessToken = result.AccessToken,
                 UserId = result.UserId,
                 Name = result.Name,
+                Email = result.Email,
+                StaffId = result.StaffId,
+                StudentId = result.StudentId,
+                AdminId = result.AdminId,
                 Role = result.Role
             });
         }

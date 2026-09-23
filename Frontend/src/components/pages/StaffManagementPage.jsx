@@ -1001,8 +1001,9 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             zIndex: 99999,
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
             border: "1px solid var(--cms-border, #d1d5db)",
-            maxHeight: "180px",
+            maxHeight: "165px",
             overflowY: "auto",
+            overflowX: "hidden",
             scrollbarWidth: "thin",
           }}
         >

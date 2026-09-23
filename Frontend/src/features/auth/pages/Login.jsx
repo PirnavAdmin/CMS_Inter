@@ -62,7 +62,7 @@ export default function Login() {
     // controls so the credentials visible to the user are the ones we send.
     const submitted = new FormData(e.currentTarget);
     const emailOrMobile = String(submitted.get("email") || values.email || "").trim();
-    const password = String(submitted.get("password") || values.password || "");
+    const password = String(submitted.get("password") || values.password || "").trim();
     if (!emailOrMobile || !password) {
       validate();
       return;
@@ -96,7 +96,17 @@ export default function Login() {
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
       const userRole = String(result.user.role || "").toLowerCase();
-      if (userRole === "faculty" || userRole === "teacher" || userRole === "hod" || userRole.includes("faculty") || userRole.includes("lecturer")) {
+      const isFacultyOrStaff =
+        userRole === "faculty" ||
+        userRole === "teacher" ||
+        userRole === "staff" ||
+        userRole === "hod" ||
+        userRole.includes("faculty") ||
+        userRole.includes("teacher") ||
+        userRole.includes("staff") ||
+        userRole.includes("lecturer");
+
+      if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
       } else {
         navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
