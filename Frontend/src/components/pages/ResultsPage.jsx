@@ -2074,7 +2074,7 @@ function Select({ label, value, disabled, onChange, children }) {
     <div className="cms-field-group">
       <label className="cms-label">{label}</label>
       <select
-        className="cms-select"
+        className="cms-select app-select"
         value={value}
         disabled={disabled}
         aria-label={label}
@@ -2123,7 +2123,7 @@ function SectionsTable({
         </div>
 
         <div className="results-table-toolbar">
-          <div className="results-table-search">
+          <div className="results-table-search app-search-field app-search-field--icon">
             <input
               className="cms-input"
               placeholder="Search section..."
@@ -2299,7 +2299,7 @@ function PublishedGroupsList({
         </div>
 
         <div className="results-table-toolbar results-published-toolbar">
-          <div className="results-published-search">
+          <div className="results-published-search app-search-field app-search-field--icon">
             <input
               className="cms-input"
               placeholder="Search exam, group, program..."
@@ -2309,7 +2309,7 @@ function PublishedGroupsList({
           </div>
           <div className="results-table-actions results-published-filters">
             <select
-              className="cms-select results-filter-select"
+              className="cms-select results-filter-select app-select"
               value={groupFilter}
               onChange={(e) => setGroupFilter(e.target.value)}
               aria-label="Filter by Group"
@@ -2323,7 +2323,7 @@ function PublishedGroupsList({
             </select>
 
             <select
-              className="cms-select results-filter-select"
+              className="cms-select results-filter-select app-select"
               value={examFilter}
               onChange={(e) => setExamFilter(e.target.value)}
               aria-label="Filter by Examination"
@@ -2337,7 +2337,7 @@ function PublishedGroupsList({
             </select>
 
             <select
-              className="cms-select results-filter-select"
+              className="cms-select results-filter-select app-select"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               aria-label="Filter by Pass Rate"
@@ -2566,7 +2566,7 @@ function SectionStudentsView({
         </div>
 
         <div className="results-table-toolbar results-section-toolbar">
-          <div className="results-table-search results-section-search">
+          <div className="results-table-search results-section-search app-search-field app-search-field--icon">
             <input
               className="cms-input"
               value={query}
@@ -2579,7 +2579,7 @@ function SectionStudentsView({
           </div>
           <div className="results-table-actions results-section-actions">
             <select
-              className="cms-select results-student-filter-select"
+              className="cms-select results-student-filter-select app-select"
               value={resultFilter}
               onChange={(e) => {
                 setResultFilter(e.target.value);
@@ -2706,7 +2706,7 @@ function RankListView({
         </div>
 
         <div className="results-rank-toolbar" style={{ marginBottom: 14 }}>
-          <div className="results-rank-search">
+          <div className="results-rank-search app-search-field app-search-field--icon">
             <input
               className="cms-input"
               placeholder="Search rank, student, roll number or section..."
@@ -2719,7 +2719,7 @@ function RankListView({
           </div>
           <div className="cms-field-group" style={{ width: 180 }}>
             <select
-              className="cms-select"
+              className="cms-select app-select"
               value={filter}
               onChange={(e) => {
                 setFilter(e.target.value);

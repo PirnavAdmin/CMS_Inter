@@ -148,8 +148,8 @@ function StatCard({ icon: Icon, label, value, hint, tone = "blue" }) {
 function Toolbar({ query, onQuery, filters, onAdd, onExport, onPrint, addLabel = "Add Record", className = "" }) {
   return (
     <div className={`cms-transport-toolbar ${className}`.trim()}>
-      <label className="cms-transport-search">
-        <Search size={16} />
+      <label className="cms-transport-search app-search-field">
+        <Search className="app-search-field__icon" size={16} />
         <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Search transport records..." />
       </label>
       {filters ? <div className="cms-transport-filters">{filters}</div> : null}
@@ -219,7 +219,7 @@ function TableSection({
           onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
         />
       ) : (
-        <select
+        <select className="app-select"
           value={filterValues[filter.name] || "All"}
           onChange={(event) => onFilterChange?.(filter.name, event.target.value)}
         >
@@ -350,7 +350,7 @@ function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
       <div className="cms-form-grid cols-3 cms-transport-add-driver-form">
         <label className="cms-field full">
           <span>Select Driver from Non-Teaching Staff <b>*</b></span>
-          <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaffDriver(event.target.value)}>
+          <select className="app-select" value={values.staffId} disabled={isSaving} onChange={(event) => selectStaffDriver(event.target.value)}>
             <option value="">Select Driver</option>
             {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.driverName} ({driver.employeeId})</option>)}
           </select>
@@ -385,7 +385,7 @@ function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
         </label>
         <label className="cms-field">
           <span>Status</span>
-          <select value={values.status} disabled={isSaving} onChange={(event) => update("status", event.target.value)}>
+          <select className="app-select" value={values.status} disabled={isSaving} onChange={(event) => update("status", event.target.value)}>
             <option value="Active">Active</option>
             <option value="On Leave">On Leave</option>
             <option value="Inactive">Inactive</option>
@@ -429,7 +429,7 @@ function AddAttendantModal({ staff, isSaving, onCancel, onSave }) {
       <div className="cms-form-grid cols-3">
         <label className="cms-field full">
           <span>Select Non-Teaching Staff <b>*</b></span>
-          <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaff(event.target.value)}>
+          <select className="app-select" value={values.staffId} disabled={isSaving} onChange={(event) => selectStaff(event.target.value)}>
             <option value="">Select Non-Teaching Staff</option>
             {staff.map((member) => <option key={member.id} value={member.id}>{member.name} ({member.employeeId})</option>)}
           </select>
@@ -438,7 +438,7 @@ function AddAttendantModal({ staff, isSaving, onCancel, onSave }) {
         <label className="cms-field"><span>Attendant Name <b>*</b></span><input value={values.attendantName} readOnly /></label>
         <label className="cms-field"><span>Mobile Number <b>*</b></span><input value={values.mobileNumber} readOnly /></label>
         <label className="cms-field"><span>Gender <b>*</b></span><input value={values.gender} readOnly /></label>
-        <label className="cms-field"><span>Status</span><select value={values.status} disabled={isSaving} onChange={(event) => setValues((current) => ({ ...current, status: event.target.value }))}><option value="Active">Active</option><option value="On Leave">On Leave</option><option value="Inactive">Inactive</option></select></label>
+        <label className="cms-field"><span>Status</span><select className="app-select" value={values.status} disabled={isSaving} onChange={(event) => setValues((current) => ({ ...current, status: event.target.value }))}><option value="Active">Active</option><option value="On Leave">On Leave</option><option value="Inactive">Inactive</option></select></label>
         {error ? <p className="cms-error">{error}</p> : null}
       </div>
     </Modal>

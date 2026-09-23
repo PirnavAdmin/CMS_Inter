@@ -48,8 +48,8 @@ export default function DriverStudentTable({
 
       {showFilters && (
         <div className="dp-table-controls">
-          <div className="dp-search-box">
-            <Search size={16} className="dp-search-icon" />
+          <div className="dp-search-box app-search-field">
+            <Search size={16} className="dp-search-icon app-search-field__icon" />
             <input
               type="text"
               placeholder="Search by student name, roll number, class or stop..."
@@ -75,7 +75,7 @@ export default function DriverStudentTable({
               <select
                 value={selectedStop}
                 onChange={(e) => setSelectedStop(e.target.value)}
-                className="dp-select"
+                className="dp-select app-select"
               >
                 {uniqueStops.map((stop) => (
                   <option key={stop} value={stop}>
@@ -89,7 +89,7 @@ export default function DriverStudentTable({
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="dp-select"
+                className="dp-select app-select"
               >
                 <option value="All">All Statuses</option>
                 <option value="Picked Up">Picked Up</option>

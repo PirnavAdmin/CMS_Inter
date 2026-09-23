@@ -128,7 +128,7 @@ export default function DriverStudentsPage() {
             <select
               value={selectedBatchStop}
               onChange={(e) => setSelectedBatchStop(e.target.value)}
-              className="dp-select dp-select-sm"
+              className="dp-select dp-select-sm app-select"
             >
               {stopsList.map((stop) => (
                 <option key={stop} value={stop}>

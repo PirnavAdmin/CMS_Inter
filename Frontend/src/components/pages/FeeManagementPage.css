@@ -157,14 +157,7 @@
   font-weight: 650;
 }
 .cms-fee-chart-filter select {
-  min-height: 30px;
   min-width: 150px;
-  padding: 5px 9px;
-  border: 1px solid var(--cms-border);
-  border-radius: 8px;
-  background: var(--cms-surface);
-  color: var(--cms-text);
-  font-size: 13px;
 }
 .cms-fee-head-actions {
   display: inline-flex;
@@ -292,7 +285,6 @@
   min-width: 0;
 }
 .cms-fee-filter > span { color: var(--cms-muted); font-size: 11px; font-weight: 600; }
-.cms-fee-filter select,
 .cms-fee-filter input {
   width: 100%;
   min-height: 34px;
@@ -302,6 +294,9 @@
   background: var(--cms-surface);
   color: var(--cms-text);
   font-size: 13px;
+}
+.cms-fee-filter select {
+  width: 100%;
 }
 
 .cms-content:has(> .cms-fee-tabs) .cms-table .num, .cms-fee-table .num { text-align: right; }

@@ -580,7 +580,7 @@ export default function DashboardLayout({
             <NavbarIcon src={navbarMenuIcon} />
           </button>
           <div className="cms-search-wrap" ref={searchRef}>
-            <div className="cms-search-top">
+            <div className="cms-search-top app-search-field">
               <NavbarIcon src={navbarSearchIcon} />
               <input placeholder="Search pages and modules..." value={query} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)} aria-label="Search pages" />
             </div>
@@ -601,7 +601,7 @@ export default function DashboardLayout({
               <div className="cms-academic-dropdown-wrap" ref={boardRef}>
                 <button
                   type="button"
-                  className={`cms-academic-btn ${boardOpen ? "is-open" : ""}`}
+                  className={(`cms-academic-btn ${boardOpen ? "is-open" : ""}`) + " app-select-control"}
                   onClick={() => {
                     setBoardOpen((v) => !v);
                     setYearOpen(false);
@@ -625,7 +625,7 @@ export default function DashboardLayout({
                 </button>
 
                 {boardOpen && (
-                  <div className="cms-academic-dropdown-panel">
+                  <div className="cms-academic-dropdown-panel app-select-panel">
                     <div className="cms-academic-panel-header">Select Board</div>
                     <div className="cms-academic-panel-list">
                       {boardsLoading ? <div className="cms-academic-panel-empty">Loading boards...</div> : !boards.length ? <div className="cms-academic-panel-empty">{boardsError || "No active boards available"}</div> : boards.map((b) => {
@@ -635,7 +635,7 @@ export default function DashboardLayout({
                           <button
                             key={b.id || b.code}
                             type="button"
-                            className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
+                            className={(`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`) + " app-select-option"}
                             onClick={() => {
                               setSelectedBoard(b);
                               setBoardOpen(false);
@@ -667,7 +667,7 @@ export default function DashboardLayout({
               <div className="cms-academic-dropdown-wrap" ref={yearRef}>
                 <button
                   type="button"
-                  className={`cms-academic-btn ${yearOpen ? "is-open" : ""}`}
+                  className={(`cms-academic-btn ${yearOpen ? "is-open" : ""}`) + " app-select-control"}
                   onClick={() => {
                     setYearOpen((v) => !v);
                     setBoardOpen(false);
@@ -689,7 +689,7 @@ export default function DashboardLayout({
                 </button>
 
                 {yearOpen && (
-                  <div className="cms-academic-dropdown-panel">
+                  <div className="cms-academic-dropdown-panel app-select-panel">
                     <div className="cms-academic-panel-header">Select Academic Year</div>
                     <div className="cms-academic-panel-list">
                       {academicYearsLoading ? <div className="cms-academic-panel-empty">Loading academic years...</div> : !academicYears.length ? <div className="cms-academic-panel-empty">{academicYearsError || "No active academic years available"}</div> : academicYears.map((y) => {
@@ -702,7 +702,7 @@ export default function DashboardLayout({
                           <button
                             key={y.id || y.code}
                             type="button"
-                            className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
+                            className={(`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`) + " app-select-option"}
                             onClick={() => {
                               setSelectedAcademicYear(y);
                               setYearOpen(false);

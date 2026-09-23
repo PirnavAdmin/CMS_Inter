@@ -678,15 +678,6 @@
   font-size: 12px;
 }
 
-.reports-page-size select {
-  height: 34px;
-  padding: 0 26px 0 9px;
-  border: 1px solid var(--cms-border);
-  border-radius: 9px;
-  color: var(--cms-text);
-  background: var(--cms-surface);
-}
-
 .reports-page-number {
   color: var(--cms-muted);
   font-size: 12px;
@@ -1021,4 +1012,3 @@
 .reports-audit-table { min-width: 1100px; }
 .reports-audit-description { max-width: 270px; overflow: visible; text-overflow: clip; white-space: normal !important; overflow-wrap: anywhere; }
 .reports-audit-pagination { min-height: 46px; padding: 5px 14px; gap: 7px; }
-.reports-page-size select { height: 36px; border-radius: 9px; }

@@ -1229,7 +1229,7 @@ function SelectFilter({ label, value, options, onChange }) {
   return (
     <label className="cms-fee-filter">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="app-select" value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">All</option>
         {options.map((option) => {
           const optionValue = option && typeof option === "object" ? option.value : option;
@@ -1442,7 +1442,7 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
           <h2>Group-wise Collection</h2>
           <label className="cms-fee-chart-filter">
             <span>Group</span>
-            <select value={selectedGroup} onChange={(event) => setSelectedGroup(event.target.value)}>
+            <select className="app-select" value={selectedGroup} onChange={(event) => setSelectedGroup(event.target.value)}>
               <option value="">All Groups</option>
               {groupOptions.map((group, index) => <option key={`${group}-${index}`} value={group}>{group}</option>)}
             </select>
@@ -1711,7 +1711,7 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
         <div className="cms-form-grid cols-3">
           <div className="cms-field full">
             <label htmlFor="collect-target">Pay Towards</label>
-            <select id="collect-target" value={target} onChange={(event) => selectTarget(event.target.value)}>
+            <select className="app-select" id="collect-target" value={target} onChange={(event) => selectTarget(event.target.value)}>
               {pending.map((item) => (
                 <option key={item.no} value={String(item.no)}>
                   Fee Schedule {item.no} - {formatCurrency(item.balance)} due {formatDate(item.dueDate)}
@@ -1730,7 +1730,7 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
           </div>
           <div className="cms-field">
             <label htmlFor="collect-method">Payment Method <span className="req">*</span></label>
-            <select id="collect-method" value={method} onChange={(event) => setMethod(event.target.value)}>
+            <select className="app-select" id="collect-method" value={method} onChange={(event) => setMethod(event.target.value)}>
               {PAYMENT_METHODS.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
           </div>
@@ -2131,8 +2131,8 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
         <span className="cms-badge cms-badge-info">{rows.length} of {accounts.length} students</span>
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls">
-        <div className="cms-fee-search">
-          <Search3DIcon size={15} />
+        <div className="cms-fee-search app-search-field">
+          <Search3DIcon className="app-search-field__icon" size={15} />
           <input value={search} placeholder="Search by student name or admission number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
         <div className="cms-fee-filter-row">
@@ -2218,8 +2218,8 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
         <span className="cms-badge cms-badge-info">{rows.length} accounts</span>
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls cms-fee-search-only">
-        <div className="cms-fee-search">
-          <Search3DIcon size={15} />
+        <div className="cms-fee-search app-search-field">
+          <Search3DIcon className="app-search-field__icon" size={15} />
           <input value={search} placeholder="Search by student name or admission number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
       </div>
@@ -2525,14 +2525,14 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
       <div className="cms-form-grid cols-3">
         <div className="cms-field">
           <label htmlFor="fs-board">Board <span className="req">*</span></label>
-          <select id="fs-board" value={values.boardId || ""} onChange={(event) => update("boardId", event.target.value)}>
+          <select className="app-select" id="fs-board" value={values.boardId || ""} onChange={(event) => update("boardId", event.target.value)}>
             <option value="">{masterErrors.boards ? "Unable to load boards" : masterLoading && !masters.boards.length ? "Loading boards..." : masters.boards.length ? "Select Board" : "No boards available"}</option>
             {masters.boards.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </div>
         <div className="cms-field">
           <label htmlFor="fs-year">Academic Year <span className="req">*</span></label>
-          <select id="fs-year" value={values.academicYearId || values.academicYear} onChange={(event) => {
+          <select className="app-select" id="fs-year" value={values.academicYearId || values.academicYear} onChange={(event) => {
             update("academicYearId", event.target.value);
             update("academicYear", masters.years.find((item) => item.value === event.target.value)?.label || event.target.value);
           }}>
@@ -2542,14 +2542,14 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
         </div>
         <div className="cms-field">
           <label htmlFor="fs-group">Group <span className="req">*</span></label>
-          <select id="fs-group" value={values.groupId || ""} onChange={(event) => changeGroup(event.target.value)} disabled={!values.boardId || !values.academicYearId}>
+          <select className="app-select" id="fs-group" value={values.groupId || ""} onChange={(event) => changeGroup(event.target.value)} disabled={!values.boardId || !values.academicYearId}>
             <option value="">{!values.boardId || !values.academicYearId ? "Select Board/Year first" : masterErrors.groups ? "Unable to load groups" : masterLoading && !groupOptions.length ? "Loading groups..." : groupOptions.length ? "Select Group" : "No groups available"}</option>
             {groupOptions.map((group) => <option key={group.value} value={group.value}>{group.label}</option>)}
           </select>
         </div>
         <div className="cms-field">
           <label htmlFor="fs-program">Program</label>
-          <select id="fs-program" value={values.programId || ""} onChange={(event) => changeProgram(event.target.value)} disabled={!values.groupId || programLoading || !programOptions.length}>
+          <select className="app-select" id="fs-program" value={values.programId || ""} onChange={(event) => changeProgram(event.target.value)} disabled={!values.groupId || programLoading || !programOptions.length}>
             <option value="">{!values.groupId ? "Select Group first" : programLoading ? "Loading programs..." : programError ? "Unable to load programs" : programOptions.length ? "Select Program" : "No programs available"}</option>
             {programOptions.map((program) => <option key={program.value} value={program.value}>{program.label}</option>)}
           </select>
@@ -2577,7 +2577,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
                   <td><strong>{item.type}</strong>{item.required ? <small className="cms-fee-required">Mandatory</small> : null}</td>
                   <td>
                     <select
-                      className="cms-mini-input"
+                      className="cms-mini-input app-select"
                       value={item.required ? "Mandatory" : "Optional"}
                       onChange={(event) => updateFeeItem(item.id, { required: event.target.value === "Mandatory" })}
                     >
@@ -2587,7 +2587,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
                   </td>
                   <td>
                     <select
-                      className="cms-mini-input"
+                      className="cms-mini-input app-select"
                       value={item.selected === false ? "Inactive" : "Active"}
                       onChange={(event) => updateFeeItem(item.id, { selected: event.target.value === "Active" })}
                     >
@@ -2670,13 +2670,13 @@ function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
         </div>
         <div className="cms-field">
           <label htmlFor="ft-category">Category</label>
-          <select id="ft-category" value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}>
+          <select className="app-select" id="ft-category" value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}>
             {FEE_TYPE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
           </select>
         </div>
         <div className="cms-field">
           <label htmlFor="ft-status">Status</label>
-          <select id="ft-status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
+          <select className="app-select" id="ft-status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
           </select>
@@ -2845,7 +2845,7 @@ function ScholarshipFormModal({ initial, scholarships, onClose, onSaved }) {
         </div>
         <div className="cms-field">
           <label htmlFor="sch-type">Discount Type</label>
-          <select id="sch-type" value={draft.discountType} onChange={(event) => setDraft((current) => ({ ...current, discountType: event.target.value }))}>
+          <select className="app-select" id="sch-type" value={draft.discountType} onChange={(event) => setDraft((current) => ({ ...current, discountType: event.target.value }))}>
             <option value="Percentage">Percentage</option>
             <option value="Fixed Amount">Fixed Amount</option>
           </select>
@@ -3014,14 +3014,14 @@ function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
         </div>
         <div className="cms-field">
           <label htmlFor="fine-fee-type">Applicable Fee / Fee Type <span className="req">*</span></label>
-          <select id="fine-fee-type" value={draft.feeTypeId} onChange={(event) => setDraft((current) => ({ ...current, feeTypeId: event.target.value }))}>
+          <select className="app-select" id="fine-fee-type" value={draft.feeTypeId} onChange={(event) => setDraft((current) => ({ ...current, feeTypeId: event.target.value }))}>
             {!activeFeeTypes.length ? <option value="">No active fee types</option> : null}
             {activeFeeTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </div>
         <div className="cms-field">
           <label htmlFor="fine-type">Fine Type <span className="req">*</span></label>
-          <select id="fine-type" value={draft.fineType} onChange={(event) => setDraft((current) => ({ ...current, fineType: event.target.value }))}>
+          <select className="app-select" id="fine-type" value={draft.fineType} onChange={(event) => setDraft((current) => ({ ...current, fineType: event.target.value }))}>
             <option value="Fixed Amount">Fixed Amount</option>
             <option value="Per Day">Per Day</option>
           </select>
@@ -3036,7 +3036,7 @@ function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
         </div>
         <div className="cms-field">
           <label htmlFor="fine-status">Status</label>
-          <select id="fine-status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
+          <select className="app-select" id="fine-status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
             <option value="Active">Active</option>
             <option value="Inactive">Inactive</option>
           </select>
@@ -3369,7 +3369,7 @@ function HostelFeesTab({ configs, onChange, onToast }) {
           <div className="cms-form-grid">
             <div className="cms-field full">
               <label htmlFor="hostel-fee-block">Hostel Block <span className="req">*</span></label>
-              <select
+              <select className="app-select"
                 id="hostel-fee-block"
                 value={editing.hostelBlock}
                 onChange={(event) => {
@@ -3382,13 +3382,13 @@ function HostelFeesTab({ configs, onChange, onToast }) {
             </div>
             <div className="cms-field">
               <label htmlFor="hostel-fee-room-type">Room Type <span className="req">*</span></label>
-              <select id="hostel-fee-room-type" value={editing.roomType} onChange={(event) => setEditing((current) => ({ ...current, roomType: event.target.value }))}>
+              <select className="app-select" id="hostel-fee-room-type" value={editing.roomType} onChange={(event) => setEditing((current) => ({ ...current, roomType: event.target.value }))}>
                 {roomTypeOptions.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
               </select>
             </div>
             <div className="cms-field">
               <label htmlFor="hostel-fee-plan">Fee Frequency <span className="req">*</span></label>
-              <select id="hostel-fee-plan" value={editing.feePlan} onChange={(event) => setEditing((current) => ({ ...current, feePlan: event.target.value }))}>
+              <select className="app-select" id="hostel-fee-plan" value={editing.feePlan} onChange={(event) => setEditing((current) => ({ ...current, feePlan: event.target.value }))}>
                 <option value="Monthly">Monthly</option>
                 <option value="Quarterly">Quarterly</option>
                 <option value="Half Yearly">Half Yearly</option>
@@ -3409,7 +3409,7 @@ function HostelFeesTab({ configs, onChange, onToast }) {
             </div>
             <div className="cms-field">
               <label htmlFor="hostel-fee-status">Status</label>
-              <select id="hostel-fee-status" value={editing.status} onChange={(event) => setEditing((current) => ({ ...current, status: event.target.value }))}>
+              <select className="app-select" id="hostel-fee-status" value={editing.status} onChange={(event) => setEditing((current) => ({ ...current, status: event.target.value }))}>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
               </select>
@@ -3557,8 +3557,8 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
         </div>
       </div>
       <div className="cms-card-body cms-fee-toolbar cms-fee-controls cms-fee-search-only">
-        <div className="cms-fee-search">
-          <Search3DIcon size={15} />
+        <div className="cms-fee-search app-search-field">
+          <Search3DIcon className="app-search-field__icon" size={15} />
           <input value={search} placeholder="Search by student, admission number or receipt number" onChange={(event) => setSearchTerm(event.target.value)} />
         </div>
       </div>

@@ -929,8 +929,8 @@ export default function CredentialsGeneratorPage() {
 
             <div className="cred-filter-card">
               <div className="cred-filter-row">
-                <div className="cred-search-box">
-                  <Search3DIcon size={16} className="cred-search-icon" />
+                <div className="cred-search-box app-search-field">
+                  <Search3DIcon size={16} className="cred-search-icon app-search-field__icon" />
                   <input
                     type="text"
                     placeholder={
@@ -951,7 +951,7 @@ export default function CredentialsGeneratorPage() {
                 <div className="cred-dropdown-group">
                   <div className="cred-select-wrapper">
                     <Filter size={14} className="cred-select-icon" />
-                    <select
+                    <select className="app-select"
                       value={filterDeptLevel}
                       onChange={(e) => setFilterDeptLevel(e.target.value)}
                     >
@@ -967,7 +967,7 @@ export default function CredentialsGeneratorPage() {
                   </div>
 
                   <div className="cred-select-wrapper">
-                    <select
+                    <select className="app-select"
                       value={filterStatus}
                       onChange={(e) => setFilterStatus(e.target.value)}
                     >
@@ -1323,7 +1323,7 @@ export default function CredentialsGeneratorPage() {
                 <div className="cred-form-row">
                   <div className="cred-form-field">
                     <label>Random Password Length</label>
-                    <select
+                    <select className="app-select"
                       value={credentialSettings.pwdLength}
                       onChange={(e) =>
                         setCredentialSettings((p) => ({ ...p, pwdLength: Number(e.target.value) }))
@@ -1337,7 +1337,7 @@ export default function CredentialsGeneratorPage() {
 
                   <div className="cred-form-field">
                     <label>Temporary Password Expiry</label>
-                    <select
+                    <select className="app-select"
                       value={credentialSettings.expiryDays}
                       onChange={(e) =>
                         setCredentialSettings((p) => ({ ...p, expiryDays: Number(e.target.value) }))
@@ -1537,7 +1537,7 @@ export default function CredentialsGeneratorPage() {
                   {wizardConfig.scopeOption === "department" && (
                     <div className="cred-form-field" style={{ marginTop: 15 }}>
                       <label>Select Target Department / Course</label>
-                      <select
+                      <select className="app-select"
                         value={wizardConfig.deptOrLevel}
                         onChange={(e) =>
                           setWizardConfig((p) => ({ ...p, deptOrLevel: e.target.value }))
@@ -1575,7 +1575,7 @@ export default function CredentialsGeneratorPage() {
 
                     <div className="cred-form-field">
                       <label>Password Generation Strategy</label>
-                      <select
+                      <select className="app-select"
                         value={wizardConfig.pwdStrategy}
                         onChange={(e) =>
                           setWizardConfig((p) => ({ ...p, pwdStrategy: e.target.value }))

@@ -514,7 +514,7 @@ const CertificateManagement = () => {
                   ADMISSION NO. <span className="text-red">*</span>
                 </label>
                 <select
-                  className="cert-input-select"
+                  className="cert-input-select app-select"
                   value={formData.admissionNo}
                   onChange={handleAdmissionChange}
                   required
@@ -536,7 +536,7 @@ const CertificateManagement = () => {
                   CERTIFICATE TYPE <span className="text-red">*</span>
                 </label>
                 <select
-                  className="cert-input-select"
+                  className="cert-input-select app-select"
                   value={formData.certificateType}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, certificateType: e.target.value }))
@@ -703,8 +703,8 @@ const CertificateManagement = () => {
 
           {/* Search, Filter, Export, New Request Bar */}
           <div className="cert-toolbar">
-            <div className="cert-search-box">
-              <Search3DIcon className="cert-search-icon" size={17} />
+            <div className="cert-search-box app-search-field">
+              <Search3DIcon className="cert-search-icon app-search-field__icon" size={17} />
               <input
                 type="text"
                 placeholder="Search by certificate no., admission no., or student name..."
@@ -769,7 +769,7 @@ const CertificateManagement = () => {
             <div className="cert-filters-drawer">
               <div className="cert-filter-item">
                 <label>Status:</label>
-                <select
+                <select className="app-select"
                   value={selectedStatusFilter}
                   onChange={(e) => {
                     setSelectedStatusFilter(e.target.value);
@@ -787,7 +787,7 @@ const CertificateManagement = () => {
 
               <div className="cert-filter-item">
                 <label>Certificate Type:</label>
-                <select
+                <select className="app-select"
                   value={selectedTypeFilter}
                   onChange={(e) => {
                     setSelectedTypeFilter(e.target.value);

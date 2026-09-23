@@ -353,21 +353,21 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
           </div>
           <div className="att-filter-item">
             <label>Board</label>
-            <select value={selectedBoard} onChange={(e) => setSelectedBoard(e.target.value)}>
+            <select className="app-select" value={selectedBoard} onChange={(e) => setSelectedBoard(e.target.value)}>
               <option value="BIEAP">BIEAP</option>
               <option value="CBSE">CBSE</option>
             </select>
           </div>
           <div className="att-filter-item">
             <label>Academic Year</label>
-            <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
+            <select className="app-select" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
               <option value="2026-2027">2026–2027</option>
               <option value="2025-2026">2025–2026</option>
             </select>
           </div>
           <div className="att-filter-item">
             <label>Academic Level</label>
-            <select value={selectedLevel} onChange={(e) => handleLevelChange(e.target.value)}>
+            <select className="app-select" value={selectedLevel} onChange={(e) => handleLevelChange(e.target.value)}>
               <option value="">All Levels</option>
               <option value="1st Year">1st Year</option>
               <option value="2nd Year">2nd Year</option>
@@ -375,7 +375,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
           </div>
           <div className="att-filter-item">
             <label>Group</label>
-            <select value={selectedGroup} onChange={(e) => handleGroupChange(e.target.value)}>
+            <select className="app-select" value={selectedGroup} onChange={(e) => handleGroupChange(e.target.value)}>
               <option value="">All Groups</option>
               <option value="MPC">MPC</option>
               <option value="BIPC">BIPC</option>
@@ -386,7 +386,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
           </div>
           <div className="att-filter-item">
             <label>Section</label>
-            <select value={selectedSection} onChange={(e) => handleSectionChange(e.target.value)}>
+            <select className="app-select" value={selectedSection} onChange={(e) => handleSectionChange(e.target.value)}>
               <option value="">All Sections</option>
               <option value="Section A">Section A</option>
               <option value="Section B">Section B</option>
@@ -394,7 +394,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
           </div>
           <div className="att-filter-item">
             <label>Attendance Status</label>
-            <select value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
+            <select className="app-select" value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
               <option value="All">All Statuses</option>
               <option value="Present">Present</option>
               <option value="Absent">Absent</option>
@@ -405,8 +405,8 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
           </div>
           <div className="att-filter-item search-filter">
             <label>Search Student</label>
-            <div className="att-search-input-wrap">
-              <Search3DIcon size={14} className="att-search-icon" />
+            <div className="att-search-input-wrap app-search-field">
+              <Search3DIcon size={14} className="att-search-icon app-search-field__icon" />
               <input
                 type="text"
                 placeholder="Search Name, Admission No, Roll No..."

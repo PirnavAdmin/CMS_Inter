@@ -260,12 +260,6 @@
 }
 
 .faculty-select-pill select {
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--faculty-primary-dark);
   cursor: pointer;
 }
 
@@ -740,9 +734,7 @@
   color: var(--faculty-text);
 }
 
-.faculty-form-group input,
-.faculty-form-group select,
-.faculty-form-group textarea {
+.faculty-form-group input, .faculty-form-group textarea {
   padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--faculty-border);
@@ -753,9 +745,11 @@
   transition: border-color 0.2s;
 }
 
-.faculty-form-group input:focus,
-.faculty-form-group select:focus,
-.faculty-form-group textarea:focus {
+.faculty-form-group select {
+  transition: border-color 0.2s;
+}
+
+.faculty-form-group input:focus, .faculty-form-group textarea:focus {
   border-color: var(--faculty-primary);
 }
 

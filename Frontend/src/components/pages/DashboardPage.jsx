@@ -1238,7 +1238,7 @@ export default function DashboardPage() {
               <div className="dashboard-header-select-wrap">
                 <span className="dashboard-select-label">View By:</span>
                 <select
-                  className="dashboard-header-dropdown"
+                  className="dashboard-header-dropdown app-select"
                   value={studentView}
                   onChange={(e) => setStudentView(e.target.value)}
                   aria-label="Select View By"
@@ -1394,7 +1394,7 @@ export default function DashboardPage() {
           <article className="dashboard-card dashboard-staff-attendance-card">
             <CardHeader title="Staff Attendance Overview (Today)">
               <select
-                className="dashboard-header-dropdown"
+                className="dashboard-header-dropdown app-select"
                 value={staffType}
                 onChange={(e) => setStaffType(e.target.value)}
                 aria-label="Staff Type"
