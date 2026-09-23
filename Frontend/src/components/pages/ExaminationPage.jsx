@@ -35,6 +35,42 @@ import "./ExaminationPage.css";
 
 const PAGE_SIZE = 5;
 
+// Use the shared table-row skeleton for the examination table's ten columns.
+const ExaminationTableSkeleton = () =>
+  Array.from({ length: PAGE_SIZE }, (_, index) => (
+    <SkeletonRow key={index} columns={10} />
+  ));
+
+/* Examination loading change log (2026-09-23):
+ * - Render the examination list when its own request finishes; unrelated master,
+ *   student and room requests no longer keep the table skeleton visible.
+ * - Start the list request first, load students/rooms together, and start the
+ *   program lookup alongside masters instead of after students and rooms.
+ * - Cancel initial master/student/room requests on cleanup, including React's
+ *   development effect replay, and ignore their late results.
+ * - Limit background schedule hydration to three requests at a time, retaining
+ *   all active examinations for the existing occupancy/conflict checks.
+ * Existing endpoints, normalization, mutations, UI markup and CSS are retained.
+ * These changes remove frontend waits; server/proxy response latency still
+ * requires Network Timing/backend measurements and is not fixed by this file.
+ */
+
+const settleWithConcurrency = async (items, limit, task, signal) => {
+  const results = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length && !signal.aborted) {
+      const index = next++;
+      try {
+        results[index] = { status: "fulfilled", value: await task(items[index]) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }));
+  return results;
+};
+
 import {
   ensureArray,
   unwrap,
@@ -1659,6 +1695,9 @@ const normalizeExamRecord = (e) => {
     programName: e?.programName || e?.program?.name || "",
     academicLevelName: e?.academicLevelName || e?.levelName || e?.academicLevel?.name || "",
     selectedSubjectIds,
+    // List/detail DTOs can omit allocations; distinguish omission from an
+    // explicitly empty selection so scheduling can retrieve the server scope.
+    needsSubjectSelection: rawSubjects == null && e?.groupSubjectSelections == null,
     groupSubjectSelections: e?.groupSubjectSelections || {},
     selectedSubjectDetails: ensureArray(e?.selectedSubjectDetails),
     groupProgramSelections: e?.groupProgramSelections || [],
@@ -1711,7 +1750,6 @@ export default function ExaminationPage() {
   const [exams, setExams] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const mutationRef = useRef(false);
-  const [loading, setLoading] = useState(false);
   const [examsLoading, setExamsLoading] = useState(false);
   const [examsError, setExamsError] = useState(null);
   const loadExamsAbortRef = useRef(null);
@@ -1779,8 +1817,8 @@ export default function ExaminationPage() {
       }
       // Concurrently fetch schedule rows for active examinations to ensure room/hall occupancy is fully known
       const activeExams = normalized.filter((e) => ["DRAFT", "SCHEDULED"].includes(e.status));
-      Promise.allSettled(
-        activeExams.map((e) =>
+      settleWithConcurrency(
+        activeExams, 3, (e) =>
           apiClient.get(`/api/v1/examinations/${e.id}/schedules`, { signal }).then((res) => {
             const sRaw = unwrap(res);
             const fallbackGid = e.groupIds?.[0] || e.groupId;
@@ -1788,8 +1826,8 @@ export default function ExaminationPage() {
               ...normalizeScheduleRecord(entry, fallbackGid, e, [], []),
               examId: e.id,
             }));
-          }).catch(() => [])
-        )
+          }),
+        signal
       ).then((results) => {
         if (signal.aborted) return;
         const fetchedSchedules = results
@@ -1817,13 +1855,14 @@ export default function ExaminationPage() {
   }, [showToast]);
 
   // Robust Student Fetching & Enrichment from Students, Admissions, and Active Endpoints
-  const fetchStudentsList = useCallback(async () => {
+  const fetchStudentsList = useCallback(async (signal) => {
     try {
       const [studentsRes, admissionsRes, activeStudentsRes] = await Promise.allSettled([
-        apiClient.get("/api/v1/students"),
-        apiClient.get("/api/v1/student-admissions"),
-        apiClient.get("/api/v1/students/active"),
+        apiClient.get("/api/v1/students", { signal }),
+        apiClient.get("/api/v1/student-admissions", { signal }),
+        apiClient.get("/api/v1/students/active", { signal }),
       ]);
+      if (signal?.aborted) return [];
 
       const rawStudents = studentsRes.status === "fulfilled" ? unwrap(studentsRes.value) : [];
       const rawAdmissions = admissionsRes.status === "fulfilled" ? unwrap(admissionsRes.value) : [];
@@ -1920,7 +1959,7 @@ export default function ExaminationPage() {
   }, []);
 
   // Robust Room & Exam Hall Fetching via GET /api/v1/rooms
-  const fetchRoomsList = useCallback(async (filters = {}) => {
+  const fetchRoomsList = useCallback(async (filters = {}, signal) => {
     try {
       const params = {};
       if (filters?.building) params.Building = filters.building;
@@ -1932,9 +1971,11 @@ export default function ExaminationPage() {
       if (filters?.search || filters?.searchTerm) params.SearchTerm = filters.search || filters.searchTerm;
 
       const response = await apiClient.get("/api/v1/rooms", {
+        signal,
         params: Object.keys(params).length ? params : undefined,
       });
 
+      if (signal?.aborted) return [];
       const rawRoomsList = unwrap(response);
       const seenKeys = new Set();
       const normalizedRooms = [];
@@ -1990,6 +2031,7 @@ export default function ExaminationPage() {
       setRooms(normalizedRooms);
       return normalizedRooms;
     } catch (e) {
+      if (signal?.aborted) return [];
       console.warn("fetchRoomsList encountered an issue:", e);
       return [];
     }
@@ -1998,27 +2040,31 @@ export default function ExaminationPage() {
   // 1. Initial Mount: Active Boards, Patterns, Exam Types, Rooms, Faculty, Academic Levels, Groups, Students
   useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
+    const { signal } = controller;
     const fetchInitialMasterData = async () => {
-      setLoading(true);
       try {
-        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, groupsRes, subjectsRes] =
+        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, groupsRes, subjectsRes, programsRes] =
           await Promise.allSettled([
-            apiClient.get("/api/v1/boards/active").catch(() => apiClient.get("/api/v1/boards")),
-            apiClient.get("/api/v1/academic-years").catch(() => null),
-            apiClient.get("/api/v1/examinations/patterns"),
-            apiClient.get("/api/v1/examinations/types"),
-            apiClient.get("/api/v1/staff", { params: { staffType: "Teaching" } }),
-            apiClient.get("/api/v1/academic-levels"),
-            apiClient.get("/api/v1/groups"),
-            apiClient.get("/api/v1/subjects").catch(() => null),
+            apiClient.get("/api/v1/boards/active", { signal }).catch((error) => {
+              if (signal.aborted) throw error;
+              return apiClient.get("/api/v1/boards", { signal });
+            }),
+            apiClient.get("/api/v1/academic-years", { signal }).catch(() => null),
+            apiClient.get("/api/v1/examinations/patterns", { signal }),
+            apiClient.get("/api/v1/examinations/types", { signal }),
+            apiClient.get("/api/v1/staff", { signal, params: { staffType: "Teaching" } }),
+            apiClient.get("/api/v1/academic-levels", { signal }),
+            apiClient.get("/api/v1/groups", { signal }),
+            apiClient.get("/api/v1/subjects", { signal }).catch(() => null),
+            apiClient.get("/api/v1/programs", { signal }),
           ]);
 
         if (!isMounted) return;
 
-        // Fetch students and enrich with admissions
-        await fetchStudentsList();
-        // Fetch active classrooms and examination halls
-        await fetchRoomsList();
+        // Independent enrichment must not delay publishing master data.
+        void fetchStudentsList(signal);
+        void fetchRoomsList({}, signal);
 
         if (boardsRes.status === "fulfilled") {
           const rawBoards = unwrap(boardsRes.value);
@@ -2118,7 +2164,8 @@ export default function ExaminationPage() {
           }
 
           try {
-            const progsRes = await apiClient.get("/api/v1/programs");
+            if (programsRes.status === "rejected") throw programsRes.reason;
+            const progsRes = programsRes.value;
             const rawProgs = unwrap(progsRes);
             if (Array.isArray(rawProgs) && rawProgs.length > 0) {
               setPrograms((prev) => {
@@ -2169,16 +2216,15 @@ export default function ExaminationPage() {
           );
         }
       } catch (err) {
-        showToast("Failed to load initial master data.", "error");
-      } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) showToast("Failed to load initial master data.", "error");
       }
     };
 
-    fetchInitialMasterData();
     loadExaminations();
+    fetchInitialMasterData();
     return () => {
       isMounted = false;
+      controller.abort();
       if (loadExamsAbortRef.current) {
         loadExamsAbortRef.current.abort();
       }
@@ -2236,6 +2282,28 @@ export default function ExaminationPage() {
   };
 
   const currentExam = exams.find((e) => String(e.id) === String(examId));
+
+  useEffect(() => {
+    if (!currentExam?.needsSubjectSelection || !isRegularExamination(currentExam)) return;
+    const controller = new AbortController();
+    const selectedId = currentExam.id;
+    apiClient.get(`/api/v1/examinations/${selectedId}/eligible-subjects`, {
+      signal: controller.signal,
+    }).then((response) => {
+      if (controller.signal.aborted) return;
+      const subjectIds = [...new Set(unwrap(response)
+        .map((subject) => normalizeId(subject.subjectId ?? subject.id))
+        .filter(Boolean))];
+      setExams((prev) => prev.map((item) => item.id === selectedId
+        ? { ...item, selectedSubjectIds: subjectIds, needsSubjectSelection: false }
+        : item));
+    }).catch((error) => {
+      if (!controller.signal.aborted) {
+        showToast(getApiErrorMessage(error) || "Failed to load examination subjects.", "error");
+      }
+    });
+    return () => controller.abort();
+  }, [currentExam, showToast]);
 
   // Preserves all draft schedules when navigating back to Examinations list
   const handleBackFromSchedule = () => {
@@ -2810,7 +2878,7 @@ export default function ExaminationPage() {
                 </tr>
               </thead>
               <tbody>
-                {examsLoading || loading ? (
+                {examsLoading ? (
                   <ExaminationTableSkeleton />
                 ) : shownExams.length ? (
                   shownExams.map((e) => (
@@ -3094,7 +3162,7 @@ export default function ExaminationPage() {
             groups={groups}
             programs={programs}
             students={students}
-            onRefreshStudents={fetchStudentsList}
+            onRefreshStudents={() => fetchStudentsList()}
             rooms={rooms}
             onRefreshRooms={fetchRoomsList}
             setSchedules={setSchedules}
@@ -5388,7 +5456,9 @@ function ScheduleSection({
               name: s.subjectName ?? s.name,
               code: s.subjectCode ?? s.code ?? "",
               academicLevelIds: (s.academicLevelIds || (s.academicLevelId ? [s.academicLevelId] : [])).map(normalizeId),
-              groupIds: (s.groupIds || (s.groupId ? [s.groupId] : (selectedGroupId ? [selectedGroupId] : []))).map(normalizeId),
+              groupIds: (ensureArray(s.groupIds).length
+                ? ensureArray(s.groupIds)
+                : s.groupId ? [s.groupId] : [selectedGroupId]).map(normalizeId),
               programIds: (s.programIds || (s.programId ? [s.programId] : [])).map(normalizeId),
               facultyIds: (s.facultyIds || (s.facultyId ? [s.facultyId] : [])).map(normalizeId),
               isActive: s.isActive !== false,
