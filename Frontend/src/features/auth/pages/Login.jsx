@@ -82,7 +82,7 @@ export default function Login() {
       const userRole = String(result.user.role || "").toLowerCase();
       if (userRole === "faculty" || userRole === "teacher" || userRole === "hod" || userRole.includes("faculty") || userRole.includes("lecturer")) {
         navigate("/faculty-dashboard", { replace: true });
-      } else if (userRole === "driver") {
+      } else if (userRole === "driver" || userRole.includes("driver")) {
         navigate("/driver", { replace: true });
       } else {
         navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
