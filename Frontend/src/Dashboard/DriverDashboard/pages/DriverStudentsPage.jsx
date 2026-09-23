@@ -32,20 +32,18 @@ export default function DriverStudentsPage() {
   const fetchStudentsAndRoute = async () => {
     try {
       setIsLoading(true);
-      const [studentsRes, routeRes] = await Promise.all([
-        getStudents(),
-        getRoute()
-      ]);
+      const studentsRes = await getStudents();
       
-      const fetchedStudents = studentsRes.data?.students || (Array.isArray(studentsRes.data) ? studentsRes.data : []);
+      const resData = studentsRes.data?.data || {};
+      const fetchedStudents = resData.students || [];
       setStudents(fetchedStudents);
 
-      const fetchedRoute = routeRes.data?.route || { stops: [
-        { name: "Green Park" }, { name: "City Center" }, { name: "University Gate" }
-      ]};
-      setRouteDetails(fetchedRoute);
-      if (fetchedRoute.stops && fetchedRoute.stops.length > 0) {
-        setSelectedBatchStop(fetchedRoute.stops[0].name);
+      const routeStops = resData.routeStops || [];
+      const stopsArray = routeStops.map(stop => typeof stop === 'string' ? { name: stop } : stop);
+      setRouteDetails({ stops: stopsArray });
+      
+      if (stopsArray.length > 0) {
+        setSelectedBatchStop(stopsArray[0].name);
       }
     } catch (err) {
       console.error(err);

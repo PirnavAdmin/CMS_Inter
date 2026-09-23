@@ -37,27 +37,36 @@ export default function DriverDashboard() {
   // Global shared state for students & active trip
   const [students, setStudents] = useState([]);
   const [activeTripState, setActiveTripState] = useState({
-    morningTripStatus: "In Progress",
+    morningTripStatus: "Pending",
     eveningTripStatus: "Pending",
   });
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      try {
-        const { getStudents, getTrips } = await import("../../api/transportDriverApi.js");
-        const res = await getStudents();
-        if (res.data?.students) {
-          setStudents(res.data.students);
-        } else if (Array.isArray(res.data)) {
-          setStudents(res.data);
-        }
-        // Optionally fetch active trip state if needed:
-        // const tripsRes = await getTrips();
-        // setActiveTripState(tripsRes.data.activeTripState);
-      } catch (err) {
-        console.error("Failed to load global driver data", err);
+  const fetchInitialData = async () => {
+    try {
+      const { getStudents, getTrips } = await import("../../api/transportDriverApi.js");
+      const res = await getStudents();
+      if (res.data?.students) {
+        setStudents(res.data.students);
+      } else if (Array.isArray(res.data)) {
+        setStudents(res.data);
       }
-    };
+      
+      const tripsRes = await getTrips();
+      if (tripsRes.data?.success) {
+        const { morningTrip, eveningTrip } = tripsRes.data.data;
+        if (morningTrip || eveningTrip) {
+          setActiveTripState({
+            morningTripStatus: morningTrip?.status || "Pending",
+            eveningTripStatus: eveningTrip?.status || "Pending",
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load global driver data", err);
+    }
+  };
+
+  useEffect(() => {
     fetchInitialData();
   }, []);
 
@@ -108,9 +117,7 @@ export default function DriverDashboard() {
       activeTab={activeTab}
       onSelectTab={handleSelectTab}
       onLogout={handleLogout}
-      onSyncData={() => {
-        // Mock sync
-      }}
+      onSyncData={fetchInitialData}
     >
       {activeTab === "home" && (
         <DriverHomePage
