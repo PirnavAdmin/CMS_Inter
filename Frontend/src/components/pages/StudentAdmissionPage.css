@@ -528,13 +528,6 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-.cms-admission-filters .cms-field select {
-  height: 36px;
-  min-height: 36px;
-  padding-right: 24px;
-  padding-top: 0;
-  padding-bottom: 0;
-}
 .cms-admission-export-control { position: relative; flex: 0 0 auto; margin-left: auto; }
 .cms-admission-export-btn { height: 36px; min-height: 36px; padding-inline: 10px; }
 .cms-admission-export-menu {

@@ -887,14 +887,14 @@ function FacultyDashboard() {
       <div style={{ display: "flex", gap: "12px", marginBottom: "16px", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
           <span style={{ fontSize: "12px", fontWeight: 700 }}>Board:</span>
-          <select value={selectedBoard} onChange={(e) => setSelectedBoard(e.target.value)} style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--faculty-border)", fontSize: "12px" }}>
+          <select className="app-select" value={selectedBoard} onChange={(e) => setSelectedBoard(e.target.value)} >
             <option value="BIEAP">BIEAP</option>
             <option value="TSBIE">TSBIE</option>
             <option value="CBSE">CBSE</option>
           </select>
 
           <span style={{ fontSize: "12px", fontWeight: 700, marginLeft: "8px" }}>Academic Year:</span>
-          <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} style={{ padding: "4px 8px", borderRadius: "6px", border: "1px solid var(--faculty-border)", fontSize: "12px" }}>
+          <select className="app-select" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} >
             <option value="2025-2026">2025-2026</option>
             <option value="2024-2025">2024-2025</option>
           </select>
@@ -1063,7 +1063,7 @@ function FacultyDashboard() {
             </div>
             <div className="faculty-form-group">
               <label>Class Section</label>
-              <select value={attendanceSection} onChange={(e) => setAttendanceSection(e.target.value)}>
+              <select className="app-select" value={attendanceSection} onChange={(e) => setAttendanceSection(e.target.value)}>
                 <option value="c1">MPC 1st Year — Section A</option>
                 <option value="c2">MPC 2nd Year — Section B</option>
               </select>
@@ -1229,14 +1229,14 @@ function FacultyDashboard() {
           <div className="faculty-form-grid-3">
             <div className="faculty-form-group">
               <label>Class & Section</label>
-              <select defaultValue="MPC 1st Year Sec A">
+              <select className="app-select" defaultValue="MPC 1st Year Sec A">
                 <option value="MPC 1st Year Sec A">MPC 1st Year — Sec A</option>
                 <option value="MPC 2nd Year Sec B">MPC 2nd Year — Sec B</option>
               </select>
             </div>
             <div className="faculty-form-group">
               <label>Assessment Type</label>
-              <select defaultValue="Unit Test 2">
+              <select className="app-select" defaultValue="Unit Test 2">
                 <option value="Unit Test 1">Unit Test 1</option>
                 <option value="Unit Test 2">Unit Test 2</option>
                 <option value="Mid Term">Mid Term Exam</option>
@@ -1673,7 +1673,7 @@ function FacultyDashboard() {
             <form onSubmit={handleLeaveSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div className="faculty-form-group">
                 <label>Leave Type *</label>
-                <select value={leaveForm.type} onChange={(e) => setLeaveForm({ ...leaveForm, type: e.target.value })}>
+                <select className="app-select" value={leaveForm.type} onChange={(e) => setLeaveForm({ ...leaveForm, type: e.target.value })}>
                   <option value="Casual Leave (CL)">Casual Leave (CL)</option>
                   <option value="Sick Leave (SL)">Sick Leave (SL)</option>
                   <option value="Earned Leave (EL)">Earned Leave (EL)</option>
@@ -1775,7 +1775,7 @@ function FacultyDashboard() {
             <form onSubmit={handleReimbSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div className="faculty-form-group">
                 <label>Reimbursement Category *</label>
-                <select value={reimbForm.type} onChange={(e) => setReimbForm({ ...reimbForm, type: e.target.value })}>
+                <select className="app-select" value={reimbForm.type} onChange={(e) => setReimbForm({ ...reimbForm, type: e.target.value })}>
                   <option value="Books & Journals">Books & Journals</option>
                   <option value="Academic Conference">Academic Conference</option>
                   <option value="Official Travel / Fuel">Official Travel / Fuel</option>
@@ -2127,8 +2127,8 @@ function FacultyDashboard() {
                 <Menu size={20} />
               </button>
 
-              <div className="faculty-search-box">
-                <Search3DIcon size={15} />
+              <div className="faculty-search-box app-search-field">
+                <Search3DIcon className="app-search-field__icon" size={15} />
                 <input
                   type="text"
                   placeholder="Search classes, students, notices, payslips..."
@@ -2142,7 +2142,7 @@ function FacultyDashboard() {
               {/* BOARD SELECTOR */}
               <div className="faculty-select-pill">
                 <span>Board:</span>
-                <select value={selectedBoard} onChange={(e) => setSelectedBoard(e.target.value)}>
+                <select className="app-select" value={selectedBoard} onChange={(e) => setSelectedBoard(e.target.value)}>
                   <option value="BIEAP">BIEAP</option>
                   <option value="TSBIE">TSBIE</option>
                   <option value="CBSE">CBSE</option>
@@ -2154,7 +2154,7 @@ function FacultyDashboard() {
               {/* ACADEMIC YEAR SELECTOR */}
               <div className="faculty-select-pill">
                 <span>Year:</span>
-                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
+                <select className="app-select" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
                   <option value="2025-2026">2025-2026</option>
                   <option value="2024-2025">2024-2025</option>
                   <option value="2023-2024">2023-2024</option>

@@ -923,8 +923,8 @@ export default function TemplatesPage() {
           <>
             {/* Common Top Toolbar */}
             <div className="templates-toolbar">
-              <div className="templates-search-box">
-                <Search3DIcon size={15} className="templates-search-icon" />
+              <div className="templates-search-box app-search-field">
+                <Search3DIcon size={15} className="templates-search-icon app-search-field__icon" />
                 <input
                   type="text"
                   placeholder="Search templates..."
@@ -942,7 +942,7 @@ export default function TemplatesPage() {
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="templates-select-filter"
+                  className="templates-select-filter app-select"
                 >
                   <option value="All Categories">All Categories</option>
                   <option value="Student Certificate">Student Certificate</option>
@@ -956,7 +956,7 @@ export default function TemplatesPage() {
                   <select
                     value={selectedCertType}
                     onChange={(e) => setSelectedCertType(e.target.value)}
-                    className="templates-select-filter"
+                    className="templates-select-filter app-select"
                   >
                     <option value="All Certificate Types">All Certificate Types</option>
                     <option value="Bonafide">Bonafide</option>
@@ -970,7 +970,7 @@ export default function TemplatesPage() {
                 <select
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="templates-select-filter"
+                  className="templates-select-filter app-select"
                 >
                   <option value="All">All Status</option>
                   <option value="Active">Active</option>
@@ -981,7 +981,7 @@ export default function TemplatesPage() {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="templates-select-filter"
+                  className="templates-select-filter app-select"
                 >
                   <option value="Default Order">Default Order (1-5)</option>
                   <option value="Recently Updated">Recently Updated</option>
@@ -1530,7 +1530,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                   </div>
                   <div className="form-group">
                     <label>Font Family</label>
-                    <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} className="cms-input">
+                    <select value={fontFamily} onChange={(e) => setFontFamily(e.target.value)} className="cms-input app-select">
                       <option value="Georgia, serif">Georgia Serif</option>
                       <option value="'Cinzel', serif">Cinzel Classic</option>
                       <option value="Arial, sans-serif">Arial Sans</option>
@@ -1540,7 +1540,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                   </div>
                   <div className="form-group">
                     <label>Font Size</label>
-                    <select value={fontSize} onChange={(e) => setFontSize(e.target.value)} className="cms-input">
+                    <select value={fontSize} onChange={(e) => setFontSize(e.target.value)} className="cms-input app-select">
                       <option value="12px">12px Extra Small</option>
                       <option value="13.5px">13.5px Standard</option>
                       <option value="15px">15px Large</option>
@@ -1584,7 +1584,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                   </div>
                   <div className="form-group">
                     <label>Seal Stamp Type</label>
-                    <select value={seal} onChange={(e) => setSeal(e.target.value)} className="cms-input">
+                    <select value={seal} onChange={(e) => setSeal(e.target.value)} className="cms-input app-select">
                       <option value="Principal Seal">Principal Seal</option>
                       <option value="College Seal">College Seal</option>
                       <option value="Board Seal">Board Seal</option>
@@ -1607,7 +1607,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                   </label>
                   <div className="form-group margin-top">
                     <label>QR Placement</label>
-                    <select value={qrPosition} onChange={(e) => setQrPosition(e.target.value)} className="cms-input">
+                    <select value={qrPosition} onChange={(e) => setQrPosition(e.target.value)} className="cms-input app-select">
                       <option value="Bottom Left">Bottom Left</option>
                       <option value="Bottom Right">Bottom Right</option>
                       <option value="Top Right">Top Right</option>
@@ -1629,7 +1629,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                   </div>
                   <div className="form-group">
                     <label>Signature Position</label>
-                    <select value={signaturePos} onChange={(e) => setSignaturePos(e.target.value)} className="cms-input">
+                    <select value={signaturePos} onChange={(e) => setSignaturePos(e.target.value)} className="cms-input app-select">
                       <option value="Bottom Right">Bottom Right</option>
                       <option value="Bottom Left">Bottom Left</option>
                       <option value="Bottom Center">Bottom Center</option>
@@ -1637,7 +1637,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                   </div>
                   <div className="form-group">
                     <label>Signature Style</label>
-                    <select value={signatureStyle} onChange={(e) => setSignatureStyle(e.target.value)} className="cms-input">
+                    <select value={signatureStyle} onChange={(e) => setSignatureStyle(e.target.value)} className="cms-input app-select">
                       <option value="Cursive Hand">Cursive Handwriting</option>
                       <option value="Calligraphy Script">Calligraphy Script</option>
                       <option value="Formal Sans">Formal Sans</option>
@@ -1691,14 +1691,14 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
                   <h3>Layout & Toggles</h3>
                   <div className="form-group">
                     <label>Orientation</label>
-                    <select value={orientation} onChange={(e) => setOrientation(e.target.value)} className="cms-input">
+                    <select value={orientation} onChange={(e) => setOrientation(e.target.value)} className="cms-input app-select">
                       <option value="Landscape">Landscape</option>
                       <option value="Portrait">Portrait</option>
                     </select>
                   </div>
                   <div className="form-group">
                     <label>Page Size</label>
-                    <select value={pageSize} onChange={(e) => setPageSize(e.target.value)} className="cms-input">
+                    <select value={pageSize} onChange={(e) => setPageSize(e.target.value)} className="cms-input app-select">
                       <option value="A4">A4 Standard</option>
                       <option value="A5">A5 Compact</option>
                       <option value="Letter">Letter</option>
@@ -1870,7 +1870,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
               </div>
               <div className="form-group">
                 <label>Category</label>
-                <select value={certType} onChange={(e) => setCertType(e.target.value)} className="cms-input">
+                <select value={certType} onChange={(e) => setCertType(e.target.value)} className="cms-input app-select">
                   <option value="Student Certificate">Student Certificate</option>
                   <option value="Academic">Academic</option>
                   <option value="HR">HR</option>
@@ -1878,14 +1878,14 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
               </div>
               <div className="form-group">
                 <label>Page Size</label>
-                <select value={pageSize} onChange={(e) => setPageSize(e.target.value)} className="cms-input">
+                <select value={pageSize} onChange={(e) => setPageSize(e.target.value)} className="cms-input app-select">
                   <option value="A4">A4 (Portrait / Landscape)</option>
                   <option value="A5">A5</option>
                 </select>
               </div>
               <div className="form-group">
                 <label>Institution Seal</label>
-                <select value={seal} onChange={(e) => setSeal(e.target.value)} className="cms-input">
+                <select value={seal} onChange={(e) => setSeal(e.target.value)} className="cms-input app-select">
                   <option value="Principal Seal">Principal Seal</option>
                   <option value="College Seal">College Seal</option>
                   <option value="Board Seal">Board Seal</option>
@@ -1980,7 +1980,7 @@ function ReportEditorScreen({ template, onSave, notify }) {
             </div>
             <div className="form-group">
               <label>Export Format</label>
-              <select value={format} onChange={(e) => setFormat(e.target.value)} className="cms-input">
+              <select value={format} onChange={(e) => setFormat(e.target.value)} className="cms-input app-select">
                 <option value="Excel">Excel Spreadsheet (.xlsx)</option>
                 <option value="PDF">PDF Document (.pdf)</option>
                 <option value="Word">Word Document (.docx)</option>
@@ -2196,7 +2196,7 @@ function UploadTemplateTabSection({ onUploaded, notify }) {
           <div className="form-row">
             <div className="form-group">
               <label>Template Type *</label>
-              <select value={templateType} onChange={(e) => setTemplateType(e.target.value)} className="cms-input">
+              <select value={templateType} onChange={(e) => setTemplateType(e.target.value)} className="cms-input app-select">
                 <option value="Certificate">Certificate</option>
                 <option value="Report">Report</option>
                 <option value="Letter">Letter</option>
@@ -2205,7 +2205,7 @@ function UploadTemplateTabSection({ onUploaded, notify }) {
             </div>
             <div className="form-group">
               <label>Category *</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="cms-input">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="cms-input app-select">
                 <option value="Student Certificate">Student Certificate</option>
                 <option value="Academic">Academic</option>
                 <option value="Report">Report</option>
@@ -2222,7 +2222,7 @@ function UploadTemplateTabSection({ onUploaded, notify }) {
             </div>
             <div className="form-group">
               <label>Applicable Module *</label>
-              <select value={applicableModule} onChange={(e) => setApplicableModule(e.target.value)} className="cms-input">
+              <select value={applicableModule} onChange={(e) => setApplicableModule(e.target.value)} className="cms-input app-select">
                 <option value="Certificates">Certificates</option>
                 <option value="Reports">Reports</option>
                 <option value="Staff Management">Staff Management</option>
@@ -2354,7 +2354,7 @@ function AddTemplateWizardScreen({ onAdd }) {
               {type === "Certificate" && (
                 <div className="form-group">
                   <label>Base Template / Duplicate From</label>
-                  <select value={duplicateFrom} onChange={(e) => setDuplicateFrom(e.target.value)} className="cms-input">
+                  <select value={duplicateFrom} onChange={(e) => setDuplicateFrom(e.target.value)} className="cms-input app-select">
                     <option value="none">Blank Certificate Template</option>
                     {DEFAULT_CERTIFICATE_TEMPLATES.map((t) => (
                       <option key={t.id} value={t.id}>Duplicate {t.name}</option>
@@ -2364,7 +2364,7 @@ function AddTemplateWizardScreen({ onAdd }) {
               )}
               <div className="form-group">
                 <label>Category</label>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="cms-input">
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="cms-input app-select">
                   <option value="Student Certificate">Student Certificate</option>
                   <option value="Academic">Academic</option>
                   <option value="Report">Report</option>

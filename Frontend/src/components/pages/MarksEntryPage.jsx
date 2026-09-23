@@ -3711,7 +3711,7 @@ function SearchableSelect({
       <div className={`cms-custom-select ${open ? "is-open" : ""}`} ref={ref}>
         <button
           type="button"
-          className="cms-custom-select-trigger"
+          className="cms-custom-select-trigger app-select-control"
           role="combobox"
           aria-label={label}
           aria-labelledby={!hideLabel ? `${id}-label` : undefined}
@@ -3726,8 +3726,8 @@ function SearchableSelect({
           <span className="cms-select-arrow">⌄</span>
         </button>
         {open && (
-          <div className="cms-custom-select-menu">
-            <input
+          <div className="cms-custom-select-menu app-select-panel">
+            <span className="app-search-field app-search-field--icon"><input
               autoFocus
               className="cms-custom-select-search"
               value={query}
@@ -3737,13 +3737,13 @@ function SearchableSelect({
               }}
               onKeyDown={keyDown}
               placeholder="Search..."
-            />
+            /></span>
             <div className="cms-custom-select-options" id={listId} role="listbox">
               <button
                 type="button"
                 role="option"
                 aria-selected={!value}
-                className="cms-custom-select-option"
+                className="cms-custom-select-option app-select-option"
                 title={`Select ${label}`}
                 onClick={() => {
                   onChange("");
@@ -3760,9 +3760,9 @@ function SearchableSelect({
                     role="option"
                     aria-selected={eq(item.id, value)}
                     title={item.name}
-                    className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${
+                    className={(`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${
                       highlight === index ? "highlighted" : ""
-                    }`}
+                    }`) + " app-select-option"}
                     key={item.id}
                     onMouseEnter={() => setHighlight(index)}
                     onClick={() => {
@@ -3799,7 +3799,7 @@ const Num = ({ value, disabled, onChange }) => (
 );
 
 const SearchBox = ({ value, onChange }) => (
-  <div className="cms-search-wrap">
+  <div className="cms-search-wrap app-search-field app-search-field--icon">
     <input
       className="cms-search-input cms-search-input-plain"
       value={value}
@@ -3960,7 +3960,7 @@ function DynamicPagination({ page, pageSize = 5, setPageSize, totalItems = 0, se
           <div className="cms-sec-page-size-wrap">
             <span className="cms-sec-page-size-label">Per page:</span>
             <select
-              className="cms-sec-page-size-select"
+              className="cms-sec-page-size-select app-select"
               aria-label="Records per page"
               value={isCustom ? "custom" : pageSize}
               onChange={(e) => {

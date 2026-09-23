@@ -497,8 +497,8 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
           <div className="ns-tab-body">
             {/* SEARCH & PAGE SIZE BAR */}
             <div className="ns-table-tools">
-              <div className="ns-search-box">
-                <Search3DIcon size={16} className="ns-search-icon" />
+              <div className="ns-search-box app-search-field">
+                <Search3DIcon size={16} className="ns-search-icon app-search-field__icon" />
                 <input
                   type="text"
                   placeholder={`Search generated ${series.name.toLowerCase()} history...`}
@@ -520,7 +520,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
 
               <div className="ns-table-page-size">
                 <span>Show</span>
-                <select
+                <select className="app-select"
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
@@ -940,7 +940,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
                 <div className="ns-field-row-2">
                   <div className="ns-field">
                     <label>Number Length *</label>
-                    <select
+                    <select className="app-select"
                       value={formState.numberLength}
                       onChange={(e) => setFormState({ ...formState, numberLength: Number(e.target.value) })}
                     >

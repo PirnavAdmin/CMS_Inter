@@ -80,8 +80,6 @@
 .att-filter-card { display: grid; gap: 16px; }
 .att-filter-grid { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(180px, 1fr)); }
 .att-filter-grid select.is-placeholder { color: var(--cms-muted); font-weight: 500; }
-.att-filter-grid select:not(.is-placeholder) { color: var(--cms-text); }
-.att-filter-grid select option { color: var(--cms-text); font-weight: 400; }
 .att-staff-filter-grid .att-field:nth-child(2) { display: none; }
 .att-filter-action { display: flex; justify-content: flex-end; gap: 10px; }
 .att-filter-action .cms-btn { min-height: 42px; }
@@ -286,8 +284,7 @@
   font-size: 12px;
   font-weight: 650;
 }
-.att-field input,
-.att-field select {
+.att-field input {
   width: 100%;
   height: 41px;
   min-width: 0;
@@ -298,8 +295,12 @@
   color: var(--cms-text);
   font: inherit;
 }
-.att-field input:focus,
-.att-field select:focus {
+.att-field select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}
+.att-field input:focus {
   border-color: var(--cms-primary);
   outline: 3px solid var(--cms-primary-soft);
   outline-offset: 0;
@@ -835,7 +836,6 @@
   letter-spacing: 0.3px;
 }
 
-.att-filter-item select,
 .att-filter-item input[type="date"] {
   height: 34px;
   padding: 0 10px;
@@ -848,7 +848,6 @@
   outline: none;
 }
 
-.att-filter-item select:focus,
 .att-filter-item input:focus {
   border-color: var(--cms-primary);
 }
@@ -1637,7 +1636,7 @@
 .att-overview-record-head { margin-bottom: 10px; }
 .att-overview-records-card { display: grid; }
 .att-overview-month-selector { display: inline-flex; align-items: center; gap: 8px; width: fit-content; min-height: 38px; margin-bottom: 10px; padding: 0 10px; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-surface); color: var(--cms-primary); }
-.att-overview-month-selector select { min-height: 36px; padding: 7px 24px 7px 0; border: 0; outline: 0; background: transparent; color: var(--cms-text); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.att-overview-month-selector select { font: inherit; cursor: pointer; }
 .att-overview-records-card .cms-table th, .att-overview-records-card .cms-table td { padding: 9px 12px; font-size: 13px; }
 .att-overview-export { position: relative; }
 .att-overview-export > div { position: absolute; z-index: 2; top: calc(100% + 5px); right: 0; display: grid; min-width: 110px; padding: 4px; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-surface); box-shadow: var(--cms-shadow); }

@@ -1,0 +1,150 @@
+/* Shared search-field contract: the wrapper owns the only border and focus state.
+   Explicit resets also cover legacy module rules and inline input padding. */
+body .app-search-field.app-search-field {
+  display: flex !important;
+  align-items: center !important;
+  flex-direction: row !important;
+  gap: 8px !important;
+  position: relative;
+  box-sizing: border-box !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  padding: 0 12px !important;
+  border: 1px solid var(--cms-border) !important;
+  border-radius: 8px !important;
+  background: var(--cms-surface) !important;
+  color: var(--cms-text) !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+body .app-search-field.app-search-field:focus-within {
+  border-color: var(--cms-primary) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+body .app-search-field.app-search-field::before,
+body .app-search-field.app-search-field::after {
+  content: none !important;
+}
+
+/* Fields which previously had no icon use the same asset as Search3DIcon. */
+body .app-search-field.app-search-field--icon::before {
+  content: "" !important;
+  display: block;
+  position: static;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+  background: url("../../assets/navbar-3d/search.png") center / contain no-repeat;
+  pointer-events: none;
+}
+
+body .app-search-field.app-search-field > input:not([type="checkbox"]) {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  display: block !important;
+  position: static !important;
+  flex: 1 1 0% !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--cms-text) !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 20px !important;
+  text-indent: 0 !important;
+  transform: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+body .app-search-field.app-search-field > input::placeholder {
+  color: var(--cms-muted) !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 20px !important;
+  opacity: 1;
+}
+
+body .app-search-field > input::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+body .app-search-field.app-search-field > .app-search-field__icon,
+body .app-search-field.app-search-field > .cms-navbar-3d-icon {
+  display: block !important;
+  position: static !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+  object-fit: contain;
+  pointer-events: none;
+  color: var(--cms-muted);
+}
+
+body .app-search-field__icon > :is(svg, img) {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+/* Keep existing clear/toggle controls in the flow instead of over the text. */
+body .app-search-field.app-search-field > :is(button, svg):not(.app-search-field__icon) {
+  position: static !important;
+  flex-shrink: 0;
+  margin: 0;
+  transform: none !important;
+}
+
+body .app-search-field:has(> input:disabled) {
+  opacity: 0.65;
+}
+
+/* Toolbars must wrap before their filters squeeze the search input to zero. */
+body .app-search-toolbar {
+  flex-wrap: wrap !important;
+}
+
+/* Preserve validation feedback on the outer border, without an inner error ring. */
+body :is(.has-error, .has-field-error) .app-search-field.app-search-field,
+body .app-search-field.app-search-field:has(> input[aria-invalid="true"]) {
+  border-color: var(--cms-red, #ef4444) !important;
+}
+
+/* The subject picker can also contain selected chips; retain that behavior. */
+body .app-search-field.subject-compact-box {
+  height: auto !important;
+  flex-wrap: wrap;
+  padding-block: 4px !important;
+}
+body .app-search-field.subject-compact-box > input:not([type="checkbox"]) {
+  height: 30px !important;
+  min-width: 100px !important;
+}

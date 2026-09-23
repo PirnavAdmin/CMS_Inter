@@ -237,7 +237,7 @@
 .cert-bulk-search { position: relative; display: flex; align-items: center; min-width: 0; }
 .cert-bulk-search :is(svg, .cms-search-3d-icon) { position: absolute; left: 12px; z-index: 2; color: var(--cms-muted); pointer-events: none; }
 .cert-form-card .cert-bulk-search input { width: 100%; min-height: 36px; padding: 7px 11px 7px 36px; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-surface); color: var(--cms-text); font: inherit; font-size: 12px; }
-.cert-form-card .cert-bulk-filter-row select { width: 100%; min-width: 0; min-height: 36px; padding: 7px 30px 7px 10px; border: 1px solid var(--cms-border); border-radius: 8px; background-color: var(--cms-surface); color: var(--cms-text); font: inherit; font-size: 11px; font-weight: 600; }
+.cert-form-card .cert-bulk-filter-row select { width: 100%; min-width: 0; font: inherit; }
 .cert-bulk-select-actions { display: flex; align-items: center; justify-content: flex-start; gap: 8px; white-space: nowrap; }
 .cert-bulk-select-actions button { padding: 5px 9px; border: 1px solid var(--cms-border); border-radius: 7px; background: var(--cms-surface); color: var(--cms-primary); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .cert-bulk-select-actions button:disabled { cursor: not-allowed; opacity: .5; }
@@ -305,12 +305,7 @@
 [data-theme="dark"] .cert-admission-options,
 [data-theme="dark"] .cert-admission-options button { background: var(--cms-surface); color: var(--cms-text); }
 
-.cert-form-card .cms-field input,
-.cert-form-card .cms-field select,
-.cert-form-card .cms-field textarea,
-.cert-form-card .cms-field-group input,
-.cert-form-card .cms-field-group select,
-.cert-form-card .cms-field-group textarea {
+.cert-form-card .cms-field input, .cert-form-card .cms-field textarea, .cert-form-card .cms-field-group input, .cert-form-card .cms-field-group textarea {
   width: 100%;
   position: relative;
   z-index: 1;
@@ -327,15 +322,15 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
+.cert-form-card .cms-field select, .cert-form-card .cms-field-group select {
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
 .cert-form-card .cms-field select,
 .cert-form-card .cms-field-group select {
-  background-image: linear-gradient(45deg, transparent 50%, #566900 50%), linear-gradient(135deg, #566900 50%, transparent 50%);
-  background-position: calc(100% - 16px) calc(50% - 2px), calc(100% - 11px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
-  background-repeat: no-repeat;
-  padding-right: 38px;
-  appearance: none;
-  -webkit-appearance: none;
   -moz-appearance: none;
 }
 
@@ -347,8 +342,6 @@
 
 .cert-form-card .cert-type-select-control select {
   width: 100%;
-  padding-right: 40px;
-  background-image: none;
 }
 
 .cert-type-select-control > svg {
@@ -359,24 +352,18 @@
   pointer-events: none;
 }
 
-.cert-form-card .cms-field input:hover,
-.cert-form-card .cms-field select:hover,
-.cert-form-card .cms-field textarea:hover,
-.cert-form-card .cms-field-group input:hover,
-.cert-form-card .cms-field-group select:hover,
-.cert-form-card .cms-field-group textarea:hover {
+.cert-form-card .cms-field input:hover, .cert-form-card .cms-field textarea:hover, .cert-form-card .cms-field-group input:hover, .cert-form-card .cms-field-group textarea:hover {
   border-color: var(--cms-primary-border) !important;
   background: var(--cms-surface) !important;
   box-shadow: none;
   transform: none;
 }
 
-.cert-form-card .cms-field input:focus,
-.cert-form-card .cms-field select:focus,
-.cert-form-card .cms-field textarea:focus,
-.cert-form-card .cms-field-group input:focus,
-.cert-form-card .cms-field-group select:focus,
-.cert-form-card .cms-field-group textarea:focus {
+.cert-form-card .cms-field select:hover, .cert-form-card .cms-field-group select:hover {
+  transform: none;
+}
+
+.cert-form-card .cms-field input:focus, .cert-form-card .cms-field textarea:focus, .cert-form-card .cms-field-group input:focus, .cert-form-card .cms-field-group textarea:focus {
   outline: none;
   border-color: var(--cert-primary);
   box-shadow: 0 0 0 3px var(--cms-primary-soft);
@@ -399,12 +386,7 @@
   box-shadow: none;
 }
 
-.cert-page .cms-field.cert-readonly input,
-.cert-page .cms-field.cert-readonly select,
-.cert-page .cms-field.cert-readonly textarea,
-.cert-page .cms-field input[readonly],
-.cert-page .cms-field select[readonly],
-.cert-page .cms-field textarea[readonly] {
+.cert-page .cms-field.cert-readonly input, .cert-page .cms-field.cert-readonly textarea, .cert-page .cms-field input[readonly], .cert-page .cms-field textarea[readonly] {
   background: var(--cms-subtle) !important;
   border: 1px solid var(--cms-border) !important;
   color: var(--cms-muted) !important;
@@ -603,9 +585,7 @@
   padding: 10px 18px 16px;
 }
 
-.cert-records-filters select,
-.cert-records-date-range,
-.cert-records-date-range input {
+.cert-records-date-range, .cert-records-date-range input {
   min-width: 0;
   min-height: 40px;
   border: 1px solid var(--cms-border-strong);
@@ -616,7 +596,12 @@
   font-size: 13px;
 }
 
-.cert-records-filters select { width: 100%; padding: 0 34px 0 12px; }
+.cert-records-filters select {
+  min-width: 0;
+  font: inherit;
+}
+
+.cert-records-filters select { width: 100%; }
 
 .cert-records-date-range {
   display: grid;
@@ -769,36 +754,7 @@
   opacity: 0.9;
 }
 
-.cert-workflow-select option {
-  font-weight: 600;
-  color: var(--cert-text);
-  background: #ffffff;
-}
-
-.cert-workflow-select option:disabled {
-  color: #8F9789;
-  background: #F7F7F2;
-  font-weight: 500;
-}
-
-.cert-workflow-select option:not(:disabled) {
-  color: #111411;
-  background: #ffffff;
-  font-weight: 600;
-}
-
-.cms-overlay .cms-modal .cms-field input,
-.cms-overlay .cms-modal .cms-field select,
-.cms-overlay .cms-modal .cms-field textarea,
-.cms-overlay .cms-modal .cms-field-group input,
-.cms-overlay .cms-modal .cms-field-group select,
-.cms-overlay .cms-modal .cms-field-group textarea,
-.cert-page .cms-field input,
-.cert-page .cms-field select,
-.cert-page .cms-field textarea,
-.cert-page .cms-field-group input,
-.cert-page .cms-field-group select,
-.cert-page .cms-field-group textarea {
+.cms-overlay .cms-modal .cms-field input, .cms-overlay .cms-modal .cms-field textarea, .cms-overlay .cms-modal .cms-field-group input, .cms-overlay .cms-modal .cms-field-group textarea, .cert-page .cms-field input, .cert-page .cms-field textarea, .cert-page .cms-field-group input, .cert-page .cms-field-group textarea {
   width: 100%;
   min-height: 38px;
   background: var(--cms-surface) !important;
@@ -813,36 +769,23 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
-.cms-overlay .cms-modal .cms-field input:hover,
-.cms-overlay .cms-modal .cms-field select:hover,
-.cms-overlay .cms-modal .cms-field textarea:hover,
-.cms-overlay .cms-modal .cms-field-group input:hover,
-.cms-overlay .cms-modal .cms-field-group select:hover,
-.cms-overlay .cms-modal .cms-field-group textarea:hover,
-.cert-page .cms-field input:hover,
-.cert-page .cms-field select:hover,
-.cert-page .cms-field textarea:hover,
-.cert-page .cms-field-group input:hover,
-.cert-page .cms-field-group select:hover,
-.cert-page .cms-field-group textarea:hover {
+.cms-overlay .cms-modal .cms-field select, .cms-overlay .cms-modal .cms-field-group select, .cert-page .cms-field select, .cert-page .cms-field-group select {
+  width: 100%;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.cms-overlay .cms-modal .cms-field input:hover, .cms-overlay .cms-modal .cms-field textarea:hover, .cms-overlay .cms-modal .cms-field-group input:hover, .cms-overlay .cms-modal .cms-field-group textarea:hover, .cert-page .cms-field input:hover, .cert-page .cms-field textarea:hover, .cert-page .cms-field-group input:hover, .cert-page .cms-field-group textarea:hover {
   border-color: var(--cms-primary-border) !important;
   background: var(--cms-surface) !important;
   box-shadow: none;
   transform: none;
 }
 
-.cms-overlay .cms-modal .cms-field input:focus,
-.cms-overlay .cms-modal .cms-field select:focus,
-.cms-overlay .cms-modal .cms-field textarea:focus,
-.cms-overlay .cms-modal .cms-field-group input:focus,
-.cms-overlay .cms-modal .cms-field-group select:focus,
-.cms-overlay .cms-modal .cms-field-group textarea:focus,
-.cert-page .cms-field input:focus,
-.cert-page .cms-field select:focus,
-.cert-page .cms-field textarea:focus,
-.cert-page .cms-field-group input:focus,
-.cert-page .cms-field-group select:focus,
-.cert-page .cms-field-group textarea:focus {
+.cms-overlay .cms-modal .cms-field select:hover, .cms-overlay .cms-modal .cms-field-group select:hover, .cert-page .cms-field select:hover, .cert-page .cms-field-group select:hover {
+  transform: none;
+}
+
+.cms-overlay .cms-modal .cms-field input:focus, .cms-overlay .cms-modal .cms-field textarea:focus, .cms-overlay .cms-modal .cms-field-group input:focus, .cms-overlay .cms-modal .cms-field-group textarea:focus, .cert-page .cms-field input:focus, .cert-page .cms-field textarea:focus, .cert-page .cms-field-group input:focus, .cert-page .cms-field-group textarea:focus {
   outline: none;
   border-color: var(--cert-primary);
   box-shadow: 0 0 0 3px var(--cms-primary-soft);
@@ -859,12 +802,7 @@
   font-weight: 800;
 }
 
-.cert-page .cert-form-card .cms-field input,
-.cert-page .cert-form-card .cms-field select,
-.cert-page .cert-form-card .cms-field textarea,
-.cert-page .cert-form-card .cms-field-group input,
-.cert-page .cert-form-card .cms-field-group select,
-.cert-page .cert-form-card .cms-field-group textarea {
+.cert-page .cert-form-card .cms-field input, .cert-page .cert-form-card .cms-field textarea, .cert-page .cert-form-card .cms-field-group input, .cert-page .cert-form-card .cms-field-group textarea {
   min-height: 34px;
   padding: 6px 9px 6px 10px;
   font-size: 12px;
@@ -2203,41 +2141,17 @@
   color: #8F9789;
 }
 
-[data-theme="dark"] .cert-form-card .cms-field input,
-[data-theme="dark"] .cert-form-card .cms-field select,
-[data-theme="dark"] .cert-form-card .cms-field textarea,
-[data-theme="dark"] .cert-form-card .cms-field-group input,
-[data-theme="dark"] .cert-form-card .cms-field-group select,
-[data-theme="dark"] .cert-form-card .cms-field-group textarea,
-[data-theme="dark"] .cert-search-box,
-[data-theme="dark"] .cert-toolbar-select,
-[data-theme="dark"] .cert-workflow-select {
+[data-theme="dark"] .cert-form-card .cms-field input, [data-theme="dark"] .cert-form-card .cms-field textarea, [data-theme="dark"] .cert-form-card .cms-field-group input, [data-theme="dark"] .cert-form-card .cms-field-group textarea, [data-theme="dark"] .cert-search-box, [data-theme="dark"] .cert-toolbar-select, [data-theme="dark"] .cert-workflow-select {
   background: #111411 !important;
   color: #F7F7F2 !important;
   border: 1px solid #334155 !important;
 }
 
-[data-theme="dark"] .cert-form-card .cms-field input:hover,
-[data-theme="dark"] .cert-form-card .cms-field select:hover,
-[data-theme="dark"] .cert-form-card .cms-field textarea:hover,
-[data-theme="dark"] .cert-form-card .cms-field-group input:hover,
-[data-theme="dark"] .cert-form-card .cms-field-group select:hover,
-[data-theme="dark"] .cert-form-card .cms-field-group textarea:hover,
-[data-theme="dark"] .cert-search-box:hover,
-[data-theme="dark"] .cert-toolbar-select:hover,
-[data-theme="dark"] .cert-workflow-select:hover {
+[data-theme="dark"] .cert-form-card .cms-field input:hover, [data-theme="dark"] .cert-form-card .cms-field textarea:hover, [data-theme="dark"] .cert-form-card .cms-field-group input:hover, [data-theme="dark"] .cert-form-card .cms-field-group textarea:hover, [data-theme="dark"] .cert-search-box:hover, [data-theme="dark"] .cert-toolbar-select:hover, [data-theme="dark"] .cert-workflow-select:hover {
   border-color: #9CAF27 !important;
 }
 
-[data-theme="dark"] .cert-form-card .cms-field input:focus,
-[data-theme="dark"] .cert-form-card .cms-field select:focus,
-[data-theme="dark"] .cert-form-card .cms-field textarea:focus,
-[data-theme="dark"] .cert-form-card .cms-field-group input:focus,
-[data-theme="dark"] .cert-form-card .cms-field-group select:focus,
-[data-theme="dark"] .cert-form-card .cms-field-group textarea:focus,
-[data-theme="dark"] .cert-search-box:focus-within,
-[data-theme="dark"] .cert-toolbar-select:focus,
-[data-theme="dark"] .cert-workflow-select:focus {
+[data-theme="dark"] .cert-form-card .cms-field input:focus, [data-theme="dark"] .cert-form-card .cms-field textarea:focus, [data-theme="dark"] .cert-form-card .cms-field-group input:focus, [data-theme="dark"] .cert-form-card .cms-field-group textarea:focus, [data-theme="dark"] .cert-search-box:focus-within, [data-theme="dark"] .cert-toolbar-select:focus, [data-theme="dark"] .cert-workflow-select:focus {
   border-color: #9CAF27 !important;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
 }
@@ -2248,12 +2162,7 @@
   color: #F2F3EE;
 }
 
-[data-theme="dark"] .cert-page .cms-field.cert-readonly input,
-[data-theme="dark"] .cert-page .cms-field.cert-readonly select,
-[data-theme="dark"] .cert-page .cms-field.cert-readonly textarea,
-[data-theme="dark"] .cert-page .cms-field input[readonly],
-[data-theme="dark"] .cert-page .cms-field select[readonly],
-[data-theme="dark"] .cert-page .cms-field textarea[readonly] {
+[data-theme="dark"] .cert-page .cms-field.cert-readonly input, [data-theme="dark"] .cert-page .cms-field.cert-readonly textarea, [data-theme="dark"] .cert-page .cms-field input[readonly], [data-theme="dark"] .cert-page .cms-field textarea[readonly] {
   background: #172033 !important;
   border-color: #334155 !important;
   color: #F2F3EE !important;
@@ -2273,11 +2182,6 @@
   background: rgba(59, 130, 246, 0.08);
   border-color: rgba(96, 165, 250, 0.34);
   color: #F1F4E2;
-}
-
-[data-theme="dark"] .cert-workflow-select option {
-  background: #111411;
-  color: #F7F7F2;
 }
 
 [data-theme="dark"] .cert-table-fit thead th {
@@ -2354,12 +2258,7 @@
   box-shadow: 0 8px 18px rgba(59, 130, 246, 0.2);
 }
 
-[data-theme="dark"] .cert-page .cms-field input,
-[data-theme="dark"] .cert-page .cms-field select,
-[data-theme="dark"] .cert-page .cms-field textarea,
-[data-theme="dark"] .cert-page .cms-field-group input,
-[data-theme="dark"] .cert-page .cms-field-group select,
-[data-theme="dark"] .cert-page .cms-field-group textarea {
+[data-theme="dark"] .cert-page .cms-field input, [data-theme="dark"] .cert-page .cms-field textarea, [data-theme="dark"] .cert-page .cms-field-group input, [data-theme="dark"] .cert-page .cms-field-group textarea {
   background: #111411 !important;
   color: #F7F7F2 !important;
   border: 1px solid #334155 !important;
@@ -2528,17 +2427,13 @@
   transform: none !important;
 }
 
-.cert-page input:hover,
-.cert-page select:hover,
-.cert-page textarea:hover,
-.cert-page input:focus,
-.cert-page select:focus,
-.cert-page textarea:focus,
-.cert-page .cert-search-box:focus-within,
-.cert-page .cert-toolbar-select:focus,
-.cert-page .cert-workflow-select:focus {
+.cert-page input:hover, .cert-page textarea:hover, .cert-page input:focus, .cert-page textarea:focus, .cert-page .cert-search-box:focus-within, .cert-page .cert-toolbar-select:focus, .cert-page .cert-workflow-select:focus {
   transform: none !important;
   box-shadow: none !important;
+}
+
+.cert-page select:hover, .cert-page select:focus {
+  transform: none !important;
 }
 
 @media (max-width: 1000px) {

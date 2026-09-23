@@ -395,7 +395,7 @@ function CustomDepartmentDropdown({
 
   return (
     <div className={`master-custom-dropdown-wrap ${isOpen ? "is-open" : ""}`} ref={dropdownRef}>
-      <div className="master-combobox-input-wrap">
+      <div className="master-combobox-input-wrap app-search-field app-search-field--icon app-select-control">
         <input
           type="text"
           className="master-combobox-input"
@@ -429,7 +429,7 @@ function CustomDepartmentDropdown({
       </div>
 
       {isOpen && (
-        <div className="master-custom-dropdown-menu" role="listbox">
+        <div className="master-custom-dropdown-menu app-select-panel" role="listbox">
           <div className="master-dropdown-list-scroll">
             <button
               type="button"
@@ -580,7 +580,7 @@ function MasterCreateModal({ kind, staffType, departments = [], onClose, onSaved
                   onChange={(val) => setValues((v) => ({ ...v, [name]: val }))}
                 />
               ) : type === "select" ? (
-                <select
+                <select className="app-select"
                   value={values[name] ?? ""}
                   onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
                 >
@@ -997,8 +997,8 @@ export default function DepartmentManagementPage() {
                 </button>
               </div>
             </header>
-            <label className="master-search">
-              <Search3DIcon size={16} />
+            <label className="master-search app-search-field">
+              <Search3DIcon className="app-search-field__icon" size={16} />
               <span className="sr-only">Search departments</span>
               <input
                 value={deptQuery}
@@ -1108,8 +1108,8 @@ export default function DepartmentManagementPage() {
                 </button>
               </div>
             </header>
-            <label className="master-search">
-              <Search3DIcon size={16} />
+            <label className="master-search app-search-field">
+              <Search3DIcon className="app-search-field__icon" size={16} />
               <span className="sr-only">Search designations</span>
               <input
                 value={designationQuery}
@@ -1779,7 +1779,7 @@ export function MasterFormPage({ kind }) {
                         onChange={(val) => setValues((v) => ({ ...v, [name]: val }))}
                       />
                     ) : type === "select" ? (
-                      <select
+                      <select className="app-select"
                         value={values[name] ?? ""}
                         onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
                       >

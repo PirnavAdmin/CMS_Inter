@@ -274,8 +274,7 @@
   position: relative;
   overflow: visible !important;
 }
-.master-create-modal .master-form-grid input,
-.master-create-modal .master-form-grid select {
+.master-create-modal .master-form-grid input {
   background: transparent;
 }
 .master-department-picker {
@@ -591,9 +590,7 @@
 .master-form-grid label.is-wide {
   grid-column: 1/-1;
 }
-.master-form-grid input,
-.master-form-grid select,
-.master-form-grid textarea {
+.master-form-grid input, .master-form-grid textarea {
   width: 100%;
   min-height: 34px;
   padding: 6px 9px;
@@ -603,6 +600,10 @@
   color: var(--cms-text);
   font: inherit;
   font-size: 11px;
+}
+.master-form-grid select {
+  width: 100%;
+  font: inherit;
 }
 .master-form-grid textarea {
   min-height: 68px;

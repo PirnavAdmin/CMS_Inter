@@ -139,8 +139,8 @@ export default function DataTable({
   return (
     <div className="cms-card">
       <div className="cms-toolbar">
-        <div className="cms-search">
-          <Search3DIcon size={16} />
+        <div className="cms-search app-search-field">
+          <Search3DIcon className="app-search-field__icon" size={16} />
           <input
             value={query}
             placeholder={searchPlaceholder || `Search ${title || "records"}...`}

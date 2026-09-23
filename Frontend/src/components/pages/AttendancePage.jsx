@@ -46,7 +46,7 @@ const staffType = (v) => {
 };
 const ATTENDANCE_PAGE_SIZE = 5;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
-function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
+function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={(mutedPlaceholder && !value ? "is-placeholder" : undefined) + " app-select"} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
 
 function AttendancePagination({ page, totalRows, onPageChange }) {
  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
@@ -523,8 +523,8 @@ function Screen({ staff = false, say }) {
          {staff ? <StaffSummary rows={visible} /> : <StudentSummary rows={visible} />}
          <section className={`att-card att-table-card ${staff ? "att-staff-table-card" : ""}`}>
            <div className={`att-student-search att-records-search-toolbar ${staff ? "att-staff-table-toolbar" : ""}`}>
-             <div className="att-student-search-box">
-               <Search3DIcon size={18} />
+             <div className="att-student-search-box app-search-field">
+               <Search3DIcon className="app-search-field__icon" size={18} />
                <input
                  type="search"
                  value={search}
@@ -947,8 +947,8 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
         </div>
       </header>
       <div className="att-student-search att-records-search-toolbar att-month-search-toolbar">
-        <div className="att-student-search-box">
-          <Search3DIcon size={18} />
+        <div className="att-student-search-box app-search-field">
+          <Search3DIcon className="app-search-field__icon" size={18} />
           <input
             type="search"
             value={search}

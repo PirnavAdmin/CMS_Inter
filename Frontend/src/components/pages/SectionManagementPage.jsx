@@ -505,7 +505,7 @@ function SearchableSelect({
     >
       <button
         type="button"
-        className="cms-searchable-select-trigger"
+        className="cms-searchable-select-trigger app-select-control"
         role="combobox"
         aria-label={placeholder}
         aria-expanded={open}
@@ -525,10 +525,10 @@ function SearchableSelect({
         <ChevronDown size={14} className="cms-select-arrow" />
       </button>
       {open && (
-        <div className="cms-searchable-select-menu">
+        <div className="cms-searchable-select-menu app-select-panel">
           {showSearch && (
-            <div className="cms-searchable-select-search">
-              <Search size={14} />
+            <div className="cms-searchable-select-search app-search-field">
+              <Search className="app-search-field__icon" size={14} />
               <input
                 type="text"
                 autoFocus
@@ -2041,8 +2041,8 @@ export default function SectionManagementPage() {
               /* ROOMS TABLE VIEW */
               <div className="cms-card">
                 <div className="cms-toolbar cms-sec-toolbar">
-                  <div className="cms-search cms-sec-search">
-                    <Search size={16} />
+                  <div className="cms-search cms-sec-search app-search-field">
+                    <Search className="app-search-field__icon" size={16} />
                     <input
                       type="search"
                       placeholder="Search by Room No, block, floor..."
@@ -2187,7 +2187,7 @@ export default function SectionManagementPage() {
                   <div className="cms-sec-page-size-wrap">
                     <span className="cms-sec-page-size-label">Per page:</span>
                     <select
-                      className="cms-sec-page-size-select"
+                      className="cms-sec-page-size-select app-select"
                       aria-label="Rooms per page"
                       value={isCustomRoomPage ? "custom" : roomPageSize}
                       onChange={(e) => {
@@ -2399,7 +2399,7 @@ export default function SectionManagementPage() {
                             Status <span className="req">*</span>
                           </label>
                           <select
-                            className="cms-sec-native-select"
+                            className="cms-sec-native-select app-select"
                             value={roomForm.isActive}
                             onChange={(event) => {
                               setRoomForm((f) => ({ ...f, isActive: event.target.value }));
@@ -2544,7 +2544,7 @@ export default function SectionManagementPage() {
                               Status <span className="req">*</span>
                             </label>
                             <select
-                              className="cms-sec-native-select"
+                              className="cms-sec-native-select app-select"
                               value={bulkRoomForm.isActive}
                               onChange={(event) => {
                                 setBulkRoomForm((f) => ({ ...f, isActive: event.target.value }));
@@ -2605,8 +2605,8 @@ export default function SectionManagementPage() {
               /* SECTION TABLE VIEW */
               <div className="cms-card">
                 <div className="cms-toolbar cms-sec-toolbar">
-                  <div className="cms-search cms-sec-search">
-                    <Search size={16} />
+                  <div className="cms-search cms-sec-search app-search-field">
+                    <Search className="app-search-field__icon" size={16} />
                     <input
                       type="search"
                       placeholder="Search by section, group, program..."
@@ -2772,7 +2772,7 @@ export default function SectionManagementPage() {
                   <div className="cms-sec-page-size-wrap">
                     <span className="cms-sec-page-size-label">Per page:</span>
                     <select
-                      className="cms-sec-page-size-select"
+                      className="cms-sec-page-size-select app-select"
                       aria-label="Sections per page"
                       value={isCustomSectionPage ? "custom" : sectionPageSize}
                       onChange={(e) => {
@@ -3098,7 +3098,7 @@ export default function SectionManagementPage() {
                               Status <span className="req">*</span>
                             </label>
                             <select
-                              className="cms-sec-native-select"
+                              className="cms-sec-native-select app-select"
                               value={sectionForm.status}
                               onChange={(event) => {
                                 setSectionForm((f) => ({ ...f, status: event.target.value }));
