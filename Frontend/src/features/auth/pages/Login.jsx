@@ -53,21 +53,6 @@ export default function Login() {
       /* storage unavailable */
     }
 
-    // Direct mock login for Driver Portal
-    if (emailOrMobile.toLowerCase() === "driver@cms.com" && password === "Driver@123") {
-      const driverSession = {
-        email: "Driver@CMS.com",
-        role: "Driver",
-        name: "Ramesh Kumar",
-        employeeId: "EMP001",
-        busNumber: "PC-101",
-        loginTime: new Date().toISOString(),
-      };
-      window.sessionStorage.setItem("pjc-driver-session", JSON.stringify(driverSession));
-      navigate("/driver", { replace: true });
-      return;
-    }
-
     setBusy(true);
     // A login attempt must not inherit authorization from an older session.
     clearAuthSession();
@@ -79,6 +64,8 @@ export default function Login() {
       const userRole = String(result.user.role || "").toLowerCase();
       if (userRole === "faculty" || userRole === "teacher" || userRole === "hod" || userRole.includes("faculty") || userRole.includes("lecturer")) {
         navigate("/faculty-dashboard", { replace: true });
+      } else if (userRole === "driver") {
+        navigate("/driver", { replace: true });
       } else {
         navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
       }

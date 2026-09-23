@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { getDashboard } from "../../api/transportDriverApi.js";
+import { getDashboard } from "../../../api/transportDriverApi.js";
 
 export default function DriverHomePage({
   onNavigateTab,
