@@ -41,7 +41,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (request.BoardId.HasValue && request.BoardId.Value > 0)
             {
-                query = query.Where(f => f.BoardId == request.BoardId.Value);
+                query = query.Where(f => f.BoardId == request.BoardId.Value || f.BoardId == null || f.BoardId == 0);
             }
 
             if (request.StaffType.HasValue)
@@ -581,7 +581,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (request.BoardId.HasValue && request.BoardId.Value > 0)
             {
-                facultyQuery = facultyQuery.Where(f => f.BoardId == request.BoardId.Value);
+                facultyQuery = facultyQuery.Where(f => f.BoardId == request.BoardId.Value || f.BoardId == null || f.BoardId == 0);
             }
 
             if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)

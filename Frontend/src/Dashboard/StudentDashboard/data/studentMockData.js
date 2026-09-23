@@ -59,11 +59,6 @@ export const subjectAttendance = [
 ];
 
 export const monthlyAttendance = [["June", 18, 17, 1, "94%"], ["July", 25, 23, 2, "92%"], ["August", 24, 22, 2, "92%"], ["September", 20, 18, 2, "90%"]];
-export const exams = [
-  ["Quarterly Examination", "Mathematics", "28-Sep-2026", "09:30 AM", "3 Hours", "Hall A", 100],
-  ["Quarterly Examination", "Physics", "30-Sep-2026", "09:30 AM", "3 Hours", "Hall A", 100],
-  ["Quarterly Examination", "Chemistry", "03-Oct-2026", "09:30 AM", "3 Hours", "Hall A", 100],
-];
 export const resultSubjects = [["Mathematics", 18, 20, 65, 103, 120, "A", "Pass"], ["Physics", 17, 19, 58, 94, 120, "A", "Pass"], ["Chemistry", 18, 18, 60, 96, 120, "A", "Pass"], ["English", 19, 0, 69, 88, 100, "A", "Pass"], ["Sanskrit", 18, 0, 67, 85, 100, "A", "Pass"]];
 export const results = [["Unit Test I", "87%", "A", "Published"], ["Monthly Test - August", "84%", "A", "Published"]];
 export const feeBreakdown = [["Admission Fee", 10000, 10000, 0], ["Tuition Fee", 45000, 40000, 5000], ["Laboratory Fee", 5000, 5000, 0]];

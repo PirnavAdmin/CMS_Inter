@@ -340,7 +340,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 result.PaymentPlan ??= request.PaymentPlan;
             }
 
-            return result;
+            return result!;
         }
 
 

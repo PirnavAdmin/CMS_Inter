@@ -289,6 +289,8 @@ export default function AppRoutes() {
       <Route path="/driver/*" element={<DriverDashboard />} />
       <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
       <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
+      <Route path="/staff/onboarding/:id" element={<StaffManagementPage />} />
+      <Route path="/staff/onboarding/:id/complete-profile" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id/complete-profile" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id/review" element={<StaffManagementPage />} />

@@ -7,6 +7,10 @@ namespace CollegeManagement.API.DTOs.Authentication
         public string? AccessToken { get; set; }
         public int? UserId { get; set; }
         public string? Name { get; set; }
+        public string? Email { get; set; }
+        public int? StaffId { get; set; }
+        public int? StudentId { get; set; }
+        public int? AdminId { get; set; }
         public string? Role { get; set; }
         public string? Otp { get; set; }
         public string? ResetToken { get; set; }
