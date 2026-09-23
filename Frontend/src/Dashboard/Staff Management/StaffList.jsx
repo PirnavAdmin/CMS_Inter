@@ -710,8 +710,8 @@ const StaffList = () => {
         {/* Toolbar */}
         <div className="staff-toolbar">
           {/* Search */}
-          <div className="staff-search-box app-search-field">
-            <Search3DIcon className="staff-search-icon app-search-field__icon" size={16} />
+          <div className="staff-search-box">
+            <Search3DIcon className="staff-search-icon" size={16} />
             <input
               type="text"
               className="staff-search-input"
@@ -725,7 +725,7 @@ const StaffList = () => {
           <div className="staff-filter-group">
             {/* Department Filter */}
             <select
-              className="staff-select app-select"
+              className="staff-select"
               value={selectedDepartment}
               onChange={(e) => {
                 setSelectedDepartment(e.target.value);
@@ -742,7 +742,7 @@ const StaffList = () => {
 
             {/* Status Filter */}
             <select
-              className="staff-select app-select"
+              className="staff-select"
               value={selectedStatus}
               onChange={(e) => {
                 setSelectedStatus(e.target.value);
@@ -1039,7 +1039,7 @@ const StaffList = () => {
                       Gender <span className="req">*</span>
                     </label>
                     <select
-                      className="staff-form-select app-select"
+                      className="staff-form-select"
                       value={formData.gender}
                       onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                     >
@@ -1111,7 +1111,7 @@ const StaffList = () => {
                   <div className="staff-form-field">
                     <label className="staff-form-label">Blood Group</label>
                     <select
-                      className="staff-form-select app-select"
+                      className="staff-form-select"
                       value={formData.bloodGroup}
                       onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
                     >
@@ -1149,7 +1149,7 @@ const StaffList = () => {
                     </label>
                     {!isCustomDept ? (
                       <select
-                        className="staff-form-select app-select"
+                        className="staff-form-select"
                         value={formData.department}
                         onChange={(e) => {
                           if (e.target.value === "__ADD_NEW__") {
@@ -1198,7 +1198,7 @@ const StaffList = () => {
                     </label>
                     {!isCustomDesig ? (
                       <select
-                        className="staff-form-select app-select"
+                        className="staff-form-select"
                         value={formData.designation}
                         onChange={(e) => {
                           if (e.target.value === "__ADD_NEW__") {
@@ -1274,7 +1274,7 @@ const StaffList = () => {
                       Status <span className="req">*</span>
                     </label>
                     <select
-                      className="staff-form-select app-select"
+                      className="staff-form-select"
                       value={formData.status}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                     >

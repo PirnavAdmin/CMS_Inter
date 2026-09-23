@@ -332,6 +332,8 @@ namespace CollegeManagement.API.Services.Implementations
             if (!string.IsNullOrWhiteSpace(dto.Aadhaar) && !await _staffRepository.IsAadhaarUniqueAsync(dto.Aadhaar))
                 throw new ConflictException($"Aadhaar number '{dto.Aadhaar}' is already registered.");
 
+            var (resolvedBoardId, resolvedBoardName, _) = await ResolveBoardAsync(dto.BoardId, dto.BoardName ?? dto.Board, dto.BoardCode);
+
             var staff = _mapper.Map<Staff>(dto);
             staff.EmployeeId = employeeId;
             staff.StaffType = staffType;
@@ -339,8 +341,8 @@ namespace CollegeManagement.API.Services.Implementations
             staff.Department = deptName;
             staff.DesignationId = resolvedDesignationId;
             staff.Designation = resolvedDesignationName;
-            staff.BoardId = dto.BoardId;
-            staff.BoardName = dto.BoardName ?? dto.Board;
+            staff.BoardId = resolvedBoardId;
+            staff.BoardName = resolvedBoardName;
             staff.Gender = !string.IsNullOrWhiteSpace(dto.Gender) ? dto.Gender : (!string.IsNullOrWhiteSpace(staff.Gender) ? staff.Gender : "Male");
             staff.DateOfBirth = dto.DateOfBirth.HasValue ? dto.DateOfBirth.Value : (staff.DateOfBirth != default ? staff.DateOfBirth : DateTime.UtcNow.AddYears(-25));
             staff.Qualification = !string.IsNullOrWhiteSpace(dto.Qualification) ? dto.Qualification : (!string.IsNullOrWhiteSpace(staff.Qualification) ? staff.Qualification : "Graduate");
@@ -580,14 +582,16 @@ namespace CollegeManagement.API.Services.Implementations
                 resolvedDesignationName = existingStaff.Designation;
             }
 
+            var (resolvedBoardId, resolvedBoardName, _) = await ResolveBoardAsync(dto.BoardId ?? existingStaff.BoardId, dto.BoardName ?? dto.Board ?? existingStaff.BoardName, dto.BoardCode);
+
             _mapper.Map(dto, existingStaff);
             existingStaff.StaffType = staffType;
             existingStaff.DepartmentId = resolvedDepartmentId;
             existingStaff.Department = deptName;
             existingStaff.DesignationId = resolvedDesignationId;
             existingStaff.Designation = resolvedDesignationName;
-            existingStaff.BoardId = dto.BoardId ?? existingStaff.BoardId;
-            existingStaff.BoardName = dto.BoardName ?? dto.Board ?? existingStaff.BoardName;
+            existingStaff.BoardId = resolvedBoardId;
+            existingStaff.BoardName = resolvedBoardName;
 
             if (dto.JoiningDate.HasValue || dto.DateOfJoining.HasValue)
             {
@@ -1680,6 +1684,54 @@ namespace CollegeManagement.API.Services.Implementations
         // =========================================================================
         // PRIVATE HELPERS
         // =========================================================================
+
+        private async Task<(int? BoardId, string? BoardName, string? BoardCode)> ResolveBoardAsync(int? boardId, string? boardName, string? boardCode)
+        {
+            var rawName = boardName?.Trim();
+            var rawCode = boardCode?.Trim();
+
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                try
+                {
+                    var b = await _boardRepository.GetBoardByIdAsync(boardId.Value);
+                    if (b != null)
+                    {
+                        return (b.BoardId, b.BoardName, b.BoardCode);
+                    }
+                }
+                catch { }
+            }
+
+            try
+            {
+                var boards = (await _boardRepository.GetBoardsForExportAsync(new BoardExportRequest())).ToList();
+                if (boards.Any())
+                {
+                    var match = boards.FirstOrDefault(b =>
+                        (!string.IsNullOrWhiteSpace(rawCode) && string.Equals(b.BoardCode, rawCode, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrWhiteSpace(rawName) && (
+                            string.Equals(b.BoardName, rawName, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(b.BoardCode, rawName, StringComparison.OrdinalIgnoreCase)
+                        ))
+                    );
+
+                    if (match != null)
+                    {
+                        return (match.BoardId, match.BoardName, match.BoardCode);
+                    }
+
+                    var activeBoard = boards.FirstOrDefault(b => b.IsActive) ?? boards.FirstOrDefault();
+                    if (activeBoard != null)
+                    {
+                        return (activeBoard.BoardId, activeBoard.BoardName, activeBoard.BoardCode);
+                    }
+                }
+            }
+            catch { }
+
+            return (boardId, rawName, rawCode);
+        }
 
         private StaffProfileFullDto MapToFullProfileDto(Staff staff)
         {

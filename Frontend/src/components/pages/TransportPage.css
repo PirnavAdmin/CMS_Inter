@@ -237,6 +237,7 @@
   font-weight: 650;
 }
 
+.cms-transport-filter select,
 .cms-transport-filter input {
   min-height: 34px;
   min-width: 132px;
@@ -246,10 +247,6 @@
   background: var(--cms-surface);
   color: var(--cms-text);
   font-size: 13px;
-}
-
-.cms-transport-filter select {
-  min-width: 132px;
 }
 
 .cms-transport-route-slab {
@@ -334,16 +331,12 @@
   color: var(--cms-danger);
 }
 
-.cms-transport-pickup-modal .cms-field input {
+.cms-transport-pickup-modal .cms-field input,
+.cms-transport-pickup-modal .cms-field select {
   box-sizing: border-box;
   width: 100%;
   min-height: 42px;
   height: 42px;
-}
-
-.cms-transport-pickup-modal .cms-field select {
-  box-sizing: border-box;
-  width: 100%;
 }
 
 .cms-transport-pickup-modal .cms-modal-foot {
@@ -478,15 +471,11 @@
   gap: 5px;
 }
 
+.cms-transport-report-toolbar-compact .cms-transport-filter select,
 .cms-transport-report-toolbar-compact .cms-transport-filter input {
   min-width: 104px;
   max-width: 124px;
   padding-inline: 7px;
-}
-
-.cms-transport-report-toolbar-compact .cms-transport-filter select {
-  min-width: 104px;
-  max-width: 124px;
 }
 
 .cms-transport-report-toolbar-compact .cms-transport-toolbar-actions {

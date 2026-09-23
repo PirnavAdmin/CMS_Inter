@@ -470,11 +470,11 @@ function LeaveHistory({ onSelect }) {
             ))}
           </div>
           <div className="leave-history-controls">
-            <label className="app-search-field">
-              <Search3DIcon className="app-search-field__icon" size={15} />
+            <label>
+              <Search3DIcon size={15} />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search faculty..." />
             </label>
-            <select className="app-select" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <select value={status} onChange={(e) => setStatus(e.target.value)}>
               {["All Status", "Approved", "Pending", "Rejected"].map(item => (
                 <option key={item}>{item}</option>
               ))}
@@ -877,8 +877,8 @@ export default function LeaveManagementPage() {
 
           {/* Filter Bar */}
           <div className="leave-filter-bar">
-            <div className="leave-search-box app-search-field">
-              <Search className="app-search-field__icon" size={16} />
+            <div className="leave-search-box">
+              <Search size={16} />
               <input 
                 type="text" 
                 placeholder="Search faculty name, ID, department..." 
@@ -887,7 +887,7 @@ export default function LeaveManagementPage() {
               />
             </div>
             <div className="leave-status-filter">
-              <select className="app-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending</option>
                 <option value="approved">Approved</option>

@@ -544,10 +544,20 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
         toolbarExtra={
           <>
             {/* Staff Type Dropdown Filter */}
-            <select className="app-select"
+            <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                fontWeight: 500,
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Staff Types</option>
               <option value="Teaching">Teaching</option>
@@ -555,10 +565,19 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
             </select>
 
             {/* Department Filter */}
-            <select className="app-select"
+            <select
               value={filterDept}
               onChange={(e) => setFilterDept(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Departments</option>
               {departments.map((d) => (
@@ -567,10 +586,19 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
             </select>
 
             {/* Status Filter */}
-            <select className="app-select"
+            <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Statuses</option>
               <option value="Active">Active</option>
@@ -708,10 +736,20 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
         searchPlaceholder="Search structure by name, role, dept..."
         toolbarExtra={
           <>
-            <select className="app-select"
+            <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                fontWeight: 500,
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Staff Types</option>
               <option value="Teaching">Teaching</option>
@@ -991,10 +1029,20 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
         toolbarExtra={
           <>
             {/* Period Dropdown */}
-            <select className="app-select"
+            <select
               value={presetPeriod}
               onChange={(e) => setPresetPeriod(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                fontWeight: 500,
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="1m">1M (Current)</option>
               <option value="3m">3M (Quarter)</option>
@@ -1003,10 +1051,19 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
             </select>
 
             {/* Month Picker */}
-            <select className="app-select"
+            <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               {monthNames.map((m) => (
                 <option key={m.num} value={m.num}>{m.name}</option>
@@ -1014,10 +1071,19 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
             </select>
 
             {/* Year Picker */}
-            <select className="app-select"
+            <select
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="2026">2026</option>
               <option value="2025">2025</option>
@@ -1025,10 +1091,20 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
             </select>
 
             {/* Staff Type / Category Filter */}
-            <select className="app-select"
+            <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                fontWeight: 500,
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Staff Types</option>
               <option value="Teaching">Teaching</option>
@@ -1264,10 +1340,19 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
         toolbarExtra={
           <>
             {/* Month Filter */}
-            <select className="app-select"
+            <select
               value={filterMonth}
               onChange={(e) => setFilterMonth(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Months</option>
               <option value="01">January</option>
@@ -1285,10 +1370,19 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
             </select>
 
             {/* Year Filter */}
-            <select className="app-select"
+            <select
               value={filterYear}
               onChange={(e) => setFilterYear(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Years</option>
               <option value="2026">2026</option>
@@ -1297,10 +1391,19 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
             </select>
 
             {/* Department Filter */}
-            <select className="app-select"
+            <select
               value={filterDept}
               onChange={(e) => setFilterDept(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Departments</option>
               {departments.map((d) => (
@@ -1309,10 +1412,19 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
             </select>
 
             {/* Status Filter */}
-            <select className="app-select"
+            <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              style={{ cursor: "pointer" }}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--cms-border)",
+                fontSize: "12px",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                height: "36px",
+                cursor: "pointer",
+              }}
             >
               <option value="All">All Statuses</option>
               <option value="Paid">Paid</option>
@@ -1537,8 +1649,8 @@ function SearchableInputPicker({ label, placeholder, value, onChange, options = 
           }
         }}
       >
-        <div className="salary-search-input-wrap app-search-field app-select-control">
-          <Search3DIcon className="app-search-field__icon" size={14} />
+        <div className="salary-search-input-wrap">
+          <Search3DIcon size={14} />
           <input
             type="text"
             placeholder={placeholder}
@@ -1553,13 +1665,13 @@ function SearchableInputPicker({ label, placeholder, value, onChange, options = 
           />
         </div>
         {open ? (
-          <div className="salary-search-dropdown app-select-panel" role="listbox">
+          <div className="salary-search-dropdown" role="listbox">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt) => (
                 <button
                   key={opt}
                   type="button"
-                  className="salary-search-option app-select-option"
+                  className="salary-search-option"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     setQuery(opt);
@@ -1712,7 +1824,7 @@ function AddSalaryStructureScreen({ store, setStore, navigate, setToast }) {
                 </div>
                 <div className="salary-form-group">
                   <label>Staff Type *</label>
-                  <select className="app-select" value={formData.staffType} onChange={(e) => setFormData({ ...formData, staffType: e.target.value })}>
+                  <select value={formData.staffType} onChange={(e) => setFormData({ ...formData, staffType: e.target.value })}>
                     <option value="Teaching">Teaching</option>
                     <option value="Non-Teaching">Non-Teaching</option>
                     <option value="Both">Both</option>
@@ -1738,7 +1850,7 @@ function AddSalaryStructureScreen({ store, setStore, navigate, setToast }) {
                 </div>
                 <div className="salary-form-group">
                   <label>Status *</label>
-                  <select className="app-select" value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
+                  <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
                   </select>
@@ -1983,8 +2095,8 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
           }
         }}
       >
-        <div className="salary-search-input-wrap app-search-field app-select-control">
-          <Search3DIcon className="app-search-field__icon" size={14} />
+        <div className="salary-search-input-wrap">
+          <Search3DIcon size={14} />
           <input
             type="text"
             placeholder="Search staff by name / ID..."
@@ -2000,13 +2112,13 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
           />
         </div>
         {open ? (
-          <div className="salary-search-dropdown app-select-panel" role="listbox">
+          <div className="salary-search-dropdown" role="listbox">
             {filtered.length > 0 ? (
               filtered.map((s) => (
                 <button
                   key={s.id}
                   type="button"
-                  className="salary-search-option app-select-option"
+                  className="salary-search-option"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     onSelect(s.id);
@@ -2125,7 +2237,7 @@ function AssignSalaryScreen({ staffType = "Teaching", store, setStore, navigate,
 
                 <div className="salary-form-group">
                   <label>Select Salary Structure *</label>
-                  <select className="app-select" value={selectedStructId} onChange={(e) => setSelectedStructId(e.target.value)}>
+                  <select value={selectedStructId} onChange={(e) => setSelectedStructId(e.target.value)}>
                     {store.structures.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} ({s.staffType}) — Gross: {formatINR(s.grossSalary)}
@@ -2139,7 +2251,7 @@ function AssignSalaryScreen({ staffType = "Teaching", store, setStore, navigate,
               <div className="salary-form-grid-3">
                 <div className="salary-form-group">
                   <label>Payment Mode</label>
-                  <select className="app-select" value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
+                  <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
                     <option value="Bank Transfer">Bank Transfer</option>
                     <option value="Cheque">Cheque</option>
                     <option value="Cash">Cash</option>

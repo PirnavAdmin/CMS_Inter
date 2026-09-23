@@ -890,12 +890,12 @@ export default function PromotionPage({ screen = "promotion" }) {
                 <span className="cms-badge cms-badge-info">Selected Students: {selectedIds.length}</span>
               </div>
               <div className="promotion-table-controls">
-                <span className="app-search-field app-search-field--icon"><input
+                <input
                   aria-label="Search students"
                   placeholder="Search student name, admission number, or ID"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                /></span>
+                />
                 <button className="cms-btn cms-btn-ghost" onClick={loadStudents} disabled={studentsLoading}>
                   Search
                 </button>
@@ -1393,14 +1393,23 @@ function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], 
             <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--cms-muted)", display: "block", marginBottom: "6px" }}>
               Select Student (from loaded cohort)
             </label>
-            <select className="app-select"
+            <select
               value={currentStudent?.id || ""}
               onChange={(e) => {
                 const selected = allStudents.find((s) => String(s.id) === String(e.target.value));
                 setCurrentStudent(selected || null);
                 setError("");
               }}
-              style={{ width: "100%" }}
+              style={{
+                width: "100%",
+                padding: "9px 12px",
+                borderRadius: "6px",
+                border: "1px solid var(--cms-border)",
+                background: "var(--cms-surface)",
+                color: "var(--cms-text)",
+                fontSize: "13.5px",
+                outline: "none"
+              }}
             >
               <option value="">
                 {allStudents.length
@@ -1630,10 +1639,10 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
           <span style={{ fontSize: "13px", fontWeight: 600 }}>
             Bulk Assign {isProgram ? "Program" : "Section"} to Selected ({selected.length}):
           </span>
-          <select className="app-select"
+          <select
             value={bulkTarget}
             onChange={(e) => setBulkTarget(e.target.value)}
-            
+            style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--cms-border)", fontSize: "13px" }}
           >
             <option value="">Select target {isProgram ? "program" : "section"}</option>
             {isProgram
@@ -1704,10 +1713,10 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
                   <td>{row.group}</td>
                   <td>{isProgram ? (row.program || "Regular") : (row.section || "-")}</td>
                   <td>
-                    <select className="app-select"
+                    <select
                       value={targetMap[row.id] || ""}
                       onChange={(e) => setTargetMap({ ...targetMap, [row.id]: e.target.value })}
-                      
+                      style={{ padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--cms-border)", fontSize: "12.5px" }}
                     >
                       <option value="">Choose {isProgram ? "program" : "section"}</option>
                       {isProgram

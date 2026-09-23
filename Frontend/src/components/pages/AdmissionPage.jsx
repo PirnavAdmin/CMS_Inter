@@ -2239,7 +2239,7 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
         <label htmlFor={`f-${field.name}`}>
           {field.label} {field.required ? <span className="req">*</span> : null}
         </label>
-        <select className="app-select"
+        <select
           id={`f-${field.name}`}
           value={value ?? ""}
           disabled={field.disabled}
@@ -2280,7 +2280,7 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             </button>
             </>
           ) : (
-            <select className="app-select" id="f-quota" value={value ?? ""} onChange={(event) => onChange(field.name, event.target.value)}>
+            <select id="f-quota" value={value ?? ""} onChange={(event) => onChange(field.name, event.target.value)}>
               <option value="">Select {field.label}</option>
               {(field.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
@@ -2587,7 +2587,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
               <div className="cms-fee-inline-fields">
                 <div className="cms-field">
                   <label htmlFor="f-installmentCount">Number of Course Fee Schedules</label>
-                  <select className="app-select"
+                  <select
                     id="f-installmentCount"
                     value={String(values.installmentCount || DEFAULT_INSTALLMENT_COUNT)}
                     onChange={(event) => onInstallmentCountChange(Number(event.target.value))}
@@ -4923,8 +4923,8 @@ export default function AdmissionPage() {
       >
         <div className="cms-card cms-admission-list-card">
           <div className="cms-admission-toolbar">
-            <div className="cms-search cms-admission-search app-search-field">
-              <Search className="app-search-field__icon" size={16} />
+            <div className="cms-search cms-admission-search">
+              <Search size={16} />
               <input
                 value={search}
                 placeholder="Search by student name or admission number"

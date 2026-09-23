@@ -610,7 +610,7 @@ function Context({ state, section = true, compact = false, hideGlobalContext = f
   const { value, data, change } = state;
   const select = (label, key, values, disabled, emptyLabel = `Select ${label}`) => (
     <Field label={label}>
-      <select className="app-select" value={value[key]} onChange={change(key)} disabled={disabled}>
+      <select value={value[key]} onChange={change(key)} disabled={disabled}>
         <option value="">{emptyLabel}</option>
         {values.map((entry) => (
           <option key={entry.id} value={entry.id}>
@@ -815,14 +815,14 @@ function StructureForm({ item, close, saved }) {
         </div>
         {form.breaks.map((breakItem, index) => (
           <div className="ttm-break-row" key={`${breakItem.breakTypeId}-${index}`}>
-            <select className="app-select"
+            <select
               value={breakItem.breakTypeId}
               onChange={(event) => updateBreak(index, "breakTypeId", event.target.value)}
             >
               <option value="">Select break type</option>
               {breakTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
             </select>
-            <select className="app-select"
+            <select
               value={breakItem.afterPeriod}
               onChange={(event) => updateBreak(index, "afterPeriod", event.target.value)}
             >
@@ -950,7 +950,7 @@ function AssignStructureForm({ item, close, assigned, notify, initial }) {
   };
   const select = (label, key, values, disabled) => (
     <Field label={label}>
-      <select className="app-select" value={value[key]} onChange={change(key)} disabled={disabled}>
+      <select value={value[key]} onChange={change(key)} disabled={disabled}>
         <option value="">Select {label}</option>
         {values.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
       </select>
@@ -1474,7 +1474,7 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
   };
   const select = (label, key, values, optionLabel = (entry) => entry.name ?? entry.label) => (
     <Field label={label}>
-      <select className="app-select" value={form[key]} onChange={set(key)}>
+      <select value={form[key]} onChange={set(key)}>
         <option value="">Select {label}</option>
         {values.map((entry) => (
           <option key={entry.id ?? entry.value} value={entry.id ?? entry.value}>
@@ -1987,7 +1987,7 @@ function Draft({ initial, notify }) {
                 <div className="ttm-toolbar-workflow-actions">
                   <label className="ttm-inline-filter">
                     <span>Status</span>
-                    <select className="app-select" value={publishedFilter} onChange={(e) => setPublishedFilter(e.target.value)} disabled={actionBusy}>
+                    <select value={publishedFilter} onChange={(e) => setPublishedFilter(e.target.value)} disabled={actionBusy}>
                       <option value="">All</option>
                       <option value="false">Draft</option>
                       <option value="true">Published</option>
@@ -2046,8 +2046,8 @@ function Draft({ initial, notify }) {
                 </div>
                 {published && (
                   <div className="ttm-toolbar-searches">
-                    <label className="ttm-inline-filter ttm-staff-select app-search-field">
-                      <Search className="app-search-field__icon" size={18} aria-hidden="true" />
+                    <label className="ttm-inline-filter ttm-staff-select">
+                      <Search size={18} aria-hidden="true" />
                       <input
                         type="search"
                         list="ttm-staff-options"
@@ -2074,8 +2074,8 @@ function Draft({ initial, notify }) {
                         {staffChoices.map((staff) => <option key={staff.id} value={facultyOptionLabel(staff)} />)}
                       </datalist>
                     </label>
-                    <label className="ttm-inline-filter ttm-person-select app-search-field">
-                      <Search className="app-search-field__icon" size={18} aria-hidden="true" />
+                    <label className="ttm-inline-filter ttm-person-select">
+                      <Search size={18} aria-hidden="true" />
                       <input
                         type="search"
                         list="ttm-student-options"
@@ -2235,13 +2235,13 @@ function Draft({ initial, notify }) {
             <p>Copy the currently selected timetable to another academic year and section.</p>
             <div className="ttm-form-grid">
               <Field label="Target Academic Year">
-                <select className="app-select" value={copyTarget.academicYearId} onChange={(e) => setCopyTarget((x) => ({ ...x, academicYearId: e.target.value }))}>
+                <select value={copyTarget.academicYearId} onChange={(e) => setCopyTarget((x) => ({ ...x, academicYearId: e.target.value }))}>
                   <option value="">Select Academic Year</option>
                   {data.years.map((year) => <option key={year.id} value={year.id}>{year.name}</option>)}
                 </select>
               </Field>
               <Field label="Target Section">
-                <select className="app-select" value={copyTarget.sectionId} onChange={(e) => setCopyTarget((x) => ({ ...x, sectionId: e.target.value }))}>
+                <select value={copyTarget.sectionId} onChange={(e) => setCopyTarget((x) => ({ ...x, sectionId: e.target.value }))}>
                   <option value="">Select Section</option>
                   {data.sections.map((section) => <option key={section.id} value={section.id}>{section.name}</option>)}
                 </select>

@@ -141,7 +141,7 @@ export default function AttendanceOverviewPage() {
 
       <section className="att-card att-overview-records-card">
         <header className="att-overview-record-head"><h3>Attendance Records</h3><ExportMenu /></header>
-        <label className="att-overview-month-selector"><CalendarDays size={17} /><select className="app-select" value={month} onChange={(event) => setMonth(event.target.value)} aria-label="Attendance month"><option>All Months</option>{months.map((m) => <option key={`${m.monthName}-${m.year}`}>{m.monthName} {m.year}</option>)}</select></label>
+        <label className="att-overview-month-selector"><CalendarDays size={17} /><select value={month} onChange={(event) => setMonth(event.target.value)} aria-label="Attendance month"><option>All Months</option>{months.map((m) => <option key={`${m.monthName}-${m.year}`}>{m.monthName} {m.year}</option>)}</select></label>
         <div className="att-scroll"><table className="cms-table"><thead><tr><th>Month</th><th>Working Days</th><th>Present</th><th>Absent</th><th>{staff ? "Leave" : "Half-Day"}</th><th>Attendance %</th></tr></thead><tbody>{visibleMonths.map((m) => <tr key={m.month}>
             <td>{m.monthName} {m.year}</td>
             <td>{m.workingDays}</td>

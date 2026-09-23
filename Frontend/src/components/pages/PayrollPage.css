@@ -337,7 +337,9 @@
   color: var(--cms-text);
 }
 
-.salary-form-group input, .salary-form-group textarea {
+.salary-form-group input,
+.salary-form-group select,
+.salary-form-group textarea {
   width: 100%;
   padding: 7px 10px;
   border: 1px solid var(--cms-border);
@@ -349,12 +351,9 @@
   outline: none;
 }
 
-.salary-form-group select {
-  width: 100%;
-  font: inherit;
-}
-
-.salary-form-group input:focus, .salary-form-group textarea:focus {
+.salary-form-group input:focus,
+.salary-form-group select:focus,
+.salary-form-group textarea:focus {
   border-color: var(--cms-primary);
   box-shadow: 0 0 0 2px var(--cms-primary-soft);
 }

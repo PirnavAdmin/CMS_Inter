@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building,
+  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
@@ -61,6 +61,7 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/settings/number-series", icon: settingsNumberSeriesIcon },
   { path: "/dashboard/settings/templates", icon: settingsTemplatesIcon },
   { path: "/dashboard/settings/audit-logs", icon: settingsAuditLogsIcon },
+  { path: "/dashboard/settings/roles-permissions", icon: ShieldCheck },
   { path: "/dashboard/designations", icon: generatedSidebarIcons.department },
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
@@ -179,7 +180,15 @@ export const menu = [
   {
     section: "Administration",
     items: [
-      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
+      {
+        to: "/dashboard/settings",
+        label: "Settings",
+        icon: boardAcademicYearIcon,
+        children: [
+          { to: "/dashboard/settings", label: "General Settings", icon: Settings },
+          { to: "/dashboard/settings/roles-permissions", label: "Roles & Permissions", icon: ShieldCheck },
+        ],
+      },
     ],
   },
 ];
@@ -363,8 +372,9 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const user = readUser();
-  const profileName = user?.name && user.name !== user?.email ? user.name : "CMS Admin";
-  const profileEmail = user?.email || "Admin@CMS.com";
+  const rawEmail = user?.email;
+  const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
   const profileRole = user?.role || "admin";
   const pendingActionCount = MOCK_NOTIFICATIONS.reduce((total, item) => total + item.count, 0);
 
@@ -458,6 +468,9 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
+    if (basePath === "/dashboard/settings") {
+      return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
+    }
     if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
       return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
     }
@@ -580,7 +593,7 @@ export default function DashboardLayout({
             <NavbarIcon src={navbarMenuIcon} />
           </button>
           <div className="cms-search-wrap" ref={searchRef}>
-            <div className="cms-search-top app-search-field">
+            <div className="cms-search-top">
               <NavbarIcon src={navbarSearchIcon} />
               <input placeholder="Search pages and modules..." value={query} onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)} aria-label="Search pages" />
             </div>
@@ -601,7 +614,7 @@ export default function DashboardLayout({
               <div className="cms-academic-dropdown-wrap" ref={boardRef}>
                 <button
                   type="button"
-                  className={(`cms-academic-btn ${boardOpen ? "is-open" : ""}`) + " app-select-control"}
+                  className={`cms-academic-btn ${boardOpen ? "is-open" : ""}`}
                   onClick={() => {
                     setBoardOpen((v) => !v);
                     setYearOpen(false);
@@ -625,7 +638,7 @@ export default function DashboardLayout({
                 </button>
 
                 {boardOpen && (
-                  <div className="cms-academic-dropdown-panel app-select-panel">
+                  <div className="cms-academic-dropdown-panel">
                     <div className="cms-academic-panel-header">Select Board</div>
                     <div className="cms-academic-panel-list">
                       {boardsLoading ? <div className="cms-academic-panel-empty">Loading boards...</div> : !boards.length ? <div className="cms-academic-panel-empty">{boardsError || "No active boards available"}</div> : boards.map((b) => {
@@ -635,7 +648,7 @@ export default function DashboardLayout({
                           <button
                             key={b.id || b.code}
                             type="button"
-                            className={(`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`) + " app-select-option"}
+                            className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
                             onClick={() => {
                               setSelectedBoard(b);
                               setBoardOpen(false);
@@ -667,7 +680,7 @@ export default function DashboardLayout({
               <div className="cms-academic-dropdown-wrap" ref={yearRef}>
                 <button
                   type="button"
-                  className={(`cms-academic-btn ${yearOpen ? "is-open" : ""}`) + " app-select-control"}
+                  className={`cms-academic-btn ${yearOpen ? "is-open" : ""}`}
                   onClick={() => {
                     setYearOpen((v) => !v);
                     setBoardOpen(false);
@@ -689,7 +702,7 @@ export default function DashboardLayout({
                 </button>
 
                 {yearOpen && (
-                  <div className="cms-academic-dropdown-panel app-select-panel">
+                  <div className="cms-academic-dropdown-panel">
                     <div className="cms-academic-panel-header">Select Academic Year</div>
                     <div className="cms-academic-panel-list">
                       {academicYearsLoading ? <div className="cms-academic-panel-empty">Loading academic years...</div> : !academicYears.length ? <div className="cms-academic-panel-empty">{academicYearsError || "No active academic years available"}</div> : academicYears.map((y) => {
@@ -702,7 +715,7 @@ export default function DashboardLayout({
                           <button
                             key={y.id || y.code}
                             type="button"
-                            className={(`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`) + " app-select-option"}
+                            className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
                             onClick={() => {
                               setSelectedAcademicYear(y);
                               setYearOpen(false);

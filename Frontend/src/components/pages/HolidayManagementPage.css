@@ -40,9 +40,8 @@
 .holiday-search { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 11px; border: 1px solid var(--cms-border); border-radius: 8px; color: var(--cms-muted); background: var(--cms-surface); }
 .holiday-filters > .holiday-search { flex: 1 1 280px; max-width: 380px; }
 .holiday-search input { width: 100%; min-width: 0; height: 37px; border: 0; outline: 0; color: var(--cms-text); background: transparent; font: inherit; font-size: 13px; }
-.holiday-form-grid input, .holiday-form-grid textarea { width: 100%; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-surface); color: var(--cms-text); font: inherit; font-size: 13px; }
-.holiday-filters select, .holiday-form-grid select { width: 100%; font: inherit; }
-.holiday-form-grid input { min-height: 38px; padding: 0 10px; }
+.holiday-filters select, .holiday-form-grid select, .holiday-form-grid input, .holiday-form-grid textarea { width: 100%; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-surface); color: var(--cms-text); font: inherit; font-size: 13px; }
+.holiday-filters select, .holiday-form-grid select, .holiday-form-grid input { min-height: 38px; padding: 0 10px; }
 .holiday-filters > select { flex: 0 1 160px; width: 160px; }
 .holiday-date-filter { display: flex; align-items: center; flex: 0 1 auto; gap: 6px; color: var(--cms-muted); font-size: 12px; font-weight: 600; }
 .holiday-date-filter input { min-height: 38px; padding: 0 9px; border: 1px solid var(--cms-border); border-radius: 8px; background: var(--cms-surface); color: var(--cms-text); font: inherit; }

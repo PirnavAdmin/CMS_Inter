@@ -447,7 +447,7 @@ export default function LeaveTypesPage() {
               </div>
               <div className="leave-form-field">
                 <label>Applicable Staff Eligibility</label>
-                <select className="app-select" 
+                <select 
                   value={formData.applicableStaffType}
                   onChange={(e) => setFormData({ ...formData, applicableStaffType: e.target.value })}
                 >

@@ -466,7 +466,9 @@
   color: #ef4444;
 }
 
-.leave-form-field input, .leave-form-field textarea {
+.leave-form-field input,
+.leave-form-field select,
+.leave-form-field textarea {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid #d1d5db;
@@ -478,12 +480,9 @@
   box-sizing: border-box;
 }
 
-.leave-form-field select {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.leave-form-field input:focus, .leave-form-field textarea:focus {
+.leave-form-field input:focus,
+.leave-form-field select:focus,
+.leave-form-field textarea:focus {
   border-color: var(--cms-primary, #5a6e38);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary, #5a6e38) 20%, transparent);
 }

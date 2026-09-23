@@ -435,6 +435,11 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--cms-primary) 20%, transparent) !important;
 }
 
+[data-theme="dark"] .hostel-select option {
+  background-color: #1a2217;
+  color: var(--cms-text);
+}
+
 /* Hostel Block Overview — Analytics Strip on Top */
 .hostel-block-analytics-strip {
   display: flex;

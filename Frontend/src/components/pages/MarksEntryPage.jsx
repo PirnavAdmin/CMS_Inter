@@ -312,10 +312,10 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             id: normalizeId(y.academicYearId ?? y.id),
             name: y.academicYearName ?? y.name,
             boardId: normalizeId(y.boardId),
-            isActive: y.isActive !== false,
+            isActive: y.isActive !== false && y.status !== false && y.status !== "Inactive",
             isCurrent: Boolean(y.isCurrent),
           }))
-          .filter((y) => y.isActive && (!y.boardId || eq(y.boardId, filters.board)));
+          .filter((y) => y.isActive && (!y.boardId || eq(y.boardId, filters.board)) && !String(y.name || "").includes("2028") && !String(y.name || "").includes("2029"));
 
         if (isMounted) {
           setYears(listYears);
@@ -634,7 +634,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   };
 }
 
-export default function MarksEntryPage() {
+export default function MarksEntryPage({ embedded = false } = {}) {
   // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
   const [tab, setTab] = useState("entry");
 
@@ -748,7 +748,15 @@ export default function MarksEntryPage() {
       passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
       internalMax: Number(s.internalMax ?? 20),
       practicalMax: Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
-      theoryMax: Number(s.theoryMax ?? (Number(s.maxMarks || 100) - 20)),
+      theoryMax: Number(
+        s.theoryMax ??
+          Math.max(
+            0,
+            Number(s.maxMarks || 100) -
+              Number(s.internalMax ?? 20) -
+              Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
+          )
+      ),
       facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
       facultyId: s.invigilatorId || s.facultyId || "",
     }));
@@ -2021,7 +2029,15 @@ export default function MarksEntryPage() {
         passPercentage: Number(s.passingMarks ? (s.passingMarks / s.maxMarks) * 100 : 35),
         internalMax: Number(s.internalMax ?? 20),
         practicalMax: Number(s.practicalMax ?? (s.isPractical ? 30 : 0)),
-        theoryMax: Number(s.theoryMax ?? (Number(s.maxMarks || 100) - 20)),
+        theoryMax: Number(
+          s.theoryMax ??
+            Math.max(
+              0,
+              Number(s.maxMarks || 100) -
+                Number(s.internalMax ?? 20) -
+                Number(s.practicalMax ?? (s.isPractical ? 30 : 0))
+            )
+        ),
         facultyName: s.invigilatorName || s.invigilator || s.facultyName || "",
         facultyId: s.invigilatorId || s.facultyId || "",
       }));
@@ -2478,9 +2494,8 @@ export default function MarksEntryPage() {
     evaluation: ["Marks Evaluation", "Verify, reject, and approve submitted marks"],
   }[tab] || ["Marks Entry", "Enter and submit subject-wise examination marks"];
 
-  return (
-    <DashboardLayout title={meta[0]} subtitle={meta[1]}>
-      <div className="cms-marks-entry">
+  const content = (
+    <div className={`cms-marks-entry ${embedded ? "cms-marks-entry-embedded" : ""}`}>
         {toast && (
           <div className={`cms-toast-banner cms-toast-${toast.type}`} aria-live="polite">
             {toast.text}
@@ -2887,6 +2902,11 @@ export default function MarksEntryPage() {
           />
         )}
       </div>
+  );
+
+  return embedded ? content : (
+    <DashboardLayout title={meta[0]} subtitle={meta[1]}>
+      {content}
     </DashboardLayout>
   );
 }
@@ -3711,7 +3731,7 @@ function SearchableSelect({
       <div className={`cms-custom-select ${open ? "is-open" : ""}`} ref={ref}>
         <button
           type="button"
-          className="cms-custom-select-trigger app-select-control"
+          className="cms-custom-select-trigger"
           role="combobox"
           aria-label={label}
           aria-labelledby={!hideLabel ? `${id}-label` : undefined}
@@ -3726,8 +3746,8 @@ function SearchableSelect({
           <span className="cms-select-arrow">⌄</span>
         </button>
         {open && (
-          <div className="cms-custom-select-menu app-select-panel">
-            <span className="app-search-field app-search-field--icon"><input
+          <div className="cms-custom-select-menu">
+            <input
               autoFocus
               className="cms-custom-select-search"
               value={query}
@@ -3737,13 +3757,13 @@ function SearchableSelect({
               }}
               onKeyDown={keyDown}
               placeholder="Search..."
-            /></span>
+            />
             <div className="cms-custom-select-options" id={listId} role="listbox">
               <button
                 type="button"
                 role="option"
                 aria-selected={!value}
-                className="cms-custom-select-option app-select-option"
+                className="cms-custom-select-option"
                 title={`Select ${label}`}
                 onClick={() => {
                   onChange("");
@@ -3760,9 +3780,9 @@ function SearchableSelect({
                     role="option"
                     aria-selected={eq(item.id, value)}
                     title={item.name}
-                    className={(`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${
+                    className={`cms-custom-select-option ${eq(item.id, value) ? "selected" : ""} ${
                       highlight === index ? "highlighted" : ""
-                    }`) + " app-select-option"}
+                    }`}
                     key={item.id}
                     onMouseEnter={() => setHighlight(index)}
                     onClick={() => {
@@ -3799,7 +3819,7 @@ const Num = ({ value, disabled, onChange }) => (
 );
 
 const SearchBox = ({ value, onChange }) => (
-  <div className="cms-search-wrap app-search-field app-search-field--icon">
+  <div className="cms-search-wrap">
     <input
       className="cms-search-input cms-search-input-plain"
       value={value}
@@ -3960,7 +3980,7 @@ function DynamicPagination({ page, pageSize = 5, setPageSize, totalItems = 0, se
           <div className="cms-sec-page-size-wrap">
             <span className="cms-sec-page-size-label">Per page:</span>
             <select
-              className="cms-sec-page-size-select app-select"
+              className="cms-sec-page-size-select"
               aria-label="Records per page"
               value={isCustom ? "custom" : pageSize}
               onChange={(e) => {

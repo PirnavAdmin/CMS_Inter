@@ -430,6 +430,15 @@
   color: #445522;
 }
 
+.cert-filter-item select {
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #d4dcc5;
+  font-size: 0.85rem;
+  outline: none;
+  background: #ffffff;
+}
+
 .btn-clear-filters {
   background: transparent;
   border: none;

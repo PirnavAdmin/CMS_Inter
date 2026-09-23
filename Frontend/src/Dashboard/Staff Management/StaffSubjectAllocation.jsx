@@ -269,7 +269,7 @@ const StaffSubjectAllocation = () => {
                 Teaching Staff <span>*</span>
               </label>
               <select
-                className="ssa-select app-select"
+                className="ssa-select"
                 value={form.staffId}
                 onChange={(e) => setField("staffId", e.target.value)}
               >
@@ -287,7 +287,7 @@ const StaffSubjectAllocation = () => {
             <div className="ssa-field">
               <label className="ssa-label">Board</label>
               <select
-                className="ssa-select app-select"
+                className="ssa-select"
                 value={form.board}
                 onChange={(e) => setField("board", e.target.value)}
               >
@@ -303,7 +303,7 @@ const StaffSubjectAllocation = () => {
             <div className="ssa-field">
               <label className="ssa-label">Academic Year</label>
               <select
-                className="ssa-select app-select"
+                className="ssa-select"
                 value={form.academicYear}
                 onChange={(e) => setField("academicYear", e.target.value)}
               >
@@ -319,7 +319,7 @@ const StaffSubjectAllocation = () => {
             <div className="ssa-field">
               <label className="ssa-label">Group</label>
               <select
-                className="ssa-select app-select"
+                className="ssa-select"
                 value={form.group}
                 onChange={(e) => setField("group", e.target.value)}
               >
@@ -335,7 +335,7 @@ const StaffSubjectAllocation = () => {
             <div className="ssa-field">
               <label className="ssa-label">Academic Level</label>
               <select
-                className="ssa-select app-select"
+                className="ssa-select"
                 value={form.academicLevel}
                 onChange={(e) => setField("academicLevel", e.target.value)}
               >
@@ -351,7 +351,7 @@ const StaffSubjectAllocation = () => {
             <div className="ssa-field">
               <label className="ssa-label">Section</label>
               <select
-                className="ssa-select app-select"
+                className="ssa-select"
                 value={form.section}
                 onChange={(e) => setField("section", e.target.value)}
               >
@@ -367,7 +367,7 @@ const StaffSubjectAllocation = () => {
             <div className="ssa-field">
               <label className="ssa-label">Subject</label>
               <select
-                className="ssa-select app-select"
+                className="ssa-select"
                 value={form.subject}
                 onChange={(e) => setField("subject", e.target.value)}
               >

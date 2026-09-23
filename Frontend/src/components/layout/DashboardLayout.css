@@ -509,64 +509,6 @@
   font-size: 13px;
 }
 
-/* Search results need a solid surface, independent of the glass dashboard theme. */
-.cms-topbar .cms-search-panel {
-  --search-surface: #ffffff;
-  --search-text: #1c2416;
-  --search-muted: #59634f;
-  --search-border: #d9dfcf;
-  --search-hover: #f1f4e2;
-  background: var(--search-surface);
-  color: var(--search-text);
-  border-color: var(--search-border) !important;
-  box-shadow: 0 12px 28px rgba(28, 36, 22, 0.18);
-  opacity: 1;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  max-height: min(320px, calc(100dvh - 80px));
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-}
-
-[data-theme="dark"] .cms-topbar .cms-search-panel {
-  --search-surface: #1b2119;
-  --search-text: #f1f5e9;
-  --search-muted: #bdc8b1;
-  --search-border: #414d36;
-  --search-hover: #303b27;
-}
-
-.cms-topbar .cms-search-panel .cms-search-item {
-  background: var(--search-surface);
-  color: var(--search-text);
-  flex-shrink: 0;
-}
-
-.cms-topbar .cms-search-panel .cms-search-item + .cms-search-item {
-  border-top: 1px solid var(--search-border);
-}
-
-.cms-topbar .cms-search-panel .cms-search-item > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.cms-topbar .cms-search-panel .cms-search-item small {
-  flex-shrink: 0;
-  color: var(--search-muted);
-  text-align: right;
-}
-
-.cms-topbar .cms-search-panel .cms-search-item:hover,
-.cms-topbar .cms-search-panel .cms-search-item:focus-visible {
-  background: var(--search-hover);
-  color: var(--search-text);
-}
-
-.cms-topbar .cms-search-panel .cms-search-empty {
-  color: var(--search-muted);
-}
-
 .cms-top-actions {
   margin-left: auto;
   display: flex;

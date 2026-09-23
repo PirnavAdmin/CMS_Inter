@@ -1744,8 +1744,8 @@ export default function HostelPage() {
               <Building2 size={18} style={{ color: "var(--cms-primary)" }} />
               <span>Hostel Block Overview &amp; Analytics</span>
             </div>
-            <div className="app-search-field" style={{ position: "relative", width: 280, maxWidth: "100%" }}>
-              <Search className="app-search-field__icon"
+            <div style={{ position: "relative", width: 280, maxWidth: "100%" }}>
+              <Search
                 size={15}
                 style={{
                   position: "absolute",
@@ -2176,8 +2176,8 @@ export default function HostelPage() {
         </div>
         <div className="cms-card-body">
           <div className="cms-hostel-toolbar">
-            <div className="cms-hostel-search app-search-field">
-              <Search className="app-search-field__icon" size={15} />
+            <div className="cms-hostel-search">
+              <Search size={15} />
               <input
                 placeholder="Search by name or code..."
                 value={searchQuery}
@@ -2187,7 +2187,7 @@ export default function HostelPage() {
             <div className="cms-hostel-toolbar-actions" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Filter:</span>
               <select
-                className="cms-hostel-select app-select"
+                className="cms-hostel-select"
                 value={filterBlock}
                 onChange={(e) => setFilterBlock(e.target.value)}
                 style={{ minWidth: 230 }}
@@ -2375,8 +2375,8 @@ export default function HostelPage() {
         </div>
         <div className="cms-card-body">
           <div className="cms-hostel-toolbar">
-            <div className="cms-hostel-search app-search-field">
-              <Search className="app-search-field__icon" size={15} />
+            <div className="cms-hostel-search">
+              <Search size={15} />
               <input
                 placeholder="Search by category or specification..."
                 value={searchQuery}
@@ -2385,7 +2385,7 @@ export default function HostelPage() {
             </div>
             <div className="cms-hostel-toolbar-actions">
               <select
-                className="cms-hostel-select app-select"
+                className="cms-hostel-select"
                 value={filterAcType}
                 onChange={(e) => setFilterAcType(e.target.value)}
                 style={{ minWidth: 230 }}
@@ -2610,14 +2610,14 @@ export default function HostelPage() {
           >
             {/* Left: Search input */}
             <div
-              className="cms-hostel-search app-search-field"
+              className="cms-hostel-search"
               style={{
                 minWidth: 260,
                 flex: "1 1 260px",
                 maxWidth: 420,
               }}
             >
-              <Search className="app-search-field__icon" size={15} style={{ color: "var(--cms-muted)" }} />
+              <Search size={15} style={{ color: "var(--cms-muted)" }} />
               <input
                 type="text"
                 placeholder="Search room number, hostel..."
@@ -2631,13 +2631,13 @@ export default function HostelPage() {
             <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
               <span style={{ fontSize: 12, fontWeight: 800, color: "var(--cms-text)" }}>Filter:</span>
               <select
-                className="cms-hostel-select app-select"
+                className="cms-hostel-select"
                 value={filterHostelRooms}
                 onChange={(e) => {
                   setFilterHostelRooms(e.target.value);
                   setFilterFloor("all");
                 }}
-                style={{ minWidth: 170 }}
+                style={{ minWidth: 170, borderRadius: 10, fontWeight: 600 }}
               >
                 <option value="">Select Hostel...</option>
                 <option value="all">All Hostels</option>
@@ -2651,10 +2651,10 @@ export default function HostelPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <Layers size={16} style={{ color: "var(--cms-primary)" }} />
                 <select
-                  className="cms-hostel-select app-select"
+                  className="cms-hostel-select"
                   value={filterFloor}
                   onChange={(e) => setFilterFloor(e.target.value)}
-                  style={{ minWidth: 130 }}
+                  style={{ minWidth: 130, borderRadius: 10, fontWeight: 600 }}
                 >
                   <option value="all">All Floors</option>
                   {availableFloors.map((fl) => (
@@ -2914,14 +2914,14 @@ export default function HostelPage() {
           >
             {/* Left: Search input */}
             <div
-              className="cms-hostel-search app-search-field"
+              className="cms-hostel-search"
               style={{
                 minWidth: 260,
                 flex: "1 1 260px",
                 maxWidth: 420,
               }}
             >
-              <Search className="app-search-field__icon" size={15} style={{ color: "var(--cms-muted)" }} />
+              <Search size={15} style={{ color: "var(--cms-muted)" }} />
               <input
                 type="text"
                 placeholder="Search warden by name, ID, hostel..."
@@ -2934,10 +2934,10 @@ export default function HostelPage() {
             {/* Right: Filters & Tools */}
             <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
               <select
-                className="cms-hostel-select app-select"
+                className="cms-hostel-select"
                 value={filterHostelWarden}
                 onChange={(e) => setFilterHostelWarden(e.target.value)}
-                style={{ minWidth: 200 }}
+                style={{ minWidth: 200, borderRadius: 10, fontWeight: 600 }}
               >
                 <option value="">-- Select Hostel --</option>
                 <option value="all">All Hostels</option>
@@ -3200,8 +3200,8 @@ export default function HostelPage() {
         {/* Toolbar with EXACTLY 4 Filters */}
         <div className="cms-alloc-toolbar-compact">
           {/* 1. Search Box */}
-          <div className="app-search-field" style={{ position: "relative", width: "100%" }}>
-            <Search className="app-search-field__icon"
+          <div style={{ position: "relative", width: "100%" }}>
+            <Search
               size={15}
               style={{
                 position: "absolute",
@@ -3229,7 +3229,7 @@ export default function HostelPage() {
                 setFilterAllocHostel(e.target.value);
                 setFilterAllocRoom("all");
               }}
-              className="cms-alloc-select-compact app-select"
+              className="cms-alloc-select-compact"
             >
               <option value="all">All Hostels</option>
               {hostelOptions.map((h) => (
@@ -3262,7 +3262,7 @@ export default function HostelPage() {
                 setFilterAllocFloor(e.target.value);
                 setFilterAllocRoom("all");
               }}
-              className="cms-alloc-select-compact app-select"
+              className="cms-alloc-select-compact"
             >
               <option value="all">All Floors</option>
               {floorOptions.map((f) => (
@@ -3292,7 +3292,7 @@ export default function HostelPage() {
             <select
               value={filterAllocRoom}
               onChange={(e) => setFilterAllocRoom(e.target.value)}
-              className="cms-alloc-select-compact app-select"
+              className="cms-alloc-select-compact"
             >
               <option value="all">All Rooms</option>
               {roomOptions.map((r) => (
@@ -3474,8 +3474,8 @@ export default function HostelPage() {
         {/* Filter Bar matching Screenshot 1 & 4 */}
         <div className="cms-outpass-toolbar">
           {/* Search Box */}
-          <div className="cms-outpass-search-wrap app-search-field">
-            <div className="cms-outpass-search-icon app-search-field__icon">
+          <div className="cms-outpass-search-wrap">
+            <div className="cms-outpass-search-icon">
               <Search size={15} />
             </div>
             <input
@@ -3491,7 +3491,7 @@ export default function HostelPage() {
           <div className="cms-outpass-filters-wrap">
             {/* Outpass Type Filter matching Screenshot 4 */}
             <select
-              className="cms-outpass-select app-select"
+              className="cms-outpass-select"
               value={outpassType}
               onChange={(e) => setOutpassType(e.target.value)}
             >
@@ -3503,7 +3503,7 @@ export default function HostelPage() {
 
             {/* Status Filter matching Screenshot 1 & 2 */}
             <select
-              className="cms-outpass-select app-select"
+              className="cms-outpass-select"
               value={outpassStatus}
               onChange={(e) => setOutpassStatus(e.target.value)}
             >
@@ -3712,8 +3712,8 @@ export default function HostelPage() {
         {/* Filter Toolbar matching Screenshot 1 & 2 */}
         <div className="cms-transfer-toolbar">
           {/* Search Box */}
-          <div className="cms-transfer-search-wrap app-search-field">
-            <div className="cms-transfer-search-icon app-search-field__icon">
+          <div className="cms-transfer-search-wrap">
+            <div className="cms-transfer-search-icon">
               <Search size={15} />
             </div>
             <input
@@ -3729,7 +3729,7 @@ export default function HostelPage() {
           <div className="cms-transfer-filter-container">
             <button
               type="button"
-              className="cms-transfer-filter-trigger app-select-control"
+              className="cms-transfer-filter-trigger"
               onClick={() => setIsTransferFilterOpen(!isTransferFilterOpen)}
             >
               <span>{currentFilterLabel}</span>
@@ -3744,9 +3744,9 @@ export default function HostelPage() {
             </button>
 
             {isTransferFilterOpen && (
-              <div className="cms-transfer-filter-menu app-select-panel">
+              <div className="cms-transfer-filter-menu">
                 <div
-                  className={(`cms-transfer-filter-option ${transferFilter === "" ? "selected" : ""}`) + " app-select-option"}
+                  className={`cms-transfer-filter-option ${transferFilter === "" ? "selected" : ""}`}
                   onClick={() => {
                     setTransferFilter("");
                     setIsTransferFilterOpen(false);
@@ -3755,7 +3755,7 @@ export default function HostelPage() {
                   <span>Select</span>
                 </div>
                 <div
-                  className={(`cms-transfer-filter-option ${transferFilter === "all" || !transferFilter ? "selected" : ""}`) + " app-select-option"}
+                  className={`cms-transfer-filter-option ${transferFilter === "all" || !transferFilter ? "selected" : ""}`}
                   onClick={() => {
                     setTransferFilter("all");
                     setIsTransferFilterOpen(false);
@@ -3767,7 +3767,7 @@ export default function HostelPage() {
                   )}
                 </div>
                 <div
-                  className={(`cms-transfer-filter-option ${transferFilter === "Room Transfer" ? "selected" : ""}`) + " app-select-option"}
+                  className={`cms-transfer-filter-option ${transferFilter === "Room Transfer" ? "selected" : ""}`}
                   onClick={() => {
                     setTransferFilter("Room Transfer");
                     setIsTransferFilterOpen(false);
@@ -3779,7 +3779,7 @@ export default function HostelPage() {
                   )}
                 </div>
                 <div
-                  className={(`cms-transfer-filter-option ${transferFilter === "Bed Vacate" ? "selected" : ""}`) + " app-select-option"}
+                  className={`cms-transfer-filter-option ${transferFilter === "Bed Vacate" ? "selected" : ""}`}
                   onClick={() => {
                     setTransferFilter("Bed Vacate");
                     setIsTransferFilterOpen(false);
@@ -4015,8 +4015,8 @@ export default function HostelPage() {
           {/* 1. SEARCH STUDENT */}
           <div>
             <label className="cms-att-filter-lbl-compact">SEARCH STUDENT</label>
-            <div className="app-search-field" style={{ position: "relative", width: "100%" }}>
-              <Search className="app-search-field__icon"
+            <div style={{ position: "relative", width: "100%" }}>
+              <Search
                 size={14}
                 style={{
                   position: "absolute",
@@ -4066,8 +4066,8 @@ export default function HostelPage() {
                   <select
                     value={attendanceMonth}
                     onChange={(e) => setAttendanceMonth(e.target.value)}
-                    className="cms-alloc-select-compact app-select"
-                    
+                    className="cms-alloc-select-compact"
+                    style={{ height: 34, fontSize: 12.5, fontWeight: 600 }}
                   >
                     {academicMonthOptions.map((m) => (
                       <option key={m.value} value={m.value}>
@@ -4162,8 +4162,8 @@ export default function HostelPage() {
                   setAttendanceBlock(e.target.value);
                   setAttendanceRoom("all");
                 }}
-                className="cms-alloc-select-compact app-select"
-                
+                className="cms-alloc-select-compact"
+                style={{ height: 34, fontSize: 12.5 }}
               >
                 <option value="all">All Hostel Blocks</option>
                 {attendanceBlockOptions.map((blk) => (
@@ -4196,8 +4196,8 @@ export default function HostelPage() {
               <select
                 value={attendanceRoom}
                 onChange={(e) => setAttendanceRoom(e.target.value)}
-                className="cms-alloc-select-compact app-select"
-                
+                className="cms-alloc-select-compact"
+                style={{ height: 34, fontSize: 12.5 }}
               >
                 <option value="all">All Rooms</option>
                 {attendanceRoomOptions.map((rm) => (
@@ -4810,7 +4810,7 @@ export default function HostelPage() {
             <div className="cms-report-field">
               <label className="cms-report-label">Hostel Block Filter</label>
               <select
-                className="cms-report-select app-select"
+                className="cms-report-select"
                 value={reportBlockFilter}
                 onChange={(e) => setReportBlockFilter(e.target.value)}
               >
@@ -4833,7 +4833,7 @@ export default function HostelPage() {
                 Hostel Report Category <span style={{ color: "var(--cms-red)" }}>*</span>
               </label>
               <select
-                className="cms-report-select app-select"
+                className="cms-report-select"
                 value={reportCategory}
                 onChange={(e) => setReportCategory(e.target.value)}
               >
@@ -4852,7 +4852,7 @@ export default function HostelPage() {
             <div className="cms-report-field">
               <label className="cms-report-label">Category / Status Filter</label>
               <select
-                className="cms-report-select app-select"
+                className="cms-report-select"
                 value={reportCategoryFilter}
                 onChange={(e) => setReportCategoryFilter(e.target.value)}
               >
@@ -4888,8 +4888,8 @@ export default function HostelPage() {
           </div>
 
           {/* Full-width Search Input */}
-          <div className="cms-report-search-wrap app-search-field">
-            <div className="cms-report-search-icon app-search-field__icon">
+          <div className="cms-report-search-wrap">
+            <div className="cms-report-search-icon">
               <Search size={15} />
             </div>
             <input
@@ -5132,7 +5132,7 @@ export default function HostelPage() {
             <div className="cms-report-page-size-wrap">
               <span className="cms-report-page-size-label">Per page:</span>
               <select
-                className="cms-report-page-size-select app-select"
+                className="cms-report-page-size-select"
                 aria-label="Records per page"
                 value={isCustomReportPage ? "custom" : reportPageSize}
                 onChange={(e) => {
@@ -5337,7 +5337,7 @@ export default function HostelPage() {
               <label>
                 Category <span className="required-star">*</span>
               </label>
-              <select className="app-select"
+              <select
                 required
                 disabled={isView}
                 value={form.type || ""}
@@ -5355,7 +5355,7 @@ export default function HostelPage() {
               <label>
                 Total Floors <span className="required-star">*</span>
               </label>
-              <select className="app-select"
+              <select
                 required
                 disabled={isView}
                 value={form.floors || ""}
@@ -5648,11 +5648,21 @@ export default function HostelPage() {
                   <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
                     Select Hostel Block <span style={{ color: "var(--cms-red)" }}>*</span>
                   </label>
-                  <select className="app-select"
+                  <select
                     required
                     value={selectedBlockCode}
                     onChange={(e) => handleBlockChange(e.target.value)}
-                    style={{ width: "100%" }}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: 10,
+                      border: "1px solid var(--cms-border)",
+                      background: "var(--cms-surface)",
+                      color: selectedBlockCode ? "var(--cms-text)" : "var(--cms-muted)",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      outline: "none",
+                    }}
                   >
                     <option value="" disabled>Select Hostel Block...</option>
                     {blocks.map((b) => (
@@ -5688,10 +5698,20 @@ export default function HostelPage() {
                       <label style={{ display: "block", fontSize: 10, fontWeight: 800, color: "var(--cms-muted)", textTransform: "uppercase", marginBottom: 4 }}>
                         Total Floors in Block <span style={{ color: "var(--cms-red)" }}>*</span>
                       </label>
-                      <select className="app-select"
+                      <select
                         value={floorConfigs.length || selectedBlock.floors || 3}
                         onChange={(e) => handleFloorCountChange(Number(e.target.value))}
-                        style={{ width: "100%" }}
+                        style={{
+                          width: "100%",
+                          padding: "5px 8px",
+                          borderRadius: 8,
+                          border: "1px solid var(--cms-border)",
+                          background: "var(--cms-subtle)",
+                          color: "var(--cms-primary)",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          outline: "none",
+                        }}
                       >
                         {Array.from({ length: 30 }, (_, i) => (
                           <option key={i + 1} value={i + 1}>
@@ -5708,11 +5728,20 @@ export default function HostelPage() {
                 <label style={{ display: "block", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
                   Select Floor Level
                 </label>
-                <select className="app-select"
+                <select
                   disabled={!selectedBlock}
                   value={selectedFloorLevel}
                   onChange={(e) => setSelectedFloorLevel(e.target.value)}
-                  style={{ width: "100%" }}
+                  style={{
+                    width: "100%",
+                    padding: "9px 12px",
+                    borderRadius: 10,
+                    border: "1px solid var(--cms-border)",
+                    background: "var(--cms-surface)",
+                    color: "var(--cms-text)",
+                    fontSize: 13,
+                    outline: "none",
+                  }}
                 >
                   <option value="">
                     All Floors ({floorConfigs.length || (selectedBlock?.floors || 3)} Floors Configured)
@@ -6161,7 +6190,7 @@ export default function HostelPage() {
                       <label>
                         Status <span className="required-star">*</span>
                       </label>
-                      <select className="app-select"
+                      <select
                         value={configStatus}
                         onChange={(e) => setConfigStatus(e.target.value)}
                       >
@@ -6263,7 +6292,7 @@ export default function HostelPage() {
             </div>
             <div>
               <label>Accommodation Tier *</label>
-              <select className="app-select"
+              <select
                 disabled={isView}
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
@@ -6416,8 +6445,8 @@ export default function HostelPage() {
                       floor: "",
                     });
                   }}
-                  className="cms-alloc-modal-select app-select"
-                  
+                  className="cms-alloc-modal-select"
+                  style={{ color: form.block ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="" disabled>Select Hostel Block...</option>
                   {blocks.map((b) => (
@@ -6443,8 +6472,8 @@ export default function HostelPage() {
                   disabled={isView || !form.block}
                   value={form.floor}
                   onChange={(e) => setForm({ ...form, floor: e.target.value })}
-                  className="cms-alloc-modal-select app-select"
-                  
+                  className="cms-alloc-modal-select"
+                  style={{ color: form.floor ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="" disabled>
                     {!form.block ? "Select Hostel Block first..." : "Select Floor Level..."}
@@ -6494,8 +6523,8 @@ export default function HostelPage() {
                         fee: chosen ? chosen.fee : form.fee,
                       });
                     }}
-                    className="cms-alloc-modal-select app-select"
-                    
+                    className="cms-alloc-modal-select"
+                    style={{ color: form.type ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
                     <option value="" disabled>Select room sharing...</option>
                     {sharingOptions.map((opt) => (
@@ -6521,7 +6550,7 @@ export default function HostelPage() {
                   disabled={isView}
                   value={form.status || "Active"}
                   onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  className="cms-alloc-modal-select app-select"
+                  className="cms-alloc-modal-select"
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -6680,8 +6709,8 @@ export default function HostelPage() {
                   disabled={isView}
                   value={form.staffId || ""}
                   onChange={(e) => handleCandidateChange(e.target.value)}
-                  className="cms-alloc-modal-select app-select"
-                  
+                  className="cms-alloc-modal-select"
+                  style={{ color: form.name ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="" disabled>
                     {wardenCandidates.length === 0 ? "No available unassigned staff found..." : "Select Hostel Warden..."}
@@ -6719,8 +6748,8 @@ export default function HostelPage() {
                       hostelId: blk ? blk.id : form.hostelId,
                     });
                   }}
-                  className="cms-alloc-modal-select app-select"
-                  
+                  className="cms-alloc-modal-select"
+                  style={{ color: form.assignedHostels ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="" disabled>Select Hostel Block...</option>
                   {blocks.map((b) => (
@@ -6963,7 +6992,7 @@ export default function HostelPage() {
               <label className="cms-alloc-modal-label">
                 Select Student <span style={{ color: "var(--cms-red)" }}>*</span>
               </label>
-              <div className="app-search-field app-search-field--icon" style={{ position: "relative" }}>
+              <div style={{ position: "relative" }}>
                 <input
                   type="text"
                   required
@@ -6987,7 +7016,7 @@ export default function HostelPage() {
               </div>
 
               {isStudentDropdownOpen && (
-                <div className="cms-alloc-modal-dropdown app-select-panel">
+                <div className="cms-alloc-modal-dropdown">
                   {filteredCandidates.length === 0 ? (
                     <div className="cms-alloc-modal-dropdown-empty">
                       No matching student found. Type name to assign.
@@ -7006,7 +7035,7 @@ export default function HostelPage() {
                           setStudentSearch(st.name);
                           setIsStudentDropdownOpen(false);
                         }}
-                        className="cms-alloc-modal-dropdown-item app-select-option"
+                        className="cms-alloc-modal-dropdown-item"
                       >
                         <span style={{ fontWeight: 600, color: "var(--cms-text)", fontSize: 12.5 }}>{st.name}</span>
                         <span style={{ color: "var(--cms-muted)", fontSize: 11.5 }}>
@@ -7041,8 +7070,8 @@ export default function HostelPage() {
                       bedId: null,
                     });
                   }}
-                  className="cms-alloc-modal-select app-select"
-                  
+                  className="cms-alloc-modal-select"
+                  style={{ color: form.blockName ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="">Select Hostel Block</option>
                   {blocks.map((b, idx) => (
@@ -7079,8 +7108,8 @@ export default function HostelPage() {
                         bedId: null,
                       });
                     }}
-                    className="cms-alloc-modal-select app-select"
-                    
+                    className="cms-alloc-modal-select"
+                    style={{ color: form.room ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
                     {!form.blockName ? (
                       <option value="">Select Hostel Block first...</option>
@@ -7119,8 +7148,8 @@ export default function HostelPage() {
                         bedId: bd ? bd.id : null,
                       });
                     }}
-                    className="cms-alloc-modal-select app-select"
-                    
+                    className="cms-alloc-modal-select"
+                    style={{ color: form.bed ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
                     {!form.room ? (
                       <option value="">Select Room first...</option>
@@ -7320,7 +7349,7 @@ export default function HostelPage() {
                   disabled={isView}
                   value={selectedStudentId}
                   onChange={(e) => setSelectedStudentId(e.target.value)}
-                  className="cms-alloc-modal-select app-select"
+                  className="cms-alloc-modal-select"
                 >
                   <option value="">Select Student...</option>
                   {studentCandidates.map((st) => (
@@ -7346,7 +7375,7 @@ export default function HostelPage() {
                   disabled={isView}
                   value={outpassCategory}
                   onChange={(e) => setOutpassCategory(e.target.value)}
-                  className="cms-alloc-modal-select app-select"
+                  className="cms-alloc-modal-select"
                 >
                   <option value="Local Outpass (Same Day)">Local Outpass (Same Day)</option>
                   <option value="Home Leave (Multiple Days)">Home Leave (Multiple Days)</option>
@@ -7573,7 +7602,7 @@ export default function HostelPage() {
                   disabled={isView}
                   value={selectedStudentId}
                   onChange={(e) => setSelectedStudentId(e.target.value)}
-                  className="cms-alloc-modal-select app-select"
+                  className="cms-alloc-modal-select"
                 >
                   <option value="">Select Resident Student...</option>
                   {residentStudents.map((st) => (
@@ -7599,7 +7628,7 @@ export default function HostelPage() {
                   disabled={isView}
                   value={actionType}
                   onChange={(e) => setActionType(e.target.value)}
-                  className="cms-alloc-modal-select app-select"
+                  className="cms-alloc-modal-select"
                 >
                   <option value="Room Transfer (Change Room/Block)">Room Transfer (Change Room/Block)</option>
                   <option value="Bed Vacate">Bed Vacate</option>
@@ -7625,7 +7654,7 @@ export default function HostelPage() {
                       setDestinationRoom("");
                       setDestinationBed("");
                     }}
-                    className="cms-alloc-modal-select app-select"
+                    className="cms-alloc-modal-select"
                   >
                     <option value="">Select Destination Block...</option>
                     {blocks.map((b) => (
@@ -7656,7 +7685,7 @@ export default function HostelPage() {
                         setDestinationRoom(e.target.value);
                         setDestinationBed("");
                       }}
-                      className="cms-alloc-modal-select app-select"
+                      className="cms-alloc-modal-select"
                     >
                       <option value="">Select Room...</option>
                       {destRooms.map((r) => (
@@ -7680,7 +7709,7 @@ export default function HostelPage() {
                       disabled={isView}
                       value={destinationBed}
                       onChange={(e) => setDestinationBed(e.target.value)}
-                      className="cms-alloc-modal-select app-select"
+                      className="cms-alloc-modal-select"
                     >
                       {!destRoomObj ? (
                         <option value="">Select Room first...</option>

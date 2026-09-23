@@ -2813,7 +2813,7 @@ export default function ExaminationPage() {
       {activeTab === "exams" ? (
         <div className="cms-card exam-list-card">
           <div className="exam-table-toolbar">
-            <div className="exam-search app-search-field app-search-field--icon">
+            <div className="exam-search">
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -3436,7 +3436,7 @@ function SearchableSingleSelect({
       {label && <label>{label}</label>}
       <div className="cms-searchable-select">
         <div
-          className={((`cms-searchable-select-trigger staff-search-input-wrap ${open ? "is-active" : ""}`) + " app-search-field") + " app-select-control"}
+          className={`cms-searchable-select-trigger staff-search-input-wrap ${open ? "is-active" : ""}`}
           style={{ ...(error ? { borderColor: "#ef4444" } : {}), cursor: disabled ? "not-allowed" : "pointer" }}
           onClick={() => {
             if (disabled) return;
@@ -3448,7 +3448,7 @@ function SearchableSingleSelect({
             if (inputEl) inputEl.focus();
           }}
         >
-          <Search className="staff-search-icon app-search-field__icon" aria-hidden="true" size={14} />
+          <Search className="staff-search-icon" aria-hidden="true" size={14} />
           <input
             type="text"
             disabled={disabled}
@@ -3506,8 +3506,17 @@ function SearchableSingleSelect({
 
         {open && !disabled && (
           <div
-            className="cms-searchable-select-dropdown staff-search-dropdown-menu app-select-panel"
-            style={{ opacity: 1, zIndex: 100000, overflow: "hidden" }}
+            className="cms-searchable-select-dropdown staff-search-dropdown-menu"
+            style={{
+              backgroundColor: "#ffffff",
+              background: "#ffffff",
+              opacity: 1,
+              zIndex: 100000,
+              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.08)",
+              border: "1.5px solid var(--cms-border, #d1d5db)",
+              borderRadius: "12px",
+              overflow: "hidden",
+            }}
           >
             <div className="cms-searchable-select-options" role="listbox" style={{ background: "#ffffff", opacity: 1, maxHeight: "220px", overflowY: "auto" }}>
               {filteredOptions.length > 0 ? (
@@ -3516,11 +3525,16 @@ function SearchableSingleSelect({
                   return (
                     <div
                       key={opt.id}
-                      className={(`cms-searchable-select-option staff-search-dropdown-item ${isSelected ? "selected is-selected" : ""}`) + " app-select-option"}
+                      className={`cms-searchable-select-option staff-search-dropdown-item ${isSelected ? "selected is-selected" : ""}`}
                       role="option"
                       aria-selected={isSelected}
                       title={opt.name}
-                      style={{ cursor: "pointer" }}
+                      style={{
+                        backgroundColor: isSelected ? "var(--cms-primary-soft, #f0fdf4)" : "#ffffff",
+                        color: isSelected ? "var(--cms-primary, #6F8400)" : "var(--cms-text, #1e293b)",
+                        fontWeight: isSelected ? "600" : "normal",
+                        cursor: "pointer",
+                      }}
                       onMouseDown={(e) => {
                         e.preventDefault();
                         handleSelect(opt);
@@ -3608,7 +3622,7 @@ function SearchableMultiSelect({
         <button
           type="button"
           disabled={disabled}
-          className="cms-searchable-select-trigger app-select-control"
+          className="cms-searchable-select-trigger"
           aria-haspopup="listbox"
           aria-expanded={open}
           onClick={() =>
@@ -3628,11 +3642,20 @@ function SearchableMultiSelect({
 
         {open && (
           <div
-            className="cms-searchable-select-dropdown app-select-panel"
-            style={{ opacity: 1, zIndex: 100000, overflow: "hidden" }}
+            className="cms-searchable-select-dropdown"
+            style={{
+              backgroundColor: "#ffffff",
+              background: "#ffffff",
+              opacity: 1,
+              zIndex: 100000,
+              boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 4px 10px rgba(0, 0, 0, 0.08)",
+              border: "1.5px solid var(--cms-border, #d1d5db)",
+              borderRadius: "12px",
+              overflow: "hidden",
+            }}
           >
-            <div className="cms-searchable-select-search app-search-field" style={{ backgroundColor: "#ffffff" }}>
-              <Search3DIcon className="app-search-field__icon" size={14} />
+            <div className="cms-searchable-select-search" style={{ backgroundColor: "#ffffff" }}>
+              <Search3DIcon size={14} />
               <input
                 type="text"
                 autoFocus
@@ -3648,7 +3671,7 @@ function SearchableMultiSelect({
                   return (
                     <div
                       key={opt.id}
-                      className={(`cms-searchable-select-option ${isChecked ? "selected" : ""}`) + " app-select-option"}
+                      className={`cms-searchable-select-option ${isChecked ? "selected" : ""}`}
                       role="option"
                       aria-selected={isChecked}
                       title={opt.name}

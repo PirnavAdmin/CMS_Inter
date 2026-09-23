@@ -51,7 +51,9 @@
   gap: 5px;
 }
 
-.course-group-form-page .cms-field input, .course-group-form-page .cms-field textarea {
+.course-group-form-page .cms-field input,
+.course-group-form-page .cms-field select,
+.course-group-form-page .cms-field textarea {
   min-height: 38px;
   padding: 8px 10px;
 }

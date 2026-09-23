@@ -43,6 +43,15 @@ export default function SettingsPage() {
       primary: true,
     },
     {
+      id: "roles-permissions",
+      title: "Roles & Permissions",
+      description: "Manage system roles and module-level permissions for dashboard access control.",
+      icon: ShieldCheck,
+      to: "/dashboard/settings/roles-permissions",
+      buttonText: "Manage Roles",
+      primary: true,
+    },
+    {
       id: "leave-types",
       title: "Leave Types & Policy Configuration",
       description: "Define annual leave quotas, staff eligibility, carry-forward policies, and proof requirements.",

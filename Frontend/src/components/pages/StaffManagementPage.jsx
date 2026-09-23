@@ -30,24 +30,8 @@ import {
   ExternalLink,
   UserCheck,
   Lock,
+  KeyRound,
   X,
-  Bus,
-  BookOpen,
-  CreditCard,
-  ShieldCheck,
-  Wrench,
-  Cpu,
-  FileCheck2,
-  Sparkles,
-  Package,
-  HeartHandshake,
-  Layers,
-  FlaskConical,
-  Building,
-  AlertTriangle,
-  CheckCircle2,
-  Info,
-  HelpCircle,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -56,14 +40,6 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
-import {
-  NON_TEACHING_ROLE_CONFIG,
-  normalizeDepartmentCode,
-  normalizeDesignationCode,
-  getDepartmentConfig,
-  getDepartmentRoles,
-  getRoleConfig,
-} from "@/data/nonTeachingRolesConfig.js";
 import * as XLSX from "xlsx";
 import "./StaffManagementPage.css";
 import totalStaffIcon from "@/assets/dashboard-3d/add-staff.png";
@@ -974,7 +950,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
   return (
     <div className={`staff-custom-search-select ${hasError ? "has-error" : ""}`} ref={ref}>
       <div
-        className="staff-search-input-wrap app-search-field app-select-control"
+        className="staff-search-input-wrap"
         style={{ ...(hasError ? { borderColor: "#ef4444" } : {}), cursor: "pointer" }}
         onClick={() => {
           setOpen((prev) => !prev);
@@ -982,7 +958,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
           if (inputEl) inputEl.focus();
         }}
       >
-        <Search className="staff-search-icon app-search-field__icon" aria-hidden="true" size={13} />
+        <Search className="staff-search-icon" aria-hidden="true" size={13} />
         <input
           type="text"
           value={search}
@@ -1017,8 +993,19 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
       </div>
       {open ? (
         <div
-          className="staff-search-dropdown-menu app-select-panel"
-          style={{ opacity: 1, zIndex: 99999, maxHeight: "180px", overflowY: "auto", scrollbarWidth: "thin" }}
+          className="staff-search-dropdown-menu"
+          style={{
+            backgroundColor: "#ffffff",
+            background: "#ffffff",
+            opacity: 1,
+            zIndex: 99999,
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
+            border: "1px solid var(--cms-border, #d1d5db)",
+            maxHeight: "165px",
+            overflowY: "auto",
+            overflowX: "hidden",
+            scrollbarWidth: "thin",
+          }}
         >
           {filteredOpts.length > 0 ? (
             filteredOpts.map((o, idx) => {
@@ -1028,8 +1015,13 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
               return (
                 <div
                   key={`${optVal}-${idx}`}
-                  className={(`staff-search-dropdown-item ${isSelected ? "is-selected" : ""}`) + " app-select-option"}
-                  style={{ cursor: "pointer" }}
+                  className={`staff-search-dropdown-item ${isSelected ? "is-selected" : ""}`}
+                  style={{
+                    backgroundColor: isSelected ? "var(--cms-primary-soft, #f0fdf4)" : "#ffffff",
+                    color: isSelected ? "var(--cms-primary, #355e3b)" : "var(--cms-text, #1f2937)",
+                    fontWeight: isSelected ? "600" : "normal",
+                    cursor: "pointer",
+                  }}
                   onMouseDown={(e) => {
                     e.preventDefault();
                     handleSelect(o);
@@ -1155,13 +1147,13 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
   return (
     <div className="subject-allocation-wrapper" ref={ref}>
       <div
-        className="subject-compact-box app-search-field app-select-control"
+        className="subject-compact-box"
         onClick={() => {
           const input = ref.current?.querySelector("input");
           if (input) input.focus();
         }}
       >
-        <Search className="subject-search-icon app-search-field__icon" size={13} />
+        <Search className="subject-search-icon" size={13} />
         {selectedSubjects.map((sub, idx) => (
           <span key={`${sub}-${idx}`} className="subject-pill">
             {sub}
@@ -1194,10 +1186,10 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
       </div>
 
       {open ? (
-        <div className="subject-dropdown-menu app-select-panel">
+        <div className="subject-dropdown-menu">
           {showCustomAdd ? (
             <div
-              className="subject-dropdown-item is-custom-add app-select-option"
+              className="subject-dropdown-item is-custom-add"
               onMouseDown={(e) => {
                 e.preventDefault();
                 addSubject(search);
@@ -1211,7 +1203,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
             filteredOptions.map((opt, idx) => (
               <div
                 key={`${opt}-${idx}`}
-                className="subject-dropdown-item app-select-option"
+                className="subject-dropdown-item"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   addSubject(opt);
@@ -1730,20 +1722,6 @@ function Field({
         return Array.from(new Set(liveDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean)));
       }
 
-      if (!isTeaching && currentDept) {
-        const deptRoles = getDepartmentRoles(currentDept);
-        if (Array.isArray(deptRoles) && deptRoles.length > 0) {
-          return deptRoles;
-        }
-      }
-
-      let deptSpecific = [];
-      if (currentDept) {
-        deptSpecific = isTeaching
-          ? (teachingDesignationMap[currentDept] || [])
-          : (getDepartmentRoles(currentDept) || nonTeachingDesignationMap[currentDept] || []);
-      }
-
       // Fallback ONLY when API returned no designations (e.g. network offline):
       if (currentDept) {
         const activeMap = isTeaching ? teachingDesignationMap : nonTeachingDesignationMap;
@@ -1970,10 +1948,13 @@ function Field({
         {label} {required ? <b className="required-star" style={{ color: "#ef4444", marginLeft: "2px", fontWeight: "bold" }}>*</b> : null}
       </span>
       {type === "select" ? (
-        <select className="app-select"
+        <select
           value={val}
           onChange={(e) => change(e.target.value)}
-          style={{ ...errorStyle }}
+          style={{
+            ...errorStyle,
+            color: val ? "var(--cms-text)" : "var(--cms-muted, #738065)",
+          }}
         >
           <option value="" disabled hidden style={{ color: "var(--cms-muted, #738065)" }}>
             Select {label}
@@ -2601,8 +2582,8 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
               Errors ({invalidCount})
             </button>
           </div>
-          <div className="staff-import-search app-search-field">
-            <Search className="app-search-field__icon" size={14} />
+          <div className="staff-import-search">
+            <Search size={14} />
             <input
               type="text"
               placeholder="Search in imported rows..."
@@ -3228,11 +3209,11 @@ function StaffList({ records = [], setRecords, forced }) {
         if (isMounted) {
           if (deptRes.status === "fulfilled" && deptRes.value?.data) {
             const items = deptRes.value.data.items || deptRes.value.data.data || (Array.isArray(deptRes.value.data) ? deptRes.value.data : []);
-            setApiFilterDepts(items.map((d) => (typeof d === "object" ? d.name || d.departmentName : d)).filter(Boolean));
+            setApiFilterDepts(items);
           }
           if (desigRes.status === "fulfilled" && desigRes.value?.data) {
             const items = desigRes.value.data.items || desigRes.value.data.data || (Array.isArray(desigRes.value.data) ? desigRes.value.data : []);
-            setApiFilterDesigs(items.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean));
+            setApiFilterDesigs(items);
           }
         }
       } catch (err) {
@@ -3244,14 +3225,88 @@ function StaffList({ records = [], setRecords, forced }) {
   }, [forced, tab]);
 
   const departmentOptions = useMemo(() => {
-    const fallback = list.map((r) => r?.department).filter(Boolean);
-    return [...new Set([...apiFilterDepts, ...fallback])];
-  }, [apiFilterDepts, list]);
+    const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+    const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+    const fallbackList = isTeaching ? teachingDepartments : isNonTeaching ? nonTeachingDepartments : [...teachingDepartments, ...nonTeachingDepartments];
+    const apiNames = apiFilterDepts.map((d) => (typeof d === "object" ? d.name || d.departmentName : d)).filter(Boolean);
+    const listNames = list.map((r) => r?.department).filter(Boolean);
+    return [...new Set([...apiNames, ...fallbackList, ...listNames])];
+  }, [apiFilterDepts, forced, tab, list]);
 
   const designationOptions = useMemo(() => {
-    const fallback = list.map((r) => r?.designation).filter(Boolean);
-    return [...new Set([...apiFilterDesigs, ...fallback])];
-  }, [apiFilterDesigs, list]);
+    const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+    const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+    const currentDept = String(departmentFilter || "").trim();
+    const currentDeptNorm = currentDept.toLowerCase().replace(/[-_\s&]/g, "");
+
+    if (currentDept) {
+      // 1. Live designations from API matching selected department
+      const matchingApi = apiFilterDesigs
+        .filter((d) => {
+          if (!d) return false;
+          if (typeof d === "object") {
+            const dDeptName = String(d.departmentName || d.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "");
+            return dDeptName && (dDeptName === currentDeptNorm || currentDeptNorm.includes(dDeptName) || dDeptName.includes(currentDeptNorm));
+          }
+          return false;
+        })
+        .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+        .filter(Boolean);
+
+      // 2. Static / fallback designation mapping for this department
+      const activeMap = isTeaching ? teachingDesignationMap : isNonTeaching ? nonTeachingDesignationMap : { ...teachingDesignationMap, ...nonTeachingDesignationMap };
+      let mapDesigs = [];
+      for (const [deptKey, desigs] of Object.entries(activeMap)) {
+        const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
+        if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
+          if (Array.isArray(desigs)) mapDesigs = desigs;
+          break;
+        }
+      }
+
+      // 3. Fallback from local list items matching this department
+      const localMatching = list
+        .filter((r) => r && String(r.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "") === currentDeptNorm)
+        .map((r) => r.designation)
+        .filter(Boolean);
+
+      const combined = [...new Set([...matchingApi, ...mapDesigs, ...localMatching])];
+      if (combined.length > 0) return combined;
+    }
+
+    // When no department is selected, return all designations for this staff type
+    const fallbackList = isTeaching ? teachingDesignations : isNonTeaching ? nonTeachingDesignations : [...teachingDesignations, ...nonTeachingDesignations];
+    const apiNames = apiFilterDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean);
+    const listNames = list.map((r) => r?.designation).filter(Boolean);
+    return [...new Set([...apiNames, ...fallbackList, ...listNames])];
+  }, [apiFilterDesigs, departmentFilter, forced, tab, list]);
+
+  const handleDepartmentFilterChange = (newDept) => {
+    setDepartmentFilter(newDept);
+    setPage(1);
+    if (newDept && designationFilter) {
+      const currentDeptNorm = newDept.toLowerCase().replace(/[-_\s&]/g, "");
+      const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+      const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+      const activeMap = isTeaching ? teachingDesignationMap : isNonTeaching ? nonTeachingDesignationMap : { ...teachingDesignationMap, ...nonTeachingDesignationMap };
+      let validDesigs = [];
+      for (const [deptKey, desigs] of Object.entries(activeMap)) {
+        const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
+        if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
+          validDesigs = desigs;
+          break;
+        }
+      }
+      const matchingApi = apiFilterDesigs
+        .filter((d) => typeof d === "object" && String(d.departmentName || d.department || "").toLowerCase().replace(/[-_\s&]/g, "") === currentDeptNorm)
+        .map((d) => (typeof d === "object" ? d.name || d.designationName : d));
+      const allValid = new Set([...validDesigs, ...matchingApi]);
+      if (allValid.size > 0 && !allValid.has(designationFilter)) {
+        setDesignationFilter("");
+      }
+    }
+  };
+
   const showStaffType = forced !== "Teaching" && forced !== "Non-Teaching";
   const shown = useMemo(() => {
     if (apiItems !== null && Array.isArray(apiItems)) {
@@ -3274,8 +3329,8 @@ function StaffList({ records = [], setRecords, forced }) {
 
   return (
     <DashboardLayout
-      title={forced === "Completed" ? "Completed Profiles" : forced === "All" ? "Staff List" : forced ? `${forced} Staff` : "Staff List"}
-      subtitle={forced === "Completed" ? "View staff members with completed profiles." : "View, edit and manage all staff members."}
+      title={forced === "Completed" ? "Completed Profiles" : forced === "All" ? "Total Staff" : forced ? `${forced} Staff` : "Total Staff"}
+      subtitle={forced === "Completed" ? "View staff members with completed profiles." : forced === "All" || !forced ? "View, edit and manage all staff members across the institution." : `View, edit and manage ${forced.toLowerCase()} staff members.`}
       breadcrumb={["People", "Staff Management"]}
       actions={null}
     >
@@ -3304,25 +3359,25 @@ function StaffList({ records = [], setRecords, forced }) {
             </div>
           ) : null}
           <div className="staff-toolbar">
-            <div className="staff-toolbar-filters app-search-toolbar">
-              <label className="app-search-field">
-                <Search3DIcon className="app-search-field__icon" size={15} />
+            <div className="staff-toolbar-filters">
+              <label>
+                <Search3DIcon size={15} />
                 <input
                   placeholder="Search staff..."
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                 />
               </label>
-              <select className="app-select" value={departmentFilter} onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }} aria-label="Filter by department">
+              <select value={departmentFilter} onChange={(e) => handleDepartmentFilterChange(e.target.value)} aria-label="Filter by department">
                 <option value="">Department</option>
                 {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
               </select>
-              <select className="app-select" value={designationFilter} onChange={(e) => { setDesignationFilter(e.target.value); setPage(1); }} aria-label="Filter by designation">
+              <select value={designationFilter} onChange={(e) => { setDesignationFilter(e.target.value); setPage(1); }} aria-label="Filter by designation">
                 <option value="">Designation</option>
                 {designationOptions.map((designation) => <option key={designation} value={designation}>{designation}</option>)}
               </select>
               {showStaffType ? (
-                <select className="app-select" value={staffTypeFilter} onChange={(e) => { setStaffTypeFilter(e.target.value); setPage(1); }} aria-label="Filter by staff type">
+                <select value={staffTypeFilter} onChange={(e) => { setStaffTypeFilter(e.target.value); setPage(1); }} aria-label="Filter by staff type">
                   <option value="">Staff Type</option>
                   <option value="Teaching">Teaching</option>
                   <option value="Non-Teaching">Non-Teaching</option>
@@ -3712,129 +3767,6 @@ function TeachingForm({ records, setRecords, existing }) {
 }
 
 // ----------------------------------------------------------------------
-// DEPARTMENT HELPER PANEL & DYNAMIC FIELD COMPONENTS
-// ----------------------------------------------------------------------
-function DepartmentHelperPanel({ department, designation }) {
-  const deptConfig = getDepartmentConfig(department);
-  const roleConfig = getRoleConfig(department, designation);
-  const IconComp = DEPARTMENT_ICONS[deptConfig.deptCode] || Building2;
-
-  return (
-    <aside className="nt-helper-panel">
-      <div className="nt-helper-header">
-        <div className="nt-role-header-icon">
-          <IconComp size={20} />
-        </div>
-        <div>
-          <span className="nt-helper-badge">{deptConfig.deptName}</span>
-          <h4 className="nt-helper-title">{roleConfig.roleLabel || designation || "Department Role"}</h4>
-          <p className="nt-helper-tagline">"{deptConfig.tagline}"</p>
-        </div>
-      </div>
-      <p className="nt-helper-desc">{deptConfig.description}</p>
-      <div>
-        <h5 className="nt-helper-points-title">Key Operational Responsibilities</h5>
-        <ul className="nt-helper-points">
-          {deptConfig.highlights.map((point, idx) => (
-            <li key={idx}>
-              <CheckCircle2 size={13} />
-              <span>{point}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </aside>
-  );
-}
-
-const DEPARTMENT_ICONS = {
-  TRANSPORT: Bus,
-  HOSTEL: Building2,
-  LIBRARY: BookOpen,
-  ACCOUNTS_FINANCE: CreditCard,
-  SECURITY: ShieldCheck,
-  MAINTENANCE: Wrench,
-  IT_SUPPORT: Cpu,
-  EXAMINATIONS: FileCheck2,
-  ADMINISTRATION: Building,
-  HR: Users,
-  ADMISSIONS: GraduationCap,
-  HOUSEKEEPING: Sparkles,
-  STORES_INVENTORY: Package,
-  STUDENT_AFFAIRS: HeartHandshake,
-  CAMPUS_OPERATIONS: Layers,
-  LAB_SUPPORT: FlaskConical,
-};
-
-function DepartmentSpecificFields({ fields = [], values = {}, setValues, errors = {}, setErrors }) {
-  const handleChange = (fieldName, val) => {
-    if (typeof setErrors === "function" && errors[fieldName]) {
-      setErrors((prev) => {
-        const copy = { ...prev };
-        delete copy[fieldName];
-        return copy;
-      });
-    }
-    if (typeof setValues === "function") {
-      setValues((prev) => ({
-        ...prev,
-        [fieldName]: val,
-      }));
-    }
-  };
-
-  return (
-    <div className="staff-form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-      {fields.map((f) => {
-        const { name, label, type, options, required, placeholder, gridSpan } = f;
-        const val = values[name] ?? "";
-        const hasError = Boolean(errors[name]);
-        const isWide = gridSpan === "is-wide" || type === "textarea";
-
-        return (
-          <label key={name} className={`${isWide ? "is-wide" : ""} ${hasError ? "has-field-error" : ""}`}>
-            <span>
-              {label} {required ? <b className="required-star">*</b> : null}
-            </span>
-            {type === "select" ? (
-              <select className="app-select"
-                value={val}
-                onChange={(e) => handleChange(name, e.target.value)}
-                style={hasError ? { borderColor: "#ef4444" } : undefined}
-              >
-                <option value="">Select {label}</option>
-                {(options || []).map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            ) : type === "textarea" ? (
-              <textarea
-                rows={3}
-                value={val}
-                placeholder={placeholder || `Enter ${label.toLowerCase()}...`}
-                onChange={(e) => handleChange(name, e.target.value)}
-                style={hasError ? { borderColor: "#ef4444" } : undefined}
-              />
-            ) : (
-              <input
-                type={type === "number" ? "number" : type === "date" ? "date" : "text"}
-                value={val}
-                placeholder={placeholder || `Enter ${label.toLowerCase()}...`}
-                onChange={(e) => handleChange(name, e.target.value)}
-                style={hasError ? { borderColor: "#ef4444" } : undefined}
-              />
-            )}
-            {hasError ? <span className="field-error">{errors[name]}</span> : null}
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-// ----------------------------------------------------------------------
 // CREATE / EDIT NON-TEACHING FORM (POST /api/v1/staff & PUT /api/v1/staff/{id})
 // ----------------------------------------------------------------------
 function NonTeachingForm({ records, setRecords, existing }) {
@@ -3845,104 +3777,50 @@ function NonTeachingForm({ records, setRecords, existing }) {
   const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
   const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || activeBoardCode || "";
   const activeBoardId = selectedBoard?.id || selectedBoard?.boardId || undefined;
-  const stepLabels = [
-    "Basic Details",
-    "Department & Role",
-    "Department Specific Details",
-    "Documents & Summary",
+  const pincodeRequestRef = useRef(0);
+  const labels = [
+    "Personal Information",
+    "Contact & Address",
+    "Employment Details",
+    // "Salary & Bank", // Commented out per requirement: salary structure is assigned in separate module
+    "Documents",
+    "Emergency Contact",
+    "Preview",
   ];
-
   const [step, setStep] = useState(0);
-  const [editingFromReview, setEditingFromReview] = useState(false);
-  const [toast, setToast] = useState("");
+  const [values, setValues] = useState(
+    existing || {
+      staffType: "Non-Teaching",
+      role: "",
+      roleName: "",
+      roleId: undefined,
+      employeeId: "",
+      board: activeBoardName,
+      boardName: activeBoardName,
+      boardCode: activeBoardCode,
+      ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
+      status: "Active",
+      nationality: "Indian",
+      country: "India",
+    },
+  );
   const [errors, setErrors] = useState({});
+  const [toast, setToast] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pincodeError, setPincodeError] = useState("");
+  const [editingFromReview, setEditingFromReview] = useState(false);
 
-  // Confirmation Warnings State
-  const [deptChangePending, setDeptChangePending] = useState(null);
-  const [desigChangePending, setDesigChangePending] = useState(null);
-
-  // Form State Structure
-  const [formData, setFormData] = useState(() => {
-    if (existing) {
-      const existingDeptSpec = existing.departmentSpecific || {};
-      const existingDocs = existing.documents || {};
-      return {
-        basic: {
-          board: existing.board || existing.boardName || activeBoardName,
-          boardName: existing.boardName || existing.board || activeBoardName,
-          boardCode: existing.boardCode || activeBoardCode,
-          boardId: existing.boardId || activeBoardId,
-          employeeId: existing.employeeId || "",
-          firstName: existing.firstName || "",
-          middleName: existing.middleName || "",
-          lastName: existing.lastName || "",
-          gender: existing.gender || "Male",
-          dateOfBirth: existing.dateOfBirth || "",
-          mobile: existing.mobile || "",
-          email: existing.email || "",
-          profilePhoto: existing.profilePhoto || null,
-        },
-        employment: {
-          department: existing.department || "Transport",
-          designation: existing.designation || "Driver",
-          employmentType: existing.employmentType || "Full Time",
-          dateOfJoining: existing.dateOfJoining || existing.joiningDate || new Date().toISOString().split("T")[0],
-          status: existing.status || "Active",
-        },
-        departmentSpecific: {
-          ...existingDeptSpec,
-          ...existing,
-        },
-        documents: {
-          ...existingDocs,
-        },
-      };
-    }
-
-    return {
-      basic: {
+  useEffect(() => {
+    if (!existing && activeBoardName && !values.board) {
+      setValues((v) => ({
+        ...v,
         board: activeBoardName,
         boardName: activeBoardName,
         boardCode: activeBoardCode,
-        boardId: activeBoardId,
-        employeeId: "",
-        firstName: "",
-        middleName: "",
-        lastName: "",
-        gender: "Male",
-        dateOfBirth: "",
-        mobile: "",
-        email: "",
-        profilePhoto: null,
-      },
-      employment: {
-        department: "Transport",
-        designation: "Driver",
-        employmentType: "Full Time",
-        dateOfJoining: new Date().toISOString().split("T")[0],
-        status: "Active",
-      },
-      departmentSpecific: {},
-      documents: {},
-    };
-  });
-
-  // Sync active board if creating new staff
-  useEffect(() => {
-    if (!existing && activeBoardName && !formData.basic.board) {
-      setFormData((prev) => ({
-        ...prev,
-        basic: {
-          ...prev.basic,
-          board: activeBoardName,
-          boardName: activeBoardName,
-          boardCode: activeBoardCode,
-          boardId: activeBoardId,
-        },
+        ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
       }));
     }
-  }, [activeBoardName, activeBoardCode, activeBoardId, existing, formData.basic.board]);
+  }, [activeBoardName, activeBoardCode, activeBoardId, existing, values.board]);
 
   // Fetch next employee ID dynamically from Settings Number Series / Staff API
   useEffect(() => {
@@ -3950,217 +3828,149 @@ function NonTeachingForm({ records, setRecords, existing }) {
     async function fetchNextId() {
       const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records);
       if (isMounted && nextId) {
-        setFormData((prev) => ({
-          ...prev,
-          basic: { ...prev.basic, employeeId: nextId },
-        }));
+        setValues((v) => ({ ...v, employeeId: nextId }));
       }
     }
-    if (!existing && !formData.basic.employeeId) fetchNextId();
+    if (!existing) fetchNextId();
+    return () => { isMounted = false; };
+  }, [existing, records]);
+
+  useEffect(() => {
+    const pincode = String(values.pin || "").replace(/\D/g, "").slice(0, 6);
+    if (pincode !== String(values.pin || "")) {
+      setValues((current) => ({ ...current, pin: pincode }));
+      return undefined;
+    }
+    if (!/^\d{6}$/.test(pincode)) {
+      pincodeRequestRef.current += 1;
+      setPincodeError("");
+      return undefined;
+    }
+
+    let ignore = false;
+    const requestId = ++pincodeRequestRef.current;
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await apiClient.get(apiEndpoints.location.byPincode(pincode), { skipGlobalLoader: true });
+        const data = response.data?.data ?? response.data?.Data ?? response.data ?? {};
+        const location = {
+          country: data.country || "India",
+          state: data.state || "",
+          district: data.district || "",
+          city: data.city || data.postOffice || "",
+        };
+        if (ignore || requestId !== pincodeRequestRef.current) return;
+        setValues((current) => ({ ...current, ...location }));
+        setPincodeError("");
+      } catch {
+        if (!ignore && requestId === pincodeRequestRef.current) {
+          setPincodeError("Location could not be loaded. Enter details manually.");
+        }
+      }
+    }, 450);
     return () => {
-      isMounted = false;
+      ignore = true;
+      window.clearTimeout(timer);
     };
-  }, [existing, records, formData.basic.employeeId]);
+  }, [values.pin]);
 
-  // Current Role Configuration based on (department, designation)
-  const currentDept = formData.employment.department || "Transport";
-  const currentDesig = formData.employment.designation || "Driver";
-  const deptConfig = useMemo(() => getDepartmentConfig(currentDept), [currentDept]);
-  const roleConfig = useMemo(() => getRoleConfig(currentDept, currentDesig), [currentDept, currentDesig]);
-  const DeptIcon = DEPARTMENT_ICONS[deptConfig.deptCode] || Building2;
+  const next = () => {
+    const currentFields = getNonTeachingStepFields(step, values);
+    const stepErrors = validateStepFields(currentFields, values, activeBoardName);
 
-  // Check if departmentSpecific has user-entered data
-  const hasRoleData = useMemo(() => {
-    const spec = formData.departmentSpecific;
-    if (!spec || typeof spec !== "object") return false;
-    return Object.values(spec).some((v) => v !== undefined && v !== null && String(v).trim() !== "");
-  }, [formData.departmentSpecific]);
-
-  // Handle Department Dropdown Selection (with confirmation if data exists)
-  const handleDepartmentSelect = (newDept) => {
-    if (newDept === formData.employment.department) return;
-    if (hasRoleData) {
-      setDeptChangePending(newDept);
-    } else {
-      applyDepartmentChange(newDept);
-    }
-  };
-
-  const applyDepartmentChange = (newDept) => {
-    const availableRoles = getDepartmentRoles(newDept);
-    const defaultRole = availableRoles[0] || "";
-    setFormData((prev) => ({
-      ...prev,
-      employment: {
-        ...prev.employment,
-        department: newDept,
-        designation: defaultRole,
-      },
-      departmentSpecific: {},
-    }));
-    setDeptChangePending(null);
-  };
-
-  // Handle Designation Dropdown Selection (with confirmation if data exists)
-  const handleDesignationSelect = (newDesig) => {
-    if (newDesig === formData.employment.designation) return;
-    if (hasRoleData) {
-      setDesigChangePending(newDesig);
-    } else {
-      applyDesignationChange(newDesig);
-    }
-  };
-
-  const applyDesignationChange = (newDesig) => {
-    setFormData((prev) => ({
-      ...prev,
-      employment: {
-        ...prev.employment,
-        designation: newDesig,
-      },
-      departmentSpecific: {},
-    }));
-    setDesigChangePending(null);
-  };
-
-  // Step 1 Fields (Basic Staff Details)
-  const basicFields = useMemo(() => [
-    ["board", "Board Name", "select", [], true],
-    ["employeeId", "Employee ID", "text", [], true],
-    ["firstName", "First Name", "text", [], true],
-    ["middleName", "Middle Name", "text", [], false],
-    ["lastName", "Last Name", "text", [], true],
-    ["gender", "Gender", "select", ["Male", "Female", "Other"], true],
-    ["dateOfBirth", "Date of Birth", "date", [], true],
-    ["mobile", "Mobile Number", "text", [], true],
-    ["email", "Email Address", "email", [], false],
-    ["profilePhoto", "Profile Photo", "file", [], false],
-  ], []);
-
-  // Step 2 Fields (Department & Designation)
-  const availableDeptOptions = useMemo(() => {
-    const apiList = Array.isArray(apiDepts) && apiDepts.length > 0 ? apiDepts : nonTeachingDepartments;
-    const filtered = apiList.filter((d) => isNonTeachingDeptName(typeof d === "object" ? d.name || d.departmentName : d));
-    return filtered.length > 0 ? filtered : nonTeachingDepartments;
-  }, [apiDepts]);
-
-  const availableDesigOptions = useMemo(() => {
-    return getDepartmentRoles(currentDept);
-  }, [currentDept]);
-
-  // Validation functions
-  const validateStep = (stepIndex) => {
-    const nextErrors = {};
-
-    if (stepIndex === 0) {
-      // Validate Basic Details
-      const basic = formData.basic;
-      if (!basic.board && !activeBoardName) nextErrors.board = "Please select a board name";
-      if (!basic.employeeId) nextErrors.employeeId = "Employee ID is required";
-      if (!basic.firstName || basic.firstName.trim().length < 2) nextErrors.firstName = "First Name must be at least 2 characters";
-      if (!basic.lastName || basic.lastName.trim().length < 1) nextErrors.lastName = "Last Name is required";
-      if (!basic.gender) nextErrors.gender = "Gender is required";
-
-      if (!basic.dateOfBirth) {
-        nextErrors.dateOfBirth = "Date of Birth is required";
-      } else {
-        const dob = new Date(basic.dateOfBirth);
-        const today = new Date();
-        const minAgeDate = new Date();
-        minAgeDate.setFullYear(today.getFullYear() - 18);
-        if (dob > minAgeDate) nextErrors.dateOfBirth = "Staff member must be at least 18 years old";
-      }
-
-      if (!basic.mobile) {
-        nextErrors.mobile = "Mobile number is required";
-      } else {
-        const cleanMob = basic.mobile.replace(/\D/g, "");
-        if (cleanMob.length !== 10 || !/^[6-9]/.test(cleanMob)) {
-          nextErrors.mobile = "Mobile number must be a valid 10-digit number starting with 6, 7, 8, or 9";
-        }
-      }
-
-      if (basic.email && basic.email.trim()) {
-        if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(basic.email.trim())) {
-          nextErrors.email = "Please enter a valid email address";
-        }
-      }
-    }
-
-    if (stepIndex === 1) {
-      // Validate Department & Role
-      const emp = formData.employment;
-      if (!emp.department) nextErrors.department = "Department is required";
-      if (!emp.designation) nextErrors.designation = "Designation is required";
-      if (!emp.employmentType) nextErrors.employmentType = "Employment type is required";
-      if (!emp.dateOfJoining) nextErrors.dateOfJoining = "Date of Joining is required";
-      if (!emp.status) nextErrors.status = "Status is required";
-    }
-
-    if (stepIndex === 2) {
-      // Validate Department & Role Specific fields
-      const roleFields = roleConfig.fields || [];
-      const specValues = formData.departmentSpecific || {};
-      for (const field of roleFields) {
-        if (field.required) {
-          const val = specValues[field.name];
-          if (val === undefined || val === null || String(val).trim() === "") {
-            nextErrors[field.name] = `${field.label} is required`;
-          }
-        }
-      }
-    }
-
-    return nextErrors;
-  };
-
-  const handleNext = () => {
-    const stepErrors = validateStep(step);
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
       setToast("Please fill in all mandatory fields marked with an asterisk (*).");
       return;
     }
+
     setErrors({});
     if (editingFromReview) {
       setEditingFromReview(false);
-      setStep(3);
+      setStep(labels.length - 1);
       return;
     }
     setStep((s) => s + 1);
   };
 
-  const handleSaveStaff = async () => {
-    // Validate all 3 active steps before final submission
-    for (let i = 0; i < 3; i++) {
-      const stepErrors = validateStep(i);
+  const save = async () => {
+    for (let i = 0; i < labels.length - 1; i++) {
+      const stepFields = getNonTeachingStepFields(i, values);
+      const stepErrors = validateStepFields(stepFields, values, activeBoardName);
       if (Object.keys(stepErrors).length > 0) {
         setErrors(stepErrors);
-        setToast(`Please fill in all mandatory fields in ${stepLabels[i]}.`);
+        setToast(`Please fill in all mandatory fields in ${labels[i]}.`);
         setStep(i);
         return;
       }
     }
 
-    const basic = formData.basic;
-    const emp = formData.employment;
-    const spec = formData.departmentSpecific;
-    const docs = formData.documents;
+    const isTransport =
+      String(values?.department || "").trim().toLowerCase().includes("transport") ||
+      String(values?.designation || "").trim().toLowerCase().includes("driver");
 
-    const fullName = [basic.firstName, basic.middleName, basic.lastName].filter(Boolean).join(" ") || basic.employeeId || "Non-Teaching Staff";
-    const resolvedCode = basic.boardCode || resolveBoardCode({ board: basic.board, boardName: basic.boardName }, boards);
+    if (isTransport && values.drivingLicenseNumber && values._dlPdfRawText) {
+      const cleanDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const rawText = String(values._dlPdfRawText).toUpperCase();
+      const cleanPdfText = rawText.replace(/[^A-Z0-9]/g, "");
+
+      const isDirectMatch = cleanPdfText.includes(cleanDL) || rawText.includes(cleanDL);
+
+      if (!isDirectMatch) {
+        const dlPatternMatches = rawText.match(/\b([A-Z]{2}\d{2,3}\s?(?:19|20)\d{2}\s?\d{7}|[A-Z]{2}\d{13,14})\b/g);
+        if (dlPatternMatches && dlPatternMatches.length > 0) {
+          const foundDiffDL = dlPatternMatches.some((match) => {
+            const cleanFound = match.replace(/[^A-Z0-9]/g, "");
+            return cleanFound.length >= 15 && cleanFound !== cleanDL;
+          });
+          if (foundDiffDL) {
+            setToast("Entered Driver's License Number does not match the uploaded Driving License PDF document.");
+            setErrors({ drivingLicenseNumber: "Entered number does not match the uploaded Driving License PDF document." });
+            setStep(2);
+            return;
+          }
+        }
+      }
+    }
+
+    // ── Duplicate Driving License Number check ──────────────────────────────
+    if (isTransport && values.drivingLicenseNumber) {
+      const enteredDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const currentId = existing?.id || existing?.employeeId || null;
+      const duplicate = (Array.isArray(records) ? records : []).find((r) => {
+        // Skip self when editing
+        const rId = r?.id || r?.employeeId;
+        if (currentId && String(rId) === String(currentId)) return false;
+        const rDL = String(r?.drivingLicenseNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        return rDL.length > 0 && rDL === enteredDL;
+      });
+      if (duplicate) {
+        const dupName = [duplicate.firstName, duplicate.middleName, duplicate.lastName].filter(Boolean).join(" ") || duplicate.employeeId || "another staff member";
+        setErrors({ drivingLicenseNumber: `This Driving License Number is already registered under ${dupName}.` });
+        setToast(`Driving License '${values.drivingLicenseNumber}' is already registered under ${dupName}. Please verify.`);
+        setStep(2);
+        return;
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
+    const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
+    const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
+    const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
+    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
 
     const payload = {
-      ...basic,
-      ...emp,
-      ...spec,
-      boardCode: resolvedCode !== "—" ? resolvedCode : basic.boardCode,
+      ...values,
+      email: values.email?.trim() ? values.email.trim() : null,
+      qualification: values.qualification?.trim() ? values.qualification.trim() : null,
+      role: values.role || "Cleaner",
+      roleName: values.roleName || values.role || "Cleaner",
+      roleId: Number(resolvedRoleId),
+      boardCode: resolvedCode !== "—" ? resolvedCode : values.boardCode,
       fullName,
       staffType: "Non-Teaching",
       profileStatus: "Completed",
       profileCompletionPercentage: 100,
-      departmentSpecific: { ...spec },
-      documents: { ...docs },
     };
 
     setSubmitting(true);
@@ -4174,19 +3984,9 @@ function NonTeachingForm({ records, setRecords, existing }) {
         const res = await apiClient.post(apiEndpoints.faculty.create, payload);
         targetId = res.data?.id || res.data?.staffId;
       }
-
-      const record = {
-        ...payload,
-        id: targetId,
-        profileStatus: "Completed",
-        profileCompletion: 100,
-        addedOn: existing?.addedOn || new Date().toISOString().split("T")[0],
-      };
-
+      const record = { ...payload, id: targetId, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
       if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
-      window.dispatchEvent(new Event("staff-records-updated"));
-
       if (existing) {
         setToast("Non-teaching staff profile updated successfully.");
         n(`/dashboard/staff/non-teaching`);
@@ -4206,24 +4006,32 @@ function NonTeachingForm({ records, setRecords, existing }) {
           errorStep = 0;
           try {
             const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records);
-            if (nextId) setFormData((prev) => ({ ...prev, basic: { ...prev.basic, employeeId: nextId } }));
+            if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
           } catch {}
         }
-        if (lower.includes("email")) nextErrors.email = errMsg;
-        if (lower.includes("mobile")) nextErrors.mobile = errMsg;
+        if (lower.includes("aadhaar") || lower.includes("pan") || lower.includes("name")) {
+          if (lower.includes("aadhaar")) nextErrors.aadhaar = errMsg;
+          errorStep = 0;
+        }
+        if (lower.includes("email")) {
+          nextErrors.email = errMsg;
+          errorStep = 1;
+        }
+        if (lower.includes("mobile")) {
+          nextErrors.mobile = errMsg;
+          errorStep = 1;
+        }
+        if (lower.includes("license") || lower.includes("licence") || lower.includes("joining") || lower.includes("department") || lower.includes("designation")) {
+          if (lower.includes("license") || lower.includes("licence")) nextErrors.drivingLicenseNumber = errMsg;
+          errorStep = 2;
+        }
         setErrors(nextErrors);
         setStep(errorStep);
         return;
       }
-      console.warn("Save non-teaching staff API offline, using local fallback save:", err);
+      console.warn("Save non-teaching staff API error:", err);
       targetId = existing?.id || Date.now();
-      const record = {
-        ...payload,
-        id: targetId,
-        profileStatus: "Completed",
-        profileCompletion: 100,
-        addedOn: existing?.addedOn || new Date().toISOString().split("T")[0],
-      };
+      const record = { ...payload, id: targetId, profileStatus: "Completed", profileCompletion: 100, addedOn: existing?.addedOn || new Date().toISOString().split("T")[0] };
       if (!existing) incrementSeriesSequence("employee-id");
       setRecords(existing ? records.map((r) => (String(r.id) === String(existing.id) ? record : r)) : [record, ...records]);
       if (existing) {
@@ -4237,62 +4045,34 @@ function NonTeachingForm({ records, setRecords, existing }) {
     }
   };
 
-  // Handle Document Upload simulation
-  const handleDocUpload = (docKey, e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setFormData((prev) => ({
-        ...prev,
-        documents: {
-          ...prev.documents,
-          [docKey]: file.name,
-        },
-      }));
-      setToast(`Uploaded ${file.name}`);
-    }
-  };
-
   return (
     <DashboardLayout
       title={existing ? "Edit Non-Teaching Staff" : "Add Non-Teaching Staff"}
-      subtitle="Complete non-teaching staff profile with dynamic role-specific fields and compliance checklist."
-      breadcrumb={["People", "Staff Management", existing ? "Edit Non-Teaching" : "Add Non-Teaching"]}
+      subtitle="Admin completes the entire profile."
+      breadcrumb={["People", "Staff Management"]}
     >
       <Toast message={toast} onClose={() => setToast("")} />
       <main className="staff-mock-page">
         <Back />
-        <Steps labels={stepLabels} step={step} />
-
-        {/* STEP 1: BASIC STAFF DETAILS */}
-        {step === 0 && (
-          <form
-            className="staff-form-panel non-teaching-basic-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleNext();
-            }}
-          >
-            <header>
-              <UserRound />
-              <div>
-                <h2>Basic Staff Details</h2>
-                <p>Enter the basic information of the non-teaching staff member.</p>
-              </div>
-            </header>
-            <div className="staff-form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-              {basicFields.map((f) => (
+        <Steps labels={labels} step={step} />
+        <section className="staff-form-panel non-teaching-form">
+          <header>
+            <Building2 />
+            <div>
+              <h2>{labels[step]}</h2>
+              <p>Step {step + 1} of {labels.length}</p>
+            </div>
+          </header>
+          {step < labels.length - 1 ? (
+            <div className="staff-form-grid">
+              {getNonTeachingStepFields(step, values).map((f) => (
                 <Field
                   key={f[0]}
                   item={f}
-                  values={formData.basic}
-                  setValues={(updater) => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      basic: typeof updater === "function" ? updater(prev.basic) : updater,
-                    }));
-                  }}
+                  values={values}
+                  setValues={setValues}
                   setErrors={setErrors}
-                  error={errors[f[0]]}
+                  error={errors[f[0]] || (f[0] === "pin" ? pincodeError : "")}
                   forceOptional={false}
                   departmentOptions={apiDepts}
                   designationOptions={apiDesigs}
@@ -4301,320 +4081,31 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 />
               ))}
             </div>
-            <footer>
-              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff")}>
-                Cancel
-              </button>
-              <button type="submit" className="cms-btn cms-btn-primary">
-                Next <ChevronRight />
-              </button>
-            </footer>
-          </form>
-        )}
-
-        {/* STEP 2: DEPARTMENT & ROLE */}
-        {step === 1 && (
-          <form
-            className="staff-form-panel non-teaching-dept-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleNext();
-            }}
-          >
-            <header>
-              <Building2 />
-              <div>
-                <h2>Department &amp; Designation</h2>
-                <p>Select the employee's department, role, employment type and status.</p>
-              </div>
-            </header>
-            <div className="staff-form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-              <label className={errors.department ? "has-field-error" : ""}>
-                <span>
-                  Department <b className="required-star">*</b>
-                </span>
-                <SearchSelectInput
-                  label="Department"
-                  opts={availableDeptOptions}
-                  value={formData.employment.department}
-                  onChange={handleDepartmentSelect}
-                  hasError={Boolean(errors.department)}
-                />
-                {errors.department ? <span className="field-error">{errors.department}</span> : null}
-              </label>
-
-              <label className={errors.designation ? "has-field-error" : ""}>
-                <span>
-                  Designation / Role <b className="required-star">*</b>
-                </span>
-                <SearchSelectInput
-                  label="Designation / Role"
-                  opts={availableDesigOptions}
-                  value={formData.employment.designation}
-                  onChange={handleDesignationSelect}
-                  hasError={Boolean(errors.designation)}
-                />
-                {errors.designation ? <span className="field-error">{errors.designation}</span> : null}
-              </label>
-
-              <label className={errors.employmentType ? "has-field-error" : ""}>
-                <span>
-                  Employment Type <b className="required-star">*</b>
-                </span>
-                <select className="app-select"
-                  value={formData.employment.employmentType}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFormData((prev) => ({
-                      ...prev,
-                      employment: { ...prev.employment, employmentType: val },
-                    }));
-                  }}
-                >
-                  <option value="Full Time">Full Time</option>
-                  <option value="Part Time">Part Time</option>
-                  <option value="Contract">Contract</option>
-                </select>
-                {errors.employmentType ? <span className="field-error">{errors.employmentType}</span> : null}
-              </label>
-
-              <label className={errors.dateOfJoining ? "has-field-error" : ""}>
-                <span>
-                  Date of Joining <b className="required-star">*</b>
-                </span>
-                <input
-                  type="date"
-                  value={formData.employment.dateOfJoining}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFormData((prev) => ({
-                      ...prev,
-                      employment: { ...prev.employment, dateOfJoining: val },
-                    }));
-                  }}
-                />
-                {errors.dateOfJoining ? <span className="field-error">{errors.dateOfJoining}</span> : null}
-              </label>
-
-              <label className={errors.status ? "has-field-error" : ""}>
-                <span>
-                  Status <b className="required-star">*</b>
-                </span>
-                <select className="app-select"
-                  value={formData.employment.status}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setFormData((prev) => ({
-                      ...prev,
-                      employment: { ...prev.employment, status: val },
-                    }));
-                  }}
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-                {errors.status ? <span className="field-error">{errors.status}</span> : null}
-              </label>
-            </div>
-            <footer>
-              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(0)}>
+          ) : (
+            <Summary
+              record={{
+                ...values,
+                fullName: [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" "),
+              }}
+              groups={labels.slice(0, labels.length - 1).map((label, index) => [label, getNonTeachingStepFields(index, values)])}
+              onSave={(updatedRecord) => {
+                setValues((prev) => ({ ...prev, ...updatedRecord }));
+              }}
+            />
+          )}
+          <footer>
+            {step ? (
+              <button className="cms-btn cms-btn-ghost" onClick={() => setStep((s) => s - 1)}>
                 <ChevronLeft /> Previous
               </button>
-              <button type="submit" className="cms-btn cms-btn-primary">
-                Next: Role Details <ChevronRight />
-              </button>
-            </footer>
-          </form>
-        )}
-
-        {/* STEP 3: DEPARTMENT SPECIFIC DETAILS */}
-        {step === 2 && (
-          <div className="nt-role-container">
-            <div className="nt-role-form-card">
-              <header className="nt-role-header">
-                <div className="nt-role-header-icon">
-                  <DeptIcon size={20} />
-                </div>
-                <div className="nt-role-header-text">
-                  <h2>
-                    {deptConfig.deptName} Details — {roleConfig.roleLabel || currentDesig}
-                  </h2>
-                  <p>Configure role-specific operational parameters and responsibilities.</p>
-                </div>
-              </header>
-
-              <DepartmentSpecificFields
-                fields={roleConfig.fields || []}
-                values={formData.departmentSpecific}
-                setValues={(updater) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    departmentSpecific: typeof updater === "function" ? updater(prev.departmentSpecific) : updater,
-                  }));
-                }}
-                errors={errors}
-                setErrors={setErrors}
-              />
-
-              <footer style={{ display: "flex", justifyContent: "flex-end", gap: "8px", padding: "12px 16px", borderTop: "1px solid var(--cms-border)" }}>
-                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(1)}>
-                  <ChevronLeft /> Previous
-                </button>
-                <button type="button" className="cms-btn cms-btn-primary" onClick={handleNext}>
-                  Next: Documents &amp; Summary <ChevronRight />
-                </button>
-              </footer>
-            </div>
-
-            <DepartmentHelperPanel department={currentDept} designation={currentDesig} />
-          </div>
-        )}
-
-        {/* STEP 4: DOCUMENTS & SUMMARY */}
-        {step === 3 && (
-          <section className="staff-form-panel non-teaching-summary-panel">
-            <header>
-              <FileCheck2 />
-              <div>
-                <h2>Documents &amp; Final Summary</h2>
-                <p>Upload role compliance documents and verify all employee details before final submission.</p>
-              </div>
-            </header>
-
-            {/* DOCUMENTS UPLOAD SECTION */}
-            <div className="nt-doc-section">
-              <h3>1. Compliance &amp; Verification Documents</h3>
-              <p>Upload the required identity, trade, and role verification documents.</p>
-              <div className="nt-doc-grid">
-                {/* Common Documents */}
-                {[
-                  { key: "aadhaarDoc", label: "Aadhaar Card", required: false },
-                  { key: "panDoc", label: "PAN Card", required: false },
-                  { key: "addressProofDoc", label: "Address Proof", required: false },
-                  { key: "bankProofDoc", label: "Bank Passbook / Cheque", required: false },
-                  ...(roleConfig.docList || []),
-                ].map((doc) => {
-                  const isUploaded = Boolean(formData.documents[doc.key]);
-                  return (
-                    <div key={doc.key} className={`nt-doc-item ${isUploaded ? "is-uploaded" : ""}`}>
-                      <div className="nt-doc-info">
-                        <span className="nt-doc-name">
-                          {doc.label} {doc.required ? <b className="required-star">*</b> : null}
-                        </span>
-                        <span className="nt-doc-status">
-                          {isUploaded ? `Uploaded: ${formData.documents[doc.key]}` : "Not Uploaded"}
-                        </span>
-                      </div>
-                      <label className="nt-doc-upload-btn">
-                        <Upload size={13} /> {isUploaded ? "Replace" : "Upload"}
-                        <input
-                          type="file"
-                          style={{ display: "none" }}
-                          onChange={(e) => handleDocUpload(doc.key, e)}
-                        />
-                      </label>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* SUMMARY CARDS SECTION */}
-            <div style={{ padding: "16px" }}>
-              <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "700" }}>2. Review Employee Information</h3>
-              <div className="staff-summary" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-                {/* Basic Details Card */}
-                <article>
-                  <header>
-                    <h3>Basic Information</h3>
-                    <button type="button" onClick={() => { setEditingFromReview(true); setStep(0); }}>
-                      <Pencil size={12} /> Edit
-                    </button>
-                  </header>
-                  <p><span>Full Name</span><strong>{[formData.basic.firstName, formData.basic.middleName, formData.basic.lastName].filter(Boolean).join(" ") || "—"}</strong></p>
-                  <p><span>Employee ID</span><strong>{formData.basic.employeeId || "—"}</strong></p>
-                  <p><span>Board Name</span><strong>{formData.basic.boardName || formData.basic.board || activeBoardName || "—"}</strong></p>
-                  <p><span>Gender</span><strong>{formData.basic.gender || "—"}</strong></p>
-                  <p><span>Date of Birth</span><strong>{formData.basic.dateOfBirth || "—"}</strong></p>
-                  <p><span>Mobile Number</span><strong>{formData.basic.mobile || "—"}</strong></p>
-                  <p><span>Email Address</span><strong>{formData.basic.email || "—"}</strong></p>
-                </article>
-
-                {/* Department & Employment Card */}
-                <article>
-                  <header>
-                    <h3>Department &amp; Role</h3>
-                    <button type="button" onClick={() => { setEditingFromReview(true); setStep(1); }}>
-                      <Pencil size={12} /> Edit
-                    </button>
-                  </header>
-                  <p><span>Department</span><strong>{formData.employment.department}</strong></p>
-                  <p><span>Designation</span><strong>{formData.employment.designation}</strong></p>
-                  <p><span>Employment Type</span><strong>{formData.employment.employmentType}</strong></p>
-                  <p><span>Date of Joining</span><strong>{formData.employment.dateOfJoining}</strong></p>
-                  <p><span>Status</span><strong><Badge value={formData.employment.status} /></strong></p>
-                  <p><span>Staff Type</span><strong>Non-Teaching</strong></p>
-                </article>
-
-                {/* Department Specific Details Card */}
-                <article style={{ gridColumn: "1 / -1" }}>
-                  <header>
-                    <h3>{deptConfig.deptName} Details ({roleConfig.roleLabel || currentDesig})</h3>
-                    <button type="button" onClick={() => { setEditingFromReview(true); setStep(2); }}>
-                      <Pencil size={12} /> Edit
-                    </button>
-                  </header>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" }}>
-                    {(roleConfig.fields || []).map((f) => {
-                      const val = formData.departmentSpecific[f.name];
-                      const displayVal = val !== undefined && val !== null && String(val).trim() !== "" ? String(val) : "—";
-                      return (
-                        <p key={f.name} style={{ margin: 0, padding: "6px 0", borderBottom: "1px solid var(--cms-border)" }}>
-                          <span>{f.label}</span>
-                          <strong>{displayVal}</strong>
-                        </p>
-                      );
-                    })}
-                  </div>
-                </article>
-              </div>
-            </div>
-
-            <footer>
-              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(2)}>
-                <ChevronLeft /> Previous
-              </button>
-              <button type="button" className="cms-btn cms-btn-primary" onClick={handleSaveStaff} disabled={submitting}>
-                <Check /> {submitting ? "Saving Staff..." : "Save Non-Teaching Staff"}
-              </button>
-            </footer>
-          </section>
-        )}
+            ) : null}
+            <button className="cms-btn cms-btn-primary" onClick={step === labels.length - 1 ? save : next}>
+              {step === labels.length - 1 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Preview" : "Next"}
+              <ChevronRight />
+            </button>
+          </footer>
+        </section>
       </main>
-
-      {/* DEPARTMENT CHANGE CONFIRMATION DIALOG */}
-      {deptChangePending ? (
-        <ConfirmDialog
-          title="Change Department?"
-          message={`Changing the department to "${deptChangePending}" will clear the previously entered department-specific details. Do you want to continue?`}
-          cancelText="Cancel"
-          confirmText="Change Department"
-          onCancel={() => setDeptChangePending(null)}
-          onConfirm={() => applyDepartmentChange(deptChangePending)}
-        />
-      ) : null}
-
-      {/* DESIGNATION CHANGE CONFIRMATION DIALOG */}
-      {desigChangePending ? (
-        <ConfirmDialog
-          title="Change Designation / Role?"
-          message={`Changing the designation to "${desigChangePending}" will update the role-specific fields and may clear data that is no longer applicable. Do you want to continue?`}
-          cancelText="Cancel"
-          confirmText="Change Designation"
-          onCancel={() => setDesigChangePending(null)}
-          onConfirm={() => applyDesignationChange(desigChangePending)}
-        />
-      ) : null}
     </DashboardLayout>
   );
 }
@@ -4712,11 +4203,10 @@ function SendLink({ record, update, activity }) {
       }
     } catch (err) {
       console.warn("POST /api/v1/staff/{id}/send-link fallback handled:", err);
-      // Generate guaranteed functional link even if backend email gateway is offline
-      const fallbackToken = record.profileLinkToken || record.token || record.id || `staff-${record.id}`;
-      finalLink = `${window.location.origin}/staff/onboarding/${fallbackToken}`;
+      // Generate guaranteed functional link for Faculty Dashboard
+      finalLink = `${window.location.origin}/faculty-dashboard`;
       setGeneratedLink(finalLink);
-      receivedToken = fallbackToken;
+      receivedToken = record.profileLinkToken || record.token || record.id || `staff-${record.id}`;
       success = true;
       setFeedback({
         success: true,
@@ -4743,7 +4233,7 @@ function SendLink({ record, update, activity }) {
     }
   };
 
-  const currentActiveLink = generatedLink || `${window.location.origin}/staff/onboarding/${record.profileLinkToken || record.token || record.id || "preview"}`;
+  const currentActiveLink = generatedLink || `${window.location.origin}/faculty-dashboard`;
 
   return (
     <DashboardLayout
@@ -4785,7 +4275,7 @@ function SendLink({ record, update, activity }) {
               </label>
               <label>
                 <span>Link Validity</span>
-                <select className="app-select" value={days} onChange={(e) => setDays(e.target.value)}>
+                <select value={days} onChange={(e) => setDays(e.target.value)}>
                   {[3, 7, 15, 30].map((x) => (
                     <option key={x} value={`${x} Days`}>{x} Days</option>
                   ))}
@@ -4913,196 +4403,6 @@ function SendLink({ record, update, activity }) {
         </section>
       </main>
     </DashboardLayout>
-  );
-}
-
-// ----------------------------------------------------------------------
-// PORTAL HOME & FORM (GET /api/v1/staff/token/{token}, save-profile-draft, submit-profile)
-// ----------------------------------------------------------------------
-function PortalHome({ record }) {
-  const n = useNavigate();
-  return (
-    <div className="portal-shell">
-      <aside>
-        <GraduationCap />
-        <strong>Pirnav Staff Portal</strong>
-        <span>My Dashboard</span>
-        <span>My Profile</span>
-        <span>Documents</span>
-        <span>Help</span>
-      </aside>
-      <main>
-        <header>
-          <div>
-            <h1>Welcome, {record.fullName}</h1>
-            <p>Complete and submit your professional profile.</p>
-          </div>
-          <Badge value={record.profileStatus} />
-        </header>
-        {record.profileStatus === "Needs Correction" ? (
-          <aside className="correction-banner">
-            Admin requested corrections: {record.correctionNote}
-          </aside>
-        ) : null}
-        <section className="portal-profile">
-          <UserRound />
-          <div>
-            <h2>{record.fullName}</h2>
-            <p>{record.designation} · {record.department}</p>
-          </div>
-          <div className="completion">
-            <strong>{record.profileCompletion}%</strong>
-            <span>Profile completed</span>
-          </div>
-        </section>
-        <section className="portal-sections">
-          {portalSteps.slice(0, 8).map((s, i) => (
-            <article key={s}>
-              <span>
-                {i < Math.floor(record.profileCompletion / 12.5) ? <Check /> : <Clock3 />}
-              </span>
-              <div>
-                <strong>{s}</strong>
-                <small>{i < Math.floor(record.profileCompletion / 12.5) ? "Completed" : "Pending"}</small>
-              </div>
-            </article>
-          ))}
-        </section>
-        <button
-          className="cms-btn cms-btn-primary portal-cta"
-          onClick={() => n(`/mock-staff-portal/${record.id}/complete-profile`)}
-        >
-          Complete Profile <ChevronRight />
-        </button>
-      </main>
-    </div>
-  );
-}
-
-function PortalForm({ record, update, activity }) {
-  const n = useNavigate();
-  const [step, setStep] = useState(0);
-  const [values, setValues] = useState(record);
-  const [errors, setErrors] = useState({});
-  const [confirmed, setConfirmed] = useState(false);
-
-  const handleSaveDraft = async () => {
-    try {
-      // POST /api/v1/staff/{id}/save-profile-draft
-      await apiClient.post(apiEndpoints.faculty.saveProfileDraft(record.id), {
-        sectionName: portalSteps[step],
-        personal: values,
-      });
-    } catch (err) {
-      console.warn("POST /api/v1/staff/{id}/save-profile-draft API offline");
-    }
-    update({ ...values, profileStatus: "In Progress" });
-  };
-
-  const next = () => {
-    handleSaveDraft();
-    update({
-      ...values,
-      profileStatus: "In Progress",
-      profileCompletion: Math.min(95, 35 + (step + 1) * 7),
-    });
-    setStep((s) => s + 1);
-  };
-
-  const submit = async () => {
-    try {
-      // POST /api/v1/staff/{id}/submit-profile
-      await apiClient.post(apiEndpoints.faculty.submitProfile(record.id));
-    } catch (err) {
-      console.warn("POST /api/v1/staff/{id}/submit-profile API offline");
-    }
-
-    update({
-      ...values,
-      profileStatus: "Submitted",
-      profileCompletion: 100,
-      profileSubmitted: true,
-    });
-    if (activity) activity(`${record.fullName} submitted profile`);
-    n(`/mock-staff-portal/${record.id}`);
-  };
-
-  return (
-    <div className="portal-shell">
-      <aside>
-        <GraduationCap />
-        <strong>Pirnav Staff Portal</strong>
-        {portalSteps.map((s, i) => (
-          <button className={i === step ? "is-active" : ""} onClick={() => setStep(i)} key={s}>
-            {i + 1}. {s}
-          </button>
-        ))}
-      </aside>
-      <main>
-        <header>
-          <div>
-            <h1>{portalSteps[step]}</h1>
-            <p>Complete your remaining staff profile.</p>
-          </div>
-          <span>{Math.round(((step + 1) / 8) * 100)}%</span>
-        </header>
-        {step < 7 ? (
-          <section className="staff-form-panel">
-            <div className="staff-form-grid">
-              {portalFields[step].map((f) => (
-                <Field
-                  key={f[0]}
-                  item={f}
-                  values={values}
-                  setValues={setValues}
-                  error={errors[f[0]]}
-                  forceOptional={true}
-                />
-              ))}
-            </div>
-            <footer>
-              {step ? (
-                <button className="cms-btn cms-btn-ghost" onClick={() => setStep((s) => s - 1)}>
-                  Previous
-                </button>
-              ) : null}
-              <button className="cms-btn cms-btn-ghost" onClick={handleSaveDraft}>
-                Save Draft
-              </button>
-              <button className="cms-btn cms-btn-primary" onClick={next}>
-                Save &amp; Continue
-              </button>
-            </footer>
-          </section>
-        ) : (
-          <section className="staff-form-panel">
-            <Summary
-              record={values}
-              onEdit={(groupIndex) => {
-                const map = [0, 1, 2, 5, 6];
-                setStep(map[groupIndex] !== undefined ? map[groupIndex] : groupIndex);
-              }}
-            />
-            <label className="confirm-check">
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />{" "}
-              I confirm that the information provided is correct.
-            </label>
-            <footer>
-              <button className="cms-btn cms-btn-ghost" onClick={() => setStep(6)}>
-                Previous
-              </button>
-              <button className="cms-btn cms-btn-primary" disabled={!confirmed} onClick={submit}>
-                Submit Profile
-              </button>
-            </footer>
-          </section>
-        )}
-      </main>
-    </div>
   );
 }
 
@@ -5287,8 +4587,8 @@ function Pending({ records = [], setRecords, activity }) {
 
   return (
     <DashboardLayout
-      title="Pending Teaching Staff Submissions"
-      subtitle="Track and review Teaching Staff profile completion."
+      title="Pending Staff Submissions"
+      subtitle="Track and review staff profile completion."
       breadcrumb={["People", "Staff Management"]}
     >
       <main className="staff-mock-page">
@@ -5818,46 +5118,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       ],
     ],
   ];
-
-  const nonTeachingRoleFields = useMemo(() => {
-    if (record?.staffType === "Non-Teaching" && record?.department && record?.designation) {
-      const config = getRoleConfig(record.department, record.designation);
-      if (config && Array.isArray(config.fields) && config.fields.length > 0) {
-        return config.fields.map((f) => [f.name, f.label]);
-      }
-    }
-    return [];
-  }, [record?.staffType, record?.department, record?.designation]);
-
-  const groups = useMemo(() => {
-    if (suppliedGroups) return suppliedGroups;
-    if (record?.staffType === "Non-Teaching" && nonTeachingRoleFields.length > 0) {
-      const deptConf = getDepartmentConfig(record.department);
-      return [
-        defaultGroups[0], // Basic Information
-        defaultGroups[1], // Contact & Address
-        [
-          "Department & Role",
-          [
-            ["department", "Department"],
-            ["designation", "Designation"],
-            ["dateOfJoining", "Date of Joining"],
-            ["employmentType", "Employment Type"],
-            ["staffType", "Staff Type"],
-            ["status", "Status"],
-          ],
-        ],
-        [
-          `${deptConf.deptName} Details (${record.designation})`,
-          nonTeachingRoleFields,
-        ],
-        defaultGroups[5], // Documents
-        defaultGroups[6], // Bank Details
-        defaultGroups[7], // Emergency Contact
-      ];
-    }
-    return defaultGroups;
-  }, [suppliedGroups, record?.staffType, record?.department, record?.designation, nonTeachingRoleFields, defaultGroups]);
+  const groups = suppliedGroups || defaultGroups;
 
   const startEdit = (groupIndex) => {
     if (onEdit) {
@@ -5946,7 +5207,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     if (type === "select") {
       const opts = specOpts || options || [];
       return (
-        <select className="app-select"
+        <select
           value={val}
           onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
         >
@@ -6286,6 +5547,8 @@ export default function StaffManagementPage() {
         </main>
       </DashboardLayout>
     );
+  else if ((p.includes("/mock-staff-portal") || p.includes("/staff-portal") || p.includes("/staff/onboarding")) && record)
+    page = <Navigate to="/faculty-dashboard" replace />;
   else if (p.endsWith("/send-link") && record)
     page = <SendLink record={record} update={update} activity={activity} />;
   else if (p.endsWith("/review") && record)

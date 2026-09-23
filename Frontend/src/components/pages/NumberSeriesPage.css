@@ -415,6 +415,15 @@
   color: #64748b;
 }
 
+.ns-table-page-size select {
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  outline: none;
+}
+
 /* DATA TABLE STYLING */
 .ns-table-responsive {
   overflow-x: auto;
@@ -543,7 +552,10 @@
   color: #334155;
 }
 
-.ns-field input[type="text"], .ns-field input[type="number"], .ns-field textarea {
+.ns-field input[type="text"],
+.ns-field input[type="number"],
+.ns-field select,
+.ns-field textarea {
   width: 100%;
   padding: 5px 9px;
   font-size: 12.5px;
@@ -555,12 +567,9 @@
   height: 32px;
 }
 
-.ns-field select {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.ns-field input:focus, .ns-field textarea:focus {
+.ns-field input:focus,
+.ns-field select:focus,
+.ns-field textarea:focus {
   border-color: #355e3b;
   box-shadow: 0 0 0 3px rgba(53, 94, 59, 0.1);
 }

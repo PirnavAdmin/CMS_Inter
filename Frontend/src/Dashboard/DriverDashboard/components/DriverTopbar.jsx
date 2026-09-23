@@ -11,7 +11,7 @@ import {
   AlertTriangle,
   Info,
 } from "lucide-react";
-import { getAuthUser } from "../../../features/authStorage.js";
+import { driverProfile, notificationsList } from "../data/driverMockData.js";
 
 export default function DriverTopbar({
   onMenuToggle,
@@ -23,13 +23,7 @@ export default function DriverTopbar({
   const [profileOpen, setProfileOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
-  const [notifications, setNotifications] = useState([]);
-
-  const user = getAuthUser();
-  const driverName = user?.name || "Driver";
-  const driverInitials = driverName.substring(0, 2).toUpperCase();
-  const driverEmail = user?.email || "";
-  const driverEmpId = user?.employeeId || "EMP-000";
+  const [notifications, setNotifications] = useState(notificationsList);
 
   const unreadCount = notifications.filter((n) => n.unread).length;
 
@@ -117,33 +111,29 @@ export default function DriverTopbar({
                 )}
               </div>
               <div className="dp-notif-list">
-                {notifications.length === 0 ? (
-                  <div style={{ padding: "1rem", textAlign: "center", color: "#6b7280", fontSize: "0.875rem" }}>No notifications</div>
-                ) : (
-                  notifications.map((item) => (
-                    <div
-                      key={item.id}
-                      className={`dp-notif-item ${item.unread ? "is-unread" : ""}`}
-                    >
-                      <div className="dp-notif-icon-box">
-                        {item.tone === "warning" ? (
-                          <AlertTriangle size={14} className="dp-text-warning" />
-                        ) : item.tone === "success" ? (
-                          <CheckCircle size={14} className="dp-text-success" />
-                        ) : (
-                          <Info size={14} className="dp-text-blue" />
-                        )}
-                      </div>
-                      <div className="dp-notif-content">
-                        <div className="dp-notif-row">
-                          <strong>{item.title}</strong>
-                          <small>{item.time}</small>
-                        </div>
-                        <p>{item.content}</p>
-                      </div>
+                {notifications.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`dp-notif-item ${item.unread ? "is-unread" : ""}`}
+                  >
+                    <div className="dp-notif-icon-box">
+                      {item.tone === "warning" ? (
+                        <AlertTriangle size={14} className="dp-text-warning" />
+                      ) : item.tone === "success" ? (
+                        <CheckCircle size={14} className="dp-text-success" />
+                      ) : (
+                        <Info size={14} className="dp-text-blue" />
+                      )}
                     </div>
-                  ))
-                )}
+                    <div className="dp-notif-content">
+                      <div className="dp-notif-row">
+                        <strong>{item.title}</strong>
+                        <small>{item.time}</small>
+                      </div>
+                      <p>{item.content}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -159,12 +149,12 @@ export default function DriverTopbar({
               setNotificationsOpen(false);
             }}
           >
-            <div className="dp-profile-avatar">{driverInitials}</div>
+            <div className="dp-profile-avatar">{driverProfile.initials}</div>
             <div className="dp-profile-meta">
-              <strong className="dp-profile-name">{driverName}</strong>
+              <strong className="dp-profile-name">{driverProfile.name}</strong>
               <div className="dp-profile-sub">
                 <span className="dp-role-badge">Driver</span>
-                <span className="dp-emp-id">{driverEmpId}</span>
+                <span className="dp-emp-id">{driverProfile.employeeId}</span>
               </div>
             </div>
           </button>
@@ -172,11 +162,11 @@ export default function DriverTopbar({
           {profileOpen && (
             <div className="dp-dropdown-menu dp-profile-dropdown">
               <div className="dp-profile-dropdown-hero">
-                <div className="dp-profile-avatar is-large">{driverInitials}</div>
+                <div className="dp-profile-avatar is-large">{driverProfile.initials}</div>
                 <div>
-                  <strong>{driverName}</strong>
-                  <small>{driverEmail}</small>
-                  <span className="dp-dropdown-bus-tag">Bus: Assigned Vehicle</span>
+                  <strong>{driverProfile.name}</strong>
+                  <small>{driverProfile.email}</small>
+                  <span className="dp-dropdown-bus-tag">Bus: {driverProfile.assignedVehicle}</span>
                 </div>
               </div>
 

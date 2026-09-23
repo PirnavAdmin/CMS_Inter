@@ -289,7 +289,7 @@ export default function AttendanceTimingConfigPage() {
 
               <label>
                 <span>Applicable Staff Type</span>
-                <select className="app-select"
+                <select
                   value={form.staffType}
                   onChange={(e) => setForm({ ...form, staffType: e.target.value })}
                 >

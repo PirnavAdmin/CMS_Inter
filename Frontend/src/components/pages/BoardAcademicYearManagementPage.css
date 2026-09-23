@@ -415,7 +415,9 @@
 .bay-form-field > span > b {
   color: #dc2626;
 }
-.bay-form input, .bay-form textarea {
+.bay-form input,
+.bay-form select,
+.bay-form textarea {
   width: 100%;
   min-height: 39px;
   padding: 7px 10px;
@@ -426,10 +428,6 @@
   box-sizing: border-box;
   font-size: 14px;
   line-height: 1.4;
-}
-.bay-form select {
-  width: 100%;
-  box-sizing: border-box;
 }
 .bay-form input::placeholder,
 .bay-form textarea::placeholder {
@@ -445,6 +443,10 @@
 .bay-form .bay-board-multiselect {
   min-height: 92px;
   padding: 4px;
+}
+.bay-form .bay-board-multiselect option {
+  padding: 6px 8px;
+  border-radius: 5px;
 }
 .bay-form small {
   color: var(--cms-muted);
@@ -1076,7 +1078,9 @@
 .ay-form-card label b {
   color: #dc2626;
 }
-.ay-form-card input, .ay-form-card textarea {
+.ay-form-card input,
+.ay-form-card select,
+.ay-form-card textarea {
   width: 100%;
   min-height: 39px;
   padding: 7px 10px;
@@ -1087,10 +1091,6 @@
   font: inherit;
   font-size: 14px;
   line-height: 1.4;
-}
-.ay-form-card select {
-  width: 100%;
-  font: inherit;
 }
 .ay-form-card .span-3 {
   grid-column: 1/-1;
@@ -1243,7 +1243,21 @@
   color: var(--cms-muted);
 }
 
-[data-theme="dark"] .bay-page .bay-card > footer button, [data-theme="dark"] .bay-page .bay-form input, [data-theme="dark"] .bay-page .bay-form textarea, [data-theme="dark"] .bay-page .ay-form-card input, [data-theme="dark"] .bay-page .ay-form-card textarea, [data-theme="dark"] .bay-page .bay-api-picker-input, [data-theme="dark"] .bay-page .bay-api-options, [data-theme="dark"] .bay-page .bay-choose-board-button, [data-theme="dark"] .bay-page .bay-state-combobox, [data-theme="dark"] .bay-page .bay-state-options, [data-theme="dark"] .bay-page .bay-level-combobox, [data-theme="dark"] .bay-page .bay-level-options, [data-theme="dark"] .bay-page .bay-level-selected {
+[data-theme="dark"] .bay-page .bay-card > footer button,
+[data-theme="dark"] .bay-page .bay-form input,
+[data-theme="dark"] .bay-page .bay-form select,
+[data-theme="dark"] .bay-page .bay-form textarea,
+[data-theme="dark"] .bay-page .ay-form-card input,
+[data-theme="dark"] .bay-page .ay-form-card select,
+[data-theme="dark"] .bay-page .ay-form-card textarea,
+[data-theme="dark"] .bay-page .bay-api-picker-input,
+[data-theme="dark"] .bay-page .bay-api-options,
+[data-theme="dark"] .bay-page .bay-choose-board-button,
+[data-theme="dark"] .bay-page .bay-state-combobox,
+[data-theme="dark"] .bay-page .bay-state-options,
+[data-theme="dark"] .bay-page .bay-level-combobox,
+[data-theme="dark"] .bay-page .bay-level-options,
+[data-theme="dark"] .bay-page .bay-level-selected {
   background: var(--cms-elevated);
   border-color: var(--cms-border);
   color: var(--cms-text);

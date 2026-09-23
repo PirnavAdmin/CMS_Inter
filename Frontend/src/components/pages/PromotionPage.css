@@ -215,7 +215,13 @@
 }
 .promotion-table-controls > select {
   min-width: 164px;
+  border: 1px solid var(--cms-border);
+  border-radius: 9px;
+  padding: 9px 12px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
   font: inherit;
+  font-size: 13px;
 }
 .promotion-table-controls .cms-btn {
   min-height: 38px;
@@ -513,7 +519,13 @@
 .promotion-table select {
   width: 100%;
   min-width: 145px;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  padding: 8px 30px 8px 10px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
   font: inherit;
+  font-size: 12px;
 }
 .promotion-card .cms-field textarea {
   min-height: 96px;

@@ -104,13 +104,13 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
         </div>
         <div className={fieldClass("holidayType")}>
           <label htmlFor="holiday-type">Holiday Type</label>
-          <select className="app-select" id="holiday-type" value={values.holidayType} onChange={(event) => setValue("holidayType", event.target.value)}>
+          <select id="holiday-type" value={values.holidayType} onChange={(event) => setValue("holidayType", event.target.value)}>
             {TYPES.map((type) => <option key={type}>{type}</option>)}
           </select>
         </div>
         <div className={fieldClass("appliesTo")}>
           <label htmlFor="holiday-applies">Applies To</label>
-          <select className="app-select" id="holiday-applies" value={values.appliesTo} onChange={(event) => setValue("appliesTo", event.target.value)}>
+          <select id="holiday-applies" value={values.appliesTo} onChange={(event) => setValue("appliesTo", event.target.value)}>
             {APPLIES_TO.map((item) => <option key={item}>{item}</option>)}
           </select>
         </div>
@@ -133,7 +133,7 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
         ) : (
           <div className={fieldClass("status")}>
             <label htmlFor="holiday-status">Status</label>
-            <select className="app-select" id="holiday-status" value={values.status} onChange={(event) => setValue("status", event.target.value)}>
+            <select id="holiday-status" value={values.status} onChange={(event) => setValue("status", event.target.value)}>
               <option>Active</option>
               <option>Inactive</option>
             </select>
@@ -142,7 +142,7 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
         {values.dateType === "Date Range" ? (
           <div className={fieldClass("status")}>
             <label htmlFor="holiday-status">Status</label>
-            <select className="app-select" id="holiday-status" value={values.status} onChange={(event) => setValue("status", event.target.value)}>
+            <select id="holiday-status" value={values.status} onChange={(event) => setValue("status", event.target.value)}>
               <option>Active</option>
               <option>Inactive</option>
             </select>
@@ -363,11 +363,11 @@ export default function HolidayManagementPage() {
         <section className="cms-card holiday-list-card">
           <div className="cms-card-head"><div><h2>Holiday List</h2><p>Review and maintain academic holidays.</p></div></div>
           <div className="holiday-filters">
-            <label className="holiday-search app-search-field">
-              <Search className="app-search-field__icon" size={16} />
+            <label className="holiday-search">
+              <Search size={16} />
               <input value={query} onChange={(event) => updateFilter(setQuery)(event.target.value)} placeholder="Search holidays..." />
             </label>
-            <select className="app-select" value={month} onChange={(event) => changeMonth(event.target.value)} aria-label="Filter by month">
+            <select value={month} onChange={(event) => changeMonth(event.target.value)} aria-label="Filter by month">
               <option value="All">All Months</option>
               {months.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               <option value="Custom Range">Custom Range</option>
@@ -384,11 +384,11 @@ export default function HolidayManagementPage() {
                 </label>
               </>
             ) : null}
-            <select className="app-select" value={type} onChange={(event) => updateFilter(setType)(event.target.value)} aria-label="Filter by holiday type">
+            <select value={type} onChange={(event) => updateFilter(setType)(event.target.value)} aria-label="Filter by holiday type">
               <option value="All">All Types</option>
               {TYPES.map((item) => <option key={item}>{item}</option>)}
             </select>
-            <select className="app-select" value={status} onChange={(event) => updateFilter(setStatus)(event.target.value)} aria-label="Filter by status">
+            <select value={status} onChange={(event) => updateFilter(setStatus)(event.target.value)} aria-label="Filter by status">
               <option value="All">All Statuses</option>
               <option value="Active">Active</option>
               <option value="Upcoming">Upcoming</option>

@@ -170,7 +170,11 @@
   color: var(--text-color, #1e293b);
 }
 
-.att-timing-form input[type="text"], .att-timing-form input[type="time"], .att-timing-form input[type="number"], .att-timing-form textarea {
+.att-timing-form input[type="text"],
+.att-timing-form input[type="time"],
+.att-timing-form input[type="number"],
+.att-timing-form select,
+.att-timing-form textarea {
   padding: 8px 12px;
   border: 1px solid var(--border-color, #cbd5e1);
   border-radius: 6px;
@@ -181,11 +185,9 @@
   transition: border-color 0.15s ease;
 }
 
-.att-timing-form select {
-  transition: border-color 0.15s ease;
-}
-
-.att-timing-form input:focus, .att-timing-form textarea:focus {
+.att-timing-form input:focus,
+.att-timing-form select:focus,
+.att-timing-form textarea:focus {
   border-color: #4f46e5;
   box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15);
 }

@@ -192,8 +192,8 @@ export default function DriverReportsPage() {
 
         {/* Filter controls */}
         <div className="dp-table-controls">
-          <div className="dp-search-box app-search-field">
-            <Search size={16} className="dp-search-icon app-search-field__icon" />
+          <div className="dp-search-box">
+            <Search size={16} className="dp-search-icon" />
             <input
               type="text"
               placeholder="Search by date, trip ID, or driver notes..."
@@ -209,7 +209,7 @@ export default function DriverReportsPage() {
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="dp-select app-select"
+                className="dp-select"
               >
                 <option value="All">All Trip Types</option>
                 <option value="Morning">Morning Trips</option>

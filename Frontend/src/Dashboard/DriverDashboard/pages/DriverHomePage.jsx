@@ -57,9 +57,9 @@ export default function DriverHomePage({
 
   const pickedUpCount = studentsList.filter((s) => s.status === "Picked Up").length;
   const pendingCount = studentsList.filter((s) => s.status === "Pending").length;
-  const totalStudents = studentsList.length || 0;
+  const totalStudents = studentsList.length || 32;
 
-  const morningTripStatus = activeTripState?.morningTripStatus || "Pending";
+  const morningTripStatus = activeTripState?.morningTripStatus || "In Progress";
   const eveningTripStatus = activeTripState?.eveningTripStatus || "Pending";
 
   if (isLoading) {
@@ -87,11 +87,9 @@ export default function DriverHomePage({
     );
   }
 
-  const driverProfile = dashboardData?.driver || {};
-  const vehicleInfo = dashboardData?.vehicle || {};
-  const routeInfo = dashboardData?.route || {};
-  const todaySchedule = dashboardData?.todayTrips || [];
-  const stats = dashboardData?.stats || {};
+  const driverProfile = dashboardData?.driverProfile || {};
+  const todaySchedule = dashboardData?.todaySchedule || [];
+  const routeDetails = dashboardData?.routeDetails || { stops: [] };
 
 
   return (
@@ -125,24 +123,24 @@ export default function DriverHomePage({
 
       {/* Driver Welcome Hero Strip */}
       <div className="dp-driver-hero-card">
-        <div className="dp-hero-avatar">{driverProfile.name ? driverProfile.name.substring(0, 2).toUpperCase() : "DR"}</div>
+        <div className="dp-hero-avatar">{driverProfile.initials || "DR"}</div>
         <div className="dp-hero-text">
           <div className="dp-hero-greeting">
             <h3>Welcome back, {driverProfile.name || "Driver"}!</h3>
-            <span className="dp-hero-role-tag">Driver • {driverProfile.employeeId || "EMP-000"}</span>
+            <span className="dp-hero-role-tag">{driverProfile.role || "Transport Staff"} • {driverProfile.employeeId || "EMP-000"}</span>
           </div>
           <p className="dp-hero-desc">
-            You are assigned to <strong>{vehicleInfo.registrationNumber || "a vehicle"}</strong> ({vehicleInfo.model || "Standard"}) on <strong>{routeInfo.routeName || "your route"}</strong> today.
+            You are assigned to <strong>{driverProfile.assignedVehicle || "a vehicle"}</strong> ({driverProfile.vehicleModel || "Standard"}) on <strong>{driverProfile.assignedRoute || "your route"}</strong> today.
           </p>
         </div>
         <div className="dp-hero-stats">
           <div className="dp-hs-item">
             <small>Attendant</small>
-            <strong>{routeInfo.attendantName || "N/A"}</strong>
+            <strong>{driverProfile.assignedAttendant || "N/A"}</strong>
           </div>
           <div className="dp-hs-item">
             <small>Shift</small>
-            <strong>Regular</strong>
+            <strong>{driverProfile.shift || "Regular"}</strong>
           </div>
         </div>
       </div>
@@ -152,67 +150,67 @@ export default function DriverHomePage({
         <DriverStatCard
           icon={RouteIcon}
           title="Today's Route"
-          value={routeInfo.routeName || "Unassigned"}
-          subtitle={`${routeInfo.startPoint || ""} to ${routeInfo.endPoint || ""}`}
+          value={dashboardData?.routeInfo?.name || driverProfile.assignedRoute || "City Route A"}
+          subtitle={dashboardData?.routeInfo?.details || "Code: ROUTE-01 • 24.5 km"}
           tone="primary"
           onClick={() => onNavigateTab("route")}
         />
         <DriverStatCard
           icon={Bus}
           title="Bus Number"
-          value={vehicleInfo.registrationNumber || "N/A"}
-          subtitle={`Capacity: ${vehicleInfo.capacity || 0}`}
+          value={driverProfile.assignedVehicle || "PC-101"}
+          subtitle={driverProfile.vehicleRegistration || "Registration: TN 09 BX 4412"}
           tone="blue"
           onClick={() => onNavigateTab("profile")}
         />
         <DriverStatCard
           icon={Truck}
           title="Assigned Vehicle"
-          value={vehicleInfo.model || "N/A"}
-          subtitle={vehicleInfo.type || "Standard Bus"}
+          value={driverProfile.vehicleModel || "Tata Starbus"}
+          subtitle={driverProfile.vehicleDetails || "40-Seater • Diesel BS-VI"}
           tone="purple"
           onClick={() => onNavigateTab("profile")}
         />
         <DriverStatCard
           icon={Users}
           title="Students Assigned"
-          value={`${stats.totalStudents || totalStudents || 0}`}
-          subtitle={`${stats.pickedUp || pickedUpCount || 0} Picked Up • ${stats.pending || pendingCount || 0} Pending`}
+          value={`${dashboardData?.studentsCount?.total || totalStudents}`}
+          subtitle={`${dashboardData?.studentsCount?.pickedUp || pickedUpCount} Picked Up • ${dashboardData?.studentsCount?.pending || pendingCount} Pending`}
           tone="success"
           onClick={() => onNavigateTab("students")}
         />
         <DriverStatCard
           icon={Sun}
           title="Morning Trip"
-          value={morningTripStatus}
-          subtitle="07:00 AM – 08:30 AM"
-          tone={morningTripStatus === "In Progress" ? "warning" : "success"}
-          badge={morningTripStatus === "In Progress" ? "Live" : undefined}
+          value={dashboardData?.morningTrip?.status || morningTripStatus}
+          subtitle={dashboardData?.morningTrip?.time || "07:00 AM – 08:30 AM"}
+          tone={(dashboardData?.morningTrip?.status || morningTripStatus) === "In Progress" ? "warning" : "success"}
+          badge={(dashboardData?.morningTrip?.status || morningTripStatus) === "In Progress" ? "Live" : undefined}
           onClick={() => onNavigateTab("trips")}
         />
         <DriverStatCard
           icon={Moon}
           title="Evening Trip"
-          value={eveningTripStatus}
-          subtitle="04:00 PM – 05:30 PM"
+          value={dashboardData?.eveningTrip?.status || eveningTripStatus}
+          subtitle={dashboardData?.eveningTrip?.time || "04:00 PM – 05:30 PM"}
           tone="purple"
           onClick={() => onNavigateTab("trips")}
         />
         <DriverStatCard
           icon={Navigation}
           title="GPS Status"
-          value={stats.gpsStatus || "Online"}
-          subtitle="Signal: 99.8% • 12 Sats"
+          value={dashboardData?.gpsStatus?.status || "Online"}
+          subtitle={dashboardData?.gpsStatus?.signal || "Signal: 99.8% • 12 Sats"}
           tone="success"
-          badge={(stats.gpsStatus || "Online") === "Online" ? "Live" : undefined}
+          badge={dashboardData?.gpsStatus?.status === "Online" || !dashboardData?.gpsStatus ? "Live" : undefined}
           onClick={() => onNavigateTab("gps")}
         />
         <DriverStatCard
           icon={AlertTriangle}
           title="Active Alerts"
-          value={stats.activeAlerts?.toString() || "0"}
-          subtitle="Route clear & on schedule"
-          tone={stats.activeAlerts > 0 ? "warning" : "primary"}
+          value={dashboardData?.alerts?.count?.toString() || "0"}
+          subtitle={dashboardData?.alerts?.message || "Route clear & on schedule"}
+          tone={dashboardData?.alerts?.count > 0 ? "warning" : "primary"}
         />
       </div>
 
@@ -292,7 +290,7 @@ export default function DriverHomePage({
           <div className="dp-card-head">
             <div className="dp-flex-col">
               <h3>Upcoming Stops & Route Flow</h3>
-              <p>Real-time progress for {routeInfo.routeName || "the route"}</p>
+              <p>Real-time progress for {dashboardData?.routeInfo?.name || "the route"}</p>
             </div>
             <button
               type="button"
@@ -304,8 +302,8 @@ export default function DriverHomePage({
           </div>
           <div className="dp-card-body">
             <div className="dp-stops-timeline">
-              {routeInfo.stops && routeInfo.stops.length > 0 ? (
-                routeInfo.stops.map((stop, idx) => (
+              {routeDetails.stops && routeDetails.stops.length > 0 ? (
+                routeDetails.stops.map((stop, idx) => (
                   <div
                     key={stop.id || idx}
                     className={`dp-timeline-step ${

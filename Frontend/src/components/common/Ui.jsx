@@ -137,7 +137,7 @@ export function Field({ field = {}, value, error, onChange, onBlur }) {
         {label} {required ? <span className="req">*</span> : null}
       </label>
       {type === "select" ? (
-        <select className="app-select" id={id} name={name} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
+        <select id={id} name={name} value={value ?? ""} disabled={disabled} onChange={(e) => handleChange(e.target.value)} onBlur={() => onBlur?.(name)}>
           {!normalizedOptions.some((o) => o.value === "" || o.value === null) ? (
             <option value="">Select {label}</option>
           ) : null}
