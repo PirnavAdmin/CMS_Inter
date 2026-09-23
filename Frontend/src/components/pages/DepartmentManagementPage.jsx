@@ -21,7 +21,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import "./DepartmentManagementPage.css";
 import departmentsIcon from "@/assets/dashboard-3d/total-sections.png";
 import designationsIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -251,6 +251,8 @@ export const normalizeDesignation = (row) => {
 };
 
 const PAGE_SIZE = 6;
+const DepartmentTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={3} />);
+const DesignationTableSkeleton = () => Array.from({ length: PAGE_SIZE }, (_, index) => <SkeletonRow key={index} columns={4} />);
 
 function Pager({ page, total, onChange }) {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -1031,7 +1033,7 @@ export default function DepartmentManagementPage() {
                 </thead>
                 <tbody>
                   {departmentsLoading ? (
-                    <EmptyTable colSpan={4} text="Loading departments..." />
+                    <DepartmentTableSkeleton />
                   ) : visibleDepartments.length > 0 ? (
                     visibleDepartments.map((item) => (
                       <tr key={item.id || item.name}>
@@ -1146,7 +1148,7 @@ export default function DepartmentManagementPage() {
                 </thead>
                 <tbody>
                   {designationsLoading ? (
-                    <EmptyTable colSpan={4} text="Loading designations..." />
+                    <DesignationTableSkeleton />
                   ) : visibleDesignations.length > 0 ? (
                     visibleDesignations.map((item) => (
                       <tr key={item.id || item.name}>

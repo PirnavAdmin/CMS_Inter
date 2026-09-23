@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import { SkeletonPage, SkeletonRow } from "@/components/common/Ui.jsx";
 import {
   FiFileText,
   FiCheckSquare,
@@ -832,11 +833,7 @@ const CertificateManagement = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan="8" className="table-empty-message">
-                      <div className="cert-spinner-inline"></div> Loading certificates...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
                 ) : paginatedList.length === 0 ? (
                   <tr>
                     <td colSpan="8" className="table-empty-message">
@@ -1058,11 +1055,7 @@ const CertificateManagement = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan="7" className="table-empty-message">
-                      <div className="cert-spinner-inline"></div> Loading workflow items...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                 ) : paginatedList.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="table-empty-message">
@@ -1217,10 +1210,7 @@ const CertificateManagement = () => {
 
             <div className="cert-modal-body">
               {previewLoading ? (
-                <div className="cert-preview-loading" style={{ textAlign: "center", padding: "3rem" }}>
-                  <div className="cert-spinner-inline"></div>
-                  <span>Loading &amp; hydrating certificate template...</span>
-                </div>
+                <SkeletonPage />
               ) : (
                 <div className="cert-preview-card cert-canvas-ornate">
                   <div className="cert-preview-header">

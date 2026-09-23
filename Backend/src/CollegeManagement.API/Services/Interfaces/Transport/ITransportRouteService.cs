@@ -26,6 +26,6 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<TransportRouteDto?> GetByIdOrCodeAsync(string routeIdOrCode);
 
         Task<IEnumerable<TransportRouteLookupDto>>
-            GetLookupAsync(string? search, int limit);
+            GetLookupAsync(string? search, string? busType, int limit);
     }
 }

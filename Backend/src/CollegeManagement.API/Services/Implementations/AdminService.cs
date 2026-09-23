@@ -193,9 +193,10 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     var dualWriteHash = PasswordHasher.HashPassword(provisioningResult.TemporaryPassword);
                     await connection.ExecuteAsync(
-                        "UPDATE `admins` SET `Password` = @Password WHERE `id` = @Id;",
-                        new { Password = dualWriteHash, Id = adminId },
-                        transaction: transaction);
+                        "sp_UpdateAdminPassword",
+                        new { p_Id = adminId, p_Password = dualWriteHash },
+                        transaction: transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();

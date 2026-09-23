@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -510,7 +510,7 @@ export default function StudentManagementPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10"><div className="cms-empty">Loading approved students...</div></td></tr>
+                Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={10} />)
               ) : pageRows.length ? (
                 pageRows.map((s) => (
                   <tr key={s.id} onClick={() => setSelectedStudentId(String(s.id))}>

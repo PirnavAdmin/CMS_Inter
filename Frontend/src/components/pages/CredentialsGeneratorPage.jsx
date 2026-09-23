@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import "./CredentialsGeneratorPage.css";
 
 // --- DEFAULT CREDENTIAL SETTINGS & PERSISTENCE ---
@@ -1645,8 +1645,7 @@ export default function CredentialsGeneratorPage() {
                 <div className="cred-wizard-body cred-wizard-success">
                   {isWizardSending ? (
                     <div className="cred-sending-state">
-                      <RefreshCw size={36} className="cred-spinner" />
-                      <h4>Dispatching Credentials via Secure SMTP Mailer...</h4>
+                      <SkeletonText lines={2} />
                       <div className="cred-progress-outer">
                         <div
                           className="cred-progress-inner"

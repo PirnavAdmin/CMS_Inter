@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FaArrowsRotate, FaAward, FaBan, FaCheck, FaChevronDown, FaClipboardCheck, FaDownload, FaEraser, FaEye, FaFileCirclePlus, FaFileLines, FaFilter, FaPaperPlane, FaPlus, FaPrint, FaRotateLeft, FaTrash, FaUsers, FaXmark } from "react-icons/fa6";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Field, Loader, Toast, useConfirmDialog } from "@/components/common/Ui.jsx";
+import { Field, SkeletonPage, SkeletonRow, SkeletonText, Toast, useConfirmDialog } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES, normalizeApiTemplate } from "@/components/pages/TemplatesPage.jsx";
@@ -3160,7 +3160,7 @@ export default function CertificatesPage() {
                       </div>
                     ) : null}
                     <div className="cert-bulk-student-list">
-                      {loadingBulkStudents ? <Loader label="Loading students..." /> : visibleBulkStudents.length ? visibleBulkStudents.map((student, idx) => {
+                      {loadingBulkStudents ? <SkeletonPage variant="form" rows={5} /> : visibleBulkStudents.length ? visibleBulkStudents.map((student, idx) => {
                         const admissionNo = String(student.admissionNo);
                         const selectionKey = admissionNo.trim().toLocaleLowerCase();
                         return (
@@ -3494,9 +3494,7 @@ export default function CertificatesPage() {
             </thead>
             <tbody>
               {loadingList ? (
-                <tr>
-                  <td colSpan={8}><Loader label="Loading certificates..." /></td>
-                </tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
               ) : !pageRows.length ? (
                 <tr>
                   <td colSpan={8}>
@@ -3602,7 +3600,7 @@ export default function CertificatesPage() {
                   title={`${workflowStatusFilter === label ? "Clear" : "Filter by"} ${label} status`}
                 >
                   <strong>{label}</strong>
-                  <span>{loadingStats ? "Loading..." : value}</span>
+                  <span>{loadingStats ? <SkeletonText lines={1} widths={["54px"]} /> : value}</span>
                 </button>
               ))}
             </div>
@@ -3636,7 +3634,7 @@ export default function CertificatesPage() {
                 </thead>
                 <tbody>
                   {loadingList ? (
-                    <tr><td colSpan={7}><Loader label="Loading certificates..." /></td></tr>
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                   ) : !actionPageRows.length ? (
                     <tr><td colSpan={7}><div className="cert-empty-state"><div className="cert-empty-icon"><FaAward size={24} aria-hidden="true" /></div><h4>No matching certificates found</h4><p>{workflowQuery.trim() ? "Try a different certificate number, admission number, student, type, status, or date." : workflowStatusFilter === "All" ? "Certificate requests will appear here as they move through the workflow." : `There are no certificates with ${workflowStatusFilter.toLowerCase()} status.`}</p></div></td></tr>
                   ) : actionPageRows.map((row, index) => (

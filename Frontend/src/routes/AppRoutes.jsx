@@ -35,7 +35,7 @@ import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfi
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
-import SalaryManagementPage from "@/components/pages/SalaryManagementPage.jsx";
+import PayrollPage from "@/components/pages/PayrollPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
@@ -43,6 +43,7 @@ import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
 import FacultyDashboard from "@/Dashboard/Facultydashboard.jsx";
+import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
 import {
   HostelDashboard,
@@ -197,69 +198,69 @@ export default function AppRoutes() {
         <Route path="/dashboard/settings/credentials/students/generate" element={<CredentialsGeneratorPage />} />
 
         {/* Payroll (Finance) Canonical Routes */}
-        <Route path="/dashboard/payroll" element={<SalaryManagementPage mode="payroll" />} />
-        <Route path="/dashboard/payroll/employees" element={<SalaryManagementPage mode="payroll-employees" />} />
-        <Route path="/dashboard/payroll/structures" element={<SalaryManagementPage mode="structures-list" />} />
-        <Route path="/dashboard/payroll/structures/add" element={<SalaryManagementPage mode="structures-add" />} />
-        <Route path="/dashboard/payroll/structures/:id" element={<SalaryManagementPage mode="structures-view" />} />
-        <Route path="/dashboard/payroll/structures/:id/edit" element={<SalaryManagementPage mode="structures-edit" />} />
-        <Route path="/dashboard/payroll/generate" element={<SalaryManagementPage mode="payroll-generate" />} />
-        <Route path="/dashboard/payroll/history" element={<SalaryManagementPage mode="payroll-history" />} />
-        <Route path="/dashboard/payroll/assignments" element={<SalaryManagementPage mode="assignments-list" />} />
-        <Route path="/dashboard/payroll/assign/teaching" element={<SalaryManagementPage mode="assign-teaching" />} />
-        <Route path="/dashboard/payroll/assign/non-teaching" element={<SalaryManagementPage mode="assign-non-teaching" />} />
-        <Route path="/dashboard/payroll/assignments/:id" element={<SalaryManagementPage mode="assignments-view" />} />
-        <Route path="/dashboard/payroll/assignments/:id/edit" element={<SalaryManagementPage mode="assignments-edit" />} />
-        <Route path="/dashboard/payroll/process" element={<SalaryManagementPage mode="payroll-list" />} />
-        <Route path="/dashboard/payroll/month/:month" element={<SalaryManagementPage mode="payroll-month-view" />} />
-        <Route path="/dashboard/payroll/month/:month/:staffId" element={<SalaryManagementPage mode="payroll-indiv-view" />} />
-        <Route path="/dashboard/payroll/payslips" element={<SalaryManagementPage mode="payslips-list" />} />
-        <Route path="/dashboard/payroll/payslips/:staffId/:month" element={<SalaryManagementPage mode="payslip-preview" />} />
-        <Route path="/dashboard/payroll/revisions" element={<SalaryManagementPage mode="revisions-list" />} />
-        <Route path="/dashboard/payroll/revisions/add" element={<SalaryManagementPage mode="revisions-add" />} />
-        <Route path="/dashboard/payroll/attendance-impact" element={<SalaryManagementPage mode="attendance-impact" />} />
-        <Route path="/dashboard/payroll/bonus" element={<SalaryManagementPage mode="bonus-list" />} />
-        <Route path="/dashboard/payroll/bonus/add" element={<SalaryManagementPage mode="bonus-add" />} />
-        <Route path="/dashboard/payroll/overtime" element={<SalaryManagementPage mode="overtime-list" />} />
-        <Route path="/dashboard/payroll/advances" element={<SalaryManagementPage mode="advances-list" />} />
-        <Route path="/dashboard/payroll/advances/add" element={<SalaryManagementPage mode="advances-add" />} />
-        <Route path="/dashboard/payroll/reimbursements" element={<SalaryManagementPage mode="reimbursements-list" />} />
-        <Route path="/dashboard/payroll/reimbursements/add" element={<SalaryManagementPage mode="reimbursements-add" />} />
-        <Route path="/dashboard/payroll/approvals" element={<SalaryManagementPage mode="approvals-list" />} />
-        <Route path="/dashboard/payroll/reports" element={<SalaryManagementPage mode="reports" />} />
-        <Route path="/dashboard/payroll/settings" element={<SalaryManagementPage mode="settings" />} />
-        <Route path="/dashboard/payroll/import" element={<SalaryManagementPage mode="import" />} />
+        <Route path="/dashboard/payroll" element={<PayrollPage mode="payroll" />} />
+        <Route path="/dashboard/payroll/employees" element={<PayrollPage mode="payroll-employees" />} />
+        <Route path="/dashboard/payroll/structures" element={<PayrollPage mode="structures-list" />} />
+        <Route path="/dashboard/payroll/structures/add" element={<PayrollPage mode="structures-add" />} />
+        <Route path="/dashboard/payroll/structures/:id" element={<PayrollPage mode="structures-view" />} />
+        <Route path="/dashboard/payroll/structures/:id/edit" element={<PayrollPage mode="structures-edit" />} />
+        <Route path="/dashboard/payroll/generate" element={<PayrollPage mode="payroll-generate" />} />
+        <Route path="/dashboard/payroll/history" element={<PayrollPage mode="payroll-history" />} />
+        <Route path="/dashboard/payroll/assignments" element={<PayrollPage mode="assignments-list" />} />
+        <Route path="/dashboard/payroll/assign/teaching" element={<PayrollPage mode="assign-teaching" />} />
+        <Route path="/dashboard/payroll/assign/non-teaching" element={<PayrollPage mode="assign-non-teaching" />} />
+        <Route path="/dashboard/payroll/assignments/:id" element={<PayrollPage mode="assignments-view" />} />
+        <Route path="/dashboard/payroll/assignments/:id/edit" element={<PayrollPage mode="assignments-edit" />} />
+        <Route path="/dashboard/payroll/process" element={<PayrollPage mode="payroll-list" />} />
+        <Route path="/dashboard/payroll/month/:month" element={<PayrollPage mode="payroll-month-view" />} />
+        <Route path="/dashboard/payroll/month/:month/:staffId" element={<PayrollPage mode="payroll-indiv-view" />} />
+        <Route path="/dashboard/payroll/payslips" element={<PayrollPage mode="payslips-list" />} />
+        <Route path="/dashboard/payroll/payslips/:staffId/:month" element={<PayrollPage mode="payslip-preview" />} />
+        <Route path="/dashboard/payroll/revisions" element={<PayrollPage mode="revisions-list" />} />
+        <Route path="/dashboard/payroll/revisions/add" element={<PayrollPage mode="revisions-add" />} />
+        <Route path="/dashboard/payroll/attendance-impact" element={<PayrollPage mode="attendance-impact" />} />
+        <Route path="/dashboard/payroll/bonus" element={<PayrollPage mode="bonus-list" />} />
+        <Route path="/dashboard/payroll/bonus/add" element={<PayrollPage mode="bonus-add" />} />
+        <Route path="/dashboard/payroll/overtime" element={<PayrollPage mode="overtime-list" />} />
+        <Route path="/dashboard/payroll/advances" element={<PayrollPage mode="advances-list" />} />
+        <Route path="/dashboard/payroll/advances/add" element={<PayrollPage mode="advances-add" />} />
+        <Route path="/dashboard/payroll/reimbursements" element={<PayrollPage mode="reimbursements-list" />} />
+        <Route path="/dashboard/payroll/reimbursements/add" element={<PayrollPage mode="reimbursements-add" />} />
+        <Route path="/dashboard/payroll/approvals" element={<PayrollPage mode="approvals-list" />} />
+        <Route path="/dashboard/payroll/reports" element={<PayrollPage mode="reports" />} />
+        <Route path="/dashboard/payroll/settings" element={<PayrollPage mode="settings" />} />
+        <Route path="/dashboard/payroll/import" element={<PayrollPage mode="import" />} />
 
         {/* Backward-Compatible Staff Salary Aliases */}
-        <Route path="/dashboard/staff-salary" element={<SalaryManagementPage mode="payroll" />} />
-        <Route path="/dashboard/staff-salary/structures" element={<SalaryManagementPage mode="structures-list" />} />
-        <Route path="/dashboard/staff-salary/structures/add" element={<SalaryManagementPage mode="structures-add" />} />
-        <Route path="/dashboard/staff-salary/structures/:id" element={<SalaryManagementPage mode="structures-view" />} />
-        <Route path="/dashboard/staff-salary/structures/:id/edit" element={<SalaryManagementPage mode="structures-edit" />} />
-        <Route path="/dashboard/staff-salary/assignments" element={<SalaryManagementPage mode="assignments-list" />} />
-        <Route path="/dashboard/staff-salary/assign/teaching" element={<SalaryManagementPage mode="assign-teaching" />} />
-        <Route path="/dashboard/staff-salary/assign/non-teaching" element={<SalaryManagementPage mode="assign-non-teaching" />} />
-        <Route path="/dashboard/staff-salary/assignments/:id" element={<SalaryManagementPage mode="assignments-view" />} />
-        <Route path="/dashboard/staff-salary/assignments/:id/edit" element={<SalaryManagementPage mode="assignments-edit" />} />
-        <Route path="/dashboard/staff-salary/payroll" element={<SalaryManagementPage mode="payroll-list" />} />
-        <Route path="/dashboard/staff-salary/payroll/:month" element={<SalaryManagementPage mode="payroll-month-view" />} />
-        <Route path="/dashboard/staff-salary/payroll/:month/:staffId" element={<SalaryManagementPage mode="payroll-indiv-view" />} />
-        <Route path="/dashboard/staff-salary/payslips" element={<SalaryManagementPage mode="payslips-list" />} />
-        <Route path="/dashboard/staff-salary/payslips/:staffId/:month" element={<SalaryManagementPage mode="payslip-preview" />} />
-        <Route path="/dashboard/staff-salary/revisions" element={<SalaryManagementPage mode="revisions-list" />} />
-        <Route path="/dashboard/staff-salary/revisions/add" element={<SalaryManagementPage mode="revisions-add" />} />
-        <Route path="/dashboard/staff-salary/attendance-impact" element={<SalaryManagementPage mode="attendance-impact" />} />
-        <Route path="/dashboard/staff-salary/bonus" element={<SalaryManagementPage mode="bonus-list" />} />
-        <Route path="/dashboard/staff-salary/bonus/add" element={<SalaryManagementPage mode="bonus-add" />} />
-        <Route path="/dashboard/staff-salary/overtime" element={<SalaryManagementPage mode="overtime-list" />} />
-        <Route path="/dashboard/staff-salary/advances" element={<SalaryManagementPage mode="advances-list" />} />
-        <Route path="/dashboard/staff-salary/advances/add" element={<SalaryManagementPage mode="advances-add" />} />
-        <Route path="/dashboard/staff-salary/reimbursements" element={<SalaryManagementPage mode="reimbursements-list" />} />
-        <Route path="/dashboard/staff-salary/reimbursements/add" element={<SalaryManagementPage mode="reimbursements-add" />} />
-        <Route path="/dashboard/staff-salary/approvals" element={<SalaryManagementPage mode="approvals-list" />} />
-        <Route path="/dashboard/staff-salary/reports" element={<SalaryManagementPage mode="reports" />} />
-        <Route path="/dashboard/staff-salary/settings" element={<SalaryManagementPage mode="settings" />} />
-        <Route path="/dashboard/staff-salary/import" element={<SalaryManagementPage mode="import" />} />
+        <Route path="/dashboard/staff-salary" element={<PayrollPage mode="payroll" />} />
+        <Route path="/dashboard/staff-salary/structures" element={<PayrollPage mode="structures-list" />} />
+        <Route path="/dashboard/staff-salary/structures/add" element={<PayrollPage mode="structures-add" />} />
+        <Route path="/dashboard/staff-salary/structures/:id" element={<PayrollPage mode="structures-view" />} />
+        <Route path="/dashboard/staff-salary/structures/:id/edit" element={<PayrollPage mode="structures-edit" />} />
+        <Route path="/dashboard/staff-salary/assignments" element={<PayrollPage mode="assignments-list" />} />
+        <Route path="/dashboard/staff-salary/assign/teaching" element={<PayrollPage mode="assign-teaching" />} />
+        <Route path="/dashboard/staff-salary/assign/non-teaching" element={<PayrollPage mode="assign-non-teaching" />} />
+        <Route path="/dashboard/staff-salary/assignments/:id" element={<PayrollPage mode="assignments-view" />} />
+        <Route path="/dashboard/staff-salary/assignments/:id/edit" element={<PayrollPage mode="assignments-edit" />} />
+        <Route path="/dashboard/staff-salary/payroll" element={<PayrollPage mode="payroll-list" />} />
+        <Route path="/dashboard/staff-salary/payroll/:month" element={<PayrollPage mode="payroll-month-view" />} />
+        <Route path="/dashboard/staff-salary/payroll/:month/:staffId" element={<PayrollPage mode="payroll-indiv-view" />} />
+        <Route path="/dashboard/staff-salary/payslips" element={<PayrollPage mode="payslips-list" />} />
+        <Route path="/dashboard/staff-salary/payslips/:staffId/:month" element={<PayrollPage mode="payslip-preview" />} />
+        <Route path="/dashboard/staff-salary/revisions" element={<PayrollPage mode="revisions-list" />} />
+        <Route path="/dashboard/staff-salary/revisions/add" element={<PayrollPage mode="revisions-add" />} />
+        <Route path="/dashboard/staff-salary/attendance-impact" element={<PayrollPage mode="attendance-impact" />} />
+        <Route path="/dashboard/staff-salary/bonus" element={<PayrollPage mode="bonus-list" />} />
+        <Route path="/dashboard/staff-salary/bonus/add" element={<PayrollPage mode="bonus-add" />} />
+        <Route path="/dashboard/staff-salary/overtime" element={<PayrollPage mode="overtime-list" />} />
+        <Route path="/dashboard/staff-salary/advances" element={<PayrollPage mode="advances-list" />} />
+        <Route path="/dashboard/staff-salary/advances/add" element={<PayrollPage mode="advances-add" />} />
+        <Route path="/dashboard/staff-salary/reimbursements" element={<PayrollPage mode="reimbursements-list" />} />
+        <Route path="/dashboard/staff-salary/reimbursements/add" element={<PayrollPage mode="reimbursements-add" />} />
+        <Route path="/dashboard/staff-salary/approvals" element={<PayrollPage mode="approvals-list" />} />
+        <Route path="/dashboard/staff-salary/reports" element={<PayrollPage mode="reports" />} />
+        <Route path="/dashboard/staff-salary/settings" element={<PayrollPage mode="settings" />} />
+        <Route path="/dashboard/staff-salary/import" element={<PayrollPage mode="import" />} />
 
         {/* Hostel Management Module Routes */}
         <Route path="/hostel" element={<HostelDashboard />} />
@@ -284,14 +285,18 @@ export default function AppRoutes() {
 
       <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
       <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
-      <Route path="/staff/onboarding/:id" element={<Navigate to="/faculty-dashboard" replace />} />
-      <Route path="/staff/onboarding/:id/complete-profile" element={<Navigate to="/faculty-dashboard" replace />} />
-      <Route path="/mock-staff-portal/:id" element={<Navigate to="/faculty-dashboard" replace />} />
-      <Route path="/mock-staff-portal/:id/complete-profile" element={<Navigate to="/faculty-dashboard" replace />} />
-      <Route path="/mock-staff-portal/:id/review" element={<Navigate to="/faculty-dashboard" replace />} />
-      <Route path="/staff-portal/:id" element={<Navigate to="/faculty-dashboard" replace />} />
-      <Route path="/staff-portal/:id/complete-profile" element={<Navigate to="/faculty-dashboard" replace />} />
-      <Route path="/staff-portal/:id/review" element={<Navigate to="/faculty-dashboard" replace />} />
+      <Route path="/driver" element={<DriverDashboard />} />
+      <Route path="/driver/*" element={<DriverDashboard />} />
+      <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
+      <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
+      <Route path="/staff/onboarding/:id" element={<StaffManagementPage />} />
+      <Route path="/staff/onboarding/:id/complete-profile" element={<StaffManagementPage />} />
+      <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />
+      <Route path="/mock-staff-portal/:id/complete-profile" element={<StaffManagementPage />} />
+      <Route path="/mock-staff-portal/:id/review" element={<StaffManagementPage />} />
+      <Route path="/staff-portal/:id" element={<StaffManagementPage />} />
+      <Route path="/staff-portal/:id/complete-profile" element={<StaffManagementPage />} />
+      <Route path="/staff-portal/:id/review" element={<StaffManagementPage />} />
 
       {listSlugs.map((slug) => <Route key={`${slug}-redirect`} path={`/${slug}`} element={<Navigate to={`/dashboard/${slug}`} replace />} />)}
       {listSlugs.map((slug) => <Route key={`${slug}-add-redirect`} path={`/${slug}/add`} element={<Navigate to={`/dashboard/${slug}/add`} replace />} />)}

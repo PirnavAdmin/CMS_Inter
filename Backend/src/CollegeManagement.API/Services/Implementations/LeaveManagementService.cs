@@ -78,9 +78,8 @@ namespace CollegeManagement.API.Services.Implementations
                 try
                 {
                     var leave = await _context.StaffLeaveRequests
-                        .FromSqlInterpolated($"SELECT * FROM StaffLeaveRequests WHERE StaffLeaveRequestId = {leaveRequestId} FOR UPDATE")
                         .Include(l => l.Staff)
-                        .FirstOrDefaultAsync();
+                        .FirstOrDefaultAsync(l => l.StaffLeaveRequestId == leaveRequestId);
                         
                     if (leave == null) throw new CollegeManagement.API.Exceptions.NotFoundException("Leave request not found");
 

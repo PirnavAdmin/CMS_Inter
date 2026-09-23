@@ -8,8 +8,7 @@ using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Models.Holiday;
-
-
+using CollegeManagement.API.Models.Transport;
 
 namespace CollegeManagement.API.Data
 {
@@ -61,6 +60,8 @@ namespace CollegeManagement.API.Data
         public DbSet<StudentTransportAssignment> StudentTransportAssignments { get; set; } = null!;
         public DbSet<VehicleMaintenance> VehicleMaintenances { get; set; } = null!;
         public DbSet<TransportTrip> TransportTrips => Set<TransportTrip>();
+        public DbSet<TransportStudentAttendance> TransportStudentAttendances { get; set; } = null!;
+        public DbSet<TransportGpsTelemetry> TransportGpsTelemetries { get; set; } = null!;
         public DbSet<Staff> Staffs { get; set; }
         public DbSet<StaffSubjectAllocation> StaffSubjectAllocations { get; set; }
         public DbSet<Faculty> Faculties { get; set; }
