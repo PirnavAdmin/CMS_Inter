@@ -33,3 +33,18 @@ export const saveAuthSession = ({ token, user, role }, persistent) => {
   storage.setItem("user", JSON.stringify(user));
   storage.setItem("role", String(role ?? user?.role ?? ""));
 };
+
+export const updateAuthToken = (token) => {
+  if (!token || typeof window === "undefined") return;
+  const rawToken = String(token).replace(/^Bearer\s+/i, "").trim();
+  if (window.localStorage.getItem("token")) {
+    window.localStorage.setItem("token", rawToken);
+  }
+  if (window.sessionStorage.getItem("token")) {
+    window.sessionStorage.setItem("token", rawToken);
+  }
+  if (!window.localStorage.getItem("token") && !window.sessionStorage.getItem("token")) {
+    window.localStorage.setItem("token", rawToken);
+  }
+};
+

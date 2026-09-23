@@ -41,13 +41,14 @@ import {
   formatDate,
   todayISO,
 } from "@/data/feeManagementData.js";
+import { HOSTEL_BLOCKS, HOSTEL_ROOMS_DATA } from "@/modules/hostel/data/hostelData.js";
 import "./FeeManagementPage.css";
 
 const TABS = ["Overview", "Fee Setup", "Student Fee Ledger"];
-const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Scholarships"];
+const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Scholarships", "Fine"];
 const LEDGER_TABS = [
-  { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Fee Collection", label: "Fee Collection" },
+  { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Payment History", label: "Payment History" },
 ];
 const FEE_TYPE_CATEGORIES = ["Admission", "Academic", "Examination", "Facility", "Activity", "Other"];
@@ -58,6 +59,9 @@ const OVERVIEW_TABS = [
   { id: "recent", label: "Recent Payments", icon: ReceiptText },
 ];
 const CHART_COLORS = ["var(--cms-primary)", "var(--cms-green)", "var(--cms-amber)"];
+const HOSTEL_FEE_CONFIG_STORAGE_KEY = "pirnav_hostel_fee_configs_v1";
+const FINE_RULE_STORAGE_KEY = "pirnav_fee_fine_rules_v1";
+const FACILITY_FEE_NAMES = ["hostel fee", "transport fee"];
 
 const getCollection = (payload) => {
   const data = payload?.data ?? payload?.Data ?? payload;
@@ -164,6 +168,158 @@ const displayNameFor = (name, id, options = [], fallback = "-") => {
 };
 
 const compactKey = (value) => normalizeKey(value).replace(/[^a-z0-9]/g, "");
+
+const isDedicatedFacilityFeeType = (item) => {
+  const identity = normalizeKey(item?.name || item?.type || item?.feeTypeName);
+  return FACILITY_FEE_NAMES.some((name) => identity === name || identity.startsWith(`${name} `));
+};
+
+const parseCurrencyNumber = (value) => Number(String(value ?? "").replace(/[^\d.]/g, "")) || 0;
+
+const seedHostelFeeConfigs = () => HOSTEL_ROOMS_DATA.map((room) => {
+  const block = HOSTEL_BLOCKS.find((item) => item.code === room.block);
+  return {
+    id: `${room.block}-${room.roomNo}`,
+    hostelBlock: room.block,
+    hostelName: block?.name || room.block,
+    roomNo: room.roomNo,
+    roomType: room.type,
+    feePlan: "Monthly",
+    feeAmount: parseCurrencyNumber(room.fee),
+    securityDeposit: 0,
+    status: "Active",
+  };
+});
+
+const readHostelFeeConfigs = () => {
+  if (typeof window === "undefined") return seedHostelFeeConfigs();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HOSTEL_FEE_CONFIG_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) && parsed.length ? parsed : seedHostelFeeConfigs();
+  } catch {
+    return seedHostelFeeConfigs();
+  }
+};
+
+const writeHostelFeeConfigs = (rows) => {
+  if (typeof window !== "undefined") window.localStorage.setItem(HOSTEL_FEE_CONFIG_STORAGE_KEY, JSON.stringify(rows));
+};
+
+const seedFineRules = () => [];
+
+const readFineRules = () => {
+  if (typeof window === "undefined") return seedFineRules();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(FINE_RULE_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : seedFineRules();
+  } catch {
+    return seedFineRules();
+  }
+};
+
+const writeFineRules = (rows) => {
+  if (typeof window !== "undefined") window.localStorage.setItem(FINE_RULE_STORAGE_KEY, JSON.stringify(rows));
+};
+
+const addDaysISO = (isoDate, days = 0) => {
+  const base = new Date(String(isoDate || "").slice(0, 10));
+  if (Number.isNaN(base.getTime())) return "";
+  base.setDate(base.getDate() + Number(days || 0));
+  return base.toISOString().slice(0, 10);
+};
+
+const daysBetweenISO = (fromDate, toDate = todayISO()) => {
+  const from = new Date(String(fromDate || "").slice(0, 10));
+  const to = new Date(String(toDate || "").slice(0, 10));
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0;
+  return Math.floor((to.getTime() - from.getTime()) / 86400000);
+};
+
+const fineRuleMatchesFee = (rule, feeItem = {}) => {
+  const ruleId = String(rule.feeTypeId || "").trim();
+  const itemId = String(feeItem.id || feeItem.feeTypeId || "").trim();
+  if (ruleId && itemId && ruleId === itemId) return true;
+  return normalizeKey(rule.feeTypeName) === normalizeKey(feeItem.type || feeItem.name);
+};
+
+const calculateFineAmount = (rule, overdueDays) => {
+  const fineAmount = Math.max(Number(rule.fineAmount || 0), 0);
+  if (fineAmount <= 0 || overdueDays <= 0) return 0;
+  if (rule.fineType === "Per Day") {
+    return fineAmount * overdueDays;
+  }
+  return fineAmount;
+};
+
+const calculateAccountFines = (account = {}, fineRules = []) => {
+  const feeItems = (account.feeItems || []).filter((item) => !String(item.id || "").startsWith("fine-"));
+  const schedules = (account.installments || []).filter((item) => (
+    Number(item.balance || 0) > 0
+    && item.dueDate
+    && normalizeKey(item.status) !== "paid"
+  ));
+  const today = todayISO();
+
+  return fineRules
+    .filter((rule) => rule.status === "Active" && Number(rule.fineAmount || 0) > 0)
+    .flatMap((rule) => {
+      const matchedFee = feeItems.find((feeItem) => fineRuleMatchesFee(rule, feeItem));
+      if (!matchedFee) return [];
+      const candidates = schedules.length ? schedules : [{
+        no: matchedFee.id,
+        dueDate: matchedFee.dueDate || account.nextDueDate,
+        balance: account.balance,
+        amount: matchedFee.payableAmount || matchedFee.originalAmount,
+      }];
+      return candidates.map((schedule) => {
+        const graceDate = addDaysISO(schedule.dueDate, Number(rule.gracePeriod || 0));
+        if (!graceDate || today <= graceDate || Number(schedule.balance || 0) <= 0) return null;
+        const overdueDays = daysBetweenISO(graceDate, today);
+        const amount = calculateFineAmount(rule, overdueDays);
+        if (amount <= 0) return null;
+        return {
+          id: `fine-${rule.id}-${schedule.no || schedule.dueDate}`,
+          ruleId: rule.id,
+          type: rule.ruleName,
+          feeTypeName: rule.feeTypeName,
+          dueDate: schedule.dueDate,
+          graceDate,
+          overdueDays,
+          originalAmount: amount,
+          payableAmount: amount,
+          concessionAmount: 0,
+          selected: true,
+          required: false,
+          isFine: true,
+        };
+      }).filter(Boolean);
+    });
+};
+
+const applyFineRulesToAccount = (account = {}, fineRules = []) => {
+  const baseItems = (account.feeItems || []).filter((item) => !String(item.id || "").startsWith("fine-"));
+  const fineItems = calculateAccountFines({ ...account, feeItems: baseItems }, fineRules);
+  const totalFine = fineItems.reduce((sum, item) => sum + Number(item.payableAmount || 0), 0);
+  if (!totalFine) return { ...account, feeItems: baseItems, fineItems: [], totalFine: 0 };
+  const balance = Math.max(Number(account.balance || 0) + totalFine, 0);
+  return {
+    ...account,
+    feeItems: [...baseItems, ...fineItems],
+    fineItems,
+    totalFine,
+    totalPayable: Number(account.totalPayable || 0) + totalFine,
+    balance,
+    feeStatus: accountStatusFor({
+      payable: Number(account.totalPayable || 0) + totalFine,
+      paid: account.totalPaid,
+      balance,
+      dueDate: account.nextDueDate,
+      status: account.feeStatus,
+    }),
+  };
+};
+
+const applyFineRulesToAccounts = (accounts = [], fineRules = []) => accounts.map((account) => applyFineRulesToAccount(account, fineRules));
 
 const valueTokens = (...values) => values
   .flatMap((value) => String(value ?? "").split(/[/,|()-]+/))
@@ -585,6 +741,8 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const existing = grouped.get(key);
     const row = existing || {
       id: structureId,
+      structureName: textValue(item, "structureName", "StructureName", "name", "Name"),
+      description: textValue(item, "description", "Description"),
       boardId: textValue(item, "boardId", "BoardId") || textValue(itemBoard, "boardId", "BoardId", "id", "Id"),
       board: textValue(item, "boardName", "BoardName") || textValue(itemBoard, "boardName", "BoardName", "name", "Name") || textValue(item, "boardId", "BoardId"),
       academicYearId,
@@ -627,7 +785,7 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     grouped.set(key, row);
   });
   return Array.from(grouped.values()).map((row) => {
-    const feeItems = dedupeConfiguredFeeItems(row.feeItems);
+    const feeItems = dedupeConfiguredFeeItems(row.feeItems).filter((feeItem) => !isDedicatedFacilityFeeType(feeItem));
     return {
       ...row,
       feeItems,
@@ -834,10 +992,11 @@ const withPaymentContext = (payment, accounts = []) => {
 const normalizeInstallmentRows = (rows, account) => rows.map((item, index) => ({
   id: read(item, "feeInstallmentId", "FeeInstallmentId", "installmentId", "InstallmentId", "id", "Id"),
   feeInstallmentId: read(item, "feeInstallmentId", "FeeInstallmentId", "installmentId", "InstallmentId", "id", "Id"),
-  no: Number(read(item, "installmentNo", "InstallmentNo", "scheduleNo", "ScheduleNo", "no", "No") || index + 1),
+  no: Number(read(item, "installmentNumber", "InstallmentNumber", "installmentNo", "InstallmentNo", "scheduleNo", "ScheduleNo", "no", "No") || index + 1),
+  label: textValue(item, "feeSchedule", "FeeSchedule", "scheduleName", "ScheduleName", "installmentName", "InstallmentName"),
   amount: numberValue(item, "amount", "Amount", "installmentAmount", "InstallmentAmount", "payableAmount", "PayableAmount", "dueAmount", "DueAmount"),
   paid: optionalNumberValue(item, "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid"),
-  balance: optionalNumberValue(item, "balance", "Balance", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"),
+  balance: optionalNumberValue(item, "balance", "Balance", "balanceAmount", "BalanceAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"),
   dueDate: textValue(item, "dueDate", "DueDate", "date", "Date"),
   status: textValue(item, "status", "Status") || account.feeStatus || "Pending",
 })).map((item) => ({
@@ -1043,6 +1202,12 @@ const printFeeList = (title, columns, rows) => {
 
 function StatusBadge({ status }) {
   return <span className={`cms-badge ${feeStatusTone(status)}`}>{status}</span>;
+}
+
+function PaymentStatusBadge({ status }) {
+  const value = status || "Paid";
+  const tone = ["success", "paid", "completed"].includes(normalizeKey(value)) ? "cms-badge-active" : feeStatusTone(value);
+  return <span className={`cms-badge ${tone}`}>{value}</span>;
 }
 
 function SummaryCard({ icon: Icon, label, value, hint, tone, onClick }) {
@@ -1723,6 +1888,11 @@ function ReceiptModal({ receipt, onClose }) {
 
 /* --------------------------- Student fee details -------------------------- */
 function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false }) {
+  const feeBreakdownTotals = account.feeItems.reduce((totals, item) => ({
+    original: totals.original + Number(item.originalAmount || 0),
+    concession: totals.concession + Number(item.concessionAmount || 0),
+    payable: totals.payable + Number(item.payableAmount || 0),
+  }), { original: 0, concession: 0, payable: 0 });
   const receiptFallback = (txn) => ({
     ...txn,
     studentName: account.studentName,
@@ -1799,6 +1969,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
               <div><span>Original Fee</span><strong>{formatCurrency(account.totalOriginal)}</strong></div>
               <div><span>Concession</span><strong>{formatCurrency(account.totalConcession)}</strong></div>
               <div><span>Scheduled Fees</span><strong>{formatCurrency(account.courseFee)}</strong></div>
+              {account.totalFine ? <div><span>Fine</span><strong>{formatCurrency(account.totalFine)}</strong></div> : null}
               <div><span>Total Payable</span><strong>{formatCurrency(account.totalPayable)}</strong></div>
               <div><span>Total Paid</span><strong>{formatCurrency(account.totalPaid)}</strong></div>
               <div><span>Outstanding Balance</span><strong>{formatCurrency(account.balance)}</strong></div>
@@ -1835,10 +2006,10 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                 <tfoot>
                   <tr>
                     <td><strong>Total Fee</strong></td>
-                    <td className="num"><strong>{formatCurrency(account.totalOriginal)}</strong></td>
+                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.original)}</strong></td>
                     <td />
-                    <td className="num"><strong>{formatCurrency(account.totalConcession)}</strong></td>
-                    <td className="num"><strong>{formatCurrency(account.totalPayable)}</strong></td>
+                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.concession)}</strong></td>
+                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.payable)}</strong></td>
                   </tr>
                 </tfoot>
               </table>
@@ -1856,7 +2027,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                   <tbody>
                     {account.installments.map((item) => (
                       <tr key={item.no}>
-                        <td><strong>Fee Schedule {item.no}</strong></td>
+                        <td><strong>{item.label || `Fee Schedule ${item.no}`}</strong></td>
                         <td>{formatDate(item.dueDate)}</td>
                         <td className="num">{formatCurrency(item.amount)}</td>
                         <td className="num">{formatCurrency(item.paid)}</td>
@@ -1902,7 +2073,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
 }
 
 /* ----------------------------- Student ledger ---------------------------- */
-function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error = "" }) {
+function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading = false, error = "" }) {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ academicYear: "", group: "", section: "", paymentPlan: "", feeStatus: "" });
   const [page, setPage] = useState(1);
@@ -1934,7 +2105,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
     && matchesAnyNormalized(filters.group, selectedGroupLabel, item.groupId, item.groupName)
   ));
   const paymentPlanOptions = PAYMENT_PLANS.map((plan) => ({ value: plan, label: feeScheduleLabel(plan) }));
-  const rows = normalizeFeeAccountDataset(accounts.filter((item) => {
+  const rows = applyFineRulesToAccounts(normalizeFeeAccountDataset(accounts.filter((item) => {
     const term = search.trim().toLowerCase();
     const selectedSectionLabel = optionLabel(sectionOptions, filters.section);
     const matchesSearch = !term
@@ -1946,7 +2117,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
       && matchesAnyNormalized(filters.section, selectedSectionLabel, item.sectionId, item.section, `${item.group || ""} / ${item.section || ""}`)
       && matchesAnyNormalized(filters.paymentPlan, feeScheduleLabel(filters.paymentPlan), item.paymentPlan, feeScheduleLabel(item.paymentPlan))
       && matchesAnyNormalized(filters.feeStatus, filters.feeStatus, item.feeStatus);
-  }));
+  })), fineRules);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginatedRows = pageItems(rows, page);
   useEffect(() => {
@@ -2020,19 +2191,19 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
   );
 }
 
-function FeeCollectionTab({ accounts, onCollect, loading = false, error = "" }) {
+function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false, error = "" }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const setSearchTerm = (value) => {
     setSearch(value);
     setPage(1);
   };
-  const rows = normalizeFeeAccountDataset(accounts.filter((item) => {
+  const rows = applyFineRulesToAccounts(normalizeFeeAccountDataset(accounts.filter((item) => {
     const term = search.trim().toLowerCase();
     return !term
       || item.studentName.toLowerCase().includes(term)
       || item.admissionNo.toLowerCase().includes(term);
-  }));
+  })), fineRules);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginatedRows = pageItems(rows, page);
 
@@ -2276,6 +2447,8 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
     const programId = Number(values.programId || 0);
     if (initial?.id) {
       return {
+        ...(values.structureName ? { structureName: values.structureName } : {}),
+        ...(values.description ? { description: values.description } : {}),
         ...(programId ? { programId } : {}),
         isActive: values.status !== "Inactive",
       };
@@ -2781,6 +2954,166 @@ function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
   );
 }
 
+function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
+  const activeFeeTypes = feeTypes.filter((item) => item.status !== "Inactive");
+  const firstFeeType = activeFeeTypes[0];
+  const [draft, setDraft] = useState({
+    ruleName: initial?.ruleName || "",
+    feeTypeId: initial?.feeTypeId || firstFeeType?.id || "",
+    fineType: initial?.fineType || "Fixed Amount",
+    fineAmount: initial?.fineAmount ?? "",
+    gracePeriod: initial?.gracePeriod ?? 0,
+    status: initial?.status || "Active",
+  });
+  const [error, setError] = useState("");
+
+  const saveRule = () => {
+    const ruleName = draft.ruleName.trim();
+    const selectedFeeType = activeFeeTypes.find((item) => String(item.id) === String(draft.feeTypeId));
+    const fineAmount = Number(draft.fineAmount || 0);
+    const gracePeriod = Number(draft.gracePeriod || 0);
+    if (!ruleName) return setError("Fine Rule Name is required");
+    if (!selectedFeeType) return setError("Applicable Fee / Fee Type is required");
+    if (!draft.fineType) return setError("Fine Type is required");
+    if (!Number.isFinite(fineAmount) || fineAmount <= 0) return setError("Fine Amount must be greater than 0");
+    if (!Number.isFinite(gracePeriod) || gracePeriod < 0) return setError("Grace Period cannot be negative");
+    if (fineRules.some((item) => item.id !== initial?.id && normalizeKey(item.ruleName) === normalizeKey(ruleName))) return setError(`${ruleName} already exists`);
+
+    const nextRule = {
+      id: initial?.id || `FINE-${Date.now()}`,
+      ruleName,
+      feeTypeId: selectedFeeType.id,
+      feeTypeName: selectedFeeType.name,
+      fineType: draft.fineType,
+      fineAmount,
+      gracePeriod,
+      maxFine: 0,
+      status: draft.status,
+    };
+    onSaved(initial?.id
+      ? fineRules.map((item) => (item.id === initial.id ? nextRule : item))
+      : [nextRule, ...fineRules], initial?.id ? "Fine rule updated" : "Fine rule added");
+    return null;
+  };
+
+  return (
+    <Modal
+      title={initial?.id ? "Edit Fine Rule" : "Add Fine Rule"}
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="cms-btn cms-btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="cms-btn cms-btn-primary" onClick={saveRule}>Save Fine Rule</button>
+        </>
+      )}
+    >
+      <div className="cms-form-grid">
+        <div className="cms-field">
+          <label htmlFor="fine-rule-name">Fine Rule Name <span className="req">*</span></label>
+          <input id="fine-rule-name" value={draft.ruleName} onChange={(event) => setDraft((current) => ({ ...current, ruleName: event.target.value }))} />
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-fee-type">Applicable Fee / Fee Type <span className="req">*</span></label>
+          <select id="fine-fee-type" value={draft.feeTypeId} onChange={(event) => setDraft((current) => ({ ...current, feeTypeId: event.target.value }))}>
+            {!activeFeeTypes.length ? <option value="">No active fee types</option> : null}
+            {activeFeeTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-type">Fine Type <span className="req">*</span></label>
+          <select id="fine-type" value={draft.fineType} onChange={(event) => setDraft((current) => ({ ...current, fineType: event.target.value }))}>
+            <option value="Fixed Amount">Fixed Amount</option>
+            <option value="Per Day">Per Day</option>
+          </select>
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-amount">Fine Amount <span className="req">*</span></label>
+          <input id="fine-amount" type="number" min="0" value={draft.fineAmount} onChange={(event) => setDraft((current) => ({ ...current, fineAmount: event.target.value }))} />
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-grace">Grace Period</label>
+          <input id="fine-grace" type="number" min="0" value={draft.gracePeriod} onChange={(event) => setDraft((current) => ({ ...current, gracePeriod: event.target.value }))} />
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-status">Status</label>
+          <select id="fine-status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+      {error ? <p className="cms-error">{error}</p> : null}
+    </Modal>
+  );
+}
+
+function FineTab({ fineRules, feeTypes, onChange, onToast }) {
+  const [formItem, setFormItem] = useState(null);
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(fineRules.length / PAGE_SIZE));
+  const paginatedFineRules = pageItems(fineRules, page);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const saveFineRules = (nextRules, message) => {
+    onChange(nextRules);
+    onToast(message);
+    setFormItem(null);
+  };
+
+  return (
+    <div className="cms-card cms-fee-types-card">
+      <div className="cms-card-head">
+        <div>
+          <h2>Fine</h2>
+          <p>Configure overdue fee fine rules for unpaid fee schedules.</p>
+        </div>
+        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Fine Rule</button>
+      </div>
+      <div className="cms-card-body cms-fee-toolbar">
+        <div className="cms-table-wrap">
+          <table className="cms-table cms-fee-setup-table cms-fee-fine-table">
+            <thead>
+              <tr><th>Fine Rule Name</th><th>Applicable Fee</th><th>Fine Type</th><th className="num">Fine Amount</th><th>Grace Period</th><th>Status</th><th className="cms-fee-actions-col">Actions</th></tr>
+            </thead>
+            <tbody>
+              {paginatedFineRules.map((item) => (
+                <tr key={item.id}>
+                  <td><strong>{item.ruleName}</strong></td>
+                  <td>{item.feeTypeName}</td>
+                  <td>{item.fineType}</td>
+                  <td className="num">{formatCurrency(item.fineAmount)}</td>
+                  <td>{Number(item.gracePeriod || 0)} days</td>
+                  <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
+                  <td className="cms-fee-actions-col">
+                    <div className="cms-actions">
+                      <button type="button" className="cms-action-btn" title="Edit fine rule" aria-label="Edit fine rule" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!fineRules.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No fine rules configured.</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        <TablePagination page={page} totalItems={fineRules.length} onPageChange={setPage} />
+        <p className="cms-fee-note"><CheckCircle size={14} /> Fine applies only after due date plus grace period when an outstanding balance remains.</p>
+      </div>
+      {formItem ? (
+        <FineRuleFormModal
+          initial={formItem.id ? formItem : null}
+          fineRules={fineRules}
+          feeTypes={feeTypes}
+          onClose={() => setFormItem(null)}
+          onSaved={saveFineRules}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
   const [editing, setEditing] = useState(null);
   const [loadingEditId, setLoadingEditId] = useState("");
@@ -2920,7 +3253,175 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   );
 }
 
-function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, scholarships, onScholarshipsChange, structures, onToast, onRefresh, loading, error, masters, masterErrors }) {
+function HostelFeesTab({ configs, onChange, onToast }) {
+  const [editing, setEditing] = useState(null);
+  const [page, setPage] = useState(1);
+
+  const blockOptions = HOSTEL_BLOCKS.map((block) => ({
+    value: block.code,
+    label: block.name,
+  }));
+  const roomTypeOptions = Array.from(new Set(HOSTEL_ROOMS_DATA.map((room) => room.type).filter(Boolean)));
+  const defaultBlock = blockOptions[0];
+  const defaultRoomType = roomTypeOptions[0] || "";
+
+  const createDraft = (row = null) => ({
+    id: row?.id || `hostel-fee-${Date.now()}`,
+    hostelBlock: row?.hostelBlock || defaultBlock?.value || "",
+    hostelName: row?.hostelName || defaultBlock?.label || "",
+    roomNo: row?.roomNo || "All Rooms",
+    roomType: row?.roomType || defaultRoomType,
+    feePlan: row?.feePlan || "Annual",
+    feeAmount: row?.feeAmount ?? "",
+    securityDeposit: row?.securityDeposit ?? 0,
+    effectiveFrom: row?.effectiveFrom || todayISO(),
+    status: row?.status || "Active",
+  });
+
+  const openAdd = () => setEditing(createDraft());
+  const openEdit = (item) => setEditing(createDraft(item));
+  const totalPages = Math.max(1, Math.ceil(configs.length / PAGE_SIZE));
+  const paginatedConfigs = pageItems(configs, page);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const saveConfig = () => {
+    const feeAmount = Number(editing.feeAmount);
+    if (!editing.hostelBlock || !editing.roomType || !Number.isFinite(feeAmount) || feeAmount <= 0) {
+      onToast("Select hostel block, room type, and enter a valid hostel fee");
+      return;
+    }
+    const block = blockOptions.find((option) => option.value === editing.hostelBlock);
+    const nextConfig = {
+      ...editing,
+      hostelName: block?.label || editing.hostelName || editing.hostelBlock,
+      feeAmount,
+      securityDeposit: Number(editing.securityDeposit) || 0,
+      roomNo: editing.roomNo || "All Rooms",
+    };
+    const exists = configs.some((item) => item.id === nextConfig.id);
+    onChange(exists ? configs.map((item) => (item.id === nextConfig.id ? nextConfig : item)) : [nextConfig, ...configs]);
+    onToast(exists ? "Hostel fee configuration updated" : "Hostel fee configuration added");
+    setEditing(null);
+  };
+
+  return (
+    <div className="cms-card cms-fee-types-card">
+      <div className="cms-card-head">
+        <div>
+          <h2>Hostel Fees</h2>
+          <p>Dedicated hostel fee configuration, separate from normal Fee Types.</p>
+        </div>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd}><Plus size={14} /> Add Hostel Fee</button>
+      </div>
+      <div className="cms-card-body cms-fee-toolbar">
+        <div className="cms-table-wrap cms-fee-config-wrap cms-hostel-fees-wrap">
+          <table className="cms-table cms-fee-config-table cms-fee-setup-table cms-hostel-fees-table">
+            <colgroup>
+              <col className="cms-hostel-block-col" />
+              <col className="cms-hostel-room-type-col" />
+              <col className="cms-hostel-plan-col" />
+              <col className="cms-hostel-amount-col" />
+              <col className="cms-hostel-deposit-col" />
+              <col className="cms-hostel-total-col" />
+              <col className="cms-hostel-status-col" />
+              <col className="cms-hostel-actions-col" />
+            </colgroup>
+            <thead>
+              <tr><th>Hostel Block</th><th>Room Type</th><th>Fee Frequency</th><th className="num">Hostel Fee</th><th className="num">Security Deposit</th><th className="num">Total Fee</th><th>Status</th><th className="cms-fee-actions-col">Actions</th></tr>
+            </thead>
+            <tbody>
+              {paginatedConfigs.map((item) => (
+                <tr key={item.id}>
+                  <td><strong>{item.hostelName}</strong><small>{item.hostelBlock}</small></td>
+                  <td>{item.roomType}</td>
+                  <td>{item.feePlan}</td>
+                  <td className="num">{formatCurrency(item.feeAmount)}</td>
+                  <td className="num">{formatCurrency(item.securityDeposit)}</td>
+                  <td className="num"><strong>{formatCurrency(Number(item.feeAmount || 0) + Number(item.securityDeposit || 0))}</strong></td>
+                  <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
+                  <td className="cms-fee-actions-col">
+                    <div className="cms-actions">
+                      <button type="button" className="cms-action-btn" title="Edit hostel fee" aria-label="Edit hostel fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <TablePagination page={page} totalItems={configs.length} onPageChange={setPage} />
+        <p className="cms-fee-note"><CheckCircle size={14} /> Hostel Fee is resolved from this dedicated configuration when Student Type is Residential.</p>
+      </div>
+      {editing ? (
+        <Modal
+          title={configs.some((item) => item.id === editing.id) ? "Edit Hostel Fee" : "Add Hostel Fee"}
+          onClose={() => setEditing(null)}
+          footer={(
+            <>
+              <button className="cms-btn cms-btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+              <button className="cms-btn cms-btn-primary" onClick={saveConfig}>Save Hostel Fee</button>
+            </>
+          )}
+        >
+          <div className="cms-form-grid">
+            <div className="cms-field full">
+              <label htmlFor="hostel-fee-block">Hostel Block <span className="req">*</span></label>
+              <select
+                id="hostel-fee-block"
+                value={editing.hostelBlock}
+                onChange={(event) => {
+                  const block = blockOptions.find((option) => option.value === event.target.value);
+                  setEditing((current) => ({ ...current, hostelBlock: event.target.value, hostelName: block?.label || "" }));
+                }}
+              >
+                {blockOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-room-type">Room Type <span className="req">*</span></label>
+              <select id="hostel-fee-room-type" value={editing.roomType} onChange={(event) => setEditing((current) => ({ ...current, roomType: event.target.value }))}>
+                {roomTypeOptions.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
+              </select>
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-plan">Fee Frequency <span className="req">*</span></label>
+              <select id="hostel-fee-plan" value={editing.feePlan} onChange={(event) => setEditing((current) => ({ ...current, feePlan: event.target.value }))}>
+                <option value="Monthly">Monthly</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Half Yearly">Half Yearly</option>
+                <option value="Annual">Annual</option>
+              </select>
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-amount">Hostel Fee (₹) <span className="req">*</span></label>
+              <input id="hostel-fee-amount" type="number" min="0" value={editing.feeAmount} onChange={(event) => setEditing((current) => ({ ...current, feeAmount: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-deposit">Security Deposit</label>
+              <input id="hostel-fee-deposit" type="number" min="0" value={editing.securityDeposit} onChange={(event) => setEditing((current) => ({ ...current, securityDeposit: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-effective">Effective Date</label>
+              <input id="hostel-fee-effective" type="date" value={editing.effectiveFrom} onChange={(event) => setEditing((current) => ({ ...current, effectiveFrom: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="hostel-fee-status">Status</label>
+              <select id="hostel-fee-status" value={editing.status} onChange={(event) => setEditing((current) => ({ ...current, status: event.target.value }))}>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </div>
+  );
+}
+
+function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, scholarships, onScholarshipsChange, hostelFeeConfigs, onHostelFeeConfigsChange, fineRules, onFineRulesChange, structures, onToast, onRefresh, loading, error, masters, masterErrors }) {
   return (
     <div className="cms-fee-stack">
       <div className="cms-fee-tabs cms-fee-subtabs" role="tablist" aria-label="Fee setup">
@@ -2950,12 +3451,14 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
           masterErrors={masterErrors}
         />
       ) : null}
+      {setupTab === "Hostel Fees" ? <HostelFeesTab configs={hostelFeeConfigs} onChange={onHostelFeeConfigsChange} onToast={onToast} /> : null}
       {setupTab === "Scholarships" ? <ScholarshipsTab scholarships={scholarships} onChange={onScholarshipsChange} onToast={onToast} onRefresh={onRefresh} /> : null}
+      {setupTab === "Fine" ? <FineTab fineRules={fineRules} feeTypes={feeTypes} onChange={onFineRulesChange} onToast={onToast} /> : null}
     </div>
   );
 }
 
-function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, onView, onPrint, onCollect, onReceipt, masters, loading, errors }) {
+function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, fineRules, onView, onPrint, onCollect, onReceipt, masters, loading, errors }) {
   return (
     <div className="cms-fee-stack">
       <div className="cms-fee-tabs cms-fee-subtabs" role="tablist" aria-label="Student fee ledger">
@@ -2972,8 +3475,8 @@ function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts,
           </button>
         ))}
       </div>
-      {ledgerTab === "Student Fee Ledger" ? <LedgerTab accounts={ledgerAccounts} onView={onView} onPrint={onPrint} masters={masters} loading={loading.ledger} error={errors.ledger} /> : null}
-      {ledgerTab === "Fee Collection" ? <FeeCollectionTab accounts={collectionAccounts} onCollect={onCollect} loading={loading.collection} error={errors.collection} /> : null}
+      {ledgerTab === "Student Fee Ledger" ? <LedgerTab accounts={ledgerAccounts} fineRules={fineRules} onView={onView} onPrint={onPrint} masters={masters} loading={loading.ledger} error={errors.ledger} /> : null}
+      {ledgerTab === "Fee Collection" ? <FeeCollectionTab accounts={collectionAccounts} fineRules={fineRules} onCollect={onCollect} loading={loading.collection} error={errors.collection} /> : null}
       {ledgerTab === "Payment History" ? <HistoryTab transactions={paymentHistoryRows} onReceipt={onReceipt} loading={loading.ledger} error={errors.ledger} /> : null}
     </div>
   );
@@ -3085,7 +3588,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
                 <td className="num">{formatCurrency(row.amount)}</td>
                 <td>{row.method}</td>
                 <td>{row.reference || "-"}</td>
-                <td><StatusBadge status={row.status || "Paid"} /></td>
+                <td><PaymentStatusBadge status={row.status || "Paid"} /></td>
                 <td>
                   <button className="cms-action-btn" title="View receipt" aria-label="View receipt" disabled={loadingReceiptId === row.id} onClick={() => viewReceipt(row)}><ReceiptText size={15} /></button>
                 </td>
@@ -3118,7 +3621,9 @@ export default function FeeManagementPage() {
   const [receipt, setReceipt] = useState(null);
   const [toast, setToast] = useState("");
   const [feeTypes, setFeeTypes] = useState([]);
+  const [hostelFeeConfigs, setHostelFeeConfigs] = useState(() => readHostelFeeConfigs());
   const [scholarships, setScholarships] = useState([]);
+  const [fineRules, setFineRules] = useState(() => readFineRules());
   const [apiStructures, setApiStructures] = useState([]);
   const [structureLoading, setStructureLoading] = useState(false);
   const [structureError, setStructureError] = useState("");
@@ -3171,7 +3676,8 @@ export default function FeeManagementPage() {
   const overviewAccounts = ledgerAccounts;
   const selectedAccounts = selectedSource === "collection" ? [...collectionAccounts, ...ledgerAccounts] : [...ledgerAccounts, ...collectionAccounts];
   const selectedBase = selectedId ? selectedAccounts.find((item) => item.id === selectedId) : null;
-  const selected = selectedDetail || selectedBase;
+  const selectedRaw = selectedDetail || selectedBase;
+  const selected = selectedRaw ? applyFineRulesToAccount(selectedRaw, fineRules) : null;
   const modalOpen = Boolean(collecting || receipt);
   const paymentHistoryRows = useMemo(() => {
     const rows = [];
@@ -3193,11 +3699,21 @@ export default function FeeManagementPage() {
   }, [collectionAccounts, dashboardData, ledgerAccounts, paymentHistoryExtras]);
 
   const saveFeeTypes = (nextTypes) => {
-    setFeeTypes(nextTypes);
+    setFeeTypes(nextTypes.filter((item) => !isDedicatedFacilityFeeType(item)));
+  };
+
+  const saveHostelFeeConfigs = (nextConfigs) => {
+    setHostelFeeConfigs(nextConfigs);
+    writeHostelFeeConfigs(nextConfigs);
   };
 
   const saveScholarships = (nextScholarships) => {
     setScholarships(nextScholarships);
+  };
+
+  const saveFineRules = (nextRules) => {
+    setFineRules(nextRules);
+    writeFineRules(nextRules);
   };
 
   const loadAccountContext = useCallback(async (rows) => {
@@ -3362,12 +3878,12 @@ export default function FeeManagementPage() {
       : [];
 
     if (typesResult.status === "fulfilled") {
-      const apiTypes = getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id);
+      const apiTypes = getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id && !isDedicatedFacilityFeeType(item));
       setFeeTypes(apiTypes);
     }
     if (structuresResult.status === "fulfilled") {
       const normalizedFeeTypes = typesResult.status === "fulfilled"
-        ? getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id)
+        ? getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id && !isDedicatedFacilityFeeType(item))
         : [];
       const structureLookups = { years: yearOptions, groups: groupOptions, programs: programOptions };
       const listedStructures = normalizeFeeStructureRows(getCollection(structuresResult.value.data), normalizedFeeTypes, structureLookups);
@@ -3542,6 +4058,10 @@ export default function FeeManagementPage() {
           onFeeTypesChange={saveFeeTypes}
           scholarships={scholarships}
           onScholarshipsChange={saveScholarships}
+          hostelFeeConfigs={hostelFeeConfigs}
+          onHostelFeeConfigsChange={saveHostelFeeConfigs}
+          fineRules={fineRules}
+          onFineRulesChange={saveFineRules}
           structures={structures}
           onToast={setToast}
           onRefresh={loadFeeApiData}
@@ -3567,6 +4087,7 @@ export default function FeeManagementPage() {
           ledgerAccounts={ledgerAccounts}
           collectionAccounts={collectionAccounts}
           paymentHistoryRows={paymentHistoryRows}
+          fineRules={fineRules}
           onView={(id) => { setSelectedId(id); setSelectedSource("ledger"); }}
           onPrint={printStudentStatement}
           onCollect={openCollectPayment}

@@ -61,8 +61,9 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.SubjectCode, opt => opt.MapFrom(src => src.Subject != null ? src.Subject.SubjectCode : string.Empty));
 
             CreateMap<HallTicket, HallTicketResponse>()
-                .ForMember(dest => dest.StudentName, opt => opt.MapFrom(src => src.Student != null ? src.Student.Email : string.Empty))
-                .ForMember(dest => dest.RollNumber, opt => opt.MapFrom(src => src.StudentId.ToString()));
+                .ForMember(dest => dest.StudentName, opt => opt.MapFrom(src => src.Student != null ? src.Student.StudentName : string.Empty))
+                .ForMember(dest => dest.RollNumber, opt => opt.MapFrom(src => src.Student != null ? (!string.IsNullOrEmpty(src.Student.RollNo) ? src.Student.RollNo : src.Student.AdmissionNo) : src.StudentId.ToString()))
+                .ForMember(dest => dest.DownloadUrl, opt => opt.MapFrom(src => $"api/v1/examinations/halltickets/{src.StudentId}?examinationId={src.ExaminationId}"));
 
             CreateMap<InvigilatorAssignment, InvigilatorAssignmentResponse>()
                 .ForMember(dest => dest.InvigilatorName, opt => opt.MapFrom(src => src.Invigilator != null ? src.Invigilator.Email : string.Empty));

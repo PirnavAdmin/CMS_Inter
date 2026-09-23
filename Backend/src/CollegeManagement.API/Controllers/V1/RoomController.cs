@@ -7,10 +7,14 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
+using Asp.Versioning;
+
 namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
-    [Route("api/v1/rooms")]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/rooms")]
+    [Produces("application/json")]
     [Authorize]
     public class RoomController : ControllerBase
     {

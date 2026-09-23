@@ -265,6 +265,26 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <div className="ns-dashboard-container">
+        {/* BACK NAVIGATION TO SETTINGS */}
+        <div className="cms-back-nav-bar" style={{ marginBottom: "14px" }}>
+          <Link
+            to="/dashboard/settings"
+            className="cms-back-link"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              color: "var(--cms-primary, #355e3b)",
+              fontWeight: 650,
+              fontSize: "13px",
+              textDecoration: "none",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={16} /> Back to Settings
+          </Link>
+        </div>
+
         {/* TOP NOTICE BANNER */}
         <div className="ns-info-banner">
           <Info size={15} className="ns-info-icon" />

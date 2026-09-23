@@ -41,20 +41,12 @@ import {
   XCircle,
   LogOut,
   AlertCircle,
+  ArrowRight,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
-import {
-  hostelStats as seedStats,
-  hostelBlocks as seedBlocks,
-  hostelRoomCategories as seedCategories,
-  hostelRooms as seedRooms,
-  hostelWardens as seedWardens,
-  hostelAllocations as seedAllocations,
-  hostelOutpasses as seedOutpasses,
-  hostelTransfers as seedTransfers,
-  hostelAttendanceStudents as seedAttendanceStudents,
-} from "@/data/mockData.js";
+import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import * as hostelApi from "@/api/hostelApi.js";
 import "./HostelPage.css";
 
 // ── Tab Configurations (4 Major Tabs with Subtabs matching Transport Reference) ──
@@ -79,530 +71,26 @@ const studentSubtabs = [
   { id: "transfers", label: "Transfer & Vacate Student", title: "Hostel Transfers & Bed Vacations", subtitle: "Track inter-block migrations, room swaps, and official bed vacation applications", icon: RotateCcw },
 ];
 
-// Seed constants matching Screenshot 1 & 2 reference data
-const defaultSeedAllocations = [
-  {
-    id: "alloc-kalyan",
-    admissionNo: "REG-1171",
-    studentName: "kalyan Ram N",
-    gender: "Male",
-    blockName: "HM-660",
-    blockCode: "HM-660",
-    floor: "Floor 1",
-    room: "RM-674",
-    bed: "BED-1",
-    roomBadge: "Room #RM-674 (BED-1)",
-    joinDate: "2026-08-26",
-    status: "Active",
-    monthlyFee: "₹6,500",
-    contact: "+91 98765 11171",
-  },
-  {
-    id: "alloc-rajesh",
-    admissionNo: "ADM 2026 101",
-    studentName: "Rajesh Kumar",
-    gender: "Male",
-    blockName: "Ramachandra Bhavan Block",
-    blockCode: "RBB",
-    floor: "Floor 1",
-    room: "101",
-    bed: "BED-1",
-    roomBadge: "Room #101 (BED-1)",
-    joinDate: "2026-06-01",
-    status: "Active",
-    monthlyFee: "₹6,500",
-    contact: "+91 98765 10101",
-  },
+// Reference Academic Year Months for Monthly Attendance
+const academicMonthOptions = [
+  { value: "2026-06", label: "June 2026", rangeText: "Jun 1, 2026 – Jun 30, 2026" },
+  { value: "2026-07", label: "July 2026", rangeText: "Jul 1, 2026 – Jul 31, 2026" },
+  { value: "2026-08", label: "August 2026", rangeText: "Aug 1, 2026 – Aug 31, 2026" },
+  { value: "2026-09", label: "September 2026", rangeText: "Sep 1, 2026 – Sep 30, 2026" },
+  { value: "2026-10", label: "October 2026", rangeText: "Oct 1, 2026 – Oct 31, 2026" },
+  { value: "2026-11", label: "November 2026", rangeText: "Nov 1, 2026 – Nov 30, 2026" },
+  { value: "2026-12", label: "December 2026", rangeText: "Dec 1, 2026 – Dec 31, 2026" },
+  { value: "2027-01", label: "January 2027", rangeText: "Jan 1, 2027 – Jan 31, 2027" },
+  { value: "2027-02", label: "February 2027", rangeText: "Feb 1, 2027 – Feb 28, 2027" },
+  { value: "2027-03", label: "March 2027", rangeText: "Mar 1, 2027 – Mar 31, 2027" },
+  { value: "2027-04", label: "April 2027", rangeText: "Apr 1, 2027 – Apr 30, 2027" },
+  { value: "2027-05", label: "May 2027", rangeText: "May 1, 2027 – May 31, 2027" },
 ];
 
-const defaultExtraBlocks = [
-  {
-    id: "blk-hm660",
-    name: "HM-660",
-    code: "HM-660",
-    type: "Boys",
-    floors: 3,
-    totalRooms: 30,
-    totalBeds: 60,
-    occupiedBeds: 12,
-    vacantBeds: 48,
-    warden: "Dr. K. Ramesh",
-    wardenPhone: "+91 98451 22301",
-    status: "Active",
-  },
-  {
-    id: "blk-rbb",
-    name: "Ramachandra Bhavan Block",
-    code: "RBB",
-    type: "Boys",
-    floors: 4,
-    totalRooms: 40,
-    totalBeds: 80,
-    occupiedBeds: 25,
-    vacantBeds: 55,
-    warden: "M. Ramachandra",
-    wardenPhone: "+91 98451 22302",
-    status: "Active",
-  },
-  {
-    id: "blk-rbb-a",
-    name: "Ramachandra Bhavan (Block A)",
-    code: "RBB-A",
-    type: "Girls",
-    floors: 3,
-    totalRooms: 30,
-    totalBeds: 60,
-    occupiedBeds: 3,
-    vacantBeds: 57,
-    warden: "Mrs. K. Shanti",
-    wardenPhone: "+91 98451 22303",
-    status: "Active",
-  },
-];
 
-// Seed attendance students matching Screenshot 1 & 2 reference data
-const defaultAttendanceStudents = [
-  {
-    id: "REG-1456",
-    admissionNo: "REG-1456",
-    name: "Annabel Sutherland",
-    block: "Ramachandra Bhavan (Block A)",
-    blockCode: "RBB-A",
-    room: "Room #120",
-    bed: "BED-3",
-    roomBed: "Room #120 (BED-3)",
-    floor: "Floor 1",
-    gender: "Female",
-    inTime: "07:00",
-  },
-  {
-    id: "REG-1093",
-    admissionNo: "REG-1093",
-    name: "Navya Reddy",
-    block: "Ramachandra Bhavan (Block A)",
-    blockCode: "RBB-A",
-    room: "Room #120",
-    bed: "BED-3",
-    roomBed: "Room #120 (BED-3)",
-    floor: "Floor 1",
-    gender: "Female",
-    inTime: "07:00",
-  },
-  {
-    id: "REG-1090",
-    admissionNo: "REG-1090",
-    name: "Saanvi Krishna",
-    block: "Ramachandra Bhavan (Block A)",
-    blockCode: "RBB-A",
-    room: "Room #G02",
-    bed: "BED-2",
-    roomBed: "Room #G02 (BED-2)",
-    floor: "Ground Floor",
-    gender: "Female",
-    inTime: "07:00",
-  },
-];
 
-const defaultExtraRooms = [
-  {
-    id: "rm-hm674",
-    roomNo: "RM-674",
-    block: "blk-hm660",
-    blockName: "HM-660",
-    floor: "Floor 1",
-    type: "Double Sharing AC",
-    capacity: 2,
-    fee: "₹7,500",
-    occupied: 1,
-    beds: [
-      { id: "RM-674-B1", bedNumber: "BED-1", status: "Occupied", studentName: "kalyan Ram N" },
-      { id: "RM-674-B2", bedNumber: "BED-2", status: "Vacant" },
-    ],
-    status: "Available",
-  },
-  {
-    id: "rm-rbb101",
-    roomNo: "101",
-    block: "blk-rbb",
-    blockName: "Ramachandra Bhavan Block",
-    floor: "Floor 1",
-    type: "Double Sharing Non-AC",
-    capacity: 2,
-    fee: "₹6,000",
-    occupied: 1,
-    beds: [
-      { id: "RBB-101-B1", bedNumber: "BED-1", status: "Occupied", studentName: "Rajesh Kumar" },
-      { id: "RBB-101-B2", bedNumber: "BED-2", status: "Vacant" },
-    ],
-    status: "Available",
-  },
-];
 
-const candidateStudentsList = [
-  { id: "st-1", name: "kalyan Ram N", admissionNo: "REG-1171", className: "Class 10-A" },
-  { id: "st-2", name: "Rajesh Kumar", admissionNo: "ADM 2026 101", className: "Class 10-A" },
-  { id: "st-3", name: "Surya Teja", admissionNo: "ADM-2026-102", className: "Class 10-A" },
-  { id: "st-4", name: "Dhanush Y", admissionNo: "ADM-2026-103", className: "Class 10-B" },
-  { id: "st-5", name: "Bhanuprakash P", admissionNo: "ADM-2026-104", className: "Class 10-B" },
-  { id: "st-6", name: "Saranya Ch", admissionNo: "ADM-2026-105", className: "Class 9-A" },
-  { id: "st-7", name: "Ananya Roy", admissionNo: "ADM-2026-106", className: "Class 9-B" },
-  { id: "st-8", name: "Sundharam Padala", admissionNo: "ADM-2026-107", className: "Class 10-A" },
-  { id: "st-9", name: "Akhila Reddy", admissionNo: "ADM-2024-001", className: "Class 11-A" },
-  { id: "st-10", name: "Alexander Wright", admissionNo: "ADM-2024-002", className: "Class 11-B" },
-  { id: "st-11", name: "Rahul Sharma", admissionNo: "ADM-2024-007", className: "Class 12-A" },
-  { id: "st-12", name: "Sneha Reddy", admissionNo: "ADM-2024-008", className: "Class 12-B" },
-  { id: "st-13", name: "Vikram Patel", admissionNo: "ADM-2024-009", className: "Class 11-C" },
-];
 
-const defaultInitialOutpasses = [
-  {
-    id: 1,
-    studentName: "Rajesh Kumar",
-    admissionNo: "ADM-2026-101",
-    blockName: "Ramachandra Bhavan Block",
-    roomNo: "101",
-    roomNumber: "101",
-    outpassType: "Home Leave",
-    requestType: "Home Leave",
-    departureDate: "2026-08-15",
-    outDate: "2026-08-15",
-    returnDate: "2026-08-18",
-    reason: "Family function visit",
-    status: "Approved",
-  },
-  {
-    id: 2,
-    studentName: "Ananya Roy",
-    admissionNo: "ADM-2026-106",
-    blockName: "Girls Block A",
-    roomNo: "G-101",
-    roomNumber: "G-101",
-    outpassType: "Local Outpass",
-    requestType: "Local Outpass",
-    departureDate: "2026-08-17",
-    outDate: "2026-08-17",
-    returnDate: "2026-08-17",
-    reason: "Medical checkup",
-    status: "Pending",
-  },
-  ...seedOutpasses,
-];
-
-const defaultSeedTransfers = [
-  {
-    id: "tr-1",
-    studentName: "Rajesh Kumar",
-    admissionNo: "ADM-2026-101",
-    actionType: "Room Transfer",
-    requestType: "Room Transfer",
-    currentBlock: "Ramachandra Bhavan Block",
-    currentRoom: "101",
-    currentRoomDisplay: "Ramachandra Bhavan Block (#101)",
-    targetBlock: "Bhanu Block",
-    targetRoom: "201",
-    targetBed: "Bed #1",
-    targetDisplayTitle: "New Bed: Bhanu Block (#201)",
-    targetDisplaySub: "✓ Old Bed #101 Released to Available",
-    feeAdjustment: null,
-    date: "2026-08-01",
-    requestDate: "2026-08-01",
-    status: "Completed",
-    reason: "Preferred study environment in Bhanu Block",
-  },
-  {
-    id: "tr-2",
-    studentName: "Surya Teja",
-    admissionNo: "ADM-2026-102",
-    actionType: "Bed Vacate",
-    requestType: "Bed Vacate",
-    currentBlock: "Ramachandra Bhavan Block",
-    currentRoom: "101",
-    currentRoomDisplay: "Ramachandra Bhavan Block (#101)",
-    targetBlock: "--",
-    targetRoom: "--",
-    targetBed: "--",
-    targetDisplayTitle: "✓ Old Bed Released to Available",
-    targetDisplaySub: null,
-    feeAdjustment: "Fee Adjusted: ₹45,000 (Credit to Tuition Fee)",
-    date: "2026-08-10",
-    requestDate: "2026-08-10",
-    status: "Completed",
-    reason: "Switched to Non-Residential / Day Scholar after 3 months",
-  },
-];
-
-const defaultReportBlocks = [
-  {
-    id: "rep-blk-1",
-    code: "HST-01",
-    name: "Ramachandra Bhavan (Block A)",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 1,
-    floors: 1,
-    wardenName: "Goutham k",
-    warden: "Goutham k",
-    primaryMobile: "+91-9878990876",
-    wardenPhone: "+91-9878990876",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-2",
-    code: "HST-02",
-    name: "Boys Residence - Block A",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 3,
-    floors: 3,
-    wardenName: "Mr. Ramesh Kumar",
-    warden: "Mr. Ramesh Kumar",
-    primaryMobile: "+91-9845122301",
-    wardenPhone: "+91-9845122301",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-3",
-    code: "HST-03",
-    name: "Boys Residence - Block B",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 3,
-    floors: 3,
-    wardenName: "Mr. S. Sundaram",
-    warden: "Mr. S. Sundaram",
-    primaryMobile: "+91-9712044512",
-    wardenPhone: "+91-9712044512",
-    location: "North Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-4",
-    code: "HST-04",
-    name: "Girls Residence - Block A",
-    category: "Girls Hostel",
-    type: "Girls Hostel",
-    totalFloors: 3,
-    floors: 3,
-    wardenName: "Dr. M. Anuradha",
-    warden: "Dr. M. Anuradha",
-    primaryMobile: "+91-9876511200",
-    wardenPhone: "+91-9876511200",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-5",
-    code: "HST-05",
-    name: "Bhanu Block",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 4,
-    floors: 4,
-    wardenName: "M. Ramachandra",
-    warden: "M. Ramachandra",
-    primaryMobile: "+91-9845122302",
-    wardenPhone: "+91-9845122302",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-6",
-    code: "HST-06",
-    name: "Luxury hostel",
-    category: "Co-ed",
-    type: "Co-ed",
-    totalFloors: 2,
-    floors: 2,
-    wardenName: "Mr. A. Sharma",
-    warden: "Mr. A. Sharma",
-    primaryMobile: "+91-9765432109",
-    wardenPhone: "+91-9765432109",
-    location: "South Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-7",
-    code: "HST-07",
-    name: "Junior College Wing",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 2,
-    floors: 2,
-    wardenName: "Dr. K. Ramesh",
-    warden: "Dr. K. Ramesh",
-    primaryMobile: "+91-9845122301",
-    wardenPhone: "+91-9845122301",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-8",
-    code: "HST-08",
-    name: "Senior Wing - Block D",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 4,
-    floors: 4,
-    wardenName: "Mr. T. Srinivas",
-    warden: "Mr. T. Srinivas",
-    primaryMobile: "+91-9845122304",
-    wardenPhone: "+91-9845122304",
-    location: "East Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-9",
-    code: "HST-09",
-    name: "Girls Residence - Block B",
-    category: "Girls Hostel",
-    type: "Girls Hostel",
-    totalFloors: 3,
-    floors: 3,
-    wardenName: "Mrs. P. Vani",
-    warden: "Mrs. P. Vani",
-    primaryMobile: "+91-9845122305",
-    wardenPhone: "+91-9845122305",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-10",
-    code: "HST-10",
-    name: "International Hostel - Block E",
-    category: "Co-ed",
-    type: "Co-ed",
-    totalFloors: 5,
-    floors: 5,
-    wardenName: "Dr. Robert Smith",
-    warden: "Dr. Robert Smith",
-    primaryMobile: "+91-9845122306",
-    wardenPhone: "+91-9845122306",
-    location: "North Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-11",
-    code: "HST-11",
-    name: "HM-660 Block",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 3,
-    floors: 3,
-    wardenName: "Mr. V. Krishna",
-    warden: "Mr. V. Krishna",
-    primaryMobile: "+91-9845122307",
-    wardenPhone: "+91-9845122307",
-    location: "West Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-12",
-    code: "HST-12",
-    name: "Kaveri Bhavan Block",
-    category: "Girls Hostel",
-    type: "Girls Hostel",
-    totalFloors: 3,
-    floors: 3,
-    wardenName: "Mrs. S. Kamala",
-    warden: "Mrs. S. Kamala",
-    primaryMobile: "+91-9845122308",
-    wardenPhone: "+91-9845122308",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-13",
-    code: "HST-13",
-    name: "Godavari Bhavan Block",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 2,
-    floors: 2,
-    wardenName: "Mr. N. Prasad",
-    warden: "Mr. N. Prasad",
-    primaryMobile: "+91-9845122309",
-    wardenPhone: "+91-9845122309",
-    location: "South Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-14",
-    code: "HST-14",
-    name: "Krishna Bhavan Block",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 4,
-    floors: 4,
-    wardenName: "Mr. K. Mahesh",
-    warden: "Mr. K. Mahesh",
-    primaryMobile: "+91-9845122310",
-    wardenPhone: "+91-9845122310",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-15",
-    code: "HST-15",
-    name: "Saraswati Bhavan Block",
-    category: "Girls Hostel",
-    type: "Girls Hostel",
-    totalFloors: 3,
-    floors: 3,
-    wardenName: "Dr. B. Lakshmi",
-    warden: "Dr. B. Lakshmi",
-    primaryMobile: "+91-9845122311",
-    wardenPhone: "+91-9845122311",
-    location: "Main Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-16",
-    code: "HST-16",
-    name: "Narmada Bhavan Block",
-    category: "Girls Hostel",
-    type: "Girls Hostel",
-    totalFloors: 2,
-    floors: 2,
-    wardenName: "Mrs. G. Sujatha",
-    warden: "Mrs. G. Sujatha",
-    primaryMobile: "+91-9845122312",
-    wardenPhone: "+91-9845122312",
-    location: "East Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-17",
-    code: "HST-17",
-    name: "Yamuna Bhavan Block",
-    category: "Co-ed",
-    type: "Co-ed",
-    totalFloors: 3,
-    floors: 3,
-    wardenName: "Mr. R. Raghav",
-    warden: "Mr. R. Raghav",
-    primaryMobile: "+91-9845122313",
-    wardenPhone: "+91-9845122313",
-    location: "North Campus",
-    status: "Active",
-  },
-  {
-    id: "rep-blk-18",
-    code: "HST-18",
-    name: "Ganga Bhavan Block",
-    category: "Boys Hostel",
-    type: "Boys Hostel",
-    totalFloors: 4,
-    floors: 4,
-    wardenName: "Mr. D. Suresh",
-    warden: "Mr. D. Suresh",
-    primaryMobile: "+91-9845122314",
-    wardenPhone: "+91-9845122314",
-    location: "Main Campus",
-    status: "Active",
-  },
-];
 
 const hostelReportCategories = [
   { id: "Block Report", label: "Block Report" },
@@ -663,31 +151,364 @@ export default function HostelPage() {
   const [dashSelectedBlockId, setDashSelectedBlockId] = useState("blk-1");
   const [dashBlockPage, setDashBlockPage] = useState(1);
 
-  // ── Pure In-Memory State Initialization (Zero LocalStorage) ─────────
-  const [blocks, setBlocks] = useState(() => {
-    const list = seedBlocks.map((b) => {
-      if (b.code === "BR-A") return { ...b, occupiedBeds: 5, vacantBeds: 43, warden: "Mr. Ramesh Kumar", wardenPhone: "+91 98451 22301" };
-      if (b.code === "BR-B") return { ...b, occupiedBeds: 1, vacantBeds: 29, warden: "Mr. S. Sundaram", wardenPhone: "+91 97120 44512" };
-      if (b.code === "GR-A") return { ...b, occupiedBeds: 1, vacantBeds: 29, warden: "Dr. M. Anuradha", wardenPhone: "+91 98765 11200" };
-      if (b.code === "JCW") return { ...b, occupiedBeds: 1, vacantBeds: 19, warden: "Mr. A. Sharma", wardenPhone: "+91 97654 32109" };
-      return b;
-    });
-    defaultExtraBlocks.forEach((eb) => {
-      if (!list.some((b) => b.name === eb.name || b.code === eb.code)) {
-        list.push(eb);
-      }
-    });
-    return list;
-  });
-
-  const [categories, setCategories] = useState(() => seedCategories);
-  const [rooms, setRooms] = useState(() => [...defaultExtraRooms, ...seedRooms]);
-  const [wardens, setWardens] = useState(() => seedWardens);
-  const [allocations, setAllocations] = useState(() => [...defaultSeedAllocations, ...seedAllocations]);
-  const [outpasses, setOutpasses] = useState(() => defaultInitialOutpasses);
-  const [transfers, setTransfers] = useState(() => defaultSeedTransfers);
-  const [attendanceStudents, setAttendanceStudents] = useState(() => defaultAttendanceStudents);
+  // ── API-backed State Initialization ─────────────────────────────────
+  const [blocks, setBlocks] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [wardens, setWardens] = useState([]);
+  const [allocations, setAllocations] = useState([]);
+  const [outpasses, setOutpasses] = useState([]);
+  const [transfers, setTransfers] = useState([]);
+  const [attendanceStudents, setAttendanceStudents] = useState([]);
   const [attendanceMap, setAttendanceMap] = useState(() => ({ morning: {}, night: {} }));
+  const [beds, setBeds] = useState([]);
+  const [candidateStaff, setCandidateStaff] = useState([]);
+  const [candidateAdmissions, setCandidateAdmissions] = useState([]);
+  const [candidateStudents, setCandidateStudents] = useState([]);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState(null);
+
+  // ── API Response Mappers ────────────────────────────────────────────
+  const mapBlock = useCallback((b) => ({
+    id: b.hostelId ?? b.id,
+    name: b.hostelName ?? b.name ?? "",
+    code: b.hostelCode ?? b.code ?? "",
+    type: b.hostelType ?? b.type ?? "Boys",
+    floors: b.totalFloors ?? b.floors ?? 1,
+    totalRooms: b.totalRooms ?? 0,
+    totalBeds: b.totalBeds ?? 0,
+    occupiedBeds: b.occupiedBeds ?? 0,
+    vacantBeds: b.availableBeds ?? b.vacantBeds ?? 0,
+    warden: b.wardenName ?? b.warden ?? "Unassigned",
+    wardenPhone: b.primaryMobileNumber ?? b.wardenPhone ?? "-",
+    email: b.email ?? "",
+    address: b.address ?? "",
+    status: b.status ?? "Active",
+  }), []);
+
+  const mapCategory = useCallback((c) => ({
+    id: c.roomTypeId ?? c.id,
+    name: c.roomTypeSpecification ?? c.name ?? "",
+    specification: c.roomTypeSpecification ?? c.specification ?? "",
+    type: c.acType === "AC" ? "AC Accommodation" : c.acType === "Non-AC" ? "Non-AC Standard" : (c.type ?? ""),
+    capacity: c.bedCapacity ?? c.capacity ?? 1,
+    acType: c.acType ?? "Non-AC",
+    fee: c.fee ?? "",
+    totalRooms: c.totalRooms ?? 0,
+    totalBeds: c.totalBeds ?? 0,
+    blocks: c.blocks ?? "",
+    description: c.description ?? "",
+    status: c.status ?? "Active",
+  }), []);
+
+  const mapRoom = useCallback((r) => ({
+    id: r.roomId ?? r.id,
+    roomNo: r.roomNumber ?? r.roomNo ?? "",
+    block: r.hostelCode ?? r.block ?? "",
+    blockName: r.hostelName ?? r.blockName ?? "",
+    floor: r.floorLevel ?? r.floor ?? "",
+    type: r.roomTypeSpecification ?? r.type ?? "",
+    capacity: r.bedCapacity ?? r.capacity ?? 1,
+    acType: r.acType ?? "",
+    occupied: r.occupied ?? 0,
+    fee: r.fee ?? "",
+    beds: r.beds ?? [],
+    status: r.status ?? "Active",
+    hostelId: r.hostelId,
+    roomTypeId: r.roomTypeId,
+  }), []);
+
+  const mapBed = useCallback((bd) => ({
+    id: bd.bedId ?? bd.id,
+    roomId: bd.roomId,
+    roomNumber: bd.roomNumber ?? "",
+    hostelId: bd.hostelId,
+    bedNumber: bd.bedNumber ?? "",
+    bedStatus: bd.bedStatus ?? "Available",
+    status: bd.status ?? "Active",
+  }), []);
+
+  const mapWarden = useCallback((w) => ({
+    id: w.wardenAssignmentId ?? w.id,
+    empId: w.employeeId ?? w.empId ?? "",
+    name: w.wardenName ?? [w.firstName, w.middleName, w.lastName].filter(Boolean).join(" ") ?? w.name ?? "",
+    designation: w.designation ?? "Resident Warden",
+    phone: w.phone ?? "",
+    email: w.email ?? "",
+    assignedHostels: w.hostelName ?? w.assignedHostels ?? "",
+    hostelId: w.hostelId,
+    staffId: w.staffId,
+    assignmentDate: w.assignmentDate ?? "",
+    gender: w.gender ?? "",
+    status: w.status ?? "Active",
+  }), []);
+
+  const mapAllocation = useCallback((a) => ({
+    id: a.allocationId ?? a.id,
+    admissionNo: a.admissionNo ?? "",
+    studentName: a.studentName ?? a.name ?? "",
+    gender: a.gender ?? "",
+    blockName: a.hostelName ?? a.blockName ?? "",
+    blockCode: a.hostelCode ?? a.blockCode ?? "",
+    floor: a.floorLevel ?? a.floor ?? "",
+    room: a.roomNumber ? `Room #${a.roomNumber}` : (a.room ?? ""),
+    bed: a.bedNumber ?? a.bed ?? "",
+    roomBadge: a.roomNumber && a.bedNumber ? `Room #${a.roomNumber} (${a.bedNumber})` : (a.roomBadge ?? ""),
+    joinDate: a.joiningDate ? a.joiningDate.split("T")[0] : (a.joinDate ?? ""),
+    status: a.status ?? "Active",
+    monthlyFee: a.monthlyFee ?? "",
+    contact: a.contact ?? "",
+    remarks: a.remarks ?? "",
+    hostelId: a.hostelId,
+    roomId: a.roomId,
+    bedId: a.bedId,
+    studentId: a.studentId,
+    wardenAssignmentId: a.wardenAssignmentId,
+  }), []);
+
+  const mapOutpass = useCallback((o) => ({
+    id: o.requestId ?? o.id,
+    studentName: o.studentName ?? "",
+    admissionNo: o.admissionNo ?? "",
+    blockName: o.hostelName ?? o.blockName ?? "",
+    roomNo: o.roomNumber ?? o.roomNo ?? "",
+    roomNumber: o.roomNumber ?? o.roomNumber ?? "",
+    outpassType: o.requestType ?? o.outpassType ?? "",
+    requestType: o.requestType ?? "",
+    departureDate: o.fromDateTime ? o.fromDateTime.split("T")[0] : (o.departureDate ?? ""),
+    outDate: o.fromDateTime ?? o.outDate ?? "",
+    returnDate: o.toDateTime ? o.toDateTime.split("T")[0] : (o.returnDate ?? ""),
+    reason: o.reason ?? "",
+    destination: o.destination ?? "",
+    status: o.approvalStatus ?? o.status ?? "Pending",
+    approvalRemarks: o.approvalRemarks ?? "",
+    hostelId: o.hostelId,
+    studentId: o.studentId,
+    roomId: o.roomId,
+    bedId: o.bedId,
+    wardenAssignmentId: o.wardenAssignmentId,
+  }), []);
+
+  const mapTransfer = useCallback((t) => ({
+    id: t.requestId ?? t.id,
+    studentName: t.studentName ?? "",
+    admissionNo: t.admissionNo ?? "",
+    actionType: t.requestType === "Transfer" ? "Room Transfer" : (t.requestType === "Vacate" ? "Bed Vacate" : (t.actionType ?? t.requestType ?? "")),
+    requestType: t.requestType ?? "",
+    currentBlock: t.fromHostelName ?? t.currentBlock ?? "",
+    currentRoom: t.fromRoomNumber ?? t.currentRoom ?? "",
+    currentRoomDisplay: t.fromHostelName && t.fromRoomNumber ? `${t.fromHostelName} (#${t.fromRoomNumber})` : (t.currentRoomDisplay ?? ""),
+    targetBlock: t.toHostelName ?? t.targetBlock ?? "--",
+    targetRoom: t.toRoomNumber ?? t.targetRoom ?? "--",
+    targetBed: t.toBedNumber ?? t.targetBed ?? "--",
+    targetDisplayTitle: t.toHostelName && t.toRoomNumber ? `New Bed: ${t.toHostelName} (#${t.toRoomNumber})` : (t.requestType === "Vacate" ? "✓ Old Bed Released to Available" : (t.targetDisplayTitle ?? "--")),
+    targetDisplaySub: t.toHostelName && t.fromRoomNumber ? `✓ Old Bed #${t.fromRoomNumber} Released to Available` : (t.targetDisplaySub ?? null),
+    feeAdjustment: t.requestType === "Vacate" && t.refundAmount ? `Fee Adjusted: ₹${t.refundAmount.toLocaleString()}` : (t.feeAdjustment ?? null),
+    date: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : t.requestDate) : (t.date ?? ""),
+    requestDate: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : t.requestDate) : (t.requestDate ?? ""),
+    status: t.approvalStatus ?? t.status ?? "Pending",
+    reason: t.reason ?? "",
+    allocationId: t.allocationId,
+    studentId: t.studentId,
+    fromHostelId: t.fromHostelId,
+    fromRoomId: t.fromRoomId,
+    fromBedId: t.fromBedId,
+    toHostelId: t.toHostelId,
+    toRoomId: t.toRoomId,
+    toBedId: t.toBedId,
+    wardenAssignmentId: t.wardenAssignmentId,
+    approvalStatus: t.approvalStatus ?? "",
+    feeSettlementStatus: t.feeSettlementStatus ?? "",
+  }), []);
+
+  // ── Fetch all hostel data from API on mount ─────────────────────────
+  const fetchHostelData = useCallback(async () => {
+    setIsLoading(true);
+    setApiError(null);
+    try {
+      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes, studentsRes] = await Promise.allSettled([
+        hostelApi.getHostelBlocks(),
+        hostelApi.getRoomTypes(),
+        hostelApi.getRooms(),
+        hostelApi.getBeds(),
+        hostelApi.getWardens(),
+        hostelApi.getStudentAllocations(),
+        hostelApi.getOutpassLeave(),
+        hostelApi.getTransferVacate(),
+        hostelApi.getHostelDashboard(),
+        apiClient.get("/api/v1/staff?pageSize=100", { skipGlobalLoader: true }),
+        apiClient.get("/api/v1/student-admissions?pageSize=100", { skipGlobalLoader: true }),
+        apiClient.get("/api/v1/students?pageSize=200", { skipGlobalLoader: true }),
+      ]);
+
+      if (blocksRes.status === "fulfilled") {
+        const rawBlocks = blocksRes.value?.data?.data;
+        setBlocks(Array.isArray(rawBlocks) ? rawBlocks.map(mapBlock) : []);
+      }
+      if (catsRes.status === "fulfilled") {
+        const rawCats = catsRes.value?.data?.data;
+        setCategories(Array.isArray(rawCats) ? rawCats.map(mapCategory) : []);
+      }
+      if (roomsRes.status === "fulfilled") {
+        const rawRooms = roomsRes.value?.data?.data;
+        setRooms(Array.isArray(rawRooms) ? rawRooms.map(mapRoom) : []);
+      }
+      if (bedsRes.status === "fulfilled") {
+        const rawBeds = bedsRes.value?.data?.data;
+        setBeds(Array.isArray(rawBeds) ? rawBeds.map(mapBed) : []);
+      }
+      if (wardensRes.status === "fulfilled") {
+        const rawWardens = wardensRes.value?.data?.data;
+        setWardens(Array.isArray(rawWardens) ? rawWardens.map(mapWarden) : []);
+      }
+      if (allocsRes.status === "fulfilled") {
+        const rawAllocs = allocsRes.value?.data?.data;
+        const mapped = Array.isArray(rawAllocs) ? rawAllocs.map(mapAllocation) : [];
+        setAllocations(mapped);
+        // Derive attendance student list from active allocations
+        setAttendanceStudents(mapped.filter(a => a.status === "Active").map(a => ({
+          id: a.admissionNo || a.id,
+          admissionNo: a.admissionNo,
+          studentId: a.studentId,
+          name: a.studentName,
+          block: a.blockName,
+          blockCode: a.blockCode,
+          room: a.room,
+          roomId: a.roomId,
+          bed: a.bed,
+          bedId: a.bedId,
+          roomBed: a.roomBadge || `${a.room} (${a.bed})`,
+          floor: a.floor,
+          gender: a.gender,
+          inTime: "07:00",
+        })));
+      }
+      if (outpassRes.status === "fulfilled") {
+        const rawOutpass = outpassRes.value?.data?.data;
+        setOutpasses(Array.isArray(rawOutpass) ? rawOutpass.map(mapOutpass) : []);
+      }
+      if (transferRes.status === "fulfilled") {
+        const rawTransfer = transferRes.value?.data?.data;
+        setTransfers(Array.isArray(rawTransfer) ? rawTransfer.map(mapTransfer) : []);
+      }
+      if (dashRes.status === "fulfilled") {
+        setDashboardData(dashRes.value?.data?.data ?? null);
+      }
+      if (staffRes.status === "fulfilled") {
+        const rawStaff = staffRes.value?.data?.items || staffRes.value?.data?.data || staffRes.value?.data;
+        if (Array.isArray(rawStaff)) setCandidateStaff(rawStaff);
+      }
+      if (admRes.status === "fulfilled") {
+        const rawAdm = admRes.value?.data?.items || admRes.value?.data?.data || admRes.value?.data;
+        if (Array.isArray(rawAdm)) setCandidateAdmissions(rawAdm);
+      }
+      if (studentsRes.status === "fulfilled") {
+        const rawStudents = studentsRes.value?.data?.items || studentsRes.value?.data?.data || studentsRes.value?.data;
+        if (Array.isArray(rawStudents)) setCandidateStudents(rawStudents);
+      }
+    } catch (err) {
+      console.error("Failed to fetch hostel data:", err);
+      setApiError(getApiErrorMessage(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer]);
+
+  useEffect(() => {
+    fetchHostelData();
+  }, [fetchHostelData]);
+
+  // Helper to refresh a specific entity list after mutation
+  const refreshBlocks = useCallback(async () => {
+    try {
+      const res = await hostelApi.getHostelBlocks();
+      const raw = res?.data?.data;
+      if (Array.isArray(raw)) setBlocks(raw.map(mapBlock));
+    } catch (err) { console.error("Refresh blocks error:", err); }
+  }, [mapBlock]);
+
+  const refreshCategories = useCallback(async () => {
+    try {
+      const res = await hostelApi.getRoomTypes();
+      const raw = res?.data?.data;
+      if (Array.isArray(raw)) setCategories(raw.map(mapCategory));
+    } catch (err) { console.error("Refresh categories error:", err); }
+  }, [mapCategory]);
+
+  const refreshRooms = useCallback(async () => {
+    try {
+      const res = await hostelApi.getRooms();
+      const raw = res?.data?.data;
+      if (Array.isArray(raw)) setRooms(raw.map(mapRoom));
+    } catch (err) { console.error("Refresh rooms error:", err); }
+  }, [mapRoom]);
+
+  const refreshBeds = useCallback(async () => {
+    try {
+      const res = await hostelApi.getBeds();
+      const raw = res?.data?.data;
+      if (Array.isArray(raw)) setBeds(raw.map(mapBed));
+    } catch (err) { console.error("Refresh beds error:", err); }
+  }, [mapBed]);
+
+  const refreshWardens = useCallback(async () => {
+    try {
+      const res = await hostelApi.getWardens();
+      const raw = res?.data?.data;
+      if (Array.isArray(raw)) setWardens(raw.map(mapWarden));
+    } catch (err) { console.error("Refresh wardens error:", err); }
+  }, [mapWarden]);
+
+  const refreshAllocations = useCallback(async () => {
+    try {
+      const res = await hostelApi.getStudentAllocations();
+      const raw = res?.data?.data;
+      if (Array.isArray(raw)) {
+        const mapped = raw.map(mapAllocation);
+        setAllocations(mapped);
+        setAttendanceStudents(mapped.filter(a => a.status === "Active").map(a => ({
+          id: a.admissionNo || a.id,
+          admissionNo: a.admissionNo,
+          studentId: a.studentId,
+          name: a.studentName,
+          block: a.blockName,
+          blockCode: a.blockCode,
+          room: a.room,
+          roomId: a.roomId,
+          bed: a.bed,
+          bedId: a.bedId,
+          roomBed: a.roomBadge || `${a.room} (${a.bed})`,
+          floor: a.floor,
+          gender: a.gender,
+          inTime: "07:00",
+        })));
+      }
+    } catch (err) { console.error("Refresh allocations error:", err); }
+  }, [mapAllocation]);
+
+  const refreshOutpasses = useCallback(async () => {
+    try {
+      const res = await hostelApi.getOutpassLeave();
+      const raw = res?.data?.data;
+      if (Array.isArray(raw)) setOutpasses(raw.map(mapOutpass));
+    } catch (err) { console.error("Refresh outpasses error:", err); }
+  }, [mapOutpass]);
+
+  const refreshTransfers = useCallback(async () => {
+    try {
+      const res = await hostelApi.getTransferVacate();
+      const raw = res?.data?.data;
+      if (Array.isArray(raw)) setTransfers(raw.map(mapTransfer));
+    } catch (err) { console.error("Refresh transfers error:", err); }
+  }, [mapTransfer]);
+
+  const refreshDashboard = useCallback(async () => {
+    try {
+      const res = await hostelApi.getHostelDashboard();
+      setDashboardData(res?.data?.data ?? null);
+    } catch (err) { console.error("Refresh dashboard error:", err); }
+  }, []);
 
   // ── Synchronize route location with initial tab ──────────────────────
   useEffect(() => {
@@ -743,10 +564,15 @@ export default function HostelPage() {
 
   // Attendance specific state matching Screenshot 1 & 2
   const [attendanceShift, setAttendanceShift] = useState("night");
-  const [attendanceDate, setAttendanceDate] = useState("2026-09-16");
+  const [attendanceDate, setAttendanceDate] = useState("2026-09-17");
   const [attendanceFrequency, setAttendanceFrequency] = useState("daily");
+  const [attendanceMonth, setAttendanceMonth] = useState("2026-09");
+  const [customRangeStart, setCustomRangeStart] = useState("2026-09-01");
+  const [customRangeEnd, setCustomRangeEnd] = useState("2026-09-17");
+  const [appliedCustomRange, setAppliedCustomRange] = useState({ start: "2026-09-01", end: "2026-09-17" });
+  const [rangeError, setRangeError] = useState("");
   const [attendanceSearch, setAttendanceSearch] = useState("");
-  const [attendanceBlock, setAttendanceBlock] = useState("Ramachandra Bhavan (Block A)");
+  const [attendanceBlock, setAttendanceBlock] = useState("all");
   const [attendanceRoom, setAttendanceRoom] = useState("all");
 
   // Reports specific state (Matching User Reference Screenshot)
@@ -791,44 +617,54 @@ export default function HostelPage() {
       onConfirm: null,
     });
 
-  // ── Reset to initial mock datasets ──────────────────────────────────
-  const handleResetData = () => {
-    setConfirmDialog({
-      isOpen: true,
-      title: "Reset Hostel Mock Data",
-      message: "Are you sure you want to restore all hostel datasets from mockData.js? Any local edits will be reset.",
-      danger: true,
-      confirmLabel: "Reset Data",
-      onConfirm: () => {
-        setBlocks(seedBlocks);
-        setCategories(seedCategories);
-        setRooms(seedRooms);
-        setWardens(seedWardens);
-        setAllocations(seedAllocations);
-        setOutpasses(seedOutpasses);
-        setTransfers(seedTransfers);
-        setAttendanceStudents(seedAttendanceStudents);
-        const map = { morning: {}, night: {} };
-        seedAttendanceStudents.forEach((s) => {
-          map.morning[s.id] = { status: "Present", inTime: "07:00 AM", remarks: "Regular roll call" };
-          map.night[s.id] = { status: "Present", inTime: "08:00 PM", remarks: "Night inspection" };
-        });
-        setAttendanceMap(map);
-        closeConfirm();
-        showToast("Hostel data reset to default mock data successfully!");
-      },
-    });
+  // ── Refresh data from API ───────────────────────────────────────────
+  const handleResetData = async () => {
+    try {
+      showToast("Refreshing hostel data from server...", "info");
+      await fetchHostelData();
+      showToast("Hostel data refreshed from server successfully!");
+    } catch (err) {
+      showToast(getApiErrorMessage(err), "danger");
+    }
   };
+
+  // ── Enriched Blocks with Live Child & Dashboard Metrics ─────────────
+  const enrichedBlocks = useMemo(() => {
+    return blocks.map((b) => {
+      const dbBlock = dashboardData?.blocks?.find(
+        (db) => db.hostelId === b.id || db.hostelCode === b.code
+      );
+      const blockRooms = rooms.filter(
+        (r) => r.hostelId === b.id || r.block === b.name || r.blockName === b.name
+      );
+      const totalRoomsCount = dbBlock?.totalRooms ?? blockRooms.length;
+      const blockBeds = beds.filter((bd) => bd.hostelId === b.id);
+      const totalBedsCount = dbBlock?.totalBeds ?? (blockBeds.length > 0 ? blockBeds.length : blockRooms.reduce((acc, r) => acc + (Number(r.capacity) || 1), 0));
+      const occupiedCount = dbBlock?.occupiedBeds ?? allocations.filter((a) => a.hostelId === b.id && a.status === "Active").length;
+      const vacantCount = dbBlock?.availableBeds ?? Math.max(0, totalBedsCount - occupiedCount);
+      const assignedWarden = wardens.find((w) => w.hostelId === b.id);
+
+      return {
+        ...b,
+        totalRooms: totalRoomsCount,
+        totalBeds: totalBedsCount,
+        occupiedBeds: occupiedCount,
+        vacantBeds: vacantCount,
+        warden: assignedWarden?.name || b.wardenName || "Unassigned",
+        wardenPhone: assignedWarden?.phone || b.primaryMobileNumber || "-",
+      };
+    });
+  }, [blocks, dashboardData, rooms, beds, allocations, wardens]);
 
   // ── Computed Metrics ────────────────────────────────────────────────
   const totalRooms = useMemo(
-    () => blocks.reduce((acc, b) => acc + (Number(b.totalRooms) || 0), 0),
-    [blocks]
+    () => dashboardData?.totalRooms ?? enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalRooms) || 0), 0),
+    [dashboardData, enrichedBlocks]
   );
 
   const totalBeds = useMemo(
-    () => blocks.reduce((acc, b) => acc + (Number(b.totalBeds) || 0), 0),
-    [blocks]
+    () => dashboardData?.totalBeds ?? enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalBeds) || 0), 0),
+    [dashboardData, enrichedBlocks]
   );
 
   const activeAllocations = useMemo(
@@ -836,55 +672,51 @@ export default function HostelPage() {
     [allocations]
   );
 
-  const occupiedBeds = activeAllocations.length;
-  const vacantBeds = Math.max(0, totalBeds - occupiedBeds);
-  const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
+  const occupiedBeds = dashboardData?.occupiedBeds ?? activeAllocations.length;
+  const vacantBeds = dashboardData?.availableBeds ?? Math.max(0, totalBeds - occupiedBeds);
+  const occupancyRate = dashboardData?.occupancyPercentage ?? (totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0);
+  const monthlyRevenue = useMemo(() => {
+    return allocations.reduce((sum, a) => {
+      const num = parseFloat(String(a.monthlyFee || "").replace(/[^0-9.]/g, "")) || 0;
+      return sum + num;
+    }, 0);
+  }, [allocations]);
+  const activeWardensCount = dashboardData?.activeWardens ?? wardens.filter((w) => w.status === "Active").length;
   const pendingOutpasses = useMemo(
-    () => outpasses.filter((o) => o.status === "Pending Approval" || o.status === "Under Review").length,
+    () => outpasses.filter((o) => o.status === "Pending" || o.status === "Pending Approval" || o.status === "Under Review").length,
     [outpasses]
   );
 
   // ── Block CRUD ──────────────────────────────────────────────────────
-  const handleSaveBlock = (blockData) => {
-    if (modal.mode === "edit") {
-      setBlocks((prev) =>
-        prev.map((b) =>
-          b.id === blockData.id
-            ? {
-                ...b,
-                ...blockData,
-                floors: Number(blockData.floors) || b.floors,
-                address: blockData.address || blockData.location || b.address || "",
-              }
-            : b
-        )
-      );
-      showToast(`Block ${blockData.name} updated successfully!`);
-    } else {
-      const newBlock = {
-        id: `blk-${Date.now()}`,
-        name: blockData.name,
-        code: blockData.code,
-        type: blockData.type || "Boys",
-        floors: Number(blockData.floors) || 1,
+  const handleSaveBlock = async (blockData) => {
+    try {
+      const payload = {
+        hostelName: blockData.name,
+        hostelCode: blockData.code,
+        hostelType: blockData.type || "Boys",
+        totalFloors: Number(blockData.floors) || 1,
         address: blockData.address || blockData.location || "",
-        totalRooms: 0,
-        totalBeds: 0,
-        occupiedBeds: 0,
-        vacantBeds: 0,
-        warden: "Unassigned",
-        wardenPhone: "-",
         status: blockData.status || "Active",
       };
-      setBlocks((prev) => [newBlock, ...prev]);
-      showToast(`Hostel block ${blockData.name} added successfully!`);
+      if (modal.mode === "edit") {
+        await hostelApi.updateHostelBlock(blockData.id, payload);
+        showToast(`Block ${blockData.name} updated successfully!`);
+      } else {
+        await hostelApi.createHostelBlock(payload);
+        showToast(`Hostel block ${blockData.name} added successfully!`);
+      }
+      await refreshBlocks();
+      await refreshDashboard();
+      closeModal();
+    } catch (err) {
+      console.error("Save block error:", err);
+      showToast(getApiErrorMessage(err), "danger");
     }
-    closeModal();
   };
 
   const handleDeleteBlock = (block) => {
-    const hasRooms = rooms.some((r) => r.block === block.code);
-    const hasAllocs = allocations.some((a) => a.blockName === block.name || a.blockCode === block.code);
+    const hasRooms = rooms.some((r) => r.block === block.code || r.hostelId === block.id);
+    const hasAllocs = allocations.some((a) => a.blockName === block.name || a.blockCode === block.code || a.hostelId === block.id);
 
     if (hasRooms || hasAllocs) {
       showToast(`Cannot delete ${block.name}: Assigned rooms or active resident allocations exist.`, "danger");
@@ -897,98 +729,103 @@ export default function HostelPage() {
       message: `Are you sure you want to delete ${block.name} (${block.code})? This action cannot be undone.`,
       danger: true,
       confirmLabel: "Delete",
-      onConfirm: () => {
-        setBlocks((prev) => prev.filter((b) => b.id !== block.id));
-        closeConfirm();
-        showToast(`Hostel block ${block.name} deleted.`);
+      onConfirm: async () => {
+        try {
+          await hostelApi.deleteHostelBlock(block.id);
+          await refreshBlocks();
+          await refreshDashboard();
+          closeConfirm();
+          showToast(`Hostel block ${block.name} deleted.`);
+        } catch (err) {
+          console.error("Delete block error:", err);
+          showToast(getApiErrorMessage(err), "danger");
+        }
       },
     });
   };
 
   // ── Room Sharing Config Save Handler ─────────────────────────────────
-  const handleSaveRoomSharingConfig = ({ block, floorConfigs }) => {
+  const handleSaveRoomSharingConfig = async ({ block, floorConfigs }) => {
     if (!block) return;
-    let totalRoomsCount = 0;
-    let totalBedsCount = 0;
-    const generatedRooms = [];
-
-    floorConfigs.forEach((fc) => {
-      let roomIndexOnFloor = 1;
-      const addRooms = (count, capacity, sharingType, acType) => {
-        for (let i = 0; i < count; i++) {
-          const roomNum = fc.floorIndex === 0 
-            ? `${String(roomIndexOnFloor).padStart(3, "0")}`
-            : `${fc.floorIndex}${String(roomIndexOnFloor).padStart(2, "0")}`;
-          generatedRooms.push({
-            id: `rm-${block.code}-${roomNum}-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            roomNo: roomNum,
-            block: block.code,
-            blockName: block.name,
-            floor: fc.floorLabel,
-            type: `${sharingType} (${acType})`,
-            capacity: capacity,
-            occupied: 0,
-            fee: acType === "AC" ? "₹7,500/mo" : "₹6,000/mo",
-            beds: Array.from({ length: capacity }, (_, bi) => `BED-${bi + 1} (Vacant)`),
-            status: "Active",
-          });
-          roomIndexOnFloor++;
-          totalRoomsCount++;
-          totalBedsCount += capacity;
-        }
-      };
-
-      if (fc.singleSharing > 0) addRooms(fc.singleSharing, 1, "Single Sharing", fc.singleAc);
-      if (fc.doubleSharing > 0) addRooms(fc.doubleSharing, 2, "Double Sharing", fc.doubleAc);
-      if (fc.tripleSharing > 0) addRooms(fc.tripleSharing, 3, "Triple Sharing", fc.tripleAc);
-      if (fc.fourSharing > 0) addRooms(fc.fourSharing, 4, "Four Sharing", fc.fourAc);
-      if (Array.isArray(fc.customAllocations)) {
-        fc.customAllocations.forEach((ca) => {
-          const roomsCount = Number(ca.rooms) || 0;
-          const bedsPerRoom = Number(ca.beds) || 1;
-          if (roomsCount > 0) {
-            addRooms(roomsCount, bedsPerRoom, ca.name || "Custom Suite", ca.ac || "AC");
-          }
-        });
-      }
-    });
-
-    if (generatedRooms.length > 0) {
-      setRooms((prev) => [
-        ...prev.filter((r) => r.block !== block.code),
-        ...generatedRooms,
-      ]);
-    }
-
-    setBlocks((prev) =>
-      prev.map((b) =>
-        b.code === block.code
-          ? {
-              ...b,
-              totalRooms: totalRoomsCount || b.totalRooms,
-              totalBeds: totalBedsCount || b.totalBeds,
-              vacantBeds: Math.max(0, (totalBedsCount || b.totalBeds) - (b.occupiedBeds || 0)),
-              floors: floorConfigs.length || b.floors,
+    try {
+      showToast("Generating room configurations and beds on server...", "info");
+      const defaultRoomType = categories[0]?.id || 1;
+      for (const fc of floorConfigs) {
+        let roomIndexOnFloor = 1;
+        const addRooms = async (count, catName, bedCapacity) => {
+          const matchCat = categories.find((c) => c.name?.toLowerCase().includes(catName.toLowerCase()))?.id || defaultRoomType;
+          for (let i = 0; i < count; i++) {
+            const roomNum = fc.floorIndex === 0
+              ? `${String(roomIndexOnFloor).padStart(3, "0")}`
+              : `${fc.floorIndex}${String(roomIndexOnFloor).padStart(2, "0")}`;
+            const roomRes = await hostelApi.createRoom({
+              hostelId: block.id,
+              roomTypeId: matchCat,
+              floorLevel: fc.floorLabel || `Floor ${fc.floorIndex || 1}`,
+              roomNumber: roomNum,
+              status: "Active",
+            });
+            const newRoomId = roomRes?.data?.data?.roomId ?? roomRes?.data?.roomId;
+            if (newRoomId) {
+              const bedsToGen = bedCapacity || 2;
+              for (let bi = 1; bi <= bedsToGen; bi++) {
+                try {
+                  await hostelApi.createBed({
+                    roomId: newRoomId,
+                    bedNumber: `BED-${bi}`,
+                    bedStatus: "Available",
+                    status: "Active",
+                  });
+                } catch (bErr) {
+                  console.warn(`Bed gen warning for room ${roomNum}:`, bErr);
+                }
+              }
             }
-          : b
-      )
-    );
-
-    showToast(`Room sharing configuration saved for ${block.name}!`);
-    closeModal();
+            roomIndexOnFloor++;
+          }
+        };
+        if (fc.singleSharing > 0) await addRooms(fc.singleSharing, "Single", 1);
+        if (fc.doubleSharing > 0) await addRooms(fc.doubleSharing, "Double", 2);
+        if (fc.tripleSharing > 0) await addRooms(fc.tripleSharing, "Triple", 3);
+        if (fc.fourSharing > 0) await addRooms(fc.fourSharing, "Four", 4);
+      }
+      await refreshRooms();
+      await refreshBeds();
+      await refreshBlocks();
+      await refreshDashboard();
+      showToast(`Room sharing configuration and beds saved for ${block.name}!`);
+      closeModal();
+    } catch (err) {
+      console.error("Room config error:", err);
+      showToast(getApiErrorMessage(err), "danger");
+    }
   };
 
   // ── Category CRUD ───────────────────────────────────────────────────
-  const handleSaveCategory = (catData) => {
-    if (modal.mode === "edit") {
-      setCategories((prev) => prev.map((c) => (c.id === catData.id ? { ...c, ...catData } : c)));
-      showToast(`Category ${catData.name} updated.`);
-    } else {
-      const newCat = { ...catData, id: `cat-${Date.now()}` };
-      setCategories((prev) => [newCat, ...prev]);
-      showToast(`Room category ${catData.name} created.`);
+  const handleSaveCategory = async (catData) => {
+    try {
+      const isAc = (catData.type?.includes("AC") || catData.name?.includes("AC")) &&
+                   !catData.type?.includes("Non-AC") && !catData.name?.includes("Non-AC");
+      const payload = {
+        roomTypeSpecification: catData.name || catData.specification || "Standard Room",
+        bedCapacity: Number(catData.capacity) || 2,
+        acType: isAc ? "AC" : "Non-AC",
+        status: catData.status || "Active",
+        description: catData.specification || catData.description || catData.type || "",
+      };
+      if (modal.mode === "edit") {
+        await hostelApi.updateRoomType(catData.id, payload);
+        showToast(`Category ${catData.name} updated.`);
+      } else {
+        await hostelApi.createRoomType(payload);
+        showToast(`Room category ${catData.name} created.`);
+      }
+      await refreshCategories();
+      closeModal();
+    } catch (err) {
+      console.error("Save category error:", err);
+      showToast(getApiErrorMessage(err), "danger");
     }
-    closeModal();
   };
 
   const handleDeleteCategory = (cat) => {
@@ -998,55 +835,68 @@ export default function HostelPage() {
       message: `Delete category "${cat.name}"?`,
       danger: true,
       confirmLabel: "Delete",
-      onConfirm: () => {
-        setCategories((prev) => prev.filter((c) => c.id !== cat.id));
-        closeConfirm();
-        showToast(`Category ${cat.name} removed.`);
+      onConfirm: async () => {
+        try {
+          await hostelApi.deleteRoomType(cat.id);
+          await refreshCategories();
+          closeConfirm();
+          showToast(`Category ${cat.name} removed.`);
+        } catch (err) {
+          console.error("Delete category error:", err);
+          showToast(getApiErrorMessage(err), "danger");
+        }
       },
     });
   };
 
   // ── Room CRUD ───────────────────────────────────────────────────────
-  const handleSaveRoom = (roomData) => {
-    let capacity = roomData.capacity || 2;
-    if (roomData.type) {
-      if (roomData.type.includes("1 Bed") || roomData.type.toLowerCase().includes("single")) capacity = 1;
-      else if (roomData.type.includes("2 Bed") || roomData.type.toLowerCase().includes("double")) capacity = 2;
-      else if (roomData.type.includes("3 Bed") || roomData.type.toLowerCase().includes("triple")) capacity = 3;
-      else if (roomData.type.includes("4 Bed") || roomData.type.toLowerCase().includes("four")) capacity = 4;
-    }
-    const fee = roomData.fee || (roomData.type?.toLowerCase().includes("ac") ? "₹7,500/mo" : "₹6,000/mo");
-    const beds = roomData.beds && roomData.beds.length === capacity
-      ? roomData.beds
-      : Array.from({ length: capacity }, (_, i) => `BED-${i + 1} (Vacant)`);
+  const handleSaveRoom = async (roomData) => {
+    try {
+      const blk = blocks.find((b) => b.code === roomData.block || b.name === roomData.block || String(b.id) === String(roomData.block));
+      const hostelId = blk ? blk.id : (blocks[0]?.id || 1);
+      const cat = categories.find((c) => c.name === roomData.type || String(c.id) === String(roomData.roomTypeId));
+      const roomTypeId = cat ? cat.id : (categories[0]?.id || 1);
 
-    const blk = blocks.find((b) => b.code === roomData.block || b.name === roomData.block || String(b.id) === String(roomData.block));
-    const block = blk ? blk.code : (roomData.block || "BR-A");
-    const blockName = blk ? blk.name : (roomData.blockName || roomData.block || "Boys Residence - Block A");
-
-    const finalRoom = {
-      ...roomData,
-      block,
-      blockName,
-      capacity,
-      fee,
-    };
-
-    if (modal.mode === "edit") {
-      setRooms((prev) => prev.map((r) => (r.id === roomData.id ? { ...r, ...finalRoom } : r)));
-      showToast(`Room ${roomData.roomNo} updated.`);
-    } else {
-      const newRoom = {
-        ...finalRoom,
-        id: `rm-${Date.now()}`,
-        occupied: 0,
-        beds,
+      const payload = {
+        hostelId,
+        roomTypeId,
+        floorLevel: roomData.floor || "Floor 1",
+        roomNumber: String(roomData.roomNo || "").replace(/^Room #/i, "").trim() || "101",
         status: roomData.status || "Active",
       };
-      setRooms((prev) => [newRoom, ...prev]);
-      showToast(`Room ${roomData.roomNo} added.`);
+
+      if (modal.mode === "edit") {
+        await hostelApi.updateRoom(roomData.id, payload);
+        showToast(`Room ${roomData.roomNo} updated.`);
+      } else {
+        const roomRes = await hostelApi.createRoom(payload);
+        const newRoomId = roomRes?.data?.data?.roomId ?? roomRes?.data?.roomId;
+        if (newRoomId) {
+          const cap = Number(cat?.capacity || roomData.capacity || 2);
+          for (let bi = 1; bi <= cap; bi++) {
+            try {
+              await hostelApi.createBed({
+                roomId: newRoomId,
+                bedNumber: `BED-${bi}`,
+                bedStatus: "Available",
+                status: "Active",
+              });
+            } catch (bErr) {
+              console.warn(`Bed gen warning for room ${roomData.roomNo}:`, bErr);
+            }
+          }
+        }
+        showToast(`Room ${roomData.roomNo} and beds added.`);
+      }
+      await refreshRooms();
+      await refreshBeds();
+      await refreshBlocks();
+      await refreshDashboard();
+      closeModal();
+    } catch (err) {
+      console.error("Save room error:", err);
+      showToast(getApiErrorMessage(err), "danger");
     }
-    closeModal();
   };
 
   const handleDeleteRoom = (room) => {
@@ -1060,39 +910,51 @@ export default function HostelPage() {
       message: `Delete Room ${room.roomNo} in block ${room.block}?`,
       danger: true,
       confirmLabel: "Delete",
-      onConfirm: () => {
-        setRooms((prev) => prev.filter((r) => r.id !== room.id));
-        closeConfirm();
-        showToast(`Room ${room.roomNo} deleted.`);
+      onConfirm: async () => {
+        try {
+          await hostelApi.deleteRoom(room.id);
+          await refreshRooms();
+          await refreshBlocks();
+          await refreshDashboard();
+          closeConfirm();
+          showToast(`Room ${room.roomNo} deleted.`);
+        } catch (err) {
+          console.error("Delete room error:", err);
+          showToast(getApiErrorMessage(err), "danger");
+        }
       },
     });
   };
 
   // ── Warden CRUD ─────────────────────────────────────────────────────
-  const handleSaveWarden = (wardenData) => {
-    if (modal.mode === "edit") {
-      setWardens((prev) => prev.map((w) => (w.id === wardenData.id ? { ...w, ...wardenData } : w)));
-      showToast(`Warden ${wardenData.name} updated.`);
-    } else {
-      const newW = {
-        ...wardenData,
-        id: `w-${Date.now()}`,
+  const handleSaveWarden = async (wardenData) => {
+    try {
+      const blk = blocks.find((b) =>
+        b.name === wardenData.assignedHostels || b.code === wardenData.assignedHostels || String(b.id) === String(wardenData.hostelId)
+      );
+      const hostelId = blk ? blk.id : (blocks[0]?.id || 1);
+      const payload = {
+        staffId: Number(wardenData.staffId) || 1,
+        hostelId,
+        assignmentDate: wardenData.assignmentDate ? new Date(wardenData.assignmentDate).toISOString() : new Date().toISOString(),
         status: wardenData.status || "Active",
       };
-      setWardens((prev) => [newW, ...prev]);
-      showToast(`Warden ${wardenData.name} assigned.`);
-    }
 
-    if (wardenData.assignedHostels) {
-      setBlocks((prev) =>
-        prev.map((b) =>
-          wardenData.assignedHostels.includes(b.name) || wardenData.assignedHostels.includes(b.code)
-            ? { ...b, warden: wardenData.name, wardenPhone: wardenData.phone || b.wardenPhone }
-            : b
-        )
-      );
+      if (modal.mode === "edit") {
+        await hostelApi.updateWarden(wardenData.id, payload);
+        showToast(`Warden ${wardenData.name} updated.`);
+      } else {
+        await hostelApi.createWarden(payload);
+        showToast(`Warden ${wardenData.name} assigned.`);
+      }
+      await refreshWardens();
+      await refreshBlocks();
+      await refreshDashboard();
+      closeModal();
+    } catch (err) {
+      console.error("Save warden error:", err);
+      showToast(getApiErrorMessage(err), "danger");
     }
-    closeModal();
   };
 
   const handleDeleteWarden = (warden) => {
@@ -1102,177 +964,244 @@ export default function HostelPage() {
       message: `Remove warden ${warden.name} (${warden.empId})?`,
       danger: true,
       confirmLabel: "Remove",
-      onConfirm: () => {
-        setWardens((prev) => prev.filter((w) => w.id !== warden.id));
-        closeConfirm();
-        showToast(`Warden ${warden.name} removed.`);
+      onConfirm: async () => {
+        try {
+          await hostelApi.deleteWarden(warden.id);
+          await refreshWardens();
+          await refreshBlocks();
+          await refreshDashboard();
+          closeConfirm();
+          showToast(`Warden ${warden.name} removed.`);
+        } catch (err) {
+          console.error("Delete warden error:", err);
+          showToast(getApiErrorMessage(err), "danger");
+        }
       },
     });
   };
 
   // ── Student Allocation CRUD ─────────────────────────────────────────
-  const handleSaveAllocation = (allocData) => {
-    const roomStr = allocData.roomBadge || (allocData.room ? (allocData.room.startsWith("Room #") ? allocData.room : `Room #${allocData.room}`) : "Room #101");
-    const bedStr = allocData.bed || "BED-1";
-    const finalRoomBadge = allocData.roomBadge || `${roomStr} (${bedStr})`;
+  const handleSaveAllocation = async (allocData) => {
+    try {
+      const studentId = Number(allocData.studentId);
+      if (!studentId || isNaN(studentId) || studentId <= 0) {
+        showToast("Please select a valid registered student from the dropdown list.", "warning");
+        return;
+      }
 
-    if (modal.mode === "edit") {
-      setAllocations((prev) =>
-        prev.map((a) => (a.id === allocData.id ? { ...a, ...allocData, roomBadge: finalRoomBadge } : a))
-      );
-      showToast(`Allocation for ${allocData.studentName} updated.`);
-    } else {
-      const newAlloc = {
-        ...allocData,
-        id: `alloc-${Date.now()}`,
-        status: "Active",
-        room: roomStr,
-        bed: bedStr,
-        roomBadge: finalRoomBadge,
+      const blk = blocks.find((b) => b.name === allocData.blockName || b.code === allocData.blockCode || String(b.id) === String(allocData.hostelId));
+      const hostelId = blk ? Number(blk.id) : (Number(blocks[0]?.id) || 1);
+      const rm = rooms.find((r) => r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room || String(r.id) === String(allocData.roomId));
+      const roomId = rm ? Number(rm.id) : (Number(rooms[0]?.id) || 1);
+
+      // Resolve actual database bed ID for this specific room
+      let actualBedId = allocData.bedId ? Number(allocData.bedId) : null;
+      if (!actualBedId && allocData.bed) {
+        const matchingBed = beds.find(b => String(b.roomId) === String(roomId) && (b.bedNumber === allocData.bed || String(b.id) === String(allocData.bed)));
+        if (matchingBed) actualBedId = Number(matchingBed.id);
+      }
+      if (!actualBedId) {
+        const roomBeds = beds.filter(b => String(b.roomId) === String(roomId));
+        if (roomBeds.length > 0) {
+          actualBedId = Number(roomBeds[0].id);
+        }
+      }
+
+      if (!actualBedId || isNaN(actualBedId) || actualBedId <= 0) {
+        showToast("Please select a valid registered bed for this room.", "warning");
+        return;
+      }
+
+      const warden = wardens.find(w => String(w.hostelId) === String(hostelId));
+      const wardenAssignmentId = allocData.wardenAssignmentId ? Number(allocData.wardenAssignmentId) : (warden?.id ? Number(warden.id) : null);
+
+      const payload = {
+        studentId: Number(allocData.studentId),
+        hostelId: Number(hostelId),
+        roomId: Number(roomId),
+        bedId: Number(actualBedId),
+        wardenAssignmentId: wardenAssignmentId ? Number(wardenAssignmentId) : null,
+        joiningDate: allocData.joinDate ? new Date(allocData.joinDate).toISOString() : new Date().toISOString(),
+        status: allocData.status || "Active",
+        remarks: allocData.remarks || "Student hostel room allocation",
       };
-      setAllocations((prev) => [newAlloc, ...prev]);
 
-      // update block occupied count
-      setBlocks((prev) =>
-        prev.map((b) =>
-          b.name === allocData.blockName
-            ? {
-                ...b,
-                occupiedBeds: Number(b.occupiedBeds || 0) + 1,
-                vacantBeds: Math.max(0, Number(b.vacantBeds || 0) - 1),
-              }
-            : b
-        )
-      );
-
-      // update room occupied count if matching room
-      setRooms((prev) =>
-        prev.map((r) => {
-          const matchRoom = r.blockName === allocData.blockName && (r.roomNo === allocData.room || `Room #${r.roomNo}` === roomStr);
-          if (matchRoom) {
-            return {
-              ...r,
-              occupied: Math.min(Number(r.capacity || 2), Number(r.occupied || 0) + 1),
-            };
-          }
-          return r;
-        })
-      );
-
-      showToast(`Room & Bed allocated to ${allocData.studentName} successfully!`);
+      if (modal.mode === "edit") {
+        await hostelApi.updateStudentAllocation(allocData.id, payload);
+        showToast(`Allocation for ${allocData.studentName} updated.`);
+      } else {
+        await hostelApi.createStudentAllocation(payload);
+        showToast(`Room & Bed allocated to ${allocData.studentName} successfully!`);
+      }
+      await refreshAllocations();
+      await refreshRooms();
+      await refreshBlocks();
+      await refreshBeds();
+      await refreshDashboard();
+      closeModal();
+    } catch (err) {
+      console.error("Save allocation error:", err);
+      showToast(getApiErrorMessage(err), "danger");
     }
-    closeModal();
   };
 
-  const handleVacateAllocation = (alloc, reason) => {
-    setAllocations((prev) =>
-      prev.map((a) =>
-        a.id === alloc.id ? { ...a, status: "Vacated", vacateReason: reason, vacateDate: new Date().toISOString().split("T")[0] } : a
-      )
-    );
-    setBlocks((prev) =>
-      prev.map((b) =>
-        b.name === alloc.blockName
-          ? {
-              ...b,
-              occupiedBeds: Math.max(0, Number(b.occupiedBeds || 0) - 1),
-              vacantBeds: Number(b.vacantBeds || 0) + 1,
-            }
-          : b
-      )
-    );
-    closeModal();
-    showToast(`Bed vacated for ${alloc.studentName}.`);
+  const handleVacateAllocation = async (alloc, reason) => {
+    try {
+      await hostelApi.deleteStudentAllocation(alloc.id);
+      await refreshAllocations();
+      await refreshRooms();
+      await refreshBlocks();
+      await refreshDashboard();
+      closeModal();
+      showToast(`Bed vacated for ${alloc.studentName}.`);
+    } catch (err) {
+      console.error("Vacate allocation error:", err);
+      showToast(getApiErrorMessage(err), "danger");
+    }
   };
 
   // ── Outpass CRUD ────────────────────────────────────────────────────
-  const handleSaveOutpass = (outData) => {
-    const newOut = {
-      ...outData,
-      id: `out-${Date.now()}`,
-      status: "Pending Approval",
-    };
-    setOutpasses((prev) => [newOut, ...prev]);
-    closeModal();
-    showToast(`Outpass request submitted for ${outData.studentName}.`);
+  const handleSaveOutpass = async (outData) => {
+    try {
+      const alloc = allocations.find(
+        (a) =>
+          a.admissionNo === outData.admissionNo ||
+          a.studentName === outData.studentName ||
+          String(a.studentId) === String(outData.studentId)
+      );
+      const blk = blocks.find((b) => b.name === outData.blockName || b.code === outData.blockCode || String(b.id) === String(outData.hostelId));
+      const rm = rooms.find((r) => r.roomNo === outData.roomNo || r.roomNo === outData.roomNumber || String(r.id) === String(outData.roomId));
+      const hostelId = Number(outData.hostelId || alloc?.hostelId || blk?.id || blocks[0]?.id || 1);
+      const roomId = Number(outData.roomId || alloc?.roomId || rm?.id || rooms[0]?.id || 1);
+      const bedId = Number(outData.bedId || alloc?.bedId);
+      const studentId = Number(outData.studentId || alloc?.studentId);
+      const wardenAssignmentId = outData.wardenAssignmentId ? Number(outData.wardenAssignmentId) : (alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null);
+
+      if (!studentId || isNaN(studentId) || studentId <= 0) {
+        showToast("Please select an active resident student for outpass.", "warning");
+        return;
+      }
+
+      if (!bedId || isNaN(bedId) || bedId <= 0) {
+        showToast("Active bed assignment could not be found for this student.", "warning");
+        return;
+      }
+
+      const parseIso = (val, fallbackOffsetMs = 0) => {
+        if (!val) return new Date(Date.now() + fallbackOffsetMs).toISOString();
+        let d = new Date(val);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        d = new Date(`${val}T09:00:00Z`);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        return new Date(Date.now() + fallbackOffsetMs).toISOString();
+      };
+
+      const fromIso = parseIso(outData.departureDate || outData.outDate || outData.fromDateTime, 0);
+      const toIso = parseIso(outData.returnDate || outData.toDateTime, 14400000);
+
+      let reqType = "Outpass";
+      const rawType = (outData.requestType || outData.outpassType || "").toLowerCase();
+      if (rawType.includes("leave") || rawType.includes("home") || rawType.includes("emergency")) {
+        reqType = "Leave";
+      } else {
+        reqType = "Outpass";
+      }
+
+      const payload = {
+        studentId,
+        hostelId,
+        roomId,
+        bedId,
+        wardenAssignmentId,
+        requestType: reqType,
+        fromDateTime: fromIso,
+        toDateTime: toIso,
+        reason: outData.reason?.trim() || "Outpass permission request",
+        destination: outData.destination?.trim() || "City",
+      };
+
+      await hostelApi.createOutpassLeave(payload);
+      await refreshOutpasses();
+      closeModal();
+      showToast(`Outpass request submitted for ${outData.studentName || "student"}.`);
+    } catch (err) {
+      console.error("Save outpass error:", err);
+      showToast(getApiErrorMessage(err), "danger");
+    }
   };
 
-  const handleUpdateOutpassStatus = (outpassId, newStatus) => {
-    setOutpasses((prev) =>
-      prev.map((o) => (o.id === outpassId ? { ...o, status: newStatus } : o))
-    );
-    showToast(`Outpass marked as ${newStatus}.`);
+  const handleUpdateOutpassStatus = async (outpassId, newStatus) => {
+    try {
+      let apiStatus = "Pending";
+      const s = (newStatus || "").toLowerCase();
+      if (s.includes("approve")) apiStatus = "Approved";
+      else if (s.includes("reject")) apiStatus = "Rejected";
+
+      await hostelApi.approveOutpassLeave(outpassId, {
+        approvalStatus: apiStatus,
+        approvalRemarks: `Warden status update: ${apiStatus}`,
+      });
+      await refreshOutpasses();
+      showToast(`Outpass marked as ${apiStatus}.`);
+    } catch (err) {
+      console.error("Update outpass error:", err);
+      showToast(getApiErrorMessage(err), "danger");
+    }
   };
 
-  const handleDeleteOutpass = (outpass) => {
-    setOutpasses((prev) => prev.filter((o) => o.id !== outpass.id));
-    showToast("Outpass record removed.");
+  const handleDeleteOutpass = async (outpass) => {
+    try {
+      await hostelApi.deleteOutpassLeave(outpass.id);
+      await refreshOutpasses();
+      showToast("Outpass record removed.");
+    } catch (err) {
+      console.error("Delete outpass error:", err);
+      showToast(getApiErrorMessage(err), "danger");
+    }
   };
 
   // ── Transfer CRUD (Screenshots 1, 2, 3) ──────────────────────────────
-  const handleDeleteTransfer = (tr) => {
-    setTransfers((prev) => prev.filter((t) => t.id !== tr.id));
-    showToast(`Transfer record for ${tr.studentName || "student"} removed.`);
+  const handleDeleteTransfer = async (tr) => {
+    try {
+      await hostelApi.deleteTransferVacate(tr.id);
+      await refreshTransfers();
+      showToast(`Transfer record for ${tr.studentName || "student"} removed.`);
+    } catch (err) {
+      console.error("Delete transfer error:", err);
+      showToast(getApiErrorMessage(err), "danger");
+    }
   };
 
-  const handleSaveTransfer = (transData) => {
-    const isVacate = transData.actionType === "Bed Vacate";
-    const destRoomClean = transData.destinationRoom ? transData.destinationRoom.replace("Room ", "").trim() : "201";
-    const newTr = {
-      ...transData,
-      id: `tr-${Date.now()}`,
-      studentName: transData.studentName || "Resident Student",
-      admissionNo: transData.admissionNo || "ADM-2026-103",
-      actionType: isVacate ? "Bed Vacate" : "Room Transfer",
-      requestType: isVacate ? "Bed Vacate" : "Room Transfer (Change Room/Block)",
-      currentBlock: transData.currentBlock || "Ramachandra Bhavan Block",
-      currentRoom: transData.currentRoom || "101",
-      currentRoomDisplay: transData.currentRoomDisplay || `${transData.currentBlock || "Ramachandra Bhavan Block"} (#${transData.currentRoom || "101"})`,
-      targetBlock: isVacate ? "--" : (transData.destinationBlock || "Boys Residence - Block A"),
-      targetRoom: isVacate ? "--" : destRoomClean,
-      targetBed: isVacate ? "--" : (transData.destinationBed || "Bed #1"),
-      targetDisplayTitle: isVacate
-        ? "✓ Old Bed Released to Available"
-        : `New Bed: ${transData.destinationBlock || "Bhanu Block"} (#${destRoomClean})`,
-      targetDisplaySub: isVacate
-        ? null
-        : `✓ Old Bed #${transData.currentRoom || "101"} Released to Available`,
-      feeAdjustment: isVacate
-        ? "Fee Adjusted: ₹45,000 (Credit to Tuition Fee)"
-        : null,
-      date: new Date().toISOString().split("T")[0],
-      requestDate: new Date().toISOString().split("T")[0],
-      status: "Completed",
-    };
-    setTransfers((prev) => [newTr, ...prev]);
+  const handleSaveTransfer = async (transData) => {
+    try {
+      const isVacate = transData.actionType === "Bed Vacate";
+      const fromBlk = blocks.find((b) => b.name === transData.currentBlock);
+      const toBlk = blocks.find((b) => b.name === transData.destinationBlock);
+      const alloc = allocations.find((a) => a.admissionNo === transData.admissionNo || a.studentName === transData.studentName);
 
-    // In-memory allocation status update
-    if (isVacate) {
-      setAllocations((prev) =>
-        prev.map((a) =>
-          a.admissionNo === transData.admissionNo || a.studentName === transData.studentName
-            ? { ...a, status: "Vacated" }
-            : a
-        )
-      );
-    } else {
-      setAllocations((prev) =>
-        prev.map((a) =>
-          a.admissionNo === transData.admissionNo || a.studentName === transData.studentName
-            ? {
-                ...a,
-                blockName: transData.destinationBlock || a.blockName,
-                room: destRoomClean,
-                bed: transData.destinationBed || a.bed,
-                roomBadge: `Room #${destRoomClean} (${transData.destinationBed || a.bed})`,
-              }
-            : a
-        )
-      );
+      const payload = {
+        allocationId: alloc ? alloc.id : 1,
+        studentId: alloc?.studentId || 1,
+        requestType: isVacate ? "Vacate" : "Transfer",
+        fromHostelId: fromBlk ? fromBlk.id : 1,
+        fromRoomId: alloc?.roomId || 1,
+        fromBedId: alloc?.bedId || 1,
+        toHostelId: isVacate ? null : (toBlk ? toBlk.id : null),
+        toRoomId: isVacate ? null : 1,
+        toBedId: isVacate ? null : 1,
+        requestDate: new Date().toISOString(),
+        effectiveDate: new Date(Date.now() + 86400000).toISOString(),
+        reason: transData.reason || (isVacate ? "Student vacating bed" : "Student room transfer"),
+      };
+
+      await hostelApi.createTransferVacate(payload);
+      await refreshTransfers();
+      closeModal();
+      showToast(`${isVacate ? "Bed vacate request" : "Room transfer request"} submitted for ${transData.studentName || "student"}.`);
+    } catch (err) {
+      console.error("Save transfer error:", err);
+      showToast(getApiErrorMessage(err), "danger");
     }
-
-    closeModal();
-    showToast(`${isVacate ? "Bed vacated and released" : "Room transfer approved"} for ${newTr.studentName}.`);
   };
 
   const handleProcessTransfer = (tr) => {
@@ -1281,37 +1210,24 @@ export default function HostelPage() {
       title: "Approve and Process Migration",
       message: `Approve migration for ${tr.studentName} to ${tr.targetBlock} (${tr.targetRoom})? This will update their active bed allocation.`,
       confirmLabel: "Process Migration",
-      onConfirm: () => {
-        // update transfer status
-        setTransfers((prev) =>
-          prev.map((t) => (t.id === tr.id ? { ...t, status: "Processed" } : t))
-        );
-
-        // if target is Vacate Bed
-        if (tr.requestType === "Vacate Bed") {
-          setAllocations((prev) =>
-            prev.map((a) =>
-              a.studentName === tr.studentName ? { ...a, status: "Vacated" } : a
-            )
-          );
-        } else {
-          // update allocation room/block
-          setAllocations((prev) =>
-            prev.map((a) =>
-              a.studentName === tr.studentName
-                ? {
-                    ...a,
-                    blockName: tr.targetBlock,
-                    room: tr.targetRoom,
-                    roomBadge: tr.targetRoom,
-                  }
-                : a
-            )
-          );
+      onConfirm: async () => {
+        try {
+          await hostelApi.approveTransferVacate(tr.id, {
+            approvalStatus: "Approved",
+            approvalRemarks: "Approved and migration processed",
+          });
+          await hostelApi.completeTransferVacate(tr.id);
+          await refreshTransfers();
+          await refreshAllocations();
+          await refreshRooms();
+          await refreshBlocks();
+          await refreshDashboard();
+          closeConfirm();
+          showToast(`Migration for ${tr.studentName} processed successfully!`);
+        } catch (err) {
+          console.error("Process transfer error:", err);
+          showToast(getApiErrorMessage(err), "danger");
         }
-
-        closeConfirm();
-        showToast(`Migration for ${tr.studentName} processed successfully!`);
       },
     });
   };
@@ -1343,8 +1259,7 @@ export default function HostelPage() {
           !attendanceBlock ||
           attendanceBlock === "all" ||
           s.block === attendanceBlock ||
-          s.blockCode === attendanceBlock ||
-          (attendanceBlock.includes("Ramachandra") && s.block?.includes("Ramachandra"));
+          s.blockCode === attendanceBlock;
         if (matchBlock) {
           updated[s.id] = {
             status,
@@ -1366,8 +1281,7 @@ export default function HostelPage() {
           !attendanceBlock ||
           attendanceBlock === "all" ||
           s.block === attendanceBlock ||
-          s.blockCode === attendanceBlock ||
-          (attendanceBlock.includes("Ramachandra") && s.block?.includes("Ramachandra"));
+          s.blockCode === attendanceBlock;
         if (matchBlock) {
           updated[s.id] = {
             status: "",
@@ -1381,12 +1295,130 @@ export default function HostelPage() {
     showToast(`Cleared attendance selection for ${attendanceShift === "morning" ? "Morning" : "Night"} attendance.`);
   };
 
-  const handleSaveAttendanceLog = () => {
-    showToast("Attendance log saved successfully!", "success");
+  const handleSaveAttendanceLog = async () => {
+    try {
+      showToast("Saving attendance records to server...", "info");
+      const currentMap = attendanceMap[attendanceShift] || {};
+      const markedIds = Object.keys(currentMap).filter((id) => currentMap[id]?.status);
+      if (markedIds.length === 0) {
+        showToast("No attendance marked to save.", "warning");
+        return;
+      }
+      const sessionLabel = attendanceShift === "morning" ? "Morning" : "Night";
+      const attDate = attendanceDate ? new Date(`${attendanceDate}T00:00:00Z`).toISOString() : new Date().toISOString();
+
+      let savedCount = 0;
+      let lastError = null;
+      for (const stId of markedIds) {
+        const record = currentMap[stId];
+        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId || String(s.studentId) === String(stId));
+        const alloc = allocations.find((a) => String(a.studentId) === String(student?.studentId) || a.admissionNo === student?.admissionNo || a.admissionNo === stId || String(a.id) === String(stId));
+        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode || String(b.id) === String(alloc?.hostelId));
+
+        const hostelId = Number(alloc?.hostelId || blk?.id || 1);
+        const roomId = Number(alloc?.roomId || student?.roomId || 1);
+        const bedId = Number(alloc?.bedId || student?.bedId || 1);
+        const studentId = Number(alloc?.studentId || student?.studentId || 1);
+        const wardenAssignmentId = alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null;
+
+        const payload = {
+          studentId,
+          hostelId,
+          roomId,
+          bedId,
+          wardenAssignmentId,
+          attendanceDate: attDate,
+          session: sessionLabel,
+          attendanceStatus: record.status || "Present",
+          remarks: record.remarks || `Recorded during ${sessionLabel} session`,
+        };
+
+        try {
+          await hostelApi.createAttendance(payload);
+          savedCount++;
+        } catch (singleErr) {
+          console.warn(`Attendance record failed for student ${stId}:`, singleErr);
+          lastError = singleErr;
+        }
+      }
+      if (savedCount > 0) {
+        showToast(`Attendance log saved successfully! (${savedCount} records)`, "success");
+      } else if (lastError) {
+        showToast(getApiErrorMessage(lastError), "danger");
+      }
+    } catch (err) {
+      console.error("Save attendance error:", err);
+      showToast(getApiErrorMessage(err), "danger");
+    }
+  };
+
+  // ── Attendance Mode & Date Range Handlers ────────────────────────────
+  const handleSelectAttendanceFrequency = (mode) => {
+    setAttendanceFrequency(mode);
+    setRangeError("");
+    if (mode === "daily") {
+      if (!attendanceDate) setAttendanceDate("2026-09-17");
+    } else if (mode === "monthly") {
+      if (!attendanceMonth) setAttendanceMonth("2026-09");
+    } else if (mode === "custom") {
+      if (!customRangeStart && !customRangeEnd) {
+        setCustomRangeStart("2026-09-01");
+        setCustomRangeEnd("2026-09-17");
+        setAppliedCustomRange({ start: "2026-09-01", end: "2026-09-17" });
+      }
+    }
+  };
+
+  const handleCustomStartChange = (val) => {
+    setCustomRangeStart(val);
+    if (val && customRangeEnd && val > customRangeEnd) {
+      setRangeError("Start date cannot be after end date.");
+    } else {
+      setRangeError("");
+    }
+  };
+
+  const handleCustomEndChange = (val) => {
+    setCustomRangeEnd(val);
+    if (val && customRangeStart && val < customRangeStart) {
+      setRangeError("End date cannot be before start date.");
+    } else {
+      setRangeError("");
+    }
+  };
+
+  const handleApplyCustomRange = () => {
+    if (!customRangeStart || !customRangeEnd) {
+      setRangeError("Please select both start and end dates.");
+      showToast("Please select a valid date range.", "error");
+      return;
+    }
+    if (customRangeStart > customRangeEnd) {
+      setRangeError("Start date cannot be after end date.");
+      showToast("Start date cannot be after end date.", "error");
+      return;
+    }
+    setRangeError("");
+    setAppliedCustomRange({ start: customRangeStart, end: customRangeEnd });
+    showToast(`Applied date range: ${customRangeStart} → ${customRangeEnd}`, "success");
+  };
+
+  const handleClearCustomRange = () => {
+    setCustomRangeStart("");
+    setCustomRangeEnd("");
+    setRangeError("");
   };
 
   const handleExportAttendanceReport = (filteredList) => {
     const shiftData = attendanceMap[attendanceShift] || {};
+    const selectedMonthObj = academicMonthOptions.find((m) => m.value === attendanceMonth);
+    const activePeriodLabel =
+      attendanceFrequency === "daily"
+        ? attendanceDate
+        : attendanceFrequency === "monthly"
+        ? (selectedMonthObj ? selectedMonthObj.label : attendanceMonth)
+        : `${appliedCustomRange.start || "start"}_to_${appliedCustomRange.end || "end"}`;
+
     const exportData = filteredList.map((s) => ({
       admissionNo: s.admissionNo || s.id,
       studentName: s.name,
@@ -1395,10 +1427,10 @@ export default function HostelPage() {
       attendanceStatus: shiftData[s.id]?.status || "Unmarked",
       inTime: shiftData[s.id]?.inTime || s.inTime || "07:00",
       shift: attendanceShift.toUpperCase(),
-      date: attendanceDate,
+      date: activePeriodLabel,
     }));
     exportCsv(
-      `hostel-attendance-${attendanceShift}-${attendanceDate}.csv`,
+      `hostel-attendance-${attendanceShift}-${String(activePeriodLabel).replace(/[^a-zA-Z0-9_-]/g, "_")}.csv`,
       exportData,
       [
         { key: "admissionNo", label: "Admission No" },
@@ -1408,9 +1440,10 @@ export default function HostelPage() {
         { key: "attendanceStatus", label: "Attendance Status" },
         { key: "inTime", label: "In Time" },
         { key: "shift", label: "Shift" },
-        { key: "date", label: "Date" },
+        { key: "date", label: "Date / Period" },
       ]
     );
+    showToast(`Exported ${attendanceShift} attendance log for ${activePeriodLabel}`);
   };
 
   // ═════════════════════════════════════════════════════════════════════
@@ -1420,7 +1453,7 @@ export default function HostelPage() {
   // 1. Dashboard
   const renderDashboard = () => {
     // Blocks filtered by search query
-    const filteredDashBlocks = blocks.filter((b) => {
+    const filteredDashBlocks = enrichedBlocks.filter((b) => {
       if (!dashBlockSearch) return true;
       const q = dashBlockSearch.toLowerCase().trim();
       return (
@@ -1439,45 +1472,12 @@ export default function HostelPage() {
     );
 
     const selectedDashBlock =
-      blocks.find((b) => b.id === dashSelectedBlockId || b.code === dashSelectedBlockId) ||
-      blocks[0] ||
+      enrichedBlocks.find((b) => String(b.id) === String(dashSelectedBlockId) || b.code === dashSelectedBlockId) ||
+      enrichedBlocks[0] ||
       {};
 
-    // Recent 4 allocations for dashboard display
-    const recentAllocationsList = [
-      {
-        id: "alloc-dash-1",
-        studentName: "Rahul Sharma",
-        admissionNo: "ADM-2024-001",
-        blockName: "Boys Residence - Block A",
-        room: "Room #101 (BED-1)",
-        joinDate: "2026-08-01",
-      },
-      {
-        id: "alloc-dash-2",
-        studentName: "Sneha Reddy",
-        admissionNo: "ADM-2024-015",
-        blockName: "Girls Residence - Block A",
-        room: "Room #102 (BED-1)",
-        joinDate: "2026-08-03",
-      },
-      {
-        id: "alloc-dash-3",
-        studentName: "Vikram Patel",
-        admissionNo: "ADM-2024-042",
-        blockName: "Boys Residence - Block B",
-        room: "Room #201 (BED-2)",
-        joinDate: "2026-08-05",
-      },
-      {
-        id: "alloc-dash-4",
-        studentName: "Priya Nair",
-        admissionNo: "ADM-2024-068",
-        blockName: "Girls Residence - Block A",
-        room: "Room #103 (BED-1)",
-        joinDate: "2026-08-07",
-      },
-    ];
+    // Recent 4 live allocations for dashboard display
+    const recentAllocationsList = allocations.slice(0, 4);
 
     // Outpass requests for dashboard display
     const dashOutpassesList = outpasses.slice(0, 4);
@@ -1625,7 +1625,9 @@ export default function HostelPage() {
                   Billed
                 </span>
               </div>
-              <div className="cms-dash-kpi-val">₹40,000</div>
+              <div className="cms-dash-kpi-val">
+                {monthlyRevenue > 0 ? `₹${monthlyRevenue.toLocaleString()}` : "₹0"}
+              </div>
               <div className="cms-dash-kpi-sub">Hostel fees billing</div>
             </div>
           </div>
@@ -1642,7 +1644,7 @@ export default function HostelPage() {
                   Supervising
                 </span>
               </div>
-              <div className="cms-dash-kpi-val">{wardens.length || 4}</div>
+              <div className="cms-dash-kpi-val">{activeWardensCount}</div>
               <div className="cms-dash-kpi-sub">Staff on duty</div>
             </div>
           </div>
@@ -1790,7 +1792,7 @@ export default function HostelPage() {
                   Vacant: <strong style={{ color: "var(--cms-green)" }}>{selectedDashBlock.vacantBeds}</strong>
                 </span>
                 <span className="cms-dash-badge-pill">
-                  Warden: <strong>{selectedDashBlock.warden || "Mr. Ramesh Kumar"}</strong> ({selectedDashBlock.wardenPhone || "+91 98451 22301"})
+                  Warden: <strong>{selectedDashBlock.warden || "Unassigned"}</strong> {selectedDashBlock.wardenPhone && selectedDashBlock.wardenPhone !== "-" ? `(${selectedDashBlock.wardenPhone})` : ""}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-green)", display: "inline-flex", alignItems: "center", gap: 4 }}>
                   • Active Status
@@ -1980,37 +1982,43 @@ export default function HostelPage() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {recentAllocationsList.map((item) => (
-                <div key={item.id} className="cms-dash-item-row">
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ color: "var(--cms-primary)", display: "flex", alignItems: "center" }}>
-                      <BedDouble size={18} />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--cms-text)" }}>
-                        {item.studentName}
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--cms-muted)" }}>
-                        {item.admissionNo} • {item.blockName} • {item.room}
-                      </div>
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      background: "var(--cms-subtle)",
-                      border: "1px solid var(--cms-border)",
-                      color: "var(--cms-muted)",
-                      borderRadius: 9999,
-                      padding: "2px 8px",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.joinDate}
-                  </span>
+              {recentAllocationsList.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "24px 10px", color: "var(--cms-muted)", fontSize: 12 }}>
+                  No recent bed allocations recorded.
                 </div>
-              ))}
+              ) : (
+                recentAllocationsList.map((item) => (
+                  <div key={item.id} className="cms-dash-item-row">
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ color: "var(--cms-primary)", display: "flex", alignItems: "center" }}>
+                        <BedDouble size={18} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--cms-text)" }}>
+                          {item.studentName}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--cms-muted)" }}>
+                          {item.admissionNo} • {item.blockName || item.block || "Hostel"} • {item.roomBadge || item.room || "-"}
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      style={{
+                        background: "var(--cms-subtle)",
+                        border: "1px solid var(--cms-border)",
+                        color: "var(--cms-muted)",
+                        borderRadius: 9999,
+                        padding: "2px 8px",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.joinDate || "-"}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -2034,80 +2042,94 @@ export default function HostelPage() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {dashOutpassesList.map((item) => {
-                const isPending = item.status === "Pending Approval";
-                const isApproved = item.status === "Approved";
-                return (
-                  <div key={item.id} className="cms-dash-item-row">
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
-                      <div style={{ color: isApproved ? "var(--cms-green)" : "var(--cms-amber)", display: "flex", alignItems: "center" }}>
-                        <Clock size={18} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--cms-text)" }}>
-                            {item.studentName}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              borderRadius: 9999,
-                              padding: "1px 7px",
-                              background: isApproved
-                                ? "var(--cms-green-soft)"
-                                : isPending
-                                ? "var(--cms-amber-soft)"
-                                : "var(--cms-info-soft)",
-                              color: isApproved
-                                ? "var(--cms-green)"
-                                : isPending
-                                ? "var(--cms-amber)"
-                                : "var(--cms-info)",
-                            }}
-                          >
-                            {item.status}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 11, color: "var(--cms-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {item.requestType} • {item.roomNo}
-                        </div>
-                      </div>
-                    </div>
+              {dashOutpassesList.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "24px 10px", color: "var(--cms-muted)", fontSize: 12 }}>
+                  No active outpass or leave requests.
+                </div>
+              ) : (
+                dashOutpassesList.map((item) => {
+                  const statusNormalized = (item.status || "").toLowerCase();
+                  const isPending = statusNormalized.includes("pending");
+                  const isApproved = statusNormalized.includes("approve");
+                  const isRejected = statusNormalized.includes("reject");
+                  const formattedDate = item.departureDate || (item.outDate ? item.outDate.split("T")[0] : "-");
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <button
-                        type="button"
-                        className="cms-dash-btn-approve"
-                        onClick={() => handleUpdateOutpassStatus(item.id, "Approved")}
-                      >
-                        <Check size={13} /> Approve
-                      </button>
-                      <button
-                        type="button"
-                        className="cms-dash-btn-reject"
-                        onClick={() => handleUpdateOutpassStatus(item.id, "Rejected")}
-                      >
-                        <X size={13} /> Reject
-                      </button>
-                      <span
-                        style={{
-                          background: "var(--cms-subtle)",
-                          border: "1px solid var(--cms-border)",
-                          color: "var(--cms-muted)",
-                          borderRadius: 9999,
-                          padding: "2px 8px",
-                          fontSize: 11,
-                          fontWeight: 600,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {item.outDate?.split(" ")[0]}
-                      </span>
+                  return (
+                    <div key={item.id} className="cms-dash-item-row">
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+                        <div style={{ color: isApproved ? "var(--cms-green)" : isRejected ? "var(--cms-red)" : "var(--cms-amber)", display: "flex", alignItems: "center" }}>
+                          <Clock size={18} />
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--cms-text)" }}>
+                              {item.studentName}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                borderRadius: 9999,
+                                padding: "1px 7px",
+                                background: isApproved
+                                  ? "var(--cms-green-soft)"
+                                  : isRejected
+                                  ? "var(--cms-red-soft)"
+                                  : "var(--cms-amber-soft)",
+                                color: isApproved
+                                  ? "var(--cms-green)"
+                                  : isRejected
+                                  ? "var(--cms-red)"
+                                  : "var(--cms-amber)",
+                              }}
+                            >
+                              {item.status}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--cms-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {item.requestType || item.outpassType || "Outpass"} • {item.roomNo || item.roomNumber || "-"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        {isPending && (
+                          <>
+                            <button
+                              type="button"
+                              className="cms-dash-btn-approve"
+                              onClick={() => handleUpdateOutpassStatus(item.id, "Approved")}
+                            >
+                              <Check size={13} /> Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="cms-dash-btn-reject"
+                              onClick={() => handleUpdateOutpassStatus(item.id, "Rejected")}
+                            >
+                              <X size={13} /> Reject
+                            </button>
+                          </>
+                        )}
+                        <span
+                          style={{
+                            background: "var(--cms-subtle)",
+                            border: "1px solid var(--cms-border)",
+                            color: "var(--cms-muted)",
+                            borderRadius: 9999,
+                            padding: "2px 8px",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formattedDate}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -3810,10 +3832,10 @@ export default function HostelPage() {
                     <td className="cms-transfer-td">
                       <div className="cms-transfer-room-cell">
                         <span className="cms-transfer-room-block">
-                          {t.currentBlock || (t.currentRoomDisplay ? t.currentRoomDisplay.split(" (")[0] : "Ramachandra Bhavan Block")}
+                          {t.currentBlock || (t.currentRoomDisplay ? t.currentRoomDisplay.split(" (")[0] : "-")}
                         </span>
                         <span className="cms-transfer-room-num">
-                          {t.currentRoom ? `(#${t.currentRoom})` : (t.currentRoomDisplay && t.currentRoomDisplay.includes(" (") ? `(${t.currentRoomDisplay.split(" (")[1]}` : "(#101)")}
+                          {t.currentRoom ? `(#${t.currentRoom})` : (t.currentRoomDisplay && t.currentRoomDisplay.includes(" (") ? `(${t.currentRoomDisplay.split(" (")[1]}` : "")}
                         </span>
                       </div>
                     </td>
@@ -3880,8 +3902,7 @@ export default function HostelPage() {
         !attendanceBlock ||
         attendanceBlock === "all" ||
         s.block === attendanceBlock ||
-        s.blockCode === attendanceBlock ||
-        (attendanceBlock.includes("Ramachandra") && s.block?.includes("Ramachandra"));
+        s.blockCode === attendanceBlock;
 
       const matchRoom =
         !attendanceRoom ||
@@ -3900,18 +3921,14 @@ export default function HostelPage() {
 
     // Available hostel block options for dropdown
     const attendanceBlockOptions = Array.from(
-      new Set([
-        "Ramachandra Bhavan (Block A)",
-        ...blocks.map((b) => b.name),
-        ...attendanceStudents.map((s) => s.block).filter(Boolean),
-      ])
+      new Set(blocks.map((b) => b.name))
     );
 
     // Available room options for selected block
     const attendanceRoomOptions = Array.from(
       new Set(
         attendanceStudents
-          .filter((s) => !attendanceBlock || attendanceBlock === "all" || s.block === attendanceBlock || (attendanceBlock.includes("Ramachandra") && s.block?.includes("Ramachandra")))
+          .filter((s) => !attendanceBlock || attendanceBlock === "all" || s.block === attendanceBlock)
           .map((s) => s.room)
           .filter(Boolean)
       )
@@ -3957,22 +3974,29 @@ export default function HostelPage() {
             </button>
           </div>
 
-          {/* Right: Daily / Monthly toggle & Export Report */}
+          {/* Right: Daily / Monthly / Custom Range toggle & Export Report */}
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div className="cms-att-freq-compact">
+            <div className="cms-att-freq-compact" role="tablist" aria-label="Attendance Mode">
               <button
                 type="button"
                 className={`cms-att-freq-btn-compact ${attendanceFrequency === "daily" ? "is-active" : ""}`}
-                onClick={() => setAttendanceFrequency("daily")}
+                onClick={() => handleSelectAttendanceFrequency("daily")}
               >
                 Daily Attendance
               </button>
               <button
                 type="button"
                 className={`cms-att-freq-btn-compact ${attendanceFrequency === "monthly" ? "is-active" : ""}`}
-                onClick={() => setAttendanceFrequency("monthly")}
+                onClick={() => handleSelectAttendanceFrequency("monthly")}
               >
                 Monthly Attendance
+              </button>
+              <button
+                type="button"
+                className={`cms-att-freq-btn-compact ${attendanceFrequency === "custom" ? "is-active" : ""}`}
+                onClick={() => handleSelectAttendanceFrequency("custom")}
+              >
+                Custom Range
               </button>
             </div>
 
@@ -3987,7 +4011,7 @@ export default function HostelPage() {
         </div>
 
         {/* Filter Card / Bar */}
-        <div className="cms-att-filter-card-compact">
+        <div className={`cms-att-filter-card-compact ${attendanceFrequency === "custom" ? "has-custom-range" : ""}`}>
           {/* 1. SEARCH STUDENT */}
           <div>
             <label className="cms-att-filter-lbl-compact">SEARCH STUDENT</label>
@@ -4014,20 +4038,118 @@ export default function HostelPage() {
             </div>
           </div>
 
-          {/* 2. ATTENDANCE DATE * */}
+          {/* 2. DYNAMIC ATTENDANCE DATE / MONTH / DATE RANGE */}
           <div>
-            <label className="cms-att-filter-lbl-compact">
-              ATTENDANCE DATE <span style={{ color: "var(--cms-red)" }}>*</span>
-            </label>
-            <div style={{ position: "relative", width: "100%" }}>
-              <input
-                type="date"
-                value={attendanceDate}
-                onChange={(e) => setAttendanceDate(e.target.value)}
-                className="cms-alloc-input-compact"
-                style={{ height: 34, paddingLeft: 12, paddingRight: 12, fontSize: 12.5, fontWeight: 600 }}
-              />
-            </div>
+            {attendanceFrequency === "daily" && (
+              <>
+                <label className="cms-att-filter-lbl-compact">
+                  ATTENDANCE DATE <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <div style={{ position: "relative", width: "100%" }}>
+                  <input
+                    type="date"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                    className="cms-alloc-input-compact"
+                    style={{ height: 34, paddingLeft: 12, paddingRight: 12, fontSize: 12.5, fontWeight: 600 }}
+                  />
+                </div>
+              </>
+            )}
+
+            {attendanceFrequency === "monthly" && (
+              <>
+                <label className="cms-att-filter-lbl-compact">
+                  MONTH <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <div style={{ position: "relative", width: "100%" }}>
+                  <select
+                    value={attendanceMonth}
+                    onChange={(e) => setAttendanceMonth(e.target.value)}
+                    className="cms-alloc-select-compact"
+                    style={{ height: 34, fontSize: 12.5, fontWeight: 600 }}
+                  >
+                    {academicMonthOptions.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      pointerEvents: "none",
+                      color: "var(--cms-muted)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <ChevronDown size={14} />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {attendanceFrequency === "custom" && (
+              <>
+                <label className="cms-att-filter-lbl-compact">
+                  DATE RANGE <span style={{ color: "var(--cms-red)" }}>*</span>
+                </label>
+                <div className="cms-att-date-range-group">
+                  <div className="cms-att-date-range-input-wrap">
+                    <input
+                      type="date"
+                      value={customRangeStart}
+                      onChange={(e) => handleCustomStartChange(e.target.value)}
+                      className={`cms-alloc-input-compact cms-att-range-input ${rangeError && !customRangeStart ? "is-invalid" : ""}`}
+                      aria-label="Start Date"
+                      title="Start Date"
+                    />
+                  </div>
+                  <span className="cms-att-range-arrow" aria-hidden="true">
+                    <ArrowRight size={13} />
+                  </span>
+                  <div className="cms-att-date-range-input-wrap">
+                    <input
+                      type="date"
+                      value={customRangeEnd}
+                      onChange={(e) => handleCustomEndChange(e.target.value)}
+                      className={`cms-alloc-input-compact cms-att-range-input ${rangeError && (!customRangeEnd || customRangeStart > customRangeEnd) ? "is-invalid" : ""}`}
+                      aria-label="End Date"
+                      title="End Date"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleApplyCustomRange}
+                    className="cms-att-range-apply-btn"
+                    title="Apply Range"
+                  >
+                    Apply
+                  </button>
+                  {(customRangeStart || customRangeEnd) && (
+                    <button
+                      type="button"
+                      onClick={handleClearCustomRange}
+                      className="cms-att-range-clear-btn"
+                      title="Clear Range"
+                      aria-label="Clear date range"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                {rangeError && (
+                  <div className="cms-att-range-error-text">
+                    <AlertCircle size={11} />
+                    <span>{rangeError}</span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* 3. HOSTEL BLOCK */}
@@ -4126,7 +4248,11 @@ export default function HostelPage() {
               </h3>
             </div>
             <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--cms-muted)" }}>
-              Date: {attendanceDate}
+              {attendanceFrequency === "daily" && `Date: ${attendanceDate}`}
+              {attendanceFrequency === "monthly" &&
+                `Month: ${academicMonthOptions.find((m) => m.value === attendanceMonth)?.label || "September 2026"}`}
+              {attendanceFrequency === "custom" &&
+                `Date Range: ${appliedCustomRange.start || "--"} → ${appliedCustomRange.end || "--"}`}
             </span>
           </div>
 
@@ -4319,7 +4445,7 @@ export default function HostelPage() {
     // 1. Raw dataset by category
     let rawData = [];
     if (reportCategory === "Block Report") {
-      rawData = defaultReportBlocks;
+      rawData = blocks;
     } else if (reportCategory === "Room Report") {
       rawData = rooms;
     } else if (reportCategory === "Bed Allocation Report" || reportCategory === "Student Allocation Report") {
@@ -4333,7 +4459,7 @@ export default function HostelPage() {
     } else if (reportCategory === "Warden Report") {
       rawData = wardens;
     } else {
-      rawData = defaultReportBlocks;
+      rawData = blocks;
     }
 
     // 2. Filter by Block
@@ -4382,83 +4508,265 @@ export default function HostelPage() {
       safeReportPage * reportPageSize
     );
 
-    // Export Handler
-    const handleDownloadReport = () => {
-      if (reportCategory === "Block Report") {
-        exportCsv("block-report.csv", filtered, [
-          { key: "code", label: "Block Code" },
-          { key: "name", label: "Block Name" },
-          { key: "category", label: "Category" },
-          { key: "totalFloors", label: "Total Floors" },
-          { key: "wardenName", label: "Warden Name" },
-          { key: "primaryMobile", label: "Primary Mobile" },
-          { key: "location", label: "Location" },
-          { key: "status", label: "Status" },
+    // Helper to get structured columns for report export and printing
+    const getReportColumns = (cat) => {
+      switch (cat) {
+        case "Block Report":
+          return [
+            { key: "code", label: "Block Code", getter: (r) => r.code || "-" },
+            { key: "name", label: "Block Name", getter: (r) => r.name || "-" },
+            { key: "type", label: "Category", getter: (r) => r.type || r.category || "Boys" },
+            { key: "floors", label: "Total Floors", getter: (r) => r.floors ?? r.totalFloors ?? 1 },
+            { key: "warden", label: "Warden Name", getter: (r) => r.warden || r.wardenName || "Unassigned" },
+            { key: "wardenPhone", label: "Primary Mobile", getter: (r) => r.wardenPhone || r.primaryMobile || "-" },
+            { key: "address", label: "Location", getter: (r) => r.address || r.location || "Main Campus" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+        case "Room Report":
+          return [
+            { key: "roomNo", label: "Room No", getter: (r) => r.roomNo || r.roomNumber || "-" },
+            { key: "blockName", label: "Block Name", getter: (r) => r.blockName || r.block || "-" },
+            { key: "floor", label: "Floor", getter: (r) => r.floor || "1st Floor" },
+            { key: "type", label: "Category", getter: (r) => r.type || r.category || "Standard" },
+            { key: "capacity", label: "Total Beds", getter: (r) => r.capacity ?? r.totalBeds ?? 1 },
+            { key: "occupied", label: "Occupied Beds", getter: (r) => r.occupied ?? 0 },
+            { key: "vacantBeds", label: "Vacant Beds", getter: (r) => Math.max(0, (r.capacity ?? 1) - (r.occupied ?? 0)) },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+        case "Bed Allocation Report":
+        case "Student Allocation Report":
+          return [
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || "-" },
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || r.name || "-" },
+            { key: "gender", label: "Gender", getter: (r) => r.gender || "-" },
+            { key: "blockName", label: "Hostel Block", getter: (r) => r.blockName || r.blockCode || "-" },
+            { key: "roomBadge", label: "Room & Bed", getter: (r) => r.roomBadge || (r.room && r.bed ? `${r.room} (${r.bed})` : r.room || "-") },
+            { key: "joinDate", label: "Join Date", getter: (r) => r.joinDate ? (typeof r.joinDate === "string" ? r.joinDate.split("T")[0] : r.joinDate) : "-" },
+            { key: "monthlyFee", label: "Monthly Fee", getter: (r) => r.monthlyFee ? `₹${r.monthlyFee}` : "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+        case "Attendance Report":
+          return [
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || r.id || "-" },
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || r.name || "-" },
+            { key: "block", label: "Block", getter: (r) => r.block || r.blockName || "-" },
+            { key: "roomBed", label: "Room & Bed", getter: (r) => r.roomBed || (r.room && r.bed ? `${r.room} (${r.bed})` : "-") },
+            { key: "morning", label: "Morning Shift", getter: (r) => attendanceMap?.morning?.[r.admissionNo || r.id] || "Present" },
+            { key: "night", label: "Night Inspection", getter: (r) => attendanceMap?.night?.[r.admissionNo || r.id] || "Present" },
+          ];
+        case "Outpass & Leave Report":
+          return [
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || "-" },
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || "-" },
+            { key: "outpassType", label: "Outpass Type", getter: (r) => r.requestType || r.outpassType || "Outpass" },
+            { key: "blockName", label: "Hostel & Room", getter: (r) => r.blockName ? `${r.blockName} (#${r.roomNo || r.roomNumber || "-"})` : (r.roomNo || "-") },
+            { key: "departureDate", label: "Departure", getter: (r) => r.departureDate || r.outDate || "-" },
+            { key: "returnDate", label: "Expected Return", getter: (r) => r.returnDate || "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Pending" },
+          ];
+        case "Transfer & Vacate Report":
+          return [
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || "-" },
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || "-" },
+            { key: "actionType", label: "Action Type", getter: (r) => r.actionType || r.requestType || "-" },
+            { key: "currentRoomDisplay", label: "Current Room", getter: (r) => r.currentRoomDisplay || r.currentRoom || "-" },
+            { key: "targetDisplayTitle", label: "Target Room / Fee Adjustment", getter: (r) => r.targetDisplayTitle || r.feeAdjustment || "-" },
+            { key: "date", label: "Date", getter: (r) => r.date || r.requestDate || "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Pending" },
+          ];
+        case "Warden Report":
+          return [
+            { key: "empId", label: "Emp ID", getter: (r) => r.empId || "-" },
+            { key: "name", label: "Warden Name", getter: (r) => r.name || "-" },
+            { key: "designation", label: "Designation", getter: (r) => r.designation || "Resident Warden" },
+            { key: "assignedHostels", label: "Supervised Facilities", getter: (r) => r.assignedHostels || "-" },
+            { key: "phone", label: "Primary Mobile", getter: (r) => r.phone || "-" },
+            { key: "email", label: "Email", getter: (r) => r.email || "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+        default:
+          return [
+            { key: "code", label: "Code", getter: (r) => r.code || r.id || "-" },
+            { key: "name", label: "Name", getter: (r) => r.name || "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+      }
+    };
+
+    // Print Handler (Isolated window prevents CSS conflicts)
+    const handlePrintReport = () => {
+      const cols = getReportColumns(reportCategory);
+      const rows = filtered;
+      const popup = window.open("", "_blank", "width=1100,height=760");
+      if (!popup) {
+        showToast("Pop-up blocked. Please allow pop-ups to print reports.", "warning");
+        return;
+      }
+      const title = `${reportCategory} - Pirnav College`;
+      const dateStr = new Date().toLocaleString();
+      const filterSummary = [
+        reportBlockFilter && reportBlockFilter !== "all" ? `Block: ${reportBlockFilter}` : null,
+        reportCategoryFilter && reportCategoryFilter !== "all" ? `Filter: ${reportCategoryFilter}` : null,
+        reportSearch.trim() ? `Search: "${reportSearch.trim()}"` : null,
+      ].filter(Boolean).join(" | ") || "All Records";
+
+      popup.document.open();
+      popup.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #111827; }
+    .print-container { padding: 16px; }
+    .header { border-bottom: 2px solid #2d6a4f; padding-bottom: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .header-left h1 { font-size: 20px; margin: 0 0 4px; color: #1b4332; }
+    .header-left h2 { font-size: 14px; margin: 0; color: #40916c; font-weight: 600; }
+    .header-right { text-align: right; font-size: 11px; color: #6b7280; }
+    .meta-bar { background: #f3f4f6; padding: 6px 12px; border-radius: 6px; font-size: 11px; color: #374151; margin-bottom: 14px; display: flex; justify-content: space-between; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { background: #e5e7eb; color: #1f2937; font-weight: 700; text-align: left; padding: 8px 10px; border: 1px solid #d1d5db; font-size: 10.5px; text-transform: uppercase; }
+    td { padding: 7px 10px; border: 1px solid #e5e7eb; }
+    tr:nth-child(even) td { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="print-container">
+    <div class="header">
+      <div class="header-left">
+        <h1>Pirnav College</h1>
+        <h2>Hostel Management — ${reportCategory}</h2>
+      </div>
+      <div class="header-right">
+        <div>Generated: ${dateStr}</div>
+        <div>Total Records: ${rows.length}</div>
+      </div>
+    </div>
+    <div class="meta-bar">
+      <span><strong>Scope:</strong> ${filterSummary}</span>
+      <span><strong>Official Hostel Audit Report</strong></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          ${cols.map((c) => `<th>${c.label}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.length === 0 ? `<tr><td colspan="${cols.length}" style="text-align:center;padding:24px;color:#9ca3af;">No records found matching filter criteria.</td></tr>` : rows.map((row) => `<tr>${cols.map((c) => `<td>${c.getter ? c.getter(row) : (row[c.key] ?? "-")}</td>`).join("")}</tr>`).join("")}
+      </tbody>
+    </table>
+  </div>
+  <script>
+    window.addEventListener('load', () => {
+      window.focus();
+      window.print();
+    });
+  </script>
+</body>
+</html>`);
+      popup.document.close();
+    };
+
+    // Export PDF Handler using jsPDF + autotable
+    const handleExportPdf = async () => {
+      try {
+        const cols = getReportColumns(reportCategory);
+        const rows = filtered;
+        if (rows.length === 0) {
+          showToast("No records to export.", "warning");
+          return;
+        }
+
+        const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+          import("jspdf"),
+          import("jspdf-autotable"),
         ]);
-      } else if (reportCategory === "Room Report") {
-        exportCsv("room-report.csv", filtered, [
-          { key: "roomNumber", label: "Room No" },
-          { key: "blockName", label: "Block Name" },
-          { key: "floor", label: "Floor" },
-          { key: "category", label: "Category" },
-          { key: "totalBeds", label: "Total Beds" },
-          { key: "occupiedBeds", label: "Occupied Beds" },
-          { key: "vacantBeds", label: "Vacant Beds" },
-          { key: "status", label: "Status" },
-        ]);
-      } else if (reportCategory === "Bed Allocation Report" || reportCategory === "Student Allocation Report") {
-        exportCsv("allocation-report.csv", filtered, [
-          { key: "admissionNo", label: "Adm No" },
-          { key: "studentName", label: "Student Name" },
-          { key: "gender", label: "Gender" },
-          { key: "blockName", label: "Hostel Block" },
-          { key: "roomBadge", label: "Room & Bed" },
-          { key: "joinDate", label: "Join Date" },
-          { key: "monthlyFee", label: "Monthly Fee" },
-          { key: "status", label: "Status" },
-        ]);
-      } else if (reportCategory === "Attendance Report") {
-        exportCsv("attendance-report.csv", filtered, [
-          { key: "id", label: "Adm No" },
-          { key: "name", label: "Student Name" },
-          { key: "block", label: "Block" },
-          { key: "roomBed", label: "Room & Bed" },
-        ]);
-      } else if (reportCategory === "Outpass & Leave Report") {
-        exportCsv("outpass-report.csv", filtered, [
-          { key: "studentName", label: "Student Name" },
-          { key: "admissionNo", label: "Adm No" },
-          { key: "outpassType", label: "Outpass Type" },
-          { key: "blockName", label: "Hostel & Room" },
-          { key: "departureDate", label: "Departure" },
-          { key: "returnDate", label: "Expected Return" },
-          { key: "status", label: "Status" },
-        ]);
-      } else if (reportCategory === "Transfer & Vacate Report") {
-        exportCsv("transfer-vacate-report.csv", filtered, [
-          { key: "studentName", label: "Student Name" },
-          { key: "admissionNo", label: "Adm No" },
-          { key: "actionType", label: "Action Type" },
-          { key: "currentRoomDisplay", label: "Current Room" },
-          { key: "date", label: "Date" },
-          { key: "status", label: "Status" },
-        ]);
-      } else if (reportCategory === "Warden Report") {
-        exportCsv("warden-report.csv", filtered, [
-          { key: "empId", label: "Emp ID" },
-          { key: "name", label: "Warden Name" },
-          { key: "designation", label: "Designation" },
-          { key: "assignedHostels", label: "Supervised Facilities" },
-          { key: "phone", label: "Primary Mobile" },
-          { key: "email", label: "Email" },
-          { key: "status", label: "Status" },
-        ]);
-      } else {
-        exportCsv("hostel-report.csv", filtered, [
-          { key: "code", label: "Block Code" },
-          { key: "name", label: "Block Name" },
-          { key: "status", label: "Status" },
-        ]);
+
+        const doc = new jsPDF({
+          orientation: cols.length > 5 ? "landscape" : "portrait",
+          unit: "pt",
+          format: "a4",
+        });
+
+        const dateStr = new Date().toLocaleString();
+        const filterSummary = [
+          reportBlockFilter && reportBlockFilter !== "all" ? `Block: ${reportBlockFilter}` : null,
+          reportCategoryFilter && reportCategoryFilter !== "all" ? `Filter: ${reportCategoryFilter}` : null,
+          reportSearch.trim() ? `Search: "${reportSearch.trim()}"` : null,
+        ].filter(Boolean).join(" | ") || "All Records";
+
+        doc.setFontSize(16);
+        doc.setTextColor(27, 67, 50);
+        doc.text("Pirnav College — Hostel Management", 36, 36);
+
+        doc.setFontSize(12);
+        doc.setTextColor(64, 145, 108);
+        doc.text(reportCategory, 36, 52);
+
+        doc.setFontSize(9);
+        doc.setTextColor(107, 114, 128);
+        doc.text(`Exported: ${dateStr} | Records: ${rows.length} | Filters: ${filterSummary}`, 36, 68);
+
+        autoTable(doc, {
+          startY: 80,
+          head: [cols.map((c) => c.label)],
+          body: rows.map((row) =>
+            cols.map((c) => String(c.getter ? c.getter(row) : (row[c.key] ?? "-")))
+          ),
+          styles: { fontSize: 8, cellPadding: 4, textColor: [17, 24, 39] },
+          headStyles: { fillColor: [45, 106, 79], textColor: [255, 255, 255], fontStyle: "bold" },
+          alternateRowStyles: { fillColor: [249, 250, 251] },
+          margin: { left: 36, right: 36 },
+        });
+
+        const safeName = reportCategory.toLowerCase().replace(/[^a-z0-9]/g, "_");
+        doc.save(`${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+        showToast(`${reportCategory} exported as PDF successfully!`);
+      } catch (err) {
+        console.error("Export PDF error:", err);
+        showToast("Failed to generate PDF export.", "danger");
+      }
+    };
+
+    // Download Handler (.xlsx Excel or .csv)
+    const handleDownloadReport = async () => {
+      try {
+        const cols = getReportColumns(reportCategory);
+        const rows = filtered;
+        if (rows.length === 0) {
+          showToast("No records to download.", "warning");
+          return;
+        }
+
+        const exportData = rows.map((row) => {
+          const obj = {};
+          cols.forEach((c) => {
+            obj[c.label] = c.getter ? c.getter(row) : (row[c.key] ?? "-");
+          });
+          return obj;
+        });
+
+        const safeName = reportCategory.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+        try {
+          const XLSX = await import("xlsx");
+          const worksheet = XLSX.utils.json_to_sheet(exportData);
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, reportCategory.slice(0, 31));
+          XLSX.writeFile(workbook, `${safeName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+          showToast(`${reportCategory} downloaded as Excel spreadsheet!`);
+        } catch {
+          exportCsv(`${safeName}.csv`, rows, cols.map((c) => ({
+            label: c.label,
+            value: (r) => (c.getter ? c.getter(r) : r[c.key]),
+          })));
+          showToast(`${reportCategory} downloaded as CSV!`);
+        }
+      } catch (err) {
+        console.error("Download report error:", err);
+        showToast("Failed to download report.", "danger");
       }
     };
 
@@ -4474,14 +4782,14 @@ export default function HostelPage() {
             <button
               type="button"
               className="cms-report-btn-print"
-              onClick={() => window.print()}
+              onClick={handlePrintReport}
             >
               <Printer size={15} /> Print
             </button>
             <button
               type="button"
               className="cms-report-btn-pdf"
-              onClick={() => window.print()}
+              onClick={handleExportPdf}
             >
               <FileSpreadsheet size={15} /> Export PDF
             </button>
@@ -4508,24 +4816,11 @@ export default function HostelPage() {
               >
                 <option value="">-- Select Hostel Block --</option>
                 <option value="all">All Hostel Blocks</option>
-                <option value="Ramachandra Bhavan (Block A)">Ramachandra Bhavan (Block A)</option>
-                <option value="Boys Residence - Block A">Boys Residence - Block A</option>
-                <option value="Boys Residence - Block B">Boys Residence - Block B</option>
-                <option value="Girls Residence - Block A">Girls Residence - Block A</option>
-                <option value="Bhanu Block">Bhanu Block</option>
-                <option value="Luxury hostel">Luxury hostel</option>
-                <option value="Junior College Wing">Junior College Wing</option>
-                <option value="Senior Wing - Block D">Senior Wing - Block D</option>
-                <option value="Girls Residence - Block B">Girls Residence - Block B</option>
-                <option value="International Hostel - Block E">International Hostel - Block E</option>
-                <option value="HM-660 Block">HM-660 Block</option>
-                <option value="Kaveri Bhavan Block">Kaveri Bhavan Block</option>
-                <option value="Godavari Bhavan Block">Godavari Bhavan Block</option>
-                <option value="Krishna Bhavan Block">Krishna Bhavan Block</option>
-                <option value="Saraswati Bhavan Block">Saraswati Bhavan Block</option>
-                <option value="Narmada Bhavan Block">Narmada Bhavan Block</option>
-                <option value="Yamuna Bhavan Block">Yamuna Bhavan Block</option>
-                <option value="Ganga Bhavan Block">Ganga Bhavan Block</option>
+                {blocks.map((b) => (
+                  <option key={b.id} value={b.name}>
+                    {b.name}
+                  </option>
+                ))}
               </select>
               <div className="cms-report-chevron">
                 <ChevronDown size={18} />
@@ -4561,13 +4856,30 @@ export default function HostelPage() {
                 value={reportCategoryFilter}
                 onChange={(e) => setReportCategoryFilter(e.target.value)}
               >
-                <option value="">-- Filter by Category --</option>
+                <option value="">-- Filter by Category / Status --</option>
                 <option value="all">All</option>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
-                <option value="Boys Hostel">Boys Hostel</option>
-                <option value="Girls Hostel">Girls Hostel</option>
-                <option value="Co-ed">Co-ed</option>
+                {reportCategory === "Block Report" && (
+                  <>
+                    <option value="Boys Hostel">Boys Hostel</option>
+                    <option value="Girls Hostel">Girls Hostel</option>
+                    <option value="Co-ed">Co-ed</option>
+                  </>
+                )}
+                {reportCategory === "Room Report" && (
+                  <>
+                    <option value="AC">AC</option>
+                    <option value="Non-AC">Non-AC</option>
+                  </>
+                )}
+                {(reportCategory === "Outpass & Leave Report" || reportCategory === "Transfer & Vacate Report") && (
+                  <>
+                    <option value="Pending">Pending</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Rejected">Rejected</option>
+                  </>
+                )}
               </select>
               <div className="cms-report-chevron">
                 <ChevronDown size={18} />
@@ -6278,54 +6590,86 @@ export default function HostelPage() {
   const WardenModal = () => {
     const isView = modal.mode === "view";
 
-    // Warden candidates list auto-loaded for assignment
+    // Filter out staff members who are already active wardens
+    const activeWardenStaffIds = useMemo(() => {
+      return new Set(
+        wardens
+          .filter((w) => w.status === "Active" && (modal.mode !== "edit" || w.id !== modal.data?.id))
+          .map((w) => Number(w.staffId))
+      );
+    }, []);
+
+    // Warden candidates list from live staff API (candidateStaff)
     const wardenCandidates = useMemo(() => {
-      const predefined = [
-        { empId: "STF-2026-NTS-01", name: "Dr. Eleanor Vance", designation: "Chief Hostel Warden", phone: "+91 98451 22301", email: "eleanor.vance@college.edu" },
-        { empId: "STF-2026-NTS-02", name: "Rajesh Kumar", designation: "Senior Hostel Warden", phone: "+91 97120 44512", email: "rajesh.k@college.edu" },
-        { empId: "STF-2026-NTS-03", name: "Savitri Devi", designation: "Girls Hostel Warden", phone: "+91 98765 11200", email: "savitri.d@college.edu" },
-        { empId: "STF-2026-NTS-04", name: "Vikram Singh", designation: "Assistant Hostel Warden", phone: "+91 98831 66720", email: "vikram.s@college.edu" },
-      ];
-      wardens.forEach((w) => {
-        if (!predefined.some((p) => p.name.toLowerCase() === w.name.toLowerCase())) {
-          predefined.push({
-            empId: w.empId || `WRD-${Date.now()}`,
-            name: w.name,
-            designation: w.designation || "Resident Warden",
-            phone: w.phone || "+91 98451 00000",
-            email: w.email || `${w.name.toLowerCase().replace(/\s+/g, ".")}@college.edu`,
+      const list = [];
+      const seen = new Set();
+
+      if (Array.isArray(candidateStaff) && candidateStaff.length > 0) {
+        candidateStaff.forEach((s) => {
+          const sId = Number(s.staffId || s.id);
+          const empId = s.employeeId || s.empId || s.code || `STF-${sId}`;
+          const fullName = [s.firstName, s.middleName, s.lastName].filter(Boolean).join(" ") || s.fullName || s.name || `Staff #${empId}`;
+          if (!activeWardenStaffIds.has(sId) && !seen.has(sId)) {
+            seen.add(sId);
+            list.push({
+              staffId: sId,
+              empId,
+              name: fullName,
+              designation: s.designation || s.role || "Hostel Warden",
+              phone: s.mobileNumber || s.phone || s.primaryMobileNumber || "",
+              email: s.email || "",
+            });
+          }
+        });
+      }
+
+      // If editing, make sure current warden is included
+      if (modal.mode === "edit" && modal.data) {
+        const currStaffId = Number(modal.data.staffId);
+        if (currStaffId && !list.some((c) => c.staffId === currStaffId)) {
+          list.unshift({
+            staffId: currStaffId,
+            empId: modal.data.empId || `STF-${currStaffId}`,
+            name: modal.data.name,
+            designation: modal.data.designation || "Hostel Warden",
+            phone: modal.data.phone || "",
+            email: modal.data.email || "",
           });
         }
-      });
-      return predefined;
-    }, []);
+      }
+
+      return list;
+    }, [activeWardenStaffIds, candidateStaff, modal.mode, modal.data]);
 
     const [form, setForm] = useState(() => {
       if (modal.data) {
         return {
           ...modal.data,
-          assignmentDate: modal.data.assignmentDate || new Date().toISOString().split("T")[0],
+          assignmentDate: modal.data.assignmentDate ? modal.data.assignmentDate.split("T")[0] : new Date().toISOString().split("T")[0],
         };
       }
       const firstCandidate = wardenCandidates[0] || {};
       const firstBlock = blocks[0] || {};
       return {
-        empId: firstCandidate.empId || "STF-2026-NTS-01",
-        name: firstCandidate.name || "Dr. Eleanor Vance",
-        designation: firstCandidate.designation || "Chief Hostel Warden",
-        phone: firstCandidate.phone || "+91 98451 22301",
-        email: firstCandidate.email || "eleanor.vance@college.edu",
-        assignedHostels: firstBlock.name || "Ramachandra Bhavan (Block A)",
+        staffId: firstCandidate.staffId || "",
+        empId: firstCandidate.empId || "",
+        name: firstCandidate.name || "",
+        designation: firstCandidate.designation || "Resident Warden",
+        phone: firstCandidate.phone || "",
+        email: firstCandidate.email || "",
+        assignedHostels: firstBlock.name || "",
+        hostelId: firstBlock.id || "",
         assignmentDate: new Date().toISOString().split("T")[0],
         status: "Active",
       };
     });
 
-    const handleCandidateChange = (selectedName) => {
-      const candidate = wardenCandidates.find((c) => c.name === selectedName);
+    const handleCandidateChange = (selectedStaffId) => {
+      const candidate = wardenCandidates.find((c) => String(c.staffId) === String(selectedStaffId));
       if (candidate) {
         setForm((prev) => ({
           ...prev,
+          staffId: candidate.staffId,
           name: candidate.name,
           empId: candidate.empId,
           designation: candidate.designation,
@@ -6363,15 +6707,17 @@ export default function HostelPage() {
                 <select
                   required
                   disabled={isView}
-                  value={form.name}
+                  value={form.staffId || ""}
                   onChange={(e) => handleCandidateChange(e.target.value)}
                   className="cms-alloc-modal-select"
                   style={{ color: form.name ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
-                  <option value="" disabled>Select Hostel Warden...</option>
+                  <option value="" disabled>
+                    {wardenCandidates.length === 0 ? "No available unassigned staff found..." : "Select Hostel Warden..."}
+                  </option>
                   {wardenCandidates.map((c) => (
-                    <option key={c.empId + c.name} value={c.name}>
-                      {c.name} ({c.designation})
+                    <option key={c.staffId} value={c.staffId}>
+                      {c.name} ({c.empId} • {c.designation})
                     </option>
                   ))}
                 </select>
@@ -6394,7 +6740,14 @@ export default function HostelPage() {
                   required
                   disabled={isView}
                   value={form.assignedHostels}
-                  onChange={(e) => setForm({ ...form, assignedHostels: e.target.value })}
+                  onChange={(e) => {
+                    const blk = blocks.find((b) => b.name === e.target.value);
+                    setForm({
+                      ...form,
+                      assignedHostels: e.target.value,
+                      hostelId: blk ? blk.id : form.hostelId,
+                    });
+                  }}
                   className="cms-alloc-modal-select"
                   style={{ color: form.assignedHostels ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
@@ -6468,22 +6821,86 @@ export default function HostelPage() {
     const [studentSearch, setStudentSearch] = useState(modal.data?.studentName || "");
     const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
 
-    // Merge candidate students with attendance students for rich suggestions
-    const allCandidates = useMemo(() => {
-      const map = new Map();
-      candidateStudentsList.forEach((s) => map.set(s.admissionNo, s));
-      attendanceStudents.forEach((st) => {
-        if (!map.has(st.id)) {
-          map.set(st.id, {
-            id: st.id,
-            name: st.name,
-            admissionNo: st.id,
-            className: "Class 10",
-          });
+    // Set of students who already have active hostel allocations
+    const activeStudentIds = useMemo(() => {
+      const set = new Set();
+      allocations.forEach((a) => {
+        if (a.status === "Active" && (modal.mode !== "edit" || a.id !== modal.data?.id)) {
+          if (a.studentId) set.add(String(a.studentId));
+          if (a.admissionNo) set.add(String(a.admissionNo));
         }
       });
-      return Array.from(map.values());
-    }, [attendanceStudents]);
+      return set;
+    }, [allocations, modal.mode, modal.data?.id]);
+
+    // Student candidate suggestions from candidateStudents API (real Students table)
+    const allCandidates = useMemo(() => {
+      const list = [];
+      const seen = new Set();
+
+      // 1. Primary: candidateStudents fetched from /api/v1/students
+      if (Array.isArray(candidateStudents) && candidateStudents.length > 0) {
+        candidateStudents.forEach((st) => {
+          const sId = st.studentId || st.id;
+          if (!sId) return;
+          const admNo = st.admissionNo || `ADM-${sId}`;
+          const fullName = st.studentName || [st.firstName, st.middleName, st.lastName].filter(Boolean).join(" ") || `Student #${admNo}`;
+          const isAllocated = activeStudentIds.has(String(sId)) || activeStudentIds.has(String(admNo));
+
+          if (!isAllocated && !seen.has(String(sId))) {
+            seen.add(String(sId));
+            list.push({
+              id: sId,
+              studentId: sId,
+              name: fullName,
+              admissionNo: admNo,
+              className: st.programName || st.courseName || st.sectionName || "Enrolled Student",
+              gender: st.gender || "",
+              contact: st.mobileNumber || "",
+            });
+          }
+        });
+      }
+
+      // 2. Secondary: candidateAdmissions if available
+      if (Array.isArray(candidateAdmissions) && candidateAdmissions.length > 0) {
+        candidateAdmissions.forEach((ca, idx) => {
+          const sId = ca.studentId;
+          if (!sId) return;
+          const admNo = ca.admissionNumber || ca.admissionNo || `ADM-${sId}`;
+          const fullName = [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.studentName || `Student #${admNo}`;
+          const isAllocated = activeStudentIds.has(String(sId)) || activeStudentIds.has(String(admNo));
+
+          if (!isAllocated && !seen.has(String(sId))) {
+            seen.add(String(sId));
+            list.push({
+              key: `cand-${sId}-${admNo}-${idx}`,
+              id: sId,
+              studentId: sId,
+              name: fullName,
+              admissionNo: admNo,
+              className: ca.courseName || ca.branchName || ca.className || "Admitted Student",
+              gender: ca.gender || "",
+              contact: ca.contactNumber || ca.mobileNumber || "",
+            });
+          }
+        });
+      }
+
+      // 3. Fallback for edit mode: keep currently selected student
+      if (modal.mode === "edit" && modal.data?.studentId && !seen.has(String(modal.data.studentId))) {
+        list.push({
+          key: `alloc-edit-${modal.data.studentId}`,
+          id: modal.data.studentId,
+          studentId: modal.data.studentId,
+          name: modal.data.studentName || `Student #${modal.data.studentId}`,
+          admissionNo: modal.data.admissionNo || "",
+          className: "Resident Hosteller",
+        });
+      }
+
+      return list;
+    }, [candidateStudents, candidateAdmissions, activeStudentIds, modal.mode, modal.data]);
 
     const filteredCandidates = useMemo(() => {
       if (!studentSearch) return allCandidates;
@@ -6498,41 +6915,72 @@ export default function HostelPage() {
     // Available rooms for selected block
     const availableRooms = useMemo(() => {
       if (!form.blockName) return [];
-      const blkRooms = rooms.filter(
-        (r) => r.blockName === form.blockName || r.block === form.blockName
+      return rooms.filter(
+        (r) => r.blockName === form.blockName || r.block === form.blockName || String(r.hostelId) === String(form.hostelId)
       );
-      if (blkRooms.length > 0) {
-        return blkRooms.map((r) =>
-          r.roomNo.startsWith("RM") || r.roomNo.startsWith("Room")
-            ? `Room #${r.roomNo}`
-            : `Room #${r.roomNo}`
-        );
-      }
-      if (form.blockName === "HM-660") return ["Room #RM-674", "Room #RM-675", "Room #RM-676"];
-      if (form.blockName === "Ramachandra Bhavan Block") return ["Room #101", "Room #102", "Room #103"];
-      return ["Room #101", "Room #102", "Room #103", "Room #201", "Room #202"];
-    }, [form.blockName, rooms]);
+    }, [form.blockName, form.hostelId, rooms]);
+
+    // Available beds for selected room (only real registered beds in database)
+    const availableBeds = useMemo(() => {
+      if (!form.roomId && !form.room) return [];
+      const selRoom = rooms.find(
+        (r) => String(r.id) === String(form.roomId) || r.roomNo === form.room || `Room #${r.roomNo}` === form.room
+      );
+      const rId = selRoom ? selRoom.id : form.roomId;
+      if (!rId) return [];
+
+      const roomBeds = beds.filter((b) => {
+        const matchesRoom = String(b.roomId) === String(rId);
+        if (!matchesRoom) return false;
+        const isCurrentBed = modal.mode === "edit" && (String(b.id) === String(modal.data?.bedId) || b.bedNumber === modal.data?.bed);
+        const isAvailable = (b.bedStatus || "").toLowerCase() === "available" || (!b.bedStatus && (b.status || "").toLowerCase() === "active");
+        return isAvailable || isCurrentBed;
+      });
+
+      return roomBeds;
+    }, [beds, form.roomId, form.room, rooms, modal.mode, modal.data?.bedId, modal.data?.bed]);
 
     const handleSubmit = (e) => {
       e.preventDefault();
-      if (!form.studentName) {
-        showToast("Please select a student", "error");
+      let studentId = Number(form.studentId);
+      if (!studentId || isNaN(studentId) || studentId <= 0) {
+        const found = allCandidates.find(
+          (s) => s.name?.toLowerCase() === form.studentName?.toLowerCase() || s.admissionNo?.toLowerCase() === form.studentName?.toLowerCase()
+        );
+        if (found?.studentId) {
+          studentId = Number(found.studentId);
+        }
+      }
+
+      if (!studentId || isNaN(studentId) || studentId <= 0) {
+        showToast("Please select a registered student from the dropdown suggestions list.", "warning");
         return;
       }
       if (!form.blockName) {
-        showToast("Please select a hostel block", "error");
+        showToast("Please select a hostel block.", "error");
         return;
       }
       if (!form.room) {
-        showToast("Please select a room", "error");
+        showToast("Please select a room.", "error");
         return;
       }
       if (!form.bed) {
-        showToast("Please select a bed number", "error");
+        showToast("Please select a bed number.", "error");
         return;
       }
 
-      handleSaveAllocation(form);
+      const selBed = availableBeds.find((b) => b.bedNumber === form.bed);
+      const bedId = selBed ? Number(selBed.id) : Number(form.bedId);
+      if (!bedId || isNaN(bedId) || bedId <= 0) {
+        showToast("Please select a valid available bed in this room.", "warning");
+        return;
+      }
+
+      handleSaveAllocation({
+        ...form,
+        studentId,
+        bedId,
+      });
     };
 
     return (
@@ -6553,7 +7001,7 @@ export default function HostelPage() {
                   onFocus={() => setIsStudentDropdownOpen(true)}
                   onChange={(e) => {
                     setStudentSearch(e.target.value);
-                    setForm({ ...form, studentName: e.target.value });
+                    setForm({ ...form, studentName: e.target.value, studentId: null });
                     setIsStudentDropdownOpen(true);
                   }}
                   onBlur={() => {
@@ -6574,12 +7022,13 @@ export default function HostelPage() {
                       No matching student found. Type name to assign.
                     </div>
                   ) : (
-                    filteredCandidates.map((st) => (
+                    filteredCandidates.map((st, idx) => (
                       <div
-                        key={st.id}
+                        key={st.key || `st-cand-${st.id || st.admissionNo || idx}`}
                         onMouseDown={() => {
                           setForm({
                             ...form,
+                            studentId: st.studentId || st.id,
                             studentName: st.name,
                             admissionNo: st.admissionNo,
                           });
@@ -6614,15 +7063,19 @@ export default function HostelPage() {
                       ...form,
                       blockName: e.target.value,
                       blockCode: blk ? blk.code : e.target.value,
+                      hostelId: blk ? blk.id : form.hostelId,
                       room: "",
+                      roomId: null,
+                      bed: "",
+                      bedId: null,
                     });
                   }}
                   className="cms-alloc-modal-select"
                   style={{ color: form.blockName ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="">Select Hostel Block</option>
-                  {blocks.map((b) => (
-                    <option key={b.id} value={b.name}>
+                  {blocks.map((b, idx) => (
+                    <option key={b.id || b.code || b.name || `blk-${idx}`} value={b.name}>
                       {b.name}
                     </option>
                   ))}
@@ -6644,7 +7097,17 @@ export default function HostelPage() {
                   <select
                     required
                     value={form.room}
-                    onChange={(e) => setForm({ ...form, room: e.target.value })}
+                    onChange={(e) => {
+                      const selRoomNo = e.target.value;
+                      const selRoom = availableRooms.find(r => r.roomNo === selRoomNo || `Room #${r.roomNo}` === selRoomNo || String(r.id) === String(selRoomNo));
+                      setForm({
+                        ...form,
+                        room: selRoom ? selRoom.roomNo : selRoomNo,
+                        roomId: selRoom ? selRoom.id : form.roomId,
+                        bed: "",
+                        bedId: null,
+                      });
+                    }}
                     className="cms-alloc-modal-select"
                     style={{ color: form.room ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
@@ -6653,9 +7116,9 @@ export default function HostelPage() {
                     ) : (
                       <>
                         <option value="">Select Room...</option>
-                        {availableRooms.map((rm) => (
-                          <option key={rm} value={rm}>
-                            {rm}
+                        {availableRooms.map((rm, idx) => (
+                          <option key={rm.id || rm.roomNo || `rm-${idx}`} value={rm.roomNo}>
+                            Room #{rm.roomNo} {rm.type ? `(${rm.type})` : ""}
                           </option>
                         ))}
                       </>
@@ -6676,15 +7139,32 @@ export default function HostelPage() {
                   <select
                     required
                     value={form.bed}
-                    onChange={(e) => setForm({ ...form, bed: e.target.value })}
+                    onChange={(e) => {
+                      const selBedNum = e.target.value;
+                      const bd = availableBeds.find(b => b.bedNumber === selBedNum || String(b.id) === String(selBedNum));
+                      setForm({
+                        ...form,
+                        bed: bd ? bd.bedNumber : selBedNum,
+                        bedId: bd ? bd.id : null,
+                      });
+                    }}
                     className="cms-alloc-modal-select"
                     style={{ color: form.bed ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
-                    <option value="">Select Bed Number...</option>
-                    <option value="BED-1">BED-1</option>
-                    <option value="BED-2">BED-2</option>
-                    <option value="BED-3">BED-3</option>
-                    <option value="BED-4">BED-4</option>
+                    {!form.room ? (
+                      <option value="">Select Room first...</option>
+                    ) : availableBeds.length === 0 ? (
+                      <option value="" disabled>No available beds registered for this room</option>
+                    ) : (
+                      <>
+                        <option value="">Select Bed Number...</option>
+                        {availableBeds.map((bd, idx) => (
+                          <option key={bd.id || bd.bedNumber || `bd-${idx}`} value={bd.bedNumber}>
+                            {bd.bedNumber} ({bd.bedStatus || "Available"})
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="cms-alloc-modal-chevron">
                     <ChevronDown size={16} />
@@ -6777,7 +7257,7 @@ export default function HostelPage() {
   const OutpassModal = () => {
     const isView = modal.mode === "view";
     const [selectedStudentId, setSelectedStudentId] = useState(
-      modal.data?.admissionNo || ""
+      modal.data?.studentId ? String(modal.data.studentId) : (modal.data?.admissionNo || "")
     );
     const [outpassCategory, setOutpassCategory] = useState(
       modal.data?.outpassType || modal.data?.requestType || "Local Outpass (Same Day)"
@@ -6790,53 +7270,63 @@ export default function HostelPage() {
     );
     const [reason, setReason] = useState(modal.data?.reason || "");
 
-    // Resident candidates for student dropdown
+    // Resident candidates for student dropdown - strictly active allocations with valid studentId
     const studentCandidates = useMemo(() => {
       const map = new Map();
       allocations.forEach((a) => {
-        map.set(a.admissionNo, {
-          id: a.admissionNo,
-          admissionNo: a.admissionNo,
-          name: a.studentName,
-          blockName: a.blockName,
-          room: a.room,
-        });
-      });
-      attendanceStudents.forEach((st) => {
-        if (!map.has(st.id)) {
-          map.set(st.id, {
-            id: st.id,
-            admissionNo: st.id,
-            name: st.name,
-            blockName: blocks[0]?.name || "Ramachandra Bhavan Block",
-            room: "101",
+        if (a.status === "Active" && a.studentId) {
+          map.set(String(a.studentId), {
+            id: a.id,
+            allocationId: a.id,
+            studentId: a.studentId,
+            admissionNo: a.admissionNo,
+            name: a.studentName,
+            blockName: a.blockName,
+            hostelId: a.hostelId,
+            room: a.room,
+            roomId: a.roomId,
+            bed: a.bed,
+            bedId: a.bedId,
+            wardenAssignmentId: a.wardenAssignmentId,
           });
         }
       });
       return Array.from(map.values());
-    }, [allocations, attendanceStudents]);
+    }, [allocations]);
 
     const handleSubmit = (e) => {
       e.preventDefault();
-      const studentObj = studentCandidates.find((s) => s.admissionNo === selectedStudentId) || {
-        name: modal.data?.studentName || "Resident Student",
-        admissionNo: selectedStudentId || "ADM-2026-101",
-        blockName: "Ramachandra Bhavan Block",
-        room: "101",
-      };
+      if (!selectedStudentId) {
+        showToast("Please select a registered resident student", "error");
+        return;
+      }
+      const studentObj = studentCandidates.find(
+        (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId)
+      );
+
+      if (!studentObj) {
+        showToast("Please select an active resident hosteller.", "error");
+        return;
+      }
 
       handleSaveOutpass({
+        studentId: studentObj.studentId,
         studentName: studentObj.name,
         admissionNo: studentObj.admissionNo,
+        hostelId: studentObj.hostelId,
         blockName: studentObj.blockName,
+        roomId: studentObj.roomId,
         roomNo: studentObj.room,
         roomNumber: studentObj.room,
+        bedId: studentObj.bedId,
+        wardenAssignmentId: studentObj.wardenAssignmentId,
         outpassType: outpassCategory,
         requestType: outpassCategory,
-        departureDate: departureDateTime || new Date().toISOString().split("T")[0],
-        outDate: departureDateTime || new Date().toISOString().split("T")[0],
-        returnDate: returnDateTime || new Date().toISOString().split("T")[0],
-        reason: reason,
+        departureDate: departureDateTime || new Date().toISOString().slice(0, 16),
+        outDate: departureDateTime || new Date().toISOString().slice(0, 16),
+        returnDate: returnDateTime || new Date(Date.now() + 14400000).toISOString().slice(0, 16),
+        reason: reason || "Outpass permission request",
+        destination: "City",
       });
     };
 
@@ -6863,8 +7353,8 @@ export default function HostelPage() {
                 >
                   <option value="">Select Student...</option>
                   {studentCandidates.map((st) => (
-                    <option key={st.admissionNo} value={st.admissionNo}>
-                      {st.name} ({st.admissionNo})
+                    <option key={st.studentId} value={String(st.studentId)}>
+                      {st.name} ({st.admissionNo || `ID: ${st.studentId}`}) — {st.blockName || ""} {st.room ? `Room ${st.room}` : ""}
                     </option>
                   ))}
                 </select>
@@ -6968,23 +7458,22 @@ export default function HostelPage() {
     );
   };
 
-  // Transfer Modal (Screenshot 3 - Theme-based & Exact Fields)
   const TransferModal = () => {
     const isView = modal.mode === "view";
     const [selectedStudentId, setSelectedStudentId] = useState(
-      modal.data?.admissionNo || ""
+      modal.data?.studentId ? String(modal.data.studentId) : (modal.data?.admissionNo || "")
     );
     const [actionType, setActionType] = useState(
       modal.data?.actionType || modal.data?.requestType || "Room Transfer (Change Room/Block)"
     );
     const [destinationBlock, setDestinationBlock] = useState(
-      modal.data?.targetBlock || "Boys Residence - Block A"
+      modal.data?.targetBlock || (blocks[0]?.name || "")
     );
     const [destinationRoom, setDestinationRoom] = useState(
-      modal.data?.targetRoom ? (modal.data.targetRoom.startsWith("Room") ? modal.data.targetRoom : `Room ${modal.data.targetRoom}`) : "Room 201"
+      modal.data?.targetRoom || ""
     );
     const [destinationBed, setDestinationBed] = useState(
-      modal.data?.targetBed || "Bed #1"
+      modal.data?.targetBed || ""
     );
     const [reason, setReason] = useState(
       modal.data?.reason || ""
@@ -6995,38 +7484,101 @@ export default function HostelPage() {
     const residentStudents = useMemo(() => {
       const map = new Map();
       allocations.forEach((a) => {
-        if (a.status !== "Vacated") {
-          map.set(a.admissionNo, {
+        if (a.status === "Active" && a.studentId) {
+          map.set(String(a.studentId), {
+            id: a.id,
+            allocationId: a.id,
+            studentId: a.studentId,
             name: a.studentName,
             admissionNo: a.admissionNo,
             blockName: a.blockName,
+            hostelId: a.hostelId,
             room: a.room,
+            roomId: a.roomId,
             bed: a.bed,
+            bedId: a.bedId,
           });
         }
       });
       return Array.from(map.values());
     }, [allocations]);
 
+    // Destination block resolution
+    const destBlockObj = useMemo(() => {
+      return blocks.find((b) => b.name === destinationBlock || String(b.id) === String(destinationBlock)) || blocks[0] || null;
+    }, [destinationBlock, blocks]);
+
+    // Destination room options
+    const destRooms = useMemo(() => {
+      if (!destBlockObj) return [];
+      return rooms.filter(
+        (r) => r.blockName === destBlockObj.name || r.block === destBlockObj.name || String(r.hostelId) === String(destBlockObj.id)
+      );
+    }, [destBlockObj, rooms]);
+
+    // Destination room resolution
+    const destRoomObj = useMemo(() => {
+      return destRooms.find(
+        (r) => r.roomNo === destinationRoom || `Room #${r.roomNo}` === destinationRoom || `Room ${r.roomNo}` === destinationRoom || String(r.id) === String(destinationRoom)
+      ) || destRooms[0] || null;
+    }, [destRooms, destinationRoom]);
+
+    // Destination available beds (only real registered beds in database)
+    const destBeds = useMemo(() => {
+      if (!destRoomObj) return [];
+      const avail = beds.filter(
+        (b) => String(b.roomId) === String(destRoomObj.id) && ((b.bedStatus || "").toLowerCase() === "available" || (!b.bedStatus && (b.status || "").toLowerCase() === "active"))
+      );
+      return avail;
+    }, [beds, destRoomObj]);
+
     const handleSubmit = (e) => {
       e.preventDefault();
-      const currentStudent = residentStudents.find((s) => s.admissionNo === selectedStudentId) || {
-        name: modal.data?.studentName || "Rajesh Kumar",
-        admissionNo: selectedStudentId || "ADM-2026-101",
-        blockName: "Ramachandra Bhavan Block",
-        room: "101",
-      };
+      const currentStudent = residentStudents.find(
+        (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId
+      );
+
+      if (!currentStudent) {
+        showToast("Please select an active resident student.", "warning");
+        return;
+      }
+
+      let toBedId = null;
+      if (!isVacate) {
+        if (!destBlockObj) {
+          showToast("Please select a destination hostel block.", "warning");
+          return;
+        }
+        if (!destRoomObj) {
+          showToast("Please select a destination room.", "warning");
+          return;
+        }
+        const selBed = destBeds.find((b) => b.bedNumber === destinationBed);
+        toBedId = selBed ? Number(selBed.id) : null;
+        if (!toBedId) {
+          showToast("Please select an available destination bed.", "warning");
+          return;
+        }
+      }
 
       handleSaveTransfer({
+        allocationId: currentStudent.allocationId,
+        studentId: currentStudent.studentId,
         studentName: currentStudent.name,
         admissionNo: currentStudent.admissionNo,
         actionType: isVacate ? "Bed Vacate" : "Room Transfer",
         currentBlock: currentStudent.blockName,
         currentRoom: currentStudent.room,
         currentRoomDisplay: `${currentStudent.blockName} (#${currentStudent.room})`,
-        destinationBlock,
-        destinationRoom,
-        destinationBed,
+        fromHostelId: currentStudent.hostelId,
+        fromRoomId: currentStudent.roomId,
+        fromBedId: currentStudent.bedId,
+        destinationBlock: destBlockObj?.name || destinationBlock,
+        toHostelId: destBlockObj?.id || null,
+        destinationRoom: destRoomObj ? `Room #${destRoomObj.roomNo}` : destinationRoom,
+        toRoomId: destRoomObj?.id || null,
+        destinationBed: destinationBed,
+        toBedId,
         reason,
       });
     };
@@ -7054,8 +7606,8 @@ export default function HostelPage() {
                 >
                   <option value="">Select Resident Student...</option>
                   {residentStudents.map((st) => (
-                    <option key={st.admissionNo} value={st.admissionNo}>
-                      {st.name} ({st.admissionNo} - {st.blockName} #{st.room})
+                    <option key={st.studentId} value={String(st.studentId)}>
+                      {st.name} ({st.admissionNo || `ID: ${st.studentId}`} - {st.blockName} #{st.room})
                     </option>
                   ))}
                 </select>
@@ -7097,17 +7649,18 @@ export default function HostelPage() {
                   <select
                     disabled={isView}
                     value={destinationBlock}
-                    onChange={(e) => setDestinationBlock(e.target.value)}
+                    onChange={(e) => {
+                      setDestinationBlock(e.target.value);
+                      setDestinationRoom("");
+                      setDestinationBed("");
+                    }}
                     className="cms-alloc-modal-select"
                   >
-                    <option value="Boys Residence - Block A">Boys Residence - Block A</option>
-                    <option value="Boys Residence - Block B">Boys Residence - Block B</option>
-                    <option value="Bhanu Block">Bhanu Block</option>
-                    <option value="Girls Residence - Block A">Girls Residence - Block A</option>
-                    <option value="Luxury hostel">Luxury hostel</option>
-                    <option value="Ramachandra Bhavan Block">Ramachandra Bhavan Block</option>
-                    {blocks.filter(b => !["Boys Residence - Block A", "Boys Residence - Block B", "Bhanu Block", "Girls Residence - Block A", "Luxury hostel", "Ramachandra Bhavan Block"].includes(b.name)).map(b => (
-                      <option key={b.id} value={b.name}>{b.name}</option>
+                    <option value="">Select Destination Block...</option>
+                    {blocks.map((b) => (
+                      <option key={b.id} value={b.name}>
+                        {b.name} ({b.type ? b.type + " Hostel" : "Hostel"})
+                      </option>
                     ))}
                   </select>
                   <div className="cms-alloc-modal-chevron">
@@ -7128,15 +7681,18 @@ export default function HostelPage() {
                     <select
                       disabled={isView}
                       value={destinationRoom}
-                      onChange={(e) => setDestinationRoom(e.target.value)}
+                      onChange={(e) => {
+                        setDestinationRoom(e.target.value);
+                        setDestinationBed("");
+                      }}
                       className="cms-alloc-modal-select"
                     >
-                      <option value="Room 201">Room 201</option>
-                      <option value="Room 202">Room 202</option>
-                      <option value="Room 101">Room 101</option>
-                      <option value="Room 102">Room 102</option>
-                      <option value="Room 103">Room 103</option>
-                      <option value="Room 301">Room 301</option>
+                      <option value="">Select Room...</option>
+                      {destRooms.map((r) => (
+                        <option key={r.id || r.roomNo} value={r.roomNo}>
+                          Room #{r.roomNo} {r.type ? `(${r.type})` : ""}
+                        </option>
+                      ))}
                     </select>
                     <div className="cms-alloc-modal-chevron">
                       <ChevronDown size={16} />
@@ -7155,10 +7711,20 @@ export default function HostelPage() {
                       onChange={(e) => setDestinationBed(e.target.value)}
                       className="cms-alloc-modal-select"
                     >
-                      <option value="Bed #1">Bed #1</option>
-                      <option value="Bed #2">Bed #2</option>
-                      <option value="Bed #3">Bed #3</option>
-                      <option value="Bed #4">Bed #4</option>
+                      {!destRoomObj ? (
+                        <option value="">Select Room first...</option>
+                      ) : destBeds.length === 0 ? (
+                        <option value="">No beds available in this room</option>
+                      ) : (
+                        <>
+                          <option value="">Select Bed Number...</option>
+                          {destBeds.map((bd) => (
+                            <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
+                              {bd.bedNumber} ({bd.bedStatus || "Available"})
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
                     <div className="cms-alloc-modal-chevron">
                       <ChevronDown size={16} />

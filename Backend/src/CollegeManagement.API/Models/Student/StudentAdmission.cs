@@ -114,6 +114,7 @@ namespace CollegeManagement.API.Models
         public int? ProgramId { get; set; }
 
         // Section is allocated AFTER approval
+        [NotMapped]
         public int? SectionId { get; set; }
 
         // Roll Number is allocated in bulk AFTER section allocation
@@ -145,7 +146,7 @@ namespace CollegeManagement.API.Models
         [MaxLength(50)]
         public string? Medium { get; set; }
         // ADD THIS
-        public int FeeStructureId { get; set; }
+        public int? FeeStructureId { get; set; }
         public string? PaymentPlan { get; set; }
         [MaxLength(50)]
         public string? ScholarshipStatus { get; set; }
@@ -169,5 +170,42 @@ namespace CollegeManagement.API.Models
         public DateTime CreatedAt { get; set; }
 
         public DateTime? UpdatedAt { get; set; }
+
+        // Residential & Transport Allocation
+        [MaxLength(30)]
+        public string? StudentType { get; set; }
+
+        public bool? TransportRequired { get; set; }
+
+        [MaxLength(20)]
+        public string? BusType { get; set; }
+
+        public int? RouteId { get; set; }
+
+        [MaxLength(100)]
+        public string? BusRoute { get; set; }
+
+        public int? PickupPointId { get; set; }
+
+        [MaxLength(100)]
+        public string? PickupPoint { get; set; }
+
+        public int? HostelId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelBlock { get; set; }
+
+        public int? RoomId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelRoom { get; set; }
+
+        public int? BedId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelBed { get; set; }
+
+        [MaxLength(50)]
+        public string? HallTicketNumber { get; set; }
     }
 }

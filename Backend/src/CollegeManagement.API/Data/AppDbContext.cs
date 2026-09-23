@@ -8,6 +8,7 @@ using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Models.Holiday;
+using CollegeManagement.API.Models.Transport;
 
 namespace CollegeManagement.API.Data
 {
@@ -49,6 +50,18 @@ namespace CollegeManagement.API.Data
         public DbSet<Student> Students { get; set; }
         public DbSet<StudentAdmission> StudentAdmissions { get; set; }
         public DbSet<Designation> Designations { get; set; }
+        // Transport
+        public DbSet<TransportAttendant> TransportAttendants { get; set; } = null!;
+        public DbSet<TransportRoute> TransportRoutes => Set<TransportRoute>();
+        public DbSet<PickupPoint> PickupPoints => Set<PickupPoint>();
+        public DbSet<TransportVehicle> TransportVehicles => Set<TransportVehicle>();
+        public DbSet<TransportDriver> TransportDrivers { get; set; } = null!;
+        public DbSet<TransportVehicleAssignment> TransportVehicleAssignments { get; set; } = null!;
+        public DbSet<StudentTransportAssignment> StudentTransportAssignments { get; set; } = null!;
+        public DbSet<VehicleMaintenance> VehicleMaintenances { get; set; } = null!;
+        public DbSet<TransportTrip> TransportTrips => Set<TransportTrip>();
+        public DbSet<TransportStudentAttendance> TransportStudentAttendances { get; set; } = null!;
+        public DbSet<TransportGpsTelemetry> TransportGpsTelemetries { get; set; } = null!;
         public DbSet<Staff> Staffs { get; set; }
         public DbSet<StaffSubjectAllocation> StaffSubjectAllocations { get; set; }
         public DbSet<Faculty> Faculties { get; set; }
@@ -118,6 +131,18 @@ namespace CollegeManagement.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            // Transport Configuration
+            ConfigureTransportRoute(modelBuilder);
+            ConfigurePickupPoint(modelBuilder);
+            ConfigureTransportVehicle(modelBuilder);
+            ConfigureTransportDriver(modelBuilder);
+            ConfigureTransportVehicleAssignment(modelBuilder);
+            ConfigureStudentTransportAssignment(modelBuilder);
+            ConfigureVehicleMaintenance(modelBuilder);
+            modelBuilder.Entity<TransportAttendant>().ToTable("TransportAttendants");
+            modelBuilder.Entity<TransportTrip>().ToTable("TransportTrips");
+
 
             #region Attendance
             modelBuilder.Entity<Attendance>().ToTable("Attendances");
@@ -354,9 +379,10 @@ namespace CollegeManagement.API.Data
                 .HasColumnName("ProgramId");
 
             modelBuilder.Entity<StudentAdmission>()
-                .Property(sa => sa.SectionId)
-                .HasColumnName("SectionId");
+                .Ignore(sa => sa.SectionId);
 
+            modelBuilder.Entity<StudentAdmission>()
+                .Ignore(sa => sa.RollNo);
              #endregion
             modelBuilder.Entity<Student>()
                 .HasIndex(s => s.BoardId);
@@ -475,43 +501,43 @@ namespace CollegeManagement.API.Data
             // ============================================================
             modelBuilder.Entity<StudentFee>(entity =>
             {
-                entity.HasKey("StudentFeeId");
+                entity.HasKey(x => x.StudentFeeId);
 
-                entity.Property("TotalAmount")
+                entity.Property(x => x.TotalAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("ConcessionAmount")
+                entity.Property(x => x.ConcessionAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("PayableAmount")
+                entity.Property(x => x.PayableAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("PaidAmount")
+                entity.Property(x => x.PaidAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("BalanceAmount")
+                entity.Property(x => x.BalanceAmount)
                     .HasColumnType("decimal(18,2)");
 
-                entity.Property("Status")
+                entity.Property(x => x.Status)
                     .IsRequired()
                     .HasMaxLength(30);
 
-                entity.Property("AssignedAt")
+                entity.Property(x => x.AssignedAt)
                     .HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
 
-                entity.HasIndex("StudentId", "FeeStructureId")
+                entity.HasIndex(x => new { x.StudentId, x.FeeStructureId })
                     .IsUnique();
 
                 // Student -> StudentFee
-                entity.HasOne<Student>()
+                entity.HasOne(x => x.Student)
                     .WithMany()
-                    .HasForeignKey("StudentId")
+                    .HasForeignKey(x => x.StudentId)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 // FeeStructure -> StudentFee
-                entity.HasOne<FeeStructure>()
-                    .WithMany()
-                    .HasForeignKey("FeeStructureId")
+                entity.HasOne(x => x.FeeStructure)
+                    .WithMany(x => x.StudentFees)
+                    .HasForeignKey(x => x.FeeStructureId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -564,8 +590,8 @@ namespace CollegeManagement.API.Data
             {
                 entity.HasKey(x => x.FeePaymentId);
                 entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
-                entity.Property(x => x.DiscountAmount).HasColumnType("decimal(18,2)");
-                entity.Property(x => x.FineAmount).HasColumnType("decimal(18,2)");
+                entity.Ignore(x => x.DiscountAmount);
+                entity.Ignore(x => x.FineAmount);
                 entity.Property(x => x.PaymentMode).IsRequired().HasMaxLength(30);
                 entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
                 entity.Property(x => x.PaymentDate).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
@@ -1202,5 +1228,402 @@ namespace CollegeManagement.API.Data
             });
             #endregion
         }
-    }
+    
+private static void ConfigureTransportRoute(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TransportRoute>(entity =>
+            {
+                entity.ToTable("TransportRoutes");
+
+                entity.HasKey(x => x.RouteId);
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
+                entity.Property(x => x.DistanceKm).HasColumnName("Distance");
+                entity.Property(x => x.MonthlyFee).HasColumnName("DefaultMonthlyFee");
+                entity.Ignore(x => x.PickupPoint);
+                entity.Ignore(x => x.DropPoint);
+                entity.Ignore(x => x.VehicleId);
+                entity.Ignore(x => x.Vehicle);
+
+                entity.Property(x => x.RouteCode)
+                    .HasMaxLength(50)
+                    .IsRequired();
+
+                entity.Property(x => x.RouteName)
+                    .HasMaxLength(150)
+                    .IsRequired();
+
+                entity.Property(x => x.StartLocation)
+                    .HasMaxLength(150);
+
+                entity.Property(x => x.EndLocation)
+                    .HasMaxLength(150);
+
+                entity.Property(x => x.DistanceKm)
+                    .HasPrecision(10, 2);
+
+                entity.Property(x => x.Description)
+                    .HasMaxLength(500);
+
+                entity.Property(x => x.Status)
+                    .HasDefaultValue(true);
+
+                entity.Property(x => x.IsDeleted)
+                    .HasDefaultValue(false);
+
+                entity.HasIndex(x => x.RouteCode)
+                    .IsUnique()
+                    .HasDatabaseName("ux_transport_routes_route_code");
+            });
+        }
+
+private static void ConfigurePickupPoint(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<PickupPoint>(entity =>
+            {
+                entity.ToTable("PickupPoints");
+
+                entity.HasKey(x => x.PickupPointId);
+                entity.Property(x => x.PickupPointName).HasColumnName("StopName");
+                entity.Property(x => x.Landmark).HasColumnName("StopAddress");
+                entity.Property(x => x.SequenceNo).HasColumnName("StopOrder");
+                entity.Property(x => x.DistanceFromStart).HasColumnName("DistanceFromSchool");
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
+
+                entity.Property(x => x.PickupPointName)
+                    .HasMaxLength(150)
+                    .IsRequired();
+
+                entity.Property(x => x.Landmark)
+                    .HasMaxLength(250);
+
+                entity.Property(x => x.DistanceFromStart)
+                    .HasPrecision(10, 2);
+
+                entity.HasOne(x => x.TransportRoute)
+                    .WithMany()
+                    .HasForeignKey(x => x.RouteId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(x => new
+                {
+                    x.RouteId,
+                    x.SequenceNo
+                });
+
+                entity.HasIndex(x => new
+                {
+                    x.RouteId,
+                    x.PickupPointName
+                });
+            });
+        }
+
+private static void ConfigureTransportVehicle(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TransportVehicle>(entity =>
+            {
+                entity.ToTable("TransportVehicles");
+
+                entity.HasKey(x => x.VehicleId);
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
+                entity.Ignore(x => x.Routes);
+                entity.Ignore(x => x.Drivers);
+                entity.Property(x => x.RegistrationNumber).HasColumnName("VehicleRegistrationNo");
+                entity.Property(x => x.Manufacturer).HasColumnName("Make");
+
+                entity.HasIndex(x => x.VehicleNumber)
+                    .IsUnique();
+
+                entity.HasIndex(x => x.RegistrationNumber)
+                    .IsUnique();
+
+                entity.Property(x => x.VehicleNumber)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.RegistrationNumber)
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.VehicleName)
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.VehicleType)
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.Manufacturer)
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.Model)
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.InsuranceNumber)
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.Status)
+                    .HasDefaultValue(true);
+
+                entity.Property(x => x.IsDeleted)
+                    .HasDefaultValue(false);
+            });
+        }
+
+private static void ConfigureTransportDriver(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TransportDriver>(entity =>
+            {
+                entity.ToTable("TransportDrivers");
+
+                entity.HasKey(x => x.DriverId);
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
+                entity.Ignore(x => x.AssignedVehicle);
+                entity.Property(x => x.AlternateMobileNumber).HasColumnName("AlternateMobileNo");
+                entity.Property(x => x.LicenceExpiry).HasColumnName("LicenseExpiry");
+
+                entity.HasIndex(x => x.LicenceNumber)
+                    .IsUnique();
+
+                entity.HasIndex(x => x.MobileNumber);
+
+                entity.Property(x => x.DriverName)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(x => x.MobileNumber).HasColumnName("MobileNo")
+                    .IsRequired()
+                    .HasMaxLength(20);
+
+                entity.Property(x => x.LicenceNumber).HasColumnName("LicenseNo")
+                    .IsRequired()
+                    .HasMaxLength(50);
+
+                entity.Property(x => x.Status)
+                    .HasDefaultValue(true);
+
+                entity.Property(x => x.IsDeleted)
+                    .HasDefaultValue(false);
+            });
+        }
+
+private static void ConfigureTransportVehicleAssignment(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<TransportVehicleAssignment>(
+                entity =>
+                {
+                    entity.ToTable("TransportVehicleAssignments");
+
+                    entity.HasKey(x => x.AssignmentId);
+                entity.Ignore(x => x.CreatedBy);
+                entity.Ignore(x => x.UpdatedBy);
+
+                    entity.HasOne(x => x.Route)
+                        .WithMany()
+                        .HasForeignKey(x => x.RouteId)
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    entity.HasOne(x => x.Vehicle)
+                        .WithMany()
+                        .HasForeignKey(x => x.VehicleId)
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    entity.HasOne(x => x.Driver)
+                        .WithMany()
+                        .HasForeignKey(x => x.DriverId)
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    entity.HasIndex(x => new
+                    {
+                        x.RouteId,
+                        x.VehicleId,
+                        x.DriverId,
+                        x.EffectiveFrom
+                    });
+
+                    entity.HasIndex(x => x.VehicleId);
+
+                    entity.HasIndex(x => x.DriverId);
+
+                    entity.HasIndex(x => x.RouteId);
+
+                    entity.HasIndex(x => new
+                    {
+                        x.VehicleId,
+                        x.DriverId,
+                        x.RouteId,
+                        x.Status,
+                        x.IsDeleted
+                    })
+                        .HasDatabaseName("IX_TVA_Vehicle_Driver_Route");
+
+                    entity.Property(x => x.Status)
+                        .HasDefaultValue(true);
+
+                    entity.Property(x => x.IsDeleted)
+                        .HasDefaultValue(false);
+                });
+        }
+
+private static void ConfigureStudentTransportAssignment(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<StudentTransportAssignment>(
+                entity =>
+                {
+                    entity.ToTable("StudentTransportAssignments");
+
+                    entity.HasKey(
+                        x => x.StudentTransportAssignmentId);
+
+                    entity.HasOne(x => x.Route)
+                        .WithMany()
+                        .HasForeignKey(x => x.RouteId)
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    entity.HasOne(x => x.PickupPoint)
+                        .WithMany()
+                        .HasForeignKey(x => x.PickupPointId)
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    entity.HasOne(x => x.VehicleAssignment)
+                        .WithMany()
+                        .HasForeignKey(
+                            x => x.VehicleAssignmentId)
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    entity.Property(x => x.AdmissionNo)
+                        .HasMaxLength(50)
+                        .IsRequired();
+
+                    entity.HasIndex(x => x.AdmissionNo);
+
+                    entity.HasIndex(x => x.RouteId);
+
+                    entity.HasIndex(x => x.PickupPointId);
+
+                    entity.HasIndex(x => x.VehicleAssignmentId);
+
+                    entity.HasIndex(x => new
+                    {
+                        x.AdmissionNo,
+                        x.EffectiveFrom,
+                        x.EffectiveTo
+                    });
+
+                    entity.HasIndex(x => new
+                    {
+                        x.RouteId,
+                        x.PickupPointId,
+                        x.VehicleAssignmentId,
+                        x.Status,
+                        x.IsDeleted
+                    })
+                        .HasDatabaseName("IX_STA_Route_Pickup_Vehicle");
+
+                    entity.Property(x => x.TransportType)
+                        .IsRequired()
+                        .HasMaxLength(20);
+
+                    entity.Property(x => x.Status)
+                        .HasDefaultValue(true);
+
+                    entity.Property(x => x.IsDeleted)
+                        .HasDefaultValue(false);
+                });
+        }
+
+private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<VehicleMaintenance>(entity =>
+            {
+                entity.ToTable(
+                    "VehicleMaintenances");
+
+                entity.HasKey(x => x.MaintenanceId);
+
+                entity.Property(x => x.MaintenanceId)
+
+                    .ValueGeneratedOnAdd();
+
+                entity.Property(x => x.VehicleId)
+
+                    .IsRequired();
+
+                entity.Property(x => x.ServiceType)
+
+                    .HasMaxLength(150)
+                    .IsRequired();
+
+                entity.Property(x => x.ServiceDate)
+
+                    .HasColumnType("date")
+                    .IsRequired();
+
+                entity.Property(x => x.Cost)
+
+                    .HasPrecision(12, 2)
+                    .HasDefaultValue(0m);
+
+                entity.Property(x => x.VendorCenter)
+
+                    .HasMaxLength(150);
+
+                entity.Property(x => x.NextServiceDue)
+
+                    .HasColumnType("date");
+
+                entity.Property(x => x.Remarks)
+
+                    .HasMaxLength(500);
+
+                entity.Property(x => x.Status)
+
+                    .HasDefaultValue(true);
+
+                entity.Property(x => x.IsDeleted)
+
+                    .HasDefaultValue(false);
+
+                entity.Property(x => x.CreatedBy)
+;
+
+                entity.Property(x => x.UpdatedBy)
+;
+
+                entity.Property(x => x.CreatedAt)
+
+                    .HasColumnType("datetime")
+                    .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                entity.Property(x => x.UpdatedAt)
+
+                    .HasColumnType("datetime");
+
+                entity.HasOne(x => x.Vehicle)
+                    .WithMany()
+                    .HasForeignKey(x => x.VehicleId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Existing foreign-key index
+                entity.HasIndex(x => x.VehicleId)
+                    .HasDatabaseName("IX_transport_vehicle_maintenance_vehicle_id");
+
+                // Transport report performance index
+                entity.HasIndex(x => new
+                {
+                    x.VehicleId,
+                    x.ServiceDate,
+                    x.IsDeleted
+                })
+                    .HasDatabaseName("IX_VehMaint_Vehicle_ServiceDate_Deleted");
+            });
+        }
+
 }
+}
+
+
+
+

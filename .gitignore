@@ -1,4 +1,4 @@
-﻿# Visual Studio & .NET Build Artifacts
+# Visual Studio & .NET Build Artifacts
 .vs/
 **/bin/
 **/obj/
@@ -28,3 +28,7 @@ Frontend/.env
 Backend/src/CollegeManagement.API/wwwroot/uploads/student-documents/*
 Backend/src/CollegeManagement.API/wwwroot/uploads/student-photos/*
 !Backend/src/CollegeManagement.API/wwwroot/uploads/.gitkeep
+
+# Screenshots & Reference Images
+hostel screens/
+

@@ -12,6 +12,9 @@ using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
@@ -112,237 +115,190 @@ namespace CollegeManagement.API.Repositories.Implementations
                     examination.ExamCode = $"EXAM-{yearStr}-{nextSeq:D4}";
                 }
 
-                // 4. Save Examination record inside database transaction
-                using var transaction = await _context.Database.BeginTransactionAsync();
-                try
-                {
-                    _context.Examinations.Add(examination);
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                    return examination;
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
+                // 4. Save Examination record via Stored Procedure sp_CreateExamination
+                var p = new DynamicParameters();
+                p.Add("p_ExamCode", examination.ExamCode);
+                p.Add("p_ExamName", examination.ExamName);
+                p.Add("p_BoardId", examination.BoardId);
+                p.Add("p_AcademicYearId", examination.AcademicYearId);
+                p.Add("p_AcademicLevelId", examination.AcademicLevelId);
+                p.Add("p_GroupId", examination.GroupId);
+                p.Add("p_ProgramId", examination.ProgramId);
+                p.Add("p_AssessmentTypeId", examination.AssessmentTypeId);
+                p.Add("p_StartDate", examination.StartDate.ToDateTime(TimeOnly.MinValue));
+                p.Add("p_EndDate", examination.EndDate.ToDateTime(TimeOnly.MinValue));
+                p.Add("p_Description", examination.Description);
+                p.Add("p_ExamPattern", examination.ExamPattern);
+                p.Add("p_TotalMarks", examination.TotalMarks);
+                p.Add("p_PassPercentage", examination.PassPercentage);
+                p.Add("p_Status", examination.Status);
+
+                var newId = await Connection.ExecuteScalarAsync<int>(
+                    "sp_CreateExamination",
+                    p,
+                    commandType: CommandType.StoredProcedure);
+
+                examination.ExaminationId = newId;
+                return examination;
             });
         }
 
         public async Task<Examination?> GetExaminationByIdAsync(int examinationId)
         {
-            return await _context.Examinations
-                .Include(e => e.Board)
-                .Include(e => e.AcademicYear)
-                .Include(e => e.AcademicLevel)
-                .Include(e => e.Group)
-                .Include(e => e.Program)
-                .Include(e => e.AssessmentType)
-                .Include(e => e.ExamSchedules.Where(s => s.IsActive))
-                    .ThenInclude(s => s.Subject)
-                .FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
+            var p = new DynamicParameters();
+            p.Add("p_ExaminationId", examinationId);
+
+            var row = await Connection.QueryFirstOrDefaultAsync<dynamic>(
+                "sp_GetExaminationById",
+                p,
+                commandType: CommandType.StoredProcedure);
+
+            if (row == null) return null;
+
+            var exam = new Examination
+            {
+                ExaminationId = (int)row.ExamId,
+                ExamCode = (string?)row.ExamCode,
+                ExamName = (string)row.ExamName,
+                BoardId = (int)row.BoardId,
+                AcademicYearId = (int)row.AcademicYearId,
+                AcademicLevelId = (int)row.AcademicLevelId,
+                GroupId = (int)row.GroupId,
+                ProgramId = (int?)row.ProgramId,
+                AssessmentTypeId = (int)row.AssessmentTypeId,
+                StartDate = row.StartDate is DateTime dtStart ? DateOnly.FromDateTime(dtStart) : (row.StartDate is DateOnly dStart ? dStart : DateOnly.FromDateTime(Convert.ToDateTime(row.StartDate))),
+                EndDate = row.EndDate is DateTime dtEnd ? DateOnly.FromDateTime(dtEnd) : (row.EndDate is DateOnly dEnd ? dEnd : DateOnly.FromDateTime(Convert.ToDateTime(row.EndDate))),
+                Description = (string?)row.Description,
+                ExamPattern = (string?)row.ExamPattern,
+                TotalMarks = (int?)row.TotalMarks,
+                PassPercentage = row.PassPercentage != null ? Convert.ToDecimal(row.PassPercentage) : null,
+                Status = (string)(row.Status ?? "DRAFT"),
+                IsActive = Convert.ToBoolean(row.IsActive),
+                CreatedAt = (DateTime)row.CreatedAt,
+                UpdatedAt = (DateTime?)row.UpdatedAt,
+                Board = new Board { BoardId = (int)row.BoardId, BoardName = (string)(row.BoardName ?? string.Empty) },
+                AcademicYear = new AcademicYear { AcademicYearId = (int)row.AcademicYearId, AcademicYearName = (string)(row.AcademicYearName ?? row.AcademicYear ?? string.Empty) },
+                AcademicLevel = new AcademicLevel { AcademicLevelId = (int)row.AcademicLevelId, LevelName = (string)(row.AcademicLevelName ?? row.AcademicLevel ?? string.Empty) },
+                Group = new Group { GroupId = (int)row.GroupId, GroupName = (string)(row.GroupName ?? string.Empty) },
+                Program = row.ProgramId != null ? new AcademicProgram { ProgramId = (int)row.ProgramId, ProgramName = (string)(row.ProgramName ?? string.Empty) } : null,
+                AssessmentType = new AssessmentType { AssessmentTypeId = (int)row.AssessmentTypeId, AssessmentTypeName = (string)(row.ExamType ?? string.Empty) }
+            };
+
+            var schedules = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
+                "sp_GetExamSchedulesByExamination",
+                (schedule, subject) =>
+                {
+                    schedule.Subject = subject;
+                    return schedule;
+                },
+                p,
+                splitOn: "SubjectName",
+                commandType: CommandType.StoredProcedure);
+
+            exam.ExamSchedules = schedules.ToList();
+
+            return exam;
         }
 
         public async Task<IEnumerable<Examination>> GetExaminationsAsync(ExaminationSearchRequestDto filter)
         {
-            var query = _context.Examinations
-                .AsNoTracking()
-                .AsSplitQuery()
-                .Include(e => e.Board)
-                .Include(e => e.AcademicYear)
-                .Include(e => e.AcademicLevel)
-                .Include(e => e.Group)
-                .Include(e => e.Program)
-                .Include(e => e.AssessmentType)
-                .Include(e => e.ExamSchedules.Where(s => s.IsActive))
-                    .ThenInclude(s => s.Subject)
-                .Where(e => e.IsActive)
-                .AsQueryable();
+            var p = new DynamicParameters();
+            p.Add("p_BoardId", filter.BoardId > 0 ? filter.BoardId : null);
+            p.Add("p_AcademicYearId", filter.AcademicYearId > 0 ? filter.AcademicYearId : null);
+            p.Add("p_AcademicLevelId", filter.AcademicLevelId > 0 ? filter.AcademicLevelId : null);
+            p.Add("p_GroupId", filter.GroupId > 0 ? filter.GroupId : null);
+            p.Add("p_ProgramId", filter.ProgramId > 0 ? filter.ProgramId : null);
+            p.Add("p_AssessmentTypeId", filter.AssessmentTypeId > 0 ? filter.AssessmentTypeId : null);
+            p.Add("p_Status", string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status);
+            p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter.SearchTerm) ? null : filter.SearchTerm);
 
-            if (filter.BoardId.HasValue && filter.BoardId.Value > 0)
-                query = query.Where(e => e.BoardId == filter.BoardId.Value);
+            var rows = await Connection.QueryAsync<dynamic>(
+                "sp_GetExaminations",
+                p,
+                commandType: CommandType.StoredProcedure);
 
-            if (filter.AcademicYearId.HasValue && filter.AcademicYearId.Value > 0)
-                query = query.Where(e => e.AcademicYearId == filter.AcademicYearId.Value);
-
-            if (filter.AcademicLevelId.HasValue && filter.AcademicLevelId.Value > 0)
-                query = query.Where(e => e.AcademicLevelId == filter.AcademicLevelId.Value);
-
-            if (filter.GroupId.HasValue && filter.GroupId.Value > 0)
-                query = query.Where(e => e.GroupId == filter.GroupId.Value);
-
-            if (filter.ProgramId.HasValue && filter.ProgramId.Value > 0)
-                query = query.Where(e => e.ProgramId == filter.ProgramId.Value);
-
-            if (filter.AssessmentTypeId.HasValue && filter.AssessmentTypeId.Value > 0)
-                query = query.Where(e => e.AssessmentTypeId == filter.AssessmentTypeId.Value);
-
-            if (!string.IsNullOrWhiteSpace(filter.ExamType))
-                query = query.Where(e => e.AssessmentType != null && e.AssessmentType.AssessmentTypeName.ToLower().Contains(filter.ExamType.ToLower()));
-
-            if (!string.IsNullOrWhiteSpace(filter.Status))
-                query = query.Where(e => e.Status.ToLower() == filter.Status.ToLower());
-
-            if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
+            return rows.Select(row => new Examination
             {
-                var search = filter.SearchTerm.Trim().ToLower();
-                query = query.Where(e =>
-                    e.ExamName.ToLower().Contains(search) ||
-                    (e.ExamCode != null && e.ExamCode.ToLower().Contains(search)) ||
-                    (e.Group != null && e.Group.GroupName.ToLower().Contains(search)) ||
-                    (e.Program != null && e.Program.ProgramName.ToLower().Contains(search)));
-            }
-
-            return await query.OrderByDescending(e => e.ExaminationId).ToListAsync();
+                ExaminationId = (int)row.ExamId,
+                ExamCode = (string?)row.ExamCode,
+                ExamName = (string)row.ExamName,
+                BoardId = (int)row.BoardId,
+                AcademicYearId = (int)row.AcademicYearId,
+                AcademicLevelId = (int)row.AcademicLevelId,
+                GroupId = (int)row.GroupId,
+                ProgramId = (int?)row.ProgramId,
+                AssessmentTypeId = (int)row.AssessmentTypeId,
+                StartDate = row.StartDate is DateTime dtStart ? DateOnly.FromDateTime(dtStart) : (row.StartDate is DateOnly dStart ? dStart : DateOnly.FromDateTime(Convert.ToDateTime(row.StartDate))),
+                EndDate = row.EndDate is DateTime dtEnd ? DateOnly.FromDateTime(dtEnd) : (row.EndDate is DateOnly dEnd ? dEnd : DateOnly.FromDateTime(Convert.ToDateTime(row.EndDate))),
+                Description = (string?)row.Description,
+                ExamPattern = (string?)row.ExamPattern,
+                TotalMarks = (int?)row.TotalMarks,
+                PassPercentage = row.PassPercentage != null ? Convert.ToDecimal(row.PassPercentage) : null,
+                Status = (string)(row.Status ?? "DRAFT"),
+                IsActive = Convert.ToBoolean(row.IsActive),
+                CreatedAt = (DateTime)row.CreatedAt,
+                UpdatedAt = (DateTime?)row.UpdatedAt,
+                Board = new Board { BoardId = (int)row.BoardId, BoardName = (string)(row.BoardName ?? string.Empty) },
+                AcademicYear = new AcademicYear { AcademicYearId = (int)row.AcademicYearId, AcademicYearName = (string)(row.AcademicYearName ?? row.AcademicYear ?? string.Empty) },
+                AcademicLevel = new AcademicLevel { AcademicLevelId = (int)row.AcademicLevelId, LevelName = (string)(row.AcademicLevelName ?? row.AcademicLevel ?? string.Empty) },
+                Group = new Group { GroupId = (int)row.GroupId, GroupName = (string)(row.GroupName ?? string.Empty) },
+                Program = row.ProgramId != null ? new AcademicProgram { ProgramId = (int)row.ProgramId, ProgramName = (string)(row.ProgramName ?? string.Empty) } : null,
+                AssessmentType = new AssessmentType { AssessmentTypeId = (int)row.AssessmentTypeId, AssessmentTypeName = (string)(row.ExamType ?? string.Empty) }
+            }).ToList();
         }
 
         public async Task<IEnumerable<ExaminationResponse>> GetExaminationResponsesAsync(ExaminationSearchRequestDto filter)
         {
-            // 1. Try Stored Procedure sp_GetExaminations with parameters
-            try
-            {
-                var p = new DynamicParameters();
-                p.Add("p_BoardId", filter.BoardId > 0 ? filter.BoardId : null);
-                p.Add("p_AcademicYearId", filter.AcademicYearId > 0 ? filter.AcademicYearId : null);
-                p.Add("p_AcademicLevelId", filter.AcademicLevelId > 0 ? filter.AcademicLevelId : null);
-                p.Add("p_GroupId", filter.GroupId > 0 ? filter.GroupId : null);
-                p.Add("p_ProgramId", filter.ProgramId > 0 ? filter.ProgramId : null);
-                p.Add("p_AssessmentTypeId", filter.AssessmentTypeId > 0 ? filter.AssessmentTypeId : null);
-                p.Add("p_Status", string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status);
-                p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter.SearchTerm) ? null : filter.SearchTerm);
+            var p = new DynamicParameters();
+            p.Add("p_BoardId", filter.BoardId > 0 ? filter.BoardId : null);
+            p.Add("p_AcademicYearId", filter.AcademicYearId > 0 ? filter.AcademicYearId : null);
+            p.Add("p_AcademicLevelId", filter.AcademicLevelId > 0 ? filter.AcademicLevelId : null);
+            p.Add("p_GroupId", filter.GroupId > 0 ? filter.GroupId : null);
+            p.Add("p_ProgramId", filter.ProgramId > 0 ? filter.ProgramId : null);
+            p.Add("p_AssessmentTypeId", filter.AssessmentTypeId > 0 ? filter.AssessmentTypeId : null);
+            p.Add("p_Status", string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status);
+            p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter.SearchTerm) ? null : filter.SearchTerm);
 
-                var spResults = await Connection.QueryAsync<ExaminationResponse>(
-                    "sp_GetExaminations",
-                    p,
-                    commandType: CommandType.StoredProcedure);
+            var results = await Connection.QueryAsync<ExaminationResponse>(
+                "sp_GetExaminations",
+                p,
+                commandType: CommandType.StoredProcedure);
 
-                if (spResults != null && spResults.Any())
-                {
-                    return spResults.ToList();
-                }
-            }
-            catch
-            {
-                // If sp_GetExaminations in DB has 0 parameters, try calling without parameters
-                try
-                {
-                    var spResults = await Connection.QueryAsync<ExaminationResponse>(
-                        "sp_GetExaminations",
-                        commandType: CommandType.StoredProcedure);
-
-                    if (spResults != null && spResults.Any())
-                    {
-                        var filtered = spResults.AsEnumerable();
-                        if (filter.BoardId.HasValue && filter.BoardId > 0)
-                            filtered = filtered.Where(x => x.BoardId == filter.BoardId.Value);
-                        if (filter.AcademicYearId.HasValue && filter.AcademicYearId > 0)
-                            filtered = filtered.Where(x => x.AcademicYearId == filter.AcademicYearId.Value);
-                        if (filter.AcademicLevelId.HasValue && filter.AcademicLevelId > 0)
-                            filtered = filtered.Where(x => x.AcademicLevelId == filter.AcademicLevelId.Value);
-                        if (filter.GroupId.HasValue && filter.GroupId > 0)
-                            filtered = filtered.Where(x => x.GroupId == filter.GroupId.Value);
-                        if (filter.ProgramId.HasValue && filter.ProgramId > 0)
-                            filtered = filtered.Where(x => x.ProgramId == filter.ProgramId.Value);
-                        if (filter.AssessmentTypeId.HasValue && filter.AssessmentTypeId > 0)
-                            filtered = filtered.Where(x => x.AssessmentTypeId == filter.AssessmentTypeId.Value);
-                        if (!string.IsNullOrWhiteSpace(filter.Status))
-                            filtered = filtered.Where(x => string.Equals(x.Status, filter.Status, StringComparison.OrdinalIgnoreCase));
-                        if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
-                        {
-                            var s = filter.SearchTerm.Trim().ToLower();
-                            filtered = filtered.Where(x => (x.ExamName != null && x.ExamName.ToLower().Contains(s)) ||
-                                                           (x.ExamCode != null && x.ExamCode.ToLower().Contains(s)) ||
-                                                           (x.GroupName != null && x.GroupName.ToLower().Contains(s)) ||
-                                                           (x.ProgramName != null && x.ProgramName.ToLower().Contains(s)));
-                        }
-                        return filtered.ToList();
-                    }
-                }
-                catch
-                {
-                    // Fallback to EF Core below
-                }
-            }
-
-            // 2. Fallback to EF Core with pre-aggregated counts (eliminates N+1 queries)
-            var exams = await GetExaminationsAsync(filter);
-
-            var subjectCounts = await _context.Subjects
-                .AsNoTracking()
-                .Where(s => s.IsActive)
-                .GroupBy(s => new { s.BoardId, s.AcademicLevelId, s.GroupId })
-                .Select(g => new { g.Key.BoardId, g.Key.AcademicLevelId, g.Key.GroupId, Count = g.Count() })
-                .ToListAsync();
-
-            var countDict = subjectCounts.ToDictionary(
-                x => (x.BoardId, x.AcademicLevelId, x.GroupId),
-                x => x.Count);
-
-            var resultList = new List<ExaminationResponse>();
-            foreach (var exam in exams)
-            {
-                var resp = new ExaminationResponse
-                {
-                    ExaminationId = exam.ExaminationId,
-                    ExamCode = exam.ExamCode ?? string.Empty,
-                    ExamName = exam.ExamName,
-                    BoardId = exam.BoardId,
-                    BoardName = exam.Board?.BoardName ?? string.Empty,
-                    AcademicYearId = exam.AcademicYearId,
-                    AcademicYear = exam.AcademicYear?.AcademicYearName ?? string.Empty,
-                    AcademicLevelId = exam.AcademicLevelId,
-                    AcademicLevel = exam.AcademicLevel?.LevelName ?? string.Empty,
-                    GroupId = exam.GroupId,
-                    GroupName = exam.Group?.GroupName ?? string.Empty,
-                    ProgramId = exam.ProgramId,
-                    ProgramName = exam.Program?.ProgramName ?? "All Programs",
-                    AssessmentTypeId = exam.AssessmentTypeId,
-                    ExamType = exam.AssessmentType?.AssessmentTypeName ?? string.Empty,
-                    ExamPattern = !string.IsNullOrEmpty(exam.ExamPattern) ? exam.ExamPattern : "REGULAR_ACADEMIC",
-                    StartDate = exam.StartDate,
-                    EndDate = exam.EndDate,
-                    TotalMarks = exam.TotalMarks,
-                    PassPercentage = exam.PassPercentage,
-                    Description = exam.Description,
-                    Status = exam.Status,
-                    TotalEligibleSubjects = countDict.GetValueOrDefault((exam.BoardId, exam.AcademicLevelId, exam.GroupId), 0),
-                    ScheduledSubjectsCount = exam.ExamSchedules?.Count(s => s.IsActive) ?? 0,
-                    CreatedAt = exam.CreatedAt,
-                    UpdatedAt = exam.UpdatedAt,
-                    Schedules = exam.ExamSchedules?.Select(s => new ExamScheduleResponse
-                    {
-                        ExamScheduleId = s.ExamScheduleId,
-                        ExaminationId = s.ExaminationId,
-                        SubjectId = s.SubjectId,
-                        SubjectName = s.Subject?.SubjectName ?? string.Empty,
-                        SubjectCode = s.Subject?.SubjectCode ?? string.Empty,
-                        ExamDate = s.ExamDate,
-                        StartTime = s.StartTime,
-                        EndTime = s.EndTime,
-                        Hall = s.Hall ?? string.Empty,
-                        Status = s.IsActive ? "Scheduled" : "Cancelled"
-                    }).ToList() ?? new List<ExamScheduleResponse>()
-                };
-                resultList.Add(resp);
-            }
-
-            return resultList;
+            return results.ToList();
         }
 
         public async Task UpdateExaminationAsync(Examination examination)
         {
-            examination.UpdatedAt = DateTime.UtcNow;
-            _context.Examinations.Update(examination);
-            await _context.SaveChangesAsync();
+            var p = new DynamicParameters();
+            p.Add("p_ExamId", examination.ExaminationId);
+            p.Add("p_ExamName", examination.ExamName);
+            p.Add("p_BoardId", examination.BoardId);
+            p.Add("p_AcademicYearId", examination.AcademicYearId);
+            p.Add("p_AcademicLevelId", examination.AcademicLevelId);
+            p.Add("p_GroupId", examination.GroupId);
+            p.Add("p_ProgramId", examination.ProgramId);
+            p.Add("p_AssessmentTypeId", examination.AssessmentTypeId);
+            p.Add("p_StartDate", examination.StartDate.ToDateTime(TimeOnly.MinValue));
+            p.Add("p_EndDate", examination.EndDate.ToDateTime(TimeOnly.MinValue));
+            p.Add("p_Description", examination.Description);
+            p.Add("p_ExamPattern", examination.ExamPattern);
+            p.Add("p_TotalMarks", examination.TotalMarks);
+            p.Add("p_PassPercentage", examination.PassPercentage);
+            p.Add("p_Status", examination.Status);
+
+            await Connection.ExecuteAsync(
+                "sp_UpdateExamination",
+                p,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> DeleteExaminationAsync(Examination examination)
         {
-            // Perform soft delete
-            examination.IsActive = false;
-            examination.UpdatedAt = DateTime.UtcNow;
-            _context.Examinations.Update(examination);
-            return await _context.SaveChangesAsync() > 0;
+            var rows = await Connection.ExecuteAsync(
+                "sp_DeleteExamination",
+                new { p_ExamId = examination.ExaminationId },
+                commandType: CommandType.StoredProcedure);
+            return rows > 0;
         }
 
         #endregion
@@ -365,162 +321,160 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var rm = await _context.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == schedule.RoomId.Value);
                 if (rm != null)
                 {
-                    schedule.Hall = !string.IsNullOrWhiteSpace(rm.RoomNumber) ? rm.RoomNumber : rm.RoomName;
+                    schedule.Hall = !string.IsNullOrWhiteSpace(rm.RoomNumber) ? rm.RoomNumber : (rm.RoomName ?? string.Empty);
                 }
             }
 
-            try
-            {
-                var newId = await Connection.ExecuteScalarAsync<int>(
-                    "sp_CreateExamSchedule",
-                    new
-                    {
-                        p_ExamId = schedule.ExaminationId,
-                        p_SubjectId = schedule.SubjectId,
-                        p_ExamDate = schedule.ExamDate.ToDateTime(TimeOnly.MinValue),
-                        p_StartTime = schedule.StartTime.ToTimeSpan(),
-                        p_EndTime = schedule.EndTime.ToTimeSpan(),
-                        p_SessionId = schedule.SessionId,
-                        p_ScheduleMode = schedule.ScheduleMode,
-                        p_RoomId = schedule.RoomId,
-                        p_InvigilatorId = schedule.InvigilatorId,
-                        p_Hall = schedule.Hall,
-                        p_Invigilator = schedule.Invigilator,
-                        p_ExamMode = schedule.ExamMode,
-                        p_MaxMarks = schedule.MaxMarks,
-                        p_PassingMarks = schedule.PassingMarks
-                    },
-                    commandType: CommandType.StoredProcedure);
+            var p = new DynamicParameters();
+            p.Add("p_ExamId", schedule.ExaminationId);
+            p.Add("p_SubjectId", schedule.SubjectId);
+            p.Add("p_ExamDate", schedule.ExamDate.ToDateTime(TimeOnly.MinValue));
+            p.Add("p_StartTime", schedule.StartTime.ToTimeSpan());
+            p.Add("p_EndTime", schedule.EndTime.ToTimeSpan());
+            p.Add("p_SessionId", schedule.SessionId);
+            p.Add("p_ScheduleMode", schedule.ScheduleMode);
+            p.Add("p_RoomId", schedule.RoomId);
+            p.Add("p_InvigilatorId", schedule.InvigilatorId);
+            p.Add("p_Hall", schedule.Hall);
+            p.Add("p_Invigilator", schedule.Invigilator);
+            p.Add("p_ExamMode", schedule.ExamMode);
+            p.Add("p_MaxMarks", schedule.MaxMarks);
+            p.Add("p_PassingMarks", schedule.PassingMarks);
 
-                if (newId > 0)
-                {
-                    schedule.ExamScheduleId = newId;
-                    return schedule;
-                }
-            }
-            catch
-            {
-                // Fallback to EF Core if SP has not yet been executed in database
-            }
+            var newId = await Connection.ExecuteScalarAsync<int>(
+                "sp_CreateExamSchedule",
+                p,
+                commandType: CommandType.StoredProcedure);
 
-            schedule.CreatedAt = DateTime.UtcNow;
-            _context.ExamSchedules.Add(schedule);
-            await _context.SaveChangesAsync();
+            schedule.ExamScheduleId = newId;
             return schedule;
         }
 
         public async Task<ExamSchedule?> GetExamScheduleByIdAsync(int examScheduleId)
         {
-            return await _context.ExamSchedules
-                .AsNoTracking()
-                .Include(s => s.Examination)
-                .Include(s => s.Subject)
-                .FirstOrDefaultAsync(s => s.ExamScheduleId == examScheduleId);
+            var p = new DynamicParameters();
+            p.Add("p_ExamScheduleId", examScheduleId);
+
+            var results = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
+                "sp_GetExamScheduleById",
+                (schedule, subject) =>
+                {
+                    schedule.Subject = subject;
+                    return schedule;
+                },
+                p,
+                splitOn: "SubjectName",
+                commandType: CommandType.StoredProcedure);
+
+            return results.FirstOrDefault();
         }
 
         public async Task<IEnumerable<ExamSchedule>> GetExamSchedulesAsync(int? examinationId)
         {
-            var query = _context.ExamSchedules
-                .AsNoTracking()
-                .Include(s => s.Examination)
-                .Include(s => s.Subject)
-                .Where(s => s.IsActive)
-                .AsQueryable();
+            var p = new DynamicParameters();
+            p.Add("p_ExaminationId", examinationId ?? 0);
 
-            if (examinationId.HasValue)
-            {
-                query = query.Where(s => s.ExaminationId == examinationId.Value);
-            }
+            var results = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
+                "sp_GetExamSchedulesByExamination",
+                (schedule, subject) =>
+                {
+                    schedule.Subject = subject;
+                    return schedule;
+                },
+                p,
+                splitOn: "SubjectName",
+                commandType: CommandType.StoredProcedure);
 
-            return await query.OrderBy(s => s.ExamDate).ThenBy(s => s.StartTime).ToListAsync();
+            return results;
         }
 
         public async Task UpdateExamScheduleAsync(ExamSchedule schedule)
         {
-            schedule.UpdatedAt = DateTime.UtcNow;
-            _context.ExamSchedules.Update(schedule);
-            await _context.SaveChangesAsync();
+            var p = new DynamicParameters();
+            p.Add("p_ScheduleId", schedule.ExamScheduleId);
+            p.Add("p_SubjectId", schedule.SubjectId);
+            p.Add("p_ExamDate", schedule.ExamDate.ToDateTime(TimeOnly.MinValue));
+            p.Add("p_StartTime", schedule.StartTime.ToTimeSpan());
+            p.Add("p_EndTime", schedule.EndTime.ToTimeSpan());
+            p.Add("p_SessionId", schedule.SessionId);
+            p.Add("p_ScheduleMode", schedule.ScheduleMode);
+            p.Add("p_RoomId", schedule.RoomId);
+            p.Add("p_InvigilatorId", schedule.InvigilatorId);
+            p.Add("p_Hall", schedule.Hall);
+            p.Add("p_Invigilator", schedule.Invigilator);
+            p.Add("p_ExamMode", schedule.ExamMode);
+            p.Add("p_MaxMarks", schedule.MaxMarks);
+            p.Add("p_PassingMarks", schedule.PassingMarks);
+
+            await Connection.ExecuteAsync(
+                "sp_UpdateExamSchedule",
+                p,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> DeleteExamScheduleAsync(ExamSchedule schedule)
         {
-            schedule.IsActive = false;
-            schedule.UpdatedAt = DateTime.UtcNow;
-            _context.ExamSchedules.Update(schedule);
-            return await _context.SaveChangesAsync() > 0;
+            var rows = await Connection.ExecuteAsync(
+                "sp_DeleteExamSchedule",
+                new { p_ScheduleId = schedule.ExamScheduleId },
+                commandType: CommandType.StoredProcedure);
+            return rows > 0;
         }
 
         public async Task<int> PublishExamSchedulesAsync(IEnumerable<int> scheduleIds)
         {
-            var schedules = await _context.ExamSchedules
-                .Where(s => scheduleIds.Contains(s.ExamScheduleId))
-                .ToListAsync();
-
-            foreach (var schedule in schedules)
-            {
-                schedule.IsActive = true;
-                schedule.UpdatedAt = DateTime.UtcNow;
-            }
-
-            return await _context.SaveChangesAsync();
+            var idsStr = string.Join(",", scheduleIds);
+            return await Connection.ExecuteAsync(
+                "sp_PublishExamSchedules",
+                new { p_ScheduleIds = idsStr },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<IEnumerable<Subject>> GetEligibleSubjectsForExamAsync(int examinationId)
         {
-            try
-            {
-                var spSubjects = await Connection.QueryAsync<Subject>(
-                    "sp_GetEligibleSubjectsForExam",
-                    new { p_ExaminationId = examinationId },
-                    commandType: CommandType.StoredProcedure);
-
-                if (spSubjects != null && spSubjects.Any())
-                {
-                    return spSubjects;
-                }
-            }
-            catch
-            {
-                // Fallback to EF Core if SP does not exist yet
-            }
-
-            var exam = await _context.Examinations
-                .AsNoTracking()
-                .FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
-            if (exam == null) return Enumerable.Empty<Subject>();
-
-            return await _context.Subjects
-                .AsNoTracking()
-                .Where(s => s.IsActive
-                    && s.BoardId == exam.BoardId
-                    && s.AcademicLevelId == exam.AcademicLevelId
-                    && s.GroupId == exam.GroupId)
-                .OrderBy(s => s.SubjectName)
-                .ToListAsync();
+            var subjects = await Connection.QueryAsync<Subject>(
+                "sp_GetEligibleSubjectsForExam",
+                new { p_ExaminationId = examinationId },
+                commandType: CommandType.StoredProcedure);
+            return subjects;
         }
 
         public async Task<bool> HasRoomConflictAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, string hall, int? excludeScheduleId = null)
         {
             if (string.IsNullOrWhiteSpace(hall)) return false;
 
-            return await _context.ExamSchedules
-                .AnyAsync(s => s.IsActive
-                    && s.ExamDate == examDate
-                    && s.Hall.ToLower() == hall.Trim().ToLower()
-                    && (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value)
-                    && !(endTime <= s.StartTime || startTime >= s.EndTime));
+            var count = await Connection.ExecuteScalarAsync<int>(
+                "sp_CheckRoomConflict",
+                new
+                {
+                    p_ExamDate = examDate.ToDateTime(TimeOnly.MinValue),
+                    p_StartTime = startTime.ToTimeSpan(),
+                    p_EndTime = endTime.ToTimeSpan(),
+                    p_Hall = hall,
+                    p_ExcludeScheduleId = excludeScheduleId ?? 0
+                },
+                commandType: CommandType.StoredProcedure);
+
+            return count > 0;
         }
 
         public async Task<bool> HasInvigilatorConflictAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, string invigilator, int? excludeScheduleId = null)
         {
             if (string.IsNullOrWhiteSpace(invigilator)) return false;
 
-            return await _context.ExamSchedules
-                .AnyAsync(s => s.IsActive
-                    && s.ExamDate == examDate
-                    && s.Invigilator.ToLower() == invigilator.Trim().ToLower()
-                    && (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value)
-                    && !(endTime <= s.StartTime || startTime >= s.EndTime));
+            var count = await Connection.ExecuteScalarAsync<int>(
+                "sp_CheckInvigilatorConflict",
+                new
+                {
+                    p_ExamDate = examDate.ToDateTime(TimeOnly.MinValue),
+                    p_StartTime = startTime.ToTimeSpan(),
+                    p_EndTime = endTime.ToTimeSpan(),
+                    p_Invigilator = invigilator,
+                    p_ExcludeScheduleId = excludeScheduleId ?? 0
+                },
+                commandType: CommandType.StoredProcedure);
+
+            return count > 0;
         }
 
         public async Task<IEnumerable<Models.Timetable.Room>> GetAvailableHallsAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, int? excludeScheduleId = null)
@@ -599,45 +553,176 @@ namespace CollegeManagement.API.Repositories.Implementations
         #endregion
 
         #region Hall Ticket Methods
+
         public async Task<IEnumerable<HallTicket>> GenerateHallTicketsAsync(int examinationId, int batchId)
         {
-            var existingTickets = await _context.HallTickets
-                .Where(h => h.ExaminationId == examinationId && h.BatchId == batchId)
-                .ToListAsync();
+            var p = new DynamicParameters();
+            p.Add("p_ExaminationId", examinationId);
+            p.Add("p_BatchId", batchId);
 
-            if (existingTickets.Any())
-            {
-                return existingTickets;
-            }
+            var results = await Connection.QueryAsync<HallTicket, Student, HallTicket>(
+                "sp_GenerateHallTickets",
+                (ticket, student) =>
+                {
+                    ticket.Student = student;
+                    return ticket;
+                },
+                p,
+                splitOn: "StudentName",
+                commandType: CommandType.StoredProcedure);
 
-            var users = await _context.Users.ToListAsync();
-
-            var newTickets = users.Select(u => new HallTicket
-            {
-                ExaminationId = examinationId,
-                StudentId = u.UserId,
-                BatchId = batchId,
-                GeneratedAt = DateTime.UtcNow
-            }).ToList();
-
-            _context.HallTickets.AddRange(newTickets);
-            await _context.SaveChangesAsync();
-
-            return newTickets;
+            return results;
         }
-
-
-
-
 
         public async Task<Stream?> GetHallTicketPdfStreamAsync(int studentId, int examinationId)
         {
             var ticket = await _context.HallTickets
+                .Include(h => h.Student)
+                .Include(h => h.Examination)
                 .FirstOrDefaultAsync(h => h.StudentId == studentId && h.ExaminationId == examinationId);
 
-            if (ticket == null) return null;
+            var student = ticket?.Student ?? await _context.Students.FirstOrDefaultAsync(s => s.StudentId == studentId);
+            var exam = ticket?.Examination ?? await _context.Examinations.FirstOrDefaultAsync(e => e.ExaminationId == examinationId);
 
-            return new MemoryStream();
+            if (student == null || exam == null)
+            {
+                return null;
+            }
+
+            var schedules = await _context.ExamSchedules
+                .Include(s => s.Subject)
+                .Where(s => s.ExaminationId == examinationId && s.IsActive)
+                .OrderBy(s => s.ExamDate)
+                .ThenBy(s => s.StartTime)
+                .ToListAsync();
+
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            var pdfBytes = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Portrait());
+                    page.Margin(30);
+                    page.PageColor(Colors.White);
+                    page.DefaultTextStyle(x => x.FontSize(9).FontFamily("Arial"));
+
+                    // Header
+                    page.Header().Column(col =>
+                    {
+                        col.Item().AlignCenter().Text(t =>
+                        {
+                            t.Span("COLLEGE MANAGEMENT SYSTEM").FontSize(16).Bold().FontColor(Colors.Green.Darken3);
+                        });
+                        col.Item().AlignCenter().Text("EXAMINATION HALL TICKET / ADMIT CARD").FontSize(12).Bold().FontColor(Colors.Grey.Darken3);
+                        col.Item().PaddingVertical(5).LineHorizontal(1).LineColor(Colors.Green.Darken2);
+                    });
+
+                    // Content
+                    page.Content().Column(col =>
+                    {
+                        // Student & Exam Details Box
+                        col.Item().Border(1).BorderColor(Colors.Grey.Lighten1).Padding(10).Row(row =>
+                        {
+                            row.RelativeItem(3).Column(info =>
+                            {
+                                info.Item().Text(t => { t.Span("Student Name: ").Bold(); t.Span(student.StudentName); });
+                                info.Item().Text(t => { t.Span("Roll Number: ").Bold(); t.Span(!string.IsNullOrEmpty(student.RollNo) ? student.RollNo : student.AdmissionNo); });
+                                info.Item().Text(t => { t.Span("Admission No: ").Bold(); t.Span(student.AdmissionNo); });
+                                info.Item().Text(t => { t.Span("Examination: ").Bold(); t.Span($"{exam.ExamName} ({(string.IsNullOrEmpty(exam.ExamCode) ? exam.ExaminationId.ToString() : exam.ExamCode)})"); });
+                            });
+
+                            row.RelativeItem(2).Column(info =>
+                            {
+                                info.Item().Text(t => { t.Span("Exam Window: ").Bold(); t.Span($"{exam.StartDate:dd-MMM-yyyy} to {exam.EndDate:dd-MMM-yyyy}"); });
+                                info.Item().Text(t => { t.Span("Gender: ").Bold(); t.Span(student.Gender); });
+                                info.Item().Text(t => { t.Span("Generated On: ").Bold(); t.Span(DateTime.UtcNow.ToString("dd-MMM-yyyy HH:mm")); });
+                            });
+                        });
+
+                        col.Item().PaddingVertical(10).Text("EXAMINATION TIMETABLE").FontSize(11).Bold().FontColor(Colors.Green.Darken3);
+
+                        // Timetable Table
+                        col.Item().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.ConstantColumn(35);
+                                columns.RelativeColumn(2);
+                                columns.RelativeColumn(4);
+                                columns.RelativeColumn(3);
+                                columns.RelativeColumn(3);
+                                columns.RelativeColumn(2);
+                            });
+
+                            table.Header(header =>
+                            {
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("#").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Subject Code").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Subject Name").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Exam Date").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Time").Bold().FontColor(Colors.White);
+                                header.Cell().Background(Colors.Green.Darken3).Padding(5).Text("Hall / Room").Bold().FontColor(Colors.White);
+                            });
+
+                            int idx = 1;
+                            foreach (var s in schedules)
+                            {
+                                var bg = idx % 2 == 0 ? Colors.Grey.Lighten4 : Colors.White;
+                                var subjectName = s.Subject?.SubjectName ?? $"Subject #{s.SubjectId}";
+                                var subjectCode = s.Subject?.SubjectCode ?? "-";
+                                var hallName = !string.IsNullOrEmpty(s.Hall) ? s.Hall : (s.RoomId.HasValue ? $"Room {s.RoomId}" : "TBA");
+
+                                table.Cell().Background(bg).Padding(5).Text(idx.ToString());
+                                table.Cell().Background(bg).Padding(5).Text(subjectCode);
+                                table.Cell().Background(bg).Padding(5).Text(subjectName);
+                                table.Cell().Background(bg).Padding(5).Text(s.ExamDate.ToString("dd-MMM-yyyy"));
+                                table.Cell().Background(bg).Padding(5).Text($"{s.StartTime:HH:mm} - {s.EndTime:HH:mm}");
+                                table.Cell().Background(bg).Padding(5).Text(hallName);
+                                idx++;
+                            }
+                        });
+
+                        // Instructions to Candidate
+                        col.Item().PaddingTop(15).Text("IMPORTANT INSTRUCTIONS TO CANDIDATES:").Bold().FontSize(9).FontColor(Colors.Red.Darken2);
+                        col.Item().PaddingTop(3).Column(inst =>
+                        {
+                            inst.Item().Text("1. Candidates must carry this Hall Ticket and a valid College Identity Card to the examination hall.");
+                            inst.Item().Text("2. Candidates should be seated in the examination hall at least 15 minutes before the commencement of the exam.");
+                            inst.Item().Text("3. Electronic devices including mobile phones, smart watches, and programmable calculators are strictly prohibited.");
+                            inst.Item().Text("4. Candidates will not be permitted to leave the examination hall until half the time of the examination has elapsed.");
+                        });
+
+                        // Signature Section
+                        col.Item().PaddingTop(25).Row(sig =>
+                        {
+                            sig.RelativeItem().Column(c =>
+                            {
+                                c.Item().PaddingTop(25).LineHorizontal(1).LineColor(Colors.Grey.Medium);
+                                c.Item().AlignCenter().Text("Candidate's Signature").FontSize(8);
+                            });
+                            sig.ConstantItem(50);
+                            sig.RelativeItem().Column(c =>
+                            {
+                                c.Item().PaddingTop(25).LineHorizontal(1).LineColor(Colors.Grey.Medium);
+                                c.Item().AlignCenter().Text("Controller of Examinations").FontSize(8).Bold();
+                            });
+                        });
+                    });
+
+                    // Footer
+                    page.Footer().AlignCenter().Text(x =>
+                    {
+                        x.Span("Page ");
+                        x.CurrentPageNumber();
+                        x.Span(" of ");
+                        x.TotalPages();
+                        x.Span(" | This is a computer generated document.");
+                    });
+                });
+            }).GeneratePdf();
+
+            return new MemoryStream(pdfBytes);
         }
 
         #endregion
@@ -646,24 +731,26 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task AssignInvigilatorsAsync(int examScheduleId, IEnumerable<int> invigilatorIds, string hallNumber)
         {
-            var assignments = invigilatorIds.Select(id => new InvigilatorAssignment
+            foreach (var id in invigilatorIds)
             {
-                ExamScheduleId = examScheduleId,
-                InvigilatorId = id,
-                HallNumber = hallNumber,
-                AssignedAt = DateTime.UtcNow
-            });
-
-            _context.InvigilatorAssignments.AddRange(assignments);
-            await _context.SaveChangesAsync();
+                await Connection.ExecuteAsync(
+                    "sp_AssignInvigilator",
+                    new
+                    {
+                        p_ExamScheduleId = examScheduleId,
+                        p_InvigilatorId = id,
+                        p_HallNumber = hallNumber ?? string.Empty
+                    },
+                    commandType: CommandType.StoredProcedure);
+            }
         }
 
         public async Task<IEnumerable<InvigilatorAssignment>> GetInvigilatorsByScheduleIdAsync(int examScheduleId)
         {
-            return await _context.InvigilatorAssignments
-                .Include(i => i.Invigilator)
-                .Where(i => i.ExamScheduleId == examScheduleId)
-                .ToListAsync();
+            return await Connection.QueryAsync<InvigilatorAssignment>(
+                "sp_GetInvigilatorsBySchedule",
+                new { p_ExamScheduleId = examScheduleId },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<DTOs.Examination.Responses.SchedulingContextResponseDto> GetSchedulingContextAsync(int examinationId)

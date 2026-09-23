@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
   Edit3,
@@ -1410,6 +1410,24 @@ export default function BoardAcademicYearManagementPage() {
       breadcrumb={["Settings"]}
     >
       <main className="bay-page">
+        <div className="cms-back-nav-bar" style={{ marginBottom: "12px" }}>
+          <Link
+            to="/dashboard/settings"
+            className="cms-back-link"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              color: "var(--cms-primary, #355e3b)",
+              fontWeight: 650,
+              fontSize: "13px",
+              textDecoration: "none",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={16} /> Back to Settings
+          </Link>
+        </div>
         {!formOpen && !detailsOpen ? (
           <div className="bay-tabs" role="tablist" aria-label="Board and academic year sections">
             <button

@@ -67,70 +67,41 @@ namespace CollegeManagement.API.Repositories.Implementations
                     },
                     commandType: CommandType.StoredProcedure);
 
-                if (designations != null && designations.Any())
-                {
-                    return designations.ToList();
-                }
+                return designations.ToList();
             }
             catch
             {
-                // Fallback to direct optimized SQL with precomputed counts
-            }
-
-            const string fallbackSql = @"
-                SELECT 
-                    des.Id,
-                    des.Name,
-                    des.DepartmentId,
-                    COALESCE(d.DepartmentName, '') AS DepartmentName,
-                    COALESCE(d.DepartmentCode, '') AS DepartmentCode,
-                    COALESCE(des.StaffType, 'Both') AS StaffType,
-                    des.IsActive,
-                    des.CreatedAt,
-                    des.UpdatedAt,
-                    COUNT(CASE WHEN s.IsDeleted = 0 THEN s.Id END) AS AssignedStaffCount
-                FROM `Designations` des
-                LEFT JOIN `Departments` d ON d.DepartmentId = des.DepartmentId
-                LEFT JOIN `Staff` s ON s.DesignationId = des.Id
-                WHERE (@IncludeInactive = 1 OR des.IsActive = 1)
-                  AND (@DepartmentId IS NULL OR @DepartmentId <= 0 OR des.DepartmentId = @DepartmentId)
-                  AND (
-                      @StaffType IS NULL 
-                      OR TRIM(@StaffType) = '' 
-                      OR LOWER(TRIM(@StaffType)) = 'all' 
-                      OR (
-                          LOWER(REPLACE(REPLACE(CONVERT(@StaffType USING utf8mb4), '-', ''), '_', '')) = 'teaching'
-                          AND LOWER(REPLACE(REPLACE(CONVERT(des.StaffType USING utf8mb4), '-', ''), '_', '')) = 'teaching'
-                      )
-                      OR (
-                          LOWER(REPLACE(REPLACE(CONVERT(@StaffType USING utf8mb4), '-', ''), '_', '')) = 'nonteaching'
-                          AND LOWER(REPLACE(REPLACE(CONVERT(des.StaffType USING utf8mb4), '-', ''), '_', '')) = 'nonteaching'
-                      )
-                      OR LOWER(REPLACE(REPLACE(CONVERT(des.StaffType USING utf8mb4), '-', ''), '_', '')) = LOWER(REPLACE(REPLACE(CONVERT(@StaffType USING utf8mb4), '-', ''), '_', ''))
-                  )
-                GROUP BY 
-                    des.Id, 
-                    des.Name, 
-                    des.DepartmentId, 
-                    d.DepartmentName, 
-                    d.DepartmentCode, 
-                    des.StaffType, 
-                    des.IsActive, 
-                    des.CreatedAt, 
-                    des.UpdatedAt
-                ORDER BY des.Name ASC;";
-
-            var fallbackConn = await GetOpenConnectionAsync();
-            var results = await fallbackConn.QueryAsync<DesignationResponseDto>(
-                fallbackSql,
-                new
+                var query = _context.Designations.AsNoTracking().AsQueryable();
+                if (!includeInactive)
                 {
-                    IncludeInactive = includeInactive ? 1 : 0,
-                    StaffType = staffType ?? "",
-                    DepartmentId = departmentId ?? 0
-                });
+                    query = query.Where(d => d.IsActive);
+                }
+                if (departmentId.HasValue && departmentId.Value > 0)
+                {
+                    query = query.Where(d => d.DepartmentId == departmentId.Value);
+                }
+                if (!string.IsNullOrWhiteSpace(staffType) && !staffType.Equals("all", StringComparison.OrdinalIgnoreCase))
+                {
+                    query = query.Where(d => d.StaffType == staffType || d.StaffType == "Both");
+                }
 
-            return results.ToList();
+                var list = await query.OrderBy(d => d.Name).ToListAsync();
+                var deptDict = await _context.Departments.AsNoTracking().ToDictionaryAsync(d => d.DepartmentId, d => d);
+
+                return list.Select(d => new DesignationResponseDto
+                {
+                    Id = d.Id,
+                    Name = d.Name,
+                    DepartmentId = d.DepartmentId,
+                    DepartmentName = d.DepartmentId.HasValue && deptDict.TryGetValue(d.DepartmentId.Value, out var dept) ? dept.DepartmentName : "",
+                    DepartmentCode = d.DepartmentId.HasValue && deptDict.TryGetValue(d.DepartmentId.Value, out var dept2) ? dept2.DepartmentCode : "",
+                    StaffType = d.StaffType ?? "Both",
+                    IsActive = d.IsActive,
+                    CreatedAt = d.CreatedAt,
+                    UpdatedAt = d.UpdatedAt,
+                    AssignedStaffCount = _context.Staffs.Count(s => s.DesignationId == d.Id && !s.IsDeleted)
+                }).ToList();
+            }
         }
 
         public async Task<Designation?> GetByIdAsync(int id)
@@ -155,80 +126,74 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var conn = await GetOpenConnectionAsync();
-                var desig = await conn.QueryFirstOrDefaultAsync<DesignationResponseDto>(
+                return await conn.QueryFirstOrDefaultAsync<DesignationResponseDto>(
                     "sp_GetDesignationById",
                     new { p_DesignationId = id },
                     commandType: CommandType.StoredProcedure);
-
-                if (desig != null) return desig;
             }
-            catch { }
+            catch
+            {
+                var d = await _context.Designations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
+                if (d == null) return null;
 
-            const string fallbackSql = @"
-                SELECT 
-                    des.Id,
-                    des.Name,
-                    des.DepartmentId,
-                    COALESCE(d.DepartmentName, '') AS DepartmentName,
-                    COALESCE(d.DepartmentCode, '') AS DepartmentCode,
-                    COALESCE(des.StaffType, 'Both') AS StaffType,
-                    des.IsActive,
-                    des.CreatedAt,
-                    des.UpdatedAt,
-                    COUNT(CASE WHEN s.IsDeleted = 0 THEN s.Id END) AS AssignedStaffCount
-                FROM `Designations` des
-                LEFT JOIN `Departments` d ON d.DepartmentId = des.DepartmentId
-                LEFT JOIN `Staff` s ON s.DesignationId = des.Id
-                WHERE des.Id = @DesignationId
-                GROUP BY 
-                    des.Id, 
-                    des.Name, 
-                    des.DepartmentId, 
-                    d.DepartmentName, 
-                    d.DepartmentCode, 
-                    des.StaffType, 
-                    des.IsActive, 
-                    des.CreatedAt, 
-                    des.UpdatedAt
-                LIMIT 1;";
+                var dept = d.DepartmentId.HasValue ? await _context.Departments.AsNoTracking().FirstOrDefaultAsync(x => x.DepartmentId == d.DepartmentId.Value) : null;
 
-            var fallbackConn = await GetOpenConnectionAsync();
-            return await fallbackConn.QueryFirstOrDefaultAsync<DesignationResponseDto>(fallbackSql, new { DesignationId = id });
+                return new DesignationResponseDto
+                {
+                    Id = d.Id,
+                    Name = d.Name,
+                    DepartmentId = d.DepartmentId,
+                    DepartmentName = dept?.DepartmentName ?? "",
+                    DepartmentCode = dept?.DepartmentCode ?? "",
+                    StaffType = d.StaffType ?? "Both",
+                    IsActive = d.IsActive,
+                    CreatedAt = d.CreatedAt,
+                    UpdatedAt = d.UpdatedAt,
+                    AssignedStaffCount = await _context.Staffs.CountAsync(s => s.DesignationId == d.Id && !s.IsDeleted)
+                };
+            }
         }
 
         public async Task<Designation?> GetByNameAsync(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
-            var conn = await GetOpenConnectionAsync();
 
-            const string sql = @"
-                SELECT 
-                    des.Id,
-                    des.Name,
-                    des.DepartmentId,
-                    des.StaffType,
-                    des.IsActive,
-                    des.CreatedAt,
-                    des.UpdatedAt
-                FROM `Designations` des
-                WHERE LOWER(TRIM(des.Name)) = LOWER(TRIM(@Name))
-                LIMIT 1;";
-
-            return await conn.QueryFirstOrDefaultAsync<Designation>(sql, new { Name = name.Trim() });
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                return await conn.QueryFirstOrDefaultAsync<Designation>(
+                    "sp_GetDesignationByName",
+                    new { p_Name = name.Trim() },
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                var norm = name.Trim().ToLower();
+                return await _context.Designations.AsNoTracking().FirstOrDefaultAsync(d => d.Name.ToLower() == norm);
+            }
         }
 
         public async Task<bool> IsNameUniqueAsync(string name, int? excludeId = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return true;
-            var conn = await GetOpenConnectionAsync();
 
-            const string sql = @"
-                SELECT COUNT(*) FROM `Designations` 
-                WHERE LOWER(TRIM(Name)) = LOWER(TRIM(@Name)) 
-                  AND (@ExcludeId IS NULL OR Id != @ExcludeId);";
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                var count = await conn.ExecuteScalarAsync<int>(
+                    "sp_ValidateDesignationNameUnique",
+                    new { p_Name = name.Trim(), p_ExcludeId = excludeId },
+                    commandType: CommandType.StoredProcedure);
 
-            var count = await conn.ExecuteScalarAsync<int>(sql, new { Name = name.Trim(), ExcludeId = excludeId });
-            return count == 0;
+                return count == 0;
+            }
+            catch
+            {
+                var norm = name.Trim().ToLower();
+                return !await _context.Designations.AnyAsync(d =>
+                    d.Name.ToLower() == norm &&
+                    (!excludeId.HasValue || d.Id != excludeId.Value));
+            }
         }
 
         public async Task<bool> IsAssignedToFacultyAsync(int designationId)
@@ -247,12 +212,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var conn = await GetOpenConnectionAsync();
-                const string sql = "SELECT COUNT(*) FROM `Staff` WHERE DesignationId = @DesignationId AND IsDeleted = 0;";
-                return await conn.ExecuteScalarAsync<int>(sql, new { DesignationId = designationId });
+                return await conn.ExecuteScalarAsync<int>(
+                    "sp_GetDesignationAssignedStaffCount",
+                    new { p_DesignationId = designationId },
+                    commandType: CommandType.StoredProcedure);
             }
             catch
             {
-                return 0;
+                return await _context.Staffs.CountAsync(s => s.DesignationId == designationId && !s.IsDeleted);
             }
         }
 
@@ -261,22 +228,16 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var conn = await GetOpenConnectionAsync();
-                const string insertSql = @"
-                    INSERT INTO `Designations` 
-                        (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `CreatedAt`)
-                    VALUES 
-                        (@Name, @DepartmentId, @StaffType, @IsActive, UTC_TIMESTAMP());
-                    SELECT LAST_INSERT_ID();";
-
                 var id = await conn.ExecuteScalarAsync<int>(
-                    insertSql,
+                    "sp_CreateDesignation",
                     new
                     {
-                        Name = designation.Name.Trim(),
-                        DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : null,
-                        StaffType = designation.StaffType ?? "Both",
-                        IsActive = designation.IsActive ? 1 : 0
-                    });
+                        p_Name = designation.Name.Trim(),
+                        p_DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : 0,
+                        p_StaffType = designation.StaffType ?? "Both",
+                        p_IsActive = designation.IsActive ? 1 : 0
+                    },
+                    commandType: CommandType.StoredProcedure);
 
                 designation.Id = id;
                 return designation;
@@ -295,25 +256,17 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var conn = await GetOpenConnectionAsync();
-                const string updateSql = @"
-                    UPDATE `Designations`
-                    SET `Name` = @Name,
-                        `DepartmentId` = @DepartmentId,
-                        `StaffType` = @StaffType,
-                        `IsActive` = @IsActive,
-                        `UpdatedAt` = UTC_TIMESTAMP()
-                    WHERE `Id` = @Id;";
-
                 await conn.ExecuteAsync(
-                    updateSql,
+                    "sp_UpdateDesignation",
                     new
                     {
-                        Id = designation.Id,
-                        Name = designation.Name.Trim(),
-                        DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : null,
-                        StaffType = designation.StaffType ?? "Both",
-                        IsActive = designation.IsActive ? 1 : 0
-                    });
+                        p_Id = designation.Id,
+                        p_Name = designation.Name.Trim(),
+                        p_DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : 0,
+                        p_StaffType = designation.StaffType ?? "Both",
+                        p_IsActive = designation.IsActive ? 1 : 0
+                    },
+                    commandType: CommandType.StoredProcedure);
             }
             catch
             {
@@ -337,7 +290,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var conn = await GetOpenConnectionAsync();
-                await conn.ExecuteAsync("DELETE FROM `Designations` WHERE `Id` = @Id;", new { Id = id });
+                await conn.ExecuteAsync(
+                    "sp_DeleteDesignation",
+                    new { p_Id = id },
+                    commandType: CommandType.StoredProcedure);
             }
             catch
             {
@@ -363,17 +319,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             catch { }
 
-            const string sql = @"
-                SELECT 
-                    COUNT(*) AS TotalDesignations,
-                    COUNT(CASE WHEN IsActive = 1 THEN 1 END) AS ActiveDesignations,
-                    COUNT(CASE WHEN IsActive = 0 THEN 1 END) AS InactiveDesignations,
-                    (SELECT COUNT(DISTINCT Id) FROM `Staff` WHERE DesignationId IS NOT NULL AND DesignationId > 0 AND IsDeleted = 0) AS AssignedStaffCount
-                FROM `Designations`;";
-
-            var fallbackConn = await GetOpenConnectionAsync();
-            var result = await fallbackConn.QueryFirstOrDefaultAsync<DesignationSummaryDto>(sql);
-            return result ?? new DesignationSummaryDto();
+            return new DesignationSummaryDto
+            {
+                TotalDesignations = await _context.Designations.CountAsync(),
+                ActiveDesignations = await _context.Designations.CountAsync(d => d.IsActive),
+                InactiveDesignations = await _context.Designations.CountAsync(d => !d.IsActive),
+                AssignedStaffCount = await _context.Staffs.CountAsync(s => s.DesignationId.HasValue && s.DesignationId > 0 && !s.IsDeleted)
+            };
         }
     }
 }

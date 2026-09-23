@@ -170,5 +170,34 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public string? SectionName { get; set; }
 
         public string? RollNo { get; set; }
+
+        // Residential & Transport Allocation
+        public string? StudentType { get; set; }
+        public bool? TransportRequired { get; set; }
+        public string? BusType { get; set; }
+        public int? RouteId { get; set; }
+        public string? BusRoute { get; set; }
+        public int? PickupPointId { get; set; }
+        public string? PickupPoint { get; set; }
+        public int? HostelId { get; set; }
+        public string? HostelBlock { get; set; }
+        public int? RoomId { get; set; }
+        public string? HostelRoom { get; set; }
+        public int? BedId { get; set; }
+        public string? HostelBed { get; set; }
+        public string? HallTicketNumber { get; set; }
+
+        // Fetched from master tables by IDs (sp_GetStudentAdmissionById)
+        public string? FetchedHostelBlock { get; set; }
+        public string? FetchedHostelRoom { get; set; }
+        public string? FetchedHostelBed { get; set; }
+        public string? FetchedBusRoute { get; set; }
+        public string? FetchedPickupPoint { get; set; }
+
+        // Fee & Payment Plan
+        public int? FeeStructureId { get; set; }
+        public string? FeeStructureName { get; set; }
+        public string? PaymentPlan { get; set; }
+        public List<int> SelectedFeeStructureComponentIds { get; set; } = new();
     }
 }

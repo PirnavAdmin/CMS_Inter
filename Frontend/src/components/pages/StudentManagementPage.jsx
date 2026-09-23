@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -47,14 +47,18 @@ const selectOptions = (items, idKeys, labelKeys) => list(items).map((item) => ({
 })).filter((item) => item.value && item.label);
 
 export default function StudentManagementPage() {
+  const location = useLocation();
+  const savedListState = location.state?.studentManagement || {};
+  const restoringFiltersRef = useRef(Boolean(savedListState.filters));
+  const preservingPageRef = useRef(Boolean(savedListState.page));
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(savedListState.query || "");
   const [filters, setFilters] = useState({
-    level: "",
-    group: "",
-    programme: "",
-    section: "",
-    status: "",
+    level: savedListState.filters?.level || "",
+    group: savedListState.filters?.group || "",
+    programme: savedListState.filters?.programme || "",
+    section: savedListState.filters?.section || "",
+    status: savedListState.filters?.status || "",
   });
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +84,13 @@ export default function StudentManagementPage() {
   const [groupOptions, setGroupOptions] = useState([]);
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      restoringFiltersRef.current = false;
+      preservingPageRef.current = false;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   useEffect(() => {
     let active = true;
     apiClient
@@ -166,7 +177,7 @@ export default function StudentManagementPage() {
     };
   }, [reloadKey]);
   useEffect(() => {
-    setFilters({ level: "", group: "", programme: "", section: "", status: "" });
+    if (!restoringFiltersRef.current) setFilters({ level: "", group: "", programme: "", section: "", status: "" });
     setLevelOptions([]); setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
     if (!selectedBoardId) return undefined;
     let active = true;
@@ -176,7 +187,7 @@ export default function StudentManagementPage() {
     return () => { active = false; };
   }, [selectedBoardId]);
   useEffect(() => {
-    setFilters((current) => ({ ...current, group: "", programme: "", section: "" }));
+    if (!restoringFiltersRef.current) setFilters((current) => ({ ...current, group: "", programme: "", section: "" }));
     setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
     if (!selectedBoardId || !filters.level) return undefined;
     let active = true;
@@ -186,7 +197,7 @@ export default function StudentManagementPage() {
     return () => { active = false; };
   }, [filters.level, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
-    setFilters((current) => ({ ...current, programme: "", section: "" }));
+    if (!restoringFiltersRef.current) setFilters((current) => ({ ...current, programme: "", section: "" }));
     setProgrammeOptions([]); setSectionOptions([]);
     if (!filters.group) return undefined;
     let active = true;
@@ -196,7 +207,7 @@ export default function StudentManagementPage() {
     return () => { active = false; };
   }, [filters.group]);
   useEffect(() => {
-    setFilters((current) => ({ ...current, section: "" }));
+    if (!restoringFiltersRef.current) setFilters((current) => ({ ...current, section: "" }));
     setSectionOptions([]);
     if (!filters.programme) return undefined;
     let active = true;
@@ -273,12 +284,15 @@ export default function StudentManagementPage() {
       ),
     [students, query, filters, selectedBoardId, selectedAcademicYearId],
   );
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(savedListState.page || 1);
   const pageSize = 5;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  useEffect(() => setPage(1), [query, filters.level, filters.group, filters.programme, filters.section, filters.status, selectedBoardId, selectedAcademicYearId]);
+  useEffect(() => {
+    if (preservingPageRef.current) return;
+    setPage(1);
+  }, [query, filters.level, filters.group, filters.programme, filters.section, filters.status, selectedBoardId, selectedAcademicYearId]);
   const values = (key) => [...new Set(students.map((student) => student[key]).filter(Boolean))];
   const updateFilter = (key, selectedValue) => {
     setFilters((current) => ({
@@ -496,7 +510,7 @@ export default function StudentManagementPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10"><div className="cms-empty">Loading approved students...</div></td></tr>
+                Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={10} />)
               ) : pageRows.length ? (
                 pageRows.map((s) => (
                   <tr key={s.id} onClick={() => setSelectedStudentId(String(s.id))}>
@@ -514,7 +528,7 @@ export default function StudentManagementPage() {
                     <td>
                     <div className="student-action-buttons">
                       <button type="button" aria-label={`Export ${s.name} PDF`} title="Export PDF" disabled={Boolean(exporting)} onClick={() => { setSelectedStudentId(String(s.id)); exportStudents("pdf", s); }}><FileText size={16} /></button>
-                        <Link to={`/dashboard/students/${s.id}`} aria-label="View student" title="View student">
+                        <Link to={`/dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
                           <Eye size={16} />
                         </Link>
                         <button type="button" aria-label={`Upload photo for ${s.name}`} title="Upload or replace photo" onClick={() => { setError(""); setFileAction({ kind: "photo", student: s }); }}><ImageUp size={16} /></button>

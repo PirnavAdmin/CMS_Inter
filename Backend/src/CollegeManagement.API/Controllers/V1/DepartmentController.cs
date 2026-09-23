@@ -192,9 +192,11 @@ namespace CollegeManagement.API.Controllers.V1
 
         /// <summary>
         /// 9. POST /api/v1/departments/import-excel
-        /// Import Departments from Excel workbook (.xlsx / .xls) with row-level validation and auto-mapping.
+        /// Import Departments and Designations from Excel workbook (.xlsx / .xls) with row-level validation and auto-mapping.
         /// </summary>
         [HttpPost("import-excel")]
+        [HttpPost("/api/v1/departments-designations/import-excel")]
+        [HttpPost("/api/v1/departments-designations/import")]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> ImportExcel([FromForm] DepartmentImportExcelRequestDto dto)
@@ -203,13 +205,13 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 return BadRequest(new { message = "Please provide a valid Excel file (.xlsx or .xls)." });
             }
-            var result = await _departmentService.ImportDepartmentsFromExcelAsync(dto.File, dto.DefaultStaffType);
+            var result = await _departmentService.ImportDepartmentsAndDesignationsFromExcelAsync(dto.File, dto.DefaultStaffType);
             return Ok(result);
         }
 
         /// <summary>
         /// 10. POST /api/v1/departments/import
-        /// Flexible Department import supporting multipart Excel file or JSON payload.
+        /// Flexible Department and Designation import supporting multipart Excel file or JSON payload.
         /// </summary>
         [HttpPost("import")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
@@ -219,7 +221,7 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var file = Request.Form.Files[0];
                 var staffType = Request.Form["defaultStaffType"].FirstOrDefault() ?? Request.Form["staffType"].FirstOrDefault();
-                var result = await _departmentService.ImportDepartmentsFromExcelAsync(file, staffType);
+                var result = await _departmentService.ImportDepartmentsAndDesignationsFromExcelAsync(file, staffType);
                 return Ok(result);
             }
 
@@ -250,15 +252,28 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 12. GET /api/v1/departments/export-template and /api/v1/departments/template
-        /// Download sample Excel template for Department bulk import.
+        /// 12. GET /api/v1/departments/export-template, /api/v1/departments/template
+        /// Download sample Excel template for Department bulk import (3 columns: Department Name, Staff Type, Status).
         /// </summary>
         [HttpGet("export-template")]
         [HttpGet("template")]
-        public async Task<IActionResult> DownloadTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null)
+        public async Task<IActionResult> DownloadDepartmentTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null)
         {
             var effectiveStaffType = staffType ?? type;
             var (bytes, contentType, fileName) = await _departmentService.GenerateDepartmentTemplateExcelAsync(effectiveStaffType);
+            return File(bytes, contentType, fileName);
+        }
+
+        /// <summary>
+        /// 12b. GET /api/v1/departments-designations/template and /api/v1/departments-designations/export-template
+        /// Download 2-sheet unified Excel template for both Departments and Designations.
+        /// </summary>
+        [HttpGet("/api/v1/departments-designations/template")]
+        [HttpGet("/api/v1/departments-designations/export-template")]
+        public async Task<IActionResult> DownloadUnifiedTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null)
+        {
+            var effectiveStaffType = staffType ?? type;
+            var (bytes, contentType, fileName) = await _departmentService.GenerateDepartmentDesignationTemplateExcelAsync(effectiveStaffType);
             return File(bytes, contentType, fileName);
         }
 

@@ -22,9 +22,10 @@ import {
 } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
+import * as hostelApi from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
+import { Field, Modal, Skeleton, SkeletonButton, SkeletonInput, SkeletonRow, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
   DEFAULT_INSTALLMENT_COUNT,
@@ -35,8 +36,16 @@ import {
   formatDate,
   todayISO,
 } from "@/data/feeManagementData.js";
+import { HOSTEL_BLOCKS, HOSTEL_ROOMS_DATA } from "@/modules/hostel/data/hostelData.js";
 
 const MAX_DOCUMENT_SIZE = 2 * 1024 * 1024;
+
+/** Layout-matched placeholders for admission forms, fee details, and records. */
+function AdmissionPageSkeleton({ variant = "form" }) {
+  if (variant === "table") return <SkeletonTable columns={9} rows={6} className="cms-admission-table-skeleton" />;
+  if (variant === "fees") return <div className="cms-fee-block cms-admission-fee-skeleton"><Skeleton style={{ width: 190, height: 20 }} /><div className="cms-skeleton-form">{Array.from({ length: 6 }, (_, index) => <SkeletonInput key={index} />)}</div></div>;
+  return <section className="cms-admission-skeleton" aria-label="Loading admission form"><div className="cms-admission-skeleton-head"><Skeleton style={{ width: 220, height: 25 }} /><SkeletonButton width={132} /></div><div className="cms-skeleton-form">{Array.from({ length: 8 }, (_, index) => <SkeletonInput key={index} />)}</div></section>;
+}
 const formatAmount = (value) => {
   const amount = Number(value || 0);
   return `\u20b9${(Number.isFinite(amount) ? amount : 0).toLocaleString("en-IN")}`;
@@ -127,6 +136,36 @@ const readId = (item, ...keys) => {
   const value = read(item, ...keys);
   return value === undefined || value === null || value === "" || isSchemaPlaceholder(value) ? "" : String(value);
 };
+
+const compactObjects = (...sources) => sources.filter((source) => source && typeof source === "object");
+
+const readTextFromSources = (sources, ...keys) => compactObjects(...sources)
+  .map((source) => readText(source, ...keys))
+  .find(Boolean) || "";
+
+const readIdFromSources = (sources, ...keys) => compactObjects(...sources)
+  .map((source) => readId(source, ...keys))
+  .find(Boolean) || "";
+
+const normalizeYesNoText = (value) => {
+  const text = String(value ?? "").trim();
+  if (["true", "1", "yes"].includes(text.toLowerCase())) return "Yes";
+  if (["false", "0", "no"].includes(text.toLowerCase())) return "No";
+  return text;
+};
+
+const normalizeStudentTypeText = (value) => {
+  const text = String(value ?? "").trim();
+  if (["true", "2", "yes", "residential", "hostel", "hosteller"].includes(text.toLowerCase())) return "Residential";
+  if (["false", "1", "0", "no", "non-residential", "non residential", "day scholar", "dayscholar"].includes(text.toLowerCase())) return "Non-Residential";
+  return text;
+};
+
+const transportRequiredPayloadValue = (values = {}) => (
+  normalizeStudentTypeText(values.studentType) === "Non-Residential"
+    ? normalizeYesNoText(values.transportRequired) === "Yes"
+    : false
+);
 
 const studentMobileValue = (values = {}) => {
   const value = read(
@@ -513,6 +552,11 @@ const feeTypeIdentity = (item) => {
   ].join(" ").toLowerCase();
 };
 
+const isFacilityFeeItem = (item) => {
+  const identity = feeTypeIdentity(item);
+  return identity.includes("hostel") || identity.includes("transport");
+};
+
 const classifyFeeItem = (item) => {
   const identity = feeTypeIdentity(item);
   if (identity.includes("admission")) return "admission";
@@ -868,6 +912,68 @@ const steps = [
     ],
   },
   {
+    title: "Student Type & Residential Allocation",
+    fields: [
+      { name: "studentType", label: "Student Type", type: "select", selectPlaceholder: "Select Type", options: ["Non-Residential", "Residential"], required: true },
+      {
+        name: "transportRequired",
+        label: "School Transport Facility Required?",
+        type: "select",
+        options: ["Yes", "No"],
+        conditional: (values) => values.studentType === "Non-Residential",
+        requiredWhen: (values) => values.studentType === "Non-Residential",
+      },
+      {
+        name: "busType",
+        label: "Bus Type",
+        type: "select",
+        options: ["AC", "Non-AC"],
+        conditional: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+        requiredWhen: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+      },
+      {
+        name: "busRoute",
+        label: "Route",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+        requiredWhen: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+      },
+      {
+        name: "pickupPoint",
+        label: "Pickup Point",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+        requiredWhen: (values) => values.studentType === "Non-Residential" && values.transportRequired === "Yes",
+      },
+      {
+        name: "hostelBlock",
+        label: "Hostel Block",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Residential",
+        requiredWhen: (values) => values.studentType === "Residential",
+      },
+      {
+        name: "hostelRoom",
+        label: "Room",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Residential",
+        requiredWhen: (values) => values.studentType === "Residential",
+      },
+      {
+        name: "hostelBed",
+        label: "Bed",
+        type: "select",
+        options: [],
+        conditional: (values) => values.studentType === "Residential",
+        requiredWhen: (values) => values.studentType === "Residential",
+      },
+    ],
+  },
+  {
     title: "Fee",
     custom: "fee",
     fields: [],
@@ -876,8 +982,8 @@ const steps = [
 
 // The stepper adds a final read-only Preview step after all data steps.
 const allSteps = [...steps, { title: "Preview", fields: [] }];
-const ADMISSION_FORM_STEP_COUNT = 6;
 const FEE_STEP_INDEX = steps.findIndex((section) => section.custom === "fee");
+const ADMISSION_FORM_STEP_COUNT = FEE_STEP_INDEX;
 const PREVIEW_STEP_INDEX = allSteps.length - 1;
 const admissionMainTabs = [
   { title: "Admission Form", step: 0, icon: ClipboardList },
@@ -951,6 +1057,16 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "FeeStructureId", numericId(values.feeStructureId));
   const admissionPaymentPlan = toAdmissionPaymentPlan(values.paymentPlan);
   appendIfPresent(formData, "PaymentPlan", admissionPaymentPlan);
+  appendIfPresent(formData, "StudentType", values.studentType);
+  appendIfPresent(formData, "TransportRequired", transportRequiredPayloadValue(values));
+  appendIfPresent(formData, "RouteId", values.busRoute);
+  appendIfPresent(formData, "PickupPointId", values.pickupPoint);
+  appendIfPresent(formData, "HostelId", values.hostelBlock);
+  appendIfPresent(formData, "RoomId", values.hostelRoom);
+  appendIfPresent(formData, "BedId", values.hostelBed);
+  selectedFeeStructureComponentIdsFor(values).componentIds.forEach((componentId) => {
+    formData.append("SelectedFeeStructureComponentIds", componentId);
+  });
   if (import.meta.env.DEV) {
     console.log("Student Admission payment plan payload:", {
       uiPaymentPlan: values.paymentPlan,
@@ -999,6 +1115,196 @@ const sanitizeValue = (field, value) => {
 const fieldByName = steps
   .flatMap((section) => section.fields)
   .reduce((lookup, field) => ({ ...lookup, [field.name]: field }), {});
+
+const isLiveMasterActive = (item = {}) => {
+  const status = read(item, "status", "Status", "isActive", "IsActive", "active", "Active");
+  if (status === undefined || status === null || status === "") return true;
+  if (typeof status === "boolean") return status;
+  if (typeof status === "number") return status === 1;
+  return !["inactive", "deleted", "false", "0"].includes(String(status).trim().toLowerCase());
+};
+
+const normalizeTransportRouteOption = (route = {}) => {
+  const id = read(route, "routeId", "RouteId", "id", "Id");
+  const routeCode = readText(route, "routeNumber", "RouteNumber", "routeCode", "RouteCode", "code", "Code");
+  const value = id !== undefined && id !== null && id !== "" ? String(id) : routeCode;
+  if (!value) return null;
+  const routeName = readText(route, "routeName", "RouteName", "name", "Name") || routeCode || value;
+  return {
+    value,
+    label: routeCode && routeName && routeCode !== routeName ? `${routeCode} - ${routeName}` : routeName,
+    routeName,
+    routeCode,
+    status: isLiveMasterActive(route) ? "Active" : "Inactive",
+  };
+};
+
+const normalizeTransportPickupOption = (point = {}) => {
+  const id = read(point, "pickupPointId", "PickupPointId", "id", "Id");
+  const value = id !== undefined && id !== null && id !== "" ? String(id) : readText(point, "pickupPointName", "PickupPointName", "pickupName", "PickupName", "stopName", "StopName");
+  if (!value) return null;
+  const routeId = read(point, "routeId", "RouteId");
+  return {
+    value,
+    routeId: routeId !== undefined && routeId !== null && routeId !== "" ? String(routeId) : "",
+    routeName: readText(point, "routeName", "RouteName"),
+    label: readText(point, "stopName", "StopName", "pickupPointName", "PickupPointName", "pickupName", "PickupName") || value,
+    monthlyFee: Number(read(point, "monthlyFee", "MonthlyFee", "fare", "Fare") || 0),
+    status: isLiveMasterActive(point) ? "Active" : "Inactive",
+  };
+};
+
+const normalizeTransportBusType = (value) => {
+  if (typeof value === "boolean") return value ? "AC" : "Non-AC";
+  if (typeof value === "number") return value === 1 ? "AC" : "Non-AC";
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return "";
+  if (["ac", "a/c", "air conditioned", "air-conditioned", "true", "yes", "1"].includes(text)) return "AC";
+  if (["non-ac", "non ac", "nonac", "false", "no", "0"].includes(text)) return "Non-AC";
+  return "";
+};
+
+const normalizeTransportVehicleOption = (vehicle = {}) => {
+  const id = read(vehicle, "vehicleId", "VehicleId", "id", "Id");
+  if (id === undefined || id === null || id === "") return null;
+  const busType = normalizeTransportBusType(read(vehicle, "isAC", "IsAC", "isAc", "IsAc", "ac", "AC", "busType", "BusType"));
+  return {
+    value: String(id),
+    busType,
+    status: isLiveMasterActive(vehicle) ? "Active" : "Inactive",
+  };
+};
+
+const normalizeTransportVehicleAssignmentOption = (assignment = {}) => {
+  const routeId = read(assignment, "routeId", "RouteId");
+  const vehicleId = read(assignment, "vehicleId", "VehicleId");
+  if (routeId === undefined || routeId === null || routeId === "" || vehicleId === undefined || vehicleId === null || vehicleId === "") return null;
+  return {
+    routeId: String(routeId),
+    vehicleId: String(vehicleId),
+    busType: normalizeTransportBusType(read(assignment, "isAC", "IsAC", "isAc", "IsAc", "ac", "AC", "busType", "BusType")),
+    status: isLiveMasterActive(assignment) ? "Active" : "Inactive",
+  };
+};
+
+const normalizeHostelBlockOption = (block = {}) => {
+  const hostelId = read(block, "hostelId", "HostelId", "id", "Id");
+  const code = readText(block, "hostelCode", "HostelCode", "code", "Code");
+  const value = hostelId !== undefined && hostelId !== null && hostelId !== "" ? String(hostelId) : code;
+  if (!value) return null;
+  const name = readText(block, "hostelName", "HostelName", "name", "Name") || code || value;
+  return {
+    value,
+    hostelId: hostelId !== undefined && hostelId !== null && hostelId !== "" ? String(hostelId) : "",
+    label: code && name && code !== name ? `${code} - ${name}` : name,
+    name,
+    code,
+    status: isLiveMasterActive(block) ? "Active" : "Inactive",
+  };
+};
+
+const normalizeHostelRoomOption = (room = {}) => {
+  const roomId = read(room, "roomId", "RoomId", "id", "Id");
+  const roomNo = readText(room, "roomNumber", "RoomNumber", "roomNo", "RoomNo");
+  const value = roomId !== undefined && roomId !== null && roomId !== "" ? String(roomId) : roomNo;
+  if (!value) return null;
+  const hostelId = read(room, "hostelId", "HostelId");
+  const blockValue = hostelId !== undefined && hostelId !== null && hostelId !== "" ? String(hostelId) : readText(room, "hostelCode", "HostelCode", "block", "Block");
+  const type = readText(room, "roomTypeSpecification", "RoomTypeSpecification", "type", "Type");
+  const floor = readText(room, "floorLevel", "FloorLevel", "floor", "Floor");
+  return {
+    value,
+    roomId: roomId !== undefined && roomId !== null && roomId !== "" ? String(roomId) : "",
+    hostelId: hostelId !== undefined && hostelId !== null && hostelId !== "" ? String(hostelId) : "",
+    blockValue,
+    label: `Room ${roomNo || value}${floor ? ` - Floor: ${floor}` : type ? ` - ${type}` : ""}`,
+    roomNo: roomNo || value,
+    feeAmount: Number(read(room, "fee", "Fee", "monthlyFee", "MonthlyFee") || 0),
+    status: isLiveMasterActive(room) ? "Active" : "Inactive",
+  };
+};
+
+const normalizeHostelBedOption = (bed = {}) => {
+  const bedId = read(bed, "bedId", "BedId", "id", "Id");
+  const bedNumber = readText(bed, "bedNumber", "BedNumber", "bedNo", "BedNo");
+  const value = bedId !== undefined && bedId !== null && bedId !== "" ? String(bedId) : bedNumber;
+  if (!value) return null;
+  const roomId = read(bed, "roomId", "RoomId");
+  const hostelId = read(bed, "hostelId", "HostelId");
+  const bedStatus = readText(bed, "bedStatus", "BedStatus", "status", "Status") || "Available";
+  return {
+    value,
+    bedId: bedId !== undefined && bedId !== null && bedId !== "" ? String(bedId) : "",
+    roomId: roomId !== undefined && roomId !== null && roomId !== "" ? String(roomId) : "",
+    hostelId: hostelId !== undefined && hostelId !== null && hostelId !== "" ? String(hostelId) : "",
+    roomNumber: readText(bed, "roomNumber", "RoomNumber", "roomNo", "RoomNo"),
+    label: bedNumber || value,
+    bedStatus,
+    status: isLiveMasterActive(bed) && bedStatus.toLowerCase() !== "occupied" ? "Active" : "Inactive",
+  };
+};
+
+const HOSTEL_FEE_CONFIG_STORAGE_KEY = "pirnav_hostel_fee_configs_v1";
+const parseCurrencyNumber = (value) => Number(String(value ?? "").replace(/[^\d.]/g, "")) || 0;
+
+const seedHostelFeeConfigs = () => HOSTEL_ROOMS_DATA.map((room) => {
+  const block = HOSTEL_BLOCKS.find((item) => item.code === room.block);
+  return {
+    id: `${room.block}-${room.roomNo}`,
+    hostelBlock: room.block,
+    hostelName: block?.name || room.block,
+    roomNo: room.roomNo,
+    roomType: room.type,
+    feePlan: "Monthly",
+    feeAmount: parseCurrencyNumber(room.fee),
+    securityDeposit: 0,
+    status: "Active",
+  };
+});
+
+const readHostelFeeConfigs = () => {
+  if (typeof window === "undefined") return seedHostelFeeConfigs();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HOSTEL_FEE_CONFIG_STORAGE_KEY) || "[]");
+    return Array.isArray(parsed) && parsed.length ? parsed : seedHostelFeeConfigs();
+  } catch {
+    return seedHostelFeeConfigs();
+  }
+};
+
+const resolveTransportFee = (values) => {
+  if (values.studentType !== "Non-Residential" || values.transportRequired !== "Yes" || !values.busRoute || !values.pickupPoint || !values.pickupPointName) return null;
+  return {
+    type: `Transport Fee${values.busRouteName ? ` (${values.busRouteName})` : ""}`,
+    amount: Number(values.transportMonthlyFee || 0),
+    plan: "Monthly",
+    detail: values.pickupPointName,
+  };
+};
+
+const resolveHostelFee = (values) => {
+  if (values.studentType !== "Residential" || !values.hostelBlock || !values.hostelRoom || !values.hostelBed) return null;
+  if (values.hostelFeeAmount !== undefined && values.hostelFeeAmount !== null && values.hostelFeeAmount !== "") {
+    return {
+      type: `Hostel Fee (${values.hostelBlockName || values.hostelBlock}, Room ${values.hostelRoomName || values.hostelRoom})`,
+      amount: Number(values.hostelFeeAmount || 0),
+      plan: "Monthly",
+      detail: values.hostelBedName || values.hostelBed,
+    };
+  }
+  const config = readHostelFeeConfigs().find((item) => (
+    item.status !== "Inactive"
+    && String(item.hostelBlock) === String(values.hostelBlock)
+    && String(item.roomNo) === String(values.hostelRoom)
+  ));
+  if (!config) return null;
+  return {
+    type: `Hostel Fee (${config.hostelName || values.hostelBlock}, Room ${config.roomNo})`,
+    amount: Number(config.feeAmount || 0) + Number(config.securityDeposit || 0),
+    plan: config.feePlan || "Monthly",
+    detail: values.hostelBedName || values.hostelBed,
+  };
+};
 
 const visibleFieldsFor = (fields, currentValues) => fields.filter((field) => (
   typeof field.conditional === "function" ? field.conditional(currentValues) : true
@@ -1142,6 +1448,18 @@ const readAdmissionFeeItems = (item, feeStructureId) => getNestedRows(
   "SelectedFeeItems",
   "admissionFeeItems",
   "AdmissionFeeItems",
+  "selectedFeeComponents",
+  "SelectedFeeComponents",
+  "selectedComponents",
+  "SelectedComponents",
+  "selectedFeeStructureComponents",
+  "SelectedFeeStructureComponents",
+  "feeBreakdown",
+  "FeeBreakdown",
+  "breakdown",
+  "Breakdown",
+  "lineItems",
+  "LineItems",
   "feeDetails",
   "FeeDetails",
   "feeComponents",
@@ -1157,6 +1475,10 @@ const readAdmissionInstallments = (item) => getNestedRows(
   item,
   "installments",
   "Installments",
+  "schedules",
+  "Schedules",
+  "scheduledFees",
+  "ScheduledFees",
   "courseSchedules",
   "CourseSchedules",
   "feeSchedules",
@@ -1165,7 +1487,7 @@ const readAdmissionInstallments = (item) => getNestedRows(
   "PaymentSchedules",
 ).map((row, index) => ({
   no: readNumber(row, "no", "No", "installmentNo", "InstallmentNo", "scheduleNo", "ScheduleNo") ?? index + 1,
-  amount: readNumber(row, "amount", "Amount", "installmentAmount", "InstallmentAmount", "dueAmount", "DueAmount") ?? 0,
+  amount: readNumber(row, "amount", "Amount", "installmentAmount", "InstallmentAmount", "scheduledAmount", "ScheduledAmount", "dueAmount", "DueAmount", "payable", "Payable") ?? 0,
   dueDate: readText(row, "dueDate", "DueDate", "date", "Date").slice(0, 10),
 }));
 
@@ -1242,24 +1564,26 @@ const readPersistedFeeState = (payload, currentValues = {}) => {
 
 const hydratePersistedFeeState = (currentValues, payload) => {
   const persisted = readPersistedFeeState(payload, currentValues);
-  if (!persisted.paymentPlan) return currentValues;
+  const persistedItems = readAdmissionFeeItems(payload, currentValues.feeStructureId || readFeeStructureId(payload));
+  if (!persisted.paymentPlan && !persistedItems.length) return currentValues;
   return {
     ...currentValues,
-    paymentPlan: persisted.paymentPlan,
-    installmentCount: persisted.installmentCount,
-    installments: persisted.paymentPlan === "Installment Payment" ? persisted.installments : [],
+    ...(persistedItems.length ? { feeItems: persistedItems } : {}),
+    ...(persisted.paymentPlan ? {
+      paymentPlan: persisted.paymentPlan,
+      installmentCount: persisted.installmentCount,
+      installments: persisted.paymentPlan === "Installment Payment" ? persisted.installments : [],
+    } : {}),
   };
 };
 
-const persistedFeeComponents = (payload) => persistedFeeSources(payload)
-  .flatMap((source) => getNestedRows(source, "components", "Components", "feeComponents", "FeeComponents"))
-  .map((item) => normalizeFeeStructureItem(item))
-  .filter(Boolean);
+const persistedFeeComponents = (payload, feeStructureId = "") => persistedFeeSources(payload)
+  .flatMap((source) => readAdmissionFeeItems(source, readFeeStructureId(source) || feeStructureId));
 
 const readPersistedFeeSummary = (payload, fallbackFee) => {
   const sources = persistedFeeSources(payload);
   if (!sources.length) return fallbackFee;
-  const components = persistedFeeComponents(payload);
+  const components = persistedFeeComponents(payload, fallbackFee.feeStructureId);
   const componentTotal = (kind, amountKeys) => components
     .filter((item) => item.kind === kind)
     .reduce((sum, item) => sum + (amountKeys.map((key) => Number(item[key])).find(Number.isFinite) || 0), 0);
@@ -1269,11 +1593,11 @@ const readPersistedFeeSummary = (payload, fallbackFee) => {
   const readFirstText = (...keys) => sources
     .map((source) => readText(source, ...keys))
     .find(Boolean) || "";
-  const totalAmount = readFirstNumber("totalAmount", "TotalAmount");
-  const concessionAmount = readFirstNumber("concessionAmount", "ConcessionAmount", "discountAmount", "DiscountAmount");
-  const payableAmount = readFirstNumber("payableAmount", "PayableAmount", "netPayable", "NetPayable");
-  const paidAmount = readFirstNumber("paidAmount", "PaidAmount", "amountPaid", "AmountPaid");
-  const balanceAmount = readFirstNumber("balanceAmount", "BalanceAmount", "remainingBalance", "RemainingBalance");
+  const totalAmount = readFirstNumber("totalAmount", "TotalAmount", "originalFee", "OriginalFee");
+  const concessionAmount = readFirstNumber("concessionAmount", "ConcessionAmount", "discountAmount", "DiscountAmount", "concession", "Concession");
+  const payableAmount = readFirstNumber("payableAmount", "PayableAmount", "netPayable", "NetPayable", "totalPayable", "TotalPayable");
+  const paidAmount = readFirstNumber("paidAmount", "PaidAmount", "amountPaid", "AmountPaid", "totalPaid", "TotalPaid");
+  const balanceAmount = readFirstNumber("balanceAmount", "BalanceAmount", "remainingBalance", "RemainingBalance", "outstandingBalance", "OutstandingBalance");
 
   return {
     admissionFee: componentTotal("admission", ["payableAmount", "originalAmount"]) || fallbackFee.admissionFee,
@@ -1324,7 +1648,22 @@ const normalizeAdmissionRow = (item) => {
   const savedFeeItems = readAdmissionFeeItems(item, feeStructureId);
   const savedInstallments = readAdmissionInstallments(item);
   const persistedFee = readPersistedFeeState(item, { installments: savedInstallments });
-  const paymentPlan = persistedFee.paymentPlan;
+  const paymentPlan = persistedFee.paymentPlan
+    || normalizeCoursePaymentPlan(readText(item, "paymentPlan", "PaymentPlan"), savedInstallments.length > 0);
+  const allocation = read(item, "allocation", "Allocation", "residentialAllocation", "ResidentialAllocation", "studentAllocation", "StudentAllocation");
+  const transport = read(item, "transport", "Transport", "transportDetails", "TransportDetails", "transportAllocation", "TransportAllocation", "studentTransport", "StudentTransport");
+  const hostel = read(item, "hostel", "Hostel", "hostelDetails", "HostelDetails", "hostelAllocation", "HostelAllocation", "studentHostel", "StudentHostel");
+  const route = read(item, "route", "Route", "busRoute", "BusRoute")
+    || read(transport, "route", "Route", "busRoute", "BusRoute");
+  const pickup = read(item, "pickup", "Pickup", "pickupPoint", "PickupPoint")
+    || read(transport, "pickup", "Pickup", "pickupPoint", "PickupPoint");
+  const block = read(item, "block", "Block", "hostelBlock", "HostelBlock")
+    || read(hostel, "block", "Block", "hostelBlock", "HostelBlock");
+  const room = read(item, "room", "Room", "hostelRoom", "HostelRoom")
+    || read(hostel, "room", "Room", "hostelRoom", "HostelRoom");
+  const bed = read(item, "bed", "Bed", "hostelBed", "HostelBed")
+    || read(hostel, "bed", "Bed", "hostelBed", "HostelBed");
+  const allocationSources = compactObjects(item, admission, student, allocation, transport, hostel);
   const combinedAddress = readText(item, "address", "Address");
   const combinedAddressParts = combinedAddress.split(",").map((part) => part.trim()).filter(Boolean);
   const houseDoorNumber = readText(item, "houseDoorNumber", "HouseDoorNumber", "addressLine1", "AddressLine1") || combinedAddressParts[0] || "";
@@ -1333,6 +1672,24 @@ const normalizeAdmissionRow = (item) => {
   const district = readText(item, "district", "District") || combinedAddressParts[3] || "";
   const state = readText(item, "state", "State") || combinedAddressParts[4] || "";
   const pincode = readText(item, "pincode", "Pincode", "pinCode", "PinCode") || combinedAddressParts[5] || "";
+  const studentType = normalizeStudentTypeText(readTextFromSources(allocationSources, "studentType", "StudentType", "residentialType", "ResidentialType", "residenceType", "ResidenceType", "isResidential", "IsResidential"));
+  const transportRequired = normalizeYesNoText(readTextFromSources(allocationSources, "transportRequired", "TransportRequired", "isTransportRequired", "IsTransportRequired", "requiresTransport", "RequiresTransport"));
+  const busType = normalizeTransportBusType(readTextFromSources(allocationSources, "busType", "BusType", "vehicleType", "VehicleType", "isAC", "IsAC", "isAc", "IsAc"));
+  const busRoute = readIdFromSources([route, ...allocationSources], "routeId", "RouteId", "busRouteId", "BusRouteId", "id", "Id")
+    || readTextFromSources(allocationSources, "busRoute", "BusRoute", "route", "Route");
+  const busRouteName = readTextFromSources([route, ...allocationSources], "fetchedBusRoute", "FetchedBusRoute", "busRouteName", "BusRouteName", "routeName", "RouteName", "name", "Name", "routeNumber", "RouteNumber", "routeCode", "RouteCode");
+  const pickupPoint = readIdFromSources([pickup, ...allocationSources], "pickupPointId", "PickupPointId", "pickupId", "PickupId", "id", "Id")
+    || readTextFromSources(allocationSources, "pickupPoint", "PickupPoint", "pickup", "Pickup");
+  const pickupPointName = readTextFromSources([pickup, ...allocationSources], "fetchedPickupPoint", "FetchedPickupPoint", "stopName", "StopName", "pickupPointName", "PickupPointName", "pickupName", "PickupName", "name", "Name");
+  const hostelBlock = readIdFromSources([block, ...allocationSources], "hostelId", "HostelId", "id", "Id")
+    || readTextFromSources(allocationSources, "hostelBlock", "HostelBlock", "hostelCode", "HostelCode", "blockCode", "BlockCode", "code", "Code");
+  const hostelBlockName = readTextFromSources([block, ...allocationSources], "fetchedHostelBlock", "FetchedHostelBlock", "hostelBlockName", "HostelBlockName", "hostelName", "HostelName", "blockName", "BlockName", "hostelBlock", "HostelBlock", "name", "Name");
+  const hostelRoom = readIdFromSources([room, ...allocationSources], "roomId", "RoomId", "id", "Id")
+    || readTextFromSources(allocationSources, "hostelRoom", "HostelRoom", "roomNumber", "RoomNumber", "roomNo", "RoomNo");
+  const hostelRoomName = readTextFromSources([room, ...allocationSources], "fetchedHostelRoom", "FetchedHostelRoom", "hostelRoomName", "HostelRoomName", "roomName", "RoomName", "hostelRoom", "HostelRoom", "roomNumber", "RoomNumber", "roomNo", "RoomNo");
+  const hostelBed = readIdFromSources([bed, ...allocationSources], "bedId", "BedId", "id", "Id")
+    || readTextFromSources(allocationSources, "hostelBed", "HostelBed", "bedNumber", "BedNumber", "bedNo", "BedNo");
+  const hostelBedName = readTextFromSources([bed, ...allocationSources], "fetchedHostelBed", "FetchedHostelBed", "hostelBedName", "HostelBedName", "hostelBed", "HostelBed", "bedNumber", "BedNumber", "bedNo", "BedNo");
 
   return {
     id: admissionId || admissionNo,
@@ -1403,6 +1760,19 @@ const normalizeAdmissionRow = (item) => {
       passYear: readText(item, "previousYearOfPassing", "PreviousYearOfPassing", "passYear", "PassYear"),
       prevMarks: readText(item, "previousPercentage", "PreviousPercentage", "prevMarks", "PrevMarks"),
       hallTicket: readText(item, "hallTicketNumber", "HallTicketNumber"),
+      studentType,
+      transportRequired,
+      busType,
+      busRoute,
+      busRouteName,
+      pickupPoint,
+      pickupPointName,
+      hostelBlock,
+      hostelBlockName,
+      hostelRoom,
+      hostelRoomName,
+      hostelBed,
+      hostelBedName,
       group: groupId,
       groupName,
       program: programId,
@@ -1527,7 +1897,7 @@ const findApplicableFeeStructure = async ({ boardId, academicYearId, groupId, pr
 // Derives fee numbers only from backend fee rows loaded into the form state.
 const deriveAdmissionFee = (values) => {
   const baseItems = Array.isArray(values.feeItems) ? values.feeItems : [];
-  const feeItems = baseItems.map((item, index) => {
+  const feeItems = baseItems.filter((item) => !isFacilityFeeItem(item)).map((item, index) => {
     const originalAmount = Number(item.originalAmount ?? item.amount ?? 0);
     const required = Boolean(item.required);
     return {
@@ -1542,6 +1912,19 @@ const deriveAdmissionFee = (values) => {
       kind: item.kind || classifyFeeItem(item),
     };
   });
+  const facilityFeeItems = [resolveHostelFee(values), resolveTransportFee(values)]
+    .filter(Boolean)
+    .map((item, index) => ({
+      id: `${item.type.toLowerCase().includes("hostel") ? "hostel" : "transport"}-fee-${index + 1}`,
+      type: item.type,
+      originalAmount: Number(item.amount || 0),
+      payableAmount: Number(item.amount || 0),
+      selected: true,
+      required: true,
+      kind: item.type.toLowerCase().includes("hostel") ? "hostel" : "transport",
+      plan: item.plan,
+      detail: item.detail,
+    }));
   const selectedItems = feeItems.filter((item) => item.selected);
   const admissionItems = selectedItems.filter((item) => item.kind === "admission");
   const courseItems = selectedItems.filter((item) => item.kind === "course");
@@ -1549,7 +1932,8 @@ const deriveAdmissionFee = (values) => {
   const admissionFee = admissionItems.reduce((sum, item) => sum + item.originalAmount, 0);
   const courseFeeOriginal = courseItems.reduce((sum, item) => sum + item.originalAmount, 0);
   const optionalFeesTotal = optionalItems.reduce((sum, item) => sum + item.originalAmount, 0);
-  const originalTotal = admissionFee + courseFeeOriginal + optionalFeesTotal;
+  const facilityFeesTotal = facilityFeeItems.reduce((sum, item) => sum + item.originalAmount, 0);
+  const originalTotal = admissionFee + courseFeeOriginal + optionalFeesTotal + facilityFeesTotal;
   const concessionType = values.concessionType || values.scholarshipDiscountType || "Fixed";
   const concessionValue = Number(values.concessionValue || 0);
   const rawConcession = concessionType === "Percentage"
@@ -1557,7 +1941,7 @@ const deriveAdmissionFee = (values) => {
     : concessionValue;
   const courseConcession = Math.min(Math.max(Math.round(rawConcession), 0), courseFeeOriginal);
   const courseFeePayable = Math.max(courseFeeOriginal - courseConcession, 0);
-  const totalCommitment = admissionFee + courseFeePayable + optionalFeesTotal;
+  const totalCommitment = admissionFee + courseFeePayable + optionalFeesTotal + facilityFeesTotal;
   const schedule = Array.isArray(values.installments) ? values.installments : [];
   const isInstallment = values.paymentPlan === "Installment Payment";
   const coursePaidToday = 0;
@@ -1572,6 +1956,8 @@ const deriveAdmissionFee = (values) => {
     courseConcession,
     courseFeePayable,
     optionalFeesTotal,
+    facilityFeesTotal,
+    facilityFeeItems,
     totalCommitment,
     admissionFeeDueToday: 0,
     coursePaidToday,
@@ -1714,6 +2100,11 @@ const previewFieldValue = (field, values) => {
   if (field.name === "level") return values.levelName || values.level;
   if (field.name === "group") return values.groupName || values.group;
   if (field.name === "program") return values.programName || values.program;
+  if (field.name === "busRoute") return values.busRouteName || values.busRoute;
+  if (field.name === "pickupPoint") return values.pickupPointName || values.pickupPoint;
+  if (field.name === "hostelBlock") return values.hostelBlockName || values.hostelBlock;
+  if (field.name === "hostelRoom") return values.hostelRoomName || values.hostelRoom;
+  if (field.name === "hostelBed") return values.hostelBedName || values.hostelBed;
   return values[field.name];
 };
 
@@ -1944,12 +2335,46 @@ function FeeSummaryRows({ fee }) {
       <div><span>Scholarship / Concession</span><strong>-{formatCurrency(fee.courseConcession)}</strong></div>
       <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
       <div><span>Optional Selected Fees</span><strong>{formatCurrency(fee.optionalFeesTotal)}</strong></div>
+      {(fee.facilityFeeItems || []).map((item) => (
+        <div key={item.id}><span>{item.type}</span><strong>{formatCurrency(item.originalAmount)}</strong></div>
+      ))}
       <div className="is-total"><span>Total Fee Commitment</span><strong>{formatCurrency(fee.totalCommitment)}</strong></div>
       <div><span>Amount Paid Now</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
       <div><span>Future Scheduled Course Fee</span><strong>{formatCurrency(fee.courseScheduleBalance)}</strong></div>
       <div className="is-total"><span>Remaining Balance</span><strong>{formatCurrency(fee.remainingBalance)}</strong></div>
       <div><span>Payment Plan</span><strong>{fee.paymentPlan ? paymentPlanLabel(fee.paymentPlan) : "Not selected"}</strong></div>
     </div>
+  );
+}
+
+function FacilityFeesTable({ feeItems }) {
+  if (!feeItems?.length) return null;
+  return (
+    <section className="cms-fee-block">
+      <h3>Applicable Facility Fees</h3>
+      <div className="cms-fee-scroll">
+        <table className="cms-fee-table">
+          <thead>
+            <tr>
+              <th>Fee Type</th>
+              <th>Plan</th>
+              <th>Details</th>
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {feeItems.map((item) => (
+              <tr key={item.id}>
+                <td><strong>{item.type}</strong></td>
+                <td>{item.plan || "-"}</td>
+                <td>{item.detail || "-"}</td>
+                <td className="num">{formatCurrency(item.originalAmount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -2115,9 +2540,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
       </div>
 
       {feeStructureLoading ? (
-        <section className="cms-fee-block">
-          <p className="cms-fee-empty">Loading applicable fee structure...</p>
-        </section>
+        <AdmissionPageSkeleton variant="fees" />
       ) : !hasStructure ? (
         <section className="cms-fee-block">
           <p className="cms-fee-empty">
@@ -2131,6 +2554,8 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
             <h3>Applicable Fee Structure</h3>
             <FeeItemsTable feeItems={fee.feeItems} errors={errors} onChange={onChange} />
           </section>
+
+          <FacilityFeesTable feeItems={fee.facilityFeeItems} />
 
           <ConcessionPanel fee={fee} values={values} errors={errors} onChange={onChange} scholarships={scholarships} />
 
@@ -2181,6 +2606,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
                 <div><span>Admission Fee</span><strong>{formatCurrency(fee.admissionFee)}</strong></div>
                 <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
                 <div><span>Optional One-Time Fees</span><strong>{formatCurrency(fee.optionalFeesTotal)}</strong></div>
+                <div><span>Facility Fees</span><strong>{formatCurrency(fee.facilityFeesTotal)}</strong></div>
                 <div className="is-total"><span>Total Selected Fee</span><strong>{formatCurrency(fee.totalCommitment)}</strong></div>
               </div>
             </section>
@@ -2197,19 +2623,23 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
 }
 
 function FeePreview({ fee, values }) {
+  const persistedFee = readPersistedFeeSummary(values.persistedFeeDetails, fee);
+  const previewPaymentPlan = persistedFee.paymentPlan || values.paymentPlan;
+  const previewCourseFeePayable = Math.max(Number(persistedFee.courseFee || 0) - Number(persistedFee.concessionAmount || 0), 0);
   return (
     <div className="cms-fee-preview">
       <div className="cms-fee-kv-grid">
         <div><span>Group</span><strong>{values.groupName || values.group || "Not provided"}</strong></div>
         <div><span>Program</span><strong>{values.programName || values.program || "Not provided"}</strong></div>
-        <div><span>Admission Fee</span><strong>{formatCurrency(fee.admissionFee)}</strong></div>
-        <div><span>Course Fee</span><strong>{formatCurrency(fee.courseFeeOriginal)}</strong></div>
+        <div><span>Admission Fee</span><strong>{formatCurrency(persistedFee.admissionFee)}</strong></div>
+        <div><span>Course Fee</span><strong>{formatCurrency(persistedFee.courseFee)}</strong></div>
         <div><span>Scholarship</span><strong>{fee.concessionName || "No scholarship"}</strong></div>
-        <div><span>Course Fee Payable</span><strong>{formatCurrency(fee.courseFeePayable)}</strong></div>
-        <div><span>Payment Plan</span><strong>{values.paymentPlan ? paymentPlanLabel(values.paymentPlan) : "Not selected"}</strong></div>
-        <div><span>Amount Paid Now</span><strong>{formatCurrency(fee.paidToday)}</strong></div>
+        <div><span>Course Fee Payable</span><strong>{formatCurrency(previewCourseFeePayable)}</strong></div>
+        <div><span>Facility Fees</span><strong>{formatCurrency(fee.facilityFeesTotal)}</strong></div>
+        <div><span>Payment Plan</span><strong>{previewPaymentPlan ? paymentPlanLabel(previewPaymentPlan) : "Not selected"}</strong></div>
+        <div><span>Amount Paid Now</span><strong>{formatCurrency(persistedFee.amountPaid)}</strong></div>
         <div><span>Future Course Schedules</span><strong>{formatCurrency(fee.courseScheduleBalance)}</strong></div>
-        <div><span>Remaining Balance</span><strong>{formatCurrency(fee.remainingBalance)}</strong></div>
+        <div><span>Remaining Balance</span><strong>{formatCurrency(persistedFee.remainingBalance)}</strong></div>
       </div>
       {fee.selectedFeeItems.length ? (
         <div className="cms-fee-preview-schedule">
@@ -2223,6 +2653,28 @@ function FeePreview({ fee, values }) {
                 {fee.selectedFeeItems.map((item) => (
                   <tr key={item.id}>
                     <td><strong>{item.type}</strong></td>
+                    <td className="num">{formatCurrency(item.originalAmount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+      {fee.facilityFeeItems?.length ? (
+        <div className="cms-fee-preview-schedule">
+          <h4>Facility Fees</h4>
+          <div className="cms-fee-scroll">
+            <table className="cms-fee-table">
+              <thead>
+                <tr><th>Fee Type</th><th>Plan</th><th>Details</th><th className="num">Amount</th></tr>
+              </thead>
+              <tbody>
+                {fee.facilityFeeItems.map((item) => (
+                  <tr key={item.id}>
+                    <td><strong>{item.type}</strong></td>
+                    <td>{item.plan || "-"}</td>
+                    <td>{item.detail || "-"}</td>
                     <td className="num">{formatCurrency(item.originalAmount)}</td>
                   </tr>
                 ))}
@@ -2268,6 +2720,16 @@ export default function AdmissionPage() {
   const [actionBusy, setActionBusy] = useState("");
   const [masterOptions, setMasterOptions] = useState({});
   const [masterStatus, setMasterStatus] = useState({ groupsLoading: false, groupsError: "", sectionsError: "", programsLoading: false, programsError: "" });
+  const [allocationMasterData, setAllocationMasterData] = useState({
+    routes: [],
+    pickupPoints: [],
+    vehicles: [],
+    vehicleAssignments: [],
+    hostelBlocks: [],
+    hostelRooms: [],
+    hostelBeds: [],
+  });
+  const [allocationMasterStatus, setAllocationMasterStatus] = useState({ loading: false, error: "" });
   const [scholarships, setScholarships] = useState([]);
   const [feeStructureLoading, setFeeStructureLoading] = useState(false);
   const [feeStructureError, setFeeStructureError] = useState("");
@@ -2378,6 +2840,71 @@ export default function AdmissionPage() {
     ));
   }, [masterOptions.boards, masterOptions.groups, masterOptions.levels, masterOptions.sections, values.board, values.group, values.groupName, values.level, values.levelName, values.year]);
   const programOptions = useMemo(() => masterOptions.programs || [], [masterOptions.programs]);
+  const routeBusTypesByRoute = useMemo(() => {
+    const vehicleTypeById = new Map(
+      allocationMasterData.vehicles
+        .filter((vehicle) => vehicle.status !== "Inactive" && vehicle.busType)
+        .map((vehicle) => [String(vehicle.value), vehicle.busType])
+    );
+    return allocationMasterData.vehicleAssignments
+      .filter((assignment) => assignment.status !== "Inactive")
+      .reduce((lookup, assignment) => {
+        const busType = assignment.busType || vehicleTypeById.get(String(assignment.vehicleId));
+        if (!busType) return lookup;
+        const routeKey = String(assignment.routeId);
+        if (!lookup.has(routeKey)) lookup.set(routeKey, new Set());
+        lookup.get(routeKey).add(busType);
+        return lookup;
+      }, new Map());
+  }, [allocationMasterData.vehicleAssignments, allocationMasterData.vehicles]);
+  const transportRouteOptions = useMemo(() => (
+    allocationMasterData.routes
+      .filter((route) => route.status !== "Inactive")
+      .filter((route) => {
+        if (!values.busType) return true;
+        const routeBusTypes = routeBusTypesByRoute.get(String(route.value));
+        return routeBusTypes?.has(values.busType);
+      })
+      .map(({ value, label }) => ({ value, label }))
+  ), [allocationMasterData.routes, routeBusTypesByRoute, values.busType]);
+  const pickupOptionsForRoute = useCallback((routeId) => (
+    allocationMasterData.pickupPoints
+      .filter((point) => point.status !== "Inactive" && (
+        !allocationMasterData.pickupPoints.some((item) => item.routeId)
+        || String(point.routeId || "") === String(routeId || "")
+      ))
+      .map(({ value, label }) => ({ value, label }))
+  ), [allocationMasterData.pickupPoints]);
+  const hostelBlockOptions = useMemo(() => (
+    allocationMasterData.hostelBlocks
+      .filter((block) => block.status !== "Inactive")
+      .map(({ value, label }) => ({ value, label }))
+  ), [allocationMasterData.hostelBlocks]);
+  const hostelRoomsForBlock = useCallback((blockValue) => {
+    const block = allocationMasterData.hostelBlocks.find((item) => String(item.value) === String(blockValue));
+    return allocationMasterData.hostelRooms
+      .filter((room) => room.status !== "Inactive" && (
+        String(room.blockValue || "") === String(blockValue || "")
+        || Boolean(block?.hostelId && String(room.hostelId || "") === String(block.hostelId))
+      ))
+      .map(({ value, label }) => ({ value, label }));
+  }, [allocationMasterData.hostelBlocks, allocationMasterData.hostelRooms]);
+  const hostelBedsForRoom = useCallback((blockValue, roomValue) => {
+    const block = allocationMasterData.hostelBlocks.find((item) => String(item.value) === String(blockValue));
+    const room = allocationMasterData.hostelRooms.find((item) => (
+      String(item.value) === String(roomValue)
+      && (
+        String(item.blockValue || "") === String(blockValue || "")
+        || Boolean(block?.hostelId && String(item.hostelId || "") === String(block.hostelId))
+      )
+    ));
+    return allocationMasterData.hostelBeds
+      .filter((bed) => bed.status !== "Inactive" && (
+        Boolean(room?.roomId && String(bed.roomId || "") === String(room.roomId))
+        || String(bed.roomNumber || "") === String(roomValue || "")
+      ))
+      .map(({ value, label }) => ({ value, label }));
+  }, [allocationMasterData.hostelBeds, allocationMasterData.hostelBlocks, allocationMasterData.hostelRooms]);
   const groupFilterOptions = useMemo(() => {
     const scopedMasterGroups = (masterOptions.groups || []).filter((item) => (
       scopedOptionMatches(selectedContextBoardValue, boardOptions, item.boardId, item.boardName, selectedContextBoardLabel)
@@ -2465,6 +2992,53 @@ export default function AdmissionPage() {
       return { ...field, options: programOptions.length ? programOptions : [{ value: "__no_programs", label: "No programs available", disabled: true }] };
     }
     if (field.name === "bloodGroup") return { ...field, options: bloodGroupOptions };
+    if (field.name === "busRoute") {
+      if (!values.busType) return { ...field, options: [{ value: "__select_bus_type", label: "Select Bus Type first", disabled: true }] };
+      if (allocationMasterStatus.loading && !transportRouteOptions.length) return { ...field, options: [{ value: "__loading_routes", label: "Loading routes...", disabled: true }] };
+      if (allocationMasterStatus.error && !transportRouteOptions.length) return { ...field, options: [{ value: "__routes_error", label: "Unable to load routes. Please try again.", disabled: true }] };
+      return {
+        ...field,
+        options: transportRouteOptions.length ? transportRouteOptions : [{ value: "__no_routes", label: `No ${values.busType} routes available`, disabled: true }],
+      };
+    }
+    if (field.name === "pickupPoint") {
+      if (!values.busRoute) return { ...field, options: [{ value: "__select_route", label: "Select Route first", disabled: true }] };
+      const pickupOptions = pickupOptionsForRoute(values.busRoute);
+      if (allocationMasterStatus.loading && !pickupOptions.length) return { ...field, options: [{ value: "__loading_pickup_points", label: "Loading pickup points...", disabled: true }] };
+      if (allocationMasterStatus.error && !pickupOptions.length) return { ...field, options: [{ value: "__pickup_points_error", label: "Unable to load pickup points. Please try again.", disabled: true }] };
+      return {
+        ...field,
+        options: pickupOptions.length ? pickupOptions : [{ value: "__no_pickup_points", label: "No pickup points available", disabled: true }],
+      };
+    }
+    if (field.name === "hostelBlock") {
+      if (allocationMasterStatus.loading && !hostelBlockOptions.length) return { ...field, options: [{ value: "__loading_hostel_blocks", label: "Loading hostel blocks...", disabled: true }] };
+      if (allocationMasterStatus.error && !hostelBlockOptions.length) return { ...field, options: [{ value: "__hostel_blocks_error", label: "Unable to load hostel blocks. Please try again.", disabled: true }] };
+      return {
+        ...field,
+        options: hostelBlockOptions.length ? hostelBlockOptions : [{ value: "__no_hostel_blocks", label: "No hostel blocks available", disabled: true }],
+      };
+    }
+    if (field.name === "hostelRoom") {
+      if (!values.hostelBlock) return { ...field, options: [{ value: "__select_hostel_block", label: "Select Hostel Block first", disabled: true }] };
+      const roomOptions = hostelRoomsForBlock(values.hostelBlock);
+      if (allocationMasterStatus.loading && !roomOptions.length) return { ...field, options: [{ value: "__loading_hostel_rooms", label: "Loading rooms...", disabled: true }] };
+      if (allocationMasterStatus.error && !roomOptions.length) return { ...field, options: [{ value: "__hostel_rooms_error", label: "Unable to load rooms. Please try again.", disabled: true }] };
+      return {
+        ...field,
+        options: roomOptions.length ? roomOptions : [{ value: "__no_hostel_rooms", label: "No rooms available", disabled: true }],
+      };
+    }
+    if (field.name === "hostelBed") {
+      if (!values.hostelRoom) return { ...field, options: [{ value: "__select_hostel_room", label: "Select Room first", disabled: true }] };
+      const bedOptions = hostelBedsForRoom(values.hostelBlock, values.hostelRoom);
+      if (allocationMasterStatus.loading && !bedOptions.length) return { ...field, options: [{ value: "__loading_hostel_beds", label: "Loading beds...", disabled: true }] };
+      if (allocationMasterStatus.error && !bedOptions.length) return { ...field, options: [{ value: "__hostel_beds_error", label: "Unable to load beds. Please try again.", disabled: true }] };
+      return {
+        ...field,
+        options: bedOptions.length ? bedOptions : [{ value: "__no_hostel_beds", label: "No available beds", disabled: true }],
+      };
+    }
     return field;
   };
   const currentFields = current.fields.map(enhanceField);
@@ -2671,9 +3245,191 @@ export default function AdmissionPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    const loadAllocationMasterData = async () => {
+      setAllocationMasterStatus({ loading: true, error: "" });
+      const [
+        routesResult,
+        pickupPointsResult,
+        vehiclesResult,
+        vehicleAssignmentsResult,
+        hostelBlocksResult,
+        hostelRoomsResult,
+        hostelBedsResult,
+      ] = await Promise.allSettled([
+        apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
+        apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
+        hostelApi.getHostelBlocks(),
+        hostelApi.getRooms(),
+        hostelApi.getBeds(),
+      ]);
+      if (cancelled) return;
+      const nextData = {
+        routes: routesResult.status === "fulfilled"
+          ? getCollection(routesResult.value.data).map(normalizeTransportRouteOption).filter(Boolean)
+          : [],
+        pickupPoints: pickupPointsResult.status === "fulfilled"
+          ? getCollection(pickupPointsResult.value.data).map(normalizeTransportPickupOption).filter(Boolean)
+          : [],
+        vehicles: vehiclesResult.status === "fulfilled"
+          ? getCollection(vehiclesResult.value.data).map(normalizeTransportVehicleOption).filter(Boolean)
+          : [],
+        vehicleAssignments: vehicleAssignmentsResult.status === "fulfilled"
+          ? getCollection(vehicleAssignmentsResult.value.data).map(normalizeTransportVehicleAssignmentOption).filter(Boolean)
+          : [],
+        hostelBlocks: hostelBlocksResult.status === "fulfilled"
+          ? getCollection(hostelBlocksResult.value.data).map(normalizeHostelBlockOption).filter(Boolean)
+          : [],
+        hostelRooms: hostelRoomsResult.status === "fulfilled"
+          ? getCollection(hostelRoomsResult.value.data).map(normalizeHostelRoomOption).filter(Boolean)
+          : [],
+        hostelBeds: hostelBedsResult.status === "fulfilled"
+          ? getCollection(hostelBedsResult.value.data).map(normalizeHostelBedOption).filter(Boolean)
+          : [],
+      };
+      setAllocationMasterData(nextData);
+      const failed = [
+        routesResult.status === "rejected" ? "routes" : "",
+        pickupPointsResult.status === "rejected" ? "pickup points" : "",
+        vehiclesResult.status === "rejected" ? "vehicles" : "",
+        vehicleAssignmentsResult.status === "rejected" ? "vehicle assignments" : "",
+        hostelBlocksResult.status === "rejected" ? "hostel blocks" : "",
+        hostelRoomsResult.status === "rejected" ? "hostel rooms" : "",
+        hostelBedsResult.status === "rejected" ? "hostel beds" : "",
+      ].filter(Boolean);
+      setAllocationMasterStatus({
+        loading: false,
+        error: failed.length ? `Unable to load ${failed.join(", ")}.` : "",
+      });
+      if (import.meta.env.DEV) {
+        console.log("Admission allocation master data loaded:", {
+          routes: nextData.routes.length,
+          pickupPoints: nextData.pickupPoints.length,
+          vehicles: nextData.vehicles.length,
+          vehicleAssignments: nextData.vehicleAssignments.length,
+          hostelBlocks: nextData.hostelBlocks.length,
+          hostelRooms: nextData.hostelRooms.length,
+          hostelBeds: nextData.hostelBeds.length,
+          failed,
+        });
+      }
+    };
+    loadAllocationMasterData();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (viewMode !== "form" || editingAdmissionId || values.admissionDate) return;
     setValues((current) => (current.admissionDate ? current : { ...current, admissionDate: todayISO() }));
   }, [editingAdmissionId, values.admissionDate, viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "form") return;
+    if (
+      !allocationMasterData.routes.length
+      && !allocationMasterData.pickupPoints.length
+      && !allocationMasterData.hostelBlocks.length
+      && !allocationMasterData.hostelRooms.length
+      && !allocationMasterData.hostelBeds.length
+    ) return;
+    setValues((current) => {
+      let changed = false;
+      const next = { ...current };
+      const matchText = (value, ...candidates) => {
+        const target = String(value || "").trim().toLowerCase();
+        return Boolean(target) && candidates.some((candidate) => String(candidate || "").trim().toLowerCase() === target);
+      };
+
+      const selectedRoute = allocationMasterData.routes.find((route) => matchText(next.busRoute, route.value, route.routeCode, route.routeName, route.label));
+      if (selectedRoute) {
+        if (next.busRoute !== selectedRoute.value) {
+          next.busRoute = selectedRoute.value;
+          changed = true;
+        }
+        if (!next.busRouteName && selectedRoute.routeName) {
+          next.busRouteName = selectedRoute.routeName;
+          changed = true;
+        }
+        const routeBusTypes = routeBusTypesByRoute.get(String(selectedRoute.value));
+        if (!next.busType && routeBusTypes?.size === 1) {
+          next.busType = Array.from(routeBusTypes)[0];
+          changed = true;
+        } else if (next.busType && routeBusTypes?.size && !routeBusTypes.has(next.busType)) {
+          next.busRoute = "";
+          next.busRouteName = "";
+          next.pickupPoint = "";
+          next.pickupPointName = "";
+          next.transportMonthlyFee = "";
+          changed = true;
+        }
+      }
+      const selectedPickup = allocationMasterData.pickupPoints.find((point) => (
+        (!selectedRoute || !point.routeId || String(point.routeId) === String(selectedRoute.value))
+        && matchText(next.pickupPoint, point.value, point.label)
+      ));
+      if (selectedPickup) {
+        if (next.pickupPoint !== selectedPickup.value) {
+          next.pickupPoint = selectedPickup.value;
+          changed = true;
+        }
+        if (!next.pickupPointName && selectedPickup.label) {
+          next.pickupPointName = selectedPickup.label;
+          changed = true;
+        }
+        if (!next.transportMonthlyFee && selectedPickup.monthlyFee) {
+          next.transportMonthlyFee = selectedPickup.monthlyFee;
+          changed = true;
+        }
+      }
+
+      const selectedBlock = allocationMasterData.hostelBlocks.find((block) => matchText(next.hostelBlock, block.value, block.code, block.name, block.hostelId, block.label));
+      if (selectedBlock) {
+        if (next.hostelBlock !== selectedBlock.value) {
+          next.hostelBlock = selectedBlock.value;
+          changed = true;
+        }
+        if (!next.hostelBlockName && selectedBlock.name) {
+          next.hostelBlockName = selectedBlock.name;
+          changed = true;
+        }
+      }
+      const selectedRoom = allocationMasterData.hostelRooms.find((room) => (
+        (!selectedBlock || String(room.blockValue || "") === String(selectedBlock.value) || String(room.hostelId || "") === String(selectedBlock.hostelId || ""))
+        && matchText(next.hostelRoom, room.value, room.roomNo, room.roomId, room.label)
+      ));
+      if (selectedRoom) {
+        if (next.hostelRoom !== selectedRoom.value) {
+          next.hostelRoom = selectedRoom.value;
+          changed = true;
+        }
+        if (!next.hostelRoomName && selectedRoom.roomNo) {
+          next.hostelRoomName = selectedRoom.roomNo;
+          changed = true;
+        }
+        if (!next.hostelFeeAmount && selectedRoom.feeAmount) {
+          next.hostelFeeAmount = selectedRoom.feeAmount;
+          changed = true;
+        }
+      }
+      const selectedBed = allocationMasterData.hostelBeds.find((bed) => (
+        (!selectedRoom || String(bed.roomId || "") === String(selectedRoom.roomId || "") || String(bed.roomNumber || "") === String(selectedRoom.value))
+        && matchText(next.hostelBed, bed.value, bed.bedId, bed.label)
+      ));
+      if (selectedBed && next.hostelBed !== selectedBed.value) {
+        next.hostelBed = selectedBed.value;
+        next.hostelBedName = selectedBed.label;
+        changed = true;
+      } else if (selectedBed && !next.hostelBedName && selectedBed.label) {
+        next.hostelBedName = selectedBed.label;
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [allocationMasterData, routeBusTypesByRoute, viewMode]);
 
   useEffect(() => {
     const photo = values.photo;
@@ -2785,17 +3541,15 @@ export default function AdmissionPage() {
           return apiClient.get(apiEndpoints.groups.getAll, { params: { isActive: true } });
         });
       const selectedBoardForLevels = selectedContextBoardValue || values.board;
-      const [yearsResult, levelsResult, groupsResult, sectionsResult, bloodGroupsResult] = await Promise.allSettled([
+      const [yearsResult, levelsResult, groupsResult, bloodGroupsResult] = await Promise.allSettled([
         apiClient.get(apiEndpoints.academicYears.getAll),
         apiClient.get(apiEndpoints.boards.getAcademicLevels, selectedBoardForLevels ? { params: { boardId: selectedBoardForLevels } } : undefined),
         fetchGroups(),
-        apiClient.get(apiEndpoints.sections.getAll),
         apiClient.get(apiEndpoints.admissions.bloodGroups),
       ]);
 
       if (ignore) return;
       if (groupsResult.status === "rejected") console.error("Unable to load admission groups", groupsResult.reason);
-      if (sectionsResult.status === "rejected") console.error("Unable to load admission sections", sectionsResult.reason);
       const allYearOptions = yearsResult.status === "fulfilled"
         ? getCollection(yearsResult.value.data)
           .map((item) => {
@@ -2826,33 +3580,14 @@ export default function AdmissionPage() {
             .map(normalizeGroupOption)
             .filter((item) => item?.value)
           : (current.groups || []),
-        sections: sectionsResult.status === "fulfilled"
-          ? getCollection(sectionsResult.value.data)
-            .map((item) => {
-              const option = toOption(item, ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "section", "Section", "name", "Name"]);
-              const group = read(item, "group", "Group");
-              const board = read(item, "board", "Board");
-              const academicLevel = read(item, "academicLevel", "AcademicLevel");
-              return option ? {
-                ...option,
-                boardId: readId(item, "boardId", "BoardId") || readId(board, "boardId", "BoardId", "id", "Id"),
-                boardName: readText(item, "boardName", "BoardName") || (typeof board === "string" ? board : readText(board, "boardName", "BoardName", "name", "Name", "boardCode", "BoardCode")),
-                groupId: readId(item, "groupId", "GroupId") || readId(group, "groupId", "GroupId", "id", "Id"),
-                groupName: readText(item, "groupName", "GroupName") || (typeof group === "string" ? group : readText(group, "groupName", "GroupName", "name", "Name")),
-                academicYearId: readId(item, "academicYearId", "AcademicYearId"),
-                academicLevelId: readId(item, "academicLevelId", "AcademicLevelId") || readId(academicLevel, "academicLevelId", "AcademicLevelId", "id", "Id"),
-                academicLevelName: readText(item, "academicLevelName", "AcademicLevelName") || (typeof academicLevel === "string" ? academicLevel : readText(academicLevel, "levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name")),
-              } : null;
-            })
-            .filter((item) => item?.value)
-          : (current.sections || []),
+        sections: current.sections || [],
         bloodGroups: loadedBloodGroups.length ? loadedBloodGroups : DEFAULT_BLOOD_GROUP_OPTIONS,
       }));
       setMasterStatus((current) => ({
         ...current,
         groupsLoading: false,
         groupsError: groupsResult.status === "rejected" ? "Unable to load groups. Please try again." : "",
-        sectionsError: sectionsResult.status === "rejected" ? "Unable to load sections. Please try again." : "",
+        sectionsError: "",
       }));
     };
 
@@ -3181,18 +3916,15 @@ export default function AdmissionPage() {
           return;
         }
 
-        const [detailResult, itemsResult] = await Promise.allSettled([
-          apiClient.get(apiEndpoints.fee.getStructureById(matching.id)),
-          apiClient.get(apiEndpoints.fee.getStructureItems(matching.id)),
-        ]);
+        const detailResult = await Promise.resolve(apiClient.get(apiEndpoints.fee.getStructureById(matching.id)))
+          .then((value) => ({ status: "fulfilled", value }))
+          .catch((reason) => ({ status: "rejected", reason }));
         if (ignore) return;
         const detail = detailResult.status === "fulfilled" ? getObject(detailResult.value.data) : matching.raw;
-        const itemSource = itemsResult.status === "fulfilled"
-          ? getCollection(itemsResult.value.data)
-          : [
-            ...expandFeeStructureItems(detail),
-            ...expandedSummaries.filter((item) => item.id === matching.id).map((item) => item.raw),
-          ];
+        const itemSource = [
+          ...expandFeeStructureItems(detail),
+          ...expandedSummaries.filter((item) => item.id === matching.id).map((item) => item.raw),
+        ];
         const feeItems = itemSource
           .map((item) => normalizeFeeStructureItem({ ...detail, ...item }, { ...matching.raw, ...detail, feeStructureId: matching.id }))
           .filter(Boolean);
@@ -3425,6 +4157,101 @@ export default function AdmissionPage() {
     if (["board", "year", "level", "group", "program"].includes(name)) {
       feeSelectionInitializedRef.current = false;
       setFeeSelection([]);
+    }
+    if (name === "studentType") {
+      setValues((v) => ({
+        ...v,
+        studentType: val,
+        transportRequired: "",
+        busType: "",
+        busRoute: "",
+        busRouteName: "",
+        pickupPoint: "",
+        pickupPointName: "",
+        transportMonthlyFee: "",
+        hostelBlock: "",
+        hostelBlockName: "",
+        hostelRoom: "",
+        hostelRoomName: "",
+        hostelFeeAmount: "",
+        hostelBed: "",
+        hostelBedName: "",
+      }));
+      setErrors((e) => ({
+        ...e,
+        studentType: undefined,
+        transportRequired: undefined,
+        busType: undefined,
+        busRoute: undefined,
+        pickupPoint: undefined,
+        hostelBlock: undefined,
+        hostelRoom: undefined,
+        hostelBed: undefined,
+      }));
+      return;
+    }
+    if (name === "transportRequired") {
+      setValues((v) => ({
+        ...v,
+        transportRequired: val,
+        ...(val === "Yes" ? {} : { busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", transportMonthlyFee: "" }),
+      }));
+      setErrors((e) => ({ ...e, transportRequired: undefined, busType: undefined, busRoute: undefined, pickupPoint: undefined }));
+      return;
+    }
+    if (name === "busType") {
+      setValues((v) => {
+        const routeBusTypes = routeBusTypesByRoute.get(String(v.busRoute || ""));
+        const keepCurrentRoute = v.busRoute && routeBusTypes?.has(val);
+        return {
+          ...v,
+          busType: val,
+          ...(keepCurrentRoute
+            ? { pickupPoint: "", pickupPointName: "", transportMonthlyFee: "" }
+            : { busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", transportMonthlyFee: "" }),
+        };
+      });
+      setErrors((e) => ({ ...e, busType: undefined, busRoute: undefined, pickupPoint: undefined }));
+      return;
+    }
+    if (name === "busRoute") {
+      const route = allocationMasterData.routes.find((item) => String(item.value) === String(val));
+      setValues((v) => ({ ...v, busRoute: val, busRouteName: route?.routeName || "", pickupPoint: "", pickupPointName: "", transportMonthlyFee: "" }));
+      setErrors((e) => ({ ...e, busRoute: undefined, pickupPoint: undefined }));
+      return;
+    }
+    if (name === "pickupPoint") {
+      const hasRouteLinkedPickupPoints = allocationMasterData.pickupPoints.some((item) => item.routeId);
+      const pickup = allocationMasterData.pickupPoints.find((item) => (
+        String(item.value) === String(val)
+        && (!hasRouteLinkedPickupPoints || String(item.routeId || "") === String(values.busRoute || ""))
+      ));
+      setValues((v) => ({
+        ...v,
+        pickupPoint: val,
+        pickupPointName: pickup?.label || "",
+        transportMonthlyFee: pickup?.monthlyFee || "",
+      }));
+      setErrors((e) => ({ ...e, pickupPoint: undefined }));
+      return;
+    }
+    if (name === "hostelBlock") {
+      const block = allocationMasterData.hostelBlocks.find((item) => String(item.value) === String(val));
+      setValues((v) => ({ ...v, hostelBlock: val, hostelBlockName: block?.name || "", hostelRoom: "", hostelRoomName: "", hostelFeeAmount: "", hostelBed: "", hostelBedName: "" }));
+      setErrors((e) => ({ ...e, hostelBlock: undefined, hostelRoom: undefined, hostelBed: undefined }));
+      return;
+    }
+    if (name === "hostelRoom") {
+      const room = allocationMasterData.hostelRooms.find((item) => String(item.value) === String(val));
+      setValues((v) => ({ ...v, hostelRoom: val, hostelRoomName: room?.roomNo || "", hostelFeeAmount: room?.feeAmount || "", hostelBed: "", hostelBedName: "" }));
+      setErrors((e) => ({ ...e, hostelRoom: undefined, hostelBed: undefined }));
+      return;
+    }
+    if (name === "hostelBed") {
+      const bed = allocationMasterData.hostelBeds.find((item) => String(item.value) === String(val));
+      setValues((v) => ({ ...v, hostelBed: val, hostelBedName: bed?.label || "" }));
+      setErrors((e) => ({ ...e, hostelBed: undefined }));
+      return;
     }
     if (["board", "year", "level"].includes(name)) {
       const labelKey = name === "level" ? "levelName" : null;
@@ -3661,7 +4488,11 @@ export default function AdmissionPage() {
       const detail = getObject(response.data);
       const detailRow = normalizeAdmissionRow(detail);
       let formValues = detailRow.values || {};
-      const persistedSelection = null;
+      const persistedSelection = getNestedRows(
+        detail,
+        "selectedFeeStructureComponentIds",
+        "SelectedFeeStructureComponentIds",
+      ).map(String);
 
       let studentId = resolveApprovedStudentId(detail, detailRow.raw, detailRow, record.raw, record);
       let studentFeeId = readStudentFeeAssignmentId(detail) || readStudentFeeAssignmentId(record.raw || record);
@@ -3715,7 +4546,7 @@ export default function AdmissionPage() {
       openAdmissionForm({
         formValues,
         targetStep,
-        selection: persistedSelection,
+        selection: persistedSelection.length ? persistedSelection : null,
         admissionId,
       });
     } catch (err) {
@@ -3956,7 +4787,7 @@ export default function AdmissionPage() {
   const submit = async () => {
     if (saving || submitInFlightRef.current) return;
     if (feeStructureLoading) {
-      setToast("Loading applicable fee structure. Please wait.");
+      setToast("Fee structure is being prepared. Please wait.");
       return;
     }
     if (!validateAdmission()) {
@@ -4164,7 +4995,7 @@ export default function AdmissionPage() {
               </thead>
               <tbody>
                 {listLoading ? (
-                  <tr><td colSpan={9}><div className="cms-empty">Loading admissions...</div></td></tr>
+                  Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
                 ) : pagedAdmissions.length ? pagedAdmissions.map((row) => (
                   <tr key={`${row.source}-${row.id}`}>
                     <td className="cms-strong">{row.admissionNo}</td>

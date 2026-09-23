@@ -131,7 +131,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// <response code="200">Section results successfully published.</response>
         /// <response code="400">Failed to publish section results.</response>
         [HttpPost("sections/{sectionId:int}/publish")]
-        [HttpPost("publish-section")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> PublishSectionResults(
@@ -157,12 +156,11 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Publishes examination results for all sections across a group.
+        /// Publishes examination results for all sections across a group or a specific section.
         /// </summary>
-        /// <param name="request">Payload containing ExamId, GroupId, and optional PublishDate.</param>
-        /// <response code="200">Group results successfully published.</response>
-        /// <response code="400">Failed to publish group results.</response>
-        [HttpPost("publish-group")]
+        /// <param name="request">Payload containing ExamId, GroupId, optional SectionId, and optional PublishDate.</param>
+        /// <response code="200">Results successfully published.</response>
+        /// <response code="400">Failed to publish results.</response>
         [HttpPost("publish")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -170,19 +168,49 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var effectiveExamId = request?.ExamId ?? request?.ExaminationId ?? 0;
             var effectiveGroupId = request?.GroupId ?? 0;
+            var effectiveSectionId = request?.SectionId ?? 0;
 
             if (effectiveExamId <= 0)
             {
                 return BadRequest(new { success = false, message = "Exam ID is required." });
             }
 
-            _logger.LogInformation("Publishing group results for Exam: {ExamId}, Group: {GroupId}", effectiveExamId, effectiveGroupId);
-            var published = await _resultService.PublishGroupResultsAsync(effectiveGroupId, effectiveExamId, request?.PublishDate);
+            bool published;
+            if (effectiveSectionId > 0)
+            {
+                _logger.LogInformation("Publishing section results for Section: {SectionId}, Exam: {ExamId}", effectiveSectionId, effectiveExamId);
+                published = await _resultService.PublishSectionResultsAsync(effectiveSectionId, effectiveExamId, request?.PublishDate);
+            }
+            else
+            {
+                _logger.LogInformation("Publishing group results for Exam: {ExamId}, Group: {GroupId}", effectiveExamId, effectiveGroupId);
+                published = await _resultService.PublishGroupResultsAsync(effectiveGroupId, effectiveExamId, request?.PublishDate);
+            }
+
             if (published)
             {
-                return Ok(new { success = true, message = "Group results published successfully." });
+                return Ok(new { success = true, message = "Results published successfully." });
             }
-            return BadRequest(new { success = false, message = "Failed to publish group results." });
+            return BadRequest(new { success = false, message = "Failed to publish results." });
+        }
+
+        /// <summary>
+        /// Retrieves all previously published examination results grouped by exam and group with section breakdown.
+        /// </summary>
+        /// <param name="boardId">Optional Board ID filter.</param>
+        /// <param name="academicYearId">Optional Academic Year ID filter.</param>
+        /// <param name="groupId">Optional Group ID filter.</param>
+        /// <response code="200">Returns the list of published examination result groups.</response>
+        [HttpGet("published")]
+        [ProducesResponseType(typeof(IEnumerable<PublishedExamResultGroupDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetPublishedResults(
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null,
+            [FromQuery] int? groupId = null)
+        {
+            _logger.LogInformation("Retrieving published results. BoardId: {BoardId}, AcademicYearId: {AcademicYearId}, GroupId: {GroupId}", boardId, academicYearId, groupId);
+            var results = await _resultService.GetPublishedResultsAsync(boardId, academicYearId, groupId);
+            return Ok(results);
         }
 
         // =========================================================================
@@ -495,7 +523,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="examId">Optional Examination ID.</param>
         /// <response code="200">Returns the generated PDF file stream.</response>
         [HttpGet("download-pdf")]
-        [HttpGet("export-pdf")]
         [Produces("application/pdf")]
         [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
         public async Task<IActionResult> DownloadPdf(

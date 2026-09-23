@@ -160,9 +160,10 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> StaffAttendanceToday(
         [FromQuery] int? boardId = null,
         [FromQuery] string? staffType = "All Staff",
+        [FromQuery] DateTime? date = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetStaffAttendanceTodayAsync(boardId, staffType, ct);
+        var result = await _dashboardService.GetStaffAttendanceTodayAsync(boardId, staffType, date, ct);
         return Ok(result);
     }
 
@@ -202,6 +203,27 @@ public class DashboardController : ControllerBase
         CancellationToken ct = default)
     {
         var result = await _dashboardService.GetUpcomingExaminationsAsync(academicYearId, boardId, ct);
+        return Ok(result);
+    }
+
+    // =========================================================================
+    // 9B. UPCOMING HOLIDAYS & COLLEGE VACATIONS
+    // =========================================================================
+    /// <summary>
+    /// 9B. GET /api/v1/dashboard/upcoming-holidays and /api/v1/dashboard/holidays
+    /// Retrieves scheduled and upcoming holidays/vacations with date ranges, duration, and countdown badges.
+    /// </summary>
+    [HttpGet("upcoming-holidays")]
+    [HttpGet("holidays")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(List<UpcomingHolidayItemDto>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> UpcomingHolidays(
+        [FromQuery] int? academicYearId = null,
+        [FromQuery] int? boardId = null,
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+    {
+        var result = await _dashboardService.GetUpcomingHolidaysAsync(academicYearId, boardId, limit, ct);
         return Ok(result);
     }
 
@@ -269,7 +291,7 @@ public class DashboardController : ControllerBase
         var overviewRes = await StudentsOverview(academicYearId, boardId, null, ct) as OkObjectResult;
         var groupRes = await GroupDistribution(academicYearId, boardId, ct) as OkObjectResult;
         var stdAttRes = await StudentsAttendanceToday(academicYearId, boardId, "Overall", ct) as OkObjectResult;
-        var stfAttRes = await StaffAttendanceToday(boardId, "All Staff", ct) as OkObjectResult;
+        var stfAttRes = await StaffAttendanceToday(boardId, "All Staff", null, ct) as OkObjectResult;
         var certRes = await CertificateRequests(academicYearId, boardId, null, ct) as OkObjectResult;
         var examRes = await UpcomingExaminations(academicYearId, boardId, ct) as OkObjectResult;
         var highlightsRes = await TodaysHighlights(academicYearId, boardId, ct) as OkObjectResult;

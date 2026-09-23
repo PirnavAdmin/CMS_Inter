@@ -78,9 +78,8 @@ namespace CollegeManagement.API.Services.Implementations
                 try
                 {
                     var leave = await _context.StaffLeaveRequests
-                        .FromSqlInterpolated($"SELECT * FROM StaffLeaveRequests WHERE StaffLeaveRequestId = {leaveRequestId} FOR UPDATE")
                         .Include(l => l.Staff)
-                        .FirstOrDefaultAsync();
+                        .FirstOrDefaultAsync(l => l.StaffLeaveRequestId == leaveRequestId);
                         
                     if (leave == null) throw new CollegeManagement.API.Exceptions.NotFoundException("Leave request not found");
 
@@ -376,7 +375,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<StaffLeaveHistorySummaryDto>> GetStaffLeaveHistorySummaryAsync(int? departmentId = null, string staffType = null)
+        public async Task<IEnumerable<StaffLeaveHistorySummaryDto>> GetStaffLeaveHistorySummaryAsync(int? departmentId = null, string? staffType = null)
         {
             var query = _context.Staffs
                 .Include(s => s.DepartmentRef)

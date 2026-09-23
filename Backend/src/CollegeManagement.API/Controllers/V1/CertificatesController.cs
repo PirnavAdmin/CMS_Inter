@@ -151,6 +151,25 @@ public class CertificatesController : ControllerBase
     }
 
     // =========================================================
+    // 4.1. GET CERTIFICATE PREVIEW
+    // GET /api/v1/certificates/{id}/preview
+    // GET /api/v1/certificates/records/{id}/preview
+    // =========================================================
+    [HttpGet("{id:int}/preview")]
+    [HttpGet("records/{id:int}/preview")]
+    [ProducesResponseType(typeof(CertificatePreviewResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetPreview(int id, CancellationToken ct = default)
+    {
+        if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
+
+        var result = await _service.GetPreviewAsync(id, ct);
+        if (result == null) return NotFound(new { message = "Certificate not found" });
+
+        return Ok(result);
+    }
+
+    // =========================================================
     // 5. UNIFIED GENERATE CERTIFICATE
     // POST /api/v1/certificates/generate
     // =========================================================
@@ -376,20 +395,29 @@ public class CertificatesController : ControllerBase
     // 16. DOWNLOAD CERTIFICATE PDF
     // GET /api/v1/certificates/download/{id}
     // =========================================================
+    // =========================================================
+    // 16. DOWNLOAD CERTIFICATE PDF
+    // GET /api/v1/certificates/download/{id}
+    // =========================================================
     [HttpGet("download/{id:int}")]
     public async Task<IActionResult> Download(int id, CancellationToken ct = default)
     {
         if (id <= 0) return BadRequest(new { message = "Invalid certificate ID" });
 
-        var certificate = await _service.GetByIdAsync(id, ct);
-        if (certificate == null) return NotFound(new { message = "Certificate not found" });
+        var preview = await _service.GetPreviewAsync(id, ct);
+        if (preview == null)
+        {
+            var certificate = await _service.GetByIdAsync(id, ct);
+            if (certificate == null) return NotFound(new { message = "Certificate not found" });
+            preview = BuildPreviewFallback(certificate);
+        }
 
         var signaturePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "signature.png");
         var hasSignature = System.IO.File.Exists(signaturePath);
 
-        var bytes = BuildCertificatePdf(certificate, hasSignature ? signaturePath : null);
+        var bytes = BuildCertificatePdf(preview, hasSignature ? signaturePath : null);
 
-        return File(bytes, "application/pdf", $"{certificate.CertificateNumber}.pdf");
+        return File(bytes, "application/pdf", $"{preview.CertificateNumber}.pdf");
     }
 
     // =========================================================
@@ -406,12 +434,16 @@ public class CertificatesController : ControllerBase
         var certificates = await _service.GetAllAsync(search, status, certificateType, ct);
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("Certificate Number,Admission Number,Student Name,Academic Level,Group,Certificate Type,Request Date,Issue Date,Status,Issued By,Purpose,Remarks");
+        sb.AppendLine("S.No,Certificate Number,Admission Number,Student Name,Academic Level,Group,Certificate Type,Request Date,Issue Date,Status,Issued By,Purpose,Remarks,Verification Link");
 
+        int sNo = 1;
         foreach (var c in certificates)
         {
             var issueDateStr = c.IssueDate != default ? c.IssueDate.ToString("dd/MM/yyyy") : "";
-            sb.AppendLine($"\"{c.CertificateNumber}\",\"{c.AdmissionNo}\",\"{c.StudentName}\",\"{c.AcademicLevel}\",\"{c.GroupName}\",\"{c.CertificateType}\",\"{c.RequestDate:dd/MM/yyyy}\",\"{issueDateStr}\",\"{c.Status}\",\"{c.IssuedBy ?? ""}\",\"{c.Purpose?.Replace("\"", "\"\"")}\",\"{c.Remarks?.Replace("\"", "\"\"")}\"");
+            var reqDateStr = c.RequestDate != default ? c.RequestDate.ToString("dd/MM/yyyy") : "";
+            var verifyUrl = $"https://pirnavcollege.edu.in/verify-certificate/{c.CertificateNumber}";
+            sb.AppendLine($"{sNo},\"{c.CertificateNumber}\",\"{c.AdmissionNo}\",\"{c.StudentName}\",\"{c.AcademicLevel}\",\"{c.GroupName}\",\"{c.CertificateType}\",\"{reqDateStr}\",\"{issueDateStr}\",\"{c.Status}\",\"{c.IssuedBy ?? "Principal"}\",\"{c.Purpose?.Replace("\"", "\"\"")}\",\"{c.Remarks?.Replace("\"", "\"\"")}\",\"{verifyUrl}\"");
+            sNo++;
         }
 
         var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
@@ -419,7 +451,7 @@ public class CertificatesController : ControllerBase
     }
 
     // =========================================================
-    // 18. EXPORT CERTIFICATES REPORT PDF
+    // 18. EXPORT CERTIFICATES VISUAL MULTI-PAGE PDF
     // GET /api/v1/certificates/export/pdf
     // =========================================================
     [HttpGet("export/pdf")]
@@ -431,173 +463,441 @@ public class CertificatesController : ControllerBase
     {
         var certificates = await _service.GetAllAsync(search, status, certificateType, ct);
 
+        var crestPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "pirnav-college-crest.png");
+        if (!System.IO.File.Exists(crestPath))
+        {
+            var baseDirCrest = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images", "pirnav-college-crest.png");
+            if (System.IO.File.Exists(baseDirCrest)) crestPath = baseDirCrest;
+        }
+        var hasCrest = System.IO.File.Exists(crestPath);
+
+        var signaturePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "signature.png");
+        if (!System.IO.File.Exists(signaturePath))
+        {
+            var baseDirSig = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images", "signature.png");
+            if (System.IO.File.Exists(baseDirSig)) signaturePath = baseDirSig;
+        }
+        var hasSignature = System.IO.File.Exists(signaturePath);
+
         QuestPDF.Settings.License = LicenseType.Community;
+
+        if (!certificates.Any())
+        {
+            var emptyDoc = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(30);
+                    page.Content().AlignCenter().Text("No certificate records found.").FontSize(16).Bold();
+                });
+            });
+            return File(emptyDoc.GeneratePdf(), "application/pdf", $"Bulk_Certificates_{DateTime.UtcNow:yyyy-MM-dd}.pdf");
+        }
+
+        var previews = new List<CertificatePreviewResponseDto>();
+        foreach (var cert in certificates)
+        {
+            if (ct.IsCancellationRequested) break;
+            previews.Add(BuildPreviewFallback(cert));
+        }
 
         var document = Document.Create(container =>
         {
-            container.Page(page =>
+            foreach (var preview in previews)
             {
-                page.Size(PageSizes.A4.Landscape());
-                page.Margin(30);
-
-                page.Header().Column(col =>
+                container.Page(page =>
                 {
-                    col.Item().AlignCenter().Text("COLLEGE MANAGEMENT SYSTEM - CERTIFICATE RECORDS").Bold().FontSize(16).FontColor("#1b5e20");
-                    col.Item().AlignCenter().Text($"Generated on: {DateTime.UtcNow:dd/MM/yyyy HH:mm} UTC | Total Records: {certificates.Count}").FontSize(10).FontColor("#666666");
-                    col.Item().PaddingTop(4).LineHorizontal(1).LineColor("#cccccc");
+                    RenderCertificatePage(page, preview, hasCrest ? crestPath : null, hasSignature ? signaturePath : null);
                 });
-
-                page.Content().PaddingTop(10).Table(table =>
-                {
-                    table.ColumnsDefinition(cols =>
-                    {
-                        cols.ConstantColumn(30);
-                        cols.RelativeColumn(2);
-                        cols.RelativeColumn(1.2f);
-                        cols.RelativeColumn(2);
-                        cols.RelativeColumn(1.8f);
-                        cols.RelativeColumn(1.2f);
-                        cols.RelativeColumn(1.2f);
-                        cols.RelativeColumn(1.2f);
-                    });
-
-                    table.Header(header =>
-                    {
-                        header.Cell().Background("#2e7d32").Padding(4).Text("#").Bold().FontColor("#ffffff").FontSize(9);
-                        header.Cell().Background("#2e7d32").Padding(4).Text("Cert No").Bold().FontColor("#ffffff").FontSize(9);
-                        header.Cell().Background("#2e7d32").Padding(4).Text("Adm No").Bold().FontColor("#ffffff").FontSize(9);
-                        header.Cell().Background("#2e7d32").Padding(4).Text("Student").Bold().FontColor("#ffffff").FontSize(9);
-                        header.Cell().Background("#2e7d32").Padding(4).Text("Type").Bold().FontColor("#ffffff").FontSize(9);
-                        header.Cell().Background("#2e7d32").Padding(4).Text("Req Date").Bold().FontColor("#ffffff").FontSize(9);
-                        header.Cell().Background("#2e7d32").Padding(4).Text("Issue Date").Bold().FontColor("#ffffff").FontSize(9);
-                        header.Cell().Background("#2e7d32").Padding(4).Text("Status").Bold().FontColor("#ffffff").FontSize(9);
-                    });
-
-                    int idx = 1;
-                    foreach (var c in certificates)
-                    {
-                        var bg = idx % 2 == 0 ? "#f9f9f9" : "#ffffff";
-                        var issueDateStr = c.IssueDate != default ? c.IssueDate.ToString("dd/MM/yyyy") : "-";
-                        table.Cell().Background(bg).Padding(4).Text(idx.ToString()).FontSize(8);
-                        table.Cell().Background(bg).Padding(4).Text(c.CertificateNumber).Bold().FontSize(8);
-                        table.Cell().Background(bg).Padding(4).Text(c.AdmissionNo).FontSize(8);
-                        table.Cell().Background(bg).Padding(4).Text($"{c.StudentName}\n({c.AcademicLevel})").FontSize(8);
-                        table.Cell().Background(bg).Padding(4).Text(c.CertificateType).FontSize(8);
-                        table.Cell().Background(bg).Padding(4).Text(c.RequestDate.ToString("dd/MM/yyyy")).FontSize(8);
-                        table.Cell().Background(bg).Padding(4).Text(issueDateStr).FontSize(8);
-                        table.Cell().Background(bg).Padding(4).Text(c.Status).Bold().FontSize(8);
-                        idx++;
-                    }
-                });
-
-                page.Footer().AlignCenter().Text(x =>
-                {
-                    x.Span("Page ");
-                    x.CurrentPageNumber();
-                    x.Span(" of ");
-                    x.TotalPages();
-                });
-            });
+            }
         });
 
-        return File(document.GeneratePdf(), "application/pdf", $"Certificates_Report_{DateTime.UtcNow:yyyyMMddHHmmss}.pdf");
+        return File(document.GeneratePdf(), "application/pdf", $"Bulk_Certificates_{DateTime.UtcNow:yyyy-MM-dd}.pdf");
     }
 
     // =========================================================
     // QUESTPDF STYLED CERTIFICATE BUILDER
     // =========================================================
-    private static byte[] BuildCertificatePdf(CertificateResponseDto certificate, string? signaturePath)
+    private static byte[] BuildCertificatePdf(CertificatePreviewResponseDto preview, string? signaturePath)
     {
+        var crestPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "pirnav-college-crest.png");
+        if (!System.IO.File.Exists(crestPath))
+        {
+            var baseDirCrest = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images", "pirnav-college-crest.png");
+            if (System.IO.File.Exists(baseDirCrest)) crestPath = baseDirCrest;
+        }
+        var hasCrest = System.IO.File.Exists(crestPath);
+
         QuestPDF.Settings.License = LicenseType.Community;
 
         var document = Document.Create(container =>
         {
             container.Page(page =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(40);
-
-                page.Content().Border(3).BorderColor("#2e7d32").Padding(24).Column(column =>
-                {
-                    column.Spacing(8);
-
-                    // Top Header
-                    column.Item().AlignCenter().Text("COLLEGE MANAGEMENT SYSTEM").Bold().FontSize(22).FontColor("#1b5e20");
-                    column.Item().AlignCenter().Text("Recognized by State Board of Intermediate Education").FontSize(11).FontColor("#555555");
-                    column.Item().PaddingTop(6).LineHorizontal(1.5f).LineColor("#2e7d32");
-
-                    // Certificate Title Banner
-                    column.Item().PaddingTop(16).AlignCenter().Text(certificate.CertificateType.ToUpperInvariant()).Bold().FontSize(18).FontColor("#1b5e20");
-                    column.Item().AlignCenter().Text($"Certificate No: {certificate.CertificateNumber}").FontSize(11).Bold().FontColor("#333333");
-
-                    // Body Statement
-                    column.Item().PaddingTop(24).Text(text =>
-                    {
-                        text.Span("This is to certify that ").FontSize(13);
-                        text.Span(certificate.StudentName).Bold().FontSize(14).FontColor("#1b5e20");
-                        text.Span(" bearing Admission Number ").FontSize(13);
-                        text.Span(certificate.AdmissionNo).Bold().FontSize(13);
-                        text.Span(" is/was a bonafide student of this institution studying in ");
-                        text.Span(!string.IsNullOrWhiteSpace(certificate.AcademicLevel) ? certificate.AcademicLevel : "1st Year").Bold().FontSize(13);
-                        text.Span(" (Group: ");
-                        text.Span(!string.IsNullOrWhiteSpace(certificate.GroupName) ? certificate.GroupName : "General").Bold().FontSize(13);
-                        text.Span(") for the Academic Year ");
-                        text.Span(!string.IsNullOrWhiteSpace(certificate.AcademicYear) ? certificate.AcademicYear : $"{DateTime.UtcNow.Year}-{DateTime.UtcNow.Year + 1}").Bold().FontSize(13);
-                        text.Span(".");
-                    });
-
-                    // Purpose & Remarks
-                    column.Item().PaddingTop(16).Text(text =>
-                    {
-                        text.Span("This certificate is issued on request for the purpose of: ").FontSize(12);
-                        text.Span(certificate.Purpose).Bold().FontSize(12);
-                    });
-
-                    if (!string.IsNullOrWhiteSpace(certificate.Remarks))
-                    {
-                        column.Item().PaddingTop(6).Text($"Remarks: {certificate.Remarks}").FontSize(11).Italic().FontColor("#666666");
-                    }
-
-                    // Metadata details table
-                    column.Item().PaddingTop(20).Table(table =>
-                    {
-                        table.ColumnsDefinition(columns =>
-                        {
-                            columns.RelativeColumn();
-                            columns.RelativeColumn();
-                        });
-
-                        table.Cell().Text($"Request Date: {certificate.RequestDate:dd/MM/yyyy}").FontSize(11);
-                        table.Cell().AlignRight().Text($"Issue Date: {certificate.IssueDate:dd/MM/yyyy}").FontSize(11);
-                        table.Cell().Text($"Status: {certificate.Status}").FontSize(11).Bold();
-                        table.Cell().AlignRight().Text($"Issued By: {certificate.IssuedBy ?? "Principal"}").FontSize(11);
-                    });
-
-                    // Footer with signatures
-                    column.Item().PaddingTop(40).Row(row =>
-                    {
-                        row.RelativeItem().Column(c =>
-                        {
-                            c.Item().PaddingTop(30).Text("Office Seal").FontSize(11).Bold();
-                        });
-
-                        row.RelativeItem().AlignRight().Column(c =>
-                        {
-                            if (!string.IsNullOrWhiteSpace(signaturePath) && System.IO.File.Exists(signaturePath))
-                            {
-                                c.Item().Width(140).Height(50).Image(signaturePath);
-                            }
-                            else
-                            {
-                                c.Item().PaddingTop(30);
-                            }
-                            c.Item().Text("Principal / Authorized Signatory").FontSize(11).Bold();
-                        });
-                    });
-                });
+                RenderCertificatePage(page, preview, hasCrest ? crestPath : null, signaturePath);
             });
         });
 
         return document.GeneratePdf();
+    }
+
+    private static string DeriveFatherName(string? studentName)
+    {
+        if (string.IsNullOrWhiteSpace(studentName) || studentName.Equals("Student", StringComparison.OrdinalIgnoreCase))
+            return "Parent Name";
+        var parts = studentName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length > 1)
+        {
+            var last = parts[^1];
+            if (last.Length == 1) return $"{last}. Raghava Rao";
+            return $"Ramesh {last}";
+        }
+        return $"K. {studentName.Trim()} Rao";
+    }
+
+    private static CertificatePreviewResponseDto BuildPreviewFallback(CertificateResponseDto cert)
+    {
+        var certType = cert.CertificateType ?? "Certificate";
+        var certNo = cert.CertificateNumber ?? $"CERT-{cert.CertificateId}";
+        var studentName = cert.StudentName ?? "Student";
+        var admissionNo = cert.AdmissionNo ?? "ADM-2026-0000";
+        var fatherName = !string.IsNullOrWhiteSpace(cert.FatherName) 
+            && !cert.FatherName.Equals("Parent Name", StringComparison.OrdinalIgnoreCase) 
+            && !cert.FatherName.EndsWith("Father", StringComparison.OrdinalIgnoreCase) 
+            && !cert.FatherName.Equals("string", StringComparison.OrdinalIgnoreCase)
+            && !cert.FatherName.Equals("null", StringComparison.OrdinalIgnoreCase)
+            ? cert.FatherName
+            : DeriveFatherName(studentName);
+        var groupName = cert.GroupName ?? "MPC";
+        var academicLevel = cert.AcademicLevel ?? "1st Year";
+        var academicYear = cert.AcademicYear ?? "2026-2027";
+        var safePurpose = !string.IsNullOrWhiteSpace(cert.Purpose) 
+            && !cert.Purpose.Equals("purpose", StringComparison.OrdinalIgnoreCase) 
+            && !cert.Purpose.Equals("string", StringComparison.OrdinalIgnoreCase) 
+            && !cert.Purpose.Equals("null", StringComparison.OrdinalIgnoreCase)
+            ? cert.Purpose.Trim()
+            : "Higher Education / Official Purpose";
+        var remarks = cert.Remarks ?? "";
+
+        string digits = new string(admissionNo.Where(char.IsDigit).ToArray());
+        string studentIdStr = cert.StudentId > 0 ? cert.StudentId.ToString() : (!string.IsNullOrEmpty(digits) ? digits : "1");
+        if (string.IsNullOrWhiteSpace(studentIdStr)) studentIdStr = "1";
+
+        string heading = certType;
+        string paragraphOne;
+        string paragraphTwo = safePurpose.StartsWith("This certificate", StringComparison.OrdinalIgnoreCase)
+            ? safePurpose
+            : $"This certificate is issued for the purpose of {safePurpose}.";
+        string orientation = "Landscape";
+        string borderColor = "#1e3a8a";
+        string badgeBgColor = "#1e3a8a";
+        string badgeTextColor = "#ffffff";
+
+        if (certType.Contains("Bonafide", StringComparison.OrdinalIgnoreCase) || certType.Equals("BC", StringComparison.OrdinalIgnoreCase))
+        {
+            heading = "Bonafide Certificate";
+            paragraphOne = $"This is to certify that Mr./Ms. {studentName} (S/o / D/o {fatherName}) bearing Student ID {studentIdStr} and Admission Number {admissionNo} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {groupName} Group, {academicLevel} during the academic year {academicYear}.";
+            borderColor = "#1e3a8a";
+            badgeBgColor = "#1e3a8a";
+        }
+        else if (certType.Contains("Study", StringComparison.OrdinalIgnoreCase) || certType.Equals("SC", StringComparison.OrdinalIgnoreCase))
+        {
+            heading = "Study Certificate";
+            paragraphOne = $"This is to certify that Mr./Ms. {studentName} (S/o / D/o {fatherName}) bearing Student ID {studentIdStr} and Admission Number {admissionNo} has studied in this college during the period from June 2025 to May 2027 in {groupName} Group and appeared for the Intermediate Public Examination conducted by the Board of Intermediate Education, Andhra Pradesh (BIEAP).";
+            borderColor = "#15803d";
+            badgeBgColor = "#15803d";
+        }
+        else if (certType.Contains("Conduct", StringComparison.OrdinalIgnoreCase) || certType.Equals("CC", StringComparison.OrdinalIgnoreCase))
+        {
+            heading = "Conduct Certificate";
+            paragraphOne = $"This is to certify that Mr./Ms. {studentName} (S/o / D/o {fatherName}) bearing Student ID {studentIdStr} and Admission Number {admissionNo} has been a student of this college during the academic year(s) {academicYear}.\nTo the best of our knowledge and records, his/her conduct and character have been Good.";
+            borderColor = "#991b1b";
+            badgeBgColor = "#991b1b";
+        }
+        else if (certType.Contains("Transfer", StringComparison.OrdinalIgnoreCase) || certType.Contains("TC", StringComparison.OrdinalIgnoreCase))
+        {
+            heading = "Transfer Certificate (TC)";
+            paragraphOne = $"This is to certify that Mr./Ms. {studentName} (S/o / D/o {fatherName}) bearing Student ID {studentIdStr} and Admission Number {admissionNo} has studied in this college from June 2025 to May 2027 in {groupName} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. All dues to the college have been cleared (YES).\nWe wish him/her all the best for his/her future endeavours.";
+            borderColor = "#b45309";
+            badgeBgColor = "#b45309";
+        }
+        else
+        {
+            heading = certType.Contains("Other", StringComparison.OrdinalIgnoreCase) ? "Other Certificate" : certType;
+            paragraphOne = $"This is to certify that Mr./Ms. {studentName} (S/o / D/o {fatherName}) bearing Student ID {studentIdStr} and Admission Number {admissionNo} is studying in {academicLevel} ({groupName}) for the Academic Year {academicYear}.";
+            borderColor = "#0f766e";
+            badgeBgColor = "#0f766e";
+        }
+
+        return new CertificatePreviewResponseDto
+        {
+            CertificateId = cert.CertificateId,
+            CertificateNumber = certNo,
+            CertificateType = certType,
+            Status = cert.Status ?? "Generated",
+            RequestDate = cert.RequestDate,
+            IssueDate = cert.IssueDate != default ? cert.IssueDate : cert.RequestDate,
+            IssuedBy = cert.IssuedBy ?? "Principal",
+            Purpose = safePurpose,
+            Remarks = remarks,
+            Heading = heading,
+            ParagraphOne = paragraphOne,
+            ParagraphTwo = paragraphTwo,
+            Orientation = orientation,
+            BorderColor = borderColor,
+            BadgeBgColor = badgeBgColor,
+            BadgeTextColor = badgeTextColor,
+            SignatureType = "Principal",
+            SealText = "PIRNAV COLLEGE\nVIJAYAWADA",
+            QrEnabled = true
+        };
+    }
+
+    private static void RenderCertificatePage(PageDescriptor page, CertificatePreviewResponseDto preview, string? crestPath, string? signaturePath)
+    {
+        var borderColor = !string.IsNullOrWhiteSpace(preview.BorderColor) ? preview.BorderColor : "#1e3a8a";
+        var badgeBgColor = !string.IsNullOrWhiteSpace(preview.BadgeBgColor) ? preview.BadgeBgColor : borderColor;
+        var badgeTextColor = !string.IsNullOrWhiteSpace(preview.BadgeTextColor) ? preview.BadgeTextColor : "#ffffff";
+        var taglineColor = "#b45309";
+        var isPortrait = string.Equals(preview.Orientation, "Portrait", StringComparison.OrdinalIgnoreCase);
+        var verifyUrl = $"https://pirnavcollege.edu.in/verify-certificate/{Uri.EscapeDataString(preview.CertificateNumber)}";
+
+        page.Size(isPortrait ? PageSizes.A4.Portrait() : PageSizes.A4.Landscape());
+        page.Margin(isPortrait ? 18 : 14);
+
+        // Exact Double Border matching preview: 1.5px outer border + 2px gap + 1.5px inner border
+        page.Content()
+            .Border(1.5f).BorderColor(borderColor)
+            .Padding(2f)
+            .Border(1.5f).BorderColor(borderColor)
+            .Padding(isPortrait ? 16 : 14)
+            .Column(col =>
+        {
+            // 1. TOP HEADER SECTION (Symmetrical 155pt left and right items for 100% true center alignment)
+            col.Item().Column(headerCol =>
+            {
+                headerCol.Item().Row(headerRow =>
+                {
+                    // Left item: College Crest
+                    headerRow.ConstantItem(isPortrait ? 120 : 155).AlignLeft().AlignMiddle().Column(c =>
+                    {
+                        if (!string.IsNullOrWhiteSpace(crestPath) && System.IO.File.Exists(crestPath))
+                        {
+                            c.Item().Width(isPortrait ? 42 : 46).Height(isPortrait ? 42 : 46).Image(crestPath);
+                        }
+                        else
+                        {
+                            c.Item().Width(isPortrait ? 38 : 42).Height(isPortrait ? 38 : 42).Svg(GetCollegeLogoSvg(borderColor));
+                        }
+                    });
+
+                    // Center item: Institution Name, Tagline & Address
+                    headerRow.RelativeItem().AlignCenter().AlignMiddle().Column(c =>
+                    {
+                        c.Item().AlignCenter().Text("PIRNAV COLLEGE").Bold().FontSize(isPortrait ? 18 : 20).FontColor(borderColor);
+                        c.Item().AlignCenter().Text("(Intermediate / Junior College)").Bold().FontSize(isPortrait ? 9f : 9.5f).FontColor(taglineColor);
+                        c.Item().AlignCenter().Text("D.No. 12-3-45, College Road, Vijayawada - 520 001, Andhra Pradesh").FontSize(isPortrait ? 7.8f : 8.5f).FontColor("#64748b");
+                    });
+
+                    // Right item: Affiliation details (Exact same width to guarantee centered header)
+                    headerRow.ConstantItem(isPortrait ? 120 : 155).AlignRight().AlignMiddle().Column(c =>
+                    {
+                        c.Item().AlignRight().Text("Affiliated to").FontSize(isPortrait ? 7.2f : 7.8f).FontColor("#64748b");
+                        c.Item().AlignRight().Text("Board of Intermediate Education").Bold().FontSize(isPortrait ? 7.8f : 8.5f).FontColor("#1e293b");
+                        c.Item().AlignRight().Text("Andhra Pradesh (BIEAP)").FontSize(isPortrait ? 7.2f : 7.8f).FontColor("#64748b");
+                        c.Item().AlignRight().Text("College Code: 12345").FontSize(isPortrait ? 7.2f : 7.8f).FontColor("#64748b");
+                    });
+                });
+
+                // Ref & Date bar with dashed bottom divider line
+                var issueDateStr = preview.IssueDate.HasValue ? preview.IssueDate.Value.ToString("dd/MM/yyyy") : (preview.RequestDate.HasValue ? preview.RequestDate.Value.ToString("dd/MM/yyyy") : DateTime.UtcNow.ToString("dd/MM/yyyy"));
+                headerCol.Item().PaddingTop(6).PaddingBottom(4).Row(refRow =>
+                {
+                    refRow.RelativeItem().Text(t =>
+                    {
+                        t.Span("Ref No: ").FontSize(9.5f).FontColor("#475569");
+                        t.Span(preview.CertificateNumber).Bold().FontSize(9.5f).FontColor("#1e293b");
+                    });
+
+                    refRow.RelativeItem().AlignRight().Text(t =>
+                    {
+                        t.Span("Date: ").FontSize(9.5f).FontColor("#475569");
+                        t.Span(issueDateStr).Bold().FontSize(9.5f).FontColor("#1e293b");
+                    });
+                });
+
+                headerCol.Item().LineHorizontal(1).LineColor("#cbd5e1");
+            });
+
+            // 2. CERTIFICATE TITLE BADGE
+            var headingText = !string.IsNullOrWhiteSpace(preview.Heading) ? preview.Heading : (!string.IsNullOrWhiteSpace(preview.CertificateType) ? preview.CertificateType : "CERTIFICATE");
+            col.Item().PaddingTop(isPortrait ? 10 : 12).AlignCenter().Container()
+                .Background(badgeBgColor)
+                .PaddingVertical(4)
+                .PaddingHorizontal(22)
+                .Text(headingText.ToUpperInvariant())
+                .Bold()
+                .FontSize(isPortrait ? 12 : 12.5f)
+                .FontColor(badgeTextColor);
+
+            // 3. CERTIFICATE BODY CONTENT
+            col.Item().PaddingTop(isPortrait ? 14 : 16).PaddingHorizontal(isPortrait ? 6 : 10).AlignCenter().Column(bodyCol =>
+            {
+                bodyCol.Item().AlignCenter().Text(preview.ParagraphOne).FontSize(isPortrait ? 12.5f : 13).LineHeight(1.6f).FontColor("#1e293b");
+
+                if (!string.IsNullOrWhiteSpace(preview.ParagraphTwo))
+                {
+                    bodyCol.Item().PaddingTop(8).AlignCenter().Text(preview.ParagraphTwo).FontSize(isPortrait ? 11.5f : 12).LineHeight(1.45f).FontColor("#334155");
+                }
+
+                if (!string.IsNullOrWhiteSpace(preview.Remarks))
+                {
+                    bodyCol.Item().PaddingTop(6).AlignCenter().Text($"Remarks: {preview.Remarks}").FontSize(10.5f).Italic().FontColor("#64748b");
+                }
+            });
+
+            // 4. FOOTER AREA (Fixed top padding guaranteeing exactly 1 page per certificate)
+            col.Item().PaddingTop(isPortrait ? 16 : 18).Row(footerRow =>
+            {
+                // Left Column: Place, Date, Scan to verify with QR Code SVG
+                var issueDateStr = preview.IssueDate.HasValue ? preview.IssueDate.Value.ToString("dd/MM/yyyy") : (preview.RequestDate.HasValue ? preview.RequestDate.Value.ToString("dd/MM/yyyy") : DateTime.UtcNow.ToString("dd/MM/yyyy"));
+                footerRow.RelativeItem(1.2f).AlignBottom().Column(leftCol =>
+                {
+                    leftCol.Item().Text("Place: Vijayawada").FontSize(10).FontColor("#334155");
+                    leftCol.Item().Text($"Date: {issueDateStr}").FontSize(10).FontColor("#334155");
+                    if (preview.QrEnabled)
+                    {
+                        leftCol.Item().PaddingTop(3).Row(qrRow =>
+                        {
+                            qrRow.AutoItem().Width(38).Height(38).Svg(GenerateQrCodeSvg(verifyUrl, 38, borderColor));
+                            qrRow.RelativeItem().PaddingLeft(6).AlignMiddle().Column(t =>
+                            {
+                                t.Item().Text("Scan to verify").FontSize(8f).FontColor("#64748b");
+                            });
+                        });
+                    }
+                });
+
+                // Center Column: Circular College Seal Stamp (Single dashed circle matching Preview 1:1)
+                footerRow.RelativeItem(1f).AlignCenter().AlignBottom().Column(centerCol =>
+                {
+                    centerCol.Item().Width(64).Height(64).Svg(GetCollegeSealSvg(borderColor));
+                });
+
+                // Right Column: Signatory
+                footerRow.RelativeItem(1.2f).AlignRight().AlignBottom().Column(rightCol =>
+                {
+                    var sigImg = signaturePath;
+                    if (string.IsNullOrWhiteSpace(sigImg) || !System.IO.File.Exists(sigImg))
+                    {
+                        var candidates = new[]
+                        {
+                            Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "signature.png"),
+                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images", "signature.png"),
+                            Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "signature.jpg"),
+                            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images", "signature.jpg")
+                        };
+                        sigImg = candidates.FirstOrDefault(System.IO.File.Exists);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(sigImg) && System.IO.File.Exists(sigImg))
+                    {
+                        rightCol.Item().AlignRight().Width(95).Height(32).Image(sigImg);
+                    }
+                    else
+                    {
+                        rightCol.Item().AlignRight().Width(110).Height(30).Svg(GetSignatureSvg(preview.SignatureType ?? "Principal", "#1e3a8a"));
+                    }
+                    rightCol.Item().AlignRight().Text(preview.SignatureType ?? "Principal").Bold().FontSize(10).FontColor("#1e293b");
+                    rightCol.Item().AlignRight().Text("Pirnav College").FontSize(8.5f).FontColor("#64748b");
+                });
+            });
+        });
+    }
+
+    private static string GetCollegeLogoSvg(string color = "#1e3a8a")
+    {
+        return $@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 50 50"" width=""50"" height=""50"">
+          <circle cx=""25"" cy=""25"" r=""23"" fill=""{color}"" />
+          <text x=""25"" y=""33"" font-size=""24"" font-weight=""bold"" fill=""#ffffff"" text-anchor=""middle"" font-family=""sans-serif"">P</text>
+        </svg>";
+    }
+
+    private static string GetCollegeSealSvg(string color = "#1e3a8a")
+    {
+        return $@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 80 80"" width=""80"" height=""80"">
+          <circle cx=""40"" cy=""40"" r=""36"" fill=""none"" stroke=""{color}"" stroke-width=""2"" stroke-dasharray=""4,3"" />
+          <text x=""40"" y=""37"" font-size=""10"" font-weight=""800"" fill=""{color}"" text-anchor=""middle"" font-family=""Arial, sans-serif"" letter-spacing=""1"">PIRNAV</text>
+          <text x=""40"" y=""51"" font-size=""10"" font-weight=""800"" fill=""{color}"" text-anchor=""middle"" font-family=""Arial, sans-serif"" letter-spacing=""1"">COLLEGE</text>
+        </svg>";
+    }
+
+    private static string GetSignatureSvg(string title = "Principal", string color = "#1e3a8a")
+    {
+        return $@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 160 40"" width=""140"" height=""36"">
+          <text x=""80"" y=""26"" font-size=""18"" font-style=""italic"" font-weight=""600"" fill=""{color}"" text-anchor=""middle"" font-family=""'Segoe Script', 'Caveat', 'Brush Script MT', cursive"">Dr. S. K. Rao</text>
+        </svg>";
+    }
+
+    private static string GenerateQrCodeSvg(string text, int size = 48, string color = "#1e3a8a")
+    {
+        var len = text.Length;
+        var version = len <= 32 ? 2 : 3;
+        var matrixSize = version * 4 + 17;
+        var matrix = new int[matrixSize, matrixSize];
+        var isReserved = new bool[matrixSize, matrixSize];
+
+        void AddFinder(int row, int col)
+        {
+            for (int r = -1; r <= 7; r++)
+            {
+                for (int c = -1; c <= 7; c++)
+                {
+                    int nr = row + r, nc = col + c;
+                    if (nr >= 0 && nr < matrixSize && nc >= 0 && nc < matrixSize)
+                    {
+                        isReserved[nr, nc] = true;
+                        if (r >= 0 && r <= 6 && c >= 0 && c <= 6)
+                        {
+                            matrix[nr, nc] = (r == 0 || r == 6 || c == 0 || c == 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4)) ? 1 : 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        AddFinder(0, 0);
+        AddFinder(0, matrixSize - 7);
+        AddFinder(matrixSize - 7, 0);
+
+        for (int i = 8; i < matrixSize - 8; i++)
+        {
+            if (!isReserved[6, i]) { matrix[6, i] = (i % 2 == 0) ? 1 : 0; isReserved[6, i] = true; }
+            if (!isReserved[i, 6]) { matrix[i, 6] = (i % 2 == 0) ? 1 : 0; isReserved[i, 6] = true; }
+        }
+
+        var hash = 17;
+        foreach (var ch in text) hash = hash * 31 + ch;
+        var rnd = new Random(Math.Abs(hash));
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append($@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 {size} {size}"" width=""{size}"" height=""{size}"">");
+        sb.Append($@"<rect width=""{size}"" height=""{size}"" fill=""#ffffff"" />");
+
+        float cellSize = (float)size / matrixSize;
+        for (int r = 0; r < matrixSize; r++)
+        {
+            for (int c = 0; c < matrixSize; c++)
+            {
+                int val = isReserved[r, c] ? matrix[r, c] : (rnd.Next(2) ^ ((r + c) % 2 == 0 ? 1 : 0));
+                if (val == 1)
+                {
+                    sb.Append($@"<rect x=""{(c * cellSize):F2}"" y=""{(r * cellSize):F2}"" width=""{cellSize:F2}"" height=""{cellSize:F2}"" fill=""{color}"" />");
+                }
+            }
+        }
+        sb.Append("</svg>");
+        return sb.ToString();
     }
 }

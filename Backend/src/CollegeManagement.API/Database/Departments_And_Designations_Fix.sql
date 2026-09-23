@@ -223,6 +223,66 @@ BEGIN
         COUNT(CASE WHEN IsActive = 1 THEN 1 END) AS ActiveDesignations,
         COUNT(CASE WHEN IsActive = 0 THEN 1 END) AS InactiveDesignations,
         (SELECT COUNT(DISTINCT Id) FROM `Staff` WHERE DesignationId IS NOT NULL AND DesignationId > 0 AND IsDeleted = 0) AS AssignedStaffCount
-    FROM `Designations`;
+    FROM `Designations`
+    WHERE IsDeleted = 0;
 END $$
 DELIMITER ;
+
+-- ----------------------------------------------------------------------------
+-- 7. Data Cleanup & Seeding: Separation of Hostel and Transport
+-- ----------------------------------------------------------------------------
+-- Remove redundant combined 'Hostel & Transport' department
+DELETE FROM `Departments` WHERE `DepartmentId` = 510 OR LOWER(`DepartmentName`) = 'hostel & transport';
+
+-- Ensure Transport and Hostel departments are active Non-Teaching
+UPDATE `Departments` SET `IsActive` = 1, `IsDeleted` = 0, `StaffType` = 'Non-Teaching' WHERE LOWER(`DepartmentName`) = 'transport';
+UPDATE `Departments` SET `IsActive` = 1, `IsDeleted` = 0, `StaffType` = 'Non-Teaching' WHERE LOWER(`DepartmentName`) = 'hostel';
+
+-- Remove test designation 'account'
+DELETE FROM `Designations` WHERE `Id` = 265 AND LOWER(`Name`) = 'account';
+
+-- Link Bus Driver to Transport department
+UPDATE `Designations` 
+SET `DepartmentId` = (SELECT `DepartmentId` FROM `Departments` WHERE LOWER(`DepartmentName`) = 'transport' LIMIT 1),
+    `StaffType` = 'Non-Teaching',
+    `IsActive` = 1,
+    `IsDeleted` = 0
+WHERE LOWER(`Name`) = 'bus driver';
+
+-- Seed Transport Designations
+INSERT INTO `Designations` (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `IsDeleted`, `CreatedAt`, `UpdatedAt`)
+SELECT 'Driver', d.`DepartmentId`, 'Non-Teaching', 1, 0, NOW(), NOW()
+FROM `Departments` d WHERE LOWER(d.`DepartmentName`) = 'transport'
+AND NOT EXISTS (SELECT 1 FROM `Designations` WHERE LOWER(`Name`) = 'driver' AND `IsDeleted` = 0);
+
+INSERT INTO `Designations` (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `IsDeleted`, `CreatedAt`, `UpdatedAt`)
+SELECT 'Transport Incharge', d.`DepartmentId`, 'Non-Teaching', 1, 0, NOW(), NOW()
+FROM `Departments` d WHERE LOWER(d.`DepartmentName`) = 'transport'
+AND NOT EXISTS (SELECT 1 FROM `Designations` WHERE LOWER(`Name`) = 'transport incharge' AND `IsDeleted` = 0);
+
+INSERT INTO `Designations` (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `IsDeleted`, `CreatedAt`, `UpdatedAt`)
+SELECT 'Transport Coordinator', d.`DepartmentId`, 'Non-Teaching', 1, 0, NOW(), NOW()
+FROM `Departments` d WHERE LOWER(d.`DepartmentName`) = 'transport'
+AND NOT EXISTS (SELECT 1 FROM `Designations` WHERE LOWER(`Name`) = 'transport coordinator' AND `IsDeleted` = 0);
+
+-- Seed Hostel Designations
+INSERT INTO `Designations` (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `IsDeleted`, `CreatedAt`, `UpdatedAt`)
+SELECT 'Hostel Warden', d.`DepartmentId`, 'Non-Teaching', 1, 0, NOW(), NOW()
+FROM `Departments` d WHERE LOWER(d.`DepartmentName`) = 'hostel'
+AND NOT EXISTS (SELECT 1 FROM `Designations` WHERE LOWER(`Name`) = 'hostel warden' AND `IsDeleted` = 0);
+
+INSERT INTO `Designations` (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `IsDeleted`, `CreatedAt`, `UpdatedAt`)
+SELECT 'Assistant Warden', d.`DepartmentId`, 'Non-Teaching', 1, 0, NOW(), NOW()
+FROM `Departments` d WHERE LOWER(d.`DepartmentName`) = 'hostel'
+AND NOT EXISTS (SELECT 1 FROM `Designations` WHERE LOWER(`Name`) = 'assistant warden' AND `IsDeleted` = 0);
+
+INSERT INTO `Designations` (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `IsDeleted`, `CreatedAt`, `UpdatedAt`)
+SELECT 'Warden', d.`DepartmentId`, 'Non-Teaching', 1, 0, NOW(), NOW()
+FROM `Departments` d WHERE LOWER(d.`DepartmentName`) = 'hostel'
+AND NOT EXISTS (SELECT 1 FROM `Designations` WHERE LOWER(`Name`) = 'warden' AND `IsDeleted` = 0);
+
+INSERT INTO `Designations` (`Name`, `DepartmentId`, `StaffType`, `IsActive`, `IsDeleted`, `CreatedAt`, `UpdatedAt`)
+SELECT 'Hostel Caretaker', d.`DepartmentId`, 'Non-Teaching', 1, 0, NOW(), NOW()
+FROM `Departments` d WHERE LOWER(d.`DepartmentName`) = 'hostel'
+AND NOT EXISTS (SELECT 1 FROM `Designations` WHERE LOWER(`Name`) = 'hostel caretaker' AND `IsDeleted` = 0);
+

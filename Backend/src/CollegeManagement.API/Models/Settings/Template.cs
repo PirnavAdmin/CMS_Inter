@@ -39,7 +39,7 @@ namespace CollegeManagement.API.Models.Settings
         public bool IsActive { get; set; } = true;
 
         [Column("Version")]
-        public int Version { get; set; } = 1;
+        public string Version { get; set; } = "1";
 
         [Column("CreatedAt")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

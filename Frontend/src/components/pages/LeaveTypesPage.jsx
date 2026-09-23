@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   CalendarDays, 
   Plus, 
@@ -214,6 +214,25 @@ export default function LeaveTypesPage() {
       }
     >
       <div className="leave-types-page">
+        {/* Back Navigation */}
+        <div className="cms-back-nav-bar" style={{ marginBottom: "14px" }}>
+          <Link
+            to="/dashboard/settings"
+            className="cms-back-link"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              color: "var(--cms-primary, #355e3b)",
+              fontWeight: 650,
+              fontSize: "13px",
+              textDecoration: "none",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft size={16} /> Back to Settings
+          </Link>
+        </div>
 
         {/* Feedback Messages */}
         {successMessage && (

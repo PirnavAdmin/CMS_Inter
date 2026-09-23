@@ -35,9 +35,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                 targetDate = parsedDt.Date;
             }
 
-            // Fetch staff members filtered by staff type and optional department
+            // Fetch staff members filtered by staff type, board, and optional department
             var query = _context.Staffs
-                .Where(f => !f.IsDeleted && f.Status == "Active");
+                .Where(f => !f.IsDeleted && (f.Status == "Active" || f.Status == null));
+
+            if (request.BoardId.HasValue && request.BoardId.Value > 0)
+            {
+                query = query.Where(f => f.BoardId == request.BoardId.Value);
+            }
 
             if (request.StaffType.HasValue)
             {
@@ -576,7 +581,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (request.BoardId.HasValue && request.BoardId.Value > 0)
             {
-                facultyQuery = facultyQuery.Where(f => f.BoardId == request.BoardId.Value || f.BoardId == null);
+                facultyQuery = facultyQuery.Where(f => f.BoardId == request.BoardId.Value);
             }
 
             if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)

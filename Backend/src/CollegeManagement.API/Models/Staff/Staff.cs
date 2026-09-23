@@ -71,10 +71,8 @@ namespace CollegeManagement.API.Models.Staff
         [StringLength(15)]
         public string? AlternateMobile { get; set; }
 
-        [Required]
-        [EmailAddress]
         [StringLength(150)]
-        public string Email { get; set; } = string.Empty;
+        public string? Email { get; set; }
 
         [StringLength(10)]
         public string? BloodGroup { get; set; }
@@ -194,6 +192,14 @@ namespace CollegeManagement.API.Models.Staff
         public string? DocumentsJson { get; set; }
         public string? BankDetailsJson { get; set; }
         public string? EmergencyContactJson { get; set; }
+        public string? DepartmentSpecificJson { get; set; }
+
+        [NotMapped]
+        public string? CustomFieldsJson
+        {
+            get => DepartmentSpecificJson;
+            set => DepartmentSpecificJson = value;
+        }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

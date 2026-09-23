@@ -1,6 +1,6 @@
 using System.Data;
-using System.Reflection;
 using System.Text;
+using System.Reflection;
 using Asp.Versioning;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Helpers;
@@ -11,6 +11,7 @@ using CollegeManagement.API.Profiles;
 using CollegeManagement.API.Repositories;
 using CollegeManagement.API.Repositories.Implementations;
 using CollegeManagement.API.Repositories.Implementations.Hostel;
+using CollegeManagement.API.Repositories.Implementations.Transport;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Services;
@@ -19,7 +20,6 @@ using CollegeManagement.API.Services.Implementations.Hostel;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Location;
-using CollegeManagement.API.Tests;
 using CollegeManagement.API.Validators.StaffValidators;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -31,97 +31,14 @@ using MySqlConnector;
 
 var builder = WebApplication.CreateBuilder(args);
 
-#region CLI Test & Maintenance Handlers
-if (args.Length > 0)
-{
-    var connStr = builder.Configuration.GetConnectionString("DefaultConnection")!;
-
-    if (args.Contains("--test-staff-module"))
-    {
-        var tester = new StaffModuleBackendTester(connStr);
-        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
-        return;
-    }
-    if (args.Contains("--validate-staff-db"))
-    {
-        var validator = new StaffDbValidator(connStr);
-        await validator.ValidateAndSeedCleanDataAsync();
-        Environment.Exit(0);
-        return;
-    }
-    if (args.Contains("--inspect-certificates-db"))
-    {
-        var inspector = new CertificateDbInspector(connStr);
-        await inspector.InspectAsync();
-        Environment.Exit(0);
-        return;
-    }
-    if (args.Contains("--test-certificates-module"))
-    {
-        var tester = new CertificateModuleBackendTester(connStr);
-        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
-        return;
-    }
-    if (args.Contains("--test-dashboard-module"))
-    {
-        var tester = new DashboardModuleBackendTester(connStr);
-        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
-        return;
-    }
-    if (args.Contains("--test-reports-module"))
-    {
-        var tester = new ReportModuleBackendTester(connStr);
-        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
-        return;
-    }
-    if (args.Contains("--test-hostel-module"))
-    {
-        var tester = new HostelModuleBackendTester(connStr);
-        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
-        return;
-    }
-    if (args.Contains("--test-staff-attendance-module"))
-    {
-        builder.Services.AddDbContext<AppDbContext>(opt => opt.UseMySql(connStr, ServerVersion.AutoDetect(connStr)));
-        builder.Services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
-        builder.Services.AddScoped<IStaffAttendanceService, StaffAttendanceService>();
-        var testApp = builder.Build();
-        var success = await StaffAttendanceModuleBackendTester.RunAsync(testApp.Services);
-        Environment.Exit(success ? 0 : 1);
-        return;
-    }
-    if (args.Contains("--test-sections-module"))
-    {
-        var tester = new SectionModuleBackendTester(connStr);
-        Environment.Exit(await tester.RunAllTestsAsync() ? 0 : 1);
-        return;
-    }
-    if (args.Contains("--test-db-all"))
-    {
-        builder.Services.AddDbContext<AppDbContext>(opt => opt.UseMySql(connStr, ServerVersion.AutoDetect(connStr)));
-        var testApp = builder.Build();
-        var exitCode = await DbSchemaAndSpTester.RunAsync(testApp.Services);
-        Environment.Exit(exitCode);
-        return;
-    }
-    if (args.Contains("--validate-certificates-sql"))
-    {
-        var validator = new CertificateSqlValidator(connStr);
-        await validator.ValidateAndExecuteScriptAsync();
-        Environment.Exit(0);
-        return;
-    }
-    if (args.Contains("--inspect-certificate-deps"))
-    {
-        var inspector = new CertificateDependencyInspector(connStr);
-        await inspector.RunInspectionAsync();
-        Environment.Exit(0);
-        return;
-    }
-}
-#endregion
-
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
+#region Dapper Type Handlers
+Dapper.SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new NullableDateOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new TimeOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new NullableTimeOnlyTypeHandler());
+#endregion
 
 #region Controllers & JSON
 builder.Services.AddControllers()
@@ -211,6 +128,7 @@ builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
 builder.Services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IStudentAdmissionRepository, StudentAdmissionRepository>();
+builder.Services.AddScoped<IStudentImportRepository, StudentImportRepository>();
 builder.Services.AddScoped<IAssignmentRepository, AssignmentRepository>();
 builder.Services.AddScoped<IAssignmentSubmissionRepository, AssignmentSubmissionRepository>();
 builder.Services.AddScoped<IExaminationRepository, ExaminationRepository>();
@@ -228,7 +146,6 @@ builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddScoped<IStudyMaterialRepository, StudyMaterialRepository>();
 builder.Services.AddScoped<ICertificateRepository, CertificateRepository>();
 builder.Services.AddScoped<IFeeRepository, FeeRepository>();
-builder.Services.AddScoped<ISectionRepository, SectionRepository>();
 builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocationRepository>();
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
@@ -248,6 +165,19 @@ builder.Services.AddScoped<IHostelOutpassLeaveRepository, HostelOutpassLeaveRepo
 builder.Services.AddScoped<IHostelTransferVacateRepository, HostelTransferVacateRepository>();
 builder.Services.AddScoped<IHostelDashboardRepository, HostelDashboardRepository>();
 builder.Services.AddScoped<IHostelReportRepository, HostelReportRepository>();
+
+// Transport Repositories
+builder.Services.AddScoped<ITransportRouteRepository, TransportRouteRepository>();
+builder.Services.AddScoped<IPickupPointRepository, PickupPointRepository>();
+builder.Services.AddScoped<ITransportVehicleRepository, TransportVehicleRepository>();
+builder.Services.AddScoped<ITransportDriverRepository, TransportDriverRepository>();
+builder.Services.AddScoped<ITransportAttendantRepository, TransportAttendantRepository>();
+builder.Services.AddScoped<ITransportVehicleAssignmentRepository, TransportVehicleAssignmentRepository>();
+builder.Services.AddScoped<IStudentTransportAssignmentRepository, StudentTransportAssignmentRepository>();
+builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepository>();
+builder.Services.AddScoped<ITransportDashboardRepository, TransportDashboardRepository>();
+builder.Services.AddScoped<ITransportReportRepository, TransportReportRepository>();
+builder.Services.AddScoped<ITransportRepository, TransportRepository>();
 #endregion
 
 #region Services
@@ -317,6 +247,21 @@ builder.Services.AddScoped<IHostelTransferVacateService, HostelTransferVacateSer
 builder.Services.AddScoped<IHostelDashboardService, HostelDashboardService>();
 builder.Services.AddScoped<IHostelReportService, HostelReportService>();
 
+// Transport Services
+builder.Services.AddScoped<ITransportRouteService, TransportRouteService>();
+builder.Services.AddScoped<IPickupPointService, PickupPointService>();
+builder.Services.AddScoped<ITransportVehicleService, TransportVehicleService>();
+builder.Services.AddScoped<ITransportDriverService, TransportDriverService>();
+builder.Services.AddScoped<ITransportAttendantService, TransportAttendantService>();
+builder.Services.AddScoped<ITransportVehicleAssignmentService, TransportVehicleAssignmentService>();
+builder.Services.AddScoped<IStudentTransportAssignmentService, StudentTransportAssignmentService>();
+builder.Services.AddScoped<IVehicleMaintenanceService, VehicleMaintenanceService>();
+builder.Services.AddScoped<ITransportDashboardService, TransportDashboardService>();
+builder.Services.AddScoped<ITransportReportService, TransportReportService>();
+builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
+builder.Services.AddScoped<ITransportService, TransportService>();
+
+// Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");
@@ -422,69 +367,31 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-#region Database Schema Initialization
-using (var scope = app.Services.CreateScope())
-{
-    try
-    {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-
-        db.Database.ExecuteSqlRaw(@"
-            CREATE TABLE IF NOT EXISTS `ExamCodeSequences` (
-                `AcademicYear` VARCHAR(20) NOT NULL PRIMARY KEY,
-                `LastSequence` INT NOT NULL DEFAULT 0,
-                `UpdatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-        ");
-
-        db.Database.ExecuteSqlRaw(@"
-            SET @idx_exists = (
-                SELECT COUNT(*)
-                FROM INFORMATION_SCHEMA.STATISTICS
-                WHERE TABLE_SCHEMA = DATABASE()
-                  AND TABLE_NAME = 'Examinations'
-                  AND INDEX_NAME = 'IX_Examinations_ExamCode'
-            );
-
-            SET @ddl = IF(
-                @idx_exists = 0,
-                'ALTER TABLE `Examinations` ADD UNIQUE INDEX `IX_Examinations_ExamCode` (`ExamCode`);',
-                'SELECT 1;'
-            );
-
-            PREPARE stmt FROM @ddl;
-            EXECUTE stmt;
-            DEALLOCATE PREPARE stmt;
-        ");
-    }
-    catch (Exception ex)
-    {
-        var logger = scope.ServiceProvider.GetService<ILogger<Program>>();
-        logger?.LogWarning(ex, "Schema initialization notice for Examinations unique index / ExamCodeSequences");
-    }
-}
-#endregion
-
 #region Pipeline Middleware
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+    ForwardedHeaders = ForwardedHeaders.All
+};
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 app.UseCors("AllowFrontend");
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-if (app.Environment.IsDevelopment())
+#region Swagger UI
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "College Management API v1");
-        c.RoutePrefix = "swagger";
-    });
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "College Management API v1");
+    c.RoutePrefix = "swagger";
+});
+#endregion
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseStaticFiles();
 app.UseAuthentication();
 

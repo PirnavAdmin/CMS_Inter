@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building,
-  Building2, LayoutDashboard, Users, BarChart3, CalendarDays,
+  Building2, LayoutDashboard, Users, BarChart3,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -12,6 +12,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
+import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import boardAcademicYearIcon from "@/assets/sidebar-3d/board-academic-year.png";
 import subjectsIcon from "@/assets/sidebar-3d/subjects.png";
 import timetableIcon from "@/assets/sidebar-3d/timetable.png";
@@ -62,6 +63,8 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/settings/audit-logs", icon: settingsAuditLogsIcon },
   { path: "/dashboard/designations", icon: generatedSidebarIcons.department },
   { path: "/dashboard/promotions", icon: promotionIcon },
+  { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
+  { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -122,7 +125,7 @@ export const menu = [
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
-      { to: "/dashboard/holidays", label: "Holiday Management", icon: CalendarDays },
+      { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon },
     ],
   },
   {
@@ -140,7 +143,7 @@ export const menu = [
     section: "Staff",
     items: [
       { to: "/dashboard/staff", label: "Staff Management", icon: staffIcon },
-      { to: "/dashboard/departments", label: "Department Management", icon: generatedSidebarIcons.department },
+      { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department },
       { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
       { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
     ],
@@ -157,6 +160,7 @@ export const menu = [
     section: "Finance",
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
+      { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
     ],
   },
   {
@@ -307,6 +311,8 @@ export default function DashboardLayout({
   title,
   subtitle,
   breadcrumb = [],
+  backLink,
+  backLinkPosition = "above",
   actions,
   children,
   excludeNotificationSources = EMPTY_NOTIFICATION_SOURCES,
@@ -344,6 +350,7 @@ export default function DashboardLayout({
   const pathname = location.pathname;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname), [pathname]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title) ?? pageMenuItem?.icon;
+  const pageTitleNode = <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>;
 
 
 
@@ -760,7 +767,11 @@ export default function DashboardLayout({
 
         <main className="cms-content">
           <div className="cms-page-head">
-            <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>
+            {backLink ? (
+              <div className="cms-page-heading-with-back">
+                {backLinkPosition === "below" ? <>{pageTitleNode}{backLink}</> : <>{backLink}{pageTitleNode}</>}
+              </div>
+            ) : pageTitleNode}
             {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div> : null}
           </div>
 

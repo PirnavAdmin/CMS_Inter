@@ -42,5 +42,35 @@ public class CertificateResponseDto
 
     public string? IssuedBy { get; set; }
 
+    public string? FatherName { get; set; }
+
+    public string? MotherName { get; set; }
+
+    public string? RollNo { get; set; }
+
+    public string? Section { get; set; }
+
+    public string? BoardName { get; set; }
+
+    public DateTime? DateOfBirth { get; set; }
+
+    public string? TemplateCode { get; set; }
+
+    public string? TemplateTitle { get; set; }
+
+    public string? Orientation { get; set; }
+
+    public string? BorderColor { get; set; }
+
+    public string? BadgeBgColor { get; set; }
+
+    public string? BadgeTextColor { get; set; }
+
+    public string? ParagraphOne { get; set; }
+
+    public string? ParagraphTwo { get; set; }
+
+    public string? Signature { get; set; }
+
     public bool IsActive { get; set; } = true;
 }

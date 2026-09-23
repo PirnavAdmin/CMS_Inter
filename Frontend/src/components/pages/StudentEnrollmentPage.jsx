@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { env } from "@/config/env.js";
@@ -100,6 +101,8 @@ const validate = (form) => {
 
 export default function StudentEnrollmentPage({ id }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const returnState = location.state?.studentManagement;
   const redirectTimer = useRef(null);
   const photoInputRef = useRef(null);
   const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [savedPhotoPreview, setSavedPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] });
@@ -234,23 +237,23 @@ export default function StudentEnrollmentPage({ id }) {
       }
       saved = true;
       setMessage(photoFile ? "Student profile and photo updated successfully." : "Student profile updated successfully.");
-      redirectTimer.current = window.setTimeout(() => navigate(`/dashboard/students/${id}`), 1400);
+      redirectTimer.current = window.setTimeout(() => navigate(`/dashboard/students/${id}`, { state: returnState ? { studentManagement: returnState } : undefined }), 1400);
     }
     catch (error) { setMessage(studentUpdateError(error)); }
     finally { if (!saved) setSaving(false); }
   };
   const field = (key, props = {}) => ({ ...props, error: errors[key], onBlur: blur(key) });
-  if (loading) return <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">Loading student profile...</div></div></DashboardLayout>;
+  if (loading) return <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><SkeletonPage variant="form" rows={8} /></DashboardLayout>;
   if (!student) return <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{loadError || "Student record was not found."}</div></div></DashboardLayout>;
-  return <DashboardLayout title="EDIT STUDENT PROFILE" subtitle="Update student personal and family information." breadcrumb={["People", "Students"]}><form onSubmit={submit} className="cms-card student-profile-edit" noValidate>
+  return <DashboardLayout title="Edit Student Profile" subtitle="Update student details and save the changes." breadcrumb={["People", "Students"]} backLinkPosition="below" backLink={<Link className="cms-back-link" to={`/dashboard/students/${id}`} state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Student Profile</Link>}><form onSubmit={submit} className="cms-card student-profile-edit" noValidate>
     <div className="student-profile-edit-summary"><span><small>Student Name</small><b>{student.name}</b></span><span><small>Roll No.</small><b>{student.rollNo}</b></span><span><small>Admission No.</small><b>{student.admissionNo}</b></span></div>
+    <ProfileSection title="Personal Information" className="student-profile-personal-section">
+      <Field label="Student Name *" {...field("studentName")}><input value={form.studentName} onChange={change("studentName")} maxLength="100" /></Field>
+      <Field label="Gender *" {...field("gender")}><select value={form.gender} onChange={change("gender")}><option value="">Select gender</option>{genderOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field><Field label="Date of Birth *" {...field("dateOfBirth")}><input type="date" value={form.dateOfBirth} onChange={change("dateOfBirth")} /></Field><Field label="Blood Group"><select value={form.bloodGroup} onChange={change("bloodGroup")}><option value="">Select Blood Group</option>{bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select></Field><Field label="Nationality" {...field("nationality")}><input value={form.nationality} onChange={change("nationality")} maxLength="100" /></Field><Field label="Religion"><input value={form.religion} onChange={change("religion")} /></Field><Field label="Category"><select value={form.category} onChange={change("category")}><option value="">Select category</option>{categoryOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field>
+      <Field label="Photo" className="student-profile-photo-field" error={photoError}><div className="student-profile-photo-upload"><div className="student-profile-photo-preview">{photoPreview || savedPhotoPreview ? <img src={photoPreview || savedPhotoPreview} alt={`${student.name}'s profile`} /> : <span>{initialsOf(student.name)}</span>}</div><input ref={photoInputRef} className="student-profile-photo-input" type="file" accept="image/jpeg,image/jpg,image/png" onChange={choosePhoto} /><button className="cms-btn cms-btn-ghost" type="button" onClick={() => photoInputRef.current?.click()}>{form.photo || photoPreview ? "Replace Photo" : "Upload Photo"}</button><small>JPG, JPEG or PNG</small></div></Field>
+    </ProfileSection>
     <ProfileSection title="Admission Details">
       <Field label="Admission No." {...field("admissionNo")}><input value={form.admissionNo} onChange={change("admissionNo")} /></Field><Field label="Admission Number" {...field("admissionNumber")}><input value={form.admissionNumber} onChange={change("admissionNumber")} /></Field><Field label="Admission Date" {...field("admissionDate")}><input type="date" value={form.admissionDate} onChange={change("admissionDate")} /></Field><Field label="Medium"><select value={form.medium} onChange={change("medium")}><option value="">Select medium</option>{mediumOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field><Field label="Second Language"><select value={form.secondLanguage} onChange={change("secondLanguage")}><option value="">Select second language</option>{secondLanguageOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field>
-    </ProfileSection>
-    <ProfileSection title="Personal Information">
-      <Field label="Student Name *" {...field("studentName")}><input value={form.studentName} onChange={change("studentName")} maxLength="100" /></Field>
-      <Field label="Photo" error={photoError}><div className="student-profile-photo-upload"><div className="student-profile-photo-preview">{photoPreview || savedPhotoPreview ? <img src={photoPreview || savedPhotoPreview} alt={`${student.name}'s profile`} /> : <span>{initialsOf(student.name)}</span>}</div><input ref={photoInputRef} className="student-profile-photo-input" type="file" accept="image/jpeg,image/jpg,image/png" onChange={choosePhoto} /><button className="cms-btn cms-btn-ghost" type="button" onClick={() => photoInputRef.current?.click()}>{form.photo || photoPreview ? "Replace Photo" : "Upload Photo"}</button><small>JPG, JPEG or PNG</small></div></Field>
-      <Field label="Gender *" {...field("gender")}><select value={form.gender} onChange={change("gender")}><option value="">Select gender</option>{genderOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field><Field label="Date of Birth *" {...field("dateOfBirth")}><input type="date" value={form.dateOfBirth} onChange={change("dateOfBirth")} /></Field><Field label="Blood Group"><select value={form.bloodGroup} onChange={change("bloodGroup")}><option value="">Select Blood Group</option>{bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}</select></Field><Field label="Nationality" {...field("nationality")}><input value={form.nationality} onChange={change("nationality")} maxLength="100" /></Field><Field label="Religion"><input value={form.religion} onChange={change("religion")} /></Field><Field label="Category"><select value={form.category} onChange={change("category")}><option value="">Select category</option>{categoryOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></Field>
     </ProfileSection>
     <ProfileSection title="Contact Information"><Field label="Email" {...field("email")}><input type="email" value={form.email} onChange={change("email")} maxLength="254" /></Field><Field label="Mobile Number" {...field("mobileNumber")}><input type="tel" inputMode="numeric" maxLength="10" value={form.mobileNumber} onChange={numericChange("mobileNumber", 10)} /></Field><Field label="Aadhaar Number" {...field("aadhaarNumber")}><input type="text" inputMode="numeric" maxLength="12" value={form.aadhaarNumber} onChange={numericChange("aadhaarNumber", 12)} /></Field></ProfileSection>
     <ProfileSection title="Academic Placement">
@@ -263,11 +266,11 @@ export default function StudentEnrollmentPage({ id }) {
     <ProfileSection title="Father Details"><Field label="Father Name" {...field("fatherName")}><input value={form.fatherName} onChange={change("fatherName")} maxLength="100" /></Field><Field label="Occupation" {...field("fatherOccupation")}><input value={form.fatherOccupation} onChange={change("fatherOccupation")} maxLength="100" /></Field><Field label="Mobile Number" {...field("fatherMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.fatherMobile} onChange={numericChange("fatherMobile", 10)} /></Field><Field label="Email" {...field("fatherEmail")}><input type="email" value={form.fatherEmail} onChange={change("fatherEmail")} maxLength="254" /></Field></ProfileSection>
     <ProfileSection title="Mother Details"><Field label="Mother Name" {...field("motherName")}><input value={form.motherName} onChange={change("motherName")} maxLength="100" /></Field><Field label="Occupation" {...field("motherOccupation")}><input value={form.motherOccupation} onChange={change("motherOccupation")} maxLength="100" /></Field><Field label="Mobile Number" {...field("motherMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.motherMobile} onChange={numericChange("motherMobile", 10)} /></Field><Field label="Email" {...field("motherEmail")}><input type="email" value={form.motherEmail} onChange={change("motherEmail")} maxLength="254" /></Field></ProfileSection>
     <ProfileSection title="Guardian Details"><Field label="Guardian Name" {...field("guardianName")}><input value={form.guardianName} onChange={change("guardianName")} maxLength="100" /></Field><Field label="Mobile Number" {...field("guardianMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.guardianMobile} onChange={numericChange("guardianMobile", 10)} /></Field><Field label="Email" {...field("guardianEmail")}><input type="email" value={form.guardianEmail} onChange={change("guardianEmail")} maxLength="254" /></Field></ProfileSection>
-    <div className="student-profile-edit-actions"><Link to={`/dashboard/students/${id}`} className="cms-btn cms-btn-ghost">Cancel</Link><button className="cms-btn cms-btn-primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button></div>
+    <div className="student-profile-edit-actions"><Link to={`/dashboard/students/${id}`} state={returnState ? { studentManagement: returnState } : undefined} className="cms-btn cms-btn-ghost">Cancel</Link><button className="cms-btn cms-btn-primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button></div>
   </form><Toast message={message} onClose={() => setMessage("")} /></DashboardLayout>;
 }
 
-function ProfileSection({ title, children }) { return <section className="student-profile-section"><h2>{title}</h2><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
+function ProfileSection({ title, className = "", children }) { return <section className={`student-profile-section ${className}`.trim()}><h2>{title}</h2><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
 function Field({ label, error, className = "", children, onBlur }) { return <label className={`cms-field ${className}${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}</span>{children}{error ? <small className="cms-field-error">{error}</small> : null}</label>; }
 function SelectField({ label, value, onChange, options, placeholder }) {
   const selected = String(value ?? "");

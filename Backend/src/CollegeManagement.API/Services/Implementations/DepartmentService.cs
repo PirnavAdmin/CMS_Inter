@@ -1,20 +1,30 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ClosedXML.Excel;
 using CollegeManagement.API.DTOs.Staff;
+using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Models;
+using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Services.Implementations
 {
     public class DepartmentService : IDepartmentService
     {
         private readonly IDepartmentRepository _departmentRepository;
+        private readonly IDesignationRepository _designationRepository;
 
-        public DepartmentService(IDepartmentRepository departmentRepository)
+        public DepartmentService(
+            IDepartmentRepository departmentRepository,
+            IDesignationRepository designationRepository)
         {
             _departmentRepository = departmentRepository;
+            _designationRepository = designationRepository;
         }
 
         public async Task<IEnumerable<DepartmentResponseDto>> GetActiveDepartmentsAsync()
@@ -130,43 +140,75 @@ namespace CollegeManagement.API.Services.Implementations
             return await _departmentRepository.ValidateNameAsync(name, excludeId);
         }
 
-        public async Task<MasterImportResultDto> ImportDepartmentsFromExcelAsync(Microsoft.AspNetCore.Http.IFormFile file, string? defaultStaffType = null)
+        public async Task<MasterImportResultDto> ImportDepartmentsFromExcelAsync(IFormFile file, string? defaultStaffType = null)
+        {
+            return await ImportDepartmentsAndDesignationsFromExcelAsync(file, defaultStaffType);
+        }
+
+        public async Task<MasterImportResultDto> ImportDepartmentsAndDesignationsFromExcelAsync(IFormFile file, string? defaultStaffType = null)
         {
             if (file == null || file.Length == 0)
-                throw new CollegeManagement.API.Exceptions.ValidationException("Please upload a valid Excel file (.xlsx or .xls).");
+                throw new ValidationException("Please upload a valid Excel file (.xlsx or .xls).");
 
-            var ext = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (ext != ".xlsx" && ext != ".xls")
-                throw new CollegeManagement.API.Exceptions.ValidationException("Unsupported file format. Please upload an Excel workbook (.xlsx or .xls).");
+                throw new ValidationException("Unsupported file format. Please upload an Excel workbook (.xlsx or .xls).");
 
             var result = new MasterImportResultDto();
             using var stream = file.OpenReadStream();
-            using var workbook = new ClosedXML.Excel.XLWorkbook(stream);
-            var worksheet = workbook.Worksheets.FirstOrDefault();
-            if (worksheet == null)
-                throw new CollegeManagement.API.Exceptions.ValidationException("Excel file contains no worksheets.");
+            using var workbook = new XLWorkbook(stream);
 
-            var rows = worksheet.RangeUsed()?.RowsUsed()?.ToList();
-            if (rows == null || rows.Count < 2)
-                throw new CollegeManagement.API.Exceptions.ValidationException("Excel worksheet is empty or missing data rows.");
+            if (!workbook.Worksheets.Any())
+                throw new ValidationException("Excel file contains no worksheets.");
 
-            // Read headers
-            var headerRow = rows[0];
-            var headerMap = new System.Collections.Generic.Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase);
-            for (int col = 1; col <= headerRow.Cells().Count(); col++)
+            var existingDepts = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true)).ToList();
+            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true)).ToList();
+
+            // In-memory lookup maps for resolving department references during designation import
+            var resolvedDeptsByName = new Dictionary<string, Department>(StringComparer.OrdinalIgnoreCase);
+            var resolvedDeptsByCode = new Dictionary<string, Department>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var d in existingDepts)
             {
-                var val = headerRow.Cell(col).GetString().Trim();
-                if (!string.IsNullOrWhiteSpace(val) && !headerMap.ContainsKey(val))
-                {
-                    headerMap[val] = col;
-                }
+                if (!string.IsNullOrWhiteSpace(d.DepartmentName) && !resolvedDeptsByName.ContainsKey(d.DepartmentName.Trim()))
+                    resolvedDeptsByName[d.DepartmentName.Trim()] = d;
+                if (!string.IsNullOrWhiteSpace(d.DepartmentCode) && !resolvedDeptsByCode.ContainsKey(d.DepartmentCode.Trim()))
+                    resolvedDeptsByCode[d.DepartmentCode.Trim()] = d;
             }
 
-            string GetVal(ClosedXML.Excel.IXLRangeRow row, params string[] names)
+            // Identify worksheets: Departments and Designations
+            var deptSheet = workbook.Worksheets.FirstOrDefault(ws =>
+                ws.Name.Equals("Departments", StringComparison.OrdinalIgnoreCase) ||
+                ws.Name.Equals("Department", StringComparison.OrdinalIgnoreCase) ||
+                ws.Name.Equals("Dept", StringComparison.OrdinalIgnoreCase))
+                ?? (workbook.Worksheets.Count == 1 ? workbook.Worksheets.First() : null);
+
+            var desigSheet = workbook.Worksheets.FirstOrDefault(ws =>
+                ws.Name.Equals("Designations", StringComparison.OrdinalIgnoreCase) ||
+                ws.Name.Equals("Designation", StringComparison.OrdinalIgnoreCase) ||
+                ws.Name.Equals("Desig", StringComparison.OrdinalIgnoreCase));
+
+            // Helper to build header index map
+            Dictionary<string, int> BuildHeaderMap(IXLRangeRow headerRow)
+            {
+                var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                int maxCol = headerRow.LastCellUsed()?.Address.ColumnNumber ?? headerRow.Cells().Count();
+                for (int col = 1; col <= maxCol; col++)
+                {
+                    var val = headerRow.Cell(col).GetString().Trim();
+                    if (!string.IsNullOrWhiteSpace(val) && !map.ContainsKey(val))
+                    {
+                        map[val] = col;
+                    }
+                }
+                return map;
+            }
+
+            string GetCellValue(IXLRangeRow row, Dictionary<string, int> map, params string[] names)
             {
                 foreach (var name in names)
                 {
-                    if (headerMap.TryGetValue(name, out int colIdx))
+                    if (map.TryGetValue(name, out int colIdx))
                     {
                         var cellVal = row.Cell(colIdx).GetString().Trim();
                         if (!string.IsNullOrWhiteSpace(cellVal)) return cellVal;
@@ -175,133 +217,336 @@ namespace CollegeManagement.API.Services.Implementations
                 return string.Empty;
             }
 
-            result.TotalRowsRead = rows.Count - 1;
-            var existingDepts = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true)).ToList();
+            var seenDeptNamesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenDesigKeysInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            for (int i = 1; i < rows.Count; i++)
+            // =========================================================================
+            // 1. PROCESS DEPARTMENTS SHEET
+            // =========================================================================
+            if (deptSheet != null)
             {
-                var rowNumber = i + 1;
-                var row = rows[i];
-
-                var deptName = GetVal(row, "Department Name", "DepartmentName", "Name", "Department", "Dept Name", "DeptName");
-                var deptCode = GetVal(row, "Department Code", "DepartmentCode", "Code", "Dept Code", "DeptCode");
-                var shortName = GetVal(row, "Short Name", "ShortName", "Short");
-                var desc = GetVal(row, "Description", "Desc");
-                var category = GetVal(row, "Category");
-                var hodId = GetVal(row, "HOD Employee ID", "HODEmployeeId", "HOD", "HOD Id");
-                var sType = GetVal(row, "Staff Type", "StaffType", "Staff_Type", "Type");
-                var status = GetVal(row, "Status", "IsActive", "Active");
-
-                if (string.IsNullOrWhiteSpace(deptName))
+                var deptRows = deptSheet.RangeUsed()?.RowsUsed()?.ToList();
+                if (deptRows != null && deptRows.Count >= 2)
                 {
-                    result.Errors.Add(new MasterImportRowError
+                    var deptHeaderMap = BuildHeaderMap(deptRows[0]);
+                    int deptRowCount = deptRows.Count - 1;
+                    result.TotalRowsRead += deptRowCount;
+
+                    for (int i = 1; i < deptRows.Count; i++)
                     {
-                        RowNumber = rowNumber,
-                        ItemName = "Row " + rowNumber,
-                        ErrorMessage = "Department Name is required."
-                    });
-                    result.FailedRowsCount++;
-                    continue;
-                }
+                        var rowNumber = i + 1;
+                        var row = deptRows[i];
 
-                // Determine StaffType
-                string staffType = "Both";
-                if (!string.IsNullOrWhiteSpace(sType))
-                {
-                    var clean = sType.Replace("-", "").Replace("_", "").Trim().ToLower();
-                    if (clean == "teaching" || clean == "teachingstaff") staffType = "Teaching";
-                    else if (clean == "nonteaching" || clean == "nonteachingstaff") staffType = "Non-Teaching";
-                    else staffType = "Both";
-                }
-                else if (!string.IsNullOrWhiteSpace(defaultStaffType))
-                {
-                    var clean = defaultStaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
-                    if (clean == "teaching" || clean == "teachingstaff") staffType = "Teaching";
-                    else if (clean == "nonteaching" || clean == "nonteachingstaff") staffType = "Non-Teaching";
-                    else staffType = "Both";
-                }
+                        var deptName = GetCellValue(row, deptHeaderMap, "Department Name", "DepartmentName", "Name", "Department", "Dept Name", "DeptName");
+                        var deptCode = GetCellValue(row, deptHeaderMap, "Department Code", "DepartmentCode", "Code", "Dept Code", "DeptCode");
+                        var shortName = GetCellValue(row, deptHeaderMap, "Short Name", "ShortName", "Short");
+                        var desc = GetCellValue(row, deptHeaderMap, "Description", "Desc");
+                        var sType = GetCellValue(row, deptHeaderMap, "Staff Type", "StaffType", "Staff_Type", "Type");
+                        var status = GetCellValue(row, deptHeaderMap, "Status", "IsActive", "Active");
 
-                // Determine Active status
-                bool isActive = true;
-                if (!string.IsNullOrWhiteSpace(status))
-                {
-                    if (status.Equals("Inactive", System.StringComparison.OrdinalIgnoreCase) ||
-                        status.Equals("0", System.StringComparison.OrdinalIgnoreCase) ||
-                        status.Equals("false", System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        isActive = false;
-                    }
-                }
-
-                // Clean or generate DepartmentCode
-                if (string.IsNullOrWhiteSpace(deptCode))
-                {
-                    deptCode = !string.IsNullOrWhiteSpace(shortName)
-                        ? $"DEP_{shortName.ToUpper().Replace(" ", "_")}"
-                        : $"DEP_{deptName.ToUpper().Replace(" ", "_")}";
-                }
-
-                if (deptCode.Length > 20) deptCode = deptCode.Substring(0, 20);
-
-                try
-                {
-                    // Check if department exists by Name or Code
-                    var existing = existingDepts.FirstOrDefault(d =>
-                        d.DepartmentName.Equals(deptName, System.StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrWhiteSpace(deptCode) && d.DepartmentCode.Equals(deptCode, System.StringComparison.OrdinalIgnoreCase)));
-
-                    if (existing != null)
-                    {
-                        existing.DepartmentName = deptName;
-                        if (!string.IsNullOrWhiteSpace(deptCode)) existing.DepartmentCode = deptCode;
-                        existing.StaffType = staffType;
-                        if (!string.IsNullOrWhiteSpace(desc)) existing.Description = desc;
-                        existing.IsActive = isActive;
-                        existing.UpdatedAt = System.DateTime.UtcNow;
-
-                        await _departmentRepository.UpdateDepartmentAsync(existing);
-                        result.UpdatedCount++;
-                        result.ImportedItems.Add(new { existing.DepartmentId, existing.DepartmentName, existing.DepartmentCode, existing.StaffType, Status = "Updated" });
-                    }
-                    else
-                    {
-                        var newDept = new Department
+                        // Skip completely blank rows
+                        if (string.IsNullOrWhiteSpace(deptName) && string.IsNullOrWhiteSpace(deptCode) && string.IsNullOrWhiteSpace(sType))
                         {
-                            DepartmentName = deptName,
-                            DepartmentCode = deptCode,
-                            StaffType = staffType,
-                            Description = desc,
-                            IsActive = isActive,
-                            CreatedAt = System.DateTime.UtcNow
-                        };
+                            continue;
+                        }
 
-                        var created = await _departmentRepository.AddDepartmentAsync(newDept);
-                        existingDepts.Add(created);
-                        result.SuccessCount++;
-                        result.ImportedItems.Add(new { created.DepartmentId, created.DepartmentName, created.DepartmentCode, created.StaffType, Status = "Created" });
+                        if (string.IsNullOrWhiteSpace(deptName))
+                        {
+                            result.Errors.Add(new MasterImportRowError
+                            {
+                                RowNumber = rowNumber,
+                                ItemName = $"Department Row {rowNumber}",
+                                ErrorMessage = "Department Name is required."
+                            });
+                            result.FailedRowsCount++;
+                            continue;
+                        }
+
+                        // Determine StaffType
+                        string staffType = "Both";
+                        if (!string.IsNullOrWhiteSpace(sType))
+                        {
+                            var clean = sType.Replace("-", "").Replace("_", "").Trim().ToLower();
+                            if (clean == "teaching" || clean == "teachingstaff") staffType = "Teaching";
+                            else if (clean == "nonteaching" || clean == "nonteachingstaff") staffType = "Non-Teaching";
+                            else staffType = "Both";
+                        }
+                        else if (!string.IsNullOrWhiteSpace(defaultStaffType))
+                        {
+                            var clean = defaultStaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
+                            if (clean == "teaching" || clean == "teachingstaff") staffType = "Teaching";
+                            else if (clean == "nonteaching" || clean == "nonteachingstaff") staffType = "Non-Teaching";
+                            else staffType = "Both";
+                        }
+
+                        // Determine Status
+                        bool isActive = true;
+                        if (!string.IsNullOrWhiteSpace(status))
+                        {
+                            if (status.Equals("Inactive", StringComparison.OrdinalIgnoreCase) ||
+                                status.Equals("0", StringComparison.OrdinalIgnoreCase) ||
+                                status.Equals("false", StringComparison.OrdinalIgnoreCase))
+                            {
+                                isActive = false;
+                            }
+                        }
+
+                        // Generate or sanitize code
+                        if (string.IsNullOrWhiteSpace(deptCode))
+                        {
+                            deptCode = !string.IsNullOrWhiteSpace(shortName)
+                                ? $"DEP_{shortName.ToUpper().Replace(" ", "_")}"
+                                : $"DEP_{deptName.ToUpper().Replace(" ", "_")}";
+                        }
+                        if (deptCode.Length > 20) deptCode = deptCode.Substring(0, 20);
+
+                        // Detect in-file duplicate
+                        if (seenDeptNamesInFile.Contains(deptName))
+                        {
+                            result.DuplicateCount++;
+                        }
+                        seenDeptNamesInFile.Add(deptName);
+
+                        try
+                        {
+                            var existing = existingDepts.FirstOrDefault(d =>
+                                d.DepartmentName.Equals(deptName, StringComparison.OrdinalIgnoreCase) ||
+                                (!string.IsNullOrWhiteSpace(deptCode) && d.DepartmentCode.Equals(deptCode, StringComparison.OrdinalIgnoreCase)));
+
+                            if (existing != null)
+                            {
+                                existing.DepartmentName = deptName;
+                                if (!string.IsNullOrWhiteSpace(deptCode)) existing.DepartmentCode = deptCode;
+                                existing.StaffType = staffType;
+                                if (!string.IsNullOrWhiteSpace(desc)) existing.Description = desc;
+                                existing.IsActive = isActive;
+                                existing.UpdatedAt = DateTime.UtcNow;
+
+                                await _departmentRepository.UpdateDepartmentAsync(existing);
+                                resolvedDeptsByName[deptName] = existing;
+                                if (!string.IsNullOrWhiteSpace(deptCode)) resolvedDeptsByCode[deptCode] = existing;
+
+                                result.UpdatedCount++;
+                                result.DepartmentsImported++;
+                                result.ImportedItems.Add(new { existing.DepartmentId, existing.DepartmentName, existing.DepartmentCode, existing.StaffType, Status = "Updated", Type = "Department" });
+                            }
+                            else
+                            {
+                                var newDept = new Department
+                                {
+                                    DepartmentName = deptName,
+                                    DepartmentCode = deptCode,
+                                    StaffType = staffType,
+                                    Description = desc,
+                                    IsActive = isActive,
+                                    CreatedAt = DateTime.UtcNow
+                                };
+
+                                var created = await _departmentRepository.AddDepartmentAsync(newDept);
+                                existingDepts.Add(created);
+                                resolvedDeptsByName[deptName] = created;
+                                if (!string.IsNullOrWhiteSpace(deptCode)) resolvedDeptsByCode[deptCode] = created;
+
+                                result.SuccessCount++;
+                                result.DepartmentsImported++;
+                                result.ImportedItems.Add(new { created.DepartmentId, created.DepartmentName, created.DepartmentCode, created.StaffType, Status = "Created", Type = "Department" });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            result.Errors.Add(new MasterImportRowError
+                            {
+                                RowNumber = rowNumber,
+                                ItemName = deptName,
+                                ErrorMessage = ex.Message
+                            });
+                            result.FailedRowsCount++;
+                        }
                     }
                 }
-                catch (System.Exception ex)
+            }
+
+            // =========================================================================
+            // 2. PROCESS DESIGNATIONS SHEET
+            // =========================================================================
+            if (desigSheet != null)
+            {
+                var desigRows = desigSheet.RangeUsed()?.RowsUsed()?.ToList();
+                if (desigRows != null && desigRows.Count >= 2)
                 {
-                    result.Errors.Add(new MasterImportRowError
+                    var desigHeaderMap = BuildHeaderMap(desigRows[0]);
+                    int desigRowCount = desigRows.Count - 1;
+                    result.TotalRowsRead += desigRowCount;
+
+                    for (int i = 1; i < desigRows.Count; i++)
                     {
-                        RowNumber = rowNumber,
-                        ItemName = deptName,
-                        ErrorMessage = ex.Message
-                    });
-                    result.FailedRowsCount++;
+                        var rowNumber = i + 1;
+                        var row = desigRows[i];
+
+                        var desigName = GetCellValue(row, desigHeaderMap, "Designation Name", "DesignationName", "Name", "Title", "Designation");
+                        var deptRef = GetCellValue(row, desigHeaderMap, "Department Name", "DepartmentName", "Department", "Department Code", "DepartmentCode", "Dept");
+                        var sType = GetCellValue(row, desigHeaderMap, "Staff Type", "StaffType", "Staff_Type", "Type");
+                        var status = GetCellValue(row, desigHeaderMap, "Status", "IsActive", "Active");
+
+                        // Skip completely blank rows
+                        if (string.IsNullOrWhiteSpace(desigName) && string.IsNullOrWhiteSpace(deptRef) && string.IsNullOrWhiteSpace(sType))
+                        {
+                            continue;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(desigName))
+                        {
+                            result.Errors.Add(new MasterImportRowError
+                            {
+                                RowNumber = rowNumber,
+                                ItemName = $"Designation Row {rowNumber}",
+                                ErrorMessage = "Designation Name is required."
+                            });
+                            result.FailedRowsCount++;
+                            continue;
+                        }
+
+                        // Resolve Department reference
+                        int? deptId = null;
+                        string matchedDeptStaffType = string.Empty;
+
+                        if (!string.IsNullOrWhiteSpace(deptRef))
+                        {
+                            Department? matchedDept = null;
+                            if (resolvedDeptsByName.TryGetValue(deptRef, out var foundByName))
+                            {
+                                matchedDept = foundByName;
+                            }
+                            else if (resolvedDeptsByCode.TryGetValue(deptRef, out var foundByCode))
+                            {
+                                matchedDept = foundByCode;
+                            }
+                            else
+                            {
+                                matchedDept = existingDepts.FirstOrDefault(d =>
+                                    d.DepartmentName.Equals(deptRef, StringComparison.OrdinalIgnoreCase) ||
+                                    d.DepartmentCode.Equals(deptRef, StringComparison.OrdinalIgnoreCase));
+                            }
+
+                            if (matchedDept != null)
+                            {
+                                deptId = matchedDept.DepartmentId;
+                                matchedDeptStaffType = matchedDept.StaffType;
+                            }
+                            else
+                            {
+                                result.Errors.Add(new MasterImportRowError
+                                {
+                                    RowNumber = rowNumber,
+                                    ItemName = desigName,
+                                    ErrorMessage = $"Department '{deptRef}' does not exist for Designation '{desigName}'."
+                                });
+                                result.FailedRowsCount++;
+                                continue;
+                            }
+                        }
+
+                        // Determine StaffType
+                        string staffType = "Both";
+                        if (!string.IsNullOrWhiteSpace(sType))
+                        {
+                            var clean = sType.Replace("-", "").Replace("_", "").Trim().ToLower();
+                            if (clean == "teaching" || clean == "teachingstaff") staffType = "Teaching";
+                            else if (clean == "nonteaching" || clean == "nonteachingstaff") staffType = "Non-Teaching";
+                            else staffType = "Both";
+                        }
+                        else if (!string.IsNullOrWhiteSpace(matchedDeptStaffType))
+                        {
+                            staffType = matchedDeptStaffType;
+                        }
+                        else if (!string.IsNullOrWhiteSpace(defaultStaffType))
+                        {
+                            var clean = defaultStaffType.Replace("-", "").Replace("_", "").Trim().ToLower();
+                            if (clean == "teaching" || clean == "teachingstaff") staffType = "Teaching";
+                            else if (clean == "nonteaching" || clean == "nonteachingstaff") staffType = "Non-Teaching";
+                            else staffType = "Both";
+                        }
+
+                        // Determine Status
+                        bool isActive = true;
+                        if (!string.IsNullOrWhiteSpace(status))
+                        {
+                            if (status.Equals("Inactive", StringComparison.OrdinalIgnoreCase) ||
+                                status.Equals("0", StringComparison.OrdinalIgnoreCase) ||
+                                status.Equals("false", StringComparison.OrdinalIgnoreCase))
+                            {
+                                isActive = false;
+                            }
+                        }
+
+                        // In-file duplicate check
+                        string desigKey = $"{desigName}_{deptId}";
+                        if (seenDesigKeysInFile.Contains(desigKey))
+                        {
+                            result.DuplicateCount++;
+                        }
+                        seenDesigKeysInFile.Add(desigKey);
+
+                        try
+                        {
+                            var existing = existingDesigs.FirstOrDefault(d =>
+                                d.Name.Equals(desigName, StringComparison.OrdinalIgnoreCase) &&
+                                (deptId == null || d.DepartmentId == null || d.DepartmentId == deptId));
+
+                            if (existing != null)
+                            {
+                                existing.Name = desigName;
+                                if (deptId.HasValue && deptId.Value > 0) existing.DepartmentId = deptId.Value;
+                                existing.StaffType = staffType;
+                                existing.IsActive = isActive;
+                                existing.UpdatedAt = DateTime.UtcNow;
+
+                                await _designationRepository.UpdateAsync(existing);
+                                result.UpdatedCount++;
+                                result.DesignationsImported++;
+                                result.ImportedItems.Add(new { existing.Id, existing.Name, existing.StaffType, existing.DepartmentId, Status = "Updated", Type = "Designation" });
+                            }
+                            else
+                            {
+                                var newDesig = new Designation
+                                {
+                                    Name = desigName,
+                                    DepartmentId = deptId,
+                                    StaffType = staffType,
+                                    IsActive = isActive,
+                                    CreatedAt = DateTime.UtcNow
+                                };
+
+                                var created = await _designationRepository.AddAsync(newDesig);
+                                existingDesigs.Add(created);
+                                result.SuccessCount++;
+                                result.DesignationsImported++;
+                                result.ImportedItems.Add(new { created.Id, created.Name, created.StaffType, created.DepartmentId, Status = "Created", Type = "Designation" });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            result.Errors.Add(new MasterImportRowError
+                            {
+                                RowNumber = rowNumber,
+                                ItemName = desigName,
+                                ErrorMessage = ex.Message
+                            });
+                            result.FailedRowsCount++;
+                        }
+                    }
                 }
             }
 
             result.Success = result.Errors.Count == 0;
-            result.Message = $"Department import completed: {result.SuccessCount} created, {result.UpdatedCount} updated, {result.FailedRowsCount} failed.";
+            result.Message = $"Bulk import completed: {result.SuccessCount} created, {result.UpdatedCount} updated, {result.DuplicateCount} duplicates, {result.FailedRowsCount} failed ({result.DepartmentsImported} departments, {result.DesignationsImported} designations).";
             return result;
         }
 
-        public async Task<MasterImportResultDto> BulkImportDepartmentsAsync(System.Collections.Generic.IEnumerable<CreateDepartmentDto> dtos, string? defaultStaffType = null)
+        public async Task<MasterImportResultDto> BulkImportDepartmentsAsync(IEnumerable<CreateDepartmentDto> dtos, string? defaultStaffType = null)
         {
             var result = new MasterImportResultDto();
-            var list = dtos?.ToList() ?? new System.Collections.Generic.List<CreateDepartmentDto>();
+            var list = dtos?.ToList() ?? new List<CreateDepartmentDto>();
             result.TotalRowsRead = list.Count;
 
             var existingDepts = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true)).ToList();
@@ -331,8 +576,8 @@ namespace CollegeManagement.API.Services.Implementations
                 try
                 {
                     var existing = existingDepts.FirstOrDefault(d =>
-                        d.DepartmentName.Equals(deptName, System.StringComparison.OrdinalIgnoreCase) ||
-                        d.DepartmentCode.Equals(deptCode, System.StringComparison.OrdinalIgnoreCase));
+                        d.DepartmentName.Equals(deptName, StringComparison.OrdinalIgnoreCase) ||
+                        d.DepartmentCode.Equals(deptCode, StringComparison.OrdinalIgnoreCase));
 
                     if (existing != null)
                     {
@@ -341,10 +586,11 @@ namespace CollegeManagement.API.Services.Implementations
                         existing.StaffType = staffType;
                         if (!string.IsNullOrWhiteSpace(dto.Description)) existing.Description = dto.Description;
                         existing.IsActive = dto.IsActive;
-                        existing.UpdatedAt = System.DateTime.UtcNow;
+                        existing.UpdatedAt = DateTime.UtcNow;
 
                         await _departmentRepository.UpdateDepartmentAsync(existing);
                         result.UpdatedCount++;
+                        result.DepartmentsImported++;
                         result.ImportedItems.Add(new { existing.DepartmentId, existing.DepartmentName, existing.DepartmentCode, existing.StaffType, Status = "Updated" });
                     }
                     else
@@ -356,14 +602,15 @@ namespace CollegeManagement.API.Services.Implementations
                             StaffType = staffType,
                             Description = dto.Description,
                             IsActive = dto.IsActive,
-                            CreatedAt = System.DateTime.UtcNow
+                            CreatedAt = DateTime.UtcNow
                         });
                         existingDepts.Add(created);
                         result.SuccessCount++;
+                        result.DepartmentsImported++;
                         result.ImportedItems.Add(new { created.DepartmentId, created.DepartmentName, created.DepartmentCode, created.StaffType, Status = "Created" });
                     }
                 }
-                catch (System.Exception ex)
+                catch (Exception ex)
                 {
                     result.Errors.Add(new MasterImportRowError { RowNumber = idx, ItemName = deptName, ErrorMessage = ex.Message });
                     result.FailedRowsCount++;
@@ -377,71 +624,82 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDepartmentTemplateExcelAsync(string? staffType = null)
         {
-            using var workbook = new ClosedXML.Excel.XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("Departments");
+            using var workbook = new XLWorkbook();
+            var ws = workbook.Worksheets.Add("Departments");
 
-            var headers = new[]
-            {
-                "Department Name", "Department Code", "Short Name", "Description",
-                "Category", "HOD Employee ID", "Staff Type", "Status", "Display Order"
-            };
+            var headers = new[] { "Department Name", "Staff Type", "Status" };
 
             for (int col = 0; col < headers.Length; col++)
             {
-                var cell = worksheet.Cell(1, col + 1);
+                var cell = ws.Cell(1, col + 1);
                 cell.Value = headers[col];
                 cell.Style.Font.Bold = true;
-                cell.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
-                cell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromArgb(46, 125, 50);
-                cell.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+                cell.Style.Font.FontSize = 11;
+                cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Fill.BackgroundColor = XLColor.FromArgb(30, 64, 175);
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                cell.Style.Border.OutsideBorderColor = XLColor.FromArgb(203, 213, 225);
             }
+            ws.Row(1).Height = 26;
 
-            var cleanType = staffType?.Replace("-", "").Replace("_", "").Trim().ToLower();
-            bool isTeaching = cleanType == "teaching";
-            bool isNonTeaching = cleanType == "nonteaching";
+            ws.Column(1).Width = 35;
+            ws.Column(2).Width = 20;
+            ws.Column(3).Width = 15;
+            ws.ShowGridLines = true;
 
-            var sampleRows = isTeaching
-                ? new[]
-                {
-                    new[] { "Mathematics", "MATH", "MATH", "Department of Mathematics", "Science", "", "Teaching", "Active", "1" },
-                    new[] { "Physics", "PHYS", "PHYS", "Department of Physics", "Science", "", "Teaching", "Active", "2" },
-                    new[] { "Chemistry", "CHEM", "CHEM", "Department of Chemistry", "Science", "", "Teaching", "Active", "3" },
-                    new[] { "Computer Science", "CS", "CS", "Department of Computer Science", "Engineering", "", "Teaching", "Active", "4" },
-                    new[] { "English", "ENG", "ENG", "Department of English", "Languages", "", "Teaching", "Active", "5" }
-                }
-                : isNonTeaching
-                ? new[]
-                {
-                    new[] { "Administration", "ADMIN", "ADM", "Administrative Department", "Operations", "", "Non-Teaching", "Active", "1" },
-                    new[] { "Accounts & Finance", "ACC_FIN", "ACC", "Finance & Accounts Office", "Finance", "", "Non-Teaching", "Active", "2" },
-                    new[] { "Admissions", "ADMISS", "ADM", "Student Admissions Office", "Student Services", "", "Non-Teaching", "Active", "3" },
-                    new[] { "Library", "LIB", "LIB", "Central Library", "Academic Resources", "", "Non-Teaching", "Active", "4" },
-                    new[] { "Transport", "TRANS", "TRN", "Campus Transport Services", "Logistics", "", "Non-Teaching", "Active", "5" }
-                }
-                : new[]
-                {
-                    new[] { "Mathematics", "MATH", "MATH", "Department of Mathematics", "Science", "", "Teaching", "Active", "1" },
-                    new[] { "Computer Science", "CS", "CS", "Department of Computer Science", "Engineering", "", "Teaching", "Active", "2" },
-                    new[] { "Administration", "ADMIN", "ADM", "Administrative Department", "Operations", "", "Non-Teaching", "Active", "3" },
-                    new[] { "Accounts & Finance", "ACC_FIN", "ACC", "Finance & Accounts Office", "Finance", "", "Non-Teaching", "Active", "4" },
-                    new[] { "Library", "LIB", "LIB", "Central Library", "Academic Resources", "", "Non-Teaching", "Active", "5" }
-                };
-
-            for (int r = 0; r < sampleRows.Length; r++)
-            {
-                for (int c = 0; c < sampleRows[r].Length; c++)
-                {
-                    worksheet.Cell(r + 2, c + 1).Value = sampleRows[r][c];
-                }
-            }
-
-            worksheet.Columns().AdjustToContents();
-
-            using var ms = new System.IO.MemoryStream();
+            using var ms = new MemoryStream();
             workbook.SaveAs(ms);
             var fileName = !string.IsNullOrWhiteSpace(staffType)
-                ? $"department-import-template-{staffType.ToLower().Replace(" ", "-")}.xlsx"
-                : "department-import-template.xlsx";
+                ? $"Department_Import_Template_{staffType.ToLower().Replace(" ", "_")}.xlsx"
+                : "Department_Import_Template.xlsx";
+
+            return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+        }
+
+        public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDepartmentDesignationTemplateExcelAsync(string? staffType = null)
+        {
+            using var workbook = new XLWorkbook();
+
+            // Style configuration helper
+            void ApplyHeaderStyle(IXLWorksheet ws, string[] headers)
+            {
+                for (int col = 0; col < headers.Length; col++)
+                {
+                    var cell = ws.Cell(1, col + 1);
+                    cell.Value = headers[col];
+                    cell.Style.Font.Bold = true;
+                    cell.Style.Font.FontSize = 11;
+                    cell.Style.Font.FontColor = XLColor.White;
+                    cell.Style.Fill.BackgroundColor = XLColor.FromArgb(30, 64, 175); // Institutional Blue
+                    cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                    cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                    cell.Style.Border.OutsideBorderColor = XLColor.FromArgb(203, 213, 225);
+                }
+                ws.Row(1).Height = 26;
+                ws.Column(1).Width = 35;
+                ws.Column(2).Width = 20;
+                ws.Column(3).Width = 15;
+                ws.ShowGridLines = true;
+            }
+
+            // Sheet 1: Departments (Only 3 fields matching Add Department modal)
+            var deptWs = workbook.Worksheets.Add("Departments");
+            var deptHeaders = new[] { "Department Name", "Staff Type", "Status" };
+            ApplyHeaderStyle(deptWs, deptHeaders);
+
+            // Sheet 2: Designations (Only 3 fields matching Add Designation modal)
+            var desigWs = workbook.Worksheets.Add("Designations");
+            var desigHeaders = new[] { "Designation Name", "Staff Type", "Status" };
+            ApplyHeaderStyle(desigWs, desigHeaders);
+
+            using var ms = new MemoryStream();
+            workbook.SaveAs(ms);
+            var fileName = !string.IsNullOrWhiteSpace(staffType)
+                ? $"Department_Designation_Import_Template_{staffType.ToLower().Replace(" ", "_")}.xlsx"
+                : "Department_Designation_Import_Template.xlsx";
 
             return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
@@ -449,7 +707,7 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<(byte[] Bytes, string ContentType, string FileName)> ExportDepartmentsExcelAsync(string? staffType = null)
         {
             var depts = (await _departmentRepository.GetDepartmentsAsync(staffType, includeInactive: true)).ToList();
-            using var workbook = new ClosedXML.Excel.XLWorkbook();
+            using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Departments");
 
             var headers = new[]
@@ -463,9 +721,9 @@ namespace CollegeManagement.API.Services.Implementations
                 var cell = worksheet.Cell(1, col + 1);
                 cell.Value = headers[col];
                 cell.Style.Font.Bold = true;
-                cell.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
-                cell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromArgb(46, 125, 50);
-                cell.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
+                cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Fill.BackgroundColor = XLColor.FromArgb(30, 64, 175);
+                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             }
 
             for (int r = 0; r < depts.Count; r++)
@@ -486,10 +744,11 @@ namespace CollegeManagement.API.Services.Implementations
 
             worksheet.Columns().AdjustToContents();
 
-            using var ms = new System.IO.MemoryStream();
+            using var ms = new MemoryStream();
             workbook.SaveAs(ms);
-            var fileName = $"departments-export-{System.DateTime.UtcNow:yyyyMMdd-HHmmss}.xlsx";
+            var fileName = $"departments-export-{DateTime.UtcNow:yyyyMMdd-HHmmss}.xlsx";
             return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
     }
 }
+

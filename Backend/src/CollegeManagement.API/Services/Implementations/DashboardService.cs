@@ -54,9 +54,9 @@ public class DashboardService : IDashboardService
         return await _repository.GetStudentAttendanceAsync(boardId, academicYearId, null, viewBy, ct);
     }
 
-    public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, CancellationToken ct = default)
+    public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, DateTime? date = null, CancellationToken ct = default)
     {
-        return await _repository.GetStaffAttendanceAsync(boardId, null, staffType, ct);
+        return await _repository.GetStaffAttendanceAsync(boardId, date, staffType, ct);
     }
 
     public async Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(int? academicYearId, int? boardId, DateTime? date, CancellationToken ct = default)
@@ -89,5 +89,10 @@ public class DashboardService : IDashboardService
     public async Task<IReadOnlyList<FacultyWorkloadItemDto>> GetFacultyWorkloadAsync(int? academicYearId, int? boardId, CancellationToken ct = default)
     {
         return await _repository.GetFacultyWorkloadAsync(boardId, academicYearId, ct);
+    }
+
+    public async Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(int? academicYearId, int? boardId, int limit = 20, CancellationToken ct = default)
+    {
+        return await _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, ct);
     }
 }

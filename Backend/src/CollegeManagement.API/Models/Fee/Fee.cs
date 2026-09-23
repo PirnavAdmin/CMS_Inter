@@ -76,6 +76,7 @@ public class StudentFee
     [Column(TypeName = "decimal(18,2)")] public decimal PayableAmount { get; set; }
     [Column(TypeName = "decimal(18,2)")] public decimal PaidAmount { get; set; }
     [Column(TypeName = "decimal(18,2)")] public decimal BalanceAmount { get; set; }
+    [MaxLength(100)] public string? PaymentPlan { get; set; }
     [MaxLength(30)] public string Status { get; set; } = "Pending";
     public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
@@ -84,7 +85,7 @@ public class StudentFee
     public FeeStructure? FeeStructure { get; set; }
     public ICollection<StudentFeeComponent> Components { get; set; } = new List<StudentFeeComponent>();
     public ICollection<FeeConcession> Concessions { get; set; } = new List<FeeConcession>();
-    public ICollection<FeePaymentPlan> PaymentPlans { get; set; } = new List<FeePaymentPlan>();
+    [NotMapped] public ICollection<FeePaymentPlan> PaymentPlans { get; set; } = new List<FeePaymentPlan>();
     public ICollection<FeePayment> Payments { get; set; } = new List<FeePayment>();
 }
 
@@ -156,8 +157,9 @@ public class FeePayment
     [Required] public int StudentFeeId { get; set; }
     public int? FeeInstallmentId { get; set; }
     [Column(TypeName = "decimal(18,2)")] public decimal Amount { get; set; }
-    [Column(TypeName = "decimal(18,2)")] public decimal DiscountAmount { get; set; }
-    [Column(TypeName = "decimal(18,2)")] public decimal FineAmount { get; set; }
+    [NotMapped] public decimal DiscountAmount { get; set; }
+    [NotMapped] public decimal FineAmount { get; set; }
+    [MaxLength(50)] public string? ReceiptNumber { get; set; }
     [Required, MaxLength(30)] public string PaymentMode { get; set; } = string.Empty;
     [MaxLength(100)] public string? TransactionReference { get; set; }
     [MaxLength(500)] public string? Remarks { get; set; }

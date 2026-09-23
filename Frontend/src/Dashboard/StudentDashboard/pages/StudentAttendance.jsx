@@ -1,0 +1,7 @@
+import { BookOpenCheck, CalendarDays, UserCheck, UserX } from "lucide-react";
+import StudentCard from "../components/StudentCard.jsx";
+import StudentDataTable from "../components/StudentDataTable.jsx";
+import StudentPageHeader from "../components/StudentPageHeader.jsx";
+import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
+import { attendance, monthlyAttendance, subjectAttendance } from "../data/studentMockData.js";
+export default function StudentAttendance() { return <div className="sp-page"><StudentPageHeader title="My Attendance" subtitle="View your monthly and subject-wise attendance."/><div className="sp-summary-grid four"><StudentSummaryCard icon={BookOpenCheck} label="Overall Attendance" value={`${attendance.percentage}%`}/><StudentSummaryCard icon={UserCheck} label="Present" value={attendance.present} tone="blue"/><StudentSummaryCard icon={UserX} label="Absent" value={attendance.absent} tone="red"/><StudentSummaryCard icon={CalendarDays} label="Working Days" value={attendance.workingDays} tone="orange"/></div><div className="sp-grid-2"><StudentCard title="Monthly Attendance" subtitle="Sundays and holidays are excluded."><StudentDataTable columns={["Month", "Working Days", "Present", "Absent", "Attendance %"]} rows={monthlyAttendance}/></StudentCard><StudentCard title="Subject-wise Attendance"><StudentDataTable columns={["Subject", "Conducted", "Present", "Absent", "Attendance %", "Status"]} rows={subjectAttendance} statusColumns={[5]}/></StudentCard></div></div>; }

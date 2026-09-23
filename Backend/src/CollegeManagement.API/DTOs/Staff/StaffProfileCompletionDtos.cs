@@ -254,11 +254,16 @@ namespace CollegeManagement.API.DTOs.Staff
         }
         public StaffBankDetails BankDetails { get; set; } = new();
         public StaffEmergencyContact EmergencyContact { get; set; } = new();
+
+        // Dynamic Role-Specific and Non-Teaching Fields for Frontend Integration
+        public Dictionary<string, object> DepartmentSpecific { get; set; } = new();
+        public Dictionary<string, object> CustomFields => DepartmentSpecific;
+        public Dictionary<string, string> DocumentsMap { get; set; } = new();
     }
 
     public class UpdateStaffProfileSectionDto
     {
-        public string SectionName { get; set; } = string.Empty; // "Personal", "Address", "Education", "Experience", "Documents", "Bank", "Emergency", "Employment"
+        public string SectionName { get; set; } = string.Empty; // "Personal", "Address", "Education", "Experience", "Documents", "Bank", "Emergency", "Employment", "RoleSpecific"
         
         public UpdateStaffPersonalDetailsDto? Personal { get; set; }
         public UpdateStaffAddressDto? Address { get; set; }
@@ -267,6 +272,13 @@ namespace CollegeManagement.API.DTOs.Staff
         public StaffBankDetails? Bank { get; set; }
         public StaffEmergencyContact? Emergency { get; set; }
         public UpdateStaffEmploymentDetailsDto? Employment { get; set; }
+        public Dictionary<string, object>? DepartmentSpecific { get; set; }
+        public Dictionary<string, object>? CustomFields
+        {
+            get => DepartmentSpecific;
+            set => DepartmentSpecific = value;
+        }
+        public Dictionary<string, string>? Documents { get; set; }
     }
 
     public class UpdateStaffPersonalDetailsDto

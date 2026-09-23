@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AutoMapper;
 using ClosedXML.Excel;
@@ -137,6 +138,18 @@ namespace CollegeManagement.API.Services.Implementations
             return MapToFullProfileDto(staff);
         }
 
+        public async Task<StaffProfileFullDto> GetStaffProfileByEmployeeIdAsync(string employeeId)
+        {
+            if (string.IsNullOrWhiteSpace(employeeId))
+                throw new ValidationException("Employee ID cannot be empty.");
+
+            var staff = await _staffRepository.GetByEmployeeIdAsync(employeeId.Trim());
+            if (staff == null)
+                throw new NotFoundException($"Staff record with Employee ID {employeeId} not found.");
+
+            return MapToFullProfileDto(staff);
+        }
+
         public async Task<StaffProfileFullDto> GetStaffProfileByTokenAsync(string token)
         {
             if (string.IsNullOrWhiteSpace(token))
@@ -154,9 +167,9 @@ namespace CollegeManagement.API.Services.Implementations
             return await _staffRepository.GenerateNextEmployeeIdAsync(staffType);
         }
 
-        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync()
+        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null)
         {
-            return await _staffRepository.GetDashboardStatsAsync();
+            return await _staffRepository.GetDashboardStatsAsync(boardId);
         }
 
         public async Task<StaffResponseDto> CreateStaffAsync(CreateStaffDto dto)
@@ -266,22 +279,52 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // Uniqueness Validations for new staff
+            // Email handling: Required for Teaching, optional for Non-Teaching (with fallback system login email)
             if (string.IsNullOrWhiteSpace(dto.Email))
-                throw new ValidationException("Email address is required for staff creation.");
-
-            if (!dto.RoleId.HasValue || dto.RoleId.Value <= 0)
-                throw new ValidationException("RoleId is required and must be greater than 0.");
+            {
+                if (string.Equals(staffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(staffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(staffType, "Non Teaching", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cleanEmp = Regex.Replace(employeeId.ToLowerInvariant(), @"[^a-z0-9]", "");
+                    dto.Email = $"{cleanEmp}@college.local";
+                }
+                else
+                {
+                    throw new ValidationException("Email address is required for teaching staff creation.");
+                }
+            }
 
             if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
                 throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
 
-            if (!await _staffRepository.IsEmailUniqueAsync(dto.Email))
-                throw new ConflictException($"Email address '{dto.Email}' is already registered to a staff record.");
+            if (!string.IsNullOrWhiteSpace(dto.Email))
+            {
+                if (!await _staffRepository.IsEmailUniqueAsync(dto.Email))
+                {
+                    if (dto.Email.EndsWith("@college.local", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dto.Email = $"{Regex.Replace(employeeId.ToLowerInvariant(), @"[^a-z0-9]", "")}_{Guid.NewGuid().ToString("N").Substring(0, 4)}@college.local";
+                    }
+                    else
+                    {
+                        throw new ConflictException($"Email address '{dto.Email}' is already registered to a staff record.");
+                    }
+                }
 
-            var existingUser = await _userRepository.GetByEmailAsync(dto.Email.Trim());
-            if (existingUser != null)
-                throw new ConflictException($"Email address '{dto.Email}' is already registered to an existing authentication account.");
+                var existingUser = await _userRepository.GetByEmailAsync(dto.Email.Trim());
+                if (existingUser != null)
+                {
+                    if (dto.Email.EndsWith("@college.local", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dto.Email = $"{Regex.Replace(employeeId.ToLowerInvariant(), @"[^a-z0-9]", "")}_{Guid.NewGuid().ToString("N").Substring(0, 4)}@college.local";
+                    }
+                    else
+                    {
+                        throw new ConflictException($"Email address '{dto.Email}' is already registered to an existing authentication account.");
+                    }
+                }
+            }
 
             if (!await _staffRepository.IsMobileUniqueAsync(dto.Mobile))
                 throw new ConflictException($"Mobile number '{dto.Mobile}' is already registered.");
@@ -311,7 +354,8 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.HighestQualification, dto.University, dto.Specialization, dto.PassingYear, dto.Percentage,
                 dto.TotalExperience, dto.PreviousInstitution, dto.PreviousDesignation, dto.ExperienceFrom, dto.ExperienceTo,
                 dto.AadhaarDocument, dto.PanDocument, dto.QualificationCertificate, dto.ExperienceCertificate, dto.Resume, dto.BankProof, dto.DrivingLicence, dto.OtherDocuments, dto.Photo, dto.Signature,
-                dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson);
+                dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson,
+                dto.DepartmentSpecific, dto.Documents, dto.DepartmentSpecificJson);
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
 
@@ -329,11 +373,33 @@ namespace CollegeManagement.API.Services.Implementations
                 var connection = _context.Database.GetDbConnection();
 
                 // 1. Dynamic Role Validation and Staff-Role Security Check
-                assignedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value, connection, dbTransaction);
-                if (assignedRole == null)
+                if (dto.RoleId.HasValue && dto.RoleId.Value > 0)
                 {
-                    await transaction.RollbackAsync();
-                    throw new ValidationException($"Role with ID '{dto.RoleId.Value}' was not found in Roles table.");
+                    assignedRole = await _userRepository.GetRoleByIdAsync(dto.RoleId.Value, connection, dbTransaction);
+                    if (assignedRole == null)
+                    {
+                        await transaction.RollbackAsync();
+                        throw new ValidationException($"Role with ID '{dto.RoleId.Value}' was not found in Roles table.");
+                    }
+                }
+                else
+                {
+                    // Fallback to appropriate role (Faculty for Teaching, Staff/Faculty for Non-Teaching)
+                    var targetRoleName = string.Equals(staffType, "Teaching", StringComparison.OrdinalIgnoreCase) ? "Faculty" : "Staff";
+                    assignedRole = await _userRepository.GetRoleByNameAsync(targetRoleName, connection, dbTransaction);
+                    if (assignedRole == null)
+                    {
+                        assignedRole = await _userRepository.GetRoleByNameAsync("Faculty", connection, dbTransaction);
+                    }
+                    if (assignedRole == null)
+                    {
+                        assignedRole = await _userRepository.GetRoleByIdAsync(4, connection, dbTransaction);
+                    }
+                    if (assignedRole == null)
+                    {
+                        await transaction.RollbackAsync();
+                        throw new ValidationException("No valid default staff role (Faculty/Staff) could be resolved.");
+                    }
                 }
 
                 var nonStaffRoles = new[] { "Super Admin", "Admin", "Student", "Parent" };
@@ -416,14 +482,31 @@ namespace CollegeManagement.API.Services.Implementations
             if (existingStaff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
+            var staffType = string.IsNullOrWhiteSpace(dto.StaffType) ? existingStaff.StaffType : dto.StaffType.Trim();
+
+            // Email handling for update
+            if (string.IsNullOrWhiteSpace(dto.Email))
+            {
+                if (string.Equals(staffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(staffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(staffType, "Non Teaching", StringComparison.OrdinalIgnoreCase))
+                {
+                    dto.Email = !string.IsNullOrWhiteSpace(existingStaff.Email) ? existingStaff.Email : $"{Regex.Replace(existingStaff.EmployeeId.ToLowerInvariant(), @"[^a-z0-9]", "")}@college.local";
+                }
+                else
+                {
+                    throw new ValidationException("Email address is required for teaching staff.");
+                }
+            }
+
             // Uniqueness Validations
-            if (!await _staffRepository.IsEmailUniqueAsync(dto.Email, id))
+            if (!string.IsNullOrWhiteSpace(dto.Email) && !await _staffRepository.IsEmailUniqueAsync(dto.Email, id))
                 throw new ConflictException($"Email address '{dto.Email}' is already registered to another staff member.");
 
             var normalizedNewEmail = dto.Email.Trim().ToUpperInvariant();
-            var normalizedOldEmail = existingStaff.Email.Trim().ToUpperInvariant();
+            var normalizedOldEmail = existingStaff.Email?.Trim().ToUpperInvariant() ?? string.Empty;
             bool emailChanged = !string.Equals(normalizedNewEmail, normalizedOldEmail, StringComparison.OrdinalIgnoreCase);
-            if (emailChanged)
+            if (emailChanged && !string.IsNullOrWhiteSpace(dto.Email))
             {
                 var existingUserWithNewEmail = await _userRepository.GetByEmailAsync(normalizedNewEmail);
                 if (existingUserWithNewEmail != null && existingUserWithNewEmail.StaffId != id)
@@ -437,8 +520,6 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (!string.IsNullOrWhiteSpace(dto.Aadhaar) && !await _staffRepository.IsAadhaarUniqueAsync(dto.Aadhaar, id))
                 throw new ConflictException($"Aadhaar number '{dto.Aadhaar}' is already registered to another staff member.");
-
-            var staffType = string.IsNullOrWhiteSpace(dto.StaffType) ? existingStaff.StaffType : dto.StaffType.Trim();
 
             // Department resolution
             int? resolvedDepartmentId = dto.DepartmentId;
@@ -518,7 +599,8 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.HighestQualification, dto.University, dto.Specialization, dto.PassingYear, dto.Percentage,
                 dto.TotalExperience, dto.PreviousInstitution, dto.PreviousDesignation, dto.ExperienceFrom, dto.ExperienceTo,
                 dto.AadhaarDocument, dto.PanDocument, dto.QualificationCertificate, dto.ExperienceCertificate, dto.Resume, dto.BankProof, dto.DrivingLicence, dto.OtherDocuments, dto.Photo, dto.Signature,
-                dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson);
+                dto.EducationJson, dto.ExperienceJson, dto.DocumentsJson, dto.BankDetailsJson, dto.EmergencyContactJson,
+                dto.DepartmentSpecific, dto.Documents, dto.DepartmentSpecificJson);
 
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
@@ -1426,6 +1508,40 @@ namespace CollegeManagement.API.Services.Implementations
                                 r.RelativeItem().Text($"Branch: {profile.BankDetails?.Branch ?? "—"}");
                             });
                         });
+
+                        // Role & Department Specific Details (Non-Teaching)
+                        if (profile.DepartmentSpecific != null && profile.DepartmentSpecific.Count > 0)
+                        {
+                            col.Item().PaddingTop(10);
+                            col.Item().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(10).Column(c =>
+                            {
+                                c.Item().Text($"{profile.Department} — Role Specific Information").Bold().FontSize(11).FontColor(Colors.Green.Darken3);
+                                c.Item().PaddingTop(3).Column(detailCol =>
+                                {
+                                    var entries = profile.DepartmentSpecific.ToList();
+                                    for (int i = 0; i < entries.Count; i += 2)
+                                    {
+                                        var item1 = entries[i];
+                                        var val1 = item1.Value?.ToString() ?? "—";
+                                        var item2 = i + 1 < entries.Count ? entries[i + 1] : default;
+
+                                        detailCol.Item().PaddingBottom(2).Row(r =>
+                                        {
+                                            r.RelativeItem().Text($"{item1.Key}: {val1}");
+                                            if (item2.Key != null)
+                                            {
+                                                var val2 = item2.Value?.ToString() ?? "—";
+                                                r.RelativeItem().Text($"{item2.Key}: {val2}");
+                                            }
+                                            else
+                                            {
+                                                r.RelativeItem().Text("");
+                                            }
+                                        });
+                                    }
+                                });
+                            });
+                        }
                     });
 
                     // Footer
@@ -1680,6 +1796,32 @@ namespace CollegeManagement.API.Services.Implementations
                 else dto.OtherDocuments = d.FileName;
             }
 
+            // Dynamic Role-Specific / Department Specific details
+            if (!string.IsNullOrWhiteSpace(staff.DepartmentSpecificJson))
+            {
+                try
+                {
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(staff.DepartmentSpecificJson);
+                    if (dict != null)
+                    {
+                        dto.DepartmentSpecific = dict;
+                    }
+                }
+                catch { }
+            }
+
+            // Dynamic documents map for frontend lookup
+            if (docList.Any())
+            {
+                foreach (var d in docList)
+                {
+                    if (!string.IsNullOrWhiteSpace(d.DocumentType) && !string.IsNullOrWhiteSpace(d.FileName))
+                    {
+                        dto.DocumentsMap[d.DocumentType] = d.FileName;
+                    }
+                }
+            }
+
             return dto;
         }
 
@@ -1758,6 +1900,36 @@ namespace CollegeManagement.API.Services.Implementations
                 if (!string.IsNullOrWhiteSpace(dto.Employment.EmploymentType)) staff.EmploymentType = dto.Employment.EmploymentType.Trim();
                 if (!string.IsNullOrWhiteSpace(dto.Employment.Status)) staff.Status = dto.Employment.Status.Trim();
             }
+
+            if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.Any())
+            {
+                staff.DepartmentSpecificJson = JsonSerializer.Serialize(dto.DepartmentSpecific);
+            }
+
+            if (dto.Documents != null && dto.Documents.Any())
+            {
+                var docList = DeserializeList<StaffDocumentItem>(staff.DocumentsJson);
+                foreach (var kvp in dto.Documents)
+                {
+                    if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                    {
+                        docList.RemoveAll(d => string.Equals(d.DocumentType, kvp.Key, StringComparison.OrdinalIgnoreCase));
+                        docList.Add(new StaffDocumentItem
+                        {
+                            DocumentType = kvp.Key,
+                            DocumentName = kvp.Value,
+                            FileName = kvp.Value,
+                            FilePath = $"/uploads/staff-documents/{kvp.Value}",
+                            FileType = Path.GetExtension(kvp.Value).TrimStart('.').ToUpper(),
+                            UploadedAt = DateTime.UtcNow
+                        });
+                    }
+                }
+                if (docList.Any())
+                {
+                    staff.DocumentsJson = JsonSerializer.Serialize(docList);
+                }
+            }
         }
 
         private static void SyncFlattenedPropertiesToJson(
@@ -1767,7 +1939,10 @@ namespace CollegeManagement.API.Services.Implementations
             string? highestQualification, string? university, string? specialization, string? passingYear, string? percentage,
             string? totalExp, string? previousInstitution, string? previousDesignation, string? expFrom, string? expTo,
             string? aadhaarDoc, string? panDoc, string? qualCert, string? expCert, string? resume, string? bankProof, string? drivingLicence, string? otherDocs, string? photo, string? signature,
-            string? rawEduJson, string? rawExpJson, string? rawDocJson, string? rawBankJson, string? rawEmergencyJson)
+            string? rawEduJson, string? rawExpJson, string? rawDocJson, string? rawBankJson, string? rawEmergencyJson,
+            Dictionary<string, object>? departmentSpecific = null,
+            Dictionary<string, string>? documentsMap = null,
+            string? rawDeptSpecificJson = null)
         {
             // 1. Bank Details
             if (!string.IsNullOrWhiteSpace(rawBankJson))
@@ -1910,10 +2085,32 @@ namespace CollegeManagement.API.Services.Implementations
                 AddOrUpdateDoc("Photo", photo);
                 AddOrUpdateDoc("Signature", signature);
 
+                // Dynamic documents from frontend map
+                if (documentsMap != null && documentsMap.Count > 0)
+                {
+                    foreach (var kvp in documentsMap)
+                    {
+                        if (!string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
+                        {
+                            AddOrUpdateDoc(kvp.Key, kvp.Value);
+                        }
+                    }
+                }
+
                 if (docList.Any())
                 {
                     staff.DocumentsJson = JsonSerializer.Serialize(docList);
                 }
+            }
+
+            // 6. Department Specific / Role Specific Details for Non-Teaching Staff
+            if (!string.IsNullOrWhiteSpace(rawDeptSpecificJson))
+            {
+                staff.DepartmentSpecificJson = rawDeptSpecificJson;
+            }
+            else if (departmentSpecific != null && departmentSpecific.Count > 0)
+            {
+                staff.DepartmentSpecificJson = JsonSerializer.Serialize(departmentSpecific);
             }
         }
 

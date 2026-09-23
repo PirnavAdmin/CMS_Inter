@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { CalendarCheck2, CalendarClock, CalendarDays, ChevronDown, Clock3, Coffee, Download, UserCheck, UserRound, UserX } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Loader } from "@/components/common/Ui.jsx";
+import { SkeletonDashboard } from "@/components/common/Ui.jsx";
 import apiClient from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -32,6 +32,7 @@ function ExportMenu() {
 
 export default function AttendanceOverviewPage() {
   const { area, staffId, studentId } = useParams();
+  const location = useLocation();
   const staff = area === "staff" || Boolean(staffId);
   const id = staff ? staffId : studentId;
   const { selectedAcademicYearId, selectedAcademicYear } = useAcademicContext();
@@ -76,17 +77,18 @@ export default function AttendanceOverviewPage() {
 
   const title = staff ? "Staff Attendance Overview" : "Student Attendance Overview";
   const backPath = staff ? "/dashboard/attendance/staff" : "/dashboard/attendance/student";
+  const backState = !staff && location.state?.attendanceState ? { attendanceState: location.state.attendanceState } : undefined;
   const yearLabel = selectedAcademicYear?.name || selectedAcademicYear?.label || profile?.academicYearName || '';
   const subtitle = yearLabel ? `Academic Year: ${yearLabel}` : '';
   
   if (loading) {
-    return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}><main className="attendance-module"><Loader label="Loading overview..." /></main></DashboardLayout>;
+    return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}><main className="attendance-module"><SkeletonDashboard cards={4} tableColumns={5} /></main></DashboardLayout>;
   }
 
   if (error) {
     return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}>
       <main className="attendance-module att-overview-page">
-        <Link className="cms-back-link" to={backPath}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
+        <Link className="cms-back-link" to={backPath} state={backState}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
         <section className="att-card" style={{ padding: "2rem", textAlign: "center" }}>
           <p style={{ color: "var(--cms-danger, #ef4444)", marginBottom: "1rem" }}>{error}</p>
           <button type="button" className="cms-btn cms-btn-primary" onClick={loadData}>Retry</button>
@@ -103,7 +105,7 @@ export default function AttendanceOverviewPage() {
 
   return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}>
     <main className={`attendance-module att-overview-page ${staff ? "att-overview-page-staff" : "att-overview-page-student"}`} data-overview-id={id}>
-      <Link className="cms-back-link" to={backPath}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
+      <Link className="cms-back-link" to={backPath} state={backState}>← Back to {staff ? "Staff" : "Student"} Attendance</Link>
       {staff ? <section className="att-card att-overview-card att-overview-staff-card">
         <div className="att-overview-staff-summary">
           <div className="att-overview-staff-identity"><span className="att-overview-photo">{profileName.charAt(0).toUpperCase()}</span><div><strong>{profileName}</strong><span>Staff</span></div></div>

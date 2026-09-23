@@ -47,5 +47,10 @@ namespace CollegeManagement.API.Helpers
         /// Extracts the canonical RoleName (ClaimTypes.Role) from claims.
         /// </summary>
         string? GetRole(ClaimsPrincipal? principal);
+
+        /// <summary>
+        /// Safely extracts the UserId from a raw JWT token string (even if expired).
+        /// </summary>
+        int? GetUserIdFromToken(string? token);
     }
 }
