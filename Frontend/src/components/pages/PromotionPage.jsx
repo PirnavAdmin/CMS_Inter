@@ -1,1805 +1,1847 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, Users, UserCheck, UserX, Megaphone, RotateCcw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { ArrowRight, Download, RefreshCw } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
-import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
+import { Field, Loader, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
+  getPromotionOptions,
   getEligibleStudents,
+  getAllocationStudents,
+  promotionList,
   previewPromotion,
   promoteStudents,
   promoteSingleStudent,
   allocateProgram,
   allocateSection,
-  allocateGroup,
   getPromotionHistory,
-  rollbackPromotion,
   getPromotionReport,
+  rollbackPromotion,
+  promotionError,
+  isPromotionEligible,
+  isFinalPromotionLevel,
+  nextPromotionLevel,
+  nextPromotionYear,
 } from "@/features/promotion/services/promotionStore.js";
 import "./PromotionPage.css";
 
-const EMPTY_SETUP = {
-  fromYear: "", board: "", fromLevel: "", group: "", program: "", fromSection: "",
-  toYear: "", toBoard: "", toLevel: "", toGroup: "", toProgram: "", toSection: "",
-};
+const EMPTY_COHORT = { academicLevelId: "", groupId: "", programId: "", sectionId: "" };
+const VIEWS = [
+  ["promote", "Promote Students"],
+  ["allocation", "Allocation"],
+  ["history", "History & Reports"],
+];
+const text = (value) => String(value ?? "");
+const findOption = (options, value) => options.find((item) => item.value === text(value));
+const toggle = (items, id) =>
+  items.includes(id) ? items.filter((item) => item !== id) : [...items, id];
+const matchStudent = (row, search) =>
+  `${row.studentName} ${row.studentCode ?? row.admissionNo ?? ""} ${row.rollNo ?? ""}`
+    .toLowerCase()
+    .includes(search.trim().toLowerCase());
+const date = (value) => (value ? new Date(value).toLocaleDateString() : "—");
 
-const EMPTY_HISTORY_FILTERS = {
-  academicYearId: "", academicLevel: "",
-  groupId: "", programId: "", section: "", studentId: "", search: "", promotionStatus: "", fromDate: "", toDate: "",
-};
-
-const read = (item, ...keys) => {
-  const key = keys.find((candidate) => item?.[candidate] !== undefined && item?.[candidate] !== null);
-  return key ? item[key] : undefined;
-};
-
-const unwrap = (payload, preferred = []) => {
-  if (Array.isArray(payload)) return payload;
-  const candidates = [
-    ...preferred.map((key) => payload?.[key]), payload?.data, payload?.Data, payload?.items, payload?.Items,
-    payload?.records, payload?.Records, payload?.result, payload?.Result, payload?.$values,
-    payload?.data?.items, payload?.data?.records, payload?.data?.$values,
-  ];
-  return candidates.find(Array.isArray) || [];
-};
-
-const unwrapObject = (payload) => payload?.data ?? payload?.Data ?? payload?.result ?? payload?.Result ?? payload ?? {};
-const asString = (value) => value === undefined || value === null ? "" : String(value);
-const isPresent = (value) => value !== "" && value !== undefined && value !== null;
-const numericId = (value) => {
-  if (!isPresent(value)) return undefined;
-  const number = Number(value);
-  return Number.isFinite(number) && number > 0 ? number : undefined;
-};
-const compactParams = (values) => Object.fromEntries(Object.entries(values).filter(([, value]) => isPresent(value) && !Number.isNaN(value)));
-const unique = (values) => [...new Set(values.filter(Boolean).map(String))];
-const option = (value, label) => ({ value: asString(value), label: asString(label ?? value) });
-const isSecondYearLevel = (value) => /\b(?:2nd|second)\s+year\b/i.test(asString(value));
-const academicYearRange = (year) => {
-  const match = asString(year).match(/\b(\d{4})\s*[-/]\s*(\d{4})\b/);
-  if (!match) return null;
-  const start = Number(match[1]);
-  const end = Number(match[2]);
-  return end === start + 1 ? { start, end } : null;
-};
-
-const isNextAcademicYear = (sourceYear, targetYear) => {
-  const source = academicYearRange(sourceYear);
-  const target = academicYearRange(targetYear);
-  return Boolean(source && target && target.start === source.start + 1);
-};
-
-const getMasterFailureMessage = (responses, names) => {
-  const failures = responses
-    .map((result, index) => result.status === "rejected" ? { name: names[index], error: result.reason } : null)
-    .filter(Boolean);
-  if (!failures.length) return "";
-  const statuses = failures.map(({ error }) => error?.response?.status);
-  if (statuses.some((status) => status === 502) || failures.some(({ error }) => !error?.response)) {
-    return "Unable to connect to the server. Please check your network connection and try again.";
-  }
-  if (statuses.some((status) => status === 401)) return "Your session has expired. Please sign in again.";
-  if (statuses.some((status) => status === 403)) return "Your account is not permitted to load Promotion master data.";
-  return `Unable to load ${failures.map(({ name }) => name).join(", ")}. Other live master data remains available.`;
-};
-
-const normalizeStudent = (item) => {
-  const id = read(item, "studentId", "StudentId", "id", "Id");
-  const eligibleFlag = read(item, "isEligible", "IsEligible", "eligible", "Eligible");
-  const eligibility = asString(read(item, "eligibilityStatus", "EligibilityStatus", "eligibility", "status", "Status"));
-  return {
-    raw: item,
-    id: numericId(id) ?? id,
-    admissionNo: read(item, "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo", "admissionNumberNo", "AdmissionNumberNo", "studentCode", "StudentCode") || "-",
-    name: read(item, "studentName", "StudentName", "fullName", "FullName", "name", "Name") || "-",
-    academicYear: read(item, "academicYear", "AcademicYear", "academicYearName", "AcademicYearName", "sourceAcademicYearName", "SourceAcademicYearName", "currentAcademicYear", "CurrentAcademicYear") || "-",
-    academicYearId: read(item, "academicYearId", "AcademicYearId"),
-    board: read(item, "boardName", "BoardName", "sourceBoardName", "SourceBoardName", "board", "Board") || "-",
-    boardId: read(item, "boardId", "BoardId"),
-    level: read(item, "academicLevel", "AcademicLevel", "sourceAcademicLevel", "SourceAcademicLevel", "level", "Level") || "-",
-    levelId: read(item, "academicLevelId", "AcademicLevelId"),
-    group: read(item, "groupName", "GroupName", "sourceGroupName", "SourceGroupName", "group", "Group") || "-",
-    groupId: read(item, "groupId", "GroupId", "sourceGroupId", "SourceGroupId"),
-    program: read(item, "programName", "ProgramName", "sourceProgramName", "SourceProgramName", "program", "Program") || "-",
-    programId: read(item, "programId", "ProgramId", "sourceProgramId", "SourceProgramId"),
-    section: read(item, "sectionName", "SectionName", "sourceSection", "SourceSection", "section", "Section") || "-",
-    medium: read(item, "medium", "Medium", "sourceMedium", "SourceMedium") || "-",
-    eligibility: eligibility || (eligibleFlag === false ? "Not Eligible" : "-"),
-    eligibleFlag,
-    reason: read(item, "eligibilityReason", "EligibilityReason", "reason", "Reason", "remarks", "Remarks") || "",
-  };
-};
-
-const normalizeHistory = (item) => ({
-  raw: item,
-  id: numericId(read(item, "promotionId", "PromotionId", "id", "Id")) ?? read(item, "promotionId", "PromotionId", "id", "Id"),
-  studentId: read(item, "studentId", "StudentId"),
-  student: read(item, "studentName", "StudentName", "name", "Name") || "-",
-  admissionNo: read(item, "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo", "studentCode", "StudentCode") || "-",
-  sourceYear: read(item, "sourceAcademicYear", "SourceAcademicYear", "sourceAcademicYearName", "SourceAcademicYearName", "academicYearName", "AcademicYearName") || "-",
-  sourceLevel: read(item, "sourceAcademicLevel", "SourceAcademicLevel", "academicLevel", "AcademicLevel") || "-",
-  sourceGroup: read(item, "sourceGroupName", "SourceGroupName", "groupName", "GroupName") || "-",
-  sourceSection: read(item, "sourceSection", "SourceSection", "section", "Section") || "-",
-  targetYear: read(item, "targetAcademicYear", "TargetAcademicYear", "targetAcademicYearName", "TargetAcademicYearName") || "-",
-  targetLevel: read(item, "targetAcademicLevel", "TargetAcademicLevel") || "-",
-  targetGroup: read(item, "targetGroupName", "TargetGroupName") || "-",
-  targetSection: read(item, "targetSection", "TargetSection") || "-",
-  date: read(item, "promotionDate", "PromotionDate", "createdAt", "CreatedAt") ? String(read(item, "promotionDate", "PromotionDate", "createdAt", "CreatedAt")).split("T")[0] : "-",
-  status: read(item, "promotionStatus", "PromotionStatus", "status", "Status") || "-",
-  promotedBy: read(item, "promotedBy", "PromotedBy", "promotedByName", "PromotedByName") || "System",
-  canRollback: read(item, "canRollback", "CanRollback") !== false && !read(item, "isRolledBack", "IsRolledBack", "rollbackStatus", "RollbackStatus"),
-});
-
-const isEligible = (student) => {
-  if (!student) return false;
-  const status = (student.eligibilityStatus || "").toLowerCase();
-  return status === "eligible" || status === "";
-};
-
-export default function PromotionPage({ screen = "promotion" }) {
-  const navigate = useNavigate();
-  const activeTab = screen;
-
-  // Consume global Board & Academic Year from Navbar Context
-  const {
-    selectedBoardId,
-    selectedBoard,
-    selectedAcademicYearId,
-    selectedAcademicYear,
-  } = useAcademicContext();
-
-  const [allocationTab, setAllocationTab] = useState("program");
-  const [setup, setSetup] = useState(EMPTY_SETUP);
-  const [masters, setMasters] = useState({ years: [], boards: [], levels: [], groups: [], sections: [] });
-  const [masterLoading, setMasterLoading] = useState(true);
-  const [masterError, setMasterError] = useState("");
-  const [students, setStudents] = useState([]);
-  const [studentsLoaded, setStudentsLoaded] = useState(false);
-  const [studentsLoading, setStudentsLoading] = useState(false);
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [search, setSearch] = useState("");
-  const [eligibilityFilter, setEligibilityFilter] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [error, setError] = useState("");
-  const [toast, setToast] = useState("");
-  const [previewData, setPreviewData] = useState(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [individualStudent, setIndividualStudent] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [historyFilters, setHistoryFilters] = useState(EMPTY_HISTORY_FILTERS);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
-  const [rollbackRecord, setRollbackRecord] = useState(null);
-  const [rollbackReason, setRollbackReason] = useState("");
-  const [rollbackLoading, setRollbackLoading] = useState(false);
-  const [reportData, setReportData] = useState(null);
-  const [reportRows, setReportRows] = useState([]);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [reportLoaded, setReportLoaded] = useState(false);
-  const eligibleController = useRef(null);
-
-  const loadMasters = useCallback(async () => {
-    setMasterLoading(true);
-    setMasterError("");
-    try {
-      const responses = await Promise.allSettled([
-        apiClient.get(apiEndpoints.academicYears.getAll),
-        apiClient.get(apiEndpoints.boards.list),
-        apiClient.get(apiEndpoints.boards.academicLevels),
-        apiClient.get(apiEndpoints.groups.list),
-        apiClient.get(apiEndpoints.sections.list),
-      ]);
-      const dataAt = (index) => responses[index].status === "fulfilled" ? responses[index].value.data : [];
-      const [yearsData, boardsData, levelsData, groupsData, sectionsData] = responses.map((_, index) => dataAt(index));
-      const groupItems = unwrap(groupsData);
-      const sectionItems = unwrap(sectionsData);
-      const levels = unwrap(levelsData, ["academicLevels", "AcademicLevels"]).map((item) => ({
-        ...option(typeof item === "string" ? item : read(item, "academicLevelId", "AcademicLevelId", "id", "Id", "academicLevelName", "AcademicLevelName", "levelName", "LevelName"), typeof item === "string" ? item : read(item, "academicLevelName", "AcademicLevelName", "levelName", "LevelName", "academicLevel", "AcademicLevel", "name", "Name")),
-        board: asString(read(item, "boardId", "BoardId")),
-        year: asString(read(item, "academicYearId", "AcademicYearId")),
-      })).filter((item) => item.value);
-      const groups = groupItems.map((item) => ({
-        ...option(read(item, "groupId", "GroupId", "id", "Id"), read(item, "groupName", "GroupName", "name", "Name")),
-        board: asString(read(item, "boardId", "BoardId")),
-        level: asString(read(item, "academicLevel", "AcademicLevel", "academicLevelName", "AcademicLevelName")),
-        levelId: asString(read(item, "academicLevelId", "AcademicLevelId")),
-        year: asString(read(item, "academicYearId", "AcademicYearId")),
-        programs: unwrap(item, ["programs", "Programs"]).map((program) => option(read(program, "programId", "ProgramId", "id", "Id"), read(program, "programName", "ProgramName", "name", "Name"))).filter((program) => numericId(program.value)),
-      })).filter((item) => numericId(item.value));
-      const sections = sectionItems.map((item) => ({
-        value: asString(read(item, "sectionName", "SectionName", "name", "Name", "section", "Section", "sectionId", "SectionId", "id", "Id")),
-        label: asString(read(item, "sectionName", "SectionName", "name", "Name", "section", "Section")),
-        group: asString(read(item, "groupId", "GroupId")),
-        level: asString(read(item, "academicLevelId", "AcademicLevelId")),
-        board: asString(read(item, "boardId", "BoardId")),
-        year: asString(read(item, "academicYearId", "AcademicYearId")),
-        program: asString(read(item, "programId", "ProgramId", "groupProgramId", "GroupProgramId")),
-      })).filter((item) => item.value);
-      const boardOptions = unwrap(boardsData).map((item) => {
-        const ids = read(item, "academicLevelIds", "AcademicLevelIds");
-        const names = read(item, "academicLevelNames", "AcademicLevelNames", "academicLevels", "AcademicLevels");
-        return {
-          ...option(read(item, "boardId", "BoardId", "id", "Id"), read(item, "boardName", "BoardName", "name", "Name")),
-          academicLevelIds: Array.isArray(ids) ? ids.map(asString) : [],
-          academicLevelNames: Array.isArray(names) ? names.map((level) => asString(typeof level === "object" ? read(level, "levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name") : level)) : [],
-          active: read(item, "isActive", "IsActive", "active", "Active") === true || /^active$/i.test(asString(read(item, "status", "Status"))),
-        };
-      }).filter((item) => numericId(item.value) && item.active);
-
-      setMasters({
-        years: unwrap(yearsData).map((item) => ({
-          ...option(read(item, "academicYearId", "AcademicYearId", "id", "Id"), read(item, "academicYear", "AcademicYear", "academicYearName", "AcademicYearName", "name", "Name")),
-          board: asString(read(item, "boardId", "BoardId")),
-          active: read(item, "isActive", "IsActive") === true || /^active$/i.test(asString(read(item, "status", "Status"))),
-        })).filter((item) => numericId(item.value)),
-        boards: boardOptions,
-        levels,
-        groups,
-        sections,
-      });
-      setMasterError(getMasterFailureMessage(responses, ["academic years", "boards", "academic levels", "groups", "sections"]));
-    } catch (requestError) {
-      setMasterError(getApiErrorMessage(requestError));
-    } finally {
-      setMasterLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadMasters(); }, [loadMasters]);
-
-  useEffect(() => () => eligibleController.current?.abort(), []);
-
-  // Dynamically load programs for groups
+// Promise caching deduplicates identical scopes, including StrictMode effects.
+// The key check hides stale options in the same render as a dependency change.
+function useOptions(kind, params, enabled, cache) {
+  const key = enabled ? JSON.stringify([kind, params]) : "";
+  const [result, setResult] = useState({ key: "", options: [], error: "" });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    const groupIds = unique([setup.group, historyFilters.groupId]);
-    if (!groupIds.length) return undefined;
-    let active = true;
-    setMasters((current) => ({
-      ...current,
-      groups: current.groups.map((group) => groupIds.includes(group.value) ? { ...group, programs: [] } : group),
-    }));
-    Promise.allSettled(groupIds.map((groupId) => apiClient.get(apiEndpoints.groups.programs(groupId))))
-      .then((results) => {
-        if (!active) return;
-        setMasters((current) => ({
-          ...current,
-          groups: current.groups.map((group) => {
-            const index = groupIds.indexOf(group.value);
-            const result = results[index];
-            if (index < 0 || result?.status !== "fulfilled") return group;
-            const programs = unwrap(result.value.data)
-              .map((program) => option(
-                read(program, "programId", "ProgramId", "id", "Id", "groupProgramId", "GroupProgramId"),
-                read(program, "programName", "ProgramName", "programme", "Programme", "program", "Program", "name", "Name"),
-              ))
-              .filter((program) => numericId(program.value));
-            return { ...group, programs };
-          }),
-        }));
+    if (!key) return undefined;
+    let current = true;
+    if (!cache.current.has(key)) {
+      const [type, scope] = JSON.parse(key);
+      const request = getPromotionOptions(type, scope).catch((error) => {
+        cache.current.delete(key);
+        throw error;
       });
-    return () => { active = false; };
-  }, [historyFilters.groupId, setup.group]);
-
-  // Derive the next academic year automatically from the current navbar year
-  const nextAcademicYearObj = useMemo(() => {
-    if (!selectedAcademicYear && !selectedAcademicYearId) return null;
-    const currentLabel = selectedAcademicYear?.label || selectedAcademicYear?.name || "";
-    const currentRange = academicYearRange(currentLabel);
-    if (currentRange && masters.years.length) {
-      const found = masters.years.find((y) => {
-        const r = academicYearRange(y.label);
-        return r && r.start === currentRange.start + 1;
+      cache.current.set(key, request);
+    }
+    cache.current
+      .get(key)
+      .then((options) => {
+        if (current) setResult({ key, options, error: "" });
+      })
+      .catch((error) => {
+        if (current) setResult({ key, options: [], error: promotionError(error, `load ${kind}`) });
       });
-      if (found) return found;
-    }
-    // Fallback: look for 2027-2028 or year with label ending in +1
-    const nextByPattern = masters.years.find((y) => /2027\s*[-/]\s*2028/i.test(y.label));
-    if (nextByPattern) return nextByPattern;
-    return null;
-  }, [masters.years, selectedAcademicYear, selectedAcademicYearId]);
-
-  // Synchronize setup directly whenever navbar Board or Academic Year changes
-  useEffect(() => {
-    if (!selectedBoardId && !selectedAcademicYearId) return;
-    const targetYearId = nextAcademicYearObj?.value || "";
-    setSetup((current) => ({
-      ...current,
-      board: asString(selectedBoardId),
-      fromYear: asString(selectedAcademicYearId),
-      toBoard: asString(selectedBoardId),
-      toYear: asString(targetYearId),
-      fromLevel: "",
-      group: "",
-      program: "",
-      fromSection: "",
-      toLevel: "",
-      toGroup: "",
-      toProgram: "",
-      toSection: "",
-    }));
-    setFieldErrors({});
-    setStudentsLoaded(false);
-    setStudents([]);
-    setSelectedIds([]);
-    setError("");
-  }, [selectedBoardId, selectedAcademicYearId, nextAcademicYearObj]);
-
-  // Resolve academic levels associated with the active board
-  const boardLevels = useMemo(() => {
-    const boardValue = setup.board || asString(selectedBoardId);
-    const activeBoard = masters.boards.find((b) => String(b.value) === String(boardValue) || String(b.id) === String(boardValue));
-    if (!activeBoard) return masters.levels;
-    const matched = masters.levels.filter((level) => {
-      if (level.board && String(level.board) === String(boardValue)) return true;
-      if (activeBoard.academicLevelIds?.length && activeBoard.academicLevelIds.includes(String(level.value))) return true;
-      if (activeBoard.academicLevelNames?.length && activeBoard.academicLevelNames.some((n) => n.toLowerCase() === level.label.toLowerCase())) return true;
-      return false;
-    });
-    return matched.length ? matched : masters.levels;
-  }, [masters.boards, masters.levels, selectedBoardId, setup.board]);
-
-  // Filter levels for the active navbar board & academic year
-  const levelsFor = useCallback((prefix) => {
-    if (prefix === "to") {
-      const sourceObj = boardLevels.find((l) => String(l.value) === String(setup.fromLevel));
-      const sourceLabel = sourceObj?.label || "";
-      if (/1st|first|\b1\b/i.test(sourceLabel)) {
-        const secondYearLevels = boardLevels.filter((l) => /2nd|second|\b2\b/i.test(l.label));
-        if (secondYearLevels.length > 0) return secondYearLevels;
-      }
-      return boardLevels.filter((l) => String(l.value) !== String(setup.fromLevel));
-    }
-    return boardLevels;
-  }, [boardLevels, setup.fromLevel]);
-
-  // Filter groups for the active navbar board, academic year, and chosen level
-  const groupsFor = useCallback((prefix) => masters.groups.filter((group) => {
-    const boardValue = setup.board || asString(selectedBoardId);
-    const yearValue = setup.fromYear || asString(selectedAcademicYearId);
-    const levelValue = setup[prefix === "from" ? "fromLevel" : "toLevel"];
-    if (!boardValue || !yearValue) return true;
-    if (!levelValue) return group.board === asString(boardValue) && group.year === asString(yearValue);
-    const levelLabel = masters.levels.find((level) => level.value === asString(levelValue))?.label;
-    return group.board === asString(boardValue)
-      && group.year === asString(yearValue)
-      && (group.levelId === asString(levelValue) || group.level === asString(levelLabel));
-  }), [masters.groups, masters.levels, selectedAcademicYearId, selectedBoardId, setup]);
-
-  const programsFor = useCallback((prefix) => {
-    const groupValue = setup[prefix === "from" ? "group" : "toGroup"];
-    const group = masters.groups.find((item) => item.value === asString(groupValue));
-    return group?.programs || [];
-  }, [masters.groups, setup]);
-
-  const sectionsFor = useCallback((prefix) => {
-    const groupValue = setup[prefix === "from" ? "group" : "toGroup"];
-    const groupLabel = masters.groups.find((item) => item.value === groupValue)?.label;
-    const levelValue = setup[prefix === "from" ? "fromLevel" : "toLevel"];
-    const programValue = setup[prefix === "from" ? "program" : "toProgram"];
-    const boardValue = setup.board || asString(selectedBoardId);
-    const yearValue = setup.fromYear || asString(selectedAcademicYearId);
-    return masters.sections.filter((section) => (!section.group || section.group === groupValue || section.group === groupLabel)
-      && (!section.level || section.level === levelValue)
-      && (!programValue || !section.program || section.program === asString(programValue))
-      && (!section.board || section.board === asString(boardValue))
-      && (!section.year || section.year === asString(yearValue)));
-  }, [masters.groups, masters.sections, selectedAcademicYearId, selectedBoardId, setup]);
-
-  // Form fields for Source - Board & From Academic Year are REMOVED as they come from the Navbar!
-  const sourceFields = useMemo(() => [
-    { name: "fromLevel", label: "From Academic Level", type: "select", options: levelsFor("from"), required: true },
-    { name: "group", label: "Group", type: "select", options: groupsFor("from"), required: true, disabled: !setup.fromLevel },
-    { name: "program", label: "Program", type: "select", options: programsFor("from"), required: true, disabled: !setup.group },
-    { name: "fromSection", label: "From Section", type: "select", options: sectionsFor("from"), required: true, disabled: !setup.program },
-  ], [groupsFor, levelsFor, programsFor, sectionsFor, setup.fromLevel, setup.group, setup.program]);
-
-  const selectedSourceLevel = masters.levels.find((level) => level.value === asString(setup.fromLevel));
-  const isFinalYear = isSecondYearLevel(selectedSourceLevel?.label || setup.fromLevel);
-  const destinationLevels = useMemo(() => levelsFor("to").filter((level) => !/^degree$/i.test(level.label)), [levelsFor]);
-  const lockedTargetGroups = useMemo(() => masters.groups.filter((group) => group.value === asString(setup.group)), [masters.groups, setup.group]);
-  const lockedTargetPrograms = useMemo(() => programsFor("from").filter((program) => program.value === asString(setup.program)), [programsFor, setup.program]);
-
-  // Form fields for Destination - Board & To Academic Year are REMOVED (Board inherits, Target Year is automated)!
-  const targetFields = useMemo(() => [
-    { name: "toLevel", label: "To Academic Level", type: "select", options: destinationLevels, required: true },
-    { name: "toGroup", label: "Group", type: "select", options: lockedTargetGroups, required: true, disabled: true },
-    { name: "toProgram", label: "Program", type: "select", options: lockedTargetPrograms, required: true, disabled: true },
-    { name: "toSection", label: "To Section", type: "select", options: sectionsFor("to"), required: true },
-  ], [destinationLevels, lockedTargetGroups, lockedTargetPrograms, sectionsFor]);
-
-  const updateSetup = (name, value) => {
-    const resets = {
-      fromLevel: ["group", "program", "fromSection", "toGroup", "toProgram", "toSection"],
-      group: ["program", "fromSection", "toProgram", "toSection"],
-      program: ["fromSection", "toSection"],
-      toLevel: ["toSection"],
+    return () => {
+      current = false;
     };
-
-    setSetup((current) => {
-      const updated = {
-        ...current,
-        ...Object.fromEntries((resets[name] || []).map((key) => [key, ""])),
-        [name]: value,
-        ...(name === "group" ? { toGroup: value, toProgram: "" } : {}),
-        ...(name === "program" ? { toProgram: value } : {}),
-      };
-
-      // Automatically suggest next academic level for this board when fromLevel is selected
-      if (name === "fromLevel") {
-        const sourceLevelObj = boardLevels.find((l) => String(l.value) === String(value));
-        const sourceLabel = sourceLevelObj?.label || value;
-        if (/1st|first|\b1\b/i.test(sourceLabel)) {
-          const secondYear = boardLevels.find((l) => /2nd|second|\b2\b/i.test(l.label)) || boardLevels[1];
-          if (secondYear) {
-            updated.toLevel = secondYear.value;
-          }
-        }
-      }
-
-      return updated;
-    });
-
-    setFieldErrors((current) => ({
-      ...current,
-      [name]: undefined,
-    }));
-    setStudentsLoaded(false);
-    setStudents([]);
-    setSelectedIds([]);
-    setError("");
+  }, [key, kind, attempt, cache]);
+  const retry = () => {
+    cache.current.delete(key);
+    setResult({ key: "", options: [], error: "" });
+    setAttempt((value) => value + 1);
   };
-
-  const validateFields = (fields) => {
-    const errors = {};
-    fields.forEach((field) => {
-      if (field.required && !setup[field.name]) errors[field.name] = `${field.label} is required.`;
-    });
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+  return {
+    options: key && result.key === key ? result.options : [],
+    loading: Boolean(key && result.key !== key),
+    error: key && result.key === key ? result.error : "",
+    enabled,
+    retry,
   };
+}
 
-  const academicLevelLabel = useCallback((levelId) => masters.levels.find((level) => level.value === asString(levelId))?.label || asString(levelId), [masters.levels]);
-
-  const eligibleParams = useCallback(() => {
-    return compactParams({
-      AcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
-      BoardId: numericId(setup.board || selectedBoardId),
-      AcademicLevel: academicLevelLabel(setup.fromLevel),
-      GroupId: numericId(setup.group),
-      ProgramId: numericId(setup.program),
-      Section: setup.fromSection,
-      TargetAcademicYearId: numericId(setup.toYear || nextAcademicYearObj?.value),
-      TargetAcademicLevel: academicLevelLabel(setup.toLevel),
-      TargetGroupId: numericId(setup.toGroup),
-      TargetSection: setup.toSection,
-    });
-  }, [academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup]);
-
-  const fetchEligibleStudents = useCallback(async () => {
-    setStudentsLoading(true);
-    setError("");
-    try {
-      const data = await getEligibleStudents(eligibleParams());
-      const rows = unwrap(data, ["students", "Students", "eligibleStudents", "EligibleStudents"]).map(normalizeStudent).filter((student) => isPresent(student.id));
-      setStudents(rows);
-      setStudentsLoaded(true);
-      setSelectedIds((current) => current.filter((id) => rows.some((student) => student.id === id && isEligible(student))));
-    } catch (requestError) {
-      setStudents([]);
-      setStudentsLoaded(true);
-      setError(getApiErrorMessage(requestError));
-    } finally {
-      setStudentsLoading(false);
-    }
-  }, [eligibleParams]);
-
-  const loadStudents = async () => {
-    if (!validateFields(sourceFields)) {
-      setError("Please complete the required source level, group, and section.");
-      return;
-    }
-    await fetchEligibleStudents();
-  };
-
-  const visibleStudents = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return students.filter((student) => {
-      const matchesSearch = !query || `${student.name} ${student.admissionNo} ${student.id}`.toLowerCase().includes(query);
-      return matchesSearch && (!eligibilityFilter || student.eligibility === eligibilityFilter);
-    });
-  }, [eligibilityFilter, search, students]);
-
-  const selectedStudents = useMemo(() => students.filter((student) => selectedIds.includes(student.id) && isEligible(student)), [selectedIds, students]);
-  const eligibleStudents = useMemo(() => students.filter(isEligible), [students]);
-  const summary = useMemo(() => ({ eligible: eligibleStudents.length, ineligible: students.length - eligibleStudents.length }), [eligibleStudents.length, students.length]);
-
-  const buildPayload = () => ({
-    sourceAcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
-    sourceAcademicLevelId: numericId(setup.fromLevel),
-    sourceAcademicLevel: academicLevelLabel(setup.fromLevel),
-    sourceGroupId: numericId(setup.group),
-    sourceProgramId: numericId(setup.program),
-    sourceSection: setup.fromSection,
-    targetAcademicYearId: numericId(setup.toYear || nextAcademicYearObj?.value),
-    targetAcademicLevelId: numericId(setup.toLevel),
-    targetAcademicLevel: academicLevelLabel(setup.toLevel),
-    targetGroupId: numericId(setup.toGroup),
-    targetProgramId: numericId(setup.toProgram),
-    targetSection: setup.toSection,
-    studentIds: selectedStudents.map((student) => numericId(student.id)).filter(Boolean),
-  });
-
-  const validatePromotion = () => {
-    if (!nextAcademicYearObj && !setup.toYear) {
-      setError("Destination academic year could not be found. Please ensure the next academic year is configured.");
-      return false;
-    }
-    if (!validateFields([...sourceFields, ...targetFields])) {
-      setError("Please complete the required source and destination details.");
-      return false;
-    }
-    if (String(setup.group) !== String(setup.toGroup) || String(setup.program) !== String(setup.toProgram)) {
-      setFieldErrors((current) => ({ ...current, toGroup: "Target Group must match Source Group.", toProgram: "Target Program must match Source Program." }));
-      setError("Target Group and Program must match the Source configuration.");
-      return false;
-    }
-    if (!selectedIds.length) {
-      setError("Please select at least one eligible student.");
-      return false;
-    }
-    if (selectedStudents.length !== selectedIds.length) {
-      setError("Only eligible students can be promoted.");
-      return false;
-    }
-    if (!buildPayload().studentIds.length) {
-      setError("Selected students do not contain valid backend IDs.");
-      return false;
-    }
-    setError("");
-    return true;
-  };
-
-  const openPreview = async () => {
-    if (!validatePromotion()) return;
-    setPreviewLoading(true);
-    setError("");
-    try {
-      const data = await previewPromotion(buildPayload());
-      setPreviewData(unwrapObject(data));
-    } catch (previewError) {
-      setPreviewData(null);
-      setError(previewError?.code === "ECONNABORTED" ? "Promotion preview timed out. Please check that the promotion API is running and try again." : getApiErrorMessage(previewError));
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const refreshAfterMutation = async () => {
-    setSelectedIds([]);
-    await Promise.all([fetchEligibleStudents(), fetchHistory()]);
-  };
-
-  const confirmPromotion = async () => {
-    if (submitting || !validatePromotion()) return;
-    setSubmitting(true);
-    try {
-      const res = await promoteStudents(buildPayload());
-      const batchId = read(unwrapObject(res), "promotionBatchId", "PromotionBatchId");
-      setPreviewData(null);
-      setToast(`Promotion completed successfully${batchId ? `. Batch ID: ${batchId}` : "."}`);
-      await refreshAfterMutation();
-    } catch (promotionError) {
-      setError(getApiErrorMessage(promotionError));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const promoteIndividual = async () => {
-    if (!individualStudent || submitting || !validateFields(targetFields)) return;
-    const studentId = numericId(individualStudent.id);
-    if (!studentId) { setError("This student does not contain a valid backend ID."); return; }
-    setSubmitting(true);
-    try {
-      await promoteSingleStudent(studentId, {
-        targetAcademicYearId: numericId(setup.toYear || nextAcademicYearObj?.value),
-        targetAcademicLevel: academicLevelLabel(setup.toLevel),
-        targetGroupId: numericId(setup.toGroup),
-        targetSection: setup.toSection,
+function useRecords(kind, query, revision = 0) {
+  const key = query ? JSON.stringify([kind, query, revision]) : "";
+  const [result, setResult] = useState({ key: "", data: null, error: "" });
+  useEffect(() => {
+    if (!key) return undefined;
+    const controller = new AbortController();
+    let current = true;
+    const [type, params] = JSON.parse(key);
+    const load = {
+      eligible: getEligibleStudents,
+      allocation: getAllocationStudents,
+      history: getPromotionHistory,
+      report: getPromotionReport,
+    }[type];
+    load(params, controller.signal)
+      .then((data) => {
+        if (current)
+          setResult({ key, data: type === "report" ? data : promotionList(data), error: "" });
+      })
+      .catch((error) => {
+        if (current && error.code !== "ERR_CANCELED")
+          setResult({
+            key,
+            data: null,
+            error: promotionError(
+              error,
+              `load ${type === "eligible" ? "eligible students" : type}`,
+            ),
+          });
       });
-      setIndividualStudent(null);
-      setToast("Student promoted successfully.");
-      await refreshAfterMutation();
-    } catch (requestError) {
-      setError(getApiErrorMessage(requestError));
-    } finally {
-      setSubmitting(false);
-    }
+    return () => {
+      current = false;
+      controller.abort();
+    };
+  }, [key]);
+  return {
+    data: result.key === key ? result.data : null,
+    error: result.key === key ? result.error : "",
+    loading: Boolean(key && result.key !== key),
+    loaded: Boolean(key && result.key === key),
   };
+}
 
-  const fetchHistory = useCallback(async () => {
-    setHistoryLoading(true);
+// A synchronous lock closes the gap before React renders disabled buttons.
+function useOperation() {
+  const lock = useRef(false);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const run = async (label, task) => {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(label);
     setError("");
     try {
-      const rows = await getPromotionHistory(compactParams({
-        academicYearId: numericId(historyFilters.academicYearId || selectedAcademicYearId),
-        academicLevel: historyFilters.academicLevel,
-        groupId: numericId(historyFilters.groupId),
-        programId: numericId(historyFilters.programId),
-        section: historyFilters.section,
-        studentId: numericId(historyFilters.studentId),
-        search: historyFilters.search.trim(),
-        promotionStatus: historyFilters.promotionStatus,
-        fromDate: historyFilters.fromDate,
-        toDate: historyFilters.toDate,
-      }));
-      setHistory(unwrap(rows, ["history", "History", "promotions", "Promotions"]).map(normalizeHistory));
-      setHistoryLoaded(true);
-    } catch (requestError) {
-      setHistory([]);
-      setHistoryLoaded(true);
-      setError(getApiErrorMessage(requestError));
+      await task();
+    } catch (failure) {
+      setError(promotionError(failure, label.toLowerCase()));
     } finally {
-      setHistoryLoading(false);
-    }
-  }, [historyFilters, selectedAcademicYearId]);
-
-  useEffect(() => {
-    if (activeTab === "history" && !historyLoaded) fetchHistory();
-  }, [activeTab, fetchHistory, historyLoaded]);
-
-  const rollback = async () => {
-    if (!rollbackReason.trim()) { setError("Enter a reason for rollback."); return; }
-    const promotionId = numericId(rollbackRecord?.id);
-    if (!promotionId) { setError("This record does not contain a valid backend Promotion ID."); return; }
-    setRollbackLoading(true);
-    try {
-      await rollbackPromotion({ promotionId, reason: rollbackReason.trim() });
-      setRollbackRecord(null);
-      setRollbackReason("");
-      setToast("Promotion rolled back successfully.");
-      await fetchHistory();
-    } catch (requestError) {
-      setError(getApiErrorMessage(requestError));
-    } finally {
-      setRollbackLoading(false);
+      lock.current = false;
+      setBusy("");
     }
   };
+  return { busy, error, setError, run };
+}
 
-  const fetchReport = useCallback(async () => {
-    setReportLoading(true);
-    setError("");
-    try {
-      const res = await getPromotionReport(compactParams({
-        academicYearId: numericId(selectedAcademicYearId),
-      }));
-      const data = unwrapObject(res);
-      setReportData(data);
-      setReportRows(unwrap(data, ["details", "Details"]).map(normalizeHistory));
-      setReportLoaded(true);
-    } catch (requestError) {
-      setReportRows([]);
-      setReportLoaded(true);
-      setError(getApiErrorMessage(requestError));
-    } finally {
-      setReportLoading(false);
-    }
-  }, [selectedAcademicYearId]);
+function ErrorNotice({ message, onRetry }) {
+  return message ? (
+    <div className="promotion-error" role="alert">
+      {message}
+      {onRetry ? (
+        <button type="button" onClick={onRetry}>
+          Retry
+        </button>
+      ) : null}
+    </div>
+  ) : null;
+}
 
+function PromotionDialog({ onClose, title, ...props }) {
+  const close = useRef(onClose);
   useEffect(() => {
-    if (activeTab === "report" && !reportLoaded) fetchReport();
-  }, [activeTab, fetchReport, reportLoaded]);
+    close.current = onClose;
+  }, [onClose]);
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const dialog = document.querySelector(".promotion-dialog");
+    if (!dialog) return undefined;
+    dialog.setAttribute("aria-label", title);
+    const focusable = () =>
+      Array.from(
+        dialog.querySelectorAll(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]',
+        ),
+      ).filter((element) => element.offsetParent);
+    focusable()[0]?.focus();
+    const keydown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close.current();
+      }
+      if (event.key !== "Tab") return;
+      const elements = focusable();
+      const first = elements[0];
+      const last = elements.at(-1);
+      if (
+        event.shiftKey &&
+        (document.activeElement === first || !dialog.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        last?.focus();
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === last || !dialog.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [title]);
+  return <Modal {...props} title={title} onClose={onClose} />;
+}
 
-  const exportCsv = () => {
-    if (!reportRows.length) return;
-    const headers = ["Promotion ID", "Student Name", "Admission No", "Source Academic Details", "Target Academic Details", "Promotion Date", "Status", "Promoted By"];
-    const lines = reportRows.map((r) => [
-      r.id ?? "",
-      `"${(r.student || "").replace(/"/g, '""')}"`,
-      `"${(r.admissionNo || "").replace(/"/g, '""')}"`,
-      `"${[r.sourceYear, r.sourceLevel, r.sourceGroup, r.sourceSection].filter((v) => v !== "-").join(" - ")}"`,
-      `"${[r.targetYear, r.targetLevel, r.targetGroup, r.targetSection].filter((v) => v !== "-").join(" - ")}"`,
-      r.date || "",
-      `"${(r.status || "").replace(/"/g, '""')}"`,
-      `"${(r.promotedBy || "").replace(/"/g, '""')}"`,
-    ]);
-    const csv = [headers.join(","), ...lines.map((l) => l.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `Promotion_Report_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+function OptionField({ name, label, value, onChange, source, disabled = false, optional = false }) {
+  const resource = label.endsWith("Section") ? "sections" : `${label.toLowerCase()}s`;
+  const message = source.loading
+    ? `Loading ${resource}...`
+    : source.error
+      ? `Unable to load ${resource}.`
+      : source.enabled && !source.options.length
+        ? label === "Section"
+          ? "No sections available for the selected program."
+          : `No ${label.toLowerCase()} options available.`
+        : "";
+  return (
+    <div className="promotion-option-field">
+      <Field
+        field={{
+          name,
+          label,
+          type: "select",
+          options: source.options,
+          required: !optional,
+          disabled: disabled || source.loading || !source.enabled || !source.options.length,
+        }}
+        value={value}
+        onChange={(_, next) => onChange(next)}
+      />
+      {message ? (
+        <div
+          className={source.error ? "promotion-field-error" : "promotion-field-hint"}
+          role={source.error ? "alert" : "status"}
+        >
+          {message}
+          {source.error ? (
+            <>
+              {" "}
+              {source.error}{" "}
+              <button type="button" className="cms-action-link" onClick={source.retry}>
+                Retry
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function useCohortOptions(context, filters, cache) {
+  const scope = {
+    boardId: context.boardId,
+    academicYearId: context.yearId,
+    academicLevelId: filters.academicLevelId,
   };
+  const groups = useOptions(
+    "groups",
+    scope,
+    Boolean(context.ready && filters.academicLevelId),
+    cache,
+  );
+  const programs = useOptions(
+    "programs",
+    { groupId: filters.groupId },
+    Boolean(findOption(groups.options, filters.groupId)),
+    cache,
+  );
+  const sections = useOptions(
+    "sections",
+    { ...scope, groupId: filters.groupId, programId: filters.programId },
+    Boolean(findOption(programs.options, filters.programId)),
+    cache,
+  );
+  return { groups, programs, sections };
+}
+function changeCohort(filters, field, value) {
+  return {
+    ...filters,
+    [field]: value,
+    ...(field === "academicLevelId" ? { groupId: "", programId: "", sectionId: "" } : {}),
+    ...(field === "groupId" ? { programId: "", sectionId: "" } : {}),
+    ...(field === "programId" ? { sectionId: "" } : {}),
+  };
+}
+function CohortFields({ prefix, filters, onChange, levels, options, optionalSection = false }) {
+  return (
+    <div className="promotion-field-grid">
+      <OptionField
+        name={`${prefix}-level`}
+        label="Academic Level"
+        value={filters.academicLevelId}
+        onChange={(value) => onChange("academicLevelId", value)}
+        source={levels}
+      />
+      <OptionField
+        name={`${prefix}-group`}
+        label="Group"
+        value={filters.groupId}
+        onChange={(value) => onChange("groupId", value)}
+        source={options.groups}
+      />
+      <OptionField
+        name={`${prefix}-program`}
+        label="Program"
+        value={filters.programId}
+        onChange={(value) => onChange("programId", value)}
+        source={options.programs}
+      />
+      <OptionField
+        name={`${prefix}-section`}
+        label="Section"
+        value={filters.sectionId}
+        onChange={(value) => onChange("sectionId", value)}
+        source={options.sections}
+        optional={optionalSection}
+      />
+      {optionalSection ? (
+        <span className="promotion-field-hint">
+          Leave Section empty to include all sections and unallocated students.
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
-  const setHistoryFilter = (name, value) => setHistoryFilters((current) => ({
-    ...current,
-    [name]: value,
-    ...(name === "groupId" ? { programId: "", section: "" } : {}),
-    ...(name === "programId" ? { section: "" } : {}),
-  }));
-
-  const historyGroup = masters.groups.find((group) => group.value === asString(historyFilters.groupId));
-  const historyPrograms = historyGroup?.programs || [];
-  const historySections = masters.sections.filter((section) => (!section.group || section.group === asString(historyFilters.groupId) || section.group === historyGroup?.label) && (!historyFilters.programId || !section.program || section.program === asString(historyFilters.programId)));
-  const previewStudents = unwrap(previewData, ["students", "Students", "eligibleStudents", "EligibleStudents"]);
-  const previewEligibleCount = read(previewData, "eligibleCount", "EligibleCount") ?? (previewStudents.length ? previewStudents.filter((student) => isEligible(normalizeStudent(student))).length : selectedStudents.length);
-
+export default function PromotionPage() {
+  const academic = useAcademicContext();
   return (
     <DashboardLayout
-      title={
-        activeTab === "promotion" ? "Student Promotion" :
-        activeTab === "single" ? "Single Student Promotion" :
-        activeTab === "allocation" ? "Program & Section Allocation" :
-        activeTab === "history" ? "Promotion History" :
-        "Promotion Reports"
-      }
-      subtitle="Manage student promotions, program tracks, and section allocations."
+      title="Promotion Center"
+      subtitle="Manage yearly promotion and academic allocation"
       breadcrumb={["Academics", "Promotion"]}
     >
-      <div className="promotion-page">
-        <nav className="promotion-tabs" aria-label="Promotion sections">
-          {[
-            ["promotion", "Student Promotion", "/dashboard/promotions/eligible"],
-            ["single", "Single Student", "/dashboard/promotions/single"],
-            ["allocation", "Program & Section Allocation", "/dashboard/promotions/allocation"],
-            ["history", "Promotion History", "/dashboard/promotions/history"],
-            ["report", "Reports", "/dashboard/promotions/report"],
-          ].map(([value, label, path]) => (
-            <button
-              key={value}
-              className={activeTab === value ? "is-active" : ""}
-              onClick={() => { navigate(path); setError(""); }}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-
-        {masterError ? (
-          <div className="promotion-error" role="alert">
-            {masterError} <button onClick={loadMasters}>Retry master data</button>
-          </div>
-        ) : null}
-        {error ? <div className="promotion-error" role="alert">{error}</div> : null}
-
-        {activeTab === "promotion" ? (
-          <>
-            <section className="cms-card promotion-card">
-              <div className="cms-card-head">
-                <div>
-                  <h2>1. Promotion Setup</h2>
-                  <p>Configure the student cohort level, group, and section for promotion.</p>
-                </div>
-                <button className="cms-btn cms-btn-ghost" onClick={loadMasters} disabled={masterLoading}>
-                  {masterLoading ? "Loading..." : <><RefreshCw size={16} aria-hidden="true" /> Refresh</>}
-                </button>
-              </div>
-
-              <div className="promotion-context-wrap">
-                <div className="promotion-context-row">
-                  <div className="promotion-context-board">
-                    <span className="promotion-context-label">Board</span>
-                    <strong>{selectedBoard?.name || selectedBoard?.code || "Board of Intermediate Education, AP"}</strong>
-                  </div>
-
-                  <div className="promotion-context-year">
-                    <span className="promotion-context-label">Source Academic Year</span>
-                    <strong>{selectedAcademicYear?.label || selectedAcademicYear?.name || "2026-2027"}</strong>
-                  </div>
-                  <span className="promotion-context-arrow" aria-hidden="true"><ArrowRight size={18} /></span>
-                  <div className={`promotion-context-year promotion-context-destination${nextAcademicYearObj ? " is-auto" : " is-missing"}`}>
-                    <span className="promotion-context-label">Destination Academic Year</span>
-                    <strong>{nextAcademicYearObj ? `${nextAcademicYearObj.label} (Auto)` : "2027-2028 (Default)"}</strong>
-                  </div>
-                </div>
-              </div>
-
-              <div className="cms-card-body promotion-setup-grid">
-                <div className="promotion-flow-panel">
-                  <h3>Current / Source Details</h3>
-                  <div className="promotion-field-grid">
-                    {sourceFields.map((field) => (
-                      <Field
-                        key={field.name}
-                        field={{ ...field, disabled: masterLoading || field.disabled }}
-                        value={setup[field.name]}
-                        error={fieldErrors[field.name]}
-                        onChange={updateSetup}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="promotion-arrow" aria-hidden="true">→</div>
-
-                {isFinalYear ? (
-                  <div className="promotion-flow-panel promotion-completion-panel">
-                    <h3>Course Completion</h3>
-                    <p>Second year students transition upon board examination and course completion.</p>
-                  </div>
-                ) : (
-                  <div className="promotion-flow-panel">
-                    <h3>Destination Details</h3>
-                    <div className="promotion-field-grid">
-                      {targetFields.map((field) => (
-                        <Field
-                          key={field.name}
-                          field={{ ...field, disabled: masterLoading || field.disabled }}
-                          value={setup[field.name]}
-                          error={fieldErrors[field.name]}
-                          onChange={updateSetup}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="promotion-actions">
-                <button
-                  className="cms-btn cms-btn-primary"
-                  onClick={loadStudents}
-                  disabled={masterLoading || studentsLoading}
-                >
-                  {studentsLoading ? "Loading..." : "Load Students"}
-                </button>
-                <button
-                  className="cms-btn cms-btn-ghost"
-                  onClick={() => {
-                    setSetup((c) => ({
-                      ...c,
-                      fromLevel: "",
-                      group: "",
-                      program: "",
-                      fromSection: "",
-                      toLevel: "",
-                      toGroup: "",
-                      toProgram: "",
-                      toSection: "",
-                    }));
-                    setStudents([]);
-                    setStudentsLoaded(false);
-                    setSelectedIds([]);
-                    setSearch("");
-                    setFieldErrors({});
-                    setError("");
-                  }}
-                >
-                  Clear Selection
-                </button>
-              </div>
-            </section>
-
-            <section className="cms-card promotion-card">
-              <div className="cms-card-head promotion-table-head">
-                <div>
-                  <h2>2. Student Eligibility</h2>
-                  <p>
-                    {studentsLoaded
-                      ? `${students.length} student${students.length === 1 ? "" : "s"} returned by the Promotion API.`
-                      : "Select the cohort level, group, and section above, then click Load Students."}
-                  </p>
-                </div>
-                <span className="cms-badge cms-badge-info">Selected Students: {selectedIds.length}</span>
-              </div>
-              <div className="promotion-table-controls">
-                <input
-                  aria-label="Search students"
-                  placeholder="Search student name, admission number, or ID"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-                <button className="cms-btn cms-btn-ghost" onClick={loadStudents} disabled={studentsLoading}>
-                  Search
-                </button>
-                <button
-                  className="cms-btn cms-btn-ghost"
-                  onClick={() => setSelectedIds(visibleStudents.map((student) => student.id))}
-                  disabled={!visibleStudents.length}
-                >
-                  Select All
-                </button>
-                <button className="cms-btn cms-btn-ghost" onClick={() => setSelectedIds([])}>
-                  Clear
-                </button>
-              </div>
-              {studentsLoading ? (
-                <div className="promotion-empty" role="status">Loading eligible students...</div>
-              ) : studentsLoaded ? (
-                <div className="cms-table-wrap">
-                  <table className="cms-table promotion-table">
-                    <thead>
-                      <tr>
-                        <th>Select</th>
-                        <th>Admission No.</th>
-                        <th>Student Name</th>
-                        <th>Academic Year</th>
-                        <th>Board</th>
-                        <th>Level</th>
-                        <th>Group</th>
-                        <th>Section</th>
-                        <th>Medium</th>
-                        {!isFinalYear ? <th>Action</th> : null}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleStudents.length ? (
-                        visibleStudents.map((student) => (
-                          <tr key={student.id}>
-                            <td>
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.includes(student.id)}
-                                onChange={() =>
-                                  setSelectedIds((current) =>
-                                    current.includes(student.id)
-                                      ? current.filter((id) => id !== student.id)
-                                      : [...current, student.id]
-                                  )
-                                }
-                              />
-                            </td>
-                            <td className="cms-strong">{student.admissionNo}</td>
-                            <td>{student.name}</td>
-                            <td>{student.academicYear}</td>
-                            <td>{student.board}</td>
-                            <td>{student.level}</td>
-                            <td>{student.group}</td>
-                            <td>{student.section}</td>
-                            <td>{student.medium}</td>
-                            {!isFinalYear ? (
-                              <td>
-                                <button
-                                  className="cms-action-link"
-                                  onClick={() => setIndividualStudent(student)}
-                                >
-                                  Promote
-                                </button>
-                              </td>
-                            ) : null}
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={isFinalYear ? 9 : 10} className="promotion-empty">
-                            No students found for the selected filters.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="promotion-empty">Select the source details, then load students.</div>
-              )}
-            </section>
-
-            {studentsLoaded ? (
-              <section className="promotion-summary" style={{ gridTemplateColumns: "repeat(2, minmax(100px, 1fr))" }}>
-                <div><span>Total Students</span><strong>{students.length}</strong></div>
-                <div><span>Selected</span><strong>{selectedIds.length}</strong></div>
-              </section>
-            ) : null}
-
-            {!isFinalYear ? (
-              <div className="promotion-final-actions">
-                <button
-                  className="cms-btn cms-btn-primary"
-                  onClick={openPreview}
-                  disabled={!selectedIds.length || previewLoading || submitting}
-                >
-                  {previewLoading ? "Preparing Preview..." : "Preview Promotion"}
-                </button>
-              </div>
-            ) : null}
-          </>
-        ) : null}
-
-        {activeTab === "single" ? (
-          <SinglePromotionScreen
-            masters={masters}
-            preselectedStudent={individualStudent || students.find(isEligible)}
-            allStudents={students}
-            defaultNextYearId={nextAcademicYearObj?.value}
-            onPromoteSuccess={(name) => {
-              setToast(`Student ${name ? `(${name}) ` : ""}promotion completed successfully.`);
-              refreshAfterMutation();
-            }}
-          />
-        ) : null}
-
-        {activeTab === "allocation" ? (
-          <AllocationScreen
-            activeTab={allocationTab}
-            setActiveTab={setAllocationTab}
-            masters={masters}
-            setup={setup}
-            students={students}
-            defaultNextYearId={nextAcademicYearObj?.value}
-            onSaved={(actionName) => setToast(`${actionName} allocation updated successfully.`)}
-            onReloadCohort={loadStudents}
-          />
-        ) : null}
-
-        {activeTab === "history" ? (
-          <section className="cms-card promotion-card">
-            <div className="cms-card-head">
-              <div>
-                <h2>Promotion History</h2>
-                <p>Search completed promotion activity and roll back supported records.</p>
-              </div>
-            </div>
-            <div className="cms-card-body promotion-history-filters">
-              {[
-                { name: "academicYearId", label: "Source Year", type: "select", options: uniqueAcademicYearsByName(masters.years, (year) => year.label) },
-                { name: "academicLevel", label: "Source Level", type: "select", options: masters.levels },
-                { name: "groupId", label: "Source Group", type: "select", options: masters.groups },
-                { name: "programId", label: "Source Program", type: "select", options: historyPrograms, disabled: !historyFilters.groupId },
-                { name: "section", label: "Source Section", type: "select", options: historySections, disabled: !historyFilters.programId },
-                { name: "studentId", label: "Student ID", type: "number" },
-                { name: "search", label: "Search" },
-                { name: "promotionStatus", label: "Promotion Status" },
-              ].map((field) => (
-                <Field
-                  key={field.name}
-                  field={field}
-                  value={historyFilters[field.name]}
-                  onChange={setHistoryFilter}
-                />
-              ))}
-              <HistoryDateRange
-                fromDate={historyFilters.fromDate}
-                toDate={historyFilters.toDate}
-                onChange={setHistoryFilter}
-              />
-            </div>
-            <div className="promotion-actions">
-              <button
-                className="cms-btn cms-btn-ghost"
-                onClick={() => { setHistoryFilters(EMPTY_HISTORY_FILTERS); setHistoryLoaded(false); }}
-              >
-                Clear Filters
-              </button>
-              <button
-                className="cms-btn cms-btn-primary"
-                onClick={fetchHistory}
-                disabled={historyLoading}
-              >
-                {historyLoading ? "Loading..." : "Load History"}
-              </button>
-            </div>
-            {historyLoading ? (
-              <div className="promotion-empty">Loading promotion history...</div>
-            ) : historyLoaded ? (
-              <HistoryTable rows={history} onRollback={setRollbackRecord} />
-            ) : null}
-          </section>
-        ) : null}
-
-        {activeTab === "report" ? (
-          <ReportScreen
-            reportData={reportData}
-            rows={reportRows}
-            loading={reportLoading}
-            loaded={reportLoaded}
-            onLoad={fetchReport}
-            onExportCsv={exportCsv}
-          />
-        ) : null}
-      </div>
-
-      {previewData ? (
-        <Modal
-          title="Promotion Preview"
-          onClose={() => setPreviewData(null)}
-          footer={
-            <>
-              <button className="cms-btn cms-btn-ghost" onClick={() => setPreviewData(null)} disabled={submitting}>
-                Cancel
-              </button>
-              <button className="cms-btn cms-btn-primary" onClick={confirmPromotion} disabled={submitting}>
-                {submitting ? "Promoting..." : "Confirm Promotion"}
-              </button>
-            </>
-          }
-        >
-          <div className="promotion-preview-details">
-            <div>
-              <span>Source</span>
-              <strong>
-                {[
-                  selectedAcademicYear?.label || selectedAcademicYear?.name || "2026-2027",
-                  selectedBoard?.name || "BIEAP",
-                  setup.fromLevel,
-                  masters.groups.find((item) => item.value === setup.group)?.label,
-                  setup.fromSection && `Section ${setup.fromSection}`,
-                ].filter(Boolean).join(" • ")}
-              </strong>
-            </div>
-            <div>
-              <span>Destination</span>
-              <strong>
-                {[
-                  nextAcademicYearObj ? nextAcademicYearObj.label : "2027-2028",
-                  selectedBoard?.name || "BIEAP",
-                  setup.toLevel,
-                  masters.groups.find((item) => item.value === setup.toGroup)?.label,
-                  setup.toSection && `Section ${setup.toSection}`,
-                ].filter(Boolean).join(" • ")}
-              </strong>
-            </div>
-            <div><span>Selected Students</span><strong>{selectedIds.length}</strong></div>
-            <div><span>Eligible Students</span><strong>{previewEligibleCount}</strong></div>
-            <div><span>Not Eligible Students</span><strong>{read(previewData, "notEligibleCount", "NotEligibleCount", "ineligibleCount", "IneligibleCount") ?? 0}</strong></div>
-          </div>
-          {previewStudents.length ? (
-            <ul className="promotion-preview-list">
-              {previewStudents.map((student, index) => (
-                <li key={read(student, "studentId", "StudentId", "id", "Id") ?? index}>
-                  {read(student, "studentName", "StudentName", "name", "Name") || read(student, "admissionNumber", "AdmissionNumber") || `Student ${index + 1}`}
-                  {read(student, "eligibilityStatus", "EligibilityStatus", "reason", "Reason") ? ` — ${read(student, "eligibilityStatus", "EligibilityStatus", "reason", "Reason")}` : ""}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="promotion-preview-copy">The backend preview completed successfully for the selected students.</p>
-          )}
-        </Modal>
-      ) : null}
-
-      {individualStudent ? (
-        <Modal
-          title="Promote Student"
-          size="sm"
-          onClose={() => setIndividualStudent(null)}
-          footer={
-            <>
-              <button className="cms-btn cms-btn-ghost" onClick={() => setIndividualStudent(null)} disabled={submitting}>
-                Cancel
-              </button>
-              <button
-                className="cms-btn cms-btn-primary"
-                onClick={promoteIndividual}
-                disabled={submitting}
-              >
-                {submitting ? "Promoting..." : "Promote Student"}
-              </button>
-            </>
-          }
-        >
-          <div className="promotion-confirm-copy">
-            <p>Promote this student to the selected Target configuration?</p>
-            <strong>{individualStudent.name}</strong>
-            <p>{individualStudent.admissionNo}</p>
-          </div>
-        </Modal>
-      ) : null}
-
-      {rollbackRecord ? (
-        <Modal
-          title="Rollback Promotion"
-          size="sm"
-          onClose={() => setRollbackRecord(null)}
-          footer={
-            <>
-              <button className="cms-btn cms-btn-ghost" onClick={() => setRollbackRecord(null)} disabled={rollbackLoading}>
-                Cancel
-              </button>
-              <button
-                className="cms-btn cms-btn-danger"
-                onClick={rollback}
-                disabled={rollbackLoading || !rollbackReason.trim()}
-              >
-                {rollbackLoading ? "Rolling Back..." : "Rollback"}
-              </button>
-            </>
-          }
-        >
-          <div className="cms-field">
-            <label htmlFor="rollback-reason">Rollback reason <span className="req">*</span></label>
-            <textarea
-              id="rollback-reason"
-              value={rollbackReason}
-              onChange={(event) => setRollbackReason(event.target.value)}
-              placeholder="Enter the reason for rollback"
-            />
-          </div>
-        </Modal>
-      ) : null}
-
-      <Toast message={toast} onClose={() => setToast("")} />
+      <PromotionCenter
+        key={`${academic.selectedBoardId}:${academic.selectedAcademicYearId}`}
+        academic={academic}
+      />
     </DashboardLayout>
   );
 }
-
-function HistoryTable({ rows, onRollback }) {
-  return (
-    <div className="cms-table-wrap">
-      <table className="cms-table promotion-table">
-        <thead>
-          <tr>
-            <th>Promotion ID</th>
-            <th>Student</th>
-            <th>Admission No.</th>
-            <th>Source</th>
-            <th>Target</th>
-            <th>Date</th>
-            <th>Status</th>
-            <th>Promoted By</th>
-            {onRollback ? <th>Action</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length ? (
-            rows.map((row, index) => (
-              <tr key={row.id ?? index}>
-                <td className="cms-strong">{row.id ?? "-"}</td>
-                <td>{row.student}</td>
-                <td>{row.admissionNo}</td>
-                <td>{[row.sourceYear, row.sourceLevel, row.sourceGroup, row.sourceSection].filter((v) => v !== "-").join(" • ") || "-"}</td>
-                <td>{[row.targetYear, row.targetLevel, row.targetGroup, row.targetSection].filter((v) => v !== "-").join(" • ") || "-"}</td>
-                <td>{row.date}</td>
-                <td>
-                  <span className={`promotion-status ${/rolledback/i.test(row.status) ? "not-eligible" : "eligible"}`}>
-                    {row.status}
-                  </span>
-                </td>
-                <td>{row.promotedBy}</td>
-                {onRollback ? (
-                  <td>
-                    <button
-                      className="cms-action-link danger"
-                      disabled={!row.canRollback}
-                      onClick={() => onRollback(row)}
-                    >
-                      Rollback
-                    </button>
-                  </td>
-                ) : null}
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={onRollback ? 9 : 8} className="promotion-empty">No promotion history available.</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
+function PromotionCenter({ academic }) {
+  const [params, setParams] = useSearchParams();
+  const view = VIEWS.some(([value]) => value === params.get("view"))
+    ? params.get("view")
+    : "promote";
+  const cache = useRef(new Map());
+  const [revision, setRevision] = useState(0);
+  const [toast, setToast] = useState({ message: "", type: "success" });
+  const years = useOptions("years", {}, true, cache);
+  const levels = useOptions(
+    "levels",
+    { boardId: text(academic.selectedBoardId) },
+    Boolean(academic.selectedBoardId),
+    cache,
   );
-}
-
-function HistoryDateRange({ fromDate, toDate, onChange }) {
+  const context = {
+    boardId: text(academic.selectedBoardId),
+    yearId: text(academic.selectedAcademicYearId),
+    boardName:
+      academic.selectedBoard?.name ??
+      academic.selectedBoard?.boardName ??
+      "Select a Board in the header",
+    yearName:
+      academic.selectedAcademicYear?.label ??
+      academic.selectedAcademicYear?.name ??
+      "Select an Academic Year in the header",
+    ready: Boolean(
+      academic.selectedBoardId && findOption(years.options, academic.selectedAcademicYearId),
+    ),
+  };
+  const changed = (message, type = "success") => {
+    setRevision((value) => value + 1);
+    if (message) setToast({ message, type });
+  };
   return (
-    <div className="cms-field promotion-date-range">
-      <label>Date Range</label>
-      <div className="promotion-date-range-control">
-        <label>From Date<input type="date" value={fromDate} onChange={(event) => onChange("fromDate", event.target.value)} /></label>
-        <span aria-hidden="true">—</span>
-        <label>To Date<input type="date" value={toDate} onChange={(event) => onChange("toDate", event.target.value)} /></label>
+    <div className="promotion-page">
+      <nav className="promotion-tabs" aria-label="Promotion workspaces">
+        {VIEWS.map(([value, label]) => (
+          <button
+            type="button"
+            key={value}
+            className={view === value ? "is-active" : ""}
+            aria-current={view === value ? "page" : undefined}
+            onClick={() =>
+              setParams((current) => {
+                const next = new URLSearchParams(current);
+                next.set("view", value);
+                return next;
+              })
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className="promotion-context-row">
+        <div>
+          <span>Board</span>
+          <strong>{context.boardName}</strong>
+        </div>
+        <div>
+          <span>Academic Year</span>
+          <strong>{context.yearName}</strong>
+        </div>
       </div>
+      <ErrorNotice message={years.error} onRetry={years.retry} />
+      {!years.loading && !years.error && !context.ready ? (
+        <ErrorNotice message="The current academic year is not present in configured academic years. Select a configured year in the header." />
+      ) : null}
+      <div hidden={view !== "promote"}>
+        <PromoteWorkspace
+          context={context}
+          levels={levels}
+          years={years}
+          cache={cache}
+          revision={revision}
+          onChanged={changed}
+        />
+      </div>
+      <div hidden={view !== "allocation"}>
+        <AllocationWorkspace
+          context={context}
+          levels={levels}
+          cache={cache}
+          revision={revision}
+          onChanged={changed}
+        />
+      </div>
+      <div hidden={view !== "history"}>
+        <HistoryWorkspace
+          context={context}
+          years={years}
+          levels={levels}
+          active={view === "history"}
+          revision={revision}
+          onChanged={changed}
+        />
+      </div>
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast({ message: "", type: "success" })}
+      />
     </div>
   );
 }
 
-function SinglePromotionScreen({ masters, preselectedStudent, allStudents = [], defaultNextYearId, onPromoteSuccess }) {
-  const { selectedBoard, selectedAcademicYear } = useAcademicContext();
-  const [currentStudent, setCurrentStudent] = useState(preselectedStudent || null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [target, setTarget] = useState({
-    year: defaultNextYearId || "",
-    level: "",
-    group: "",
-    program: "",
-    section: "",
-    medium: "English",
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (preselectedStudent) setCurrentStudent(preselectedStudent);
-  }, [preselectedStudent]);
-
-  useEffect(() => {
-    if (defaultNextYearId && !target.year) {
-      setTarget((t) => ({ ...t, year: defaultNextYearId }));
-    }
-  }, [defaultNextYearId, target.year]);
-
-  const change = (name, value) => {
+function PromoteWorkspace({ context, levels, years, cache, revision, onChanged }) {
+  const [filters, setFilters] = useState(EMPTY_COHORT);
+  const [target, setTarget] = useState({ levelId: "", groupId: "", sectionId: "" });
+  const [query, setQuery] = useState(null);
+  const [reload, setReload] = useState(0);
+  const [selection, setSelection] = useState({ revision: -1, ids: [] });
+  const [search, setSearch] = useState("");
+  const [eligibility, setEligibility] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [outcome, setOutcome] = useState(null);
+  const operation = useOperation();
+  const options = useCohortOptions(context, filters, cache);
+  const nextYear = nextPromotionYear(years.options, context.yearId, context.boardId);
+  const sourceLevel = findOption(levels.options, filters.academicLevelId);
+  const finalYear = isFinalPromotionLevel(sourceLevel?.label);
+  const targetLevelId =
+    target.levelId || nextPromotionLevel(levels.options, filters.academicLevelId);
+  const targetLevel = findOption(levels.options, targetLevelId);
+  const destinationGroups = useOptions(
+    "groups",
+    { boardId: context.boardId, academicYearId: nextYear?.value, academicLevelId: targetLevelId },
+    Boolean(nextYear && targetLevel && !finalYear),
+    cache,
+  );
+  const targetGroupId =
+    target.groupId ||
+    (findOption(destinationGroups.options, filters.groupId) ? filters.groupId : "");
+  const destinationPrograms = useOptions(
+    "programs",
+    { groupId: targetGroupId },
+    Boolean(targetGroupId && findOption(destinationGroups.options, targetGroupId)),
+    cache,
+  );
+  const preservedProgram = findOption(destinationPrograms.options, filters.programId);
+  const destinationSections = useOptions(
+    "sections",
+    {
+      boardId: context.boardId,
+      academicYearId: nextYear?.value,
+      academicLevelId: targetLevelId,
+      groupId: targetGroupId,
+      programId: filters.programId,
+    },
+    Boolean(preservedProgram && !finalYear),
+    cache,
+  );
+  const sourceSection = findOption(options.sections.options, filters.sectionId);
+  const targetSection = findOption(destinationSections.options, target.sectionId);
+  const readySource = Boolean(
+    context.ready &&
+    sourceLevel &&
+    findOption(options.groups.options, filters.groupId) &&
+    findOption(options.programs.options, filters.programId) &&
+    sourceSection,
+  );
+  const readyTarget = Boolean(
+    nextYear && targetLevel && targetGroupId && preservedProgram && targetSection && !finalYear,
+  );
+  const records = useRecords("eligible", query, `${revision}:${reload}`);
+  const students = records.data ?? [];
+  const selected =
+    selection.revision === revision && !records.loading
+      ? selection.ids.filter((studentId) =>
+          students.some(
+            (student) => student.studentId === studentId && isPromotionEligible(student),
+          ),
+        )
+      : [];
+  const select = (ids) => setSelection({ revision, ids });
+  const visible = students.filter(
+    (row) => matchStudent(row, search) && (!eligibility || row.eligibilityStatus === eligibility),
+  );
+  const invalidate = () => {
+    setQuery(null);
+    select([]);
+    setPreview(null);
+    setOutcome(null);
+    operation.setError("");
+  };
+  const updateSource = (field, value) => {
+    setFilters(changeCohort(filters, field, value));
+    if (field === "academicLevelId") setTarget({ levelId: "", groupId: "", sectionId: "" });
+    else
+      setTarget((current) => ({
+        ...current,
+        ...(field === "groupId" ? { groupId: "" } : {}),
+        sectionId: "",
+      }));
+    invalidate();
+  };
+  const updateTarget = (field, value) => {
     setTarget((current) => ({
       ...current,
-      ...(name === "group" ? { program: "", section: "" } : {}),
-      ...(name === "program" ? { section: "" } : {}),
-      [name]: value,
+      [field]: value,
+      ...(field === "levelId" ? { groupId: "", sectionId: "" } : {}),
+      ...(field === "groupId" ? { sectionId: "" } : {}),
     }));
+    invalidate();
   };
-
-  const targetGroup = masters.groups.find((group) => group.value === asString(target.group));
-  const targetPrograms = targetGroup?.programs || [];
-  const targetSections = masters.sections.filter((section) =>
-    (!section.group || section.group === asString(target.group) || section.group === targetGroup?.label) &&
-    (!target.program || !section.program || section.program === asString(target.program))
-  );
-  const targetYearLabel = masters.years.find((year) => year.value === asString(target.year))?.label;
-
-  const fields = [
-    { name: "year", label: "Target Academic Year", type: "select", options: uniqueAcademicYearsByName(masters.years, (year) => year.label), required: true },
-    { name: "level", label: "Target Academic Level", type: "select", options: masters.levels, required: true },
-    { name: "group", label: "Target Group", type: "select", options: masters.groups, required: true },
-    { name: "program", label: "Target Program", type: "select", options: targetPrograms, required: true, disabled: !target.group },
-    { name: "section", label: "Target Section", type: "select", options: targetSections, required: true, disabled: !target.program },
-    { name: "medium", label: "Target Medium", type: "select", options: [option("English")], required: true },
-  ];
-
-  const handleSearchSelect = (student) => {
-    setCurrentStudent(student);
-    setSearchTerm("");
-    setError("");
-  };
-
-  const matchingStudents = useMemo(() => {
-    if (!searchTerm.trim()) return [];
-    const q = searchTerm.toLowerCase();
-    return allStudents.filter((s) => `${s.name} ${s.admissionNo} ${s.id}`.toLowerCase().includes(q));
-  }, [allStudents, searchTerm]);
-
-  const executePromote = async () => {
-    if (!currentStudent || submitting) return;
-    setSubmitting(true);
-    setError("");
-    try {
-      const targetLevel = masters.levels.find((level) => level.value === asString(target.level))?.label || asString(target.level);
-      await promoteSingleStudent(currentStudent.id, {
-        targetAcademicYearId: numericId(target.year),
-        targetAcademicLevel: targetLevel,
-        targetGroupId: numericId(target.group),
-        targetProgramId: numericId(target.program),
-        targetSection: target.section,
-        targetMedium: target.medium,
-      });
-      setConfirming(false);
-      onPromoteSuccess?.(currentStudent.name);
-    } catch (err) {
-      setError(getApiErrorMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <section className="cms-card promotion-card">
-      <div className="cms-card-head">
-        <div>
-          <h2>Single Student Promotion</h2>
-          <p>Select a student from the active cohort to promote individually.</p>
-        </div>
-      </div>
-      {error ? <div className="promotion-error" role="alert">{error}</div> : null}
-
-      <div className="cms-card-body promotion-setup-grid promotion-single-grid">
-        <div className="promotion-flow-panel">
-          <h3>Current Details</h3>
-          <div style={{ marginBottom: "14px" }}>
-            <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--cms-muted)", display: "block", marginBottom: "6px" }}>
-              Select Student (from loaded cohort)
-            </label>
-            <select
-              value={currentStudent?.id || ""}
-              onChange={(e) => {
-                const selected = allStudents.find((s) => String(s.id) === String(e.target.value));
-                setCurrentStudent(selected || null);
-                setError("");
-              }}
-              style={{
-                width: "100%",
-                padding: "9px 12px",
-                borderRadius: "6px",
-                border: "1px solid var(--cms-border)",
-                background: "var(--cms-surface)",
-                color: "var(--cms-text)",
-                fontSize: "13.5px",
-                outline: "none"
-              }}
-            >
-              <option value="">
-                {allStudents.length
-                  ? `-- Select Student (${allStudents.length} available) --`
-                  : "-- No students loaded. Please load students in Student Promotion tab first --"}
-              </option>
-              {allStudents.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {currentStudent ? (
-            <div style={{ display: "grid", gap: "8px", fontSize: "13px", marginTop: "12px" }}>
-              <div><strong>Student Name:</strong> {currentStudent.name}</div>
-              <div><strong>Admission No:</strong> {currentStudent.admissionNo}</div>
-              <div><strong>Academic Year:</strong> {currentStudent.academicYear || selectedAcademicYear?.label || "2026-2027"}</div>
-              <div><strong>Board:</strong> {currentStudent.board || selectedBoard?.name || "BIEAP"}</div>
-              <div><strong>Level:</strong> {currentStudent.level}</div>
-              <div><strong>Group:</strong> {currentStudent.group}</div>
-              <div><strong>Program:</strong> {currentStudent.program}</div>
-              <div><strong>Section:</strong> {currentStudent.section}</div>
-            </div>
-          ) : (
-            <p className="promotion-empty">No student selected. Select a student from the dropdown above.</p>
-          )}
-        </div>
-
-        <div className="promotion-flow-panel">
-          <h3>Destination Details</h3>
-          <div className="promotion-field-grid">
-            {fields.map((field) => (
-              <Field
-                key={field.name}
-                field={field}
-                value={target[field.name]}
-                onChange={change}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="promotion-actions">
-        <button
-          className="cms-btn cms-btn-ghost"
-          type="button"
-          onClick={() => { setCurrentStudent(null); setTarget({ year: defaultNextYearId || "", level: "", group: "", program: "", section: "", medium: "English" }); }}
-        >
-          Reset
-        </button>
-        <button
-          className="cms-btn cms-btn-primary"
-          type="button"
-          disabled={!currentStudent || !isEligible(currentStudent) || Object.values(target).some((value) => !value) || submitting}
-          onClick={() => setConfirming(true)}
-        >
-          {submitting ? "Promoting..." : "Promote Student"}
-        </button>
-      </div>
-
-      {confirming ? (
-        <Modal
-          title="Confirm Student Promotion"
-          onClose={() => setConfirming(false)}
-          footer={
-            <>
-              <button className="cms-btn cms-btn-ghost" onClick={() => setConfirming(false)} disabled={submitting}>
-                Cancel
-              </button>
-              <button className="cms-btn cms-btn-primary" onClick={executePromote} disabled={submitting}>
-                {submitting ? "Promoting..." : "Confirm & Promote"}
-              </button>
-            </>
-          }
-        >
-          <p>Are you sure you want to promote <strong>{currentStudent?.name}</strong> ({currentStudent?.admissionNo})?</p>
-          <div style={{ marginTop: "10px", padding: "10px", background: "var(--cms-subtle)", borderRadius: "6px" }}>
-            <div><strong>From:</strong> {currentStudent?.academicYear} • {currentStudent?.level} • {currentStudent?.group} • {currentStudent?.program}</div>
-            <div style={{ marginTop: "4px" }}>
-              <strong>To:</strong> {targetYearLabel} • {masters.levels.find((l) => l.value === asString(target.level))?.label} • {targetGroup?.label} • Section {target.section}
-            </div>
-          </div>
-        </Modal>
-      ) : null}
-    </section>
-  );
-}
-
-function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, defaultNextYearId, onSaved, onReloadCohort }) {
-  const { selectedBoard, selectedAcademicYear, selectedAcademicYearId, selectedBoardId } = useAcademicContext();
-  const [selected, setSelected] = useState([]);
-  const [bulkTarget, setBulkTarget] = useState("");
-  const [targetMap, setTargetMap] = useState({});
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
-
-  const isProgram = activeTab === "program";
-
-  // Derive rows from students
-  const rows = useMemo(() => students.map((s) => ({
-    id: s.id,
-    student: s.name,
-    roll: s.admissionNo,
-    group: s.group,
-    groupId: s.groupId,
-    program: s.program,
-    programId: s.programId,
-    section: s.section,
-  })), [students]);
-
-  // Program options available for selected group
-  const currentGroupId = setup.toGroup || setup.group || (students.length > 0 ? students[0].groupId : "");
-  const currentGroupObj = masters.groups.find((g) => g.value === asString(currentGroupId));
-  const availablePrograms = currentGroupObj?.programs || masters.groups.flatMap((g) => g.programs || []);
-
-  const availableSections = masters.sections;
-
-  const handleApplyBulk = () => {
-    if (!bulkTarget) return;
-    const updated = { ...targetMap };
-    selected.forEach((id) => {
-      updated[id] = bulkTarget;
+  const load = () => {
+    if (!readySource) return;
+    select([]);
+    setOutcome(null);
+    operation.setError("");
+    setQuery({
+      academicYearId: Number(context.yearId),
+      boardId: Number(context.boardId),
+      academicLevel: sourceLevel.label,
+      groupId: Number(filters.groupId),
+      programId: Number(filters.programId),
+      section: sourceSection.sectionName,
+      targetAcademicYearId: nextYear ? Number(nextYear.value) : undefined,
+      targetAcademicLevel: targetLevel?.label,
+      targetGroupId: targetGroupId ? Number(targetGroupId) : undefined,
+      targetProgramId: Number(filters.programId),
+      targetSection: targetSection?.sectionName,
     });
-    setTargetMap(updated);
+    setReload((value) => value + 1);
   };
-
-  const handleSave = async () => {
-    if (!selected.length) {
-      setMessage("Please select at least one student.");
-      return;
-    }
-
-    setSaving(true);
-    setMessage("");
-
-    try {
-      const targetYearId = numericId(setup.toYear || defaultNextYearId || selectedAcademicYearId);
-      const targetAcademicLevel = masters.levels.find((l) => l.value === asString(setup.toLevel || setup.fromLevel))?.label;
-      const targetGroupId = numericId(setup.toGroup || setup.group);
-
-      if (!targetYearId || !targetAcademicLevel || !targetGroupId) {
-        setMessage("Missing required target configuration. Please select Year, Level, and Group.");
-        setSaving(false);
-        return;
-      }
-
-      if (isProgram) {
-        const byProgram = {};
-        for (const id of selected) {
-          const progId = numericId(targetMap[id] || bulkTarget);
-          if (!progId) {
-            throw new Error(`Please specify a target program for selected student ID: ${id}`);
-          }
-          if (!byProgram[progId]) byProgram[progId] = [];
-          byProgram[progId].push(id);
-        }
-
-        for (const [progIdStr, studentIds] of Object.entries(byProgram)) {
-          await allocateProgram({
-            studentIds,
-            targetAcademicYearId: targetYearId,
-            targetAcademicLevel,
-            targetGroupId,
-            targetProgramId: Number(progIdStr),
-          });
-        }
-        onSaved?.("Program");
+  const sourceDescription = [
+    context.yearName,
+    sourceLevel?.label,
+    findOption(options.groups.options, filters.groupId)?.label,
+    findOption(options.programs.options, filters.programId)?.label,
+    sourceSection?.label,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const destinationDescription = [
+    nextYear?.label,
+    targetLevel?.label,
+    findOption(destinationGroups.options, targetGroupId)?.label,
+    preservedProgram?.label,
+    targetSection?.label,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const openPreview = (ids, single = false) =>
+    operation.run("Preparing preview", async () => {
+      if (
+        !readySource ||
+        !readyTarget ||
+        !ids.length ||
+        ids.some(
+          (studentId) =>
+            !students.some(
+              (student) => student.studentId === studentId && isPromotionEligible(student),
+            ),
+        )
+      )
+        throw new Error("Complete the source and destination, then select eligible students.");
+      const payload = {
+        sourceAcademicYearId: Number(context.yearId),
+        sourceBoardId: Number(context.boardId),
+        sourceAcademicLevelId: Number(filters.academicLevelId),
+        sourceAcademicLevel: sourceLevel.label,
+        sourceGroupId: Number(filters.groupId),
+        sourceProgramId: Number(filters.programId),
+        sourceSectionId: Number(sourceSection.value),
+        sourceSection: sourceSection.sectionName,
+        targetAcademicYearId: Number(nextYear.value),
+        targetBoardId: Number(context.boardId),
+        targetAcademicLevelId: Number(targetLevelId),
+        targetAcademicLevel: targetLevel.label,
+        targetGroupId: Number(targetGroupId),
+        targetProgramId: Number(filters.programId),
+        targetSectionId: Number(targetSection.value),
+        targetSection: targetSection.sectionName,
+        studentIds: ids,
+      };
+      const data = await previewPromotion(payload);
+      if (!data || !Array.isArray(data.students))
+        throw new Error("The server returned an invalid preview. Reload students and try again.");
+      setPreview({
+        payload,
+        data,
+        single,
+        source: sourceDescription,
+        destination: destinationDescription,
+        revision,
+      });
+    });
+  const validPreview =
+    preview &&
+    preview.revision === revision &&
+    preview.data?.totalSelected === preview.payload.studentIds.length &&
+    preview.data?.eligibleCount === preview.payload.studentIds.length &&
+    preview.data?.notEligibleCount === 0 &&
+    preview.data?.students?.length === preview.payload.studentIds.length &&
+    new Set(preview.data.students.map((row) => row.studentId)).size ===
+      preview.payload.studentIds.length &&
+    preview.data.students.every(
+      (row) => isPromotionEligible(row) && preview.payload.studentIds.includes(row.studentId),
+    );
+  const confirm = () =>
+    operation.run("Promoting", async () => {
+      if (!validPreview)
+        throw new Error("The preview is no longer valid. Reload students and preview again.");
+      const { payload, single } = preview;
+      let result;
+      if (single) {
+        const {
+          targetAcademicYearId,
+          targetBoardId,
+          targetAcademicLevel,
+          targetGroupId,
+          targetProgramId,
+          targetSection,
+        } = payload;
+        result = await promoteSingleStudent(payload.studentIds[0], {
+          targetAcademicYearId,
+          targetBoardId,
+          targetAcademicLevel,
+          targetGroupId,
+          targetProgramId,
+          targetSection,
+        });
+        if (result.promotionStatus?.toLowerCase() !== "promoted")
+          throw new Error("The server did not confirm promotion. Refresh history before retrying.");
       } else {
-        const bySection = {};
-        for (const id of selected) {
-          const sec = targetMap[id] || bulkTarget;
-          if (!sec) {
-            throw new Error(`Please specify a target section for selected student ID: ${id}`);
-          }
-          if (!bySection[sec]) bySection[sec] = [];
-          bySection[sec].push(id);
+        result = await promoteStudents(payload);
+        if (
+          !Number.isInteger(result?.promotedCount) ||
+          !Number.isInteger(result?.failedCount) ||
+          result.promotedCount < 0 ||
+          result.failedCount < 0 ||
+          result.promotedCount + result.failedCount !== payload.studentIds.length
+        ) {
+          setPreview(null);
+          select([]);
+          onChanged("");
+          throw new Error(
+            "The server did not return a complete promotion result. Review refreshed history before retrying.",
+          );
         }
-
-        for (const [secStr, studentIds] of Object.entries(bySection)) {
-          await allocateSection({
-            studentIds,
-            targetAcademicYearId: targetYearId,
-            targetAcademicLevel,
-            targetGroupId,
-            targetSection: secStr,
-          });
-        }
-        onSaved?.("Section");
       }
-
-      setSelected([]);
-      setTargetMap({});
-      setBulkTarget("");
-    } catch (err) {
-      setMessage(getApiErrorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
+      setPreview(null);
+      select([]);
+      setOutcome({ result, single });
+      const failed = !single && result.failedCount > 0;
+      onChanged(
+        single
+          ? "Student promoted successfully."
+          : `${result.promotedCount ?? "—"} promoted; ${result.failedCount ?? "—"} failed.${result.promotionBatchId ? ` Batch: ${result.promotionBatchId}` : ""}`,
+        failed ? "warning" : "success",
+      );
+    });
   return (
-    <section className="cms-card promotion-card">
-      <div className="promotion-tabs" role="tablist" style={{ marginBottom: "14px" }}>
-        <button
-          role="tab"
-          aria-selected={isProgram}
-          className={isProgram ? "is-active" : ""}
-          onClick={() => { setActiveTab("program"); setMessage(""); }}
-        >
-          Program Allocation (Track Change)
-        </button>
-        <button
-          role="tab"
-          aria-selected={!isProgram}
-          className={!isProgram ? "is-active" : ""}
-          onClick={() => { setActiveTab("section"); setMessage(""); }}
-        >
-          Section Allocation
-        </button>
-      </div>
-
-      <div style={{ marginBottom: "16px", padding: "12px", background: "var(--cms-subtle)", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "13px", fontWeight: 600 }}>
-            Bulk Assign {isProgram ? "Program" : "Section"} to Selected ({selected.length}):
-          </span>
+    <div className="promotion-workspace">
+      <ol className="promotion-steps" aria-label="Promotion workflow">
+        <li aria-current={!query ? "step" : undefined}>
+          <span>1</span>Select source cohort
+        </li>
+        <li aria-current={query && !preview ? "step" : undefined}>
+          <span>2</span>Review eligible students
+        </li>
+        <li aria-current={preview ? "step" : undefined}>
+          <span>3</span>Preview & confirm
+        </li>
+      </ol>
+      <ErrorNotice message={operation.error} />
+      <section className="cms-card promotion-card">
+        <fieldset className="promotion-form" disabled={Boolean(operation.busy)}>
+          <legend className="promotion-sr-only">Promotion configuration</legend>
+          <div className="cms-card-body promotion-setup-grid">
+            <div>
+              <h2>Current cohort</h2>
+              <p className="promotion-panel-caption">{context.yearName}</p>
+              <CohortFields
+                prefix="promote-source"
+                filters={filters}
+                onChange={updateSource}
+                levels={levels}
+                options={options}
+              />
+            </div>
+            <ArrowRight className="promotion-arrow" size={24} aria-hidden="true" />
+            <div>
+              <h2>{finalYear ? "Course completion" : "Promotion destination"}</h2>
+              <p className="promotion-panel-caption">
+                {years.loading
+                  ? "Loading academic years..."
+                  : (nextYear?.label ?? "Next academic year is not configured.")}
+              </p>
+              {finalYear ? (
+                <p className="promotion-note">
+                  Final-year students follow the course completion process. This promotion service
+                  does not provide a completion action.
+                </p>
+              ) : (
+                <div className="promotion-field-grid">
+                  <OptionField
+                    name="promote-target-level"
+                    label="Academic Level"
+                    value={targetLevelId}
+                    onChange={(value) => updateTarget("levelId", value)}
+                    source={{
+                      ...levels,
+                      options: levels.options.filter(
+                        (level) => level.value !== filters.academicLevelId,
+                      ),
+                      enabled: Boolean(sourceLevel),
+                    }}
+                  />
+                  <OptionField
+                    name="promote-target-group"
+                    label="Group"
+                    value={targetGroupId}
+                    onChange={(value) => updateTarget("groupId", value)}
+                    source={destinationGroups}
+                  />
+                  <div className="promotion-readonly">
+                    <span>Program</span>
+                    <strong>
+                      {findOption(options.programs.options, filters.programId)?.label ?? "—"}
+                    </strong>
+                    <small>Same as current</small>
+                    {destinationPrograms.loading ? (
+                      <small role="status">Checking destination programs...</small>
+                    ) : filters.programId && targetGroupId && !preservedProgram ? (
+                      <small className="promotion-field-error">
+                        Choose a destination group that supports the current program.
+                      </small>
+                    ) : null}
+                    <ErrorNotice
+                      message={destinationPrograms.error}
+                      onRetry={destinationPrograms.retry}
+                    />
+                  </div>
+                  <OptionField
+                    name="promote-target-section"
+                    label="Section"
+                    value={target.sectionId}
+                    onChange={(value) => updateTarget("sectionId", value)}
+                    source={destinationSections}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="promotion-actions">
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              disabled={!readySource || records.loading}
+              onClick={load}
+            >
+              {records.loading ? "Loading eligible students..." : "Load Eligible Students"}
+            </button>
+          </div>
+        </fieldset>
+      </section>
+      <section className="cms-card promotion-card">
+        <div className="cms-card-head">
+          <div>
+            <h2>Eligible students</h2>
+            <p>
+              {records.loaded && !records.error
+                ? `${students.length} students returned for this cohort`
+                : "Configure the cohort, then load students to review eligibility."}
+            </p>
+          </div>
+        </div>
+        <div className="promotion-table-controls">
+          <input
+            aria-label="Find student in current cohort"
+            placeholder="Find student by name or admission number"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
           <select
-            value={bulkTarget}
-            onChange={(e) => setBulkTarget(e.target.value)}
-            style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--cms-border)", fontSize: "13px" }}
+            aria-label="Eligibility filter"
+            value={eligibility}
+            onChange={(event) => setEligibility(event.target.value)}
           >
-            <option value="">Select target {isProgram ? "program" : "section"}</option>
-            {isProgram
-              ? availablePrograms.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)
-              : availableSections.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            <option value="">All eligibility statuses</option>
+            <option>Eligible</option>
+            <option>Not Eligible</option>
           </select>
           <button
+            type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={handleApplyBulk}
-            disabled={!selected.length || !bulkTarget}
-            style={{ padding: "6px 12px" }}
+            disabled={!visible.some(isPromotionEligible) || Boolean(operation.busy) || finalYear}
+            onClick={() =>
+              select(visible.filter(isPromotionEligible).map((student) => student.studentId))
+            }
           >
-            Apply to Selected
-          </button>
-        </div>
-
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button
-            className="cms-btn cms-btn-ghost"
-            onClick={() => setSelected(rows.map((r) => r.id))}
-            disabled={!rows.length}
-            style={{ padding: "6px 12px" }}
-          >
-            Select All
+            Select All Eligible
           </button>
           <button
+            type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={() => setSelected([])}
-            disabled={!selected.length}
-            style={{ padding: "6px 12px" }}
+            onClick={() => select([])}
+            disabled={!selected.length || Boolean(operation.busy)}
           >
             Clear Selection
           </button>
         </div>
-      </div>
-
-      {message ? <div className="promotion-error" role="alert">{message}</div> : null}
-
-      <div className="cms-table-wrap">
-        <table className="cms-table promotion-table">
-          <thead>
-            <tr>
-              <th>Select</th>
-              <th>Student Name</th>
-              <th>Admission No.</th>
-              <th>Group</th>
-              <th>Current {isProgram ? "Program" : "Section"}</th>
-              <th>Target {isProgram ? "Program" : "Section"}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? (
-              rows.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(row.id)}
-                      onChange={() =>
-                        setSelected((items) =>
-                          items.includes(row.id) ? items.filter((id) => id !== row.id) : [...items, row.id]
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="cms-strong">{row.student}</td>
-                  <td>{row.roll}</td>
-                  <td>{row.group}</td>
-                  <td>{isProgram ? (row.program || "Regular") : (row.section || "-")}</td>
-                  <td>
-                    <select
-                      value={targetMap[row.id] || ""}
-                      onChange={(e) => setTargetMap({ ...targetMap, [row.id]: e.target.value })}
-                      style={{ padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--cms-border)", fontSize: "12.5px" }}
-                    >
-                      <option value="">Choose {isProgram ? "program" : "section"}</option>
-                      {isProgram
-                        ? availablePrograms.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)
-                        : availableSections.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-                    </select>
-                  </td>
+        <ErrorNotice message={records.error} onRetry={load} />
+        {records.loading ? (
+          <Loader label="Loading eligible students..." />
+        ) : (
+          <div className="cms-table-wrap">
+            <table className="cms-table promotion-table">
+              <thead>
+                <tr>
+                  <th>Select</th>
+                  <th>Student</th>
+                  <th>Admission / Student Code</th>
+                  <th>Current Level</th>
+                  <th>Group</th>
+                  <th>Program</th>
+                  <th>Section</th>
+                  <th>Eligibility</th>
+                  <th>Reason</th>
+                  <th>Action</th>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={6} className="promotion-empty">
-                  No students available. Please load students from the Student Promotion tab first.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="promotion-actions">
-        <button
-          className="cms-btn cms-btn-primary"
-          disabled={!selected.length || saving}
-          onClick={handleSave}
+              </thead>
+              <tbody>
+                {visible.map((student) => (
+                  <tr key={student.studentId}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${student.studentName}`}
+                        checked={selected.includes(student.studentId)}
+                        disabled={
+                          !isPromotionEligible(student) || finalYear || Boolean(operation.busy)
+                        }
+                        onChange={() => select(toggle(selected, student.studentId))}
+                      />
+                    </td>
+                    <td className="cms-strong">{student.studentName}</td>
+                    <td>{student.studentCode || "—"}</td>
+                    <td>{student.academicLevel || "—"}</td>
+                    <td>{student.groupName || "—"}</td>
+                    <td>{student.programName || "—"}</td>
+                    <td>{student.section || "—"}</td>
+                    <td>
+                      <span
+                        className={`promotion-status ${isPromotionEligible(student) ? "eligible" : "not-eligible"}`}
+                      >
+                        {student.eligibilityStatus || "Unknown"}
+                      </span>
+                    </td>
+                    <td>{student.eligibilityReason || "—"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="cms-action-link"
+                        disabled={
+                          !isPromotionEligible(student) || !readyTarget || Boolean(operation.busy)
+                        }
+                        onClick={() => openPreview([student.studentId], true)}
+                      >
+                        Promote
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!visible.length ? (
+                  <tr>
+                    <td colSpan={10} className="promotion-empty">
+                      {records.error
+                        ? "Student data could not be loaded."
+                        : records.loaded
+                          ? "No eligible students found for this cohort or the selected filters."
+                          : "Select a cohort and load eligible students."}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!finalYear ? (
+          <div className="promotion-selection-bar">
+            <strong>{selected.length} students selected</strong>
+            <span>
+              {!readyTarget
+                ? "Complete the destination to preview promotion."
+                : destinationDescription}
+            </span>
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              disabled={!selected.length || !readyTarget || Boolean(operation.busy)}
+              onClick={() => openPreview(selected)}
+            >
+              {operation.busy === "Preparing preview"
+                ? "Preparing preview..."
+                : "Preview Promotion"}
+            </button>
+          </div>
+        ) : null}
+      </section>
+      {outcome ? (
+        <div className="promotion-note" role="status">
+          {outcome.single ? (
+            `Promotion ${outcome.result.promotionId}: ${outcome.result.promotionStatus}`
+          ) : (
+            <>
+              <strong>
+                {outcome.result.promotedCount ?? "—"} promoted · {outcome.result.failedCount ?? "—"}{" "}
+                failed
+              </strong>
+              {outcome.result.promotionBatchId ? (
+                <p>Batch reference: {outcome.result.promotionBatchId}</p>
+              ) : null}
+              <ul>
+                {outcome.result.students
+                  ?.filter((row) => row.promotionStatus !== "Promoted")
+                  .map((row) => (
+                    <li key={row.studentId}>
+                      {row.studentName || row.studentId}: {row.message}
+                    </li>
+                  ))}
+              </ul>
+            </>
+          )}
+        </div>
+      ) : null}
+      {preview ? (
+        <PromotionDialog
+          title={preview.single ? "Confirm Student Promotion" : "Promotion Preview"}
+          className="promotion-dialog"
+          onClose={() => !operation.busy && setPreview(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                disabled={Boolean(operation.busy)}
+                onClick={() => setPreview(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                disabled={Boolean(operation.busy) || !validPreview}
+                onClick={confirm}
+              >
+                {operation.busy === "Promoting" ? "Promoting..." : "Confirm Promotion"}
+              </button>
+            </>
+          }
         >
-          {saving ? "Saving Allocation..." : `Save ${isProgram ? "Program" : "Section"} Allocation`}
-        </button>
-      </div>
-    </section>
+          <ErrorNotice message={operation.error} />
+          <div className="promotion-preview-details">
+            <div>
+              <span>Source</span>
+              <strong>{preview.source}</strong>
+            </div>
+            <div>
+              <span>Destination</span>
+              <strong>{preview.destination}</strong>
+            </div>
+            <div>
+              <span>Selected Students</span>
+              <strong>{preview.data.totalSelected ?? "—"}</strong>
+            </div>
+            <div>
+              <span>Eligible</span>
+              <strong>{preview.data.eligibleCount ?? "—"}</strong>
+            </div>
+            <div>
+              <span>Not Eligible</span>
+              <strong>{preview.data.notEligibleCount ?? "—"}</strong>
+            </div>
+          </div>
+          {!validPreview ? (
+            <p className="promotion-field-error">
+              The backend has not approved every selected student. Review the validation results and
+              load a fresh cohort before continuing.
+            </p>
+          ) : null}
+          <ul className="promotion-preview-list">
+            {preview.data.students?.map((row) => (
+              <li key={row.studentId}>
+                <strong>{row.studentName || `Student ${row.studentId}`}</strong> —{" "}
+                {row.eligibilityStatus}
+                <p>{row.eligibilityReason}</p>
+              </li>
+            ))}
+          </ul>
+        </PromotionDialog>
+      ) : null}
+    </div>
   );
 }
 
-function ReportScreen({ reportData, rows, loading, loaded, onLoad, onExportCsv }) {
-  const total = reportData?.totalStudents ?? rows.length;
-  const eligible = reportData?.eligibleStudents ?? rows.filter((r) => /eligible/i.test(r.status) || !/rolledback/i.test(r.status)).length;
-  const notEligible = reportData?.notEligibleStudents ?? (total - eligible);
-  const promoted = reportData?.promotedStudents ?? rows.filter((r) => /promot/i.test(r.status)).length;
-  const rolledBack = reportData?.rolledBackStudents ?? rows.filter((r) => /rollback/i.test(r.status)).length;
-  const summaryCards = [
-    { label: "Total Students", value: total, tone: "total", Icon: Users },
-    { label: "Eligible", value: eligible, tone: "eligible", Icon: UserCheck },
-    { label: "Not Eligible", value: notEligible, tone: "not-eligible", Icon: UserX },
-    { label: "Promoted", value: promoted, tone: "promoted", Icon: Megaphone },
-    { label: "Rolled Back", value: rolledBack, tone: "rolled-back", Icon: RotateCcw },
-  ];
-
+function AllocationWorkspace({ context, levels, cache, revision, onChanged }) {
+  const [mode, setMode] = useState("program");
+  const [filters, setFilters] = useState(EMPTY_COHORT);
+  const [query, setQuery] = useState(null);
+  const [reload, setReload] = useState(0);
+  const [search, setSearch] = useState("");
+  const [draft, setDraft] = useState({ revision: -1, selected: [], targets: {} });
+  const [bulkTarget, setBulkTarget] = useState("");
+  const [results, setResults] = useState([]);
+  const operation = useOperation();
+  const options = useCohortOptions(context, filters, cache);
+  const records = useRecords("allocation", query, `${revision}:${reload}`);
+  const students = records.data ?? [];
+  const visible = students.filter((row) => matchStudent(row, search));
+  const selected =
+    draft.revision === revision && !records.loading
+      ? draft.selected.filter((studentId) =>
+          students.some((student) => student.studentId === studentId),
+        )
+      : [];
+  const targets = draft.revision === revision ? draft.targets : {};
+  const targetOptions = mode === "program" ? options.programs : options.sections;
+  const select = (ids) => setDraft({ revision, selected: ids, targets });
+  const clear = () => {
+    setDraft({ revision, selected: [], targets: {} });
+    setBulkTarget("");
+    setResults([]);
+    operation.setError("");
+  };
+  const ready = Boolean(
+    context.ready &&
+    findOption(levels.options, filters.academicLevelId) &&
+    findOption(options.groups.options, filters.groupId) &&
+    findOption(options.programs.options, filters.programId) &&
+    (!filters.sectionId || findOption(options.sections.options, filters.sectionId)),
+  );
+  const load = () => {
+    if (ready) {
+      clear();
+      setQuery({ boardId: context.boardId, academicYearId: context.yearId, ...filters });
+      setReload((value) => value + 1);
+    }
+  };
+  const setTarget = (studentId, value) =>
+    setDraft({ revision, selected, targets: { ...targets, [studentId]: value } });
+  const save = () =>
+    operation.run("Saving allocation", async () => {
+      if (!ready || !selected.length) throw new Error("Load a cohort and select students first.");
+      const grouped = new Map();
+      for (const studentId of selected) {
+        const target = findOption(targetOptions.options, targets[studentId]);
+        if (!target)
+          throw new Error("Assign a valid target to every selected student before saving.");
+        if (!grouped.has(target.value)) grouped.set(target.value, []);
+        grouped.get(target.value).push(studentId);
+      }
+      const responses = [];
+      let attempted = false;
+      try {
+        for (const [targetId, studentIds] of grouped) {
+          attempted = true;
+          const payload = {
+            studentIds,
+            targetAcademicYearId: Number(context.yearId),
+            targetAcademicLevelId: Number(filters.academicLevelId),
+            targetAcademicLevel: findOption(levels.options, filters.academicLevelId).label,
+            targetGroupId: Number(filters.groupId),
+          };
+          const result =
+            mode === "program"
+              ? await allocateProgram({ ...payload, targetProgramId: Number(targetId) })
+              : await allocateSection({
+                  ...payload,
+                  targetSectionId: Number(targetId),
+                  targetSection: findOption(options.sections.options, targetId).sectionName,
+                });
+          if (
+            !Number.isInteger(result?.updatedCount) ||
+            !Number.isInteger(result?.failedCount) ||
+            result.updatedCount < 0 ||
+            result.failedCount < 0 ||
+            result.updatedCount + result.failedCount !== studentIds.length
+          )
+            throw new Error(
+              "The server did not return a complete allocation result. Review the refreshed cohort before retrying.",
+            );
+          responses.push(result);
+          setResults([...responses]);
+          if (result.failedCount > 0)
+            throw new Error(
+              "Some allocations failed. Review the returned results below. Unprocessed targets were not submitted.",
+            );
+        }
+        onChanged(
+          `${mode === "program" ? "Program" : "Section"} allocation saved. ${responses.reduce((sum, result) => sum + (result.updatedCount ?? 0), 0)} updates reported by the server.`,
+        );
+      } catch (error) {
+        if (attempted)
+          onChanged(
+            "Allocation data refreshed. Review the save results before retrying.",
+            "warning",
+          );
+        throw error;
+      }
+    });
   return (
-    <div className="promotion-report-screen">
-      <section className="promotion-summary promotion-report-summary" aria-label="Promotion report summary">
-        {summaryCards.map(({ label, value, tone, Icon }) => (
-          <article className={`promotion-report-summary-card is-${tone}`} key={label}>
-            <span className="promotion-report-summary-icon" aria-hidden="true"><Icon size={18} /></span>
-            <div>
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <section className="cms-card promotion-card promotion-report-card">
-        <div className="cms-card-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className="promotion-workspace">
+      <section className="cms-card promotion-card">
+        <div className="cms-card-head">
           <div>
-            <h2>Promotion Reports</h2>
-            <p>Review comprehensive promotion metrics and audit records.</p>
+            <h2>Academic allocation</h2>
+            <p>
+              Load students independently for the current academic year. Promotion eligibility does
+              not restrict allocation.
+            </p>
           </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button className="cms-btn cms-btn-ghost" onClick={onExportCsv} disabled={!rows.length}>
-              <Download size={15} style={{ marginRight: "6px" }} /> Export CSV
+        </div>
+        <fieldset className="promotion-form" disabled={Boolean(operation.busy)}>
+          <legend className="promotion-sr-only">Allocation configuration</legend>
+          <div className="promotion-segmented" aria-label="Allocation type">
+            {[
+              ["program", "Program Allocation"],
+              ["section", "Section Allocation"],
+            ].map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                aria-pressed={mode === value}
+                className={mode === value ? "is-active" : ""}
+                onClick={() => {
+                  setMode(value);
+                  clear();
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="cms-card-body">
+            <CohortFields
+              prefix="allocation"
+              filters={filters}
+              levels={levels}
+              options={options}
+              optionalSection
+              onChange={(field, value) => {
+                setFilters(changeCohort(filters, field, value));
+                setQuery(null);
+                clear();
+              }}
+            />
+          </div>
+          <div className="promotion-actions">
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              disabled={!ready || records.loading}
+              onClick={load}
+            >
+              {records.loading ? "Loading students..." : "Load Students"}
             </button>
-            <button className="cms-btn cms-btn-primary" onClick={onLoad} disabled={loading}>
-              {loading ? "Loading..." : "Refresh Report"}
+          </div>
+        </fieldset>
+      </section>
+      <ErrorNotice message={operation.error} />
+      <ErrorNotice message={records.error} onRetry={load} />
+      <section className="cms-card promotion-card">
+        <div className="cms-card-head">
+          <div>
+            <h2>{mode === "program" ? "Program" : "Section"} assignments</h2>
+            <p>Choose targets for individual rows, or apply one target to selected students.</p>
+          </div>
+        </div>
+        <fieldset className="promotion-form" disabled={Boolean(operation.busy) || records.loading}>
+          <legend className="promotion-sr-only">Student allocations</legend>
+          <div className="promotion-table-controls">
+            <input
+              aria-label="Search allocation students"
+              placeholder="Search name, admission or roll number"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={!visible.length}
+              onClick={() => select(visible.map((row) => row.studentId))}
+            >
+              Select All
+            </button>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={!selected.length}
+              onClick={() => select([])}
+            >
+              Clear Selection
+            </button>
+          </div>
+          <div className="promotion-allocation-tools">
+            <OptionField
+              name="allocation-bulk-target"
+              label={`Target ${mode === "program" ? "Program" : "Section"}`}
+              value={bulkTarget}
+              onChange={setBulkTarget}
+              source={targetOptions}
+            />
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={!selected.length || !findOption(targetOptions.options, bulkTarget)}
+              onClick={() =>
+                setDraft({
+                  revision,
+                  selected,
+                  targets: {
+                    ...targets,
+                    ...Object.fromEntries(selected.map((studentId) => [studentId, bulkTarget])),
+                  },
+                })
+              }
+            >
+              Apply to Selected
+            </button>
+          </div>
+          {records.loading ? (
+            <Loader label="Loading allocation students..." />
+          ) : (
+            <div className="cms-table-wrap">
+              <table className="cms-table promotion-table">
+                <thead>
+                  <tr>
+                    <th>Select</th>
+                    <th>Student</th>
+                    <th>Admission No.</th>
+                    <th>Group</th>
+                    <th>Current {mode === "program" ? "Program" : "Section"}</th>
+                    <th>Target {mode === "program" ? "Program" : "Section"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visible.map((row) => (
+                    <tr key={row.studentId}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${row.studentName} for allocation`}
+                          checked={selected.includes(row.studentId)}
+                          onChange={() => select(toggle(selected, row.studentId))}
+                        />
+                      </td>
+                      <td className="cms-strong">{row.studentName}</td>
+                      <td>{row.admissionNo || "—"}</td>
+                      <td>{row.groupName || "—"}</td>
+                      <td>{(mode === "program" ? row.programName : row.sectionName) || "—"}</td>
+                      <td>
+                        <select
+                          aria-label={`Target ${mode} for ${row.studentName}`}
+                          value={targets[row.studentId] ?? ""}
+                          disabled={targetOptions.loading || !targetOptions.options.length}
+                          onChange={(event) => setTarget(row.studentId, event.target.value)}
+                        >
+                          <option value="">Choose {mode}</option>
+                          {targetOptions.options.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                  {!visible.length ? (
+                    <tr>
+                      <td colSpan={6} className="promotion-empty">
+                        {records.error
+                          ? "Student data could not be loaded."
+                          : records.loaded
+                            ? "No students found for this allocation cohort or search."
+                            : "Choose your allocation cohort above and load students."}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </fieldset>
+        <div className="promotion-selection-bar">
+          <strong>{selected.length} students selected</strong>
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary"
+            disabled={
+              !selected.length ||
+              !selected.every((studentId) =>
+                findOption(targetOptions.options, targets[studentId]),
+              ) ||
+              Boolean(operation.busy)
+            }
+            onClick={save}
+          >
+            {operation.busy ? "Saving allocation..." : "Save Allocation"}
+          </button>
+        </div>
+      </section>
+      {results.length ? (
+        <div className="promotion-note" role="status">
+          <strong>Allocation results</strong>
+          {results.map((result, index) => (
+            <div key={index}>
+              <p>
+                {result.updatedCount ?? "—"} updated · {result.failedCount ?? "—"} failed
+              </p>
+              <ul>
+                {result.students
+                  ?.filter((row) => row.status !== "Updated")
+                  .map((row) => (
+                    <li key={row.studentId}>
+                      {row.studentName || `Student ${row.studentId}`}: {row.message}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function exportCsv(filename, columns, rows) {
+  const cell = (value) => {
+    const string = text(value);
+    return `"${(/^[\s]*[=+@-]/.test(string) ? "'" + string : string).replaceAll('"', '""')}"`;
+  };
+  const content = [
+    columns.map(([label]) => cell(label)).join(","),
+    ...rows.map((row) =>
+      columns.map(([, key]) => cell(typeof key === "function" ? key(row) : row[key])).join(","),
+    ),
+  ].join("\r\n");
+  const url = URL.createObjectURL(
+    new Blob(["\ufeff", content], { type: "text/csv;charset=utf-8" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const historyDescription = (row, prefix) =>
+  [
+    row[`${prefix}AcademicYear`],
+    row[`${prefix}AcademicLevel`] ?? row[`${prefix}Level`],
+    row[`${prefix}Group`],
+    row[`${prefix}Program`],
+    row[`${prefix}Section`],
+  ]
+    .filter(Boolean)
+    .join(" · ") || "—";
+const HISTORY_COLUMNS = [
+  ["Promotion ID", "promotionId"],
+  ["Student", "studentName"],
+  ["Admission No.", "admissionNo"],
+  ["Source", (row) => historyDescription(row, "source")],
+  ["Destination", (row) => historyDescription(row, "target")],
+  ["Date", "promotionDate"],
+  ["Status", "promotionStatus"],
+  ["Promoted By", "promotedBy"],
+];
+const REPORT_METRICS = [
+  ["totalStudents", "Total Students"],
+  ["eligibleStudents", "Eligible"],
+  ["notEligibleStudents", "Not Eligible"],
+  ["promotedStudents", "Promoted"],
+  ["notPromotedStudents", "Not Promoted"],
+  ["rolledBackStudents", "Rolled Back"],
+];
+const canRollback = (row) =>
+  row.rollbackStatus === false && row.promotionStatus?.toLowerCase() === "promoted";
+
+function HistoryWorkspace({ context, years, levels, active, revision, onChanged }) {
+  const [opened, setOpened] = useState(active);
+  const [filters, setFilters] = useState({
+    academicYearId: context.yearId,
+    academicLevel: "",
+    promotionStatus: "",
+    studentId: "",
+    search: "",
+    fromDate: "",
+    toDate: "",
+  });
+  const [applied, setApplied] = useState(filters);
+  const [reloadHistory, setReloadHistory] = useState(0);
+  const [reloadReport, setReloadReport] = useState(0);
+  const [rollbackRecord, setRollbackRecord] = useState(null);
+  const [reason, setReason] = useState("");
+  const operation = useOperation();
+  useEffect(() => {
+    if (active) setOpened(true);
+  }, [active]);
+  const history = useRecords(
+    "history",
+    opened && context.ready
+      ? {
+          ...applied,
+          studentId: applied.studentId ? Number(applied.studentId) : undefined,
+          academicYearId: Number(applied.academicYearId),
+        }
+      : null,
+    `${revision}:${reloadHistory}`,
+  );
+  // Report DTO has no search, student, dates or program filters. Its cards show
+  // the shared year/level/status scope, independently of history-only filters.
+  const report = useRecords(
+    "report",
+    opened && context.ready
+      ? {
+          academicYearId: Number(applied.academicYearId),
+          academicLevel: applied.academicLevel,
+          promotionStatus: applied.promotionStatus,
+        }
+      : null,
+    `${revision}:${reloadReport}`,
+  );
+  const rows = history.data ?? [];
+  const latestInLoadedRows = new Map();
+  for (const row of rows)
+    if (canRollback(row) && (latestInLoadedRows.get(row.studentId) ?? 0) < row.promotionId)
+      latestInLoadedRows.set(row.studentId, row.promotionId);
+  const verifyLatest = async (record) => {
+    // HistoryDto has no CanRollback flag. Check the student's complete history,
+    // without year/search filters, before offering confirmation.
+    const studentHistory = promotionList(
+      await getPromotionHistory({ studentId: record.studentId }),
+    );
+    const latest = studentHistory
+      .filter(canRollback)
+      .sort((a, b) => b.promotionId - a.promotionId)[0];
+    if (latest?.promotionId !== record.promotionId)
+      throw new Error(
+        "Only the latest active promotion can be rolled back. Refresh history to review this student.",
+      );
+  };
+  const openRollback = (record) =>
+    operation.run("Checking rollback", async () => {
+      await verifyLatest(record);
+      setRollbackRecord({ ...record, revision });
+      setReason("");
+    });
+  const rollback = () =>
+    operation.run("Rolling back", async () => {
+      if (
+        !rollbackRecord ||
+        rollbackRecord.revision !== revision ||
+        !reason.trim() ||
+        reason.trim().length > 500
+      )
+        throw new Error(
+          "Enter a rollback reason of up to 500 characters and use a current record.",
+        );
+      await verifyLatest(rollbackRecord);
+      const result = await rollbackPromotion({
+        promotionId: rollbackRecord.promotionId,
+        reason: reason.trim(),
+      });
+      if (result.rollbackStatus?.toLowerCase() !== "rolledback")
+        throw new Error(
+          "Rollback was not confirmed by the server. Refresh history before retrying.",
+        );
+      setRollbackRecord(null);
+      setReason("");
+      onChanged(`Promotion ${result.promotionId} rolled back successfully.`);
+    });
+  const apply = () => {
+    if (filters.fromDate && filters.toDate && filters.fromDate > filters.toDate) {
+      operation.setError("From Date must be on or before To Date.");
+      return;
+    }
+    if (!filters.academicYearId) {
+      operation.setError("Select a source academic year.");
+      return;
+    }
+    operation.setError("");
+    setApplied(filters);
+    setReloadHistory((value) => value + 1);
+    setReloadReport((value) => value + 1);
+  };
+  const setFilter = (name, value) => setFilters((current) => ({ ...current, [name]: value }));
+  return (
+    <div className="promotion-workspace">
+      <section className="cms-card promotion-card">
+        <div className="cms-card-head">
+          <div>
+            <h2>History & Reports</h2>
+            <p>
+              Summary cards use the source year, level and status below. History also supports
+              student, search and date filters.
+            </p>
+            <p>History and reports include all boards for the selected filters.</p>
+          </div>
+        </div>
+        <div className="cms-card-body promotion-history-filters">
+          <OptionField
+            name="history-year"
+            label="Source Academic Year"
+            value={filters.academicYearId}
+            onChange={(value) => setFilter("academicYearId", value)}
+            source={years}
+          />
+          <OptionField
+            name="history-level"
+            label="Source Academic Level"
+            value={filters.academicLevel}
+            onChange={(value) => setFilter("academicLevel", value)}
+            source={{
+              ...levels,
+              options: levels.options.map((level) => ({ ...level, value: level.label })),
+            }}
+            optional
+          />
+          {[
+            {
+              name: "promotionStatus",
+              label: "Status",
+              type: "select",
+              options: ["Promoted", "RolledBack"],
+            },
+            { name: "studentId", label: "Student ID", type: "number", min: 1 },
+            { name: "search", label: "Search", placeholder: "Student name or admission number" },
+            { name: "fromDate", label: "From Date", type: "date" },
+            { name: "toDate", label: "To Date", type: "date" },
+          ].map((field) => (
+            <Field
+              key={field.name}
+              field={{ ...field, name: `history-${field.name}` }}
+              value={filters[field.name]}
+              onChange={(_, value) => setFilter(field.name, value)}
+            />
+          ))}
+        </div>
+        <div className="promotion-actions">
+          <button
+            type="button"
+            className="cms-btn cms-btn-ghost"
+            onClick={() => {
+              const empty = {
+                academicYearId: context.yearId,
+                academicLevel: "",
+                promotionStatus: "",
+                studentId: "",
+                search: "",
+                fromDate: "",
+                toDate: "",
+              };
+              setFilters(empty);
+              setApplied(empty);
+              operation.setError("");
+            }}
+            disabled={Boolean(operation.busy)}
+          >
+            Clear Filters
+          </button>
+          <button
+            type="button"
+            className="cms-btn cms-btn-primary"
+            onClick={apply}
+            disabled={
+              !context.ready || history.loading || report.loading || Boolean(operation.busy)
+            }
+          >
+            Apply Filters
+          </button>
+        </div>
+      </section>
+      <ErrorNotice message={operation.error} />
+      <section aria-label="Promotion report summary">
+        <div className="promotion-section-heading">
+          <h2>Report summary</h2>
+          <div>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={!report.data || report.loading}
+              onClick={() =>
+                exportCsv(
+                  "Promotion_Report_Summary.csv",
+                  [
+                    ["Metric", "metric"],
+                    ["Value", "value"],
+                  ],
+                  REPORT_METRICS.filter(([key]) => Number.isFinite(report.data[key])).map(
+                    ([key, label]) => ({ metric: label, value: report.data[key] }),
+                  ),
+                )
+              }
+            >
+              <Download size={15} />
+              Export Summary
+            </button>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={!report.data?.details?.length || report.loading}
+              onClick={() =>
+                exportCsv(
+                  "Promotion_Report_Details.csv",
+                  [
+                    ...HISTORY_COLUMNS.filter(([label]) => label !== "Promoted By"),
+                    ["Eligibility", "eligibilityStatus"],
+                  ],
+                  report.data.details,
+                )
+              }
+            >
+              Export Details
+            </button>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={report.loading}
+              onClick={() => setReloadReport((value) => value + 1)}
+              aria-label="Refresh report"
+            >
+              <RefreshCw size={16} />
             </button>
           </div>
         </div>
-
-        {loaded ? (
-          <HistoryTable rows={rows} />
+        <ErrorNotice message={report.error} onRetry={() => setReloadReport((value) => value + 1)} />
+        {report.loading ? (
+          <Loader label="Loading report summary..." />
+        ) : report.data ? (
+          <div className="promotion-summary">
+            {REPORT_METRICS.filter(([key]) => Number.isFinite(report.data[key])).map(
+              ([key, label]) => (
+                <div key={key}>
+                  <span>{label}</span>
+                  <strong>{report.data[key]}</strong>
+                </div>
+              ),
+            )}
+          </div>
+        ) : null}
+      </section>
+      <section className="cms-card promotion-card">
+        <div className="cms-card-head">
+          <div>
+            <h2>Promotion history</h2>
+            <p>{rows.length} loaded records</p>
+          </div>
+          <div className="promotion-heading-actions">
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={!rows.length || history.loading}
+              onClick={() => exportCsv("Promotion_History.csv", HISTORY_COLUMNS, rows)}
+            >
+              <Download size={15} />
+              Export CSV
+            </button>
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              disabled={history.loading}
+              onClick={() => setReloadHistory((value) => value + 1)}
+              aria-label="Refresh history"
+            >
+              <RefreshCw size={16} />
+            </button>
+          </div>
+        </div>
+        <ErrorNotice
+          message={history.error}
+          onRetry={() => setReloadHistory((value) => value + 1)}
+        />
+        {history.loading ? (
+          <Loader label="Loading promotion history..." />
         ) : (
-          <div className="promotion-empty">Load the report to view promotion records.</div>
+          <div className="cms-table-wrap">
+            <table className="cms-table promotion-table">
+              <thead>
+                <tr>
+                  {[
+                    "Promotion ID",
+                    "Student",
+                    "Admission No.",
+                    "Source",
+                    "Destination",
+                    "Date",
+                    "Status",
+                    "Promoted By",
+                    "Action",
+                  ].map((label) => (
+                    <th key={label}>{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.promotionId}>
+                    <td>{row.promotionId}</td>
+                    <td className="cms-strong">{row.studentName}</td>
+                    <td>{row.admissionNo || row.studentCode || "—"}</td>
+                    <td>{historyDescription(row, "source")}</td>
+                    <td>{historyDescription(row, "target")}</td>
+                    <td className="promotion-date">{date(row.promotionDate)}</td>
+                    <td>
+                      <span
+                        className={`promotion-status ${row.rollbackStatus ? "not-eligible" : "eligible"}`}
+                      >
+                        {row.promotionStatus}
+                      </span>
+                      {row.rollbackReason ? <small>{row.rollbackReason}</small> : null}
+                    </td>
+                    <td>{row.promotedBy || "—"}</td>
+                    <td>
+                      {canRollback(row) &&
+                      latestInLoadedRows.get(row.studentId) === row.promotionId ? (
+                        <button
+                          type="button"
+                          className="cms-action-link danger"
+                          disabled={Boolean(operation.busy)}
+                          onClick={() => openRollback(row)}
+                        >
+                          Rollback
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!rows.length ? (
+                  <tr>
+                    <td colSpan={9} className="promotion-empty">
+                      {history.error
+                        ? "History could not be loaded."
+                        : "No promotion history found for the selected filters."}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
+      {rollbackRecord ? (
+        <PromotionDialog
+          title="Confirm Promotion Rollback"
+          size="sm"
+          className="promotion-dialog"
+          onClose={() => !operation.busy && setRollbackRecord(null)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="cms-btn cms-btn-ghost"
+                disabled={Boolean(operation.busy)}
+                onClick={() => setRollbackRecord(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-danger"
+                disabled={
+                  Boolean(operation.busy) || !reason.trim() || rollbackRecord.revision !== revision
+                }
+                onClick={rollback}
+              >
+                {operation.busy ? "Rolling back..." : "Confirm Rollback"}
+              </button>
+            </>
+          }
+        >
+          <ErrorNotice message={operation.error} />
+          <p>
+            Roll back promotion <strong>{rollbackRecord.promotionId}</strong> for{" "}
+            <strong>{rollbackRecord.studentName}</strong>?
+          </p>
+          <div className="cms-field">
+            <label htmlFor="promotion-rollback-reason">Reason (required)</label>
+            <textarea
+              id="promotion-rollback-reason"
+              maxLength={500}
+              value={reason}
+              disabled={Boolean(operation.busy)}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </div>
+        </PromotionDialog>
+      ) : null}
     </div>
   );
 }

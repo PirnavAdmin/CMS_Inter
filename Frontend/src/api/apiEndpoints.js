@@ -425,6 +425,17 @@ export const apiEndpoints = {
   },
   examinations: {
     getAll: "/api/v1/examinations",
+    byId: (id) => `/api/v1/examinations/${encodeURIComponent(id)}`,
+    patterns: "/api/v1/examinations/patterns",
+    types: "/api/v1/examinations/types",
+    schedules: (id) => `/api/v1/examinations/${encodeURIComponent(id)}/schedules`,
+    schedule: (id, scheduleId) => `/api/v1/examinations/${encodeURIComponent(id)}/schedules/${encodeURIComponent(scheduleId)}`,
+    availableHalls: "/api/v1/examinations/available-halls",
+    availableInvigilators: "/api/v1/examinations/available-invigilators",
+    schedulingContext: (id) => `/api/v1/examinations/${encodeURIComponent(id)}/scheduling-context`,
+    finalize: (id) => `/api/v1/examinations/${encodeURIComponent(id)}/finalize-schedule`,
+    cancel: (id) => `/api/v1/examinations/${encodeURIComponent(id)}/cancel`,
+    exportExcel: (id) => id ? `/api/v1/examinations/${encodeURIComponent(id)}/export/excel` : "/api/v1/examinations/export/excel",
   },
   timetable: {
     getAll: "/api/v1/timetable",
@@ -450,6 +461,7 @@ export const apiEndpoints = {
   },
   promotions: {
     eligible: "/api/v1/promotions/eligible",
+    eligibleStudents: "/api/v1/promotions/eligible-students",
     preview: "/api/v1/promotions/preview",
     create: "/api/v1/promotions",
     student: (studentId) => `/api/v1/promotions/student/${studentId}`,

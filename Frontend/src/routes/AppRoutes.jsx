@@ -19,7 +19,8 @@ import HolidayManagementPage from "@/components/pages/HolidayManagementPage.jsx"
 import AttendancePage from "@/components/pages/AttendancePage.jsx";
 import AttendanceOverviewPage from "@/components/pages/AttendanceOverviewPage.jsx";
 import LeaveManagementPage from "@/components/pages/LeaveManagementPage.jsx";
-import ExaminationPage, { pageConfig as examinationConfig } from "@/components/pages/ExaminationPage.jsx";
+import ExaminationPage from "@/components/pages/ExaminationPage.jsx";
+import { pageConfig as examinationConfig } from "@/features/examination/examinationModel.js";
 import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
 import ResultProcessingPage from "@/components/pages/ResultProcessingPage.jsx";
 import PromotionPage from "@/components/pages/PromotionPage.jsx";
@@ -160,12 +161,12 @@ export default function AppRoutes() {
         <Route path="/dashboard/examinations/add" element={<ExaminationPage />} />
         <Route path="/dashboard/marks-entry" element={<MarksEntryPage />} />
         <Route path="/dashboard/results" element={<ResultProcessingPage />} />
-        <Route path="/dashboard/promotion" element={<PromotionPage screen="promotion" />} />
-        <Route path="/dashboard/promotions/eligible" element={<PromotionPage screen="promotion" />} />
-        <Route path="/dashboard/promotions/single" element={<PromotionPage screen="single" />} />
-        <Route path="/dashboard/promotions/allocation" element={<PromotionPage screen="allocation" />} />
-        <Route path="/dashboard/promotions/history" element={<PromotionPage screen="history" />} />
-        <Route path="/dashboard/promotions/report" element={<PromotionPage screen="report" />} />
+        <Route path="/dashboard/promotion" element={<PromotionPage />} />
+        <Route path="/dashboard/promotions/eligible" element={<Navigate to="/dashboard/promotion?view=promote" replace />} />
+        <Route path="/dashboard/promotions/single" element={<Navigate to="/dashboard/promotion?view=promote" replace />} />
+        <Route path="/dashboard/promotions/allocation" element={<Navigate to="/dashboard/promotion?view=allocation" replace />} />
+        <Route path="/dashboard/promotions/history" element={<Navigate to="/dashboard/promotion?view=history" replace />} />
+        <Route path="/dashboard/promotions/report" element={<Navigate to="/dashboard/promotion?view=history" replace />} />
         <Route path="/dashboard/transport" element={<TransportPage />} />
         <Route path="/dashboard/fee-structure" element={<FeeManagementPage />} />
         <Route path="/dashboard/certificates" element={<CertificatesPage />} />
