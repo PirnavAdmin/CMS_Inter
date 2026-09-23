@@ -56,6 +56,7 @@ export default function Login() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (busy) return;
     setError("");
     // Password managers can populate the DOM without dispatching the input
     // event React uses to update controlled field state. Read the submitted
@@ -102,26 +103,38 @@ export default function Login() {
 
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to the Pirnav College management system.">
-      <form onSubmit={submit} noValidate autoComplete="on">
+      <form className={busy ? "auth-login-form is-busy" : "auth-login-form"} onSubmit={submit} noValidate autoComplete="on" aria-busy={busy}>
         {error ? <div className="cms-alert-error" role="alert">{error}</div> : null}
-        <div className="cms-form-grid">
-          {fields.map((f) => (
-            <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
-          ))}
-        </div>
-        <div className="cms-auth-row">
-          <label className="cms-check" htmlFor="remember-me">
-            <input id="remember-me" name="remember" type="checkbox" checked={remember} onChange={(e) => {
-              setRemember(e.target.checked);
-              if (!e.target.checked) saveRememberedCredentials(null);
-            }} />
-            <span>Remember me</span>
-          </label>
-          <Link to="/forgot-password" state={{ email: String(values.email || "").trim() }} onClick={clearPasswordResetContext}>Forgot password?</Link>
-        </div>
-        <button type="submit" className="cms-btn cms-btn-primary auth-submit-btn" disabled={busy}>
-          {busy ? "Signing in..." : "Login"}
-        </button>
+        <fieldset className="auth-login-fieldset" disabled={busy}>
+          <div className="cms-form-grid">
+            {fields.map((f) => (
+              <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
+            ))}
+          </div>
+          <div className="cms-auth-row">
+            <label className="cms-check" htmlFor="remember-me">
+              <input id="remember-me" name="remember" type="checkbox" checked={remember} onChange={(e) => {
+                setRemember(e.target.checked);
+                if (!e.target.checked) saveRememberedCredentials(null);
+              }} />
+              <span>Remember me</span>
+            </label>
+            <Link
+              to="/forgot-password"
+              state={{ email: String(values.email || "").trim() }}
+              className={busy ? "is-disabled" : ""}
+              aria-disabled={busy}
+              tabIndex={busy ? -1 : undefined}
+              onClick={(event) => {
+                if (busy) { event.preventDefault(); return; }
+                clearPasswordResetContext();
+              }}
+            >Forgot password?</Link>
+          </div>
+          <button type="submit" className="cms-btn cms-btn-primary auth-submit-btn" disabled={busy}>
+            {busy ? "Signing in..." : "Login"}
+          </button>
+        </fieldset>
       </form>
     </AuthLayout>
   );

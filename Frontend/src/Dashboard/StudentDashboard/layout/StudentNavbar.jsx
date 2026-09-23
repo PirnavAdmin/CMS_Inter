@@ -9,11 +9,12 @@ import boardIcon from "@/assets/navbar-3d/board.png";
 import academicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { clearAuthSession } from "@/features/authStorage.js";
-import { student } from "../data/studentMockData.js";
+import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 
 export default function StudentNavbar({ onMenu }) {
   const navigate = useNavigate();
   const { selectedBoard, selectedAcademicYear } = useAcademicContext();
+  const { profile } = useStudentProfile();
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
   const [profileOpen, setProfileOpen] = useState(false);
   const menuRef = useRef(null);
@@ -29,16 +30,18 @@ export default function StudentNavbar({ onMenu }) {
     setDark(next);
     document.documentElement.dataset.theme = next ? "dark" : "light";
   };
-  const assignedBoard = student.board
+  const assignedBoard = profile?.boardName
     || selectedBoard?.name
     || selectedBoard?.boardName
     || selectedBoard?.code
     || "Board not assigned";
-  const assignedAcademicYear = student.academicYear
+  const assignedAcademicYear = profile?.academicYearName
     || selectedAcademicYear?.name
     || selectedAcademicYear?.label
     || selectedAcademicYear?.code
     || "Year not assigned";
+  const studentName = profile?.studentName || "Student";
+  const initials = studentName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "ST";
   const logout = () => {
     clearAuthSession();
     setProfileOpen(false);
@@ -52,7 +55,7 @@ export default function StudentNavbar({ onMenu }) {
       </button>
       <div className="sp-navbar-title">
         <strong>Student Portal</strong>
-        <span>{student.academicYear} • {student.section}</span>
+        <span>{assignedAcademicYear} • {profile?.sectionName || "Not Assigned"}</span>
       </div>
       <div className="sp-student-academic-context" aria-label="Assigned academic context">
         <div className="sp-readonly-context sp-readonly-board">
@@ -74,8 +77,8 @@ export default function StudentNavbar({ onMenu }) {
         </button>
         <div className="sp-profile-menu" ref={menuRef}>
           <button onClick={() => setProfileOpen((value) => !value)}>
-            <span className="sp-avatar">{student.initials}</span>
-            <span><strong>{student.name}</strong><small>Roll No: {student.rollNo}</small></span>
+            <span className="sp-avatar">{initials}</span>
+            <span><strong>{studentName}</strong><small>Roll No: {profile?.rollNo || "Not Assigned"}</small></span>
             <ChevronDown size={15} />
           </button>
           {profileOpen ? (
