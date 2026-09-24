@@ -611,6 +611,26 @@ export const apiEndpoints = {
     summary: "/api/Payroll/summary",
     staffSummary: (staffId) => `/api/Payroll/staff/${staffId}/summary`,
   },
+  roles: {
+    cards: "/api/v1/roles/cards",
+    list: "/api/v1/roles",
+    getById: (id) => `/api/v1/roles/${id}`,
+    create: "/api/v1/roles",
+    update: (id) => `/api/v1/roles/${id}`,
+    delete: (id) => `/api/v1/roles/${id}`,
+    modules: "/api/v1/roles/modules",
+    permissions: (roleId) => `/api/v1/roles/${roleId}/permissions`,
+    updatePermissions: (roleId) => `/api/v1/roles/${roleId}/permissions`,
+    members: (roleId) => `/api/v1/roles/${roleId}/members`,
+    userDetails: (userId) => `/api/v1/roles/users/${userId}/details`,
+    userPermissions: (userId) => `/api/v1/roles/users/${userId}/permissions`,
+    userOverrides: (userId) => `/api/v1/roles/users/${userId}/overrides`,
+    resetUserOverrides: (userId) => `/api/v1/roles/users/${userId}/overrides/reset`,
+    userAssignments: "/api/v1/roles/user-assignments",
+    assignUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/assign`,
+    removeUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/remove`,
+    myPermissions: "/api/v1/roles/my-permissions",
+  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
