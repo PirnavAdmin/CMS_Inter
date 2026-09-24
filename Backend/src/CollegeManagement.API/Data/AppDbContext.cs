@@ -85,6 +85,7 @@ namespace CollegeManagement.API.Data
         public DbSet<Section> Sections { get; set; }
 
         public DbSet<FeeType> FeeTypes { get; set; }
+        public DbSet<FineRule> FineRules { get; set; }
 
         public DbSet<FeeStructure> FeeStructures { get; set; }
 

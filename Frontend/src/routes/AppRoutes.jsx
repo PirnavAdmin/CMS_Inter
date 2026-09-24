@@ -30,12 +30,15 @@ import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
+import RolesPermissionsPage from "@/components/pages/RolesPermissionsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
 import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
 import PayrollPage from "@/components/pages/PayrollPage.jsx";
+import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
+import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
@@ -173,6 +176,12 @@ export default function AppRoutes() {
         <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
         <Route path="/dashboard/settings" element={<SettingsPage />} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
+        <Route path="/dashboard/settings/my-profile" element={<AdminProfilePage />} />
+        <Route path="/dashboard/settings/profile" element={<AdminProfilePage />} />
+        <Route path="/dashboard/my-profile" element={<AdminProfilePage />} />
+        <Route path="/dashboard/settings/campus-configuration" element={<CampusConfigurationPage />} />
+        <Route path="/dashboard/settings/campus" element={<CampusConfigurationPage />} />
+        <Route path="/dashboard/settings/roles-permissions" element={<RolesPermissionsPage />} />
         <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
         <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
         <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
