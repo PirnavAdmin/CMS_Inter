@@ -22,9 +22,9 @@ namespace CollegeManagement.API.Services
         // STUDENT CRUD
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync()
+        public async Task<List<StudentListItemDto>> GetAllAsync(int? campusId = null)
         {
-            return await _repository.GetAllAsync();
+            return await _repository.GetAllAsync(campusId);
         }
 
         public async Task<StudentResponse?> GetByIdAsync(int studentId)

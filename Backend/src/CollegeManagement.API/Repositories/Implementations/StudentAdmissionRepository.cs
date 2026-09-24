@@ -22,13 +22,68 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         // GET ALL STUDENT ADMISSIONS
         // =========================================================
-        public async Task<IEnumerable<StudentAdmissionResponseDto>> GetAllAsync()
+        public async Task<IEnumerable<StudentAdmissionResponseDto>> GetAllAsync(int? campusId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
-            return await connection.QueryAsync<StudentAdmissionResponseDto>(
-                "sp_GetAllStudentAdmissions",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var parameters = new DynamicParameters();
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    parameters.Add("p_CampusId", campusId.Value, DbType.Int32);
+                }
+                else
+                {
+                    parameters.Add("p_CampusId", null, DbType.Int32);
+                }
+
+                var result = (await connection.QueryAsync<StudentAdmissionResponseDto>(
+                    "sp_GetAllStudentAdmissions",
+                    parameters,
+                    commandType: CommandType.StoredProcedure)).ToList();
+
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                }
+
+                return result;
+            }
+            catch
+            {
+                try
+                {
+                    var result = (await connection.QueryAsync<StudentAdmissionResponseDto>(
+                        "sp_GetAllStudentAdmissions",
+                        commandType: CommandType.StoredProcedure)).ToList();
+
+                    if (campusId.HasValue && campusId.Value > 0)
+                    {
+                        result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                    }
+
+                    return result;
+                }
+                catch
+                {
+                    const string sql = @"
+                        SELECT sa.*, b.BoardName, ay.AcademicYearName, g.GroupName, s.SectionName, c.CampusName
+                        FROM StudentAdmissions sa
+                        LEFT JOIN Boards b ON sa.BoardId = b.BoardId
+                        LEFT JOIN AcademicYears ay ON sa.AcademicYearId = ay.AcademicYearId
+                        LEFT JOIN `Groups` g ON sa.GroupId = g.GroupId
+                        LEFT JOIN Sections s ON sa.SectionId = s.SectionId
+                        LEFT JOIN Campuses c ON sa.CampusId = c.CampusId
+                        WHERE sa.IsActive = 1
+                          AND (@CampusId IS NULL OR @CampusId = 0 OR sa.CampusId = @CampusId)
+                        ORDER BY sa.AdmissionId DESC";
+
+                    return await connection.QueryAsync<StudentAdmissionResponseDto>(
+                        sql,
+                        new { CampusId = campusId });
+                }
+            }
         }
 
 
@@ -283,7 +338,8 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 const string updateSql = @"
                     UPDATE StudentAdmissions
-                    SET StudentType = COALESCE(@StudentType, StudentType),
+                    SET CampusId = COALESCE(@CampusId, CampusId),
+                        StudentType = COALESCE(@StudentType, StudentType),
                         TransportRequired = COALESCE(@TransportRequired, TransportRequired),
                         BusType = COALESCE(@BusType, BusType),
                         RouteId = COALESCE(@RouteId, RouteId),
@@ -302,6 +358,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 await connection.ExecuteAsync(updateSql, new
                 {
                     AdmissionId = result.AdmissionId,
+                    request.CampusId,
                     request.StudentType,
                     TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
                     request.BusType,
@@ -317,6 +374,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     HostelBed = hostelBed,
                     request.HallTicketNumber
                 });
+
+                result.CampusId = request.CampusId ?? result.CampusId;
 
                 result.StudentType = request.StudentType ?? result.StudentType;
                 result.TransportRequired = request.TransportRequired ?? result.TransportRequired;
@@ -584,7 +643,8 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 const string updateSql = @"
                     UPDATE StudentAdmissions
-                    SET StudentType = COALESCE(@StudentType, StudentType),
+                    SET CampusId = COALESCE(@CampusId, CampusId),
+                        StudentType = COALESCE(@StudentType, StudentType),
                         TransportRequired = COALESCE(@TransportRequired, TransportRequired),
                         BusType = COALESCE(@BusType, BusType),
                         RouteId = COALESCE(@RouteId, RouteId),
@@ -603,6 +663,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 await connection.ExecuteAsync(updateSql, new
                 {
                     AdmissionId = admissionId,
+                    request.CampusId,
                     request.StudentType,
                     TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
                     request.BusType,
@@ -618,6 +679,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     HostelBed = hostelBed,
                     request.HallTicketNumber
                 });
+
+                result.CampusId = request.CampusId ?? result.CampusId;
 
                 result.StudentType = request.StudentType ?? result.StudentType;
                 result.TransportRequired = request.TransportRequired ?? result.TransportRequired;

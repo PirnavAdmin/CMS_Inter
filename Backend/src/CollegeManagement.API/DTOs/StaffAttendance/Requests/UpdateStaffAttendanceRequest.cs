@@ -12,7 +12,7 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Requests
         [Required]
         public DateTime AttendanceDate { get; set; }
 
-        public int? DepartmentId { get; set; }
+        public int? DepartmentId { get; set; } public int? CampusId { get; set; }
 
         public StaffType StaffType { get; set; } = StaffType.Teaching;
 

@@ -14,7 +14,7 @@ namespace CollegeManagement.API.Services
         // STUDENT CRUD
         // =========================================================
 
-        Task<List<StudentListItemDto>> GetAllAsync();
+        Task<List<StudentListItemDto>> GetAllAsync(int? campusId = null);
 
         Task<StudentResponse?> GetByIdAsync(
             int studentId);
