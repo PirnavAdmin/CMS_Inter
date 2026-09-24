@@ -23,7 +23,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 new
                 {
                     p_Search = search,
-                    p_Status = status
+                    p_Status = status,
+                    p_CampusId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
         }
