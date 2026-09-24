@@ -1397,11 +1397,9 @@ private static void ConfigureTransportDriver(ModelBuilder modelBuilder)
                     .HasMaxLength(100);
 
                 entity.Property(x => x.MobileNumber).HasColumnName("MobileNo")
-                    .IsRequired()
                     .HasMaxLength(20);
 
                 entity.Property(x => x.LicenceNumber).HasColumnName("LicenseNo")
-                    .IsRequired()
                     .HasMaxLength(50);
 
                 entity.Property(x => x.Status)

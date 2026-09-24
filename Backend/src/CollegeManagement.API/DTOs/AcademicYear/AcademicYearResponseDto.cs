@@ -7,6 +7,7 @@ namespace CollegeManagement.API.DTOs.AcademicYear
     {
         public int AcademicYearId { get; set; }
         public string AcademicYearName { get; set; } = string.Empty;
+        public int? CampusId { get; set; }
         public int? BoardId { get; set; }
         public string? BoardName { get; set; }
         public string? BoardCode { get; set; }

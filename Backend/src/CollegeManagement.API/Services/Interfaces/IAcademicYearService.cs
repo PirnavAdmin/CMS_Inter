@@ -15,7 +15,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> DeleteAsync(int id);
         Task<bool> ActivateAsync(int id);
         Task<bool> DeactivateAsync(int id);
-        Task<byte[]> ExportToCsvAsync(string? search, bool? status);
-        Task<byte[]> ExportToExcelAsync(string? search, bool? status);
+        Task<byte[]> ExportToCsvAsync(string? search, bool? status, int? campusId = null);
+        Task<byte[]> ExportToExcelAsync(string? search, bool? status, int? campusId = null);
     }
 }
