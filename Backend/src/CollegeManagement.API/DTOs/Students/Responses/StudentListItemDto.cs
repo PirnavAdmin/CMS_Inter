@@ -39,8 +39,19 @@ namespace CollegeManagement.API.DTOs.Students
 
         public string? SectionName { get; set; }
 
+        public int? BoardId { get; set; }
+        public string? BoardName { get; set; }
+        public int? AcademicYearId { get; set; }
+        public string? AcademicYearName { get; set; }
+
+        public int? CampusId { get; set; }
+
+        public string? CampusName { get; set; }
+
         public string Status { get; set; } = string.Empty;
 
         public bool IsActive { get; set; }
+
+        public DateTime? CreatedAt { get; set; }
     }
 }

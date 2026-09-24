@@ -107,7 +107,8 @@ namespace CollegeManagement.API.Repositories
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive);
+            bool? isActive,
+            int? campusId = null);
 
         Task<List<StudentListItemDto>> GetByGroupAsync(
             int groupId);

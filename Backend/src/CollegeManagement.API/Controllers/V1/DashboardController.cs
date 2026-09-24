@@ -62,9 +62,10 @@ public class DashboardController : ControllerBase
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
         [FromQuery] DateTime? date = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetSummaryAsync(academicYearId, boardId, date, ct);
+        var result = await _dashboardService.GetSummaryAsync(academicYearId, boardId, date, campusId, ct);
         return Ok(result);
     }
 
@@ -83,9 +84,10 @@ public class DashboardController : ControllerBase
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
         [FromQuery] DateTime? date = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetStudentsOverviewAsync(academicYearId, boardId, date, ct);
+        var result = await _dashboardService.GetStudentsOverviewAsync(academicYearId, boardId, date, campusId, ct);
         return Ok(result);
     }
 
@@ -102,9 +104,10 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> AdmissionTrend(
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetAdmissionTrendAsync(academicYearId, boardId, ct);
+        var result = await _dashboardService.GetAdmissionTrendAsync(academicYearId, boardId, campusId, ct);
         return Ok(result);
     }
 
@@ -121,9 +124,10 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> GroupDistribution(
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetGroupDistributionAsync(academicYearId, boardId, ct);
+        var result = await _dashboardService.GetGroupDistributionAsync(academicYearId, boardId, campusId, ct);
         return Ok(result);
     }
 
@@ -141,9 +145,10 @@ public class DashboardController : ControllerBase
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
         [FromQuery] string? viewBy = "Overall",
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetStudentsAttendanceTodayAsync(academicYearId, boardId, viewBy, ct);
+        var result = await _dashboardService.GetStudentsAttendanceTodayAsync(academicYearId, boardId, viewBy, campusId, ct);
         return Ok(result);
     }
 
@@ -161,9 +166,10 @@ public class DashboardController : ControllerBase
         [FromQuery] int? boardId = null,
         [FromQuery] string? staffType = "All Staff",
         [FromQuery] DateTime? date = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetStaffAttendanceTodayAsync(boardId, staffType, date, ct);
+        var result = await _dashboardService.GetStaffAttendanceTodayAsync(boardId, staffType, date, campusId, ct);
         return Ok(result);
     }
 
@@ -181,9 +187,10 @@ public class DashboardController : ControllerBase
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
         [FromQuery] DateTime? date = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetCertificateRequestsAsync(academicYearId, boardId, date, ct);
+        var result = await _dashboardService.GetCertificateRequestsAsync(academicYearId, boardId, date, campusId, ct);
         return Ok(result);
     }
 
@@ -200,9 +207,10 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> UpcomingExaminations(
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetUpcomingExaminationsAsync(academicYearId, boardId, ct);
+        var result = await _dashboardService.GetUpcomingExaminationsAsync(academicYearId, boardId, campusId, ct);
         return Ok(result);
     }
 
@@ -221,9 +229,10 @@ public class DashboardController : ControllerBase
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
         [FromQuery] int limit = 20,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetUpcomingHolidaysAsync(academicYearId, boardId, limit, ct);
+        var result = await _dashboardService.GetUpcomingHolidaysAsync(academicYearId, boardId, limit, campusId, ct);
         return Ok(result);
     }
 
@@ -240,9 +249,10 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> TodaysHighlights(
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetTodaysHighlightsAsync(academicYearId, boardId, ct);
+        var result = await _dashboardService.GetTodaysHighlightsAsync(academicYearId, boardId, campusId, ct);
         return Ok(result);
     }
 
@@ -257,9 +267,10 @@ public class DashboardController : ControllerBase
         [FromQuery] DateTime? date = null,
         [FromQuery] DateTime? startDate = null,
         [FromQuery] DateTime? endDate = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetWeeklyAttendanceAsync(academicYearId, boardId, date, startDate, endDate, ct);
+        var result = await _dashboardService.GetWeeklyAttendanceAsync(academicYearId, boardId, date, startDate, endDate, campusId, ct);
         return Ok(result);
     }
 
@@ -276,26 +287,27 @@ public class DashboardController : ControllerBase
     public async Task<IActionResult> FacultyWorkload(
         [FromQuery] int? academicYearId = null,
         [FromQuery] int? boardId = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _dashboardService.GetFacultyWorkloadAsync(academicYearId, boardId, ct);
+        var result = await _dashboardService.GetFacultyWorkloadAsync(academicYearId, boardId, campusId, ct);
         return Ok(result);
     }
 
     [HttpGet("test-verify-all")]
     [AllowAnonymous]
-    public async Task<IActionResult> TestVerifyAll([FromQuery] int? academicYearId = null, [FromQuery] int? boardId = null, CancellationToken ct = default)
+    public async Task<IActionResult> TestVerifyAll([FromQuery] int? academicYearId = null, [FromQuery] int? boardId = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
     {
         var filtersRes = await GetFilterOptions(ct) as OkObjectResult;
-        var summaryRes = await Summary(academicYearId, boardId, null, ct) as OkObjectResult;
-        var overviewRes = await StudentsOverview(academicYearId, boardId, null, ct) as OkObjectResult;
-        var groupRes = await GroupDistribution(academicYearId, boardId, ct) as OkObjectResult;
-        var stdAttRes = await StudentsAttendanceToday(academicYearId, boardId, "Overall", ct) as OkObjectResult;
-        var stfAttRes = await StaffAttendanceToday(boardId, "All Staff", null, ct) as OkObjectResult;
-        var certRes = await CertificateRequests(academicYearId, boardId, null, ct) as OkObjectResult;
-        var examRes = await UpcomingExaminations(academicYearId, boardId, ct) as OkObjectResult;
-        var highlightsRes = await TodaysHighlights(academicYearId, boardId, ct) as OkObjectResult;
-        var weeklyAttRes = await WeeklyAttendance(academicYearId, boardId, null, null, null, ct) as OkObjectResult;
+        var summaryRes = await Summary(academicYearId, boardId, null, campusId, ct) as OkObjectResult;
+        var overviewRes = await StudentsOverview(academicYearId, boardId, null, campusId, ct) as OkObjectResult;
+        var groupRes = await GroupDistribution(academicYearId, boardId, campusId, ct) as OkObjectResult;
+        var stdAttRes = await StudentsAttendanceToday(academicYearId, boardId, "Overall", campusId, ct) as OkObjectResult;
+        var stfAttRes = await StaffAttendanceToday(boardId, "All Staff", null, campusId, ct) as OkObjectResult;
+        var certRes = await CertificateRequests(academicYearId, boardId, null, campusId, ct) as OkObjectResult;
+        var examRes = await UpcomingExaminations(academicYearId, boardId, campusId, ct) as OkObjectResult;
+        var highlightsRes = await TodaysHighlights(academicYearId, boardId, campusId, ct) as OkObjectResult;
+        var weeklyAttRes = await WeeklyAttendance(academicYearId, boardId, null, null, null, campusId, ct) as OkObjectResult;
 
         return Ok(new
         {

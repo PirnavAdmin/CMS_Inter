@@ -8,6 +8,8 @@ public class TransportRoute
     [Key]
     public long RouteId { get; set; }
 
+    public int? CampusId { get; set; } = 1;
+
     public string? RouteCode { get; set; }
 
     public string? RouteName { get; set; }

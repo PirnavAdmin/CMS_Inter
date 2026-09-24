@@ -8,6 +8,8 @@ namespace CollegeManagement.API.DTOs.Promotion
 
     public class PromotionEligibilityQuery
     {
+        public int? CampusId { get; set; }
+
         public int? AcademicYearId { get; set; }
 
         public int? BoardId { get; set; }
@@ -508,6 +510,8 @@ namespace CollegeManagement.API.DTOs.Promotion
 
     public class PromotionReportQuery
     {
+        public int? CampusId { get; set; }
+
         public int? AcademicYearId { get; set; }
 
         public int? TargetAcademicYearId { get; set; }

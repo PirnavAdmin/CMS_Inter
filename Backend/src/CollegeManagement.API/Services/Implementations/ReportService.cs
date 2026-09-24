@@ -28,6 +28,7 @@ public class ReportService : IReportService
 
     private static ReportFilterModel M(ReportFilterDto f) => new()
     {
+        CampusId = f.CampusId,
         BoardId = f.BoardId,
         AcademicYearId = f.AcademicYearId,
         AcademicLevelId = f.AcademicLevelId,

@@ -74,6 +74,10 @@ namespace CollegeManagement.API.DTOs.Students
 
         public string? SectionName { get; set; }
 
+        public int? CampusId { get; set; }
+
+        public string? CampusName { get; set; }
+
         // Fee Configuration Reference
         public int? FeeStructureId { get; set; }
 

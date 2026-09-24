@@ -28,6 +28,7 @@ public class CertificateRepository : ICertificateRepository
         string? search = null,
         string? status = null,
         string? certificateType = null,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
@@ -36,6 +37,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_Search", search?.Trim(), DbType.String);
         parameters.Add("p_Status", status?.Trim(), DbType.String);
         parameters.Add("p_CertificateType", certificateType?.Trim(), DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
@@ -45,7 +47,12 @@ public class CertificateRepository : ICertificateRepository
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
-            return rawRows.Select(MapDynamicToDto).ToList();
+            var results = rawRows.Select(MapDynamicToDto).ToList();
+            if (campusId.HasValue)
+            {
+                results = results.Where(r => r.CampusId == campusId.Value).ToList();
+            }
+            return results;
         }
         catch (OperationCanceledException)
         {
@@ -700,14 +707,19 @@ public class CertificateRepository : ICertificateRepository
     // GET WORKFLOW STATS
     // =========================================================
     public async Task<CertificateWorkflowStatsDto> GetWorkflowStatsAsync(
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
 
         try
         {
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
+
             var stats = await connection.QueryFirstOrDefaultAsync<CertificateWorkflowStatsDto>(new CommandDefinition(
                 "sp_GetCertificateWorkflowStats",
+                parameters,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
@@ -724,14 +736,19 @@ public class CertificateRepository : ICertificateRepository
     // GET STUDENTS DROPDOWN
     // =========================================================
     public async Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
 
         try
         {
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
+
             var list = await connection.QueryAsync<StudentCertificateDropdownDto>(new CommandDefinition(
                 "sp_GetStudentsForCertificateDropdown",
+                parameters,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
@@ -885,7 +902,7 @@ public class CertificateRepository : ICertificateRepository
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
 
-            var all = await GetAllAsync(request.AdmissionNo.Trim(), null, null, ct);
+            var all = await GetAllAsync(request.AdmissionNo.Trim(), null, null, null, ct);
             return all.FirstOrDefault();
         }
         catch (Exception ex)
@@ -1105,6 +1122,7 @@ public class CertificateRepository : ICertificateRepository
         int? groupId,
         int? sectionId,
         string? search,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
@@ -1115,6 +1133,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_GroupId", groupId, DbType.Int32);
         parameters.Add("p_SectionId", sectionId, DbType.Int32);
         parameters.Add("p_Search", search?.Trim(), DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
@@ -1238,6 +1257,18 @@ public class CertificateRepository : ICertificateRepository
         if (dict.ContainsKey("DateOfBirth") && dict["DateOfBirth"] is DateTime d1) dob = d1;
         else if (dict.ContainsKey("S_DateOfBirth") && dict["S_DateOfBirth"] is DateTime d2) dob = d2;
 
+        int? campusId = null;
+        if (dict.ContainsKey("CampusId") && dict["CampusId"] != null)
+            campusId = Convert.ToInt32(dict["CampusId"]);
+        else if (dict.ContainsKey("S_CampusId") && dict["S_CampusId"] != null)
+            campusId = Convert.ToInt32(dict["S_CampusId"]);
+
+        string? campusName = null;
+        if (dict.ContainsKey("CampusName") && dict["CampusName"] != null)
+            campusName = dict["CampusName"].ToString()!.Trim();
+        else if (dict.ContainsKey("S_CampusName") && dict["S_CampusName"] != null)
+            campusName = dict["S_CampusName"].ToString()!.Trim();
+
         return new CertificateResponseDto
         {
             CertificateId = id,
@@ -1261,6 +1292,8 @@ public class CertificateRepository : ICertificateRepository
             Section = section,
             BoardName = boardName,
             DateOfBirth = dob,
+            CampusId = campusId,
+            CampusName = campusName,
             IsActive = !status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) && !status.Equals("Deleted", StringComparison.OrdinalIgnoreCase)
         };
     }

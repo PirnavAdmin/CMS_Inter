@@ -16,48 +16,51 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
 
         Task<StudentResultDto> GetStudentResultAsync(
-    int studentId,
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId);
+            int studentId,
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId);
 
         Task<IEnumerable<RankListDto>> GetRankListAsync(
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId);
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId,
+            int? campusId = null);
 
         Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync(
             int? boardId = null,
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null);
+            int? examId = null,
+            int? campusId = null);
 
         Task<ResultStatisticsDto> GetResultStatisticsAsync(
             int? boardId = null,
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null);
+            int? examId = null,
+            int? campusId = null);
 
         Task<ResultAnalysisDto> GetResultAnalysisAsync(
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId);
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId);
 
         Task<IEnumerable<ResultDto>> DownloadMemoAsync(
-    int studentId,
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId);
+            int studentId,
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId);
 
         Task<bool> RequestRevaluationAsync(
             RevaluationRequestDto request);
@@ -70,28 +73,28 @@ namespace CollegeManagement.API.Repositories.Interfaces
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null);
-
-        
-
+            int? examId = null,
+            int? campusId = null);
 
         Task<bool> UpdateResultAsync(
-    int resultId,
-    UpdateResultRequestDto request);
+            int resultId,
+            UpdateResultRequestDto request);
 
         Task<IEnumerable<DownloadResultsPdfDto>> GetResultsForPdfAsync(
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId);
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId,
+            int? campusId = null);
 
         Task<IEnumerable<ExportResultDto>> GetResultsForExportAsync(
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId);
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId,
+            int? campusId = null);
 
     }
 }

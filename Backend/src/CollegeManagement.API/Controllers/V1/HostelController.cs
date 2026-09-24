@@ -53,10 +53,11 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("blocks")]
         public async Task<IActionResult> GetAllHostelBlocks(
             [FromQuery] string? search = null,
-            [FromQuery] string? status = null)
+            [FromQuery] string? status = null,
+            [FromQuery] int? campusId = null)
         {
             var result =
-                await _hostelBlockService.GetAllAsync(search, status);
+                await _hostelBlockService.GetAllAsync(search, status, campusId);
 
             return Ok(new
             {

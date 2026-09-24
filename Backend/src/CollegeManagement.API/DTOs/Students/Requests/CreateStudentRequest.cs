@@ -82,7 +82,9 @@ namespace CollegeManagement.API.DTOs.Students
         [MaxLength(20)]
         public string? Pincode { get; set; }
 
-        // Academic
+        // Academic & Campus
+        public int? CampusId { get; set; } = 1;
+
         [Required]
         public int BoardId { get; set; }
 

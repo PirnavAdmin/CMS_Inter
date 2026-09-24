@@ -86,6 +86,8 @@ namespace CollegeManagement.API.DTOs.Students
         // ACADEMIC ASSIGNMENT
         // =========================================================
 
+        public int? CampusId { get; set; }
+
         public int? BoardId { get; set; }
 
         public int? AcademicYearId { get; set; }

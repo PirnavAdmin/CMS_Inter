@@ -527,7 +527,8 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicLevelId,
             [FromQuery] int? groupId,
             [FromQuery] int? sectionId,
-            [FromQuery] bool? isActive)
+            [FromQuery] bool? isActive,
+            [FromQuery] int? campusId = null)
         {
             var students = await _service.SearchAsync(
                 search,
@@ -536,7 +537,8 @@ namespace CollegeManagement.API.Controllers.V1
                 academicLevelId,
                 groupId,
                 sectionId,
-                isActive);
+                isActive,
+                campusId);
 
             return Ok(students);
         }

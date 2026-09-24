@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
@@ -16,9 +16,10 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
 
         public async Task<IEnumerable<HostelBlockResponseDto>> GetAllAsync(
             string? search = null,
-            string? status = null)
+            string? status = null,
+            int? campusId = null)
         {
-            var hostels = await _repository.GetAllAsync(search, status);
+            var hostels = await _repository.GetAllAsync(search, status, campusId);
 
             return hostels.Select(MapToResponse);
         }
@@ -51,6 +52,7 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
 
             var hostel = new HostelBlock
             {
+                CampusId = dto.CampusId ?? 1,
                 HostelName = dto.HostelName.Trim(),
                 HostelCode = dto.HostelCode.Trim(),
                 HostelType = dto.HostelType.Trim(),
@@ -171,6 +173,7 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
             return new HostelBlockResponseDto
             {
                 HostelId = hostel.HostelId,
+                CampusId = hostel.CampusId ?? 1,
                 HostelName = hostel.HostelName,
                 HostelCode = hostel.HostelCode,
                 HostelType = hostel.HostelType,
