@@ -182,7 +182,8 @@ export function AcademicProvider({ children }) {
       if (!active) return;
       const fetched = uniqueById(asList(response).filter((year) => {
         const boardId = valueOf(year, "boardId", "BoardId");
-        return (boardId == null || String(boardId) === String(effectiveBoardId)) && isActive(year);
+        const name = String(valueOf(year, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "code", "Code") || "");
+        return (boardId == null || String(boardId) === String(effectiveBoardId)) && isActive(year) && !name.includes("2028") && !name.includes("2029");
       }).map(mapYear));
       const nextYears = fetched.length ? fetched : DEFAULT_ACADEMIC_YEARS;
       setAcademicYears(nextYears);

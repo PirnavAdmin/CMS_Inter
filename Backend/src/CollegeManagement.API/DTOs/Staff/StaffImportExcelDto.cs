@@ -9,6 +9,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public IFormFile File { get; set; } = null!;
 
         public string? DefaultStaffType { get; set; }
+
+        public int? CampusId { get; set; }
     }
 
     public class StaffImportRowError

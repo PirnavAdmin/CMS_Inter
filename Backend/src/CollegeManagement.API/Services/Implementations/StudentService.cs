@@ -156,7 +156,8 @@ namespace CollegeManagement.API.Services
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive)
+            bool? isActive,
+            int? campusId = null)
         {
             return await _repository.SearchAsync(
                 search,
@@ -165,7 +166,8 @@ namespace CollegeManagement.API.Services
                 academicLevelId,
                 groupId,
                 sectionId,
-                isActive);
+                isActive,
+                campusId);
         }
 
 

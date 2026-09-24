@@ -6,6 +6,7 @@ export const routePaths = {
   verifyOtp: "/verify-otp",
   resetPassword: "/reset-password",
   dashboard: "/dashboard",
+  rolesPermissions: "/dashboard/settings/roles-permissions",
   studentDashboard: "/student-dashboard",
   hostel: "/dashboard/hostel",
   hostelMaster: "/dashboard/hostel/master",

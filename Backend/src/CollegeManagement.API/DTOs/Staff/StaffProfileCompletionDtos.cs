@@ -259,6 +259,12 @@ namespace CollegeManagement.API.DTOs.Staff
         public Dictionary<string, object> DepartmentSpecific { get; set; } = new();
         public Dictionary<string, object> CustomFields => DepartmentSpecific;
         public Dictionary<string, string> DocumentsMap { get; set; } = new();
+
+        // Transport / Driver Specific
+        public bool IsDriver { get; set; }
+        public string? DrivingLicenseNumber { get; set; }
+        public DateTime? DrivingLicenseExpiryDate { get; set; }
+        public int? DrivingExperienceYears { get; set; }
     }
 
     public class UpdateStaffProfileSectionDto

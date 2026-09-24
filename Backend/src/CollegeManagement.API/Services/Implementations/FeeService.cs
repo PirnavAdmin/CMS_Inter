@@ -28,7 +28,7 @@ public class FeeService : IFeeService
         foreach (var item in r.Items) { Id(item.FeeTypeId, "FeeTypeId"); item.Rule = Text(item.Rule, "Rule"); if (!item.Rule.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) && !item.Rule.Equals("Optional", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Rule must be Mandatory or Optional."); }
         return await _repo.CreateFeeStructureAsync(r);
     }
-    public Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync() => _repo.GetFeeStructuresAsync();
+    public Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync(int? campusId = null) => _repo.GetFeeStructuresAsync(campusId);
     public Task<FeeStructureResponse?> GetFeeStructureByIdAsync(int id) { Id(id, "FeeStructureId"); return _repo.GetFeeStructureByIdAsync(id); }
     public Task<FeeStructureResponse?> UpdateFeeStructureAsync(int id, UpdateFeeStructureRequest r) { Id(id, "FeeStructureId"); return _repo.UpdateFeeStructureAsync(id, r); }
     public Task<bool> DeleteFeeStructureAsync(int id) { Id(id, "FeeStructureId"); return _repo.DeleteFeeStructureAsync(id); }
@@ -45,7 +45,7 @@ public class FeeService : IFeeService
 
     public Task<StudentFeeResponse?> AssignStudentFeeAsync(AssignStudentFeeRequest r) { Id(r.StudentId, "StudentId"); Id(r.FeeStructureId, "FeeStructureId"); return _repo.AssignStudentFeeAsync(r); }
     public Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id) { Id(id, "StudentFeeId"); return _repo.GetStudentFeeAsync(id); }
-    public Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? ay, int? group, int? section, string? plan, string? status, string? search) => _repo.GetStudentFeeLedgerAsync(ay, group, section, plan, status, search);
+    public Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? campusId, int? ay, int? group, int? section, string? plan, string? status, string? search) => _repo.GetStudentFeeLedgerAsync(campusId, ay, group, section, plan, status, search);
     public Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int id) { Id(id, "StudentId"); return _repo.GetStudentFeeDetailsByStudentAsync(id); }
 
     public Task<FeeConcessionResponse?> ApplyFeeConcessionAsync(ApplyFeeConcessionRequest r)
@@ -83,9 +83,9 @@ public class FeeService : IFeeService
     public Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsAsync(int id) { Id(id, "StudentId"); return _repo.GetFeePaymentsAsync(id); }
     public Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id) { Id(id, "FeePaymentId"); return _repo.GetFeePaymentByIdAsync(id); }
     public Task<FeeReceiptResponse?> GetReceiptAsync(string number) { Text(number, "ReceiptNumber"); return _repo.GetReceiptAsync(number.Trim()); }
-    public Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(string? search) => _repo.GetFeeCollectionAsync(search?.Trim());
-    public Task<IEnumerable<FeeDueResponse>> GetDueAsync() => _repo.GetDueAsync();
-    public Task<FeeDashboardResponse> GetDashboardAsync() => _repo.GetDashboardAsync();
-    public Task<FeeReportResponse> GetDailyReportAsync(DateTime? date) => _repo.GetDailyReportAsync(date);
-    public Task<FeeReportResponse> GetMonthlyReportAsync(int? year, int? month) { if (year.HasValue && (year < 2000 || year > 2100)) throw new ArgumentException("Invalid year."); if (month.HasValue && (month < 1 || month > 12)) throw new ArgumentException("Invalid month."); return _repo.GetMonthlyReportAsync(year, month); }
+    public Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(int? campusId, string? search) => _repo.GetFeeCollectionAsync(campusId, search?.Trim());
+    public Task<IEnumerable<FeeDueResponse>> GetDueAsync(int? campusId = null) => _repo.GetDueAsync(campusId);
+    public Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null) => _repo.GetDashboardAsync(campusId);
+    public Task<FeeReportResponse> GetDailyReportAsync(int? campusId, DateTime? date) => _repo.GetDailyReportAsync(campusId, date);
+    public Task<FeeReportResponse> GetMonthlyReportAsync(int? campusId, int? year, int? month) { if (year.HasValue && (year < 2000 || year > 2100)) throw new ArgumentException("Invalid year."); if (month.HasValue && (month < 1 || month > 12)) throw new ArgumentException("Invalid month."); return _repo.GetMonthlyReportAsync(campusId, year, month); }
 }

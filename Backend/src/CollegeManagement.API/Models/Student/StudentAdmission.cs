@@ -101,7 +101,12 @@ namespace CollegeManagement.API.Models
         [MaxLength(10)]
         public string? Pincode { get; set; }
 
-        // Academic Relations
+        // Academic Relations & Campus
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? CampusNavigation { get; set; }
+
         public int BoardId { get; set; }
 
         public int AcademicYearId { get; set; }

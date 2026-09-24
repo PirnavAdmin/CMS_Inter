@@ -7,6 +7,8 @@ namespace CollegeManagement.API.DTOs.Sections
         public int SectionId { get; set; }
         public int Id => SectionId;
 
+        public int CampusId { get; set; } = 1;
+
         public int? BoardId { get; set; }
         public string Board { get; set; } = string.Empty;
         public string BoardName { get; set; } = string.Empty;

@@ -8,8 +8,7 @@ using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Models.Timetable;
 using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Models.Holiday;
-
-
+using CollegeManagement.API.Models.Transport;
 
 namespace CollegeManagement.API.Data
 {
@@ -22,6 +21,9 @@ namespace CollegeManagement.API.Data
 
         public DbSet<User> Users { get; set; }
         public DbSet<Role> Roles { get; set; }
+        public DbSet<Permission> Permissions { get; set; }
+        public DbSet<RolePermission> RolePermissions { get; set; }
+        public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<OTP> OTPs { get; set; }
         public DbSet<AcademicYear> AcademicYears { get; set; }
         public DbSet<Group> Groups { get; set; }
@@ -48,6 +50,8 @@ namespace CollegeManagement.API.Data
         public DbSet<BoardAcademicLevel> BoardAcademicLevels { get; set; }
         public DbSet<BoardAssessment> BoardAssessments { get; set; }
         
+        public DbSet<Campus> Campuses { get; set; }
+        public DbSet<CampusBoard> CampusBoards { get; set; }
         public DbSet<Student> Students { get; set; }
         public DbSet<StudentAdmission> StudentAdmissions { get; set; }
         public DbSet<Designation> Designations { get; set; }
@@ -61,6 +65,8 @@ namespace CollegeManagement.API.Data
         public DbSet<StudentTransportAssignment> StudentTransportAssignments { get; set; } = null!;
         public DbSet<VehicleMaintenance> VehicleMaintenances { get; set; } = null!;
         public DbSet<TransportTrip> TransportTrips => Set<TransportTrip>();
+        public DbSet<TransportStudentAttendance> TransportStudentAttendances { get; set; } = null!;
+        public DbSet<TransportGpsTelemetry> TransportGpsTelemetries { get; set; } = null!;
         public DbSet<Staff> Staffs { get; set; }
         public DbSet<StaffSubjectAllocation> StaffSubjectAllocations { get; set; }
         public DbSet<Faculty> Faculties { get; set; }
@@ -84,6 +90,7 @@ namespace CollegeManagement.API.Data
         public DbSet<Section> Sections { get; set; }
 
         public DbSet<FeeType> FeeTypes { get; set; }
+        public DbSet<FineRule> FineRules { get; set; }
 
         public DbSet<FeeStructure> FeeStructures { get; set; }
 
@@ -1617,6 +1624,41 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     x.IsDeleted
                 })
                     .HasDatabaseName("IX_VehMaint_Vehicle_ServiceDate_Deleted");
+            });
+
+            // Permissions Configuration
+            modelBuilder.Entity<Permission>(entity =>
+            {
+                entity.HasIndex(e => e.PermissionCode).IsUnique();
+                entity.HasIndex(e => new { e.SubModule, e.Action }).IsUnique();
+            });
+
+            // RolePermissions Configuration
+            modelBuilder.Entity<RolePermission>(entity =>
+            {
+                entity.HasIndex(e => new { e.RoleId, e.PermissionId }).IsUnique();
+                entity.HasOne(e => e.Role)
+                    .WithMany(r => r.RolePermissions)
+                    .HasForeignKey(e => e.RoleId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Permission)
+                    .WithMany(p => p.RolePermissions)
+                    .HasForeignKey(e => e.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // UserPermissions Configuration
+            modelBuilder.Entity<UserPermission>(entity =>
+            {
+                entity.HasIndex(e => new { e.UserId, e.PermissionId }).IsUnique();
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.UserPermissions)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Permission)
+                    .WithMany(p => p.UserPermissions)
+                    .HasForeignKey(e => e.PermissionId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
 

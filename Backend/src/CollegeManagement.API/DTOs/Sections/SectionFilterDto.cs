@@ -2,6 +2,7 @@ namespace CollegeManagement.API.DTOs.Sections
 {
     public class SectionFilterDto
     {
+        public int? CampusId { get; set; }
         public int? BoardId { get; set; }
         public string? Board { get; set; }
 

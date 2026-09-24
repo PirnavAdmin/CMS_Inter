@@ -10,6 +10,8 @@ namespace CollegeManagement.API.Models.Timetable
         [Key]
         public int RoomId { get; set; }
 
+        public int CampusId { get; set; } = 1;
+
         [Required]
         [Column("RoomNumber")]
         [MaxLength(50)]

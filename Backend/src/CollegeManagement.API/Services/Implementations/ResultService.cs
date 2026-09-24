@@ -118,15 +118,20 @@ namespace CollegeManagement.API.Services.Implementations
             if (request.SectionId.HasValue && request.SectionId.Value > 0)
                 query = query.Where(m => m.SectionId == request.SectionId.Value);
 
+            if (request.CampusId.HasValue && request.CampusId.Value > 0)
+                query = query.Where(m => (m.SectionNavigation != null && m.SectionNavigation.CampusId == request.CampusId.Value) || (m.Student != null && m.Student.CampusId == request.CampusId.Value));
+
             var marks = await query.ToListAsync();
 
             if (!marks.Any())
             {
                 // Fallback: search by examId alone if specific filter didn't match
-                marks = await _context.Marks
+                var fallbackQuery = _context.Marks
                     .Include(m => m.Subject)
-                    .Where(m => m.ExaminationId == request.ExamId && m.IsActive)
-                    .ToListAsync();
+                    .Where(m => m.ExaminationId == request.ExamId && m.IsActive);
+                if (request.CampusId.HasValue && request.CampusId.Value > 0)
+                    fallbackQuery = fallbackQuery.Where(m => (m.SectionNavigation != null && m.SectionNavigation.CampusId == request.CampusId.Value) || (m.Student != null && m.Student.CampusId == request.CampusId.Value));
+                marks = await fallbackQuery.ToListAsync();
             }
 
             if (!marks.Any())
@@ -599,9 +604,9 @@ namespace CollegeManagement.API.Services.Implementations
             return true;
         }
 
-        public async Task<IEnumerable<PublishedExamResultGroupDto>> GetPublishedResultsAsync(int? boardId = null, int? academicYearId = null, int? groupId = null)
+        public async Task<IEnumerable<PublishedExamResultGroupDto>> GetPublishedResultsAsync(int? boardId = null, int? academicYearId = null, int? groupId = null, int? campusId = null)
         {
-            var cacheKey = $"published_results_{boardId ?? 0}_{academicYearId ?? 0}_{groupId ?? 0}";
+            var cacheKey = $"published_results_{boardId ?? 0}_{academicYearId ?? 0}_{groupId ?? 0}_{campusId ?? 0}";
             if (_cache.TryGetValue(cacheKey, out IEnumerable<PublishedExamResultGroupDto>? cached) && cached != null)
             {
                 return cached;
@@ -618,6 +623,8 @@ namespace CollegeManagement.API.Services.Implementations
                 marksQuery = marksQuery.Where(m => m.AcademicYearId == academicYearId.Value);
             if (groupId.HasValue && groupId.Value > 0)
                 marksQuery = marksQuery.Where(m => m.GroupId == groupId.Value);
+            if (campusId.HasValue && campusId.Value > 0)
+                marksQuery = marksQuery.Where(m => (m.SectionNavigation != null && m.SectionNavigation.CampusId == campusId.Value) || (m.Student != null && m.Student.CampusId == campusId.Value));
 
             var marks = await marksQuery.ToListAsync();
 
@@ -632,6 +639,8 @@ namespace CollegeManagement.API.Services.Implementations
                 resultsQuery = resultsQuery.Where(r => r.AcademicYearId == academicYearId.Value);
             if (groupId.HasValue && groupId.Value > 0)
                 resultsQuery = resultsQuery.Where(r => r.GroupId == groupId.Value);
+            if (campusId.HasValue && campusId.Value > 0)
+                resultsQuery = resultsQuery.Where(r => r.CampusId == campusId.Value || (r.Student != null && r.Student.CampusId == campusId.Value));
 
             var results = await resultsQuery.ToListAsync();
 
@@ -1053,9 +1062,10 @@ namespace CollegeManagement.API.Services.Implementations
             string? programId,
             int? sectionId,
             int? examId,
-            string? search = null)
+            string? search = null,
+            int? campusId = null)
         {
-            var cacheKey = $"results_ranks_{boardId}_{academicYearId}_{academicLevelId}_{groupId}_{programId}_{sectionId}_{examId}_{search}";
+            var cacheKey = $"results_ranks_{boardId}_{academicYearId}_{academicLevelId}_{groupId}_{programId}_{sectionId}_{examId}_{search}_{campusId}";
             if (_cache.TryGetValue(cacheKey, out List<RankListDto>? cachedRanks) && cachedRanks != null)
             {
                 _logger.LogInformation("Cache hit for Rank List: {Key}", cacheKey);
@@ -1072,6 +1082,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (groupId.HasValue && groupId.Value > 0) query = query.Where(m => m.GroupId == groupId.Value);
             if (sectionId.HasValue && sectionId.Value > 0) query = query.Where(m => m.SectionId == sectionId.Value);
             if (examId.HasValue && examId.Value > 0) query = query.Where(m => m.ExaminationId == examId.Value);
+            if (campusId.HasValue && campusId.Value > 0) query = query.Where(m => (m.SectionNavigation != null && m.SectionNavigation.CampusId == campusId.Value) || (m.Student != null && m.Student.CampusId == campusId.Value));
 
             var marks = await query.ToListAsync();
             if (!marks.Any()) return new List<RankListDto>();
@@ -1171,12 +1182,13 @@ namespace CollegeManagement.API.Services.Implementations
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId)
+            int examId,
+            int? campusId = null)
         {
-            var rankList = await GetCompetitionRankListAsync(boardId, academicYearId, academicLevelId, groupId, null, null, examId);
+            var rankList = await GetCompetitionRankListAsync(boardId, academicYearId, academicLevelId, groupId, null, null, examId, null, campusId);
             if (rankList.Any()) return rankList;
 
-            return await _resultRepository.GetRankListAsync(boardId, academicYearId, academicLevelId, groupId, examId);
+            return await _resultRepository.GetRankListAsync(boardId, academicYearId, academicLevelId, groupId, examId, campusId);
         }
 
         #endregion
@@ -1189,9 +1201,10 @@ namespace CollegeManagement.API.Services.Implementations
             int? academicLevelId,
             int? groupId,
             string? programId,
-            int? examId)
+            int? examId,
+            int? campusId = null)
         {
-            var cacheKey = $"results_analytics_{boardId}_{academicYearId}_{academicLevelId}_{groupId}_{programId}_{examId}";
+            var cacheKey = $"results_analytics_{boardId}_{academicYearId}_{academicLevelId}_{groupId}_{programId}_{examId}_{campusId}";
             if (_cache.TryGetValue(cacheKey, out ResultAnalyticsDto? cachedAnalytics) && cachedAnalytics != null)
             {
                 _logger.LogInformation("Cache hit for Results Analytics: {Key}", cacheKey);
@@ -1207,6 +1220,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (academicLevelId.HasValue && academicLevelId.Value > 0) query = query.Where(m => m.AcademicLevelId == academicLevelId.Value);
             if (groupId.HasValue && groupId.Value > 0) query = query.Where(m => m.GroupId == groupId.Value);
             if (examId.HasValue && examId.Value > 0) query = query.Where(m => m.ExaminationId == examId.Value);
+            if (campusId.HasValue && campusId.Value > 0) query = query.Where(m => (m.SectionNavigation != null && m.SectionNavigation.CampusId == campusId.Value) || (m.Student != null && m.Student.CampusId == campusId.Value));
 
             var marks = await query.ToListAsync();
 
@@ -1332,9 +1346,10 @@ namespace CollegeManagement.API.Services.Implementations
             int? academicLevelId = null,
             int? groupId = null,
             string? programId = null,
-            int? examId = null)
+            int? examId = null,
+            int? campusId = null)
         {
-            var analytics = await GetResultAnalyticsAsync(boardId, academicYearId, academicLevelId, groupId, programId, examId);
+            var analytics = await GetResultAnalyticsAsync(boardId, academicYearId, academicLevelId, groupId, programId, examId, campusId);
             if (analytics.FailedStudents != null && analytics.FailedStudents.Any())
             {
                 return analytics.FailedStudents.Select(f => new StudentResultDto
@@ -1350,7 +1365,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }).ToList();
             }
 
-            var students = await _resultRepository.GetFailedStudentsAsync(boardId, academicYearId, academicLevelId, groupId, examId);
+            var students = await _resultRepository.GetFailedStudentsAsync(boardId, academicYearId, academicLevelId, groupId, examId, campusId);
             return _mapper.Map<IEnumerable<StudentResultDto>>(students);
         }
 
@@ -1359,10 +1374,11 @@ namespace CollegeManagement.API.Services.Implementations
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null)
+            int? examId = null,
+            int? campusId = null)
         {
             var statistics = await _resultRepository.GetResultStatisticsAsync(
-                boardId, academicYearId, academicLevelId, groupId, examId);
+                boardId, academicYearId, academicLevelId, groupId, examId, campusId);
             return _mapper.Map<ResultStatisticsDto>(statistics);
         }
 
@@ -1459,10 +1475,11 @@ namespace CollegeManagement.API.Services.Implementations
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId)
+            int examId,
+            int? campusId = null)
         {
             return await _resultRepository.GetResultsForPdfAsync(
-                boardId, academicYearId, academicLevelId, groupId, examId);
+                boardId, academicYearId, academicLevelId, groupId, examId, campusId);
         }
 
         public async Task<IEnumerable<ExportResultDto>> GetResultsForExportAsync(
@@ -1470,10 +1487,11 @@ namespace CollegeManagement.API.Services.Implementations
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId)
+            int examId,
+            int? campusId = null)
         {
             return await _resultRepository.GetResultsForExportAsync(
-                boardId, academicYearId, academicLevelId, groupId, examId);
+                boardId, academicYearId, academicLevelId, groupId, examId, campusId);
         }
 
         public async Task<GetResultsResponseDto> GetResultsAsync(GetResultsRequestDto request)
@@ -1520,10 +1538,11 @@ namespace CollegeManagement.API.Services.Implementations
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null)
+            int? examId = null,
+            int? campusId = null)
         {
             return await _resultRepository.GetResultDashboardAsync(
-                boardId, academicYearId, academicLevelId, groupId, examId);
+                boardId, academicYearId, academicLevelId, groupId, examId, campusId);
         }
 
         public async Task<ResultReadinessDto> GetResultReadinessAsync(
@@ -1532,7 +1551,8 @@ namespace CollegeManagement.API.Services.Implementations
             int? academicLevelId,
             int? groupId,
             string? programId,
-            int examinationId)
+            int examinationId,
+            int? campusId = null)
         {
             var blockers = new List<string>();
 
@@ -1558,12 +1578,19 @@ namespace CollegeManagement.API.Services.Implementations
                 blockers.Add($"Examination status is '{exam.Status}'. Results can only be generated for 'COMPLETED' examinations.");
             }
 
-            var sections = await _context.Sections
-                .Where(s => s.IsActive && s.GroupId == exam.GroupId)
-                .ToListAsync();
+            var sectionsQuery = _context.Sections
+                .Where(s => s.IsActive && s.GroupId == exam.GroupId);
+            if (campusId.HasValue && campusId.Value > 0)
+                sectionsQuery = sectionsQuery.Where(s => s.CampusId == campusId.Value);
 
-            int studentCount = await _context.Students
-                .CountAsync(st => st.IsActive && st.GroupId == exam.GroupId);
+            var sections = await sectionsQuery.ToListAsync();
+
+            var studentsQuery = _context.Students
+                .Where(st => st.IsActive && st.GroupId == exam.GroupId);
+            if (campusId.HasValue && campusId.Value > 0)
+                studentsQuery = studentsQuery.Where(st => st.CampusId == campusId.Value);
+
+            int studentCount = await studentsQuery.CountAsync();
 
             if (studentCount == 0)
             {
@@ -1583,9 +1610,12 @@ namespace CollegeManagement.API.Services.Implementations
                     .CountAsync(s => s.IsActive && s.GroupId == exam.GroupId);
             }
 
-            var marks = await _context.Marks
-                .Where(m => m.IsActive && m.ExaminationId == examinationId)
-                .ToListAsync();
+            var marksQuery = _context.Marks
+                .Where(m => m.IsActive && m.ExaminationId == examinationId);
+            if (campusId.HasValue && campusId.Value > 0)
+                marksQuery = marksQuery.Where(m => (m.SectionNavigation != null && m.SectionNavigation.CampusId == campusId.Value) || (m.Student != null && m.Student.CampusId == campusId.Value));
+
+            var marks = await marksQuery.ToListAsync();
 
             var approvedSubjectGroups = marks
                 .GroupBy(m => new { m.SubjectId, m.SectionId })

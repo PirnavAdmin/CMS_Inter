@@ -580,6 +580,69 @@ export const apiEndpoints = {
     fees: "/api/v1/hostel/fees",
     feeById: (id) => `/api/v1/hostel/fees/${encodeURIComponent(id)}`,
   },
+
+  payroll: {
+    // Salary Structures
+    salaryStructures: "/api/Payroll/salary-structures",
+    salaryStructureById: (id) => `/api/Payroll/salary-structures/${id}`,
+
+    // Employees
+    employees: "/api/Payroll/employees",
+
+    // Salary Assignments
+    salaryAssignments: "/api/Payroll/salary-assignments",
+    salaryAssignmentById: (id) => `/api/Payroll/salary-assignments/${id}`,
+    salaryAssignmentStatus: (id, status) => `/api/Payroll/salary-assignments/${id}/status?status=${encodeURIComponent(status)}`,
+
+    // Payslips
+    payslips: "/api/Payroll/payslips",
+    payslipById: (id) => `/api/Payroll/payslips/${id}`,
+    generatePayslip: "/api/Payroll/payslips/generate",
+    generatePayslipsBulk: "/api/Payroll/payslips/generate-bulk",
+    updatePayslipStatus: (id, status) => `/api/Payroll/payslips/${id}/status?status=${encodeURIComponent(status)}`,
+    sendPayslipEmail: (id) => `/api/Payroll/payslips/${id}/send-email`,
+    payslipAdvanceRepayments: (id) => `/api/Payroll/payslips/${id}/advance-repayments`,
+
+    // Salary Revisions
+    revisions: "/api/Payroll/revisions",
+    approveRevision: (id) => `/api/Payroll/revisions/${id}/approve`,
+
+    // Bonuses
+    bonuses: "/api/Payroll/bonuses",
+    bonusById: (id) => `/api/Payroll/bonuses/${id}`,
+    approveBonus: (id) => `/api/Payroll/bonuses/${id}/approve`,
+
+    // Salary Advances
+    advances: "/api/Payroll/advances",
+    advanceById: (id) => `/api/Payroll/advances/${id}`,
+    approveAdvance: (id) => `/api/Payroll/advances/${id}/approve`,
+    advanceBalances: "/api/Payroll/advances/balances",
+    advanceRepaymentHistory: "/api/Payroll/advances/repayment-history",
+
+    // Summary
+    summary: "/api/Payroll/summary",
+    staffSummary: (staffId) => `/api/Payroll/staff/${staffId}/summary`,
+  },
+  roles: {
+    cards: "/api/v1/roles/cards",
+    list: "/api/v1/roles",
+    getById: (id) => `/api/v1/roles/${id}`,
+    create: "/api/v1/roles",
+    update: (id) => `/api/v1/roles/${id}`,
+    delete: (id) => `/api/v1/roles/${id}`,
+    modules: "/api/v1/roles/modules",
+    permissions: (roleId) => `/api/v1/roles/${roleId}/permissions`,
+    updatePermissions: (roleId) => `/api/v1/roles/${roleId}/permissions`,
+    members: (roleId) => `/api/v1/roles/${roleId}/members`,
+    userDetails: (userId) => `/api/v1/roles/users/${userId}/details`,
+    userPermissions: (userId) => `/api/v1/roles/users/${userId}/permissions`,
+    userOverrides: (userId) => `/api/v1/roles/users/${userId}/overrides`,
+    resetUserOverrides: (userId) => `/api/v1/roles/users/${userId}/overrides/reset`,
+    userAssignments: "/api/v1/roles/user-assignments",
+    assignUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/assign`,
+    removeUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/remove`,
+    myPermissions: "/api/v1/roles/my-permissions",
+  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (

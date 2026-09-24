@@ -17,6 +17,8 @@ namespace CollegeManagement.API.Models
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int AttendanceSessionId { get; set; }
 
+        public int? CampusId { get; set; } = 1;
+
         public int? TimetableId { get; set; }
 
         [Required]

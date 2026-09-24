@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Users,
   UserCheck,
@@ -14,34 +14,95 @@ import {
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStudentTable from "../components/DriverStudentTable.jsx";
-import { routeDetails } from "../data/driverMockData.js";
+import { getStudents, updateStudentAttendance, bulkAttendance, getRoute } from "../../../api/transportDriverApi.js";
 
-export default function DriverStudentsPage({
-  students = [],
-  onUpdateStatus,
-  onBatchBoardStop,
-}) {
-  const [selectedBatchStop, setSelectedBatchStop] = useState("Green Park");
+export default function DriverStudentsPage() {
+  const [students, setStudents] = useState([]);
+  const [routeDetails, setRouteDetails] = useState({ stops: [] });
+  const [selectedBatchStop, setSelectedBatchStop] = useState("");
   const [toastMessage, setToastMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const triggerToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 3500);
   };
 
+  const fetchStudentsAndRoute = async () => {
+    try {
+      setIsLoading(true);
+      const [studentsRes, routeRes] = await Promise.all([
+        getStudents(),
+        getRoute()
+      ]);
+      
+      const fetchedStudents = studentsRes.data?.students || (Array.isArray(studentsRes.data) ? studentsRes.data : []);
+      setStudents(fetchedStudents);
+
+      const fetchedRoute = routeRes.data?.route || { stops: [
+        { name: "Green Park" }, { name: "City Center" }, { name: "University Gate" }
+      ]};
+      setRouteDetails(fetchedRoute);
+      if (fetchedRoute.stops && fetchedRoute.stops.length > 0) {
+        setSelectedBatchStop(fetchedRoute.stops[0].name);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load students data.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStudentsAndRoute();
+  }, []);
+
+  const handleUpdateStatus = async (id, status) => {
+    try {
+      await updateStudentAttendance(id, { status });
+      setStudents((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, status } : s))
+      );
+      triggerToast(`Student status updated to "${status}".`);
+    } catch (err) {
+      console.error(err);
+      triggerToast("Failed to update student status.");
+    }
+  };
+
+  const handleQuickBoardStop = async () => {
+    try {
+      await bulkAttendance({ stop: selectedBatchStop, status: "Picked Up" });
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.stop === selectedBatchStop && s.status !== "Picked Up"
+            ? { ...s, status: "Picked Up" }
+            : s
+        )
+      );
+      triggerToast(`All pending students at stop "${selectedBatchStop}" marked as Boarded!`);
+    } catch (err) {
+      console.error(err);
+      triggerToast(`Failed to update batch attendance for ${selectedBatchStop}.`);
+    }
+  };
+
   const totalCount = students.length;
-  const pickedUpCount = students.filter((s) => s.status === "Picked Up").length;
+  const pickedUpCount = students.filter((s) => s.status === "Picked Up" || s.status === "Boarded").length;
   const pendingCount = students.filter((s) => s.status === "Pending").length;
   const missedCount = students.filter((s) => s.status === "Not Boarded" || s.status === "Absent").length;
 
-  const stopsList = routeDetails.stops.map((s) => s.name);
+  const stopsList = routeDetails.stops?.map((s) => s.name) || [];
 
-  const handleQuickBoardStop = () => {
-    if (onBatchBoardStop) {
-      onBatchBoardStop(selectedBatchStop);
-    }
-    triggerToast(`All pending students at stop "${selectedBatchStop}" marked as Boarded!`);
-  };
+  if (isLoading) {
+    return <div className="dp-page-container"><p>Loading students...</p></div>;
+  }
+
+  if (error) {
+    return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
+  }
 
   return (
     <div className="dp-page-container">
@@ -101,7 +162,7 @@ export default function DriverStudentsPage({
           icon={UserCheck}
           title="Picked Up / Boarded"
           value={`${pickedUpCount}`}
-          subtitle={`${Math.round((pickedUpCount / totalCount) * 100)}% Onboard`}
+          subtitle={`${totalCount > 0 ? Math.round((pickedUpCount / totalCount) * 100) : 0}% Onboard`}
           tone="success"
         />
         <DriverStatCard
@@ -125,14 +186,10 @@ export default function DriverStudentsPage({
         <DriverStudentTable
           students={students}
           stopsList={stopsList}
-          onUpdateStatus={(id, status) => {
-            if (onUpdateStatus) onUpdateStatus(id, status);
-            triggerToast(`Student status updated to "${status}".`);
-          }}
+          onUpdateStatus={handleUpdateStatus}
           showFilters={true}
         />
       </div>
     </div>
   );
 }
-

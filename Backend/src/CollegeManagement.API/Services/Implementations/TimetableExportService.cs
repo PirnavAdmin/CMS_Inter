@@ -498,43 +498,50 @@ namespace CollegeManagement.API.Services.Implementations
 
             try
             {
-                var dbConn = _context.Database.GetDbConnection();
-                var structureIds = (await dbConn.QueryAsync<int?>(
-                    "SELECT DISTINCT PeriodStructureId FROM Periods WHERE PeriodId IN @Ids AND PeriodStructureId IS NOT NULL",
-                    new { Ids = slotPeriodIds }
-                )).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                var periodsInSlots = await _context.Periods.AsNoTracking()
+                    .Where(p => slotPeriodIds.Contains(p.PeriodId))
+                    .ToListAsync();
 
-                IEnumerable<PeriodColumnModel> relevantPeriods;
-                if (structureIds.Any())
+                var structureIds = periodsInSlots
+                    .Where(p => p.PeriodStructureId.HasValue)
+                    .Select(p => p.PeriodStructureId!.Value)
+                    .Distinct()
+                    .ToList();
+
+                List<CollegeManagement.API.Models.Timetable.Period> relevantPeriods;
+                if (structureIds.Count > 0)
                 {
-                    relevantPeriods = await dbConn.QueryAsync<PeriodColumnModel>(
-                        @"SELECT PeriodId, PeriodName, StartTime, EndTime, DisplayOrder, IsBreak 
-                          FROM Periods 
-                          WHERE IsActive = 1 AND PeriodStructureId IN @StructIds 
-                          ORDER BY DisplayOrder ASC, StartTime ASC",
-                        new { StructIds = structureIds }
-                    );
+                    relevantPeriods = await _context.Periods.AsNoTracking()
+                        .Where(p => p.IsActive && p.PeriodStructureId.HasValue && structureIds.Contains(p.PeriodStructureId.Value))
+                        .OrderBy(p => p.DisplayOrder)
+                        .ThenBy(p => p.StartTime)
+                        .ToListAsync();
                 }
                 else
                 {
-                    relevantPeriods = await dbConn.QueryAsync<PeriodColumnModel>(
-                        @"SELECT PeriodId, PeriodName, StartTime, EndTime, DisplayOrder, IsBreak 
-                          FROM Periods 
-                          WHERE IsActive = 1 AND PeriodId IN @Ids 
-                          ORDER BY DisplayOrder ASC, StartTime ASC",
-                        new { Ids = slotPeriodIds }
-                    );
+                    relevantPeriods = await _context.Periods.AsNoTracking()
+                        .Where(p => p.IsActive && slotPeriodIds.Contains(p.PeriodId))
+                        .OrderBy(p => p.DisplayOrder)
+                        .ThenBy(p => p.StartTime)
+                        .ToListAsync();
                 }
 
-                var periodList = relevantPeriods.ToList();
-                if (periodList.Count > 0)
+                if (relevantPeriods.Count > 0)
                 {
-                    return periodList;
+                    return relevantPeriods.Select(p => new PeriodColumnModel
+                    {
+                        PeriodId = p.PeriodId,
+                        PeriodName = p.PeriodName,
+                        StartTime = p.StartTime,
+                        EndTime = p.EndTime,
+                        DisplayOrder = p.DisplayOrder,
+                        IsBreak = p.IsBreak
+                    }).ToList();
                 }
             }
             catch
             {
-                // Fallback safely to slot-derived columns if raw query fails
+                // Fallback safely to slot-derived columns if query fails
             }
 
             return slots

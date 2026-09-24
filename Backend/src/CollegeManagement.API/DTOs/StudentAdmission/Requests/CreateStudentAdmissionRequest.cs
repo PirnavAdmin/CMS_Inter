@@ -21,6 +21,8 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
 
         // Academic Relations
+        public int? CampusId { get; set; } = 1;
+
         [Required]
         public int BoardId { get; set; }
 

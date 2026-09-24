@@ -21,6 +21,11 @@ namespace CollegeManagement.API.DTOs.Attendance.Requests
         public string? AttendanceDate { get; set; }
 
         /// <summary>
+        /// Gets or sets the campus identifier.
+        /// </summary>
+        public int? CampusId { get; set; }
+
+        /// <summary>
         /// Gets or sets the board identifier.
         /// </summary>
         public int? BoardId { get; set; }

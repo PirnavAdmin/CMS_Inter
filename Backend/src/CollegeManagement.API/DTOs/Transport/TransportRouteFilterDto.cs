@@ -7,6 +7,8 @@ namespace CollegeManagement.API.Dtos.Transport
 
         public string? Search { get; set; }
 
+        public int? CampusId { get; set; }
+
         public bool? Status { get; set; }
 
         public string? BusType { get; set; }
