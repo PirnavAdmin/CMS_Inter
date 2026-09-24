@@ -23,7 +23,14 @@ namespace CollegeManagement.API.Repositories
         // GET ALL STUDENTS
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync(int? campusId = null)
+        public async Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
@@ -48,6 +55,30 @@ namespace CollegeManagement.API.Repositories
                 {
                     result = result.Where(x => x.CampusId == campusId.Value).ToList();
                 }
+                if (boardId.HasValue && boardId.Value > 0)
+                {
+                    result = result.Where(x => x.BoardId == boardId.Value).ToList();
+                }
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                {
+                    result = result.Where(x => x.AcademicLevelId == academicLevelId.Value).ToList();
+                }
+                if (groupId.HasValue && groupId.Value > 0)
+                {
+                    result = result.Where(x => x.GroupId == groupId.Value).ToList();
+                }
+                if (programId.HasValue && programId.Value > 0)
+                {
+                    result = result.Where(x => x.ProgramId == programId.Value).ToList();
+                }
+                if (sectionId.HasValue && sectionId.Value > 0)
+                {
+                    result = result.Where(x => x.SectionId == sectionId.Value).ToList();
+                }
+                if (!string.IsNullOrWhiteSpace(status))
+                {
+                    result = result.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
 
                 return result;
             }
@@ -62,6 +93,30 @@ namespace CollegeManagement.API.Repositories
                     if (campusId.HasValue && campusId.Value > 0)
                     {
                         result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                    }
+                    if (boardId.HasValue && boardId.Value > 0)
+                    {
+                        result = result.Where(x => x.BoardId == boardId.Value).ToList();
+                    }
+                    if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    {
+                        result = result.Where(x => x.AcademicLevelId == academicLevelId.Value).ToList();
+                    }
+                    if (groupId.HasValue && groupId.Value > 0)
+                    {
+                        result = result.Where(x => x.GroupId == groupId.Value).ToList();
+                    }
+                    if (programId.HasValue && programId.Value > 0)
+                    {
+                        result = result.Where(x => x.ProgramId == programId.Value).ToList();
+                    }
+                    if (sectionId.HasValue && sectionId.Value > 0)
+                    {
+                        result = result.Where(x => x.SectionId == sectionId.Value).ToList();
+                    }
+                    if (!string.IsNullOrWhiteSpace(status))
+                    {
+                        result = result.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
                     }
 
                     return result;
@@ -80,6 +135,18 @@ namespace CollegeManagement.API.Repositories
 
                     if (campusId.HasValue && campusId.Value > 0)
                         query = query.Where(s => s.CampusId == campusId.Value);
+                    if (boardId.HasValue && boardId.Value > 0)
+                        query = query.Where(s => s.BoardId == boardId.Value);
+                    if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                        query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
+                    if (groupId.HasValue && groupId.Value > 0)
+                        query = query.Where(s => s.GroupId == groupId.Value);
+                    if (programId.HasValue && programId.Value > 0)
+                        query = query.Where(s => s.ProgramId == programId.Value);
+                    if (sectionId.HasValue && sectionId.Value > 0)
+                        query = query.Where(s => s.SectionId == sectionId.Value);
+                    if (!string.IsNullOrWhiteSpace(status))
+                        query = query.Where(s => s.Status == status);
 
                     return await query
                         .OrderBy(s => s.StudentName)
