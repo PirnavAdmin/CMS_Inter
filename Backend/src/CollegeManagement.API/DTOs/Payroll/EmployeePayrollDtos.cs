@@ -1,4 +1,4 @@
-﻿namespace CollegeManagement.API.DTOs.Payroll
+namespace CollegeManagement.API.DTOs.Payroll
 {
     public class PayrollEmployeeDto
     {
@@ -35,5 +35,11 @@
         public int StaffId { get; set; }
         public int SalaryStructureId { get; set; }
         public DateTime EffectiveFrom { get; set; }
+        public string? PaymentMode { get; set; }
+        public string? BankName { get; set; }
+        public string? AccountNumber { get; set; }
+        public string? IFSCCode { get; set; }
+        public string? PANNumber { get; set; }
+        public string? UANNumber { get; set; }
     }
 }
