@@ -146,9 +146,9 @@ namespace CollegeManagement.API.Services.Implementations
             return true;
         }
 
-        public async Task<List<RoleCardDto>> GetRoleCardsAsync()
+        public async Task<List<RoleCardDto>> GetRoleCardsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _permissionRepository.GetRoleCardsAsync();
+            return await _permissionRepository.GetRoleCardsAsync(campusId, boardId, academicYearId);
         }
 
         public async Task<RolePermissionsMatrixResponseDto> GetRolePermissionMatrixAsync(int roleId, int? userId = null)
@@ -208,9 +208,9 @@ namespace CollegeManagement.API.Services.Implementations
             return await _permissionRepository.GetUserRoleDetailsAsync(userId);
         }
 
-        public async Task<List<UserRoleAssignmentDto>> GetRoleMembersAsync(int roleId)
+        public async Task<List<UserRoleAssignmentDto>> GetRoleMembersAsync(int roleId, int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _permissionRepository.GetRoleMembersAsync(roleId);
+            return await _permissionRepository.GetRoleMembersAsync(roleId, campusId, boardId, academicYearId);
         }
 
         public async Task<List<ModulePermissionMatrixDto>> GetUserPermissionsAsync(int userId)
