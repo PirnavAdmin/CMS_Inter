@@ -139,6 +139,8 @@ export const apiEndpoints = {
     getScholarshipById: (scholarshipId) => `/api/v1/fees/scholarships/${encodeURIComponent(scholarshipId)}`,
     updateScholarship: (scholarshipId) => `/api/v1/fees/scholarships/${encodeURIComponent(scholarshipId)}`,
     deleteScholarship: (scholarshipId) => `/api/v1/fees/scholarships/${encodeURIComponent(scholarshipId)}`,
+    fineRules: "/api/v1/fee-setup/fine-rules",
+    fineRuleById: (fineRuleId) => `/api/v1/fee-setup/fine-rules/${encodeURIComponent(fineRuleId)}`,
     assign: "/api/v1/fees/student-fees/assign",
     assignStudentFee: "/api/v1/fees/student-fees/assign",
     getStudentFee: (studentFeeId) => `/api/v1/fees/student-fees/${encodeURIComponent(studentFeeId)}`,
@@ -567,6 +569,16 @@ export const apiEndpoints = {
     routeReports: "/api/v1/transport/reports/routes",
     studentReports: "/api/v1/transport/reports/students",
     maintenanceReports: "/api/v1/transport/reports/maintenance",
+  },
+  hostel: {
+    blocks: "/api/v1/hostel/blocks",
+    blockById: (id) => `/api/v1/hostel/blocks/${encodeURIComponent(id)}`,
+    roomTypes: "/api/v1/hostel/room-types",
+    roomTypeById: (id) => `/api/v1/hostel/room-types/${encodeURIComponent(id)}`,
+    rooms: "/api/v1/hostel/rooms",
+    roomById: (id) => `/api/v1/hostel/rooms/${encodeURIComponent(id)}`,
+    fees: "/api/v1/hostel/fees",
+    feeById: (id) => `/api/v1/hostel/fees/${encodeURIComponent(id)}`,
   },
 };
 
