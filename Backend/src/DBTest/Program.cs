@@ -27,6 +27,12 @@ namespace DBTest
 
         static async Task Main(string[] args)
         {
+            if (args.Length > 0 && args[0] == "--deploy-roles")
+            {
+                await DeployRoles.RunAsync();
+                return;
+            }
+
             Console.OutputEncoding = Encoding.UTF8;
             Console.WriteLine("================================================================================");
             Console.WriteLine("          LIVE DATABASE INSPECTION & REPORTS CALCULATION VERIFICATION           ");

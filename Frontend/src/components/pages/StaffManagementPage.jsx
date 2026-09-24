@@ -37,6 +37,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
@@ -681,7 +682,6 @@ export const NON_TEACHING_ROLE_NAMES = [
 ];
 
 const teachingFields = [
-  ["board", "Board Name", "select", [], true],
   ["employeeId", "Employee ID", "text", [], true],
   ["role", "Role", "search-select", TEACHING_ROLE_NAMES, true],
   ["firstName", "First Name", "text", [], true],
@@ -703,7 +703,6 @@ const teachingFields = [
 const nonTeachingSteps = [
   // Step 0: Personal Information
   [
-    ["board", "Board Name", "select", [], true],
     ["employeeId", "Employee ID"],
     ["role", "Role", "search-select", NON_TEACHING_ROLE_NAMES, true],
     ["firstName", "First Name"],
@@ -3577,9 +3576,15 @@ function TypeSelect() {
 // ----------------------------------------------------------------------
 function TeachingForm({ records, setRecords, existing }) {
   const n = useNavigate();
+  const { selectedCampus } = useCampusContext();
   const { boards, selectedBoard } = useAcademicContext();
   const { departments: apiDepts, designations: apiDesigs } = useStaffTypeOptions("Teaching");
   const { roles: apiRoles, roleObjects: apiRoleObjects } = useStaffRoles("Teaching");
+
+  const activeCampusId = selectedCampus?.campusId || selectedCampus?.id;
+  const activeCampusName = selectedCampus?.name || selectedCampus?.campusName || "";
+  const activeCampusCode = selectedCampus?.code || selectedCampus?.campusCode || "";
+
   const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
   const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || activeBoardCode || "";
   const activeBoardId = selectedBoard?.id || selectedBoard?.boardId || undefined;
@@ -3590,6 +3595,9 @@ function TeachingForm({ records, setRecords, existing }) {
       roleName: "",
       roleId: undefined,
       employeeId: "",
+      campusId: activeCampusId ? Number(activeCampusId) || activeCampusId : undefined,
+      campusName: activeCampusName,
+      campusCode: activeCampusCode,
       board: activeBoardName,
       boardName: activeBoardName,
       boardCode: activeBoardCode,
@@ -3605,16 +3613,19 @@ function TeachingForm({ records, setRecords, existing }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!existing && activeBoardName && !values.board) {
+    if (!existing) {
       setValues((v) => ({
         ...v,
-        board: activeBoardName,
-        boardName: activeBoardName,
-        boardCode: activeBoardCode,
-        ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
+        campusId: v.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+        campusName: v.campusName || activeCampusName,
+        campusCode: v.campusCode || activeCampusCode,
+        board: v.board || activeBoardName,
+        boardName: v.boardName || activeBoardName,
+        boardCode: v.boardCode || activeBoardCode,
+        boardId: v.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
       }));
     }
-  }, [activeBoardName, activeBoardCode, activeBoardId, existing, values.board]);
+  }, [activeCampusId, activeCampusName, activeCampusCode, activeBoardName, activeBoardCode, activeBoardId, existing]);
 
   // Fetch next employee ID dynamically from Settings Number Series / Staff API
   useEffect(() => {
@@ -3646,10 +3657,16 @@ function TeachingForm({ records, setRecords, existing }) {
 
     const payload = {
       ...values,
+      campusId: values.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+      campusName: values.campusName || activeCampusName,
+      campusCode: values.campusCode || activeCampusCode,
+      board: values.board || activeBoardName,
+      boardName: values.boardName || activeBoardName,
+      boardCode: resolvedCode !== "—" ? resolvedCode : (values.boardCode || activeBoardCode),
+      boardId: values.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
       role: values.role || "Faculty",
       roleName: values.roleName || values.role || "Faculty",
       roleId: Number(resolvedRoleId),
-      boardCode: resolvedCode !== "—" ? resolvedCode : values.boardCode,
       fullName,
       staffType: "Teaching",
       profileStatus: existing?.profileStatus || "Link Sent",
@@ -3771,9 +3788,15 @@ function TeachingForm({ records, setRecords, existing }) {
 // ----------------------------------------------------------------------
 function NonTeachingForm({ records, setRecords, existing }) {
   const n = useNavigate();
+  const { selectedCampus } = useCampusContext();
   const { boards, selectedBoard } = useAcademicContext();
   const { departments: apiDepts, designations: apiDesigs } = useStaffTypeOptions("Non-Teaching");
   const { roles: apiRoles, roleObjects: apiRoleObjects } = useStaffRoles("Non-Teaching");
+
+  const activeCampusId = selectedCampus?.campusId || selectedCampus?.id;
+  const activeCampusName = selectedCampus?.name || selectedCampus?.campusName || "";
+  const activeCampusCode = selectedCampus?.code || selectedCampus?.campusCode || "";
+
   const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
   const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || activeBoardCode || "";
   const activeBoardId = selectedBoard?.id || selectedBoard?.boardId || undefined;
@@ -3795,6 +3818,9 @@ function NonTeachingForm({ records, setRecords, existing }) {
       roleName: "",
       roleId: undefined,
       employeeId: "",
+      campusId: activeCampusId ? Number(activeCampusId) || activeCampusId : undefined,
+      campusName: activeCampusName,
+      campusCode: activeCampusCode,
       board: activeBoardName,
       boardName: activeBoardName,
       boardCode: activeBoardCode,
@@ -3811,16 +3837,19 @@ function NonTeachingForm({ records, setRecords, existing }) {
   const [editingFromReview, setEditingFromReview] = useState(false);
 
   useEffect(() => {
-    if (!existing && activeBoardName && !values.board) {
+    if (!existing) {
       setValues((v) => ({
         ...v,
-        board: activeBoardName,
-        boardName: activeBoardName,
-        boardCode: activeBoardCode,
-        ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
+        campusId: v.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+        campusName: v.campusName || activeCampusName,
+        campusCode: v.campusCode || activeCampusCode,
+        board: v.board || activeBoardName,
+        boardName: v.boardName || activeBoardName,
+        boardCode: v.boardCode || activeBoardCode,
+        boardId: v.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
       }));
     }
-  }, [activeBoardName, activeBoardCode, activeBoardId, existing, values.board]);
+  }, [activeCampusId, activeCampusName, activeCampusCode, activeBoardName, activeBoardCode, activeBoardId, existing]);
 
   // Fetch next employee ID dynamically from Settings Number Series / Staff API
   useEffect(() => {
@@ -3961,12 +3990,18 @@ function NonTeachingForm({ records, setRecords, existing }) {
 
     const payload = {
       ...values,
+      campusId: values.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+      campusName: values.campusName || activeCampusName,
+      campusCode: values.campusCode || activeCampusCode,
+      board: values.board || activeBoardName,
+      boardName: values.boardName || activeBoardName,
+      boardCode: resolvedCode !== "—" ? resolvedCode : (values.boardCode || activeBoardCode),
+      boardId: values.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
       email: values.email?.trim() ? values.email.trim() : null,
       qualification: values.qualification?.trim() ? values.qualification.trim() : null,
       role: values.role || "Cleaner",
       roleName: values.roleName || values.role || "Cleaner",
       roleId: Number(resolvedRoleId),
-      boardCode: resolvedCode !== "—" ? resolvedCode : values.boardCode,
       fullName,
       staffType: "Non-Teaching",
       profileStatus: "Completed",

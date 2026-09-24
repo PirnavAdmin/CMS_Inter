@@ -77,6 +77,30 @@ export const apiEndpoints = {
     history: (boardId) => `/api/v1/boards/${boardId}/history`,
     summary: "/api/v1/boards/summary",
   },
+  campuses: {
+    list: "/api/v1/campuses",
+    getAll: "/api/v1/campuses",
+    create: "/api/v1/campuses",
+    activeHeader: "/api/v1/campuses/active-header",
+    stats: "/api/v1/campuses/stats",
+    getById: (id) => `/api/v1/campuses/${id}`,
+    update: (id) => `/api/v1/campuses/${id}`,
+    delete: (id) => `/api/v1/campuses/${id}`,
+    getBoards: (id) => `/api/v1/campuses/${id}/boards`,
+    toggleStatus: (id) => `/api/v1/campuses/${id}/status`,
+  },
+  campus: {
+    list: "/api/v1/campuses",
+    getAll: "/api/v1/campuses",
+    create: "/api/v1/campuses",
+    activeHeader: "/api/v1/campuses/active-header",
+    stats: "/api/v1/campuses/stats",
+    getById: (id) => `/api/v1/campuses/${id}`,
+    update: (id) => `/api/v1/campuses/${id}`,
+    delete: (id) => `/api/v1/campuses/${id}`,
+    getBoards: (id) => `/api/v1/campuses/${id}/boards`,
+    toggleStatus: (id) => `/api/v1/campuses/${id}/status`,
+  },
   academicYears: {
     list: "/api/v1/academic-years",
     getAll: "/api/v1/academic-years",
@@ -583,45 +607,53 @@ export const apiEndpoints = {
 
   payroll: {
     // Salary Structures
-    salaryStructures: "/api/Payroll/salary-structures",
-    salaryStructureById: (id) => `/api/Payroll/salary-structures/${id}`,
+    salaryStructures: "/api/v1/Payroll/salary-structures",
+    createSalaryStructure: "/api/v1/Payroll/salary-structures",
+    salaryStructureById: (id) => `/api/v1/Payroll/salary-structures/${id}`,
+    updateSalaryStructure: (id) => `/api/v1/Payroll/salary-structures/${id}`,
+    deleteSalaryStructure: (id) => `/api/v1/Payroll/salary-structures/${id}`,
 
     // Employees
-    employees: "/api/Payroll/employees",
+    employees: "/api/v1/Payroll/employees",
 
     // Salary Assignments
-    salaryAssignments: "/api/Payroll/salary-assignments",
-    salaryAssignmentById: (id) => `/api/Payroll/salary-assignments/${id}`,
-    salaryAssignmentStatus: (id, status) => `/api/Payroll/salary-assignments/${id}/status?status=${encodeURIComponent(status)}`,
+    salaryAssignments: "/api/v1/Payroll/salary-assignments",
+    createSalaryAssignment: "/api/v1/Payroll/salary-assignments",
+    salaryAssignmentById: (id) => `/api/v1/Payroll/salary-assignments/${id}`,
+    deleteSalaryAssignment: (id) => `/api/v1/Payroll/salary-assignments/${id}`,
+    salaryAssignmentStatus: (id, status) => `/api/v1/Payroll/salary-assignments/${id}/status${status ? `?status=${encodeURIComponent(status)}` : ""}`,
 
     // Payslips
-    payslips: "/api/Payroll/payslips",
-    payslipById: (id) => `/api/Payroll/payslips/${id}`,
-    generatePayslip: "/api/Payroll/payslips/generate",
-    generatePayslipsBulk: "/api/Payroll/payslips/generate-bulk",
-    updatePayslipStatus: (id, status) => `/api/Payroll/payslips/${id}/status?status=${encodeURIComponent(status)}`,
-    sendPayslipEmail: (id) => `/api/Payroll/payslips/${id}/send-email`,
-    payslipAdvanceRepayments: (id) => `/api/Payroll/payslips/${id}/advance-repayments`,
+    payslips: "/api/v1/Payroll/payslips",
+    payslipById: (id) => `/api/v1/Payroll/payslips/${id}`,
+    generatePayslip: "/api/v1/Payroll/payslips/generate",
+    generatePayslipsBulk: "/api/v1/Payroll/payslips/generate-bulk",
+    updatePayslipStatus: (id, status) => `/api/v1/Payroll/payslips/${id}/status${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+    sendPayslipEmail: (id) => `/api/v1/Payroll/payslips/${id}/send-email`,
+    payslipAdvanceRepayments: (id) => `/api/v1/Payroll/payslips/${id}/advance-repayments`,
 
     // Salary Revisions
-    revisions: "/api/Payroll/revisions",
-    approveRevision: (id) => `/api/Payroll/revisions/${id}/approve`,
+    revisions: "/api/v1/Payroll/revisions",
+    createRevision: "/api/v1/Payroll/revisions",
+    approveRevision: (id) => `/api/v1/Payroll/revisions/${id}/approve`,
 
     // Bonuses
-    bonuses: "/api/Payroll/bonuses",
-    bonusById: (id) => `/api/Payroll/bonuses/${id}`,
-    approveBonus: (id) => `/api/Payroll/bonuses/${id}/approve`,
+    bonuses: "/api/v1/Payroll/bonuses",
+    createBonus: "/api/v1/Payroll/bonuses",
+    bonusById: (id) => `/api/v1/Payroll/bonuses/${id}`,
+    approveBonus: (id) => `/api/v1/Payroll/bonuses/${id}/approve`,
 
     // Salary Advances
-    advances: "/api/Payroll/advances",
-    advanceById: (id) => `/api/Payroll/advances/${id}`,
-    approveAdvance: (id) => `/api/Payroll/advances/${id}/approve`,
-    advanceBalances: "/api/Payroll/advances/balances",
-    advanceRepaymentHistory: "/api/Payroll/advances/repayment-history",
+    advances: "/api/v1/Payroll/advances",
+    createAdvance: "/api/v1/Payroll/advances",
+    advanceById: (id) => `/api/v1/Payroll/advances/${id}`,
+    approveAdvance: (id) => `/api/v1/Payroll/advances/${id}/approve`,
+    advanceBalances: "/api/v1/Payroll/advances/balances",
+    advanceRepaymentHistory: "/api/v1/Payroll/advances/repayment-history",
 
     // Summary
-    summary: "/api/Payroll/summary",
-    staffSummary: (staffId) => `/api/Payroll/staff/${staffId}/summary`,
+    summary: "/api/v1/Payroll/summary",
+    staffSummary: (staffId) => `/api/v1/Payroll/staff/${staffId}/summary`,
   },
   roles: {
     cards: "/api/v1/roles/cards",
