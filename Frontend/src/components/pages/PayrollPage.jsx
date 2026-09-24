@@ -16,6 +16,9 @@ import {
   loadSalaryData, saveSalaryData, formatINR, calculateGrossSalary,
   calculateTotalDeductions, calculateNetSalary, calculateLOP, calculateOvertime
 } from "@/data/payrollData.js";
+import apiClient from "@/api/apiClient.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import * as payrollApi from "@/api/payrollApi.js";
 import "./PayrollPage.css";
 
 // 3D Unique Icons
@@ -65,6 +68,207 @@ export default function PayrollPage({ mode = "payroll" }) {
     saveSalaryData(store);
   }, [store]);
 
+  // Live API Synchronization: Fetch structures, employees, assignments, payslips, revisions, bonuses, advances, summary
+  useEffect(() => {
+    let isMounted = true;
+    const fetchPayrollFromApi = async () => {
+      try {
+        const [structRes, empRes, asgnRes, slipRes, revRes, bonusRes, advRes, summaryRes] = await Promise.allSettled([
+          payrollApi.getSalaryStructures(),
+          payrollApi.getEmployees(),
+          payrollApi.getSalaryAssignments(),
+          payrollApi.getPayslips(),
+          payrollApi.getSalaryRevisions(),
+          payrollApi.getBonuses(),
+          payrollApi.getSalaryAdvances(),
+          payrollApi.getPayrollSummary(),
+        ]);
+
+        if (!isMounted) return;
+
+        setStore((prev) => {
+          let updated = { ...prev };
+
+          // Structures
+          if (structRes.status === "fulfilled" && Array.isArray(structRes.value) && structRes.value.length > 0) {
+            updated.structures = structRes.value.map((s) => ({
+              id: s.id ? `struct-${s.id}` : s.id,
+              numericId: s.id,
+              name: s.structureName || s.name || `Structure #${s.id}`,
+              staffType: s.staffType || "Both",
+              department: s.departmentName || s.department || "General",
+              designation: s.designationName || s.designation || "All",
+              basicPay: Number(s.basicPay || 0),
+              hra: Number(s.hra || 0),
+              da: Number(s.da || 0),
+              transportAllowance: Number(s.conveyanceAllowance || s.transportAllowance || 0),
+              medicalAllowance: Number(s.medicalAllowance || 0),
+              specialAllowance: Number(s.specialAllowance || 0),
+              academicAllowance: Number(s.academicAllowance || 0),
+              otherAllowances: Number(s.otherAllowance || s.otherAllowances || 0),
+              pf: Number(s.pf || 0),
+              employerPf: Number(s.employerPf || s.pf || 0),
+              esi: Number(s.esi || 0),
+              professionalTax: Number(s.professionalTax || 0),
+              tds: Number(s.tds || 0),
+              insurance: Number(s.insuranceOtherDeduction || s.insurance || 0),
+              otherDeductions: Number(s.otherDeductions || 0),
+              grossSalary: Number(s.grossSalary || (Number(s.basicPay || 0) + Number(s.hra || 0) + Number(s.da || 0) + Number(s.conveyanceAllowance || 0) + Number(s.medicalAllowance || 0) + Number(s.otherAllowance || 0))),
+              totalDeductions: Number(s.totalDeductions || (Number(s.pf || 0) + Number(s.esi || 0) + Number(s.professionalTax || 0) + Number(s.tds || 0) + Number(s.insuranceOtherDeduction || 0))),
+              netSalary: Number(s.netSalary || 0),
+              assignedCount: Number(s.assignedStaff || s.assignedCount || 0),
+              status: s.status || "Active",
+            }));
+          }
+
+          // Employees & Assignments
+          const empList = empRes.status === "fulfilled" && Array.isArray(empRes.value) ? empRes.value : [];
+          const asgnList = asgnRes.status === "fulfilled" && Array.isArray(asgnRes.value) ? asgnRes.value : [];
+
+          if (empList.length > 0 || asgnList.length > 0) {
+            const rawAssignments = asgnList.length > 0 ? asgnList : empList;
+            updated.assignments = rawAssignments.map((e) => ({
+              id: e.assignmentId ? `asgn-${e.assignmentId}` : `emp-${e.staffId || e.id}`,
+              numericId: e.assignmentId || e.staffId || e.id,
+              assignmentId: e.assignmentId,
+              staffId: e.employeeId || `STF-${e.staffId || e.id}`,
+              rawStaffId: e.staffId || e.id,
+              staffName: e.staffName || e.name || `Staff #${e.staffId || e.id}`,
+              staffType: e.staffType || "Teaching",
+              department: e.departmentName || e.department || "General",
+              designation: e.designation || e.designationName || "-",
+              structureId: e.salaryStructureId ? `struct-${e.salaryStructureId}` : null,
+              rawStructureId: e.salaryStructureId,
+              structureName: e.structureName || "Standard Grade",
+              basicPay: Number(e.basicPay || 0),
+              grossSalary: Number(e.grossSalary || 0),
+              totalDeductions: Number(e.totalDeductions || 0),
+              netSalary: Number(e.netSalary || 0),
+              effectiveFrom: e.effectiveFrom ? String(e.effectiveFrom).split("T")[0] : "",
+              status: e.status || "Active",
+              paymentMode: e.paymentMode || "Bank Transfer",
+              bankName: e.bankName || "State Bank of India",
+              accountNumber: e.accountNumber || "9876543210123",
+              ifscCode: e.ifscCode || "SBIN0001234",
+              panNumber: e.panNumber || "ABCDE1234F",
+              uanNumber: e.uanNumber || "100987654321",
+            }));
+            updated.apiEmployees = empList;
+          }
+
+          // Payslips
+          if (slipRes.status === "fulfilled" && Array.isArray(slipRes.value) && slipRes.value.length > 0) {
+            updated.payslips = slipRes.value.map((p) => {
+              const monthStr = p.payrollYear && p.payrollMonth
+                ? `${p.payrollYear}-${String(p.payrollMonth).padStart(2, "0")}`
+                : p.month || "2026-09";
+              return {
+                id: p.payslipId ? `slip-${p.payslipId}` : p.id,
+                numericId: p.payslipId || p.id,
+                staffId: p.employeeId || `STF-${p.staffId}`,
+                rawStaffId: p.staffId,
+                staffName: p.staffName,
+                staffType: p.staffType,
+                department: p.departmentName || p.department,
+                designation: p.designation,
+                month: monthStr,
+                periodLabel: p.periodLabel || monthStr,
+                year: p.payrollYear || 2026,
+                basicPay: Number(p.basicPay || 0),
+                hra: Number(p.hra || 0),
+                da: Number(p.da || 0),
+                grossSalary: Number(p.grossSalary || 0),
+                totalDeductions: Number(p.totalDeductions || 0),
+                netSalary: Number(p.netSalary || 0),
+                status: p.payslipStatus || p.status || "Generated",
+                paymentMode: p.paymentMode || "Bank Transfer",
+                generatedAt: p.generatedAt || new Date().toISOString(),
+              };
+            });
+          }
+
+          // Revisions
+          if (revRes.status === "fulfilled" && Array.isArray(revRes.value) && revRes.value.length > 0) {
+            updated.revisions = revRes.value.map((r) => ({
+              id: r.id ? `rev-${r.id}` : r.id,
+              numericId: r.id,
+              staffId: r.employeeId || `STF-${r.staffId}`,
+              rawStaffId: r.staffId,
+              staffName: r.staffName || `Staff #${r.staffId}`,
+              staffType: r.staffType || "Teaching",
+              department: r.departmentName || r.department || "General",
+              designation: r.designation || "-",
+              currentSalary: Number(r.previousGrossSalary || r.currentSalary || 0),
+              revisedSalary: Number(r.newGrossSalary || r.revisedSalary || 0),
+              percentage: Number(r.revisionPercentage || 0),
+              effectiveDate: r.effectiveDate ? String(r.effectiveDate).split("T")[0] : "",
+              reason: r.reason || "",
+              status: r.status || "Pending",
+              approvedBy: r.approvedBy || null,
+            }));
+          }
+
+          // Bonuses
+          if (bonusRes.status === "fulfilled" && Array.isArray(bonusRes.value) && bonusRes.value.length > 0) {
+            updated.bonuses = bonusRes.value.map((b) => ({
+              id: b.id ? `bonus-${b.id}` : b.id,
+              numericId: b.id,
+              staffId: b.employeeId || `STF-${b.staffId}`,
+              rawStaffId: b.staffId,
+              staffName: b.staffName || `Staff #${b.staffId}`,
+              staffType: b.staffType || "Teaching",
+              department: b.departmentName || b.department || "General",
+              type: b.bonusType || "Performance Bonus",
+              bonusType: b.bonusType || "Performance Bonus",
+              amount: Number(b.bonusAmount || 0),
+              bonusPercentage: Number(b.bonusPercentage || 0),
+              month: b.payrollYear && b.payrollMonth ? `${b.payrollYear}-${String(b.payrollMonth).padStart(2, "0")}` : "2026-09",
+              reason: b.reason || "",
+              status: b.status || "Pending",
+              approvedBy: b.approvedBy || null,
+            }));
+          }
+
+          // Salary Advances / Loans
+          if (advRes.status === "fulfilled" && Array.isArray(advRes.value) && advRes.value.length > 0) {
+            updated.loans = advRes.value.map((a) => ({
+              id: a.id ? `adv-${a.id}` : a.id,
+              numericId: a.id,
+              staffId: a.employeeId || `STF-${a.staffId}`,
+              rawStaffId: a.staffId,
+              staffName: a.staffName || `Staff #${a.staffId}`,
+              staffType: a.staffType || "Teaching",
+              department: a.departmentName || a.department || "General",
+              advanceAmount: Number(a.advanceAmount || 0),
+              loanAmount: Number(a.advanceAmount || 0),
+              monthlyDeduction: Number(a.monthlyDeduction || 0),
+              emi: Number(a.monthlyDeduction || 0),
+              repaymentMonths: Number(a.repaymentMonths || 0),
+              tenureMonths: Number(a.repaymentMonths || 0),
+              disbursedDate: a.advanceDate ? String(a.advanceDate).split("T")[0] : "",
+              advanceDate: a.advanceDate ? String(a.advanceDate).split("T")[0] : "",
+              reason: a.reason || "",
+              status: a.status || "Pending",
+              approvedBy: a.approvedBy || null,
+            }));
+          }
+
+          // Summary Metrics from API
+          if (summaryRes.status === "fulfilled" && summaryRes.value && typeof summaryRes.value === "object") {
+            updated.apiSummary = summaryRes.value;
+          }
+
+          return updated;
+        });
+      } catch (err) {
+        console.warn("Payroll API sync fallback to local storage:", err);
+      }
+    };
+
+    fetchPayrollFromApi();
+    return () => { isMounted = false; };
+  }, []);
+
   // Derived KPI metrics
   const kpiData = useMemo(() => {
     const assignments = Array.isArray(store?.assignments) ? store.assignments : [];
@@ -93,8 +297,17 @@ export default function PayrollPage({ mode = "payroll" }) {
   }, [store]);
 
   // Handler helpers
-  const handleHoldToggle = (asgnId, currentStatus) => {
+  const handleHoldToggle = async (asgnId, currentStatus) => {
     const nextStatus = currentStatus === "On Hold" ? "Active" : "On Hold";
+    const numericId = parseInt(String(asgnId).replace(/\D+/g, ""), 10);
+    if (numericId) {
+      try {
+        await payrollApi.updateSalaryAssignmentStatus(numericId, nextStatus);
+      } catch (err) {
+        console.warn("Salary assignment status API call fallback:", err);
+      }
+    }
+
     setStore((prev) => ({
       ...prev,
       assignments: prev.assignments.map((a) => (a.id === asgnId ? { ...a, status: nextStatus } : a)),
@@ -103,7 +316,16 @@ export default function PayrollPage({ mode = "payroll" }) {
     setModal(null);
   };
 
-  const handleDeleteStructure = (structId) => {
+  const handleDeleteStructure = async (structId) => {
+    const numericId = parseInt(String(structId).replace(/\D+/g, ""), 10);
+    if (numericId) {
+      try {
+        await payrollApi.deleteSalaryStructure(numericId);
+      } catch (err) {
+        console.warn("Delete salary structure API call fallback:", err);
+      }
+    }
+
     setStore((prev) => ({
       ...prev,
       structures: prev.structures.filter((s) => s.id !== structId),
@@ -112,7 +334,40 @@ export default function PayrollPage({ mode = "payroll" }) {
     setModal(null);
   };
 
-  const handleApproveItem = (type, itemId) => {
+  const handleDeleteAssignment = async (asgnId) => {
+    const numericId = parseInt(String(asgnId).replace(/\D+/g, ""), 10);
+    if (numericId) {
+      try {
+        await payrollApi.deleteSalaryAssignment(numericId);
+      } catch (err) {
+        console.warn("Delete salary assignment API call fallback:", err);
+      }
+    }
+
+    setStore((prev) => ({
+      ...prev,
+      assignments: prev.assignments.filter((a) => a.id !== asgnId),
+    }));
+    setToast("Salary assignment removed successfully");
+    setModal(null);
+  };
+
+  const handleApproveItem = async (type, itemId) => {
+    const numericId = parseInt(String(itemId).replace(/\D+/g, ""), 10);
+    if (numericId) {
+      try {
+        if (type === "revision") {
+          await payrollApi.approveSalaryRevision(numericId, { approvedBy: "Admin", remarks: "Approved" });
+        } else if (type === "bonus") {
+          await payrollApi.approveBonus(numericId, { approvedBy: "Admin", remarks: "Approved" });
+        } else if (type === "loan" || type === "advance") {
+          await payrollApi.approveSalaryAdvance(numericId, { approvedBy: "Admin", remarks: "Approved" });
+        }
+      } catch (err) {
+        console.warn(`Approve ${type} API call fallback:`, err);
+      }
+    }
+
     if (type === "revision") {
       setStore((prev) => ({
         ...prev,
@@ -123,7 +378,7 @@ export default function PayrollPage({ mode = "payroll" }) {
         ...prev,
         bonuses: prev.bonuses.map((b) => (b.id === itemId ? { ...b, status: "Approved", approvedBy: "Admin" } : b)),
       }));
-    } else if (type === "loan") {
+    } else if (type === "loan" || type === "advance") {
       setStore((prev) => ({
         ...prev,
         loans: prev.loans.map((l) => (l.id === itemId ? { ...l, status: "Active" } : l)),
@@ -919,50 +1174,80 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
   }, [assignmentsList, selectedStaffIds]);
 
   // Handler for Generating Payslips
-  const handleGeneratePayslips = () => {
+  const handleGeneratePayslips = async () => {
     if (selectedStaffIds.length === 0 || isGenerating) return;
     setIsGenerating(true);
 
-    setTimeout(() => {
-      const targetMonthKey = `${selectedYear}-${selectedMonth}`;
-      const periodLabel = currentPeriodLabel;
+    const targetMonthKey = `${selectedYear}-${selectedMonth}`;
+    const periodLabel = currentPeriodLabel;
 
-      const newPayslips = assignmentsList
-        .filter((a) => selectedStaffIds.includes(a.id))
-        .map((a) => {
-          const employerPF = Math.round(Number(a.basicPay || 40000) * 0.12);
-          const ctc = Number(a.grossSalary || 0) + employerPF;
+    const numericStaffIds = assignmentsList
+      .filter((a) => selectedStaffIds.includes(a.id))
+      .map((a) => parseInt(String(a.rawStaffId || a.staffId || a.id).replace(/\D+/g, ""), 10))
+      .filter((id) => !isNaN(id) && id > 0);
 
-          return {
-            id: `slip-${a.staffId}-${targetMonthKey}-${Date.now()}`,
-            staffId: a.staffId,
-            staffName: a.staffName,
-            department: a.department,
-            designation: a.designation,
-            month: targetMonthKey,
-            periodLabel,
-            year: Number(selectedYear),
-            grossSalary: Number(a.grossSalary || 0),
-            totalDeductions: Number(a.totalDeductions || 0),
-            netSalary: Number(a.netSalary || 0),
-            ctc,
-            status: "Generated",
+    if (numericStaffIds.length > 0) {
+      try {
+        if (selectedStaffIds.length === assignmentsList.length) {
+          await payrollApi.generatePayslipsBulk({
+            payrollMonth: Number(selectedMonth),
+            payrollYear: Number(selectedYear),
+            staffType: categoryFilter === "All" ? null : categoryFilter,
+            departmentId: null,
             paymentMode: "Bank Transfer",
-            generatedAt: new Date().toISOString(),
-          };
-        });
+          });
+        } else {
+          for (const sId of numericStaffIds) {
+            await payrollApi.generatePayslip({
+              staffId: sId,
+              payrollMonth: Number(selectedMonth),
+              payrollYear: Number(selectedYear),
+              paymentMode: "Bank Transfer",
+              remarks: `Generated for ${periodLabel}`,
+            }).catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.warn("Generate payslips API call fallback:", err);
+      }
+    }
 
-      setStore((prev) => {
-        const existingSlips = Array.isArray(prev?.payslips) ? prev.payslips : [];
+    const newPayslips = assignmentsList
+      .filter((a) => selectedStaffIds.includes(a.id))
+      .map((a) => {
+        const employerPF = Math.round(Number(a.basicPay || 40000) * 0.12);
+        const ctc = Number(a.grossSalary || 0) + employerPF;
+
         return {
-          ...prev,
-          payslips: [...newPayslips, ...existingSlips.filter((p) => p.month !== targetMonthKey)],
+          id: `slip-${a.staffId}-${targetMonthKey}-${Date.now()}`,
+          staffId: a.staffId,
+          rawStaffId: a.rawStaffId,
+          staffName: a.staffName,
+          department: a.department,
+          designation: a.designation,
+          month: targetMonthKey,
+          periodLabel,
+          year: Number(selectedYear),
+          grossSalary: Number(a.grossSalary || 0),
+          totalDeductions: Number(a.totalDeductions || 0),
+          netSalary: Number(a.netSalary || 0),
+          ctc,
+          status: "Generated",
+          paymentMode: a.paymentMode || "Bank Transfer",
+          generatedAt: new Date().toISOString(),
         };
       });
 
-      setIsGenerating(false);
-      setToast(`Successfully generated ${newPayslips.length} payslips for ${periodLabel}!`);
-    }, 450);
+    setStore((prev) => {
+      const existingSlips = Array.isArray(prev?.payslips) ? prev.payslips : [];
+      return {
+        ...prev,
+        payslips: [...newPayslips, ...existingSlips.filter((p) => p.month !== targetMonthKey)],
+      };
+    });
+
+    setIsGenerating(false);
+    setToast(`Successfully generated ${newPayslips.length} payslips for ${periodLabel}!`);
   };
 
   // Recently Generated Payslips for Selected Period
@@ -1505,7 +1790,15 @@ function InteractivePayslipModal({ record, onClose, setToast }) {
     window.print();
   };
 
-  const handleSendEmail = () => {
+  const handleSendEmail = async () => {
+    const numericId = parseInt(String(record.numericId || record.id).replace(/\D+/g, ""), 10);
+    if (numericId) {
+      try {
+        await payrollApi.sendPayslipEmail(numericId);
+      } catch (err) {
+        console.warn("Send payslip email API call fallback:", err);
+      }
+    }
     setToast(`Payslip email dispatched to ${record.staffName}!`);
   };
 
@@ -1694,35 +1987,72 @@ function SearchableInputPicker({ label, placeholder, value, onChange, options = 
 }
 
 // ----------------------------------------------------------------------
-// SCREEN — ADD SALARY STRUCTURE
 // ----------------------------------------------------------------------
-function AddSalaryStructureScreen({ store, setStore, navigate, setToast }) {
-  const [formData, setFormData] = useState({
-    name: "",
-    staffType: "Teaching",
-    department: "",
-    designation: "",
-    effectiveFrom: new Date().toISOString().split("T")[0],
-    status: "Active",
-    taxability: "Taxable",
-    basicPay: 50000,
-    hra: 15000,
-    da: 8000,
-    specialAllowance: 5000,
-    transportAllowance: 3000,
-    medicalAllowance: 2000,
-    academicAllowance: 2000,
-    otherAllowances: 0,
-    pfApplicable: true,
-    pf: 6000,
-    employerPf: 6000,
-    esiApplicable: false,
-    esi: 0,
-    ptApplicable: true,
-    professionalTax: 200,
-    tds: 3500,
-    insurance: 1000,
-    otherDeductions: 0,
+// SCREEN — ADD / EDIT SALARY STRUCTURE
+// ----------------------------------------------------------------------
+function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
+  const existing = useMemo(() => {
+    if (!id) return null;
+    return (store.structures || []).find((s) => s.id === id || String(s.numericId) === String(id));
+  }, [id, store.structures]);
+
+  const [formData, setFormData] = useState(() => {
+    if (existing) {
+      return {
+        name: existing.name || "",
+        staffType: existing.staffType || "Teaching",
+        department: existing.department || "",
+        designation: existing.designation || "",
+        effectiveFrom: existing.effectiveFrom || new Date().toISOString().split("T")[0],
+        status: existing.status || "Active",
+        taxability: existing.taxability || "Taxable",
+        basicPay: Number(existing.basicPay || 0),
+        hra: Number(existing.hra || 0),
+        da: Number(existing.da || 0),
+        specialAllowance: Number(existing.specialAllowance || 0),
+        transportAllowance: Number(existing.transportAllowance || 0),
+        medicalAllowance: Number(existing.medicalAllowance || 0),
+        academicAllowance: Number(existing.academicAllowance || 0),
+        otherAllowances: Number(existing.otherAllowances || 0),
+        pfApplicable: existing.pf > 0,
+        pf: Number(existing.pf || 0),
+        employerPf: Number(existing.employerPf || 0),
+        esiApplicable: existing.esi > 0,
+        esi: Number(existing.esi || 0),
+        ptApplicable: existing.professionalTax > 0,
+        professionalTax: Number(existing.professionalTax || 0),
+        tds: Number(existing.tds || 0),
+        insurance: Number(existing.insurance || 0),
+        otherDeductions: Number(existing.otherDeductions || 0),
+      };
+    }
+    return {
+      name: "",
+      staffType: "Teaching",
+      department: "",
+      designation: "",
+      effectiveFrom: new Date().toISOString().split("T")[0],
+      status: "Active",
+      taxability: "Taxable",
+      basicPay: 50000,
+      hra: 15000,
+      da: 8000,
+      specialAllowance: 5000,
+      transportAllowance: 3000,
+      medicalAllowance: 2000,
+      academicAllowance: 2000,
+      otherAllowances: 0,
+      pfApplicable: true,
+      pf: 6000,
+      employerPf: 6000,
+      esiApplicable: false,
+      esi: 0,
+      ptApplicable: true,
+      professionalTax: 200,
+      tds: 3500,
+      insurance: 1000,
+      otherDeductions: 0,
+    };
   });
 
   const defaultDepartments = useMemo(() => [
@@ -1782,31 +2112,90 @@ function AddSalaryStructureScreen({ store, setStore, navigate, setToast }) {
   const netSalary = useMemo(() => calculateNetSalary(grossSalary, totalDeductions), [grossSalary, totalDeductions]);
   const ctc = useMemo(() => grossSalary + Number(formData.employerPf || 0), [grossSalary, formData.employerPf]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name) return;
-    const newStructure = {
-      ...formData,
-      id: `struct-${Date.now()}`,
-      grossSalary,
-      totalDeductions,
-      netSalary,
-      ctc,
-      assignedCount: 0,
+
+    const payload = {
+      structureName: formData.name,
+      staffType: formData.staffType || "Teaching",
+      departmentId: null,
+      designationId: null,
+      basicPay: Number(formData.basicPay || 0),
+      hra: Number(formData.hra || 0),
+      da: Number(formData.da || 0),
+      conveyanceAllowance: Number(formData.transportAllowance || 0),
+      medicalAllowance: Number(formData.medicalAllowance || 0),
+      otherAllowance: Number(formData.specialAllowance || 0) + Number(formData.academicAllowance || 0) + Number(formData.otherAllowances || 0),
+      pf: Number(formData.pf || 0),
+      professionalTax: Number(formData.professionalTax || 0),
+      tds: Number(formData.tds || 0),
+      esi: Number(formData.esi || 0),
+      insuranceOtherDeduction: Number(formData.insurance || 0) + Number(formData.otherDeductions || 0),
+      status: formData.status || "Active",
     };
-    setStore((prev) => ({
-      ...prev,
-      structures: [newStructure, ...prev.structures],
-    }));
-    setToast("Salary Structure created successfully!");
+
+    let targetNumericId = existing?.numericId || parseInt(String(id || "").replace(/\D+/g, ""), 10) || null;
+    let targetId = existing?.id || id || `struct-${Date.now()}`;
+
+    if (existing || id) {
+      if (targetNumericId) {
+        try {
+          await payrollApi.updateSalaryStructure(targetNumericId, payload);
+        } catch (err) {
+          console.warn("Failed to update structure via API, persisting to local store:", err);
+        }
+      }
+      const updatedStructure = {
+        ...existing,
+        ...formData,
+        id: targetId,
+        numericId: targetNumericId,
+        grossSalary,
+        totalDeductions,
+        netSalary,
+        ctc,
+      };
+      setStore((prev) => ({
+        ...prev,
+        structures: prev.structures.map((s) => (s.id === targetId || String(s.numericId) === String(targetNumericId) ? updatedStructure : s)),
+      }));
+      setToast("Salary Structure updated successfully!");
+    } else {
+      try {
+        const res = await payrollApi.createSalaryStructure(payload);
+        if (res?.id || res?.Id) {
+          targetNumericId = res.id || res.Id;
+          targetId = `struct-${targetNumericId}`;
+        }
+      } catch (err) {
+        console.warn("Failed to create structure via API, persisting to local store:", err);
+      }
+
+      const newStructure = {
+        ...formData,
+        id: targetId,
+        numericId: targetNumericId,
+        grossSalary,
+        totalDeductions,
+        netSalary,
+        ctc,
+        assignedCount: 0,
+      };
+      setStore((prev) => ({
+        ...prev,
+        structures: [newStructure, ...prev.structures],
+      }));
+      setToast("Salary Structure created successfully!");
+    }
     navigate("/dashboard/payroll?tab=structures");
   };
 
   return (
     <DashboardLayout
-      title="Add Salary Structure"
-      subtitle="Create a reusable salary structure with earnings, statutory rules and live preview."
-      breadcrumb={["Home", "Finance", "Payroll", "Structures", "Add"]}
+      title={existing ? "Edit Salary Structure" : "Add Salary Structure"}
+      subtitle={existing ? "Modify salary structure components and deduction rules." : "Create a reusable salary structure with earnings, statutory rules and live preview."}
+      breadcrumb={["Home", "Finance", "Payroll", "Structures", existing ? "Edit" : "Add"]}
     >
       <main className="salary-page-container">
         <Link to="/dashboard/payroll?tab=structures" className="cms-back-link">
@@ -2144,30 +2533,57 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
 }
 
 // ----------------------------------------------------------------------
-// SCREEN — ASSIGN SALARY TO STAFF
+// SCREEN — ASSIGN / EDIT SALARY TO STAFF
 // ----------------------------------------------------------------------
-function AssignSalaryScreen({ staffType = "Teaching", store, setStore, navigate, setToast }) {
-  const staffList = useMemo(() => {
-    return [
-      { id: "FAC-101", name: "Dr. K. Srinivas Rao", department: "Physics", designation: "HOD & Professor" },
-      { id: "FAC-102", name: "Mrs. Lakshmi Devi", department: "Mathematics", designation: "Assistant Professor" },
-      { id: "FAC-103", name: "Dr. Ramesh Babu", department: "Chemistry", designation: "Senior Lecturer" },
-      { id: "FAC-104", name: "Ms. Anitha Reddy", department: "English", designation: "Lecturer" },
-      { id: "NT-201", name: "Mr. Suresh Kumar", department: "Administration", designation: "Office Administrator" },
-      { id: "NT-202", name: "Mrs. Padmavathi", department: "Finance & Accounts", designation: "Senior Accountant" },
-      { id: "NT-203", name: "Mr. Venkat Rao", department: "Library", designation: "Head Librarian" },
-    ];
-  }, []);
+function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navigate, setToast }) {
+  const existingAssignment = useMemo(() => {
+    if (!id) return null;
+    return (store.assignments || []).find((a) => a.id === id || String(a.numericId) === String(id));
+  }, [id, store.assignments]);
 
-  const [selectedStaffId, setSelectedStaffId] = useState(staffList[0].id);
-  const [selectedStructId, setSelectedStructId] = useState(store.structures[0]?.id || "");
-  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().split("T")[0]);
-  const [paymentMode, setPaymentMode] = useState("Bank Transfer");
-  const [bankName, setBankName] = useState("State Bank of India");
-  const [accountNumber, setAccountNumber] = useState("9876543210123");
-  const [ifscCode, setIfscCode] = useState("SBIN0001234");
-  const [panNumber, setPanNumber] = useState("ABCDE1234F");
-  const [uanNumber, setUanNumber] = useState("100987654321");
+  const staffList = useMemo(() => {
+    const fromAssignments = (store.assignments || [])
+      .filter((a) => !staffType || a.staffType === staffType)
+      .map((a) => ({
+        id: String(a.rawStaffId || a.staffId),
+        staffCode: a.staffId,
+        rawStaffId: a.rawStaffId || parseInt(String(a.staffId).replace(/\D+/g, ""), 10) || 1,
+        name: a.staffName,
+        department: a.department,
+        designation: a.designation,
+      }));
+
+    if (fromAssignments.length > 0) return fromAssignments;
+
+    return [
+      { id: "101", staffCode: "FAC-101", rawStaffId: 101, name: "Dr. K. Srinivas Rao", department: "Physics", designation: "HOD & Professor" },
+      { id: "102", staffCode: "FAC-102", rawStaffId: 102, name: "Mrs. Lakshmi Devi", department: "Mathematics", designation: "Assistant Professor" },
+      { id: "103", staffCode: "FAC-103", rawStaffId: 103, name: "Dr. Ramesh Babu", department: "Chemistry", designation: "Senior Lecturer" },
+      { id: "104", staffCode: "FAC-104", rawStaffId: 104, name: "Ms. Anitha Reddy", department: "English", designation: "Lecturer" },
+      { id: "201", staffCode: "NT-201", rawStaffId: 201, name: "Mr. Suresh Kumar", department: "Administration", designation: "Office Administrator" },
+      { id: "202", staffCode: "NT-202", rawStaffId: 202, name: "Mrs. Padmavathi", department: "Finance & Accounts", designation: "Senior Accountant" },
+      { id: "203", staffCode: "NT-203", rawStaffId: 203, name: "Mr. Venkat Rao", department: "Library", designation: "Head Librarian" },
+    ];
+  }, [store.assignments, staffType]);
+
+  const [selectedStaffId, setSelectedStaffId] = useState(() => {
+    if (existingAssignment) return String(existingAssignment.rawStaffId || existingAssignment.staffId);
+    return staffList[0]?.id || "101";
+  });
+  const [selectedStructId, setSelectedStructId] = useState(() => {
+    if (existingAssignment) return existingAssignment.structureId || store.structures[0]?.id || "";
+    return store.structures[0]?.id || "";
+  });
+  const [effectiveFrom, setEffectiveFrom] = useState(() => {
+    if (existingAssignment?.effectiveFrom) return existingAssignment.effectiveFrom;
+    return new Date().toISOString().split("T")[0];
+  });
+  const [paymentMode, setPaymentMode] = useState(existingAssignment?.paymentMode || "Bank Transfer");
+  const [bankName, setBankName] = useState(existingAssignment?.bankName || "State Bank of India");
+  const [accountNumber, setAccountNumber] = useState(existingAssignment?.accountNumber || "9876543210123");
+  const [ifscCode, setIfscCode] = useState(existingAssignment?.ifscCode || "SBIN0001234");
+  const [panNumber, setPanNumber] = useState(existingAssignment?.panNumber || "ABCDE1234F");
+  const [uanNumber, setUanNumber] = useState(existingAssignment?.uanNumber || "100987654321");
 
   const chosenStruct = useMemo(() => {
     return store.structures.find((s) => s.id === selectedStructId) || store.structures[0];
@@ -2177,13 +2593,34 @@ function AssignSalaryScreen({ staffType = "Teaching", store, setStore, navigate,
     return staffList.find((s) => s.id === selectedStaffId) || staffList[0];
   }, [staffList, selectedStaffId]);
 
-  const handleSaveAssignment = (e) => {
+  const handleSaveAssignment = async (e) => {
     e.preventDefault();
     if (!chosenStaff || !chosenStruct) return;
 
+    let createdAsgnId = existingAssignment?.id || `asgn-${Date.now()}`;
+    const numericStaffId = parseInt(String(chosenStaff.rawStaffId || chosenStaff.id || "").replace(/\D+/g, ""), 10) || 1;
+    const numericStructId = parseInt(String(chosenStruct.numericId || chosenStruct.id || "").replace(/\D+/g, ""), 10) || 1;
+
+    try {
+      const payload = {
+        staffId: numericStaffId,
+        salaryStructureId: numericStructId,
+        effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : new Date().toISOString(),
+        basicPay: Number(chosenStruct.basicPay || 0),
+        status: existingAssignment?.status || "Active",
+      };
+      const res = await payrollApi.createSalaryAssignment(payload);
+      if (res?.assignmentId || res?.AssignmentId || res?.id || res?.Id) {
+        createdAsgnId = `asgn-${res.assignmentId || res.AssignmentId || res.id || res.Id}`;
+      }
+    } catch (err) {
+      console.warn("Failed to assign salary structure via API, persisting to local store:", err);
+    }
+
     const newAssignment = {
-      id: `asgn-${Date.now()}`,
-      staffId: chosenStaff.id,
+      id: createdAsgnId,
+      staffId: chosenStaff.staffCode || chosenStaff.id,
+      rawStaffId: numericStaffId,
       staffName: chosenStaff.name,
       staffType,
       department: chosenStaff.department,
@@ -2205,7 +2642,7 @@ function AssignSalaryScreen({ staffType = "Teaching", store, setStore, navigate,
 
     setStore((prev) => ({
       ...prev,
-      assignments: [newAssignment, ...prev.assignments.filter((a) => a.staffId !== chosenStaff.id)],
+      assignments: [newAssignment, ...prev.assignments.filter((a) => a.staffId !== (chosenStaff.staffCode || chosenStaff.id))],
     }));
 
     setToast(`Salary assigned successfully to ${chosenStaff.name}!`);
@@ -2685,11 +3122,11 @@ function AddReimbursementScreen({ store, setStore, navigate, setToast }) {
 }
 
 function EditSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
-  return <AddSalaryStructureScreen store={store} setStore={setStore} navigate={navigate} setToast={setToast} />;
+  return <AddSalaryStructureScreen id={id} store={store} setStore={setStore} navigate={navigate} setToast={setToast} />;
 }
 
 function EditSalaryAssignmentScreen({ id, store, setStore, navigate, setToast }) {
-  return <AssignSalaryScreen staffType="Teaching" store={store} setStore={setStore} navigate={navigate} setToast={setToast} />;
+  return <AssignSalaryScreen id={id} staffType="Teaching" store={store} setStore={setStore} navigate={navigate} setToast={setToast} />;
 }
 
 function PayrollMonthViewScreen({ month, store, navigate }) {

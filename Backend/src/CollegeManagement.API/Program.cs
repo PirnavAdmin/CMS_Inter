@@ -14,11 +14,15 @@ using CollegeManagement.API.Repositories.Implementations.Hostel;
 using CollegeManagement.API.Repositories.Implementations.Transport;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
+using CollegeManagement.API.Repositories.Interfaces.Payroll;
+using CollegeManagement.API.Repositories.Implementations.Payroll;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Implementations;
 using CollegeManagement.API.Services.Implementations.Hostel;
+using CollegeManagement.API.Services.Implementations.Payroll;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
+using CollegeManagement.API.Services.Interfaces.Payroll;
 using CollegeManagement.API.Services.Location;
 using CollegeManagement.API.Validators.StaffValidators;
 using FluentValidation;
@@ -111,6 +115,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateStaffDtoValidator>();
 #region Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
 builder.Services.AddScoped<IOtpRepository, OtpRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
@@ -179,6 +184,9 @@ builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepo
 builder.Services.AddScoped<ITransportDashboardRepository, TransportDashboardRepository>();
 builder.Services.AddScoped<ITransportReportRepository, TransportReportRepository>();
 builder.Services.AddScoped<ITransportRepository, TransportRepository>();
+
+// Payroll Repositories
+builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
 #endregion
 
 #region Services
@@ -266,6 +274,9 @@ builder.Services.AddScoped<ITransportDashboardService, TransportDashboardService
 builder.Services.AddScoped<ITransportReportService, TransportReportService>();
 builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
 builder.Services.AddScoped<ITransportService, TransportService>();
+
+// Payroll Service
+builder.Services.AddScoped<IPayrollService, PayrollService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>

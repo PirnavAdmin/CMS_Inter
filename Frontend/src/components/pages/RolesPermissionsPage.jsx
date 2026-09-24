@@ -38,7 +38,16 @@ import {
   updateUserPermissions,
 } from "@/features/rolesPermissions/rolesPermissions.service.js";
 import { normalizePermissionPayload, togglePermissionAction } from "@/features/rolesPermissions/permissionUtils.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./RolesPermissionsPage.css";
+
+const parseNumericId = (val) => {
+  if (val === undefined || val === null || val === "") return undefined;
+  if (typeof val === "number" && !isNaN(val)) return val;
+  const digits = String(val).replace(/\D/g, "");
+  return digits ? parseInt(digits, 10) : undefined;
+};
 
 const PAGE_SIZE = 8;
 const REQUIRED_MANAGEMENT_ROLE_CODES = [
@@ -605,7 +614,7 @@ function RoleDetails({
   );
 }
 
-function UserRoleAssignment({ roles }) {
+function UserRoleAssignment({ roles, contextFilters }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -629,14 +638,14 @@ function UserRoleAssignment({ roles }) {
     setLoading(true);
     setError("");
     try {
-      const response = await getUserRoleAssignments({ search: query, page, pageSize: PAGE_SIZE });
+      const response = await getUserRoleAssignments({ search: query, page, pageSize: PAGE_SIZE, ...contextFilters });
       setResult(response.data);
     } catch (err) {
       setError(err?.message || "Unable to load user role assignments.");
     } finally {
       setLoading(false);
     }
-  }, [page, query]);
+  }, [page, query, contextFilters]);
 
   useEffect(() => {
     loadAssignments();
@@ -1036,6 +1045,19 @@ function UserRoleAssignment({ roles }) {
 }
 
 export default function RolesPermissionsPage() {
+  const { selectedCampus } = useCampusContext();
+  const { selectedBoard, selectedAcademicYear, selectedBoardId, selectedAcademicYearId } = useAcademicContext();
+
+  const activeCampusId = useMemo(() => parseNumericId(selectedCampus?.id ?? selectedCampus?.campusId), [selectedCampus]);
+  const activeBoardId = useMemo(() => parseNumericId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId), [selectedBoardId, selectedBoard]);
+  const activeAcademicYearId = useMemo(() => parseNumericId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId), [selectedAcademicYearId, selectedAcademicYear]);
+
+  const activeContextFilters = useMemo(() => ({
+    campusId: activeCampusId,
+    boardId: activeBoardId,
+    academicYearId: activeAcademicYearId,
+  }), [activeCampusId, activeBoardId, activeAcademicYearId]);
+
   const [activeTab, setActiveTab] = useState("permissions");
   const [allRoles, setAllRoles] = useState([]);
   const [manageableRoles, setManageableRoles] = useState([]);
@@ -1080,7 +1102,7 @@ export default function RolesPermissionsPage() {
     setMembersLoading(true);
     if (openDialog) setMembersDialogOpen(true);
     try {
-      const response = await getRoleMembers(role.id, role.code);
+      const response = await getRoleMembers(role.id, role.code, activeContextFilters);
       setRoleMembers(response.data);
     } catch (err) {
       setRoleMembers([]);
@@ -1088,7 +1110,7 @@ export default function RolesPermissionsPage() {
     } finally {
       setMembersLoading(false);
     }
-  }, []);
+  }, [activeContextFilters]);
 
   const loadMemberPermissions = useCallback(async (member, role = selectedRole) => {
     if (!member || !role) return;
@@ -1112,7 +1134,7 @@ export default function RolesPermissionsPage() {
     setError("");
     try {
       const [rolesResponse, modulesResponse] = await Promise.all([
-        getRoles(),
+        getRoles(activeContextFilters),
         getModulesAndPermissions(),
       ]);
       const nextAllRoles = rolesResponse.data;
@@ -1120,7 +1142,7 @@ export default function RolesPermissionsPage() {
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
       setModules(modulesResponse.data.length ? modulesResponse.data : ALL_PERMISSION_MODULES);
-      const role = nextManageableRoles[0] || null;
+      const role = nextManageableRoles.find((r) => String(r.id) === String(selectedRole?.id)) || nextManageableRoles[0] || null;
       setSelectedRole(role);
       if (rolesResponse.meta?.usingFallback) {
         setToast({ type: "info", message: "Roles & Permissions is using local fallback data until RBAC endpoints are connected." });
@@ -1134,7 +1156,7 @@ export default function RolesPermissionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadPermissions, loadRoleMembers]);
+  }, [activeContextFilters, loadPermissions, loadRoleMembers, selectedRole?.id]);
 
   useEffect(() => {
     loadPage();
@@ -1298,7 +1320,7 @@ export default function RolesPermissionsPage() {
           </div>
         ) : null}
 
-        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={allRoles} /> : null}
+        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={allRoles} contextFilters={activeContextFilters} /> : null}
         {membersDialogOpen ? (
           <RoleMembersDialog
             role={selectedRole}
