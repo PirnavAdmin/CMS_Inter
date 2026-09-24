@@ -652,7 +652,10 @@ export default function DashboardLayout({
                         <div className="cms-academic-panel-empty">No campuses available</div>
                       ) : (
                         campuses.map((c) => {
-                          const isSelected = selectedCampus?.id === c.id;
+                          const isSelected =
+                            String(selectedCampus?.id) === String(c.id) ||
+                            String(selectedCampus?.campusId) === String(c.campusId) ||
+                            (selectedCampus?.code && selectedCampus.code === c.code);
                           return (
                             <button
                               key={c.id}
