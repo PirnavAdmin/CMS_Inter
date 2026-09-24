@@ -23,15 +23,96 @@ namespace CollegeManagement.API.Repositories
         // GET ALL STUDENTS
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync()
+        public async Task<List<StudentListItemDto>> GetAllAsync(int? campusId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
-            var result = await connection.QueryAsync<StudentListItemDto>(
-                "sp_GetAllStudents",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var parameters = new DynamicParameters();
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    parameters.Add("p_CampusId", campusId.Value, DbType.Int32);
+                }
+                else
+                {
+                    parameters.Add("p_CampusId", null, DbType.Int32);
+                }
 
-            return result.ToList();
+                var result = (await connection.QueryAsync<StudentListItemDto>(
+                    "sp_GetAllStudents",
+                    parameters,
+                    commandType: CommandType.StoredProcedure)).ToList();
+
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                }
+
+                return result;
+            }
+            catch
+            {
+                try
+                {
+                    var result = (await connection.QueryAsync<StudentListItemDto>(
+                        "sp_GetAllStudents",
+                        commandType: CommandType.StoredProcedure)).ToList();
+
+                    if (campusId.HasValue && campusId.Value > 0)
+                    {
+                        result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                    }
+
+                    return result;
+                }
+                catch
+                {
+                    var query = _context.Students
+                        .Include(s => s.BoardNavigation)
+                        .Include(s => s.AcademicYear)
+                        .Include(s => s.AcademicLevelNavigation)
+                        .Include(s => s.GroupNavigation)
+                        .Include(s => s.SectionNavigation)
+                        .Include(s => s.CampusNavigation)
+                        .AsNoTracking()
+                        .AsQueryable();
+
+                    if (campusId.HasValue && campusId.Value > 0)
+                        query = query.Where(s => s.CampusId == campusId.Value);
+
+                    return await query
+                        .OrderBy(s => s.StudentName)
+                        .Select(s => new StudentListItemDto
+                        {
+                            StudentId = s.StudentId,
+                            AdmissionNo = s.AdmissionNo ?? "",
+                            RollNo = s.RollNo ?? "",
+                            StudentName = s.StudentName,
+                            Photo = s.Photo,
+                            Gender = s.Gender,
+                            Email = s.Email,
+                            MobileNumber = s.MobileNumber,
+                            CampusId = s.CampusId,
+                            CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
+                            BoardId = s.BoardId,
+                            BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
+                            AcademicYearId = s.AcademicYearId,
+                            AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
+                            AcademicLevelId = s.AcademicLevelId ?? 0,
+                            AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
+                            GroupId = s.GroupId ?? 0,
+                            GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                            SectionId = s.SectionId ?? 0,
+                            SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                            ProgramId = s.ProgramId ?? 0,
+                            IsActive = s.IsActive,
+                            Status = s.Status,
+                            CreatedAt = s.CreatedAt
+                        })
+                        .ToListAsync();
+                }
+            }
         }
 
 
