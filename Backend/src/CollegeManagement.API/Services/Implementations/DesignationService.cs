@@ -419,7 +419,7 @@ namespace CollegeManagement.API.Services.Implementations
             using var workbook = new ClosedXML.Excel.XLWorkbook();
             var ws = workbook.Worksheets.Add("Designations");
 
-            var headers = new[] { "Designation Name", "Staff Type", "Status" };
+            var headers = new[] { "Designation Code", "Designation Name", "Status" };
 
             for (int col = 0; col < headers.Length; col++)
             {
@@ -436,9 +436,26 @@ namespace CollegeManagement.API.Services.Implementations
             }
             ws.Row(1).Height = 26;
 
-            ws.Column(1).Width = 35;
-            ws.Column(2).Width = 20;
-            ws.Column(3).Width = 15;
+            // Sample guidance rows
+            var sampleDesigs = new[]
+            {
+                new { Code = "DES_PROF", Name = "Professor", Status = "Active" },
+                new { Code = "DES_ASST_PROF", Name = "Assistant Professor", Status = "Active" },
+                new { Code = "DES_ASSOC_PROF", Name = "Associate Professor", Status = "Active" }
+            };
+
+            for (int r = 0; r < sampleDesigs.Length; r++)
+            {
+                var rowIdx = r + 2;
+                ws.Cell(rowIdx, 1).Value = sampleDesigs[r].Code;
+                ws.Cell(rowIdx, 2).Value = sampleDesigs[r].Name;
+                ws.Cell(rowIdx, 3).Value = sampleDesigs[r].Status;
+                ws.Row(rowIdx).Height = 20;
+            }
+
+            ws.Column(1).Width = 24;
+            ws.Column(2).Width = 42;
+            ws.Column(3).Width = 16;
             ws.ShowGridLines = true;
 
             using var ms = new System.IO.MemoryStream();

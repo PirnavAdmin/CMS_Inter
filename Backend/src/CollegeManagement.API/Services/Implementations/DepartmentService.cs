@@ -627,7 +627,7 @@ namespace CollegeManagement.API.Services.Implementations
             using var workbook = new XLWorkbook();
             var ws = workbook.Worksheets.Add("Departments");
 
-            var headers = new[] { "Department Name", "Staff Type", "Status" };
+            var headers = new[] { "Department Code", "Department Name", "Status" };
 
             for (int col = 0; col < headers.Length; col++)
             {
@@ -644,9 +644,26 @@ namespace CollegeManagement.API.Services.Implementations
             }
             ws.Row(1).Height = 26;
 
-            ws.Column(1).Width = 35;
-            ws.Column(2).Width = 20;
-            ws.Column(3).Width = 15;
+            // Sample guidance rows
+            var sampleDepts = new[]
+            {
+                new { Code = "DEP_CSE", Name = "Computer Science and Engineering", Status = "Active" },
+                new { Code = "DEP_ECE", Name = "Electronics and Communication Engineering", Status = "Active" },
+                new { Code = "DEP_MEC", Name = "Mechanical Engineering", Status = "Active" }
+            };
+
+            for (int r = 0; r < sampleDepts.Length; r++)
+            {
+                var rowIdx = r + 2;
+                ws.Cell(rowIdx, 1).Value = sampleDepts[r].Code;
+                ws.Cell(rowIdx, 2).Value = sampleDepts[r].Name;
+                ws.Cell(rowIdx, 3).Value = sampleDepts[r].Status;
+                ws.Row(rowIdx).Height = 20;
+            }
+
+            ws.Column(1).Width = 24;
+            ws.Column(2).Width = 42;
+            ws.Column(3).Width = 16;
             ws.ShowGridLines = true;
 
             using var ms = new MemoryStream();
@@ -679,21 +696,47 @@ namespace CollegeManagement.API.Services.Implementations
                     cell.Style.Border.OutsideBorderColor = XLColor.FromArgb(203, 213, 225);
                 }
                 ws.Row(1).Height = 26;
-                ws.Column(1).Width = 35;
-                ws.Column(2).Width = 20;
-                ws.Column(3).Width = 15;
+                ws.Column(1).Width = 24;
+                ws.Column(2).Width = 42;
+                ws.Column(3).Width = 16;
                 ws.ShowGridLines = true;
             }
 
-            // Sheet 1: Departments (Only 3 fields matching Add Department modal)
+            // Sheet 1: Departments (3 fields: Department Code, Department Name, Status)
             var deptWs = workbook.Worksheets.Add("Departments");
-            var deptHeaders = new[] { "Department Name", "Staff Type", "Status" };
+            var deptHeaders = new[] { "Department Code", "Department Name", "Status" };
             ApplyHeaderStyle(deptWs, deptHeaders);
+            var sampleDepts = new[]
+            {
+                new { Code = "DEP_CSE", Name = "Computer Science and Engineering", Status = "Active" },
+                new { Code = "DEP_ECE", Name = "Electronics and Communication Engineering", Status = "Active" }
+            };
+            for (int r = 0; r < sampleDepts.Length; r++)
+            {
+                var rowIdx = r + 2;
+                deptWs.Cell(rowIdx, 1).Value = sampleDepts[r].Code;
+                deptWs.Cell(rowIdx, 2).Value = sampleDepts[r].Name;
+                deptWs.Cell(rowIdx, 3).Value = sampleDepts[r].Status;
+                deptWs.Row(rowIdx).Height = 20;
+            }
 
-            // Sheet 2: Designations (Only 3 fields matching Add Designation modal)
+            // Sheet 2: Designations (3 fields: Designation Code, Designation Name, Status)
             var desigWs = workbook.Worksheets.Add("Designations");
-            var desigHeaders = new[] { "Designation Name", "Staff Type", "Status" };
+            var desigHeaders = new[] { "Designation Code", "Designation Name", "Status" };
             ApplyHeaderStyle(desigWs, desigHeaders);
+            var sampleDesigs = new[]
+            {
+                new { Code = "DES_PROF", Name = "Professor", Status = "Active" },
+                new { Code = "DES_ASST_PROF", Name = "Assistant Professor", Status = "Active" }
+            };
+            for (int r = 0; r < sampleDesigs.Length; r++)
+            {
+                var rowIdx = r + 2;
+                desigWs.Cell(rowIdx, 1).Value = sampleDesigs[r].Code;
+                desigWs.Cell(rowIdx, 2).Value = sampleDesigs[r].Name;
+                desigWs.Cell(rowIdx, 3).Value = sampleDesigs[r].Status;
+                desigWs.Row(rowIdx).Height = 20;
+            }
 
             using var ms = new MemoryStream();
             workbook.SaveAs(ms);

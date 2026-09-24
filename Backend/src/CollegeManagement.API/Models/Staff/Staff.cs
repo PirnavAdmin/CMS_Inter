@@ -201,6 +201,15 @@ namespace CollegeManagement.API.Models.Staff
             set => DepartmentSpecificJson = value;
         }
 
+        public bool IsDriver { get; set; } = false;
+
+        [StringLength(100)]
+        public string? DrivingLicenseNumber { get; set; }
+
+        public DateTime? DrivingLicenseExpiryDate { get; set; }
+
+        public int? DrivingExperienceYears { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? UpdatedAt { get; set; }

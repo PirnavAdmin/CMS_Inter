@@ -4584,6 +4584,42 @@ function Pending({ records = [], setRecords, activity }) {
   };
 
   const isAllShownSelected = shown.length > 0 && shown.every((r) => selectedIds.includes(r.id));
+  const [resendingId, setResendingId] = useState(null);
+  const [toast, setToast] = useState("");
+
+  const handleDirectResendLink = async (r) => {
+    if (!r?.id) return;
+    try {
+      setResendingId(r.id);
+      const res = await apiClient.post(apiEndpoints.faculty.sendLink(r.id), {
+        email: (r.email || "").trim(),
+        validityDays: 7,
+      });
+      const resData = res?.data?.data || res?.data;
+      const today = new Date().toISOString().split("T")[0];
+
+      if (setRecords) {
+        setRecords((prev) =>
+          prev.map((rec) =>
+            rec.id === r.id
+              ? { ...rec, linkSent: true, linkSentAt: today, profileStatus: "Link Sent" }
+              : rec
+          )
+        );
+      }
+
+      setToast(
+        resData?.emailSent
+          ? `Profile completion email resent successfully to ${resData.emailRecipient || r.email || r.fullName}!`
+          : `Profile completion link generated for ${r.fullName || r.email}.`
+      );
+      if (activity) activity(`${r.fullName} profile link resent directly`);
+    } catch (err) {
+      setToast(getApiErrorMessage(err, "Failed to resend profile link. Please try again."));
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   return (
     <DashboardLayout
@@ -4708,9 +4744,12 @@ function Pending({ records = [], setRecords, activity }) {
                             <button
                               className="cms-btn cms-btn-ghost"
                               style={{ padding: "5px 10px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                              onClick={() => n(`/dashboard/staff/${r.id || r.employeeId}/send-link`)}
+                              onClick={() => handleDirectResendLink(r)}
+                              disabled={resendingId === r.id}
+                              title="Resend profile completion link directly to staff email"
                             >
-                              <Send size={13} /> {r.linkSent ? "Resend Link" : "Send Link"}
+                              <Send size={13} className={resendingId === r.id ? "spin" : ""} />
+                              {resendingId === r.id ? "Resending..." : r.linkSent ? "Resend Link" : "Send Link"}
                             </button>
                           )}
                           <button
@@ -4741,6 +4780,7 @@ function Pending({ records = [], setRecords, activity }) {
           </footer>
         </section>
       </main>
+      {toast ? <Toast message={toast} onClose={() => setToast("")} /> : null}
     </DashboardLayout>
   );
 }
@@ -5550,7 +5590,7 @@ export default function StaffManagementPage() {
   else if ((p.includes("/mock-staff-portal") || p.includes("/staff-portal") || p.includes("/staff/onboarding")) && record)
     page = <Navigate to="/faculty-dashboard" replace />;
   else if (p.endsWith("/send-link") && record)
-    page = <SendLink record={record} update={update} activity={activity} />;
+    page = <Navigate to="/dashboard/staff/pending" replace />;
   else if (p.endsWith("/review") && record)
     page = <Review record={record} update={update} activity={activity} />;
   else if (p.endsWith("/edit") && record)
