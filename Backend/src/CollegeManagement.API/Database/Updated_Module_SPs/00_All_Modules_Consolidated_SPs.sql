@@ -584,8 +584,7 @@ BEGIN
     DECLARE v_AdmissionsCount INT DEFAULT 0;
 
     SELECT COUNT(*) INTO v_AdmissionsCount
-    FROM `StudentAdmissions` sa
-    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+    FROM `StudentAdmissions` sa WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
       AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
 
@@ -669,23 +668,20 @@ BEGIN
 
     -- 1. Total Students from StudentAdmissions (fallback to Students table)
     SELECT COUNT(*) INTO v_TotalStudents
-    FROM `StudentAdmissions` sa
-    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+    FROM `StudentAdmissions` sa WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR sa.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
 
     IF v_TotalStudents = 0 THEN
         SELECT COUNT(*) INTO v_TotalStudents
-        FROM `Students` s
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+        FROM `Students` s WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsActive = 1 OR s.IsActive IS NULL)
           AND (v_EffectiveAcademicYearId IS NULL OR s.AcademicYearId = v_EffectiveAcademicYearId)
           AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
     END IF;
 
     -- 2. Teaching Staff Count (Active, non-deleted, filtered by Board)
     SELECT COUNT(*) INTO v_TeachingStaff
-    FROM `Staff` st
-    WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+    FROM `Staff` st WHERE ((p_CampusId IS NULL OR st.CampusId = p_CampusId) AND st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
       AND (p_BoardId IS NULL OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0)
       AND (
@@ -697,23 +693,20 @@ BEGIN
 
     -- 3. Non-Teaching Staff Count
     SELECT COUNT(*) INTO v_NonTeachingStaff
-    FROM `Staff` st
-    WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+    FROM `Staff` st WHERE ((p_CampusId IS NULL OR st.CampusId = p_CampusId) AND st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
       AND (p_BoardId IS NULL OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0)
       AND (LOWER(st.StaffType) LIKE '%non%');
 
     -- 4. Total Groups Count
     SELECT COUNT(*) INTO v_TotalGroups
-    FROM `Groups` g
-    WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
+    FROM `Groups` g WHERE ((p_CampusId IS NULL OR g.CampusId = p_CampusId) AND g.IsActive = 1 OR g.IsActive IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR g.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR g.BoardId = p_BoardId);
 
     -- 5. Total Sections Count
     SELECT COUNT(*) INTO v_TotalSections
-    FROM `Sections` sec
-    WHERE (sec.IsActive = 1 OR sec.IsActive IS NULL)
+    FROM `Sections` sec WHERE ((p_CampusId IS NULL OR sec.CampusId = p_CampusId) AND sec.IsActive = 1 OR sec.IsActive IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR sec.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR sec.BoardId = p_BoardId);
 
@@ -726,16 +719,14 @@ BEGIN
 
     -- 7. Upcoming Exams
     SELECT COUNT(*) INTO v_UpcomingExams
-    FROM `Examinations` e
-    WHERE (e.IsActive = 1 OR e.IsActive IS NULL)
+    FROM `Examinations` e WHERE ((p_CampusId IS NULL OR e.CampusId = p_CampusId) AND e.IsActive = 1 OR e.IsActive IS NULL)
       AND e.EndDate >= v_TargetDate
       AND (v_EffectiveAcademicYearId IS NULL OR e.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR e.BoardId = p_BoardId);
 
     -- 8. Total Subjects
     SELECT COUNT(*) INTO v_TotalSubjects
-    FROM `Subjects` sub
-    WHERE (sub.IsActive = 1 OR sub.IsActive IS NULL)
+    FROM `Subjects` sub WHERE ((p_CampusId IS NULL OR sub.CampusId = p_CampusId) AND sub.IsActive = 1 OR sub.IsActive IS NULL)
       AND (p_BoardId IS NULL OR sub.BoardId = p_BoardId);
 
     -- Return final summary
@@ -899,8 +890,7 @@ BEGIN
         COUNT(DISTINCT CASE WHEN (st.StaffType = 'Teaching' OR st.StaffType = 'Both' OR st.StaffType IS NULL OR LOWER(st.StaffType) NOT LIKE '%non%') THEN st.Id END),
         COUNT(DISTINCT CASE WHEN LOWER(st.StaffType) LIKE '%non%' THEN st.Id END)
     INTO v_TeachingCount, v_NonTeachingCount
-    FROM `Staff` st
-    WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+    FROM `Staff` st WHERE ((p_CampusId IS NULL OR st.CampusId = p_CampusId) AND st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
       AND (p_BoardId IS NULL OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
 
@@ -1141,15 +1131,13 @@ BEGIN
 
     -- 1. Total Students from Students table (fallback to StudentAdmissions)
     SELECT COUNT(*) INTO v_TotalStudents
-    FROM `Students` s
-    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+    FROM `Students` s WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsActive = 1 OR s.IsActive IS NULL)
       AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
 
     IF v_TotalStudents = 0 THEN
         SELECT COUNT(*) INTO v_TotalStudents
-        FROM `StudentAdmissions` sa
-        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+        FROM `StudentAdmissions` sa WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
     END IF;
@@ -1334,8 +1322,7 @@ BEGIN
 
     -- Base eligible students count
     SELECT COUNT(DISTINCT s.StudentId) INTO v_TotalStudents
-    FROM `Students` s
-    WHERE (s.IsDeleted = 0 OR s.IsDeleted IS NULL)
+    FROM `Students` s WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsDeleted = 0 OR s.IsDeleted IS NULL)
       AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
       AND (p_GroupId IS NULL OR s.GroupId = p_GroupId)
@@ -1403,8 +1390,7 @@ BEGIN
     DECLARE v_AdmissionsCount INT DEFAULT 0;
 
     SELECT COUNT(*) INTO v_AdmissionsCount
-    FROM `StudentAdmissions` sa
-    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+    FROM `StudentAdmissions` sa WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
       AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
 
@@ -1421,8 +1407,7 @@ BEGIN
             ROUND(COALESCE((SUM(CASE WHEN LOWER(COALESCE(sa.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 0.0), 1) AS FemalePercentage,
             SUM(CASE WHEN sa.AcademicLevelId = 1 THEN 1 ELSE 0 END) AS FirstYearStudents,
             SUM(CASE WHEN sa.AcademicLevelId = 2 THEN 1 ELSE 0 END) AS SecondYearStudents
-        FROM `StudentAdmissions` sa
-        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+        FROM `StudentAdmissions` sa WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
 
@@ -1431,8 +1416,7 @@ BEGIN
             DATE_FORMAT(COALESCE(sa.AdmissionDate, sa.CreatedAt), '%b %Y') AS Period,
             MIN(COALESCE(sa.AdmissionDate, sa.CreatedAt)) AS SortDate,
             COUNT(*) AS StudentsJoined
-        FROM `StudentAdmissions` sa
-        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+        FROM `StudentAdmissions` sa WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
           AND (sa.AdmissionDate IS NOT NULL OR sa.CreatedAt IS NOT NULL)
@@ -1451,8 +1435,7 @@ BEGIN
             ROUND(COALESCE((SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) * 100.0) / NULLIF(COUNT(*), 0), 0.0), 1) AS FemalePercentage,
             SUM(CASE WHEN s.AcademicLevelId = 1 THEN 1 ELSE 0 END) AS FirstYearStudents,
             SUM(CASE WHEN s.AcademicLevelId = 2 THEN 1 ELSE 0 END) AS SecondYearStudents
-        FROM `Students` s
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+        FROM `Students` s WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsActive = 1 OR s.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
 
@@ -1460,8 +1443,7 @@ BEGIN
             DATE_FORMAT(COALESCE(s.AdmissionDate, s.CreatedAt), '%b %Y') AS Period,
             MIN(COALESCE(s.AdmissionDate, s.CreatedAt)) AS SortDate,
             COUNT(*) AS StudentsJoined
-        FROM `Students` s
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+        FROM `Students` s WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsActive = 1 OR s.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
           AND (s.AdmissionDate IS NOT NULL OR s.CreatedAt IS NOT NULL)
@@ -1501,8 +1483,7 @@ BEGIN
 
     -- Admissions Today
     SELECT COUNT(*) INTO v_AdmissionsToday
-    FROM `StudentAdmissions` sa
-    WHERE (DATE(sa.AdmissionDate) = v_TargetDate OR DATE(sa.CreatedAt) = v_TargetDate)
+    FROM `StudentAdmissions` sa WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND DATE(sa.AdmissionDate) = v_TargetDate OR DATE(sa.CreatedAt) = v_TargetDate)
       AND (sa.IsActive = 1 OR sa.IsActive IS NULL)
       AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId);
@@ -1519,8 +1500,7 @@ BEGIN
 
     -- Examinations Today
     SELECT COUNT(*) INTO v_ExamsToday
-    FROM `Examinations` e
-    WHERE (e.IsActive = 1 OR e.IsActive IS NULL)
+    FROM `Examinations` e WHERE ((p_CampusId IS NULL OR e.CampusId = p_CampusId) AND e.IsActive = 1 OR e.IsActive IS NULL)
       AND DATE(e.StartDate) <= v_TargetDate AND DATE(e.EndDate) >= v_TargetDate
       AND (p_BoardId IS NULL OR e.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR e.AcademicYearId = p_AcademicYearId);
@@ -3093,15 +3073,18 @@ DELIMITER ;
 
 DELIMITER //
 DROP PROCEDURE IF EXISTS `sp_GetDepartmentSummary` //
-CREATE PROCEDURE `sp_GetDepartmentSummary`()
+CREATE PROCEDURE `sp_GetDepartmentSummary`(
+    IN p_CampusId INT
+)
 BEGIN
     SELECT 
         COUNT(*) AS TotalDepartments,
         COUNT(CASE WHEN IsActive = 1 THEN 1 END) AS ActiveDepartments,
         COUNT(CASE WHEN IsActive = 0 THEN 1 END) AS InactiveDepartments,
-        (SELECT COUNT(*) FROM `Designations` WHERE IsActive = 1) AS TotalDesignations,
-        (SELECT COUNT(*) FROM `Staff` WHERE IsDeleted = 0 AND (Status = 'Active' OR Status IS NULL)) AS TotalStaff
-    FROM `Departments`;
+        (SELECT COUNT(*) FROM `Designations` WHERE IsActive = 1 AND (p_CampusId IS NULL OR CampusId = p_CampusId OR CampusId IS NULL)) AS TotalDesignations,
+        (SELECT COUNT(*) FROM `Staff` WHERE IsDeleted = 0 AND (Status = 'Active' OR Status IS NULL) AND (p_CampusId IS NULL OR CampusId = p_CampusId)) AS TotalStaff
+    FROM `Departments`
+    WHERE (p_CampusId IS NULL OR CampusId = p_CampusId OR CampusId IS NULL);
 END //
 DELIMITER ;
 
@@ -3109,7 +3092,8 @@ DELIMITER //
 DROP PROCEDURE IF EXISTS `sp_GetDepartments` //
 CREATE PROCEDURE `sp_GetDepartments`(
     IN p_StaffType VARCHAR(50),
-    IN p_IncludeInactive TINYINT(1)
+    IN p_IncludeInactive TINYINT(1),
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -3122,11 +3106,12 @@ BEGIN
         d.CreatedAt,
         d.UpdatedAt,
         COUNT(DISTINCT CASE WHEN des.IsActive = 1 THEN des.Id END) AS DesignationCount,
-        COUNT(DISTINCT CASE WHEN s.IsDeleted = 0 THEN s.Id END) AS StaffCount
+        COUNT(DISTINCT CASE WHEN s.IsDeleted = 0 AND (p_CampusId IS NULL OR s.CampusId = p_CampusId) THEN s.Id END) AS StaffCount
     FROM `Departments` d
-    LEFT JOIN `Designations` des ON des.DepartmentId = d.DepartmentId
-    LEFT JOIN `Staff` s ON s.DepartmentId = d.DepartmentId
+    LEFT JOIN `Designations` des ON des.DepartmentId = d.DepartmentId AND (p_CampusId IS NULL OR des.CampusId = p_CampusId OR des.CampusId IS NULL)
+    LEFT JOIN `Staff` s ON s.DepartmentId = d.DepartmentId AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
     WHERE (p_IncludeInactive = 1 OR d.IsActive = 1)
+      AND (p_CampusId IS NULL OR d.CampusId = p_CampusId OR d.CampusId IS NULL)
       AND (
           p_StaffType IS NULL 
           OR TRIM(p_StaffType) = '' 
@@ -3157,7 +3142,8 @@ DELIMITER ;
 DELIMITER //
 DROP PROCEDURE IF EXISTS `sp_GetDesignationById` //
 CREATE PROCEDURE `sp_GetDesignationById`(
-    IN p_DesignationId INT
+    IN p_DesignationId INT,
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -3170,11 +3156,12 @@ BEGIN
         des.IsActive,
         des.CreatedAt,
         des.UpdatedAt,
-        COUNT(CASE WHEN s.IsDeleted = 0 THEN s.Id END) AS AssignedStaffCount
+        COUNT(CASE WHEN s.IsDeleted = 0 AND (p_CampusId IS NULL OR s.CampusId = p_CampusId) THEN s.Id END) AS AssignedStaffCount
     FROM `Designations` des
     LEFT JOIN `Departments` d ON d.DepartmentId = des.DepartmentId
-    LEFT JOIN `Staff` s ON s.DesignationId = des.Id
-    WHERE des.Id = p_DesignationId
+    LEFT JOIN `Staff` s ON s.DesignationId = des.Id AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
+    WHERE des.Id = p_DesignationId 
+      AND (p_CampusId IS NULL OR des.CampusId = p_CampusId OR des.CampusId IS NULL)
     GROUP BY 
         des.Id, 
         des.Name, 
@@ -3191,14 +3178,17 @@ DELIMITER ;
 
 DELIMITER //
 DROP PROCEDURE IF EXISTS `sp_GetDesignationSummary` //
-CREATE PROCEDURE `sp_GetDesignationSummary`()
+CREATE PROCEDURE `sp_GetDesignationSummary`(
+    IN p_CampusId INT
+)
 BEGIN
     SELECT 
         COUNT(*) AS TotalDesignations,
         COUNT(CASE WHEN IsActive = 1 THEN 1 END) AS ActiveDesignations,
         COUNT(CASE WHEN IsActive = 0 THEN 1 END) AS InactiveDesignations,
-        (SELECT COUNT(DISTINCT Id) FROM `Staff` WHERE DesignationId IS NOT NULL AND DesignationId > 0 AND IsDeleted = 0) AS AssignedStaffCount
-    FROM `Designations`;
+        (SELECT COUNT(DISTINCT Id) FROM `Staff` WHERE DesignationId IS NOT NULL AND DesignationId > 0 AND IsDeleted = 0 AND (p_CampusId IS NULL OR CampusId = p_CampusId)) AS AssignedStaffCount
+    FROM `Designations`
+    WHERE (p_CampusId IS NULL OR CampusId = p_CampusId OR CampusId IS NULL);
 END //
 DELIMITER ;
 
@@ -3207,7 +3197,8 @@ DROP PROCEDURE IF EXISTS `sp_GetDesignations` //
 CREATE PROCEDURE `sp_GetDesignations`(
     IN p_IncludeInactive TINYINT(1),
     IN p_StaffType VARCHAR(50),
-    IN p_DepartmentId INT
+    IN p_DepartmentId INT,
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -3220,12 +3211,13 @@ BEGIN
         des.IsActive,
         des.CreatedAt,
         des.UpdatedAt,
-        COUNT(CASE WHEN s.IsDeleted = 0 THEN s.Id END) AS AssignedStaffCount
+        COUNT(CASE WHEN s.IsDeleted = 0 AND (p_CampusId IS NULL OR s.CampusId = p_CampusId) THEN s.Id END) AS AssignedStaffCount
     FROM `Designations` des
     LEFT JOIN `Departments` d ON d.DepartmentId = des.DepartmentId
-    LEFT JOIN `Staff` s ON s.DesignationId = des.Id
+    LEFT JOIN `Staff` s ON s.DesignationId = des.Id AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
     WHERE (p_IncludeInactive = 1 OR des.IsActive = 1)
       AND (p_DepartmentId IS NULL OR p_DepartmentId <= 0 OR des.DepartmentId = p_DepartmentId)
+      AND (p_CampusId IS NULL OR des.CampusId = p_CampusId OR des.CampusId IS NULL)
       AND (
           p_StaffType IS NULL 
           OR TRIM(p_StaffType) = '' 
@@ -3655,7 +3647,7 @@ DELIMITER ;
 
 DELIMITER //
 DROP PROCEDURE IF EXISTS `sp_GetCertificateWorkflowStats` //
-CREATE PROCEDURE `sp_GetCertificateWorkflowStats`()
+CREATE PROCEDURE `sp_GetCertificateWorkflowStats`(IN p_CampusId INT)
 BEGIN
     SELECT
         COUNT(*) AS TotalCount,
@@ -3673,7 +3665,8 @@ DROP PROCEDURE IF EXISTS `sp_GetCertificates` //
 CREATE PROCEDURE `sp_GetCertificates`(
     IN p_Search VARCHAR(150),
     IN p_Status VARCHAR(50),
-    IN p_CertificateType VARCHAR(100)
+    IN p_CertificateType VARCHAR(100),
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -3728,6 +3721,7 @@ BEGIN
            OR CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, '')) LIKE CONCAT('%', p_Search, '%')
            OR c.CertificateType LIKE CONCAT('%', p_Search, '%')
            OR c.Purpose LIKE CONCAT('%', p_Search, '%'))
+      AND (p_CampusId IS NULL OR c.CampusId = p_CampusId)
     ORDER BY c.Id DESC;
 END //
 DELIMITER ;
@@ -4138,7 +4132,8 @@ CREATE PROCEDURE `sp_Report_Admissions`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             sa.`AdmissionId`, 
@@ -4202,7 +4197,8 @@ CREATE PROCEDURE `sp_Report_Attendance`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             DATE_FORMAT(a.`AttendanceDate`, '%Y-%m-%d') AS `Period`, 
@@ -4240,7 +4236,8 @@ CREATE PROCEDURE `sp_Report_AuditLogs`(
     IN p_ToDate DATETIME,
     IN p_PageNumber INT,
     IN p_PageSize INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     DECLARE v_Offset INT;
     DECLARE v_Limit INT;
@@ -4276,7 +4273,8 @@ CREATE PROCEDURE `sp_Report_Dashboard`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         -- 1.1 Overview 10 Metrics Summary Card
                         SELECT
@@ -4286,7 +4284,7 @@ BEGIN
                                AND (p_AcademicYearId IS NULL OR sa.`AcademicYearId` = p_AcademicYearId) 
                                AND (p_AcademicLevelId IS NULL OR sa.`AcademicLevelId` = p_AcademicLevelId)
                                AND (p_GroupId IS NULL OR sa.`GroupId` = p_GroupId) 
-                               AND (p_SectionId IS NULL OR EXISTS (SELECT 1 FROM `Students` s WHERE (s.`AdmissionId` = sa.`AdmissionId` OR s.`AdmissionNo` = sa.`AdmissionNo`) AND s.`SectionId` = p_SectionId))
+                               AND (p_SectionId IS NULL OR EXISTS (SELECT 1 FROM `Students` s WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.`AdmissionId` = sa.`AdmissionId` OR s.`AdmissionNo` = sa.`AdmissionNo`) AND s.`SectionId` = p_SectionId))
                                AND (p_FromDate IS NULL OR sa.`AdmissionDate` >= p_FromDate) 
                                AND (p_ToDate IS NULL OR sa.`AdmissionDate` <= p_ToDate)
                             ) AS `Admissions`,
@@ -4434,7 +4432,8 @@ CREATE PROCEDURE `sp_Report_DueFees`(
     IN p_SectionId INT,
     IN p_FromDate DATETIME,
     IN p_ToDate DATETIME
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         s.`StudentId`,
@@ -4475,7 +4474,8 @@ CREATE PROCEDURE `sp_Report_Examinations`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             e.`ExamId` AS `ExaminationId`, 
@@ -4522,7 +4522,8 @@ CREATE PROCEDURE `sp_Report_FacultyAttendance`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             fa.`FacultyId`, 
@@ -4555,7 +4556,8 @@ CREATE PROCEDURE `sp_Report_FacultyWorkload`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             st.`Id` AS `FacultyId`, 
@@ -4591,7 +4593,8 @@ CREATE PROCEDURE `sp_Report_FeeCollection`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             fp.`FeePaymentId` AS `PaymentId`, 
@@ -4638,7 +4641,8 @@ CREATE PROCEDURE `sp_Report_PassPercentage`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             r.`ExamId`, 
@@ -4676,7 +4680,8 @@ CREATE PROCEDURE `sp_Report_Results`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             r.`ResultId`, 
@@ -4728,7 +4733,8 @@ CREATE PROCEDURE `sp_Report_StudentStrength`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             COALESCE(s.`GroupId`, 0) AS `GroupId`, 
@@ -4765,7 +4771,8 @@ CREATE PROCEDURE `sp_Report_Toppers`(
                         IN p_SectionId INT,
                         IN p_FromDate DATETIME,
                         IN p_ToDate DATETIME
-                    )
+                    ,
+    IN p_CampusId INT)
 BEGIN
                         SELECT 
                             rnk.`Rank`, 

@@ -196,10 +196,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             string? search,
             string? category,
             bool? isActive,
+            int? campusId = null,
             CancellationToken ct = default)
         {
             await EnsureSeedsAsync(ct);
-            var query = _context.Templates.AsNoTracking().AsQueryable();
+            var query = _context.Templates.AsNoTracking().Where(t => t.CampusId == campusId || t.CampusId == null).AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(category) && !category.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
@@ -242,9 +243,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             };
         }
 
-        public async Task<IReadOnlyList<Template>> GetActiveByCategoryAsync(string? category, CancellationToken ct = default)
+        public async Task<IReadOnlyList<Template>> GetActiveByCategoryAsync(string? category, int? campusId = null, CancellationToken ct = default)
         {
-            var query = _context.Templates.AsNoTracking().Where(t => t.IsActive);
+            var query = _context.Templates.AsNoTracking().Where(t => t.IsActive && (t.CampusId == campusId || t.CampusId == null));
 
             if (!string.IsNullOrWhiteSpace(category) && !category.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
@@ -254,26 +255,26 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await query.OrderBy(t => t.Title).ToListAsync(ct);
         }
 
-        public async Task<Template?> GetByIdAsync(int id, CancellationToken ct = default)
+        public async Task<Template?> GetByIdAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
             await EnsureSeedsAsync(ct);
-            return await _context.Templates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
+            return await _context.Templates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id && (t.CampusId == campusId || t.CampusId == null), ct);
         }
 
-        public async Task<Template?> GetByCodeAsync(string templateCode, CancellationToken ct = default)
+        public async Task<Template?> GetByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(templateCode)) return null;
             await EnsureSeedsAsync(ct);
             return await _context.Templates
                 .AsNoTracking()
-                .FirstOrDefaultAsync(t => t.TemplateCode == templateCode.Trim(), ct);
+                .FirstOrDefaultAsync(t => t.TemplateCode == templateCode.Trim() && (t.CampusId == campusId || t.CampusId == null), ct);
         }
 
-        public async Task<bool> ExistsByCodeAsync(string templateCode, int? excludeId = null, CancellationToken ct = default)
+        public async Task<bool> ExistsByCodeAsync(string templateCode, int? excludeId = null, int? campusId = null, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(templateCode)) return false;
             var code = templateCode.Trim();
-            var query = _context.Templates.AsNoTracking().Where(t => t.TemplateCode == code);
+            var query = _context.Templates.AsNoTracking().Where(t => t.TemplateCode == code && (t.CampusId == campusId || t.CampusId == null));
             if (excludeId.HasValue && excludeId.Value > 0)
             {
                 query = query.Where(t => t.Id != excludeId.Value);
@@ -292,9 +293,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             return template;
         }
 
-        public async Task<Template?> UpdateAsync(int id, Template template, CancellationToken ct = default)
+        public async Task<Template?> UpdateAsync(int id, Template template, int? campusId = null, CancellationToken ct = default)
         {
-            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id, ct);
+            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id && (t.CampusId == campusId || t.CampusId == null), ct);
             if (existing == null) return null;
 
             existing.Title = template.Title.Trim();
@@ -317,9 +318,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             return existing;
         }
 
-        public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
+        public async Task<bool> DeleteAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
-            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id, ct);
+            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id && (t.CampusId == campusId || t.CampusId == null), ct);
             if (existing == null) return false;
 
             // Soft-delete by default
@@ -329,9 +330,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             return true;
         }
 
-        public async Task<bool> ToggleActiveAsync(int id, CancellationToken ct = default)
+        public async Task<bool> ToggleActiveAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
-            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id, ct);
+            var existing = await _context.Templates.FirstOrDefaultAsync(t => t.Id == id && (t.CampusId == campusId || t.CampusId == null), ct);
             if (existing == null) return false;
 
             existing.IsActive = !existing.IsActive;

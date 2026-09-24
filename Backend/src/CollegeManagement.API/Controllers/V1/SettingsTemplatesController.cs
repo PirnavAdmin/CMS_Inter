@@ -43,9 +43,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? search = null,
             [FromQuery] string? category = null,
             [FromQuery] bool? isActive = null,
+            [FromQuery] int? campusId = null,
             CancellationToken ct = default)
         {
-            var result = await _templateService.GetAllTemplatesAsync(pageNumber, pageSize, search, category, isActive, ct);
+            var result = await _templateService.GetAllTemplatesAsync(pageNumber, pageSize, search, category, isActive, campusId, ct);
             return Ok(result);
         }
 
@@ -70,11 +71,11 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetById(int id, CancellationToken ct = default)
+        public async Task<IActionResult> GetById(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
 
-            var result = await _templateService.GetTemplateByIdAsync(id, ct);
+            var result = await _templateService.GetTemplateByIdAsync(id, campusId, ct);
             if (result == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
             return Ok(result);
@@ -88,12 +89,12 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetByCode(string templateCode, CancellationToken ct = default)
+        public async Task<IActionResult> GetByCode(string templateCode, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(templateCode))
                 return BadRequest(new { message = "Template code is required." });
 
-            var result = await _templateService.GetTemplateByCodeAsync(templateCode, ct);
+            var result = await _templateService.GetTemplateByCodeAsync(templateCode, campusId, ct);
             if (result == null) return NotFound(new { message = $"Template with code '{templateCode}' not found." });
 
             return Ok(result);
@@ -108,13 +109,13 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<IActionResult> Create([FromBody] CreateTemplateDto dto, CancellationToken ct = default)
+        public async Task<IActionResult> Create([FromBody] CreateTemplateDto dto, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
             try
             {
-                var result = await _templateService.CreateTemplateAsync(dto, ct);
+                var result = await _templateService.CreateTemplateAsync(dto, campusId, ct);
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (ValidationException ex)
@@ -136,14 +137,14 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdateTemplateDto dto, CancellationToken ct = default)
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateTemplateDto dto, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
             try
             {
-                var result = await _templateService.UpdateTemplateAsync(id, dto, ct);
+                var result = await _templateService.UpdateTemplateAsync(id, dto, campusId, ct);
                 if (result == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
                 return Ok(result);
@@ -166,11 +167,11 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Delete(int id, CancellationToken ct = default)
+        public async Task<IActionResult> Delete(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
 
-            var success = await _templateService.DeleteTemplateAsync(id, ct);
+            var success = await _templateService.DeleteTemplateAsync(id, campusId, ct);
             if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
 
             return NoContent();
@@ -184,11 +185,11 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> ToggleActive(int id, CancellationToken ct = default)
+        public async Task<IActionResult> ToggleActive(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
 
-            var success = await _templateService.ToggleTemplateActiveAsync(id, ct);
+            var success = await _templateService.ToggleTemplateActiveAsync(id, campusId, ct);
             if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
 
             return Ok(new { success = true, message = "Template active status toggled successfully." });
@@ -202,11 +203,11 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(RenderedTemplateResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
-        public async Task<IActionResult> Preview([FromBody] RenderCertificateTemplateRequestDto request, CancellationToken ct = default)
+        public async Task<IActionResult> Preview([FromBody] RenderCertificateTemplateRequestDto request, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             try
             {
-                var result = await _templateService.RenderTemplateAsync(request, ct);
+                var result = await _templateService.RenderTemplateAsync(request, campusId, ct);
                 return Ok(result);
             }
             catch (ValidationException ex)
