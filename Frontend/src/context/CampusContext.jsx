@@ -200,18 +200,30 @@ export function CampusProvider({ children }) {
     }
   }, [selectedCampusId]);
 
+  // Derived active campuses for header/navbar selection
+  const activeCampuses = useMemo(() => {
+    if (!Array.isArray(campuses)) return [];
+    return campuses.filter((c) => {
+      if (!c) return false;
+      if (c.isActive === false) return false;
+      const statusStr = String(c.status || "").toLowerCase();
+      if (statusStr === "inactive") return false;
+      return true;
+    });
+  }, [campuses]);
+
   // Derived selectedCampus object
   const selectedCampus = useMemo(() => {
-    if (!campuses?.length) return null;
+    const list = activeCampuses.length > 0 ? activeCampuses : campuses;
+    if (!list?.length) return null;
     const strId = String(selectedCampusId);
     return (
-      campuses.find((c) => String(c.id) === strId || String(c.campusId) === strId) ||
-      campuses.find((c) => c.isHQ) ||
-      campuses.find((c) => c.isActive || c.status === "Active") ||
-      campuses[0] ||
+      list.find((c) => String(c.id) === strId || String(c.campusId) === strId) ||
+      list.find((c) => c.isHQ) ||
+      list[0] ||
       null
     );
-  }, [campuses, selectedCampusId]);
+  }, [activeCampuses, campuses, selectedCampusId]);
 
   // Setter for selected campus (supports object or ID string/number)
   const handleSetSelectedCampus = useCallback((campusOrId) => {
@@ -317,6 +329,7 @@ export function CampusProvider({ children }) {
   const contextValue = useMemo(
     () => ({
       campuses,
+      activeCampuses,
       selectedCampus,
       selectedCampusId,
       setSelectedCampus: handleSetSelectedCampus,
@@ -330,6 +343,7 @@ export function CampusProvider({ children }) {
     }),
     [
       campuses,
+      activeCampuses,
       selectedCampus,
       selectedCampusId,
       handleSetSelectedCampus,
