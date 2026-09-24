@@ -871,14 +871,14 @@ export default function ReportsPage() {
         </div>
       ) : null}
 
-      {/* 10 Summary KPI Cards */}
-      <section className="reports-summary-panel" aria-labelledby="reports-summary-title">
-        <div className="reports-summary-panel-head">
-          <div>
-            <h2 id="reports-summary-title">Reports Overview (10 Metrics)</h2>
-            <p>Live calculated statistics based on your selected filter criteria</p>
-          </div>
-          {reportGenerated ? (
+      {/* 10 Summary KPI Cards - Only visible after user clicks Generate Report */}
+      {reportGenerated ? (
+        <section className="reports-summary-panel" aria-labelledby="reports-summary-title">
+          <div className="reports-summary-panel-head">
+            <div>
+              <h2 id="reports-summary-title">Reports Overview (10 Metrics)</h2>
+              <p>Live calculated statistics based on your selected filter criteria</p>
+            </div>
             <div className="reports-summary-actions">
               <button className="cms-btn cms-btn-ghost" type="button" onClick={() => previewReport("pdf")} disabled={previewing === "pdf"}>
                 <Eye size={14} /> {previewing === "pdf" ? "Loading PDF..." : "Review PDF"}
@@ -899,50 +899,30 @@ export default function ReportsPage() {
                 <Printer size={14} /> Print
               </button>
             </div>
-          ) : null}
-        </div>
-
-        {!reportGenerated && !loading ? (
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            margin: "12px 0 16px",
-            padding: "12px 16px",
-            borderRadius: "8px",
-            background: "var(--cms-subtle, #f5f8fc)",
-            border: "1px dashed var(--cms-border, #d7e0ec)",
-            color: "var(--cms-text-secondary, #486581)",
-            fontSize: "13px"
-          }}>
-            <AlertCircle size={16} color="var(--cms-primary, #2758e8)" />
-            <span>Select your filter criteria above and click <strong>Generate Report</strong> to calculate and view live metrics.</span>
           </div>
-        ) : null}
 
-        <div className="reports-summary-grid">
-          {summaryCardConfig.map((card) => {
-            const { key, label, icon: Icon, image, tone, currency, suffix } = card;
-            const format = { currency, suffix };
-            const val = cardValues[key];
-            const displayVal = val !== undefined ? formatMetric(val, format) : "—";
+          <div className="reports-summary-grid">
+            {summaryCardConfig.map((card) => {
+              const { key, label, icon: Icon, image, tone, currency, suffix } = card;
+              const format = { currency, suffix };
+              const val = cardValues[key];
+              const displayVal = val !== undefined ? formatMetric(val, format) : "—";
 
-            return (
-              <article
-                key={key}
-                className="reports-summary-card reports-summary-card-expanded"
-              >
-                <div className="reports-summary-card-head">
-                  <span className={`reports-summary-icon reports-summary-icon-${tone}`} aria-hidden="true">
-                    {image ? <img className="reports-summary-image" src={image} alt="" /> : <Icon size={20} strokeWidth={2} />}
-                  </span>
-                  <div className="reports-summary-content">
-                    <span>{label}</span>
-                    <strong>{displayVal}</strong>
+              return (
+                <article
+                  key={key}
+                  className="reports-summary-card reports-summary-card-expanded"
+                >
+                  <div className="reports-summary-card-head">
+                    <span className={`reports-summary-icon reports-summary-icon-${tone}`} aria-hidden="true">
+                      {image ? <img className="reports-summary-image" src={image} alt="" /> : <Icon size={20} strokeWidth={2} />}
+                    </span>
+                    <div className="reports-summary-content">
+                      <span>{label}</span>
+                      <strong>{displayVal}</strong>
+                    </div>
                   </div>
-                </div>
 
-                {reportGenerated ? (
                   <div className="reports-card-actions">
                     <button
                       className="cms-btn cms-btn-ghost"
@@ -963,12 +943,12 @@ export default function ReportsPage() {
                       <FileSpreadsheet size={12} /> Excel
                     </button>
                   </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </section>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {/* PDF Preview Modal */}
       {previewFile?.format === "pdf" ? (

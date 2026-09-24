@@ -495,8 +495,28 @@ export default function DashboardPage() {
       const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
       if (studentAttSeq.current === seq) {
         const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated;
-        setStudentAttState({ loading: false, error: null, data: unwrapped, timestamp: serverTime || "Not marked today" });
+        const serverTime = unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime || unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
+        let formattedTime = "Not marked today";
+        if (serverTime && serverTime !== "Not marked today") {
+          if (typeof serverTime === "string") {
+            if (serverTime.includes("T") || (serverTime.includes("-") && serverTime.includes(":"))) {
+              const d = new Date(serverTime);
+              formattedTime = !isNaN(d.getTime())
+                ? d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
+                : serverTime;
+            } else if (serverTime !== "Today") {
+              formattedTime = serverTime;
+            } else if (presentCount > 0) {
+              formattedTime = "Today";
+            }
+          } else {
+            formattedTime = String(serverTime);
+          }
+        } else if (presentCount > 0) {
+          formattedTime = "Today";
+        }
+        setStudentAttState({ loading: false, error: null, data: unwrapped, timestamp: formattedTime });
       }
     } catch (err) {
       if (studentAttSeq.current === seq) {
@@ -527,8 +547,28 @@ export default function DashboardPage() {
       const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
       if (staffAttSeq.current === seq) {
         const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated;
-        setStaffAttState({ loading: false, error: null, data: unwrapped, timestamp: serverTime || "Not marked today" });
+        const serverTime = unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime || unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
+        let formattedTime = "Not marked today";
+        if (serverTime && serverTime !== "Not marked today") {
+          if (typeof serverTime === "string") {
+            if (serverTime.includes("T") || (serverTime.includes("-") && serverTime.includes(":"))) {
+              const d = new Date(serverTime);
+              formattedTime = !isNaN(d.getTime())
+                ? d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
+                : serverTime;
+            } else if (serverTime !== "Today") {
+              formattedTime = serverTime;
+            } else if (presentCount > 0) {
+              formattedTime = "Today";
+            }
+          } else {
+            formattedTime = String(serverTime);
+          }
+        } else if (presentCount > 0) {
+          formattedTime = "Today";
+        }
+        setStaffAttState({ loading: false, error: null, data: unwrapped, timestamp: formattedTime });
       }
     } catch (err) {
       if (staffAttSeq.current === seq) {
@@ -976,9 +1016,10 @@ export default function DashboardPage() {
 
       let tone = "violet";
       const lowerType = String(type).toLowerCase();
-      if (lowerType.includes("national")) tone = "orange";
-      else if (lowerType.includes("festival")) tone = "violet";
-      else if (lowerType.includes("special")) tone = "cyan";
+      if (lowerType.includes("national") || lowerType.includes("public") || lowerType.includes("gazetted")) tone = "orange";
+      else if (lowerType.includes("festival") || lowerType.includes("religious") || lowerType.includes("cultural")) tone = "violet";
+      else if (lowerType.includes("special") || lowerType.includes("institutional") || lowerType.includes("state") || lowerType.includes("restricted")) tone = "cyan";
+      else if (lowerType.includes("vacation") || lowerType.includes("break") || lowerType.includes("term") || lowerType.includes("semester")) tone = "green";
       else tone = "blue";
 
       return {
