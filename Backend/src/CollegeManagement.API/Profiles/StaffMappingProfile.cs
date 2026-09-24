@@ -26,6 +26,7 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.CreatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.UpdatedAt, opt => opt.Ignore())
                 .ForMember(dest => dest.IsDeleted, opt => opt.MapFrom(_ => false))
+                .ForMember(dest => dest.DrivingLicenseExpiryDate, opt => opt.MapFrom(src => ParseNullableDate(src.DrivingLicenseExpiryDate)))
                 .ForMember(dest => dest.PhotoPath, opt => opt.MapFrom(src => src.PhotoPath ?? src.Photo))
                 .ForMember(dest => dest.Id, opt => opt.Ignore())
                 .ForMember(dest => dest.DesignationRef, opt => opt.Ignore())
@@ -40,6 +41,7 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.PanNumber, opt => opt.MapFrom(src => src.PanNumber ?? src.Pan))
                 .ForMember(dest => dest.Pincode, opt => opt.MapFrom(src => src.Pincode ?? src.Pin))
                 .ForMember(dest => dest.JoiningDate, opt => opt.MapFrom(src => src.JoiningDate ?? (src.DateOfJoining ?? DateTime.UtcNow)))
+                .ForMember(dest => dest.DrivingLicenseExpiryDate, opt => opt.MapFrom(src => ParseNullableDate(src.DrivingLicenseExpiryDate)))
                 .ForMember(dest => dest.UpdatedAt, opt => opt.MapFrom(_ => DateTime.UtcNow))
                 .ForMember(dest => dest.CreatedAt, opt => opt.Ignore())
                 .ForMember(dest => dest.IsDeleted, opt => opt.Ignore())
@@ -146,6 +148,11 @@ namespace CollegeManagement.API.Profiles
             {
                 return new Dictionary<string, object>();
             }
+        }
+
+        private static DateTime? ParseNullableDate(string? dateStr)
+        {
+            return !string.IsNullOrWhiteSpace(dateStr) && DateTime.TryParse(dateStr, out var d) ? d : null;
         }
     }
 }

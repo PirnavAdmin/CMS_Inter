@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { 
   Building2, 
@@ -14,37 +14,53 @@ import {
   Phone, 
   Mail, 
   MapPin, 
-  Radio,
-  Landmark,
-  ChevronDown
+  Radio, 
+  Landmark, 
+  ChevronDown,
+  AlertTriangle,
+  AlertCircle,
+  Info
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import * as campusApi from "@/api/campusApi.js";
 import "./CampusConfigurationPage.css";
 
 const FALLBACK_BOARDS = [
-  { code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh" },
-  { code: "TGBIE", name: "Telangana Board of Intermediate Education" },
-  { code: "CBSE", name: "Central Board of Secondary Education" },
-  { code: "CISCE", name: "Council for the Indian School Certificate Examinations" },
-  { code: "PUC-KA", name: "Karnataka Pre-University Education" },
-  { code: "DGE-TN", name: "Tamil Nadu State Board – Higher Secondary" },
+  { id: 1, boardId: 1, code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh", boardName: "Board of Intermediate Education, Andhra Pradesh" },
+  { id: 2, boardId: 2, code: "TGBIE", name: "Telangana Board of Intermediate Education", boardName: "Telangana Board of Intermediate Education" },
+  { id: 3, boardId: 3, code: "CBSE", name: "Central Board of Secondary Education", boardName: "Central Board of Secondary Education" },
+  { id: 4, boardId: 4, code: "CISCE", name: "Council for the Indian School Certificate Examinations", boardName: "Council for the Indian School Certificate Examinations" },
+  { id: 5, boardId: 5, code: "PUC-KA", name: "Karnataka Pre-University Education", boardName: "Karnataka Pre-University Education" },
+  { id: 6, boardId: 6, code: "DGE-TN", name: "Tamil Nadu State Board – Higher Secondary", boardName: "Tamil Nadu State Board – Higher Secondary" },
 ];
 
 export default function CampusConfigurationPage() {
-  const { campuses, selectedCampus, setSelectedCampus, addCampus, updateCampus, deleteCampus } = useCampusContext();
+  const { 
+    campuses, 
+    selectedCampus, 
+    setSelectedCampus, 
+    addCampus, 
+    updateCampus, 
+    deleteCampus,
+    toggleCampusStatus,
+    fetchCampuses,
+    loading: contextLoading 
+  } = useCampusContext();
+
   const { boards: contextBoards } = useAcademicContext();
 
-  // Combine and deduplicate available boards
+  // Combine and deduplicate available boards with IDs
   const availableBoards = useMemo(() => {
     const combined = [...(contextBoards || []), ...FALLBACK_BOARDS];
     const map = new Map();
-    combined.forEach((b) => {
+    combined.forEach((b, idx) => {
       const name = b.name || b.boardName || b.code;
-      const code = b.code || name;
+      const code = b.code || b.boardCode || name;
+      const id = Number(b.id || b.boardId || idx + 1);
       if (name && !map.has(name)) {
-        map.set(name, { code, name });
+        map.set(name, { id, boardId: id, code, name });
       }
     });
     return Array.from(map.values());
@@ -54,9 +70,31 @@ export default function CampusConfigurationPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [boardDropdownOpen, setBoardDropdownOpen] = useState(false);
 
-  // Modal State
+  // Backend Stats State
+  const [stats, setStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+
+  // Form Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCampus, setEditingCampus] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Custom In-App Delete Confirmation Modal State
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Custom In-App Alert Dialog State
+  const [alertInfo, setAlertInfo] = useState(null);
+
+  // Custom In-App Toast State
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast((prev) => (prev?.message === message ? null : prev));
+    }, 4000);
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -71,6 +109,26 @@ export default function CampusConfigurationPage() {
 
   const [formError, setFormError] = useState("");
 
+  // Load live statistics from /api/v1/campuses/stats
+  const loadStats = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      const selectedId = selectedCampus?.campusId || selectedCampus?.id;
+      const statsData = await campusApi.getCampusStats(selectedId);
+      if (statsData) {
+        setStats(statsData);
+      }
+    } catch (err) {
+      console.warn("Could not load campus stats from API:", err);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [selectedCampus]);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
+
   // Filtered Campuses
   const filteredCampuses = useMemo(() => {
     return campuses.filter((c) => {
@@ -83,8 +141,8 @@ export default function CampusConfigurationPage() {
 
       const matchStatus =
         statusFilter === "All" ||
-        (statusFilter === "Active" && (c.status === "Active" || c.status === "Active (Displays in Header Selector)")) ||
-        (statusFilter === "Inactive" && c.status === "Inactive");
+        (statusFilter === "Active" && (c.status === "Active" || c.status === "Active (Displays in Header Selector)" || c.isActive === true)) ||
+        (statusFilter === "Inactive" && (c.status === "Inactive" || c.isActive === false));
 
       return matchSearch && matchStatus;
     });
@@ -110,16 +168,20 @@ export default function CampusConfigurationPage() {
   // Open Modal for Edit
   const handleOpenEdit = (campus) => {
     setEditingCampus(campus);
+    const existingBoards = Array.isArray(campus.affiliatedBoards) && campus.affiliatedBoards.length > 0
+      ? campus.affiliatedBoards.map((b) => b.boardName || b.name || b.boardCode || b.code)
+      : Array.isArray(campus.boards) && campus.boards.length > 0
+      ? campus.boards
+      : ["Board of Intermediate Education, Andhra Pradesh"];
+
     setFormData({
-      name: campus.name || "",
-      code: campus.code || "",
+      name: campus.name || campus.campusName || "",
+      code: campus.code || campus.campusCode || "",
       address: campus.address || "",
-      phone: campus.phone || "",
+      phone: campus.phone || campus.contactPhone || "",
       email: campus.email || "",
-      boards: Array.isArray(campus.boards) && campus.boards.length > 0 
-        ? campus.boards 
-        : ["Board of Intermediate Education, Andhra Pradesh"],
-      status: campus.status?.includes("Active") ? "Active (Displays in Header Selector)" : "Inactive",
+      boards: existingBoards,
+      status: (campus.status?.includes("Active") || campus.isActive) ? "Active (Displays in Header Selector)" : "Inactive",
     });
     setBoardDropdownOpen(false);
     setFormError("");
@@ -158,7 +220,7 @@ export default function CampusConfigurationPage() {
   };
 
   // Submit Modal Form
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
 
@@ -175,46 +237,103 @@ export default function CampusConfigurationPage() {
       return;
     }
 
+    // Resolve Board IDs from selected board names
+    const resolvedBoardIds = formData.boards
+      .map((bName) => {
+        const found = availableBoards.find((b) => b.name === bName || b.boardName === bName || b.code === bName);
+        return found ? Number(found.id || found.boardId) : null;
+      })
+      .filter((id) => id != null && !isNaN(id));
+
     const payload = {
-      name: formData.name.trim(),
-      code: formData.code.trim().toUpperCase(),
+      campusName: formData.name.trim(),
+      campusCode: formData.code.trim().toUpperCase(),
       address: formData.address.trim(),
-      phone: formData.phone.trim(),
+      contactPhone: formData.phone.trim(),
       email: formData.email.trim(),
-      boards: formData.boards,
-      status: formData.status.includes("Active") ? "Active" : "Inactive",
+      isHQ: editingCampus ? Boolean(editingCampus.isHQ) : false,
+      isActive: formData.status.includes("Active"),
+      boardIds: resolvedBoardIds.length > 0 ? resolvedBoardIds : [1],
     };
 
     try {
+      setSubmitting(true);
       if (editingCampus) {
-        updateCampus(editingCampus.id, payload);
+        const targetId = editingCampus.campusId ?? editingCampus.id;
+        await updateCampus(targetId, payload);
+        showToast(`Campus "${payload.campusName}" updated successfully.`);
       } else {
-        addCampus(payload);
+        await addCampus(payload);
+        showToast(`Campus "${payload.campusName}" added successfully.`);
       }
       setModalOpen(false);
+      await loadStats();
+      await fetchCampuses();
     } catch (err) {
       setFormError(err.message || "Failed to save campus branch.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  // Delete Handler
-  const handleDelete = (campus) => {
+  // Prompt Custom In-App Delete Dialog
+  const handleDeletePrompt = (campus) => {
     if (campuses.length <= 1) {
-      alert("Cannot delete the only configured campus branch.");
+      setAlertInfo({
+        title: "Cannot Delete Campus",
+        message: "At least one campus branch must remain configured in the system.",
+        type: "warning",
+      });
       return;
     }
-    if (window.confirm(`Are you sure you want to delete the campus "${campus.name}"?`)) {
-      try {
-        deleteCampus(campus.id);
-      } catch (err) {
-        alert(err.message || "Failed to delete campus.");
-      }
+    setDeleteTarget(campus);
+  };
+
+  // Confirm In-App Delete Action
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const targetId = deleteTarget.campusId ?? deleteTarget.id;
+    const campusName = deleteTarget.name || deleteTarget.campusName;
+    try {
+      setDeleteLoading(true);
+      await deleteCampus(targetId);
+      setDeleteTarget(null);
+      showToast(`Campus "${campusName}" deleted successfully.`);
+      await loadStats();
+      await fetchCampuses();
+    } catch (err) {
+      setDeleteTarget(null);
+      setAlertInfo({
+        title: "Deletion Error",
+        message: err.message || "Failed to delete campus branch. Ensure there are no enrolled students or active records assigned to this branch.",
+        type: "danger",
+      });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  // Status Toggle Handler
+  const handleToggleStatus = async (campus) => {
+    const targetId = campus.campusId ?? campus.id;
+    const campusName = campus.name || campus.campusName;
+    try {
+      await toggleCampusStatus(targetId);
+      showToast(`Status updated for "${campusName}".`);
+      await loadStats();
+      await fetchCampuses();
+    } catch (err) {
+      setAlertInfo({
+        title: "Status Update Error",
+        message: err.message || "Failed to toggle campus active status.",
+        type: "danger",
+      });
     }
   };
 
   // Helper to extract short code for board
   const getBoardCode = (boardName) => {
-    const found = availableBoards.find((b) => b.name === boardName);
+    const found = availableBoards.find((b) => b.name === boardName || b.boardName === boardName);
     if (found?.code) return found.code;
     if (boardName.includes("Andhra Pradesh")) return "BIEAP";
     if (boardName.includes("Telangana")) return "TGBIE";
@@ -225,10 +344,10 @@ export default function CampusConfigurationPage() {
     return boardName.slice(0, 6).toUpperCase();
   };
 
-  // Stats calculation
-  const totalCount = campuses.length;
-  const activeCount = campuses.filter((c) => c.status === "Active" || c.status === "Active (Displays in Header Selector)").length;
-  const inactiveCount = totalCount - activeCount;
+  // Stats calculation with backend fallback
+  const totalCount = stats?.totalCampuses ?? campuses.length;
+  const activeCount = stats?.activeInHeader ?? campuses.filter((c) => c.status === "Active" || c.status === "Active (Displays in Header Selector)" || c.isActive).length;
+  const inactiveCount = stats?.inactiveBranches ?? (totalCount - activeCount);
 
   return (
     <DashboardLayout
@@ -293,8 +412,8 @@ export default function CampusConfigurationPage() {
             </div>
             <div className="campus-stat-info">
               <h4>Selected Branch</h4>
-              <p style={{ fontSize: 14 }}>{selectedCampus?.name || "Main Campus"}</p>
-              <small>{selectedCampus?.code || "MAIN"}</small>
+              <p style={{ fontSize: 14 }}>{selectedCampus?.name || selectedCampus?.campusName || "Main Campus"}</p>
+              <small>{selectedCampus?.code || selectedCampus?.campusCode || "MAIN"}</small>
             </div>
           </div>
         </div>
@@ -349,19 +468,23 @@ export default function CampusConfigurationPage() {
                 </tr>
               ) : (
                 filteredCampuses.map((campus) => {
-                  const isSelected = String(selectedCampus?.id) === String(campus.id) || selectedCampus?.code === campus.code;
-                  const isActive = campus.status === "Active" || campus.status === "Active (Displays in Header Selector)";
-                  const campusBoards = Array.isArray(campus.boards) && campus.boards.length > 0 
+                  const isSelected = String(selectedCampus?.id) === String(campus.id) || 
+                                     String(selectedCampus?.campusId) === String(campus.campusId) ||
+                                     selectedCampus?.code === campus.code;
+                  const isActive = campus.isActive ?? (campus.status === "Active" || campus.status === "Active (Displays in Header Selector)");
+                  const campusBoards = Array.isArray(campus.affiliatedBoards) && campus.affiliatedBoards.length > 0
+                    ? campus.affiliatedBoards.map((b) => b.boardName || b.name || b.boardCode || b.code)
+                    : Array.isArray(campus.boards) && campus.boards.length > 0 
                     ? campus.boards 
                     : ["Board of Intermediate Education, Andhra Pradesh"];
 
                   return (
-                    <tr key={campus.id} className={isSelected ? "is-selected" : ""}>
+                    <tr key={campus.campusId || campus.id} className={isSelected ? "is-selected" : ""}>
                       <td>
                         <div className="campus-name-cell">
                           <span className="campus-name-title">
-                            {campus.name}
-                            {campus.isDefault && <span className="campus-active-badge">HQ</span>}
+                            {campus.name || campus.campusName}
+                            {(campus.isHQ || campus.isDefault) && <span className="campus-active-badge">HQ</span>}
                             {isSelected && (
                               <span className="campus-active-badge" style={{ background: "#edf5ea", color: "var(--cms-primary, #5a6e38)", borderColor: "#cce8d1" }}>
                                 Active in Header
@@ -371,7 +494,7 @@ export default function CampusConfigurationPage() {
                         </div>
                       </td>
                       <td>
-                        <span className="campus-code-tag">{campus.code}</span>
+                        <span className="campus-code-tag">{campus.code || campus.campusCode}</span>
                       </td>
                       <td>
                         <div className="campus-boards-cell">
@@ -396,7 +519,7 @@ export default function CampusConfigurationPage() {
                       <td>
                         <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#475569" }}>
                           <Phone size={13} color="#94a3b8" />
-                          <span>{campus.phone || "—"}</span>
+                          <span>{campus.phone || campus.contactPhone || "—"}</span>
                         </div>
                       </td>
                       <td>
@@ -406,10 +529,16 @@ export default function CampusConfigurationPage() {
                         </div>
                       </td>
                       <td>
-                        <span className={`campus-status-pill ${isActive ? "active" : "inactive"}`}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(campus)}
+                          className={`campus-status-pill ${isActive ? "active" : "inactive"}`}
+                          style={{ border: "none", cursor: "pointer", background: "none", padding: 0 }}
+                          title="Click to toggle active status in header selector"
+                        >
                           <span style={{ width: 6, height: 6, borderRadius: "50%", background: isActive ? "#16a34a" : "#94a3b8" }} />
                           {isActive ? "Active" : "Inactive"}
-                        </span>
+                        </button>
                       </td>
                       <td style={{ textAlign: "right" }}>
                         <div className="campus-actions-row" style={{ justifyContent: "flex-end" }}>
@@ -437,7 +566,7 @@ export default function CampusConfigurationPage() {
                             <button
                               type="button"
                               className="campus-action-btn delete"
-                              onClick={() => handleDelete(campus)}
+                              onClick={() => handleDeletePrompt(campus)}
                               title="Delete Campus"
                               aria-label="Delete Campus"
                             >
@@ -557,7 +686,7 @@ export default function CampusConfigurationPage() {
                         <div className="campus-board-menu-header">Select one or more education boards:</div>
                         <div className="campus-board-options-list">
                           {availableBoards.map((b) => {
-                            const isChecked = formData.boards.includes(b.name);
+                            const isChecked = formData.boards.includes(b.name) || formData.boards.includes(b.boardName);
                             return (
                               <label
                                 key={b.name}
@@ -640,14 +769,104 @@ export default function CampusConfigurationPage() {
                     type="button"
                     className="campus-btn-cancel"
                     onClick={() => setModalOpen(false)}
+                    disabled={submitting}
                   >
                     Cancel
                   </button>
-                  <button type="submit" className="campus-btn-save">
-                    {editingCampus ? "Save Changes" : "Save Campus"}
+                  <button type="submit" className="campus-btn-save" disabled={submitting}>
+                    {submitting ? "Saving..." : editingCampus ? "Save Changes" : "Save Campus"}
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Custom In-App Delete Confirmation Modal Matching Image 1 */}
+        {deleteTarget && (
+          <div className="campus-modal-overlay" onClick={() => !deleteLoading && setDeleteTarget(null)}>
+            <div className="campus-delete-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="campus-delete-modal-header">
+                <h3 className="campus-delete-modal-title">Delete campus?</h3>
+                <button
+                  type="button"
+                  className="campus-delete-modal-close"
+                  onClick={() => !deleteLoading && setDeleteTarget(null)}
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="campus-delete-modal-body">
+                Campus {deleteTarget.name || deleteTarget.campusName} will be deleted from the database.
+              </div>
+              <div className="campus-delete-modal-actions">
+                <button
+                  type="button"
+                  className="campus-delete-btn-cancel"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleteLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="campus-delete-btn-confirm"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? "Deleting..." : "Confirm"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom In-App Alert Dialog */}
+        {alertInfo && (
+          <div className="campus-modal-overlay" onClick={() => setAlertInfo(null)}>
+            <div className="campus-confirm-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="campus-confirm-header-row">
+                <div className={`campus-confirm-icon-wrap ${alertInfo.type || "warning"}`}>
+                  {alertInfo.type === "danger" ? (
+                    <AlertCircle size={24} />
+                  ) : alertInfo.type === "info" ? (
+                    <Info size={24} />
+                  ) : (
+                    <AlertTriangle size={24} />
+                  )}
+                </div>
+                <div className="campus-confirm-content">
+                  <h3 className="campus-confirm-title">{alertInfo.title}</h3>
+                  <p className="campus-confirm-desc">{alertInfo.message}</p>
+                </div>
+              </div>
+              <div className="campus-modal-actions" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="campus-btn-save"
+                  onClick={() => setAlertInfo(null)}
+                >
+                  Okay
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom In-App Toast Notification */}
+        {toast && (
+          <div className="campus-toast-wrapper">
+            <div className={`campus-toast-item ${toast.type || "success"}`}>
+              <span>{toast.message}</span>
+              <button
+                type="button"
+                className="campus-toast-close"
+                onClick={() => setToast(null)}
+                aria-label="Dismiss notification"
+              >
+                <X size={16} />
+              </button>
             </div>
           </div>
         )}

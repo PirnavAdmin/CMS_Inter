@@ -63,7 +63,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var parameters = new DynamicParameters();
 
-            parameters.Add("p_BoardId", request.BoardId);
+            parameters.Add("p_CampusId", request.CampusId); parameters.Add("p_BoardId", request.BoardId);
             parameters.Add("p_AcademicYearId", request.AcademicYearId);
             parameters.Add("p_AcademicLevelId", request.AcademicLevelId);
             parameters.Add("p_GroupId", request.GroupId);
@@ -85,7 +85,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private IQueryable<Attendance> FilterAttendances(AttendanceSearchRequest request)
         {
-            var query = _context.Attendances.AsNoTracking().Where(a => a.IsActive);
+            var query = _context.Attendances.AsNoTracking().Where(a => a.IsActive); 
 
             if (request.BoardId.HasValue && request.BoardId.Value > 0)
                 query = query.Where(a => a.BoardId == request.BoardId.Value);

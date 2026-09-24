@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, useEffect, useMemo } from "react";
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
+import * as campusApi from "../api/campusApi.js";
+import { getAuthToken } from "../features/authStorage.js";
 
 const CampusContext = createContext(null);
 
@@ -7,64 +9,123 @@ const STORAGE_KEY_SELECTED_CAMPUS = "cms_selected_campus_id";
 
 const DEFAULT_CAMPUSES = [
   {
-    id: "CAMPUS-01",
-    name: "Main Campus - Hyderabad",
-    code: "HYD-MAIN",
-    address: "Plot 45, Knowledge City, HITEC City, Hyderabad, Telangana - 500081",
-    phone: "+91 40 6789 0123",
-    email: "hyderabad@pirnavcolleges.edu.in",
+    id: 1,
+    campusId: 1,
+    name: "Main Campus (HQ)",
+    campusName: "Main Campus (HQ)",
+    code: "MAIN",
+    campusCode: "MAIN",
+    address: "123 University Blvd, Central District",
+    phone: "+91 98765 43210",
+    contactPhone: "+91 98765 43210",
+    email: "maincampus@pirnav.edu",
     boards: [
       "Board of Intermediate Education, Andhra Pradesh",
-      "Telangana Board of Intermediate Education",
-      "Central Board of Secondary Education",
     ],
+    affiliatedBoards: [
+      {
+        boardId: 1,
+        boardCode: "BIEAP",
+        boardName: "Board of Intermediate Education, Andhra Pradesh",
+        isActive: true,
+      },
+    ],
+    boardIds: [1],
+    isHQ: true,
+    isActive: true,
     status: "Active",
-    createdAt: "2024-01-15T00:00:00.000Z",
+    createdAt: "2026-09-23T11:14:43",
   },
   {
-    id: "CAMPUS-02",
-    name: "City Campus - Vijayawada",
-    code: "VJA-CITY",
-    address: "MG Road, Opposite Municipal Complex, Vijayawada, Andhra Pradesh - 520010",
-    phone: "+91 866 245 6789",
-    email: "vijayawada@pirnavcolleges.edu.in",
+    id: 2,
+    campusId: 2,
+    name: "North Branch",
+    campusName: "North Branch",
+    code: "NORTH",
+    campusCode: "NORTH",
+    address: "45 Knowledge Park, North Sector",
+    phone: "+91 98765 43211",
+    contactPhone: "+91 98765 43211",
+    email: "north@pirnav.edu",
     boards: [
       "Board of Intermediate Education, Andhra Pradesh",
-      "Central Board of Secondary Education",
     ],
+    affiliatedBoards: [
+      {
+        boardId: 1,
+        boardCode: "BIEAP",
+        boardName: "Board of Intermediate Education, Andhra Pradesh",
+        isActive: true,
+      },
+    ],
+    boardIds: [1],
+    isHQ: false,
+    isActive: true,
     status: "Active",
-    createdAt: "2024-02-10T00:00:00.000Z",
+    createdAt: "2026-09-23T11:14:44",
   },
   {
-    id: "CAMPUS-03",
-    name: "Guntur Campus",
-    code: "GNT-01",
-    address: "Brodipet 4th Lane, Guntur, Andhra Pradesh - 522002",
-    phone: "+91 863 223 4567",
-    email: "guntur@pirnavcolleges.edu.in",
+    id: 3,
+    campusId: 3,
+    name: "South Campus",
+    campusName: "South Campus",
+    code: "SOUTH",
+    campusCode: "SOUTH",
+    address: "78 Tech Corridor, South Block",
+    phone: "+91 98765 43212",
+    contactPhone: "+91 98765 43212",
+    email: "south@pirnav.edu",
     boards: [
       "Board of Intermediate Education, Andhra Pradesh",
     ],
+    affiliatedBoards: [
+      {
+        boardId: 1,
+        boardCode: "BIEAP",
+        boardName: "Board of Intermediate Education, Andhra Pradesh",
+        isActive: true,
+      },
+    ],
+    boardIds: [1],
+    isHQ: false,
+    isActive: true,
     status: "Active",
-    createdAt: "2024-03-01T00:00:00.000Z",
+    createdAt: "2026-09-23T11:14:45",
   },
   {
-    id: "CAMPUS-04",
-    name: "Visakhapatnam Campus",
-    code: "VSKP-01",
-    address: "Dwaraka Nagar Main Road, Visakhapatnam, Andhra Pradesh - 530016",
-    phone: "+91 891 278 9012",
-    email: "vizag@pirnavcolleges.edu.in",
+    id: 4,
+    campusId: 4,
+    name: "City Center Campus",
+    campusName: "City Center Campus",
+    code: "CITY",
+    campusCode: "CITY",
+    address: "12 Downtown Metro Avenue",
+    phone: "+91 98765 43213",
+    contactPhone: "+91 98765 43213",
+    email: "city@pirnav.edu",
     boards: [
       "Board of Intermediate Education, Andhra Pradesh",
-      "Council for the Indian School Certificate Examinations",
     ],
-    status: "Inactive",
-    createdAt: "2024-04-12T00:00:00.000Z",
+    affiliatedBoards: [
+      {
+        boardId: 1,
+        boardCode: "BIEAP",
+        boardName: "Board of Intermediate Education, Andhra Pradesh",
+        isActive: true,
+      },
+    ],
+    boardIds: [1],
+    isHQ: false,
+    isActive: true,
+    status: "Active",
+    createdAt: "2026-09-23T11:14:46",
   },
 ];
 
 export function CampusProvider({ children }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
   // Load campuses from localStorage or fallback
   const [campuses, setCampuses] = useState(() => {
     try {
@@ -72,13 +133,13 @@ export function CampusProvider({ children }) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map(campusApi.normalizeCampus);
         }
       }
     } catch (e) {
       console.warn("Failed to load campuses from localStorage", e);
     }
-    return DEFAULT_CAMPUSES;
+    return DEFAULT_CAMPUSES.map(campusApi.normalizeCampus);
   });
 
   // Selected campus state
@@ -92,10 +153,37 @@ export function CampusProvider({ children }) {
     return DEFAULT_CAMPUSES[0]?.id || "";
   });
 
+  // Fetch live campuses from backend
+  const fetchCampuses = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await campusApi.getCampuses();
+      if (Array.isArray(data) && data.length > 0) {
+        setCampuses(data);
+      }
+    } catch (err) {
+      console.warn("Could not fetch campuses from API, keeping cached:", err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    fetchCampuses();
+  }, [fetchCampuses]);
+
   // Save campuses to localStorage on update
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_CAMPUSES, JSON.stringify(campuses));
+      if (campuses?.length) {
+        localStorage.setItem(STORAGE_KEY_CAMPUSES, JSON.stringify(campuses));
+      }
     } catch (e) {
       console.warn("Failed to persist campuses to localStorage", e);
     }
@@ -104,8 +192,8 @@ export function CampusProvider({ children }) {
   // Save selected campus id to localStorage
   useEffect(() => {
     try {
-      if (selectedCampusId) {
-        localStorage.setItem(STORAGE_KEY_SELECTED_CAMPUS, selectedCampusId);
+      if (selectedCampusId != null && selectedCampusId !== "") {
+        localStorage.setItem(STORAGE_KEY_SELECTED_CAMPUS, String(selectedCampusId));
       }
     } catch (e) {
       console.warn("Failed to persist selected campus id", e);
@@ -114,64 +202,145 @@ export function CampusProvider({ children }) {
 
   // Derived selectedCampus object
   const selectedCampus = useMemo(() => {
+    if (!campuses?.length) return null;
+    const strId = String(selectedCampusId);
     return (
-      campuses.find((c) => c.id === selectedCampusId) ||
-      campuses.find((c) => c.status === "Active" || c.status?.includes("Active")) ||
+      campuses.find((c) => String(c.id) === strId || String(c.campusId) === strId) ||
+      campuses.find((c) => c.isHQ) ||
+      campuses.find((c) => c.isActive || c.status === "Active") ||
       campuses[0] ||
       null
     );
   }, [campuses, selectedCampusId]);
 
-  // Setter for selected campus (supports object or ID string)
-  const handleSetSelectedCampus = (campusOrId) => {
+  // Setter for selected campus (supports object or ID string/number)
+  const handleSetSelectedCampus = useCallback((campusOrId) => {
     if (!campusOrId) return;
-    if (typeof campusOrId === "object" && campusOrId.id) {
-      setSelectedCampusId(campusOrId.id);
-    } else if (typeof campusOrId === "string") {
-      setSelectedCampusId(campusOrId);
+    if (typeof campusOrId === "object") {
+      const targetId = campusOrId.id ?? campusOrId.campusId;
+      if (targetId != null) setSelectedCampusId(String(targetId));
+    } else {
+      setSelectedCampusId(String(campusOrId));
     }
-  };
+  }, []);
 
   // Add new campus
-  const addCampus = (campusData) => {
-    const newCampus = {
-      ...campusData,
-      id: campusData.id || `CAMPUS-${Date.now().toString(36).toUpperCase()}`,
-      createdAt: new Date().toISOString(),
-      status: campusData.status || "Active",
-    };
-    setCampuses((prev) => [newCampus, ...prev]);
-    return newCampus;
-  };
+  const addCampus = useCallback(async (campusData) => {
+    try {
+      const created = await campusApi.createCampus(campusData);
+      setCampuses((prev) => [created, ...prev.filter((c) => String(c.id) !== String(created.id))]);
+      return created;
+    } catch (err) {
+      // Fallback local addition if offline
+      console.warn("API creation failed, adding locally:", err);
+      const fallbackCampus = campusApi.normalizeCampus({
+        ...campusData,
+        id: `CAMPUS-${Date.now().toString(36).toUpperCase()}`,
+        campusId: Date.now(),
+        createdAt: new Date().toISOString(),
+        status: campusData.status || "Active",
+        isActive: campusData.isActive !== false,
+      });
+      setCampuses((prev) => [fallbackCampus, ...prev]);
+      throw err;
+    }
+  }, []);
 
   // Update existing campus
-  const updateCampus = (id, updatedData) => {
-    setCampuses((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...updatedData, updatedAt: new Date().toISOString() } : c))
-    );
-  };
+  const updateCampus = useCallback(async (id, updatedData) => {
+    try {
+      const updated = await campusApi.updateCampus(id, updatedData);
+      setCampuses((prev) =>
+        prev.map((c) => (String(c.id) === String(id) || String(c.campusId) === String(id) ? updated : c))
+      );
+      return updated;
+    } catch (err) {
+      console.warn("API update failed, updating locally:", err);
+      setCampuses((prev) =>
+        prev.map((c) =>
+          String(c.id) === String(id) || String(c.campusId) === String(id)
+            ? campusApi.normalizeCampus({ ...c, ...updatedData, updatedAt: new Date().toISOString() })
+            : c
+        )
+      );
+      throw err;
+    }
+  }, []);
 
   // Delete campus
-  const deleteCampus = (id) => {
-    setCampuses((prev) => {
-      const remaining = prev.filter((c) => c.id !== id);
-      if (selectedCampusId === id && remaining.length > 0) {
-        setSelectedCampusId(remaining[0].id);
-      }
-      return remaining;
-    });
-  };
+  const deleteCampus = useCallback(async (id) => {
+    try {
+      await campusApi.deleteCampus(id);
+      setCampuses((prev) => {
+        const remaining = prev.filter((c) => String(c.id) !== String(id) && String(c.campusId) !== String(id));
+        if (String(selectedCampusId) === String(id) && remaining.length > 0) {
+          setSelectedCampusId(String(remaining[0].id || remaining[0].campusId));
+        }
+        return remaining;
+      });
+    } catch (err) {
+      console.warn("API delete failed, deleting locally:", err);
+      setCampuses((prev) => {
+        const remaining = prev.filter((c) => String(c.id) !== String(id) && String(c.campusId) !== String(id));
+        if (String(selectedCampusId) === String(id) && remaining.length > 0) {
+          setSelectedCampusId(String(remaining[0].id || remaining[0].campusId));
+        }
+        return remaining;
+      });
+      throw err;
+    }
+  }, [selectedCampusId]);
+
+  // Toggle status
+  const toggleCampusStatus = useCallback(async (id) => {
+    try {
+      await campusApi.toggleCampusStatus(id);
+      setCampuses((prev) =>
+        prev.map((c) => {
+          if (String(c.id) === String(id) || String(c.campusId) === String(id)) {
+            const nextActive = !c.isActive;
+            return {
+              ...c,
+              isActive: nextActive,
+              status: nextActive ? "Active" : "Inactive",
+            };
+          }
+          return c;
+        })
+      );
+    } catch (err) {
+      console.warn("API toggle status failed:", err);
+      throw err;
+    }
+  }, []);
 
   const contextValue = useMemo(
     () => ({
       campuses,
       selectedCampus,
+      selectedCampusId,
       setSelectedCampus: handleSetSelectedCampus,
+      fetchCampuses,
       addCampus,
       updateCampus,
       deleteCampus,
+      toggleCampusStatus,
+      loading,
+      error,
     }),
-    [campuses, selectedCampus]
+    [
+      campuses,
+      selectedCampus,
+      selectedCampusId,
+      handleSetSelectedCampus,
+      fetchCampuses,
+      addCampus,
+      updateCampus,
+      deleteCampus,
+      toggleCampusStatus,
+      loading,
+      error,
+    ]
   );
 
   return <CampusContext.Provider value={contextValue}>{children}</CampusContext.Provider>;
@@ -187,4 +356,3 @@ export function useCampusContext() {
 
 export const useCampus = useCampusContext;
 export default CampusContext;
-

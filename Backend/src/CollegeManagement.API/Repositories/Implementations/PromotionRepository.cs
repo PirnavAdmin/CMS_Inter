@@ -629,7 +629,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 },
                 commandType: CommandType.StoredProcedure);
 
-            var details = historyItems.Select(x => new PromotionReportDetailDto
+            if (q.CampusId.HasValue) { var validStudents = await _context.Students.Where(s => s.CampusId == q.CampusId.Value).Select(s => s.StudentId).ToListAsync(); historyItems = historyItems.Where(x => validStudents.Contains(x.StudentId)).ToList(); } var details = historyItems.Select(x => new PromotionReportDetailDto
             {
                 PromotionId = x.PromotionId,
                 StudentId = x.StudentId,

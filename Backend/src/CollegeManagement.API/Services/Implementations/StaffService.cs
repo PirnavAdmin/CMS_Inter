@@ -362,6 +362,30 @@ namespace CollegeManagement.API.Services.Implementations
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
 
+            // Driver & Transport specific details
+            var isDriver = !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
+                || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase));
+
+            staff.IsDriver = isDriver;
+            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
+            {
+                staff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
+            }
+            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null)
+            {
+                staff.DrivingLicenseNumber = licVal.ToString()?.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+            {
+                staff.DrivingLicenseExpiryDate = expParsed;
+            }
+            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+            {
+                staff.DrivingLicenseExpiryDate = expParsed2;
+            }
+
             // ==================================================================================
             // ATOMIC TRANSACTION: Create Staff + User Account (Shared EF Core + Dapper Connection)
             // ==================================================================================
@@ -613,6 +637,30 @@ namespace CollegeManagement.API.Services.Implementations
 
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
+
+            // Driver & Transport specific details
+            var isDriver = existingStaff.IsDriver || !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
+                || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase));
+
+            existingStaff.IsDriver = isDriver;
+            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
+            {
+                existingStaff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
+            }
+            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null)
+            {
+                existingStaff.DrivingLicenseNumber = licVal.ToString()?.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+            {
+                existingStaff.DrivingLicenseExpiryDate = expParsed;
+            }
+            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+            {
+                existingStaff.DrivingLicenseExpiryDate = expParsed2;
+            }
 
             // Transactional update: Staff domain + Users sync
             var updateStrategy = _context.Database.CreateExecutionStrategy();

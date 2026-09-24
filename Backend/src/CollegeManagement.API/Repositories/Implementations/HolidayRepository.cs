@@ -38,7 +38,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await Task.CompletedTask;
         }
 
-        public async Task<HolidaySummaryResponse> GetSummaryAsync(int? academicYearId, int? boardId)
+        public async Task<HolidaySummaryResponse> GetSummaryAsync(int? campusId, int? academicYearId, int? boardId)
         {
             try
             {
@@ -47,6 +47,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     "sp_GetHolidaySummary",
                     new
                     {
+                        p_CampusId = campusId ?? 0,
                         p_AcademicYearId = academicYearId ?? 0,
                         p_BoardId = boardId ?? 0
                     },
@@ -57,6 +58,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             catch
             {
                 var query = _context.Holidays.AsNoTracking().Where(h => !h.IsDeleted);
+                if (campusId.HasValue)
+                {
+                    query = query.Where(h => h.CampusId == campusId.Value);
+                }
                 if (academicYearId.HasValue && academicYearId.Value > 0)
                 {
                     query = query.Where(h => h.AcademicYearId == academicYearId || h.AcademicYearId == null);
@@ -107,6 +112,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     "sp_GetHolidays",
                     new
                     {
+                        p_CampusId = filter.CampusId ?? 0,
                         p_AcademicYearId = filter.AcademicYearId ?? 0,
                         p_BoardId = filter.BoardId ?? 0,
                         p_Search = filter.Search?.Trim() ?? "",
@@ -128,6 +134,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             catch
             {
                 var query = _context.Holidays.AsNoTracking().Where(h => !h.IsDeleted);
+
+                if (filter.CampusId.HasValue)
+                {
+                    query = query.Where(h => h.CampusId == filter.CampusId.Value);
+                }
 
                 if (filter.AcademicYearId.HasValue && filter.AcademicYearId.Value > 0)
                 {
@@ -166,7 +177,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<bool> ExistsDuplicateAsync(string name, DateOnly startDate, DateOnly endDate, int? excludeId = null, int? academicYearId = null)
+        public async Task<bool> ExistsDuplicateAsync(string name, DateOnly startDate, DateOnly endDate, int? excludeId = null, int? academicYearId = null, int? campusId = null)
         {
             var startDt = startDate.ToDateTime(TimeOnly.MinValue);
             var endDt = endDate.ToDateTime(TimeOnly.MinValue);
@@ -196,7 +207,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     h.StartDate.Date == startDt.Date &&
                     h.EndDate.Date == endDt.Date &&
                     (!excludeId.HasValue || h.Id != excludeId.Value) &&
-                    (!academicYearId.HasValue || h.AcademicYearId == academicYearId.Value));
+                    (!academicYearId.HasValue || h.AcademicYearId == academicYearId.Value) && (!campusId.HasValue || h.CampusId == campusId.Value));
             }
         }
 
@@ -209,6 +220,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     "sp_CreateHoliday",
                     new
                     {
+                        p_CampusId = holiday.CampusId ?? 0,
                         p_AcademicYearId = holiday.AcademicYearId ?? 0,
                         p_BoardId = holiday.BoardId ?? 0,
                         p_HolidayName = holiday.HolidayName.Trim(),
@@ -245,6 +257,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     new
                     {
                         p_Id = id,
+                        p_CampusId = updated.CampusId ?? 0,
                         p_AcademicYearId = updated.AcademicYearId ?? 0,
                         p_BoardId = updated.BoardId ?? 0,
                         p_HolidayName = updated.HolidayName.Trim(),
@@ -306,7 +319,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<(bool IsHoliday, string? HolidayName, string? HolidayType)> IsHolidayAsync(DateTime date, int? boardId = null, int? academicYearId = null, string? appliesTo = null)
+        public async Task<(bool IsHoliday, string? HolidayName, string? HolidayType)> IsHolidayAsync(DateTime date, int? boardId = null, int? academicYearId = null, string? appliesTo = null, int? campusId = null)
         {
             try
             {
@@ -336,7 +349,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     !x.IsDeleted && x.Status == "Active" &&
                     queryDate >= x.StartDate.Date && queryDate <= x.EndDate.Date &&
                     (boardId == null || x.BoardId == null || x.BoardId == boardId) &&
-                    (academicYearId == null || x.AcademicYearId == null || x.AcademicYearId == academicYearId));
+                    (academicYearId == null || x.AcademicYearId == null || x.AcademicYearId == academicYearId) && (campusId == null || x.CampusId == campusId));
 
                 if (h != null)
                 {
