@@ -689,13 +689,19 @@ export default function DepartmentManagementPage() {
         const book = XLSX.utils.book_new();
         if (kind === "department") {
           const deptSheet = XLSX.utils.aoa_to_sheet([
-            ["Department Code", "Department Name", "Staff Type", "Status"],
+            ["Department Code", "Department Name", "Status"],
+            ["DEP_CSE", "Computer Science and Engineering", "Active"],
+            ["DEP_ECE", "Electronics and Communication Engineering", "Active"],
+            ["DEP_MEC", "Mechanical Engineering", "Active"],
           ]);
           XLSX.utils.book_append_sheet(book, deptSheet, "Departments");
           XLSX.writeFile(book, "Department_Import_Template.xlsx");
         } else {
           const desigSheet = XLSX.utils.aoa_to_sheet([
-            ["Designation Code", "Designation Name", "Department Name", "Staff Type", "Status"],
+            ["Designation Code", "Designation Name", "Status"],
+            ["DES_PROF", "Professor", "Active"],
+            ["DES_ASST_PROF", "Assistant Professor", "Active"],
+            ["DES_ASSOC_PROF", "Associate Professor", "Active"],
           ]);
           XLSX.utils.book_append_sheet(book, desigSheet, "Designations");
           XLSX.writeFile(book, "Designation_Import_Template.xlsx");
@@ -1906,10 +1912,16 @@ export function MasterImportPage({ kind = "department" }) {
       // Fallback to client-side XLSX generation
       const book = XLSX.utils.book_new();
       const deptSheet = XLSX.utils.aoa_to_sheet([
-        ["Department Code", "Department Name", "Staff Type", "Status"],
+        ["Department Code", "Department Name", "Status"],
+        ["DEP_CSE", "Computer Science and Engineering", "Active"],
+        ["DEP_ECE", "Electronics and Communication Engineering", "Active"],
+        ["DEP_MEC", "Mechanical Engineering", "Active"],
       ]);
       const desigSheet = XLSX.utils.aoa_to_sheet([
-        ["Designation Code", "Designation Name", "Department Name", "Staff Type", "Status"],
+        ["Designation Code", "Designation Name", "Status"],
+        ["DES_PROF", "Professor", "Active"],
+        ["DES_ASST_PROF", "Assistant Professor", "Active"],
+        ["DES_ASSOC_PROF", "Associate Professor", "Active"],
       ]);
       XLSX.utils.book_append_sheet(book, deptSheet, "Departments");
       XLSX.utils.book_append_sheet(book, desigSheet, "Designations");
@@ -1944,7 +1956,8 @@ export function MasterImportPage({ kind = "department" }) {
         const json = XLSX.utils.sheet_to_json(targetSheet, { defval: "" });
         json.forEach((row, idx) => {
           const rawName = String(row["Department Name"] || row["DepartmentName"] || row["Name"] || "").trim();
-          if (!rawName && Object.values(row).every((v) => !String(v).trim())) return;
+          const rawCode = String(row["Department Code"] || row["DepartmentCode"] || row["Code"] || "").trim();
+          if (!rawName && !rawCode && Object.values(row).every((v) => !String(v).trim())) return;
 
           deptCount++;
           const problems = [];
@@ -1971,7 +1984,7 @@ export function MasterImportPage({ kind = "department" }) {
             index: idx + 2,
             entity: "Department",
             name: rawName || "—",
-            details: `Type: ${staffTypeVal || "Teaching"} | Status: ${status || "Active"}`,
+            details: `Code: ${rawCode || "Auto"} | Status: ${status || "Active"}${staffTypeVal ? ` | Type: ${staffTypeVal}` : ""}`,
             row,
             problems,
           });
@@ -1984,7 +1997,8 @@ export function MasterImportPage({ kind = "department" }) {
         const json = XLSX.utils.sheet_to_json(targetSheet, { defval: "" });
         json.forEach((row, idx) => {
           const rawName = String(row["Designation Name"] || row["DesignationName"] || row["Name"] || "").trim();
-          if (!rawName && Object.values(row).every((v) => !String(v).trim())) return;
+          const rawCode = String(row["Designation Code"] || row["DesignationCode"] || row["Code"] || "").trim();
+          if (!rawName && !rawCode && Object.values(row).every((v) => !String(v).trim())) return;
 
           desigCount++;
           const problems = [];
@@ -2020,7 +2034,7 @@ export function MasterImportPage({ kind = "department" }) {
             index: idx + 2,
             entity: "Designation",
             name: rawName || "—",
-            details: `Dept: ${deptNameVal || "General"} | Type: ${staffTypeVal || "Teaching"} | Status: ${status || "Active"}`,
+            details: `Code: ${rawCode || "Auto"} | Status: ${status || "Active"}${deptNameVal ? ` | Dept: ${deptNameVal}` : ""}${staffTypeVal ? ` | Type: ${staffTypeVal}` : ""}`,
             row,
             problems,
           });

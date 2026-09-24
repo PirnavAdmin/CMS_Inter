@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Payroll;
+using CollegeManagement.API.DTOs.Payroll;
 using CollegeManagement.API.Services.Interfaces.Payroll;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +8,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Route("api/v1/[controller]")]
     [Produces("application/json")]
     [Authorize]
     public class PayrollController : ControllerBase

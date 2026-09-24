@@ -112,6 +112,12 @@ namespace CollegeManagement.API.DTOs.Staff
         public Dictionary<string, object>? CustomFields => DepartmentSpecific;
         public Dictionary<string, string>? Documents { get; set; }
 
+        // Transport / Driver Specific
+        public bool IsDriver { get; set; }
+        public string? DrivingLicenseNumber { get; set; }
+        public DateTime? DrivingLicenseExpiryDate { get; set; }
+        public int? DrivingExperienceYears { get; set; }
+
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }
