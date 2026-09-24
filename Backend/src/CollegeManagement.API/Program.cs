@@ -115,6 +115,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateStaffDtoValidator>();
 #region Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
 builder.Services.AddScoped<IOtpRepository, OtpRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
