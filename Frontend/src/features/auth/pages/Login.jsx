@@ -93,7 +93,7 @@ export default function Login() {
 
       if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
-      } else if (userRole === "driver") {
+      } else if (userRole.includes("driver")) {
         navigate("/driver", { replace: true });
       } else {
         navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
