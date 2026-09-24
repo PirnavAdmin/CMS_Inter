@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock } from "lucide-react";
+import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock, User, Building2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import boardAcademicYearImage from "@/assets/settings-3d/board-academic-year.png";
 import numberSeriesImage from "@/assets/settings-3d/number-series.png";
@@ -12,6 +12,24 @@ export default function SettingsPage() {
   const navigate = useNavigate();
 
   const settingsCards = [
+    {
+      id: "my-profile",
+      title: "My Profile",
+      description: "Manage admin account profile details, profile picture, contact details, campus allocation and security password.",
+      icon: User,
+      to: "/dashboard/settings/my-profile",
+      buttonText: "Manage Profile",
+      primary: true,
+    },
+    {
+      id: "campus-configuration",
+      title: "Campus Configuration",
+      description: "Configure multi-campus branches, branch codes, address, affiliated education boards and active header branch selector.",
+      icon: Building2,
+      to: "/dashboard/settings/campus-configuration",
+      buttonText: "Configure Campuses",
+      primary: true,
+    },
     {
       id: "board-academic-year",
       title: "Board & Academic Year Management",
