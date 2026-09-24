@@ -1,16 +1,8 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 
-const ADMIN_EMAIL = "admin@cms.com";
-const ADMIN_LOGIN_ALIASES = new Set([ADMIN_EMAIL, "admin@cms"]);
 const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
 const ACCOUNT_TYPES = new Set(["admin", "user"]);
-
-export const adminLogin = (data) =>
-  apiClient.post(apiEndpoints.admin.login, {
-    email: data.email,
-    password: data.password,
-  });
 
 export const userLogin = (data) =>
   apiClient.post(apiEndpoints.auth.login, {
@@ -21,14 +13,6 @@ export const userLogin = (data) =>
 export const loginUser = async (credentials) => {
   const emailOrMobile = String(credentials.emailOrMobile || credentials.email || "").trim();
   const password = credentials.password;
-  const normalizedIdentifier = emailOrMobile.toLowerCase();
-
-  if (ADMIN_LOGIN_ALIASES.has(normalizedIdentifier)) {
-    logLoginSelection(apiEndpoints.admin.login, ADMIN_EMAIL);
-    const response = await adminLogin({ email: ADMIN_EMAIL, password });
-    logLoginResponse(response.status);
-    return normalizeLoginResponse(response.data, ADMIN_EMAIL, "admin");
-  }
 
   logLoginSelection(apiEndpoints.auth.login, emailOrMobile);
   try {
@@ -36,13 +20,6 @@ export const loginUser = async (credentials) => {
     logLoginResponse(response.status);
     return normalizeLoginResponse(response.data, emailOrMobile);
   } catch (authError) {
-    // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
-    if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
-      logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
-      const fallbackResponse = await adminLogin({ email: emailOrMobile, password });
-      logLoginResponse(fallbackResponse.status);
-      return normalizeLoginResponse(fallbackResponse.data, emailOrMobile, "admin");
-    }
     throw authError;
   }
 };

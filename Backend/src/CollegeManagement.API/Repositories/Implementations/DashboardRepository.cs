@@ -139,6 +139,7 @@ public class DashboardRepository : IDashboardRepository
         int? boardId,
         int? academicYearId,
         DateTime? targetDate,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
@@ -150,6 +151,7 @@ public class DashboardRepository : IDashboardRepository
             parameters.Add("p_BoardId", boardId, DbType.Int32);
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
             parameters.Add("p_TargetDate", dateVal, DbType.Date);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             var summary = await conn.QueryFirstOrDefaultAsync<DashboardSummaryResponseDto>(
                 "sp_GetDashboardKPIs",
@@ -172,6 +174,7 @@ public class DashboardRepository : IDashboardRepository
     public async Task<StudentsOverviewResponseDto> GetStudentsOverviewAsync(
         int? boardId,
         int? academicYearId,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         try
@@ -180,6 +183,7 @@ public class DashboardRepository : IDashboardRepository
             var parameters = new DynamicParameters();
             parameters.Add("p_BoardId", boardId, DbType.Int32);
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             using var multi = await conn.QueryMultipleAsync(
                 "sp_GetDashboardStudentsOverview",
@@ -229,6 +233,7 @@ public class DashboardRepository : IDashboardRepository
     public async Task<GroupDistributionResponseDto> GetGroupDistributionAsync(
         int? boardId,
         int? academicYearId,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         try
@@ -237,6 +242,7 @@ public class DashboardRepository : IDashboardRepository
             var parameters = new DynamicParameters();
             parameters.Add("p_BoardId", boardId, DbType.Int32);
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             // sp_GetDashboardGroupDistribution returns a single result set of groups
             var items = (await conn.QueryAsync<GroupDistributionItemDto>(
@@ -277,6 +283,7 @@ public class DashboardRepository : IDashboardRepository
         int? academicYearId,
         DateTime? targetDate,
         string? viewBy,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
@@ -289,6 +296,7 @@ public class DashboardRepository : IDashboardRepository
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
             parameters.Add("p_TargetDate", dateVal, DbType.Date);
             parameters.Add("p_ViewBy", viewBy ?? "Overall", DbType.String);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             using var multi = await conn.QueryMultipleAsync(
                 "sp_GetDashboardStudentAttendance",
@@ -319,6 +327,7 @@ public class DashboardRepository : IDashboardRepository
         int? boardId,
         DateTime? targetDate,
         string? staffType,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
@@ -331,6 +340,7 @@ public class DashboardRepository : IDashboardRepository
             parameters.Add("p_AcademicYearId", null, DbType.Int32);
             parameters.Add("p_TargetDate", dateVal, DbType.Date);
             parameters.Add("p_StaffType", staffType ?? "all", DbType.String);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             var summary = await conn.QueryFirstOrDefaultAsync<StaffAttendanceTodayResponseDto>(
                 "sp_GetDashboardStaffAttendance",
@@ -354,6 +364,7 @@ public class DashboardRepository : IDashboardRepository
         int? boardId,
         int? academicYearId,
         int limit = 6,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var conn = await GetOpenConnectionAsync();
@@ -361,6 +372,7 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_BoardId", boardId, DbType.Int32);
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
         parameters.Add("p_Limit", limit > 0 ? limit : 6, DbType.Int32);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         using var multi = await conn.QueryMultipleAsync(
             "sp_GetDashboardCertificateRequests",
@@ -379,6 +391,7 @@ public class DashboardRepository : IDashboardRepository
         int? academicYearId,
         DateTime? targetDate,
         int limit = 6,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var conn = await GetOpenConnectionAsync();
@@ -389,11 +402,23 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
         parameters.Add("p_TargetDate", dateVal, DbType.Date);
         parameters.Add("p_Limit", limit > 0 ? limit : 6, DbType.Int32);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
-        var items = await conn.QueryAsync<UpcomingExaminationItemDto>(
-            "sp_GetDashboardUpcomingExaminations",
-            parameters,
-            commandType: CommandType.StoredProcedure);
+        IEnumerable<UpcomingExaminationItemDto> items;
+        try
+        {
+            items = await conn.QueryAsync<UpcomingExaminationItemDto>(
+                "sp_GetDashboardUpcomingExams",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+        }
+        catch
+        {
+            items = await conn.QueryAsync<UpcomingExaminationItemDto>(
+                "sp_GetDashboardUpcomingExaminations",
+                parameters,
+                commandType: CommandType.StoredProcedure);
+        }
 
         return items.ToList();
     }
@@ -402,6 +427,7 @@ public class DashboardRepository : IDashboardRepository
         int? boardId,
         int? academicYearId,
         DateTime? targetDate,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var conn = await GetOpenConnectionAsync();
@@ -411,6 +437,7 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_BoardId", boardId, DbType.Int32);
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
         parameters.Add("p_TargetDate", dateVal, DbType.Date);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         var highlights = await conn.QueryFirstOrDefaultAsync<TodaysHighlightsResponseDto>(
             "sp_GetDashboardTodaysHighlights",
@@ -425,6 +452,7 @@ public class DashboardRepository : IDashboardRepository
         int? academicYearId,
         DateTime startDate,
         DateTime endDate,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var conn = await GetOpenConnectionAsync();
@@ -433,6 +461,7 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
         parameters.Add("p_StartDate", startDate.Date, DbType.Date);
         parameters.Add("p_EndDate", endDate.Date, DbType.Date);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         var rows = (await conn.QueryAsync<dynamic>(
             "sp_GetDashboardWeeklyAttendance",
@@ -490,12 +519,14 @@ public class DashboardRepository : IDashboardRepository
     public async Task<IReadOnlyList<FacultyWorkloadItemDto>> GetFacultyWorkloadAsync(
         int? boardId,
         int? academicYearId,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var conn = await GetOpenConnectionAsync();
         var parameters = new DynamicParameters();
         parameters.Add("p_BoardId", boardId, DbType.Int32);
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         var workload = await conn.QueryAsync<FacultyWorkloadItemDto>(
             "sp_GetDashboardFacultyWorkload",
@@ -509,6 +540,7 @@ public class DashboardRepository : IDashboardRepository
         int? boardId,
         int? academicYearId,
         int limit = 20,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         var conn = await GetOpenConnectionAsync();
@@ -516,6 +548,7 @@ public class DashboardRepository : IDashboardRepository
         parameters.Add("p_BoardId", boardId, DbType.Int32);
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
         parameters.Add("p_Limit", limit > 0 ? limit : 20, DbType.Int32);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         var holidays = await conn.QueryAsync<UpcomingHolidayItemDto>(
             "sp_GetDashboardUpcomingHolidays",

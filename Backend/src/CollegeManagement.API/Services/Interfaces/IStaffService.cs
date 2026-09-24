@@ -9,14 +9,14 @@ namespace CollegeManagement.API.Services.Interfaces
     public interface IStaffService
     {
         Task<PagedResult<StaffResponseDto>> GetPagedStaffAsync(StaffQueryParams queryParams);
-        Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null);
+        Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null);
         Task<StaffResponseDto?> GetStaffByIdAsync(int id);
         Task<StaffResponseDto?> GetStaffByEmployeeIdAsync(string employeeId);
         Task<StaffProfileFullDto> GetStaffProfileFullAsync(int id);
         Task<StaffProfileFullDto> GetStaffProfileByEmployeeIdAsync(string employeeId);
         Task<StaffProfileFullDto> GetStaffProfileByTokenAsync(string token);
         Task<string> GetNextEmployeeIdAsync(string staffType);
-        Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null);
+        Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null);
 
         Task<StaffResponseDto> CreateStaffAsync(CreateStaffDto dto);
         Task<StaffResponseDto> UpdateStaffAsync(int id, UpdateStaffDto dto);
@@ -38,7 +38,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<StaffProfileFullDto> DeleteDocumentAsync(int staffId, string documentType);
         Task<StaffProfileFullDto> DeleteDocumentByTokenAsync(string token, string documentType);
 
-        Task<StaffImportResultDto> ImportStaffFromExcelAsync(IFormFile file, string? defaultStaffType = null);
+        Task<StaffImportResultDto> ImportStaffFromExcelAsync(IFormFile file, string? defaultStaffType = null, int? campusId = null);
         Task<(byte[] Bytes, string ContentType, string FileName)> ExportStaffExcelAsync(StaffQueryParams queryParams);
         Task<(byte[] Bytes, string ContentType, string FileName)> GenerateTemplateExcelAsync(string? staffType = null);
         Task<(byte[] Bytes, string ContentType, string FileName)> GenerateProfilePdfAsync(int id);

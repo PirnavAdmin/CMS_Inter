@@ -113,7 +113,8 @@ namespace CollegeManagement.API.Services
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive);
+            bool? isActive,
+            int? campusId = null);
 
 
         // =========================================================

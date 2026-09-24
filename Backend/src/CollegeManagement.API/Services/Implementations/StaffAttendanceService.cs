@@ -354,6 +354,7 @@ namespace CollegeManagement.API.Services.Implementations
                         {
                             session = new StaffAttendanceSession
                             {
+                                CampusId = faculty.CampusId ?? 1,
                                 AttendanceDate = attDate.Date,
                                 DepartmentId = faculty.DepartmentId > 0 ? faculty.DepartmentId : null,
                                 StaffType = staffType,

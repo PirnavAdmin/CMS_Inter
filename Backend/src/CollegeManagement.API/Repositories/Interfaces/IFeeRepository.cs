@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Fees;
+using CollegeManagement.API.DTOs.Fees;
 
 namespace CollegeManagement.API.Repositories.Interfaces;
 
@@ -11,7 +11,7 @@ public interface IFeeRepository
     Task<bool> DeleteFeeTypeAsync(int feeTypeId);
 
     Task<FeeStructureResponse?> CreateFeeStructureAsync(CreateFeeStructureRequest request);
-    Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync();
+    Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync(int? campusId = null);
     Task<FeeStructureResponse?> GetFeeStructureByIdAsync(int feeStructureId);
     Task<FeeStructureResponse?> UpdateFeeStructureAsync(int feeStructureId, UpdateFeeStructureRequest request);
     Task<bool> DeleteFeeStructureAsync(int feeStructureId);
@@ -28,7 +28,7 @@ public interface IFeeRepository
 
     Task<StudentFeeResponse?> AssignStudentFeeAsync(AssignStudentFeeRequest request);
     Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int studentFeeId);
-    Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? academicYearId = null, int? groupId = null, int? sectionId = null, string? paymentPlan = null, string? status = null, string? search = null);
+    Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? campusId = null, int? academicYearId = null, int? groupId = null, int? sectionId = null, string? paymentPlan = null, string? status = null, string? search = null);
     Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int studentId);
 
     Task<FeeConcessionResponse?> ApplyFeeConcessionAsync(ApplyFeeConcessionRequest request);
@@ -41,9 +41,9 @@ public interface IFeeRepository
     Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int feePaymentId);
     Task<FeeReceiptResponse?> GetReceiptAsync(string receiptNumber);
 
-    Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(string? search = null);
-    Task<IEnumerable<FeeDueResponse>> GetDueAsync();
-    Task<FeeDashboardResponse> GetDashboardAsync();
-    Task<FeeReportResponse> GetDailyReportAsync(DateTime? date = null);
-    Task<FeeReportResponse> GetMonthlyReportAsync(int? year = null, int? month = null);
+    Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(int? campusId = null, string? search = null);
+    Task<IEnumerable<FeeDueResponse>> GetDueAsync(int? campusId = null);
+    Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null);
+    Task<FeeReportResponse> GetDailyReportAsync(int? campusId = null, DateTime? date = null);
+    Task<FeeReportResponse> GetMonthlyReportAsync(int? campusId = null, int? year = null, int? month = null);
 }

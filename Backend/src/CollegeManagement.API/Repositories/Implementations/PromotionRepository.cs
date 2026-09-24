@@ -56,7 +56,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_TargetSection = q.TargetSection,
                     p_TargetMedium = q.TargetMedium,
                     p_Search = q.Search,
-                    p_EligibilityStatus = q.EligibilityStatus
+                    p_EligibilityStatus = q.EligibilityStatus,
+                    p_CampusId = q.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
         }

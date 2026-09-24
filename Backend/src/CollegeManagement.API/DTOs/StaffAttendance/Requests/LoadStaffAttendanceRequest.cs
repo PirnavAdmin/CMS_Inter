@@ -21,5 +21,6 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Requests
         public AttendanceStatus? Status { get; set; }
 
         public int? FacultyId { get; set; }
+        public int? CampusId { get; set; }
     }
 }

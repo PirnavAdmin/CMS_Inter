@@ -58,6 +58,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public string FacultyType => StaffType;
         public int? DepartmentId { get; set; }
         public string Department { get; set; } = string.Empty;
+        public int? CampusId { get; set; }
+        public string? CampusName { get; set; }
         public int? BoardId { get; set; }
         public string? BoardCode { get; set; }
         public string? BoardName { get; set; }

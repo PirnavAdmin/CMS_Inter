@@ -16,14 +16,16 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
 
         public async Task<IEnumerable<HostelBlock>> GetAllAsync(
             string? search = null,
-            string? status = null)
+            string? status = null,
+            int? campusId = null)
         {
             return await _dbConnection.QueryAsync<HostelBlock>(
                 "sp_GetHostelBlocks",
                 new
                 {
                     p_Search = search,
-                    p_Status = status
+                    p_Status = status,
+                    p_CampusId = campusId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -50,6 +52,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 "sp_CreateHostelBlock",
                 new
                 {
+                    p_CampusId = hostelBlock.CampusId ?? 1,
                     p_HostelName = hostelBlock.HostelName,
                     p_HostelCode = hostelBlock.HostelCode,
                     p_HostelType = hostelBlock.HostelType,

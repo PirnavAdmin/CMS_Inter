@@ -62,6 +62,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_ProgramId", programId, DbType.Int32);
             parameters.Add("p_SearchTerm", searchTerm, DbType.String);
             parameters.Add("p_IsActive", filter?.IsActive, DbType.Boolean);
+            parameters.Add("p_CampusId", filter?.CampusId, DbType.Int32);
 
             return await Connection.QueryAsync<SectionResponse>(
                 "sp_GetAllSections",

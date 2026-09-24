@@ -98,5 +98,11 @@ namespace CollegeManagement.API.Models
         /// </summary>
         public virtual ICollection<BoardAcademicLevel> BoardAcademicLevels { get; set; }
             = new List<BoardAcademicLevel>();
+
+        /// <summary>
+        /// Gets or sets the campuses affiliated with this board.
+        /// </summary>
+        public virtual ICollection<CampusBoard> CampusBoards { get; set; }
+            = new List<CampusBoard>();
     }
 }

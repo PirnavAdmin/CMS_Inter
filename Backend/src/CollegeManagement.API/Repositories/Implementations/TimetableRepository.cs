@@ -69,7 +69,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                             p_StaffId = queryParams.StaffId,
                             p_RoomId = queryParams.RoomId,
                             p_IsPublished = queryParams.IsPublished.HasValue ? (queryParams.IsPublished.Value ? 1 : 0) : (int?)null,
-                            p_ApprovalStatus = queryParams.ApprovalStatus.HasValue ? (int?)queryParams.ApprovalStatus.Value : null
+                            p_ApprovalStatus = queryParams.ApprovalStatus.HasValue ? (int?)queryParams.ApprovalStatus.Value : null,
+                            p_CampusId = queryParams.CampusId
                         },
                         commandType: CommandType.StoredProcedure);
 
@@ -92,7 +93,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         (queryParams.DayOfWeek == null || t.DayOfWeek == queryParams.DayOfWeek) &&
                         (queryParams.StaffId == null || t.StaffId == queryParams.StaffId) &&
                         (queryParams.RoomId == null || t.RoomId == queryParams.RoomId) &&
-                        (queryParams.IsPublished == null || t.IsPublished == queryParams.IsPublished));
+                        (queryParams.IsPublished == null || t.IsPublished == queryParams.IsPublished),
+                        queryParams.CampusId);
 
                     int totalCount = list.Count;
                     int skip = (queryParams.PageNumber - 1) * queryParams.PageSize;
@@ -112,7 +114,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     (queryParams.DayOfWeek == null || t.DayOfWeek == queryParams.DayOfWeek) &&
                     (queryParams.StaffId == null || t.StaffId == queryParams.StaffId) &&
                     (queryParams.RoomId == null || t.RoomId == queryParams.RoomId) &&
-                    (queryParams.IsPublished == null || t.IsPublished == queryParams.IsPublished));
+                    (queryParams.IsPublished == null || t.IsPublished == queryParams.IsPublished),
+                    queryParams.CampusId);
 
                 int totalCount = list.Count;
                 int skip = (queryParams.PageNumber - 1) * queryParams.PageSize;
@@ -376,7 +379,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             await _context.Timetables.AddRangeAsync(targetSlots);
             await _context.SaveChangesAsync();
         }
-        private async Task<List<TimetableResponseDto>> GetInMemoryTimetableDtosAsync(System.Linq.Expressions.Expression<Func<Timetable, bool>> predicate)
+        private async Task<List<TimetableResponseDto>> GetInMemoryTimetableDtosAsync(System.Linq.Expressions.Expression<Func<Timetable, bool>> predicate, int? campusId = null)
         {
             var entities = await _context.Timetables.Where(predicate).ToListAsync();
             if (!entities.Any()) return new List<TimetableResponseDto>();
@@ -385,11 +388,20 @@ namespace CollegeManagement.API.Repositories.Implementations
             var levels = await _context.AcademicLevels.ToDictionaryAsync(l => l.AcademicLevelId, l => l.LevelName);
             var years = await _context.AcademicYears.ToDictionaryAsync(y => y.AcademicYearId, y => y.AcademicYearName);
             var groups = await _context.Groups.ToDictionaryAsync(g => g.GroupId, g => g.GroupName);
-            var sections = await _context.Sections.ToDictionaryAsync(s => s.SectionId, s => s.SectionName);
+            var sections = await _context.Sections.ToDictionaryAsync(s => s.SectionId, s => s);
             var periods = await _context.Periods.ToDictionaryAsync(p => p.PeriodId, p => p);
             var subjects = await _context.Subjects.ToDictionaryAsync(s => s.SubjectId, s => s);
             var staffs = await _context.Staffs.ToDictionaryAsync(s => s.StaffId, s => s);
             var rooms = await _context.Rooms.ToDictionaryAsync(r => r.RoomId, r => r);
+
+            if (campusId.HasValue)
+            {
+                entities = entities.Where(e =>
+                    (sections.TryGetValue(e.SectionId, out var sec) && sec.CampusId == campusId.Value) ||
+                    (staffs.TryGetValue(e.StaffId, out var st) && st.CampusId == campusId.Value) ||
+                    (rooms.TryGetValue(e.RoomId, out var rm) && rm.CampusId == campusId.Value)
+                ).ToList();
+            }
 
             return entities.Select(e => new TimetableResponseDto
             {
@@ -404,7 +416,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 GroupName = groups.GetValueOrDefault(e.GroupId, string.Empty),
                 ProgramId = e.ProgramId,
                 SectionId = e.SectionId,
-                SectionName = sections.GetValueOrDefault(e.SectionId, string.Empty),
+                SectionName = sections.TryGetValue(e.SectionId, out var secObj) ? secObj.SectionName : string.Empty,
                 DayOfWeek = e.DayOfWeek,
                 PeriodId = e.PeriodId,
                 PeriodName = periods.TryGetValue(e.PeriodId, out var p) ? p.PeriodName : string.Empty,

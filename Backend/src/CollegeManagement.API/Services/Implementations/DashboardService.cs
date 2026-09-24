@@ -22,19 +22,19 @@ public class DashboardService : IDashboardService
         return await _repository.GetFilterOptionsAsync(ct);
     }
 
-    public async Task<DashboardSummaryResponseDto> GetSummaryAsync(int? academicYearId, int? boardId, DateTime? date, CancellationToken ct = default)
+    public async Task<DashboardSummaryResponseDto> GetSummaryAsync(int? academicYearId, int? boardId, DateTime? date, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetKPIsAsync(boardId, academicYearId, date, ct);
+        return await _repository.GetKPIsAsync(boardId, academicYearId, date, campusId, ct);
     }
 
-    public async Task<StudentsOverviewResponseDto> GetStudentsOverviewAsync(int? academicYearId, int? boardId, DateTime? date, CancellationToken ct = default)
+    public async Task<StudentsOverviewResponseDto> GetStudentsOverviewAsync(int? academicYearId, int? boardId, DateTime? date, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetStudentsOverviewAsync(boardId, academicYearId, ct);
+        return await _repository.GetStudentsOverviewAsync(boardId, academicYearId, campusId, ct);
     }
 
-    public async Task<dynamic> GetAdmissionTrendAsync(int? academicYearId, int? boardId, CancellationToken ct = default)
+    public async Task<dynamic> GetAdmissionTrendAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
     {
-        var overview = await _repository.GetStudentsOverviewAsync(boardId, academicYearId, ct);
+        var overview = await _repository.GetStudentsOverviewAsync(boardId, academicYearId, campusId, ct);
         return new
         {
             totalAdmissions = overview.TotalStudents,
@@ -44,41 +44,41 @@ public class DashboardService : IDashboardService
         };
     }
 
-    public async Task<GroupDistributionResponseDto> GetGroupDistributionAsync(int? academicYearId, int? boardId, CancellationToken ct = default)
+    public async Task<GroupDistributionResponseDto> GetGroupDistributionAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetGroupDistributionAsync(boardId, academicYearId, ct);
+        return await _repository.GetGroupDistributionAsync(boardId, academicYearId, campusId, ct);
     }
 
-    public async Task<StudentsAttendanceTodayResponseDto> GetStudentsAttendanceTodayAsync(int? academicYearId, int? boardId, string? viewBy, CancellationToken ct = default)
+    public async Task<StudentsAttendanceTodayResponseDto> GetStudentsAttendanceTodayAsync(int? academicYearId, int? boardId, string? viewBy, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetStudentAttendanceAsync(boardId, academicYearId, null, viewBy, ct);
+        return await _repository.GetStudentAttendanceAsync(boardId, academicYearId, null, viewBy, campusId, ct);
     }
 
-    public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, DateTime? date = null, CancellationToken ct = default)
+    public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceTodayAsync(int? boardId, string? staffType, DateTime? date = null, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetStaffAttendanceAsync(boardId, date, staffType, ct);
+        return await _repository.GetStaffAttendanceAsync(boardId, date, staffType, campusId, ct);
     }
 
-    public async Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(int? academicYearId, int? boardId, DateTime? date, CancellationToken ct = default)
+    public async Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(int? academicYearId, int? boardId, DateTime? date, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetCertificateRequestsAsync(boardId, academicYearId, 6, ct);
+        return await _repository.GetCertificateRequestsAsync(boardId, academicYearId, 6, campusId, ct);
     }
 
-    public async Task<IReadOnlyList<UpcomingExaminationItemDto>> GetUpcomingExaminationsAsync(int? academicYearId, int? boardId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<UpcomingExaminationItemDto>> GetUpcomingExaminationsAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetUpcomingExaminationsAsync(boardId, academicYearId, null, 6, ct);
+        return await _repository.GetUpcomingExaminationsAsync(boardId, academicYearId, null, 6, campusId, ct);
     }
 
-    public async Task<TodaysHighlightsResponseDto> GetTodaysHighlightsAsync(int? academicYearId, int? boardId, CancellationToken ct = default)
+    public async Task<TodaysHighlightsResponseDto> GetTodaysHighlightsAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetTodaysHighlightsAsync(boardId, academicYearId, null, ct);
+        return await _repository.GetTodaysHighlightsAsync(boardId, academicYearId, null, campusId, ct);
     }
 
-    public async Task<WeeklyAttendanceResponseDto> GetWeeklyAttendanceAsync(int? academicYearId, int? boardId, DateTime? date, DateTime? startDate, DateTime? endDate, CancellationToken ct = default)
+    public async Task<WeeklyAttendanceResponseDto> GetWeeklyAttendanceAsync(int? academicYearId, int? boardId, DateTime? date, DateTime? startDate, DateTime? endDate, int? campusId = null, CancellationToken ct = default)
     {
         var end = endDate?.Date ?? date?.Date ?? DateTime.UtcNow.Date;
         var start = startDate?.Date ?? end.AddDays(-6);
-        return await _repository.GetWeeklyAttendanceAsync(boardId, academicYearId, start, end, ct);
+        return await _repository.GetWeeklyAttendanceAsync(boardId, academicYearId, start, end, campusId, ct);
     }
 
     public async Task<IReadOnlyList<RecentActivityItemDto>> GetRecentActivityAsync(int limit = 15, CancellationToken ct = default)
@@ -86,13 +86,13 @@ public class DashboardService : IDashboardService
         return await _repository.GetRecentActivityAsync(limit, ct);
     }
 
-    public async Task<IReadOnlyList<FacultyWorkloadItemDto>> GetFacultyWorkloadAsync(int? academicYearId, int? boardId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<FacultyWorkloadItemDto>> GetFacultyWorkloadAsync(int? academicYearId, int? boardId, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetFacultyWorkloadAsync(boardId, academicYearId, ct);
+        return await _repository.GetFacultyWorkloadAsync(boardId, academicYearId, campusId, ct);
     }
 
-    public async Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(int? academicYearId, int? boardId, int limit = 20, CancellationToken ct = default)
+    public async Task<IReadOnlyList<UpcomingHolidayItemDto>> GetUpcomingHolidaysAsync(int? academicYearId, int? boardId, int limit = 20, int? campusId = null, CancellationToken ct = default)
     {
-        return await _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, ct);
+        return await _repository.GetUpcomingHolidaysAsync(boardId, academicYearId, limit, campusId, ct);
     }
 }

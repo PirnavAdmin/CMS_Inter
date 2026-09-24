@@ -106,9 +106,9 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null)
+        public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null)
         {
-            return await _staffRepository.GetStaffDropdownAsync(staffType);
+            return await _staffRepository.GetStaffDropdownAsync(staffType, campusId);
         }
 
         public async Task<StaffResponseDto?> GetStaffByIdAsync(int id)
@@ -167,9 +167,9 @@ namespace CollegeManagement.API.Services.Implementations
             return await _staffRepository.GenerateNextEmployeeIdAsync(staffType);
         }
 
-        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null)
+        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)
         {
-            return await _staffRepository.GetDashboardStatsAsync(boardId);
+            return await _staffRepository.GetDashboardStatsAsync(boardId, campusId);
         }
 
         public async Task<StaffResponseDto> CreateStaffAsync(CreateStaffDto dto)
@@ -343,6 +343,7 @@ namespace CollegeManagement.API.Services.Implementations
             staff.Designation = resolvedDesignationName;
             staff.BoardId = resolvedBoardId;
             staff.BoardName = resolvedBoardName;
+            staff.CampusId = dto.CampusId;
             staff.Gender = !string.IsNullOrWhiteSpace(dto.Gender) ? dto.Gender : (!string.IsNullOrWhiteSpace(staff.Gender) ? staff.Gender : "Male");
             staff.DateOfBirth = dto.DateOfBirth.HasValue ? dto.DateOfBirth.Value : (staff.DateOfBirth != default ? staff.DateOfBirth : DateTime.UtcNow.AddYears(-25));
             staff.Qualification = !string.IsNullOrWhiteSpace(dto.Qualification) ? dto.Qualification : (!string.IsNullOrWhiteSpace(staff.Qualification) ? staff.Qualification : "Graduate");
@@ -616,6 +617,10 @@ namespace CollegeManagement.API.Services.Implementations
             existingStaff.Designation = resolvedDesignationName;
             existingStaff.BoardId = resolvedBoardId;
             existingStaff.BoardName = resolvedBoardName;
+            if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
+            {
+                existingStaff.CampusId = dto.CampusId.Value;
+            }
 
             if (dto.JoiningDate.HasValue || dto.DateOfJoining.HasValue)
             {
@@ -1037,7 +1042,7 @@ namespace CollegeManagement.API.Services.Implementations
             return await DeleteDocumentAsync(staff.Id, documentType);
         }
 
-        public async Task<StaffImportResultDto> ImportStaffFromExcelAsync(IFormFile file, string? defaultStaffType = null)
+        public async Task<StaffImportResultDto> ImportStaffFromExcelAsync(IFormFile file, string? defaultStaffType = null, int? campusId = null)
         {
             if (file == null || file.Length == 0)
                 throw new ValidationException("Please upload a valid Excel file (.xlsx).");
@@ -1248,6 +1253,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 var staff = new Staff
                 {
+                    CampusId = campusId ?? 1,
                     EmployeeId = empId,
                     FirstName = fName,
                     MiddleName = mName,
