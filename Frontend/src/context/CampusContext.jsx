@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from "react";
-import * as campusApi from "@/api/campusApi.js";
-import { getAuthToken } from "@/features/authStorage.js";
+import * as campusApi from "../api/campusApi.js";
+import { getAuthToken } from "../features/authStorage.js";
 
 const CampusContext = createContext(null);
 

@@ -1,9 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import apiClient from "@/api/axios.js";
-import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { getAuthToken } from "@/features/authStorage.js";
-import { useCampusContext } from "@/context/CampusContext.jsx";
+import apiClient from "../api/axios.js";
+import { apiEndpoints } from "../api/apiEndpoints.js";
+import { getAuthToken } from "../features/authStorage.js";
+import { useCampusContext } from "./CampusContext.jsx";
 
 const AcademicContext = createContext(null);
 const BOARD_STORAGE_KEY = "cms_selected_board";
