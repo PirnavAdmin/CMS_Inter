@@ -36,7 +36,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 {
                     p_Search = filter.Search ?? "",
                     p_Status = filter.Status,
-                    p_BusType = busTypeFilter
+                    p_BusType = busTypeFilter,
+                    p_CampusId = filter.CampusId
                 },
                 commandType: CommandType.StoredProcedure)).ToList();
 

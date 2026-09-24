@@ -70,6 +70,8 @@ namespace CollegeManagement.API.Models.Faculty
         [StringLength(20)]
         public string FacultyType { get; set; } = "Teaching";
 
+        public int? CampusId { get; set; }
+
         public int? DepartmentId { get; set; }
 
         [NotMapped]

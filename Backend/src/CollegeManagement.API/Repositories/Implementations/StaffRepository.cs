@@ -214,6 +214,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.BoardRef != null && (s.BoardRef.BoardName == bName || s.BoardRef.BoardCode == bName));
             }
 
+            // 4.1 Campus filter
+            if (queryParams.CampusId.HasValue && queryParams.CampusId.Value > 0)
+            {
+                query = query.Where(s => s.CampusId == queryParams.CampusId.Value);
+            }
+
             // 5. Staff Type filter with String/Enum Normalization (Teaching / Non-Teaching / NonTeaching)
             if (!string.IsNullOrWhiteSpace(queryParams.StaffType) &&
                 !queryParams.StaffType.Equals("All", StringComparison.OrdinalIgnoreCase))
@@ -322,9 +328,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             return (items, totalCount);
         }
 
-        public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null)
+        public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null)
         {
             var query = _context.Staffs.AsNoTracking().Where(s => !s.IsDeleted && s.Status == "Active");
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                query = query.Where(s => s.CampusId == campusId.Value);
+            }
             if (!string.IsNullOrWhiteSpace(staffType) && !staffType.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
                 var st = staffType.Trim();
@@ -386,7 +396,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return $"{prefix}{(maxNumber + 1):D4}";
         }
 
-        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null)
+        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)
         {
             var query = _context.Staffs
                 .AsNoTracking()
@@ -395,6 +405,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (boardId.HasValue && boardId.Value > 0)
             {
                 query = query.Where(s => s.BoardId == boardId.Value || s.BoardId == null);
+            }
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                query = query.Where(s => s.CampusId == campusId.Value);
             }
 
             var activeStaff = await query.ToListAsync();

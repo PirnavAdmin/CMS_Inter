@@ -42,9 +42,9 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("dashboard-stats")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(StaffDashboardStatsDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetDashboardStats([FromQuery] int? boardId = null)
+        public async Task<IActionResult> GetDashboardStats([FromQuery] int? boardId = null, [FromQuery] int? campusId = null)
         {
-            var stats = await _staffService.GetDashboardStatsAsync(boardId);
+            var stats = await _staffService.GetDashboardStatsAsync(boardId, campusId);
             return Ok(stats);
         }
 
@@ -82,10 +82,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("dropdown")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<StaffDropdownDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetStaffDropdown([FromQuery] string? staffType = null, [FromQuery] string? facultyType = null)
+        public async Task<IActionResult> GetStaffDropdown([FromQuery] string? staffType = null, [FromQuery] string? facultyType = null, [FromQuery] int? campusId = null)
         {
             var type = !string.IsNullOrWhiteSpace(facultyType) ? facultyType : staffType;
-            var result = await _staffService.GetStaffDropdownAsync(type);
+            var result = await _staffService.GetStaffDropdownAsync(type, campusId);
             return Ok(result);
         }
 
@@ -333,7 +333,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffImportResultDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> ImportExcel([FromForm] StaffImportExcelRequestDto dto)
         {
-            var result = await _staffService.ImportStaffFromExcelAsync(dto.File, dto.DefaultStaffType);
+            var result = await _staffService.ImportStaffFromExcelAsync(dto.File, dto.DefaultStaffType, dto.CampusId);
             return Ok(result);
         }
 

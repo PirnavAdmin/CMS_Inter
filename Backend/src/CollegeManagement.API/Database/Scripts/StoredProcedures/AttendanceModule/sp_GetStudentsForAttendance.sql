@@ -5,7 +5,7 @@ DELIMITER $$
 -- =================================================================================
 -- Author:      Senior MySQL 8 Database Architect
 -- Purpose:     Retrieves students available to mark attendance, joining their 
---              attendance status from attendance_sessions for the selected date.
+--              attendance status for the selected date.
 -- =================================================================================
 CREATE PROCEDURE sp_GetStudentsForAttendance(
     IN p_BoardId INT,
@@ -21,7 +21,9 @@ CREATE PROCEDURE sp_GetStudentsForAttendance(
     IN p_ToDate DATETIME,
     IN p_PageNumber INT,
     IN p_PageSize INT,
-    IN p_SearchText VARCHAR(100)
+    IN p_SearchText VARCHAR(100),
+    IN p_PeriodId INT,
+    IN p_TimetableId INT
 )
 BEGIN
     SELECT 
@@ -30,28 +32,22 @@ BEGIN
         COALESCE(s.RollNo, '') AS RollNumber,
         COALESCE(s.StudentName, '') AS StudentName,
         COALESCE(a.Status, 0) AS Status,
-        COALESCE(a.Remarks,'') AS Remarks,
+        COALESCE(a.Remarks, '') AS Remarks,
         (CASE WHEN a.AttendanceId IS NOT NULL THEN 1 ELSE 0 END) AS IsAttendanceMarked
-    FROM students s
+    FROM Students s
     LEFT JOIN (
         SELECT att.StudentId, MAX(att.Status) AS Status, MAX(att.Remarks) AS Remarks, MAX(att.AttendanceId) AS AttendanceId
-        FROM attendances att
-        INNER JOIN attendance_sessions sess ON att.AttendanceSessionId = sess.AttendanceSessionId
-        WHERE sess.SubjectId = p_SubjectId
-          AND DATE(sess.AttendanceDate) = DATE(p_FromDate)
-          AND (p_SectionId IS NULL OR p_SectionId = 0 OR sess.SectionId = p_SectionId)
-          AND att.IsActive = 1
-          AND sess.IsActive = 1
+        FROM Attendances att
+        WHERE (p_SubjectId IS NULL OR p_SubjectId = 0 OR att.SubjectId = p_SubjectId)
+          AND (p_FromDate IS NULL OR DATE(att.AttendanceDate) = DATE(p_FromDate))
+          AND (p_SectionId IS NULL OR p_SectionId = 0 OR att.SectionId = p_SectionId)
+          AND (att.IsActive = 1 OR att.IsActive IS NULL)
         GROUP BY att.StudentId
     ) a ON s.StudentId = a.StudentId
-    WHERE s.IsActive = 1
+    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
-      AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR EXISTS (
-            SELECT 1 FROM academiclevels al 
-            WHERE al.AcademicLevelId = p_AcademicLevelId 
-              AND (al.LevelName = s.AcademicLevel OR al.LevelCode = s.AcademicLevel)
-          ))
+      AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR s.AcademicLevelId = p_AcademicLevelId)
       AND (p_GroupId IS NULL OR p_GroupId = 0 OR s.GroupId = p_GroupId)
       AND (p_SectionId IS NULL OR p_SectionId = 0 OR s.SectionId = p_SectionId)
       AND (p_StudentId IS NULL OR p_StudentId = 0 OR s.StudentId = p_StudentId)

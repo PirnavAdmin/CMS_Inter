@@ -21,9 +21,10 @@ public class CertificateService : ICertificateService
         string? search = null,
         string? status = null,
         string? certificateType = null,
+        int? campusId = null,
         CancellationToken ct = default)
     {
-        return await _repository.GetAllAsync(search, status, certificateType, ct);
+        return await _repository.GetAllAsync(search, status, certificateType, campusId, ct);
     }
 
     public async Task<CertificateResponseDto?> GetByIdAsync(
@@ -43,15 +44,17 @@ public class CertificateService : ICertificateService
     }
 
     public async Task<CertificateWorkflowStatsDto> GetWorkflowStatsAsync(
+        int? campusId = null,
         CancellationToken ct = default)
     {
-        return await _repository.GetWorkflowStatsAsync(ct);
+        return await _repository.GetWorkflowStatsAsync(campusId, ct);
     }
 
     public async Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
+        int? campusId = null,
         CancellationToken ct = default)
     {
-        return await _repository.GetStudentsDropdownAsync(ct);
+        return await _repository.GetStudentsDropdownAsync(campusId, ct);
     }
 
     public async Task<CertificateResponseDto?> GenerateAsync(
@@ -174,9 +177,10 @@ public class CertificateService : ICertificateService
         int? groupId,
         int? sectionId,
         string? search,
+        int? campusId = null,
         CancellationToken ct = default)
     {
-        return await _repository.GetBulkEligibleStudentsAsync(academicYearId, boardId, groupId, sectionId, search, ct);
+        return await _repository.GetBulkEligibleStudentsAsync(academicYearId, boardId, groupId, sectionId, search, campusId, ct);
     }
 
     public async Task<bool> CancelAsync(

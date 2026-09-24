@@ -1242,16 +1242,46 @@ const normalizeScheduleRecord = (
   }
   if (!resolvedGroupId) resolvedGroupId = normalizeId(fallbackGroupId) || examGids[0] || "";
 
+  const groupReqStrength = (resolvedGroupId && examContext)
+    ? getRequiredCandidateStrength(examContext, resolvedGroupId, programsList, false, studentsList)
+    : 0;
+  const fallbackStrength = groupReqStrength > 0
+    ? groupReqStrength
+    : (getGroupStudents(examContext, resolvedGroupId, programsList, studentsList).length ||
+       Number(examContext?.candidateCount) || 0);
+
   // Reconstruct hallAssignments if missing or empty, checking roomNameVal, hallNames, hallId, roomId, etc.
   let hallAssignments = [];
   if (rawHallAssignments.length > 0) {
+    let remainingCandidates = fallbackStrength;
     hallAssignments = rawHallAssignments.map((a) => {
       const rawHid = a?.hallId ?? a?.roomId;
       const validHid = rawHid !== undefined && rawHid !== null && String(rawHid).trim() !== "" ? normalizeId(rawHid) : "";
+      const roomObj = ensureArray(roomsList).find((r) => normalizeId(r.id ?? r.roomId) === validHid);
+      const roomCap = Number(roomObj?.capacity ?? a?.capacity ?? a?.roomCapacity) || 0;
+
+      let candidateCount = Number(a?.candidateCount) > 0
+        ? Number(a.candidateCount)
+        : (Number(s?.candidateCount) > 0 ? Number(s.candidateCount) : 0);
+
+      if (candidateCount <= 0) {
+        if (rawHallAssignments.length === 1) {
+          candidateCount = fallbackStrength > 0 ? fallbackStrength : (roomCap > 0 ? roomCap : 40);
+        } else {
+          if (roomCap > 0) {
+            candidateCount = Math.min(remainingCandidates, roomCap);
+          } else {
+            const defaultCap = Math.ceil(fallbackStrength / rawHallAssignments.length) || 40;
+            candidateCount = Math.min(remainingCandidates, defaultCap);
+          }
+          remainingCandidates = Math.max(0, remainingCandidates - candidateCount);
+        }
+      }
+
       return {
         hallId: validHid,
         hallName: a?.hallName || a?.roomName || a?.name || (validHid && roomsList?.length ? nameOf(roomsList, validHid) : ""),
-        candidateCount: Number(a?.candidateCount) > 0 ? Number(a.candidateCount) : (Number(s?.candidateCount) > 0 ? Number(s.candidateCount) : 0),
+        candidateCount: candidateCount > 0 ? candidateCount : 0,
         invigilatorIds: ensureArray(a?.invigilatorIds || a?.facultyIds)
           .map(normalizeId)
           .filter((id) => id && id !== "0" && id !== "undefined" && id !== "null"),
@@ -1261,6 +1291,9 @@ const normalizeScheduleRecord = (
     const rawDirectHid = s?.hallId ?? s?.roomId;
     const directHid = rawDirectHid !== undefined && rawDirectHid !== null && String(rawDirectHid).trim() !== "" ? normalizeId(rawDirectHid) : "";
     if (directHid) {
+      const roomObj = ensureArray(roomsList).find((r) => normalizeId(r.id ?? r.roomId) === directHid);
+      const roomCap = Number(roomObj?.capacity ?? s?.capacity ?? s?.roomCapacity) || 0;
+      const initialCount = Number(s?.candidateCount) > 0 ? Number(s.candidateCount) : (fallbackStrength > 0 ? fallbackStrength : (roomCap > 0 ? roomCap : 40));
       const rawInvIds = ensureArray(
         s?.invigilatorIds || s?.facultyIds || (s?.invigilatorId ? [s.invigilatorId] : []) || (s?.facultyId ? [s.facultyId] : []),
       )
@@ -1271,7 +1304,7 @@ const normalizeScheduleRecord = (
         {
           hallId: directHid,
           hallName: roomNameVal || (roomsList?.length ? nameOf(roomsList, directHid) : ""),
-          candidateCount: Number(s?.candidateCount) > 0 ? Number(s.candidateCount) : 0,
+          candidateCount: initialCount > 0 ? initialCount : 0,
           invigilatorIds: rawInvIds,
         },
       ];
@@ -1303,6 +1336,7 @@ const normalizeScheduleRecord = (
     : `sch-${normalizeId(s?.examinationId ?? s?.examId ?? examContext?.id)}-${resolvedGroupId}-${normalizeId(s?.subjectId || s?.patternName || formattedDate)}`;
 
   const totalCandidatesAlloc = hallAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0);
+  const finalCandidateCount = totalCandidatesAlloc > 0 ? totalCandidatesAlloc : (fallbackStrength > 0 ? fallbackStrength : 0);
 
   const combined = ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) || isCombinedExamination(examContext);
   const configuredPattern = ensureArray(examContext?.selectedGroupPatterns?.[resolvedGroupId])[0] || examContext?.examPattern || "";
@@ -1356,7 +1390,7 @@ const normalizeScheduleRecord = (
     passPercentage: String(
       s?.passPercentage || Math.round((Number(passMarksVal) / (Number(maxMarksVal) || 100)) * 100) || "35",
     ),
-    candidateCount: totalCandidatesAlloc,
+    candidateCount: finalCandidateCount,
     roomName: roomNameVal || "—",
     invigilatorName: invigilatorVal || "—",
     hallAssignments,
@@ -1672,7 +1706,7 @@ const normalizeExamRecord = (e) => {
     scheduleMode:
       e?.scheduleMode || getExaminationScheduleMode(e),
     schedules: ensureArray(rawSchedules).map((entry) => ({
-      ...normalizeScheduleRecord(entry, groupIds[0] || e?.groupId, e, [], selectedSubjectIds),
+      ...normalizeScheduleRecord(entry, groupIds[0] || e?.groupId, e, [], selectedSubjectIds, roomsList, facultyList, programsList, studentsList),
       examId: id,
     })),
   };
@@ -1715,6 +1749,19 @@ export default function ExaminationPage() {
   const [examsLoading, setExamsLoading] = useState(false);
   const [examsError, setExamsError] = useState(null);
   const loadExamsAbortRef = useRef(null);
+
+  const roomsRef = useRef(rooms);
+  roomsRef.current = rooms;
+  const facultyRef = useRef(faculty);
+  facultyRef.current = faculty;
+  const programsRef = useRef(programs);
+  programsRef.current = programs;
+  const studentsRef = useRef(students);
+  studentsRef.current = students;
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+  const eligibleSubjectsRef = useRef(eligibleSubjects);
+  eligibleSubjectsRef.current = eligibleSubjects;
 
   // Clean React View State (No Window Router Hacks)
   const [viewMode, setViewMode] = useState("list"); // "list" | "add" | "edit"
@@ -1785,7 +1832,7 @@ export default function ExaminationPage() {
             const sRaw = unwrap(res);
             const fallbackGid = e.groupIds?.[0] || e.groupId;
             return sRaw.map((entry) => ({
-              ...normalizeScheduleRecord(entry, fallbackGid, e, [], []),
+              ...normalizeScheduleRecord(entry, fallbackGid, e, groupsRef.current, eligibleSubjectsRef.current, roomsRef.current, facultyRef.current, programsRef.current, studentsRef.current),
               examId: e.id,
             }));
           }).catch(() => [])
@@ -2597,6 +2644,45 @@ export default function ExaminationPage() {
     };
   }, [examId, showToast, exams, currentExam, groups, eligibleSubjects, rooms, faculty, programs, students]);
 
+  // Reactive schedule re-normalization: whenever students or programs or groups load/change,
+  // re-normalize any existing schedules that have candidateCount <= 0 or missing hall candidate counts.
+  useEffect(() => {
+    if (!students.length && !programs.length) return;
+    setSchedules((prevSchedules) => {
+      if (!prevSchedules.length) return prevSchedules;
+      let hasChanges = false;
+      const updated = prevSchedules.map((schItem) => {
+        const examCtx = exams.find((e) => normalizeId(e.id) === normalizeId(schItem.examId)) || currentExam;
+        const fallbackGid = schItem.groupId || examCtx?.groupIds?.[0] || examCtx?.groupId;
+        const currentAlloc = ensureArray(schItem.hallAssignments).reduce((sum, h) => sum + (Number(h.candidateCount) || 0), 0);
+
+        if (currentAlloc <= 0 || !schItem.candidateCount || Number(schItem.candidateCount) <= 0) {
+          hasChanges = true;
+          const renorm = normalizeScheduleRecord(
+            schItem,
+            fallbackGid,
+            examCtx,
+            groups,
+            eligibleSubjects,
+            rooms,
+            faculty,
+            programs,
+            students
+          );
+          return {
+            ...schItem,
+            candidateCount: renorm.candidateCount,
+            hallAssignments: renorm.hallAssignments,
+            roomName: renorm.roomName !== "—" ? renorm.roomName : schItem.roomName,
+            invigilatorName: renorm.invigilatorName !== "—" ? renorm.invigilatorName : schItem.invigilatorName,
+          };
+        }
+        return schItem;
+      });
+      return hasChanges ? updated : prevSchedules;
+    });
+  }, [students, programs, groups, exams, currentExam, eligibleSubjects, rooms, faculty]);
+
   const handleSaveSchedules = async (newSchedules, isEditingId = null, throwOnError = false) => {
     if (!newSchedules || !newSchedules.length) {
       showToast("At least one exam schedule entry is required.", "warning");
@@ -2615,10 +2701,27 @@ export default function ExaminationPage() {
       const response = await apiClient.get("/api/v1/examinations/" + targetExamId + "/schedules");
       const examCtx = currentExam || exams.find((e) => normalizeId(e.id) === normalizeId(targetExamId));
       const fallbackGid = examCtx?.groupIds?.[0] || examCtx?.groupId || groups[0]?.id;
-      const records = unwrap(response).map((entry) => ({
-        ...normalizeScheduleRecord(entry, fallbackGid, examCtx, groups, eligibleSubjects, rooms, faculty, programs, students),
-        examId: normalizeId(targetExamId),
-      }));
+      const records = unwrap(response).map((entry) => {
+        const norm = normalizeScheduleRecord(entry, fallbackGid, examCtx, groups, eligibleSubjects, rooms, faculty, programs, students);
+        const matched = ensureArray(newSchedules).find((ns) =>
+          (normalizeId(ns.subjectId) && normalizeId(ns.subjectId) === normalizeId(norm.subjectId)) ||
+          (ns.patternName && ns.patternName === norm.patternName) ||
+          (ns.date && norm.date && canonicalDate(ns.date) === canonicalDate(norm.date) && normalizeId(ns.groupId) === normalizeId(norm.groupId))
+        );
+        if (matched && ensureArray(matched.hallAssignments).length > 0) {
+          const clientTotal = ensureArray(matched.hallAssignments).reduce((sum, h) => sum + (Number(h.candidateCount) || 0), 0);
+          if (clientTotal > 0) {
+            norm.hallAssignments = matched.hallAssignments;
+            norm.candidateCount = clientTotal;
+            if (matched.roomName && matched.roomName !== "—") norm.roomName = matched.roomName;
+            if (matched.invigilatorName && matched.invigilatorName !== "—") norm.invigilatorName = matched.invigilatorName;
+          }
+        }
+        return {
+          ...norm,
+          examId: normalizeId(targetExamId),
+        };
+      });
       if (records.some((entry) => !entry.id) || (!isEditingId && !records.length)) throw new Error("The backend did not return persisted schedules. Reload before trying again.");
       setSchedules((previous) => [...previous.filter((entry) => entry.examId !== normalizeId(targetExamId)), ...records]);
       if (newSchedules.some((entry) => entry.scheduleMode === "PATTERN_WISE") && records.some((entry) => entry.combinedConfigurationVerified === false)) {
@@ -5827,6 +5930,35 @@ function ScheduleSection({
         },
         students,
       ) || [];
+    }
+
+    const groupReqStrength = getRequiredCandidateStrength(exam, selectedGroupId, programs, false, students, {
+      subjectId: sch.subjectId,
+      includedSubjectIds: isCombined ? activeGroupSubjects.map((s) => s.id) : (sch.includedSubjectIds || []),
+      subjectsList: sectionSubjects,
+    });
+    const fallbackStrength = groupReqStrength > 0 ? groupReqStrength : (getGroupStudents(exam, selectedGroupId, programs, students).length || Number(exam?.candidateCount) || 0);
+
+    if (finalAssignments.length > 0) {
+      let remaining = fallbackStrength;
+      finalAssignments = finalAssignments.map((a) => {
+        let count = Number(a.candidateCount) || 0;
+        const rId = a.hallId || a.roomId;
+        const roomObj = rooms.find((r) => normalizeId(r.id) === normalizeId(rId) || normalizeId(r.roomId) === normalizeId(rId));
+        const roomCap = Number(roomObj?.capacity) || 0;
+        if (count <= 0) {
+          if (finalAssignments.length === 1) {
+            count = fallbackStrength > 0 ? fallbackStrength : (roomCap > 0 ? roomCap : 40);
+          } else {
+            count = roomCap > 0 ? Math.min(remaining, roomCap) : Math.min(remaining, Math.ceil(fallbackStrength / finalAssignments.length) || 40);
+            remaining = Math.max(0, remaining - count);
+          }
+        }
+        return {
+          ...a,
+          candidateCount: count,
+        };
+      });
     }
 
     const currentGroupCode = codeOf(groups, selectedGroupId, "GROUP");

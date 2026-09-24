@@ -108,6 +108,11 @@ namespace CollegeManagement.API.DTOs.Staff
         [StringLength(100)]
         public string? Department { get; set; }
 
+        public int? CampusId { get; set; }
+
+        [StringLength(100)]
+        public string? CampusName { get; set; }
+
         public int? BoardId { get; set; }
 
         [StringLength(50)]

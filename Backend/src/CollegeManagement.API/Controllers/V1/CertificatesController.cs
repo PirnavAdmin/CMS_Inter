@@ -103,9 +103,10 @@ public class CertificatesController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? status = null,
         [FromQuery] string? certificateType = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var result = await _service.GetAllAsync(search, status, certificateType, ct);
+        var result = await _service.GetAllAsync(search, status, certificateType, campusId, ct);
         return Ok(result);
     }
 
@@ -115,9 +116,11 @@ public class CertificatesController : ControllerBase
     // =========================================================
     [HttpGet("workflow-stats")]
     [ProducesResponseType(typeof(CertificateWorkflowStatsDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetWorkflowStats(CancellationToken ct = default)
+    public async Task<IActionResult> GetWorkflowStats(
+        [FromQuery] int? campusId = null,
+        CancellationToken ct = default)
     {
-        var stats = await _service.GetWorkflowStatsAsync(ct);
+        var stats = await _service.GetWorkflowStatsAsync(campusId, ct);
         return Ok(stats);
     }
 
@@ -127,9 +130,11 @@ public class CertificatesController : ControllerBase
     // =========================================================
     [HttpGet("students-dropdown")]
     [ProducesResponseType(typeof(IReadOnlyList<StudentCertificateDropdownDto>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetStudentsDropdown(CancellationToken ct = default)
+    public async Task<IActionResult> GetStudentsDropdown(
+        [FromQuery] int? campusId = null,
+        CancellationToken ct = default)
     {
-        var students = await _service.GetStudentsDropdownAsync(ct);
+        var students = await _service.GetStudentsDropdownAsync(campusId, ct);
         return Ok(students);
     }
 
@@ -323,9 +328,10 @@ public class CertificatesController : ControllerBase
         [FromQuery] int? groupId = null,
         [FromQuery] int? sectionId = null,
         [FromQuery] string? search = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var students = await _service.GetBulkEligibleStudentsAsync(academicYearId, boardId, groupId, sectionId, search, ct);
+        var students = await _service.GetBulkEligibleStudentsAsync(academicYearId, boardId, groupId, sectionId, search, campusId, ct);
         return Ok(students);
     }
 
@@ -429,9 +435,10 @@ public class CertificatesController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? status = null,
         [FromQuery] string? certificateType = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var certificates = await _service.GetAllAsync(search, status, certificateType, ct);
+        var certificates = await _service.GetAllAsync(search, status, certificateType, campusId, ct);
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("S.No,Certificate Number,Admission Number,Student Name,Academic Level,Group,Certificate Type,Request Date,Issue Date,Status,Issued By,Purpose,Remarks,Verification Link");
@@ -459,9 +466,10 @@ public class CertificatesController : ControllerBase
         [FromQuery] string? search = null,
         [FromQuery] string? status = null,
         [FromQuery] string? certificateType = null,
+        [FromQuery] int? campusId = null,
         CancellationToken ct = default)
     {
-        var certificates = await _service.GetAllAsync(search, status, certificateType, ct);
+        var certificates = await _service.GetAllAsync(search, status, certificateType, campusId, ct);
 
         var crestPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "pirnav-college-crest.png");
         if (!System.IO.File.Exists(crestPath))

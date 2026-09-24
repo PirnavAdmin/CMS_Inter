@@ -211,6 +211,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_AssessmentTypeId", filter.AssessmentTypeId > 0 ? filter.AssessmentTypeId : null);
             p.Add("p_Status", string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status);
             p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter.SearchTerm) ? null : filter.SearchTerm);
+            p.Add("p_CampusId", filter.CampusId > 0 ? filter.CampusId : null);
 
             var rows = await Connection.QueryAsync<dynamic>(
                 "sp_GetExaminations",
@@ -258,6 +259,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_AssessmentTypeId", filter.AssessmentTypeId > 0 ? filter.AssessmentTypeId : null);
             p.Add("p_Status", string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status);
             p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter.SearchTerm) ? null : filter.SearchTerm);
+            p.Add("p_CampusId", filter.CampusId > 0 ? filter.CampusId : null);
 
             var results = await Connection.QueryAsync<ExaminationResponse>(
                 "sp_GetExaminations",

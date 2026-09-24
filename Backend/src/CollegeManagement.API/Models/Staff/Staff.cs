@@ -132,6 +132,14 @@ namespace CollegeManagement.API.Models.Staff
         [NotMapped]
         public string Department { get; set; } = string.Empty;
 
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
+
+        [NotMapped]
+        public string? CampusName => Campus?.CampusName;
+
         public int? BoardId { get; set; }
 
         [ForeignKey(nameof(BoardId))]

@@ -658,27 +658,108 @@ namespace CollegeManagement.API.Repositories
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive)
+            bool? isActive,
+            int? campusId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
-            var result = await connection.QueryAsync<StudentListItemDto>(
-                "sp_SearchStudents",
-                new
+            try
+            {
+                var result = await connection.QueryAsync<StudentListItemDto>(
+                    "sp_SearchStudents",
+                    new
+                    {
+                        p_Search = string.IsNullOrWhiteSpace(search)
+                            ? null
+                            : search.Trim(),
+
+                        p_BoardId = boardId,
+                        p_AcademicYearId = academicYearId,
+                        p_AcademicLevelId = academicLevelId,
+                        p_GroupId = groupId,
+                        p_SectionId = sectionId,
+                        p_IsActive = isActive,
+                        p_CampusId = campusId
+                    },
+                    commandType: CommandType.StoredProcedure);
+
+                return result.ToList();
+            }
+            catch
+            {
+                // Resilient EF Core Fallback
+                var query = _context.Students
+                    .Include(s => s.BoardNavigation)
+                    .Include(s => s.AcademicYear)
+                    .Include(s => s.AcademicLevelNavigation)
+                    .Include(s => s.GroupNavigation)
+                    .Include(s => s.SectionNavigation)
+                    .Include(s => s.CampusNavigation)
+                    .AsNoTracking()
+                    .AsQueryable();
+
+                if (campusId.HasValue && campusId.Value > 0)
+                    query = query.Where(s => s.CampusId == campusId.Value);
+
+                if (boardId.HasValue && boardId.Value > 0)
+                    query = query.Where(s => s.BoardId == boardId.Value);
+
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                    query = query.Where(s => s.AcademicYearId == academicYearId.Value);
+
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
+
+                if (groupId.HasValue && groupId.Value > 0)
+                    query = query.Where(s => s.GroupId == groupId.Value);
+
+                if (sectionId.HasValue && sectionId.Value > 0)
+                    query = query.Where(s => s.SectionId == sectionId.Value);
+
+                if (isActive.HasValue)
+                    query = query.Where(s => s.IsActive == isActive.Value);
+
+                if (!string.IsNullOrWhiteSpace(search))
                 {
-                    p_Search = string.IsNullOrWhiteSpace(search)
-                        ? null
-                        : search.Trim(),
+                    var sTerm = search.Trim();
+                    query = query.Where(s =>
+                        s.StudentName.Contains(sTerm) ||
+                        s.AdmissionNo.Contains(sTerm) ||
+                        (s.RollNo != null && s.RollNo.Contains(sTerm)) ||
+                        (s.MobileNumber != null && s.MobileNumber.Contains(sTerm)) ||
+                        (s.Email != null && s.Email.Contains(sTerm)));
+                }
 
-                    p_BoardId = boardId,
-                    p_AcademicYearId = academicYearId,
-                    p_GroupId = groupId,
-                    p_SectionId = sectionId,
-                    p_IsActive = isActive
-                },
-                commandType: CommandType.StoredProcedure);
-
-            return result.ToList();
+                return await query
+                    .OrderBy(s => s.StudentName)
+                    .Select(s => new StudentListItemDto
+                    {
+                        StudentId = s.StudentId,
+                        AdmissionNo = s.AdmissionNo,
+                        RollNo = s.RollNo ?? string.Empty,
+                        StudentName = s.StudentName,
+                        Photo = s.Photo,
+                        Gender = s.Gender,
+                        Email = s.Email,
+                        MobileNumber = s.MobileNumber,
+                        CampusId = s.CampusId,
+                        CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
+                        BoardId = s.BoardId,
+                        BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
+                        AcademicYearId = s.AcademicYearId,
+                        AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
+                        AcademicLevelId = s.AcademicLevelId ?? 0,
+                        AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
+                        GroupId = s.GroupId ?? 0,
+                        GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                        SectionId = s.SectionId ?? 0,
+                        SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                        IsActive = s.IsActive,
+                        Status = s.Status,
+                        CreatedAt = s.CreatedAt
+                    })
+                    .ToListAsync();
+            }
         }
 
 

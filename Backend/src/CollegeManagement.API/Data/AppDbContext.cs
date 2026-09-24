@@ -48,6 +48,8 @@ namespace CollegeManagement.API.Data
         public DbSet<BoardAcademicLevel> BoardAcademicLevels { get; set; }
         public DbSet<BoardAssessment> BoardAssessments { get; set; }
         
+        public DbSet<Campus> Campuses { get; set; }
+        public DbSet<CampusBoard> CampusBoards { get; set; }
         public DbSet<Student> Students { get; set; }
         public DbSet<StudentAdmission> StudentAdmissions { get; set; }
         public DbSet<Designation> Designations { get; set; }

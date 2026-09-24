@@ -61,6 +61,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 query = query.Where(f => f.DepartmentId == request.DepartmentId.Value);
             }
 
+            if (request.CampusId.HasValue && request.CampusId.Value > 0)
+            {
+                query = query.Where(f => f.CampusId == request.CampusId.Value);
+            }
+
             var facultyList = await query
                 .Include(f => f.DepartmentRef)
                 .Include(f => f.DesignationRef)
@@ -592,6 +597,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (request.FacultyId.HasValue && request.FacultyId.Value > 0)
             {
                 facultyQuery = facultyQuery.Where(f => f.Id == request.FacultyId.Value);
+            }
+
+            if (request.CampusId.HasValue && request.CampusId.Value > 0)
+            {
+                facultyQuery = facultyQuery.Where(f => f.CampusId == request.CampusId.Value);
             }
 
             var facultyList = await facultyQuery.OrderBy(f => f.FirstName).ToListAsync();

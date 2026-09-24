@@ -38,6 +38,7 @@ namespace CollegeManagement.API.DTOs.Timetable
         }
 
         public int Capacity { get; set; } = 60;
+        public int CampusId { get; set; } = 1;
         public string RoomType { get; set; } = "Classroom";
         public string? BlockName { get; set; }
 
@@ -129,6 +130,7 @@ namespace CollegeManagement.API.DTOs.Timetable
         }
 
         public int Capacity { get; set; } = 60;
+        public int CampusId { get; set; } = 1;
         public string RoomType { get; set; } = "Classroom";
         public string? BlockName { get; set; }
 
@@ -188,6 +190,7 @@ namespace CollegeManagement.API.DTOs.Timetable
     {
         public int RoomId { get; set; }
         public int Id => RoomId;
+        public int CampusId { get; set; } = 1;
 
         public string RoomCode { get; set; } = string.Empty;
         public string RoomName { get; set; } = string.Empty;
@@ -208,6 +211,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
     public class RoomFilterDto
     {
+        public int? CampusId { get; set; }
         public string? Building { get; set; }
         public string? BlockName
         {
