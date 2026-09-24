@@ -19,7 +19,7 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
 
         // Academic
-        public int? CampusId { get; set; }
+        public int? CampusId { get; set; } public int? AdmittedById { get; set; }
 
         [Required]
         public int BoardId { get; set; }
