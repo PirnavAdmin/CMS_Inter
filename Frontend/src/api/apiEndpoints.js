@@ -568,6 +568,49 @@ export const apiEndpoints = {
     studentReports: "/api/v1/transport/reports/students",
     maintenanceReports: "/api/v1/transport/reports/maintenance",
   },
+
+  payroll: {
+    // Salary Structures
+    salaryStructures: "/api/Payroll/salary-structures",
+    salaryStructureById: (id) => `/api/Payroll/salary-structures/${id}`,
+
+    // Employees
+    employees: "/api/Payroll/employees",
+
+    // Salary Assignments
+    salaryAssignments: "/api/Payroll/salary-assignments",
+    salaryAssignmentById: (id) => `/api/Payroll/salary-assignments/${id}`,
+    salaryAssignmentStatus: (id, status) => `/api/Payroll/salary-assignments/${id}/status?status=${encodeURIComponent(status)}`,
+
+    // Payslips
+    payslips: "/api/Payroll/payslips",
+    payslipById: (id) => `/api/Payroll/payslips/${id}`,
+    generatePayslip: "/api/Payroll/payslips/generate",
+    generatePayslipsBulk: "/api/Payroll/payslips/generate-bulk",
+    updatePayslipStatus: (id, status) => `/api/Payroll/payslips/${id}/status?status=${encodeURIComponent(status)}`,
+    sendPayslipEmail: (id) => `/api/Payroll/payslips/${id}/send-email`,
+    payslipAdvanceRepayments: (id) => `/api/Payroll/payslips/${id}/advance-repayments`,
+
+    // Salary Revisions
+    revisions: "/api/Payroll/revisions",
+    approveRevision: (id) => `/api/Payroll/revisions/${id}/approve`,
+
+    // Bonuses
+    bonuses: "/api/Payroll/bonuses",
+    bonusById: (id) => `/api/Payroll/bonuses/${id}`,
+    approveBonus: (id) => `/api/Payroll/bonuses/${id}/approve`,
+
+    // Salary Advances
+    advances: "/api/Payroll/advances",
+    advanceById: (id) => `/api/Payroll/advances/${id}`,
+    approveAdvance: (id) => `/api/Payroll/advances/${id}/approve`,
+    advanceBalances: "/api/Payroll/advances/balances",
+    advanceRepaymentHistory: "/api/Payroll/advances/repayment-history",
+
+    // Summary
+    summary: "/api/Payroll/summary",
+    staffSummary: (staffId) => `/api/Payroll/staff/${staffId}/summary`,
+  },
 };
 
 export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
