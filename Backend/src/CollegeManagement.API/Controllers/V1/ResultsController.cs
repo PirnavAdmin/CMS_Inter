@@ -201,6 +201,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="boardId">Optional Board ID filter.</param>
         /// <param name="academicYearId">Optional Academic Year ID filter.</param>
         /// <param name="groupId">Optional Group ID filter.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns the list of published examination result groups.</response>
         [HttpGet("published")]
         [ProducesResponseType(typeof(IEnumerable<PublishedExamResultGroupDto>), StatusCodes.Status200OK)]
@@ -293,6 +294,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="sectionId">Optional Section ID filter.</param>
         /// <param name="examId">Optional Examination ID filter.</param>
         /// <param name="search">Optional student name or roll number search string.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns list of ranked students ordered by total score descending.</response>
         [HttpGet("rank-list")]
         [ProducesResponseType(typeof(List<RankListDto>), StatusCodes.Status200OK)]
@@ -327,6 +329,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="groupId">Optional Group ID filter.</param>
         /// <param name="programId">Optional Program ID filter.</param>
         /// <param name="examId">Optional Examination ID filter.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns KPI metrics, failed student details, and subject statistics.</response>
         [HttpGet("analytics")]
         [ProducesResponseType(typeof(ResultAnalyticsDto), StatusCodes.Status200OK)]
@@ -463,6 +466,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="programId">Optional Program ID.</param>
         /// <param name="sectionId">Optional Section ID.</param>
         /// <param name="examId">Optional Examination ID.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns the generated Excel file byte stream.</response>
         [HttpGet("export-excel")]
         [Produces("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
@@ -532,6 +536,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="programId">Optional Program ID.</param>
         /// <param name="sectionId">Optional Section ID.</param>
         /// <param name="examId">Optional Examination ID.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns the generated PDF file stream.</response>
         [HttpGet("download-pdf")]
         [Produces("application/pdf")]
