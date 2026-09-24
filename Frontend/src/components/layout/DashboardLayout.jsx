@@ -340,7 +340,7 @@ export default function DashboardLayout({
     setSelectedBoard,
     setSelectedAcademicYear,
   } = useAcademicContext();
-  const { campuses, selectedCampus, setSelectedCampus } = useCampusContext();
+  const { campuses, activeCampuses, selectedCampus, setSelectedCampus } = useCampusContext();
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -365,10 +365,10 @@ export default function DashboardLayout({
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title) ?? pageMenuItem?.icon;
   const pageTitleNode = <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>;
 
-
-
-
-
+  const navbarCampuses = useMemo(() => {
+    if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
+    return (campuses || []).filter((c) => c && c.isActive !== false && String(c.status || "").toLowerCase() !== "inactive");
+  }, [activeCampuses, campuses]);
 
   const resolvedBreadcrumb = useMemo(() => {
     const provided = Array.isArray(breadcrumb) ? breadcrumb : [];
@@ -628,7 +628,7 @@ export default function DashboardLayout({
                     setNotifOpen(false);
                     setProfileOpen(false);
                   }}
-                  disabled={!campuses?.length}
+                  disabled={!navbarCampuses?.length}
                   aria-label="Select Campus"
                   aria-expanded={campusOpen}
                 >
@@ -648,10 +648,10 @@ export default function DashboardLayout({
                   <div className="cms-academic-dropdown-panel">
                     <div className="cms-academic-panel-header">Select Campus Branch</div>
                     <div className="cms-academic-panel-list">
-                      {!campuses?.length ? (
-                        <div className="cms-academic-panel-empty">No campuses available</div>
+                      {!navbarCampuses?.length ? (
+                        <div className="cms-academic-panel-empty">No active campuses available</div>
                       ) : (
-                        campuses.map((c) => {
+                        navbarCampuses.map((c) => {
                           const isSelected =
                             String(selectedCampus?.id) === String(c.id) ||
                             String(selectedCampus?.campusId) === String(c.campusId) ||
