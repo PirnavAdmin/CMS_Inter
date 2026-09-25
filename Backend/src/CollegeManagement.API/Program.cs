@@ -500,6 +500,7 @@ app.Use(async (context, next) =>
 
 app.UseAuthorization();
 app.MapControllers();
+app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
 app.Run();

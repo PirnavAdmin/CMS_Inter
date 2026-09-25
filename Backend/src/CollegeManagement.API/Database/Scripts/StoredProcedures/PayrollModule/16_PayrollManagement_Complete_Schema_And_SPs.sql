@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS `payroll_salary_structures` (
     PRIMARY KEY (`Id`),
     KEY `IX_PayrollSalaryStructures_StaffType` (`StaffType`),
     KEY `IX_PayrollSalaryStructures_Status` (`Status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
 -- 2. Staff Salary Assignments Table
 CREATE TABLE IF NOT EXISTS `payroll_staff_salaries` (
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS `payroll_staff_salaries` (
     KEY `IX_PayrollStaffSalaries_StaffId` (`StaffId`),
     KEY `IX_PayrollStaffSalaries_StructureId` (`SalaryStructureId`),
     KEY `IX_PayrollStaffSalaries_Status` (`Status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
 -- 3. Monthly Payslips Table
 CREATE TABLE IF NOT EXISTS `payroll_payslips` (
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS `payroll_payslips` (
     UNIQUE KEY `UX_PayrollPayslips_Staff_Period` (`StaffId`, `PayrollMonth`, `PayrollYear`),
     KEY `IX_PayrollPayslips_Period` (`PayrollYear`, `PayrollMonth`),
     KEY `IX_PayrollPayslips_Status` (`PayslipStatus`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
 -- 4. Salary Revisions Table
 CREATE TABLE IF NOT EXISTS `payroll_salary_revisions` (
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS `payroll_salary_revisions` (
     PRIMARY KEY (`Id`),
     KEY `IX_PayrollSalaryRevisions_StaffId` (`StaffId`),
     KEY `IX_PayrollSalaryRevisions_Status` (`Status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
 -- 5. Bonuses Table
 CREATE TABLE IF NOT EXISTS `payroll_bonuses` (
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS `payroll_bonuses` (
     PRIMARY KEY (`Id`),
     KEY `IX_PayrollBonuses_StaffId` (`StaffId`),
     KEY `IX_PayrollBonuses_Status` (`Status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
 -- 6. Advances & Staff Loans Table
 CREATE TABLE IF NOT EXISTS `payroll_advances` (
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS `payroll_advances` (
     PRIMARY KEY (`Id`),
     KEY `IX_PayrollAdvances_StaffId` (`StaffId`),
     KEY `IX_PayrollAdvances_Status` (`Status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
 -- 7. Advance Repayments Table
 CREATE TABLE IF NOT EXISTS `payroll_advance_repayments` (
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS `payroll_advance_repayments` (
     KEY `IX_PayrollAdvanceRepayments_AdvanceId` (`AdvanceId`),
     KEY `IX_PayrollAdvanceRepayments_PayslipId` (`PayslipId`),
     KEY `IX_PayrollAdvanceRepayments_StaffId` (`StaffId`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
 
 -- =============================================================================
 -- SECTION 2: STORED PROCEDURES (100% STORED PROCEDURES)

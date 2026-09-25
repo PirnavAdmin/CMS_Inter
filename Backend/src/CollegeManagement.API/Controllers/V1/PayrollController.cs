@@ -7,7 +7,6 @@ using System.Security.Claims;
 namespace CollegeManagement.API.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
     [Route("api/v1/[controller]")]
     [Produces("application/json")]
     [Authorize]
@@ -865,26 +864,30 @@ namespace CollegeManagement.API.Controllers
             return Ok(result);
         }
 
-        // GET: api/payroll/staff/10/summary?year=2027
+        // GET: api/v1/payroll/staff/10/summary?year=2026
         [HttpGet("staff/{staffId:int}/summary")]
-        public async Task<IActionResult> GetStaffPayrollSummary(int staffId, [FromQuery] int year)
+        public async Task<IActionResult> GetStaffPayrollSummary(int staffId, [FromQuery] int? year)
         {
-            if (staffId <= 0 || year < 2000)
+            var targetYear = year.GetValueOrDefault(DateTime.UtcNow.Year);
+            if (staffId <= 0 || targetYear < 2000)
                 return BadRequest(new { Message = "Valid staff ID and year (>= 2000) are required." });
 
-            var result = await _payrollService.GetStaffPayrollSummaryAsync(staffId, year);
+            var result = await _payrollService.GetStaffPayrollSummaryAsync(staffId, targetYear);
             return Ok(result);
         }
 
-        // GET: api/payroll/summary?month=3&year=2027
+        // GET: api/v1/payroll/summary?month=9&year=2026
         [HttpGet("summary")]
         public async Task<IActionResult> GetMonthlyPayrollSummary(
-            [FromQuery] int month, [FromQuery] int year)
+            [FromQuery] int? month, [FromQuery] int? year)
         {
-            if (month < 1 || month > 12 || year < 2000)
+            var targetMonth = month.GetValueOrDefault(DateTime.UtcNow.Month);
+            var targetYear = year.GetValueOrDefault(DateTime.UtcNow.Year);
+
+            if (targetMonth < 1 || targetMonth > 12 || targetYear < 2000)
                 return BadRequest(new { Message = "Valid month (1-12) and year (>= 2000) are required." });
 
-            var result = await _payrollService.GetMonthlyPayrollSummaryAsync(month, year);
+            var result = await _payrollService.GetMonthlyPayrollSummaryAsync(targetMonth, targetYear);
             return Ok(result);
         }
 
