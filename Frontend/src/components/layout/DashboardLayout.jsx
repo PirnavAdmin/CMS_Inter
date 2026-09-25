@@ -419,11 +419,15 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const user = readUser();
+  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
+  const activeMenu = isParent ? parentMenu : menu;
+  const currentSearchIndex = isParent ? parentSearchIndex : searchIndex;
+  const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
   const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
   const profileRole = user?.role || "admin";
-  const pendingActionCount = MOCK_NOTIFICATIONS.reduce((total, item) => total + item.count, 0);
+  const pendingActionCount = currentNotifications.reduce((total, item) => total + item.count, 0);
 
   const rememberSidebarScroll = () => {
     const scrollTop = sidebarNavRef.current?.scrollTop || 0;

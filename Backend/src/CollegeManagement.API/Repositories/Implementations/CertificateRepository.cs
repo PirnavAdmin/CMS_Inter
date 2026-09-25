@@ -235,6 +235,8 @@ public class CertificateRepository : ICertificateRepository
             string bloodGroup = dict.ContainsKey("Hydrated_BloodGroup") && dict["Hydrated_BloodGroup"] != null ? dict["Hydrated_BloodGroup"].ToString()!.Trim() : "O+";
             string mobile = dict.ContainsKey("Hydrated_Mobile") && dict["Hydrated_Mobile"] != null ? dict["Hydrated_Mobile"].ToString()!.Trim() : "";
 
+
+
             // 2. Fetch template settings using stored procedure
             string canonicalType = "Bonafide Certificate";
             string codeGuess = "certificate-bonafide";
