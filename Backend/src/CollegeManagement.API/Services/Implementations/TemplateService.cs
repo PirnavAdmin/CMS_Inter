@@ -239,7 +239,7 @@ namespace CollegeManagement.API.Services.Implementations
                     };
                     if (!string.IsNullOrEmpty(alias))
                     {
-                        template = await _repository.GetByCodeAsync(alias, ct);
+                        template = await _repository.GetByCodeAsync(alias, campusId, ct);
                     }
                 }
             }
@@ -252,9 +252,9 @@ namespace CollegeManagement.API.Services.Implementations
             // Fallback default: BC or BONAFIDE_CERT or any first active Certificate template
             if (template == null)
             {
-                template = await _repository.GetByCodeAsync("BC", ct)
-                    ?? await _repository.GetByCodeAsync("BONAFIDE_CERT", ct)
-                    ?? (await _repository.GetActiveByCategoryAsync("Certificate", ct)).FirstOrDefault();
+                template = await _repository.GetByCodeAsync("BC", campusId, ct)
+                    ?? await _repository.GetByCodeAsync("BONAFIDE_CERT", campusId, ct)
+                    ?? (await _repository.GetActiveByCategoryAsync("Certificate", campusId, ct)).FirstOrDefault();
             }
 
             if (template == null)
