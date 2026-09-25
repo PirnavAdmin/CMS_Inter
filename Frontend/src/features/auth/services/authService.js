@@ -20,7 +20,6 @@ export const loginUser = async (credentials) => {
     logLoginResponse(response.status);
     return normalizeLoginResponse(response.data, emailOrMobile);
   } catch (authError) {
-<<<<<<< HEAD
     // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
     if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
       logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
@@ -52,8 +51,6 @@ export const loginUser = async (credentials) => {
         message: "Login successful.",
       };
     }
-=======
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
     throw authError;
   }
 };
@@ -308,10 +305,9 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   if (expectedAccountType === "admin" && !isAdmin) {
     throw new Error("Authentication failed because the server returned an invalid admin response.");
   }
-<<<<<<< HEAD
   const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
   const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
-=======
+
   let jwtClaims = {};
   try {
     const parts = token.split(".");
@@ -333,8 +329,6 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
 
   const rawEmail = data.Email || data.email || payload.Email || payload.email || jwtClaims.email || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || enteredEmail;
   const userEmail = Array.isArray(rawEmail) ? String(rawEmail[0] || "").trim() : String(rawEmail || "").trim();
-
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
   const user = {
     id: data.AdminId || data.adminId || data.UserId || data.userId || data.id || data.Id || payload.AdminId || payload.adminId || payload.UserId || payload.userId || payload.id || payload.Id,
     staffId: staffId ? (Number(staffId) || staffId) : null,

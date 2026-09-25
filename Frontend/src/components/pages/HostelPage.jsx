@@ -985,11 +985,7 @@ export default function HostelPage() {
     try {
       const studentId = Number(allocData.studentId);
       if (!studentId || isNaN(studentId) || studentId <= 0) {
-<<<<<<< HEAD
-        showToast("Please select a valid enrolled student.", "warning");
-=======
         showToast("Please select a valid registered student from the dropdown list.", "warning");
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
         return;
       }
 
@@ -1074,18 +1070,12 @@ export default function HostelPage() {
           String(a.studentId) === String(outData.studentId)
       );
       const blk = blocks.find((b) => b.name === outData.blockName || b.code === outData.blockCode || String(b.id) === String(outData.hostelId));
-<<<<<<< HEAD
-      const hostelId = Number(outData.hostelId || alloc?.hostelId || blk?.id || 1);
-=======
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
       const rm = rooms.find((r) => r.roomNo === outData.roomNo || r.roomNo === outData.roomNumber || String(r.id) === String(outData.roomId));
       const hostelId = Number(outData.hostelId || alloc?.hostelId || blk?.id || blocks[0]?.id || 1);
       const roomId = Number(outData.roomId || alloc?.roomId || rm?.id || rooms[0]?.id || 1);
       const bedId = Number(outData.bedId || alloc?.bedId);
       const studentId = Number(outData.studentId || alloc?.studentId);
       const wardenAssignmentId = outData.wardenAssignmentId ? Number(outData.wardenAssignmentId) : (alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null);
-<<<<<<< HEAD
-=======
 
       if (!studentId || isNaN(studentId) || studentId <= 0) {
         showToast("Please select an active resident student for outpass.", "warning");
@@ -1096,7 +1086,6 @@ export default function HostelPage() {
         showToast("Active bed assignment could not be found for this student.", "warning");
         return;
       }
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
 
       const parseIso = (val, fallbackOffsetMs = 0) => {
         if (!val) return new Date(Date.now() + fallbackOffsetMs).toISOString();
@@ -1112,17 +1101,11 @@ export default function HostelPage() {
 
       let reqType = "Outpass";
       const rawType = (outData.requestType || outData.outpassType || "").toLowerCase();
-<<<<<<< HEAD
-      if (rawType.includes("home") || rawType.includes("leave")) reqType = "Leave";
-      else if (rawType.includes("emergency")) reqType = "Emergency";
-      else reqType = "Outpass";
-=======
       if (rawType.includes("leave") || rawType.includes("home") || rawType.includes("emergency")) {
         reqType = "Leave";
       } else {
         reqType = "Outpass";
       }
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
 
       const payload = {
         studentId,
@@ -6954,15 +6937,9 @@ export default function HostelPage() {
       // 2. Secondary: candidateAdmissions if available
       if (Array.isArray(candidateAdmissions) && candidateAdmissions.length > 0) {
         candidateAdmissions.forEach((ca, idx) => {
-<<<<<<< HEAD
-          const sId = ca.studentAdmissionId || ca.studentId || ca.admissionId || ca.id || `ca-${idx}`;
-          const admNo = ca.admissionNumber || ca.admissionNo || ca.regNumber || ca.regNo || `ADM-${sId}`;
-=======
-          const sId = ca.studentId;
+          const sId = ca.studentId || ca.studentAdmissionId || ca.admissionId || ca.id;
           if (!sId) return;
-          const admNo = ca.admissionNumber || ca.admissionNo || `ADM-${sId}`;
-          const fullName = [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.studentName || `Student #${admNo}`;
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
+          const admNo = ca.admissionNumber || ca.admissionNo || ca.regNumber || ca.regNo || `ADM-${sId}`;
           const isAllocated = activeStudentIds.has(String(sId)) || activeStudentIds.has(String(admNo));
 
           if (!isAllocated && !seen.has(String(sId)) && isHostelStudent(null, ca)) {
@@ -6982,7 +6959,6 @@ export default function HostelPage() {
         });
       }
 
-<<<<<<< HEAD
       // Fallback only if no candidates were loaded at all (and filter allocations)
       if (list.length === 0 && (!candidateStudents || candidateStudents.length === 0) && (!candidateAdmissions || candidateAdmissions.length === 0)) {
         allocations.forEach((a, idx) => {
@@ -7000,9 +6976,6 @@ export default function HostelPage() {
           }
         });
       }
-
-=======
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
       // 3. Fallback for edit mode: keep currently selected student
       if (modal.mode === "edit" && modal.data?.studentId && !seen.has(String(modal.data.studentId))) {
         list.push({
@@ -7270,11 +7243,7 @@ export default function HostelPage() {
                     {!form.room ? (
                       <option value="">Select Room first...</option>
                     ) : availableBeds.length === 0 ? (
-<<<<<<< HEAD
-                      <option value="">No beds available in this room</option>
-=======
                       <option value="" disabled>No available beds registered for this room</option>
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
                     ) : (
                       <>
                         <option value="">Select Bed Number...</option>
@@ -7421,18 +7390,11 @@ export default function HostelPage() {
         return;
       }
       const studentObj = studentCandidates.find(
-<<<<<<< HEAD
-        (s) => s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId) || String(s.studentId) === String(selectedStudentId)
-      );
-      if (!studentObj) {
-        showToast("Selected student was not found in active hostel allocations", "error");
-=======
         (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId)
       );
 
       if (!studentObj) {
         showToast("Please select an active resident hosteller.", "error");
->>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
         return;
       }
 
