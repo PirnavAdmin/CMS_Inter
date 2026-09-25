@@ -29,6 +29,9 @@ namespace CollegeManagement.API.Models
             set => ExaminationId = value;
         }
 
+        [NotMapped]
+        public int CampusId { get; set; } = 1;
+
         [Required]
         public int SubjectId { get; set; }
 

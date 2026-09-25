@@ -42,6 +42,20 @@ namespace CollegeManagement.API.Controllers.V1
             _logger = logger;
         }
 
+        private int ResolveCampusId(int? explicitlyProvided = null)
+        {
+            if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
+                return explicitlyProvided.Value;
+
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
+                int.TryParse(headerVal, out var campusId) && campusId > 0)
+            {
+                return campusId;
+            }
+
+            return 1;
+        }
+
         // =========================================================================
         // 1. RESULT GENERATION & SECTION SUMMARIES (TAB 1)
         // =========================================================================
@@ -79,6 +93,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> GenerateResults([FromBody] ProcessResultRequestDto request)
         {
+            request.CampusId = ResolveCampusId(request.CampusId);
             _logger.LogInformation("Generating results for Exam: {ExamId}, Group: {GroupId}", request.ExamId, request.GroupId);
             try
             {
@@ -167,6 +182,10 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> PublishGroupResults([FromBody] ProcessResultRequestDto request)
         {
+            if (request != null)
+            {
+                request.CampusId = ResolveCampusId(request.CampusId);
+            }
             var effectiveExamId = request?.ExamId ?? request?.ExaminationId ?? 0;
             var effectiveGroupId = request?.GroupId ?? 0;
             var effectiveSectionId = request?.SectionId ?? 0;
@@ -211,8 +230,9 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? groupId = null,
             [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Retrieving published results. BoardId: {BoardId}, AcademicYearId: {AcademicYearId}, GroupId: {GroupId}, CampusId: {CampusId}", boardId, academicYearId, groupId, campusId);
-            var results = await _resultService.GetPublishedResultsAsync(boardId, academicYearId, groupId, campusId);
+            var targetCampusId = ResolveCampusId(campusId);
+            _logger.LogInformation("Retrieving published results. BoardId: {BoardId}, AcademicYearId: {AcademicYearId}, GroupId: {GroupId}, CampusId: {CampusId}", boardId, academicYearId, groupId, targetCampusId);
+            var results = await _resultService.GetPublishedResultsAsync(boardId, academicYearId, groupId, targetCampusId);
             return Ok(results);
         }
 
@@ -419,11 +439,13 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int academicYearId,
             [FromQuery] int academicLevelId,
             [FromQuery] int groupId,
-            [FromQuery] int examId)
+            [FromQuery] int examId,
+            [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Retrieving result analysis for ExamId: {ExamId}", examId);
+            var targetCampusId = ResolveCampusId(campusId);
+            _logger.LogInformation("Retrieving result analysis for ExamId: {ExamId}, CampusId: {CampusId}", examId, targetCampusId);
             var analysis = await _resultService.GetResultAnalysisAsync(
-                boardId, academicYearId, academicLevelId, groupId, examId);
+                boardId, academicYearId, academicLevelId, groupId, examId, targetCampusId);
             return Ok(analysis);
         }
 
@@ -746,6 +768,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(GetResultsResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetResults([FromQuery] GetResultsRequestDto request)
         {
+            request.CampusId = ResolveCampusId(request.CampusId);
             var result = await _resultService.GetResultsAsync(request);
             return Ok(result);
         }

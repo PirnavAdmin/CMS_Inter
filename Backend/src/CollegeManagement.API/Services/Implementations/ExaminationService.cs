@@ -402,6 +402,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var schedule = _mapper.Map<ExamSchedule>(request);
+            schedule.CampusId = request.CampusId.HasValue && request.CampusId.Value > 0 ? request.CampusId.Value : (exam.CampusId ?? 1);
             var createdSchedule = await _examinationRepository.CreateExamScheduleAsync(schedule);
 
             var fullyLoadedSchedule = await _examinationRepository.GetExamScheduleByIdAsync(createdSchedule.ExamScheduleId);
@@ -504,6 +505,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (request.InvigilatorId.HasValue) schedule.InvigilatorId = request.InvigilatorId.Value;
             if (request.MaxMarks.HasValue) schedule.MaxMarks = request.MaxMarks.Value;
             if (request.PassingMarks.HasValue) schedule.PassingMarks = request.PassingMarks.Value;
+            schedule.CampusId = request.CampusId.HasValue && request.CampusId.Value > 0 ? request.CampusId.Value : (parentExam?.CampusId ?? schedule.CampusId);
 
             await _examinationRepository.UpdateExamScheduleAsync(schedule);
             EvictExamCache(schedule.ExaminationId);
@@ -518,6 +520,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (schedule == null) return false;
 
             var parentExam = schedule.Examination ?? await _examinationRepository.GetExaminationByIdAsync(schedule.ExaminationId);
+            if (parentExam != null) schedule.CampusId = parentExam.CampusId ?? 1;
             if (parentExam != null && string.Equals(parentExam.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
             {
                 throw new ValidationException("Cannot delete schedules for a cancelled examination.");
