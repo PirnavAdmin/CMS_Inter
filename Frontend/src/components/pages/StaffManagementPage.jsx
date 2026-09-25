@@ -4129,7 +4129,6 @@ function NonTeachingForm({ records, setRecords, existing }) {
       }
     }
 
-<<<<<<< HEAD
     return nextErrors;
   };
 
@@ -4168,33 +4167,6 @@ function NonTeachingForm({ records, setRecords, existing }) {
 
     const fullName = [basic.firstName, basic.middleName, basic.lastName].filter(Boolean).join(" ") || basic.employeeId || "Non-Teaching Staff";
     const resolvedCode = basic.boardCode || resolveBoardCode({ board: basic.board, boardName: basic.boardName }, boards);
-=======
-    // ── Duplicate Driving License Number check ──────────────────────────────
-    if (isTransport && values.drivingLicenseNumber) {
-      const enteredDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
-      const currentId = existing?.id || existing?.employeeId || null;
-      const duplicate = (Array.isArray(records) ? records : []).find((r) => {
-        // Skip self when editing
-        const rId = r?.id || r?.employeeId;
-        if (currentId && String(rId) === String(currentId)) return false;
-        const rDL = String(r?.drivingLicenseNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-        return rDL.length > 0 && rDL === enteredDL;
-      });
-      if (duplicate) {
-        const dupName = [duplicate.firstName, duplicate.middleName, duplicate.lastName].filter(Boolean).join(" ") || duplicate.employeeId || "another staff member";
-        setErrors({ drivingLicenseNumber: `This Driving License Number is already registered under ${dupName}.` });
-        setToast(`Driving License '${values.drivingLicenseNumber}' is already registered under ${dupName}. Please verify.`);
-        setStep(2);
-        return;
-      }
-    }
-    // ────────────────────────────────────────────────────────────────────────
-
-    const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
-    const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
-    const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
-    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
->>>>>>> 020f0f7f8d89939e0d9837efa677283bfabf2e33
 
     const payload = {
       ...basic,
@@ -4347,7 +4319,6 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 />
               ))}
             </div>
-<<<<<<< HEAD
             <footer>
               <button type="button" className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff")}>
                 Cancel
@@ -4465,23 +4436,6 @@ function NonTeachingForm({ records, setRecords, existing }) {
             </div>
             <footer>
               <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setStep(0)}>
-=======
-          ) : (
-            <Summary
-              record={{
-                ...values,
-                fullName: [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" "),
-              }}
-              groups={labels.slice(0, labels.length - 1).map((label, index) => [label, getNonTeachingStepFields(index, values)])}
-              onSave={(updatedRecord) => {
-                setValues((prev) => ({ ...prev, ...updatedRecord }));
-              }}
-            />
-          )}
-          <footer>
-            {step ? (
-              <button className="cms-btn cms-btn-ghost" onClick={() => setStep((s) => s - 1)}>
->>>>>>> 020f0f7f8d89939e0d9837efa677283bfabf2e33
                 <ChevronLeft /> Previous
               </button>
               <button type="submit" className="cms-btn cms-btn-primary">

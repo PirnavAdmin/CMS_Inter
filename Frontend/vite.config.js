@@ -23,6 +23,9 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
+      watch: {
+        ignored: ["**/*.zip", "**/*.tar.gz", "**/*.rar", "**/node_modules/**"],
+      },
       proxy: {
         "/api": {
           target: apiBaseUrl,

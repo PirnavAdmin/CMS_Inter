@@ -1,4 +1,4 @@
-const AUTH_KEYS = ["token", "user", "role"];
+const AUTH_KEYS = ["token", "user", "role", "cms-parent-active-child"];
 
 const storageValue = (storage, key) => {
   try { return storage?.getItem(key) ?? null; }

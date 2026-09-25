@@ -43,6 +43,19 @@ import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentDashboard from "@/Dashboard/StudentDashboard/StudentDashboard.jsx";
 import FacultyDashboard from "@/Dashboard/Facultydashboard.jsx";
+import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
+import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
+import ParentAttendancePage from "@/Dashboard/Parent Dashboard/pages/ParentAttendancePage.jsx";
+import ParentAcademicsPage from "@/Dashboard/Parent Dashboard/pages/ParentAcademicsPage.jsx";
+import ParentExaminationsPage from "@/Dashboard/Parent Dashboard/pages/ParentExaminationsPage.jsx";
+import ParentFeesPage from "@/Dashboard/Parent Dashboard/pages/ParentFeesPage.jsx";
+import ParentTimetablePage from "@/Dashboard/Parent Dashboard/pages/ParentTimetablePage.jsx";
+import ParentCommunicationPage from "@/Dashboard/Parent Dashboard/pages/ParentCommunicationPage.jsx";
+import ParentAnnouncementsPage from "@/Dashboard/Parent Dashboard/pages/ParentAnnouncementsPage.jsx";
+import ParentDocumentsPage from "@/Dashboard/Parent Dashboard/pages/ParentDocumentsPage.jsx";
+import ParentNotificationsPage from "@/Dashboard/Parent Dashboard/pages/ParentNotificationsPage.jsx";
+import ParentProfilePage from "@/Dashboard/Parent Dashboard/pages/ParentProfilePage.jsx";
+import ParentSettingsPage from "@/Dashboard/Parent Dashboard/pages/ParentSettingsPage.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
 import {
   HostelDashboard,
@@ -251,6 +264,28 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute requireStudent />}>
         <Route path="/student-dashboard" element={<StudentDashboard />} />
       </Route>
+
+      {/* Parent Portal Module Routes */}
+      <Route element={<ProtectedRoute requireParent />}>
+        <Route path="/parent-dashboard" element={<ParentDashboard />} />
+        <Route path="/parent-dashboard/children" element={<ParentChildrenPage />} />
+        <Route path="/parent-dashboard/children/:id" element={<ParentChildDetailsRoute />} />
+        <Route path="/parent-dashboard/attendance" element={<ParentAttendancePage />} />
+        <Route path="/parent-dashboard/academics" element={<ParentAcademicsPage />} />
+        <Route path="/parent-dashboard/examinations" element={<ParentExaminationsPage />} />
+        <Route path="/parent-dashboard/results" element={<Navigate to="/parent-dashboard/academics?tab=results" replace />} />
+        <Route path="/parent-dashboard/fees" element={<ParentFeesPage />} />
+        <Route path="/parent-dashboard/timetable" element={<ParentTimetablePage />} />
+        <Route path="/parent-dashboard/leave" element={<Navigate to="/parent-dashboard" replace />} />
+        <Route path="/parent-dashboard/communication" element={<ParentCommunicationPage />} />
+        <Route path="/parent-dashboard/announcements" element={<ParentAnnouncementsPage />} />
+        <Route path="/parent-dashboard/events" element={<Navigate to="/parent-dashboard/announcements?tab=events" replace />} />
+        <Route path="/parent-dashboard/documents" element={<ParentDocumentsPage />} />
+        <Route path="/parent-dashboard/notifications" element={<ParentNotificationsPage />} />
+        <Route path="/parent-dashboard/profile" element={<ParentProfilePage />} />
+        <Route path="/parent-dashboard/settings" element={<ParentSettingsPage />} />
+      </Route>
+
       <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
       <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id/complete-profile" element={<StaffManagementPage />} />

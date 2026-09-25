@@ -7,6 +7,7 @@ export const routePaths = {
   resetPassword: "/reset-password",
   dashboard: "/dashboard",
   studentDashboard: "/student-dashboard",
+  parentDashboard: "/parent-dashboard",
   hostel: "/dashboard/hostel",
   hostelMaster: "/dashboard/hostel/master",
   hostelStudents: "/dashboard/hostel/students",

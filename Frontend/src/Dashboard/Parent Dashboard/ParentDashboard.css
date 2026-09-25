@@ -1,0 +1,505 @@
+/* ==========================================================================
+   PIRNAV COLLEGE ERP — PARENT DASHBOARD STYLES
+   Adheres 100% to CMS plain CSS Design System & Theme Variables
+   ========================================================================== */
+
+.parent-dashboard-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+
+
+
+/* Child Switcher Banner */
+.parent-child-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--cms-radius);
+  padding: 16px 20px;
+  box-shadow: var(--cms-shadow);
+}
+
+.parent-child-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.parent-child-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  border: 2px solid var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+  display: grid;
+  place-items: center;
+  color: var(--cms-primary-dark);
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.parent-child-title h2 {
+  margin: 0 0 4px 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cms-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.parent-child-title p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cms-muted);
+}
+
+.parent-child-switch-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--cms-bg);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--cms-border);
+}
+
+.parent-child-switch-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--cms-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.parent-child-switch-btn.is-active {
+  background: var(--cms-surface);
+  color: var(--cms-primary-dark);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* Stat Grid */
+.parent-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 992px) {
+  .parent-stat-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.parent-stat-card {
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--cms-radius);
+  padding: 14px 14px;
+  box-shadow: var(--cms-shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.parent-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(16, 32, 60, 0.08);
+}
+
+.parent-stat-icon-wrap {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary-dark);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.parent-stat-icon-wrap.green {
+  background: var(--cms-green-soft);
+  color: var(--cms-green);
+}
+
+.parent-stat-icon-wrap.amber {
+  background: var(--cms-amber-soft);
+  color: var(--cms-amber);
+}
+
+.parent-stat-icon-wrap.red {
+  background: var(--cms-red-soft);
+  color: var(--cms-red);
+}
+
+.parent-stat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.parent-stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--cms-muted);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.parent-stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--cms-text);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.parent-stat-subtext {
+  font-size: 11.5px;
+  color: var(--cms-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+/* Two Column Dashboard Grid */
+.parent-dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 992px) {
+  .parent-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.parent-section-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* Overview Card */
+.parent-card {
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
+  border-radius: var(--cms-radius);
+  box-shadow: var(--cms-shadow);
+  overflow: hidden;
+  min-width: 0;
+}
+
+.parent-card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--cms-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.parent-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--cms-text);
+  margin: 0;
+}
+
+.parent-card-body {
+  padding: 20px;
+}
+
+/* Quick Actions Strip */
+.parent-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.parent-quick-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 12px;
+  background: var(--cms-bg);
+  border: 1px solid var(--cms-border);
+  border-radius: 12px;
+  color: var(--cms-text);
+  text-decoration: none;
+  cursor: pointer;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.parent-quick-btn:hover {
+  background: var(--cms-surface);
+  border-color: var(--cms-primary);
+  color: var(--cms-primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.12);
+}
+
+/* Student Profile Grid */
+.parent-profile-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.parent-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.parent-meta-label {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--cms-muted);
+  font-weight: 600;
+}
+
+.parent-meta-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cms-text);
+}
+
+/* Progress bar */
+.parent-progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: var(--cms-bg);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.parent-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cms-primary), #9CAF27);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.parent-progress-bar-fill.green {
+  background: var(--cms-green);
+}
+
+.parent-progress-bar-fill.amber {
+  background: var(--cms-amber);
+}
+
+/* List Items (Exams, Announcements, Notifs) */
+.parent-list-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.parent-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--cms-bg);
+  border-radius: 10px;
+  border: 1px solid var(--cms-border);
+  gap: 12px;
+}
+
+.parent-list-row:hover {
+  background: var(--cms-surface);
+  border-color: var(--cms-primary-border);
+}
+
+.parent-list-info h4 {
+  margin: 0 0 3px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cms-text);
+}
+
+.parent-list-info p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--cms-muted);
+}
+
+/* Modal Printable Receipts */
+.parent-receipt-sheet {
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid var(--cms-border);
+  border-radius: 12px;
+  font-family: inherit;
+  color: #10203c;
+}
+
+.parent-receipt-header {
+  text-align: center;
+  border-bottom: 2px dashed #cbd5e1;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+
+.parent-receipt-header h2 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  color: var(--cms-primary-dark);
+}
+
+.parent-receipt-header p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--cms-muted);
+}
+
+.parent-receipt-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+}
+
+.parent-receipt-table th,
+.parent-receipt-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 13px;
+  text-align: left;
+}
+
+.parent-receipt-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+}
+
+/* Timetable Grid View */
+.parent-timetable-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--cms-border);
+  border-radius: var(--cms-radius);
+}
+
+.parent-timetable-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  min-width: 760px;
+}
+
+.parent-timetable-table th {
+  background: var(--cms-bg);
+  padding: 12px 14px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cms-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--cms-border);
+}
+
+.parent-timetable-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--cms-border);
+  font-size: 13.5px;
+  vertical-align: middle;
+}
+
+.parent-timetable-slot {
+  font-weight: 600;
+  color: var(--cms-text);
+}
+
+.parent-break-row {
+  background: rgba(111, 132, 0, 0.05);
+  font-weight: 600;
+  text-align: center;
+  color: var(--cms-primary-dark);
+}
+
+/* Hall Ticket Sheet */
+.parent-hall-ticket {
+  padding: 24px;
+  border: 2px solid var(--cms-primary-dark);
+  border-radius: 12px;
+  background: #ffffff;
+  color: #10203c;
+}
+
+.parent-hall-ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+
+.parent-hall-ticket-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+  background: #f8fafc;
+  padding: 14px;
+  border-radius: 8px;
+}
+
+/* Page Back Link Heading Alignment */
+.cms-page-heading-with-back {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  text-align: left !important;
+  width: 100% !important;
+}
+
+.cms-page-heading-with-back > * {
+  align-self: flex-start !important;
+  justify-self: start !important;
+  text-align: left !important;
+  margin-left: 0 !important;
+}
+
