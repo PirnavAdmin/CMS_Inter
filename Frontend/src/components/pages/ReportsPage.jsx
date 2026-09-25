@@ -19,6 +19,7 @@ import {
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
 import admissionsImage from "@/assets/reports-3d/admissions.png";
@@ -223,6 +224,7 @@ function formatColHeader(col) {
 
 function buildReportQuery(filters) {
   const mapping = {
+    campus: "CampusId",
     board: "BoardId",
     year: "AcademicYearId",
     level: "AcademicLevelId",
@@ -292,6 +294,13 @@ async function excelPreview(blob) {
 
 export default function ReportsPage() {
   const {
+    campuses: contextCampuses = [],
+    activeCampuses = [],
+    selectedCampus,
+    selectedCampusId,
+  } = useCampusContext();
+
+  const {
     boards: contextBoards = [],
     academicYears: contextAcademicYears = [],
     selectedBoard,
@@ -302,6 +311,7 @@ export default function ReportsPage() {
 
   // Filters state with empty From Date and To Date by default (no prefilled 01-01 / today)
   const [filters, setFilters] = useState(() => ({
+    campus: selectedCampusId ? String(selectedCampusId) : (selectedCampus?.id ? String(selectedCampus.id) : ""),
     board: selectedBoardId ? String(selectedBoardId) : (selectedBoard?.id ? String(selectedBoard.id) : ""),
     year: selectedAcademicYearId ? String(selectedAcademicYearId) : (selectedAcademicYear?.id ? String(selectedAcademicYear.id) : ""),
     level: "",
@@ -543,13 +553,55 @@ export default function ReportsPage() {
     });
   }, [beginRequest, filters.board, filters.group, filters.level, filters.year, finishRequest]);
 
-  const availableBoards = useMemo(() => {
-    if (masterOptions.boards.length > 0) return masterOptions.boards;
-    return (contextBoards || []).map((b) => ({
-      value: String(b.id ?? b.boardId ?? b.value),
-      label: String(b.boardName || b.name || b.label || b.code || `Board #${b.id}`),
+  const availableCampuses = useMemo(() => {
+    const list = (activeCampuses && activeCampuses.length > 0)
+      ? activeCampuses
+      : (contextCampuses || []);
+    return list.map((c) => ({
+      value: String(c.id ?? c.campusId ?? c.value),
+      label: String(c.campusName || c.name || c.label || c.campusCode || c.code || `Campus #${c.id}`),
     }));
-  }, [masterOptions.boards, contextBoards]);
+  }, [activeCampuses, contextCampuses]);
+
+  // Sync Campus from global campus context
+  useEffect(() => {
+    const rawCampusId = selectedCampusId || selectedCampus?.id || selectedCampus?.campusId;
+    if (rawCampusId) {
+      setFilters((prev) => {
+        if (prev.campus === String(rawCampusId)) return prev;
+        return { ...prev, campus: String(rawCampusId) };
+      });
+    }
+  }, [selectedCampusId, selectedCampus]);
+
+  const availableBoards = useMemo(() => {
+    let list = masterOptions.boards.length > 0
+      ? masterOptions.boards
+      : (contextBoards || []).map((b) => ({
+          value: String(b.id ?? b.boardId ?? b.value),
+          label: String(b.boardName || b.name || b.label || b.code || `Board #${b.id}`),
+        }));
+
+    if (filters.campus) {
+      const allCampusesList = activeCampuses?.length ? activeCampuses : (contextCampuses || []);
+      const chosenCampus = allCampusesList.find(
+        (c) => String(c.id ?? c.campusId) === String(filters.campus)
+      );
+      if (chosenCampus) {
+        const campusBoardIds = (chosenCampus.affiliatedBoards || [])
+          .map((b) => String(b.boardId ?? b.id))
+          .concat((chosenCampus.boardIds || []).map(String));
+        if (campusBoardIds.length > 0) {
+          const filtered = list.filter((b) => campusBoardIds.includes(String(b.value)));
+          if (filtered.length > 0) {
+            list = filtered;
+          }
+        }
+      }
+    }
+
+    return list;
+  }, [masterOptions.boards, contextBoards, filters.campus, activeCampuses, contextCampuses]);
 
   const availableYears = useMemo(() => {
     const list = (masterOptions.years.length > 0 ? masterOptions.years : (contextAcademicYears || []).map((y) => ({
@@ -606,6 +658,12 @@ export default function ReportsPage() {
 
   const filterFields = useMemo(() => [
     {
+      name: "campus",
+      label: "Campus",
+      type: "select",
+      options: [{ value: "", label: "All Campuses" }, ...availableCampuses],
+    },
+    {
       name: "board",
       label: boardsLoading && !availableBoards.length ? "Board (Loading...)" : "Board",
       type: "select",
@@ -642,7 +700,7 @@ export default function ReportsPage() {
     },
     { name: "from", label: "From Date", type: "date" },
     { name: "to", label: "To Date", type: "date" },
-  ], [availableBoards, availableYears, boardsLoading, groupsLoading, levelLoading, masterOptions.groups, masterOptions.levels, masterOptions.sections, sectionsLoading, yearsLoading]);
+  ], [availableCampuses, availableBoards, availableYears, boardsLoading, groupsLoading, levelLoading, masterOptions.groups, masterOptions.levels, masterOptions.sections, sectionsLoading, yearsLoading]);
 
   const handleFilterChange = (name, value) => {
     setReportGenerated(false);
@@ -651,6 +709,9 @@ export default function ReportsPage() {
     setError("");
     setFilters((prev) => {
       const next = { ...prev, [name]: value };
+      if (name === "campus") {
+        Object.assign(next, { board: "", level: "", group: "", section: "" });
+      }
       if (name === "board") {
         Object.assign(next, { level: "", group: "", section: "" });
       }
@@ -690,6 +751,7 @@ export default function ReportsPage() {
 
   const resetReports = () => {
     const defaultFilters = {
+      campus: selectedCampusId ? String(selectedCampusId) : (selectedCampus?.id ? String(selectedCampus.id) : ""),
       board: selectedBoardId ? String(selectedBoardId) : (selectedBoard?.id ? String(selectedBoard.id) : ""),
       year: selectedAcademicYearId ? String(selectedAcademicYearId) : (selectedAcademicYear?.id ? String(selectedAcademicYear.id) : ""),
       level: "",
