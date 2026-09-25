@@ -37,14 +37,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             return conn;
         }
 
-        public async Task<IEnumerable<Department>> GetActiveDepartmentsAsync()
+        public async Task<IEnumerable<Department>> GetActiveDepartmentsAsync(int? campusId = null)
         {
-            return await GetDepartmentsAsync(null, includeInactive: false);
+            return await GetDepartmentsAsync(null, includeInactive: false, campusId: campusId);
         }
 
-        public async Task<IEnumerable<Department>> GetDepartmentsAsync(string? staffType = null, bool includeInactive = true)
+        public async Task<IEnumerable<Department>> GetDepartmentsAsync(string? staffType = null, bool includeInactive = true, int? campusId = null)
         {
-            var dtos = await GetDepartmentDtosAsync(staffType, includeInactive);
+            var dtos = await GetDepartmentDtosAsync(staffType, includeInactive, campusId);
             return dtos.Select(d => new Department
             {
                 DepartmentId = d.DepartmentId,
@@ -54,18 +54,19 @@ namespace CollegeManagement.API.Repositories.Implementations
                 Description = d.Description,
                 IsActive = d.IsActive,
                 CreatedAt = d.CreatedAt,
-                UpdatedAt = d.UpdatedAt
+                UpdatedAt = d.UpdatedAt,
+                CampusId = campusId
             }).ToList();
         }
 
-        public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentDtosAsync(string? staffType = null, bool includeInactive = true)
+        public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentDtosAsync(string? staffType = null, bool includeInactive = true, int? campusId = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
                 var depts = await conn.QueryAsync<DepartmentResponseDto>(
                     "sp_GetDepartments",
-                    new { p_StaffType = staffType ?? "", p_IncludeInactive = includeInactive ? 1 : 0 },
+                    new { p_StaffType = staffType ?? "", p_IncludeInactive = includeInactive ? 1 : 0, p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
 
                 return depts.ToList();
@@ -73,6 +74,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             catch
             {
                 var query = _context.Departments.AsNoTracking().AsQueryable();
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    query = query.Where(d => d.CampusId == campusId.Value || d.CampusId == null);
+                }
+                
                 if (!includeInactive)
                 {
                     query = query.Where(d => d.IsActive);
@@ -166,7 +172,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_DepartmentCode = department.DepartmentCode.Trim(),
                         p_StaffType = department.StaffType ?? "Both",
                         p_Description = department.Description,
-                        p_IsActive = department.IsActive ? 1 : 0
+                        p_IsActive = department.IsActive ? 1 : 0,
+                        p_CampusId = department.CampusId
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -196,7 +203,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_DepartmentCode = department.DepartmentCode.Trim(),
                         p_StaffType = department.StaffType ?? "Both",
                         p_Description = department.Description,
-                        p_IsActive = department.IsActive ? 1 : 0
+                        p_IsActive = department.IsActive ? 1 : 0,
+                        p_CampusId = department.CampusId
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -214,6 +222,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 existing.Description = department.Description;
                 existing.IsActive = department.IsActive;
                 existing.UpdatedAt = DateTime.UtcNow;
+                existing.CampusId = department.CampusId;
 
                 _context.Departments.Update(existing);
                 await _context.SaveChangesAsync();
@@ -244,13 +253,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<DepartmentSummaryDto> GetSummaryAsync()
+        public async Task<DepartmentSummaryDto> GetSummaryAsync(int? campusId = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
                 var summary = await conn.QueryFirstOrDefaultAsync<DepartmentSummaryDto>(
                     "sp_GetDepartmentSummary",
+                    new { p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
 
                 if (summary != null) return summary;
@@ -259,11 +269,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             return new DepartmentSummaryDto
             {
-                TotalDepartments = await _context.Departments.CountAsync(),
-                ActiveDepartments = await _context.Departments.CountAsync(d => d.IsActive),
-                InactiveDepartments = await _context.Departments.CountAsync(d => !d.IsActive),
-                TotalDesignations = await _context.Designations.CountAsync(des => des.IsActive),
-                TotalStaff = await _context.Staffs.CountAsync(s => !s.IsDeleted && (s.Status == "Active" || s.Status == null))
+                TotalDepartments = await _context.Departments.CountAsync(d => d.CampusId == campusId || d.CampusId == null),
+                ActiveDepartments = await _context.Departments.CountAsync(d => d.IsActive && (d.CampusId == campusId || d.CampusId == null)),
+                InactiveDepartments = await _context.Departments.CountAsync(d => !d.IsActive && (d.CampusId == campusId || d.CampusId == null)),
+                TotalDesignations = await _context.Designations.CountAsync(des => des.IsActive && (des.CampusId == campusId || des.CampusId == null)),
+                TotalStaff = await _context.Staffs.CountAsync(s => !s.IsDeleted && (s.Status == "Active" || s.Status == null) && (s.CampusId == campusId || s.CampusId == null))
             };
         }
 
@@ -290,7 +300,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<bool> ValidateCodeAsync(string code, int? excludeId = null)
+        public async Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null)
         {
             if (string.IsNullOrWhiteSpace(code)) return true;
             var normalized = code.Trim().ToUpper();
@@ -300,7 +310,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var conn = await GetOpenConnectionAsync();
                 var count = await conn.ExecuteScalarAsync<int>(
                     "sp_ValidateDepartmentCode",
-                    new { p_Code = normalized, p_ExcludeId = excludeId },
+                    new { p_Code = normalized, p_ExcludeId = excludeId, p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
 
                 return count == 0;
@@ -309,11 +319,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
                 return !await _context.Departments.AnyAsync(d =>
                     d.DepartmentCode.ToUpper() == normalized &&
-                    (!excludeId.HasValue || d.DepartmentId != excludeId.Value));
+                    (!excludeId.HasValue || d.DepartmentId != excludeId.Value) &&
+                    (d.CampusId == campusId || d.CampusId == null));
             }
         }
 
-        public async Task<bool> ValidateNameAsync(string name, int? excludeId = null)
+        public async Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return true;
             var normalized = name.Trim().ToUpper();
@@ -323,7 +334,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var conn = await GetOpenConnectionAsync();
                 var count = await conn.ExecuteScalarAsync<int>(
                     "sp_ValidateDepartmentName",
-                    new { p_Name = normalized, p_ExcludeId = excludeId },
+                    new { p_Name = normalized, p_ExcludeId = excludeId, p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
 
                 return count == 0;
@@ -332,7 +343,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
                 return !await _context.Departments.AnyAsync(d =>
                     d.DepartmentName.ToUpper() == normalized &&
-                    (!excludeId.HasValue || d.DepartmentId != excludeId.Value));
+                    (!excludeId.HasValue || d.DepartmentId != excludeId.Value) &&
+                    (d.CampusId == campusId || d.CampusId == null));
             }
         }
     }

@@ -119,6 +119,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<Mark> CreateAsync(Mark mark)
         {
             var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", mark.CampusId);
             parameters.Add("p_Board", mark.Board ?? string.Empty);
             parameters.Add("p_BoardId", mark.BoardId);
             parameters.Add("p_AcademicYearId", mark.AcademicYearId);
@@ -161,6 +162,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_MarkId", mark.MarkId);
+            parameters.Add("p_CampusId", mark.CampusId);
             parameters.Add("p_InternalMarks", mark.InternalMarks);
             parameters.Add("p_PracticalMarks", mark.PracticalMarks);
             parameters.Add("p_TheoryMarks", mark.TheoryMarks);

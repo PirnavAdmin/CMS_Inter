@@ -13,6 +13,8 @@ namespace CollegeManagement.API.Models
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int MarkId { get; set; }
 
+        public int? CampusId { get; set; }
+
         public string? Board { get; set; } = string.Empty;
 
         public int? BoardId { get; set; }

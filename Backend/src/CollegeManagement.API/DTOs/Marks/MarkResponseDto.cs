@@ -6,6 +6,7 @@ namespace CollegeManagement.API.DTOs.Marks
     public class MarkResponseDto
     {
         public int MarkId { get; set; }
+        public int? CampusId { get; set; }
         public string Board { get; set; } = string.Empty;
         public int? BoardId { get; set; }
         public int AcademicYearId { get; set; }
