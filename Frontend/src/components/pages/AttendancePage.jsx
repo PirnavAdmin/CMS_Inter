@@ -8,6 +8,7 @@ import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./AttendancePage.css";
 
 const STUDENT_STATUSES = ["Present", "Absent", "Half Day"];
@@ -244,6 +245,8 @@ function Screen({ staff = false, say }) {
  const navigate = useNavigate();
  const location = useLocation();
  const { selectedBoardId: navbarBoardId, selectedAcademicYearId: navbarAcademicYearId } = useAcademicContext();
+ const campusCtx = useCampusContext();
+ const navbarCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
  const restoredState = !staff ? location.state?.attendanceState : null;
  const defaultFilters = { date: getTodayDate(), level: "", group: "", section: "", program: "", department: "", type: "", person: "", status: "", view: "Attendance" };
  const [f, setF] = useState(() => restoredState?.filters || defaultFilters);
@@ -256,7 +259,7 @@ function Screen({ staff = false, say }) {
  const [page, setPage] = useState(() => restoredState?.page || 1);
  const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
  const [dirty, setDirty] = useState(false);
- const initialAcademicContext = useRef(`${staff}:${navbarBoardId}:${navbarAcademicYearId}`);
+ const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
  const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
  const options = staff ? staffOptions : studentOptions;
@@ -273,20 +276,20 @@ function Screen({ staff = false, say }) {
  };
 
  useEffect(() => {
-   const currentAcademicContext = `${staff}:${navbarBoardId}:${navbarAcademicYearId}`;
+   const currentAcademicContext = `${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`;
    if (initialAcademicContext.current === currentAcademicContext) return;
    initialAcademicContext.current = currentAcademicContext;
    if (!staff) setF((old) => ({ ...old, level: "", group: "", program: "", section: "" }));
    if (loaded) {
      load();
    }
- }, [staff, navbarBoardId, navbarAcademicYearId]);
+ }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId]);
 
  const monthParams = () => {
    const [year, month] = f.date.slice(0, 7).split("-");
    return staff
-     ? { month: Number(month), year: Number(year), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), departmentId: num(f.department), staffType: staffType(f.type), ...(f.person ? { facultyId: num(f.person) } : {}) }
-     : { month: Number(month), year: Number(year), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), academicLevelId: num(f.level), groupId: num(f.group), sectionId: num(f.section), ...(f.program ? { programId: num(f.program) } : {}) };
+     ? { month: Number(month), year: Number(year), campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), departmentId: num(f.department), staffType: staffType(f.type), ...(f.person ? { facultyId: num(f.person) } : {}) }
+     : { month: Number(month), year: Number(year), campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), academicLevelId: num(f.level), groupId: num(f.group), sectionId: num(f.section), ...(f.program ? { programId: num(f.program) } : {}) };
  };
 
  const load = async (overrideView) => {
@@ -318,6 +321,7 @@ function Screen({ staff = false, say }) {
      } else if (staff) {
        const r = await apiClient.post(apiEndpoints.staffAttendance.load, {
          date: f.date,
+         campusId: num(navbarCampusId),
          boardId: num(navbarBoardId),
          academicYearId: num(navbarAcademicYearId),
          departmentId: num(f.department),
@@ -330,6 +334,7 @@ function Screen({ staff = false, say }) {
        const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
          params: {
            date: f.date,
+           campusId: num(navbarCampusId),
            boardId: num(navbarBoardId),
            academicYearId: num(navbarAcademicYearId),
            academicLevelId: num(f.level),
@@ -377,6 +382,7 @@ function Screen({ staff = false, say }) {
      if (staff) {
        const payload = {
          attendanceDate: f.date,
+         campusId: num(navbarCampusId),
          staffType: staffType(f.type) || 1,
          departmentId: num(f.department),
          staffAttendances: rows.map((r) => ({
@@ -430,6 +436,7 @@ function Screen({ staff = false, say }) {
        await apiClient.put(apiEndpoints.staffAttendance.update, {
          facultyId: get(r, "facultyId", "staffId", "id"),
          attendanceDate: f.date,
+         campusId: num(navbarCampusId),
          departmentId: num(f.department) ?? get(r, "departmentId"),
          staffType: staffType(f.type) ?? get(r, "staffType"),
          status: VALUE[editing.status],
@@ -443,6 +450,7 @@ function Screen({ staff = false, say }) {
          attendanceDate: f.date,
          morningStatus: editing.morning !== studentSessionStatus(r, "morning") ? VALUE[editing.morning] : null,
          afternoonStatus: editing.afternoon !== studentSessionStatus(r, "afternoon") ? VALUE[editing.afternoon] : null,
+         campusId: num(navbarCampusId),
          boardId: num(navbarBoardId),
          academicYearId: num(navbarAcademicYearId),
          academicLevelId: num(f.level),

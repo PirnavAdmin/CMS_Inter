@@ -860,28 +860,130 @@ public class FeeRepository : IFeeRepository
         CreateFeePaymentAsync(
             CreateFeePaymentRequest request)
     {
-        using var c = Connection();
+        using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var studentFee = await _db.StudentFees
+                .Include(sf => sf.Student)
+                .FirstOrDefaultAsync(sf => sf.StudentFeeId == request.StudentFeeId && sf.StudentId == request.StudentId);
 
-        return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
-            "sp_CollectFeePayment",
-            new
+            if (studentFee == null)
+                throw new Exception("Student fee record not found.");
+
+            decimal discount = request.Discount < 0 ? 0 : request.Discount;
+            decimal fine = request.Fine < 0 ? 0 : request.Fine;
+            decimal finalAmount = request.Amount + fine - discount;
+
+            if (finalAmount <= 0)
+                throw new Exception("Final payment amount must be greater than zero.");
+            if (finalAmount > studentFee.BalanceAmount)
+                throw new Exception("Payment amount cannot exceed outstanding balance.");
+
+            var installments = new List<FeeInstallment>();
+            if (request.FeeInstallmentIds != null && request.FeeInstallmentIds.Any())
             {
-                p_StudentId = request.StudentId,
-                p_StudentFeeId = request.StudentFeeId,
-                p_FeeInstallmentId =
-                    request.FeeInstallmentId,
-                p_Amount = request.Amount,
-                p_PaymentDate =
-                    request.PaymentDate ?? DateTime.UtcNow,
-                p_PaymentMode = request.PaymentMode,
-                p_Discount = request.Discount,
-                p_Fine = request.Fine,
-                p_TransactionReference =
-                    request.TransactionReference,
-                p_Note = request.Note,
-                p_CollectedBy = request.CollectedBy
-            },
-            commandType: CommandType.StoredProcedure);
+                installments = await _db.FeeInstallments
+                    .Include(fi => fi.FeePaymentPlan)
+                    .Where(fi => request.FeeInstallmentIds.Contains(fi.FeeInstallmentId) && fi.FeePaymentPlan.StudentFeeId == request.StudentFeeId)
+                    .OrderBy(fi => fi.DueDate)
+                    .ToListAsync();
+                    
+                if (installments.Count != request.FeeInstallmentIds.Count)
+                    throw new Exception("One or more installments do not belong to this student fee.");
+            }
+
+            decimal remainingToDistribute = finalAmount;
+            foreach (var inst in installments)
+            {
+                if (remainingToDistribute <= 0) break;
+                
+                decimal amountToPay = Math.Min(remainingToDistribute, inst.BalanceAmount);
+                if (amountToPay > 0)
+                {
+                    inst.PaidAmount += amountToPay;
+                    inst.BalanceAmount = Math.Max(0, inst.Amount - inst.PaidAmount);
+                    inst.Status = inst.Amount <= inst.PaidAmount ? "Paid" : "PartiallyPaid";
+                    remainingToDistribute -= amountToPay;
+                }
+            }
+
+            studentFee.PaidAmount += finalAmount;
+            studentFee.BalanceAmount = Math.Max(0, studentFee.PayableAmount - studentFee.PaidAmount);
+            studentFee.Status = studentFee.PayableAmount <= studentFee.PaidAmount ? "Paid" : "PartiallyPaid";
+            studentFee.UpdatedAt = DateTime.UtcNow;
+
+            if (studentFee.Student != null)
+            {
+                studentFee.Student.FeeAmount = studentFee.PayableAmount;
+                studentFee.Student.FeePaid = studentFee.PaidAmount;
+                studentFee.Student.FeeStatus = studentFee.Status;
+                studentFee.Student.UpdatedAt = DateTime.UtcNow;
+            }
+
+            string? remarks = null;
+            if (!string.IsNullOrWhiteSpace(request.Note) || discount > 0 || fine > 0)
+            {
+                var parts = new List<string>();
+                if (!string.IsNullOrWhiteSpace(request.Note)) parts.Add(request.Note);
+                if (discount > 0) parts.Add($"Discount: {discount:F2}");
+                if (fine > 0) parts.Add($"Fine: {fine:F2}");
+                remarks = string.Join(" | ", parts);
+            }
+
+            var paymentDate = request.PaymentDate ?? DateTime.UtcNow;
+            var payment = new FeePayment
+            {
+                StudentId = request.StudentId,
+                StudentFeeId = request.StudentFeeId,
+                FeeInstallmentId = request.FeeInstallmentIds?.Count == 1 ? request.FeeInstallmentIds.First() : null,
+                Amount = finalAmount,
+                PaymentMode = request.PaymentMode.Trim(),
+                TransactionReference = request.TransactionReference,
+                Remarks = remarks,
+                PaymentDate = paymentDate,
+                Status = "Success",
+                CollectedBy = request.CollectedBy
+            };
+
+            _db.FeePayments.Add(payment);
+            await _db.SaveChangesAsync();
+
+            payment.ReceiptNumber = $"FEE-{paymentDate:yyyyMMdd}-{payment.FeePaymentId:D6}";
+            
+            var receipt = new FeeReceipt
+            {
+                FeePaymentId = payment.FeePaymentId,
+                ReceiptNumber = payment.ReceiptNumber,
+                ReceiptDate = paymentDate,
+                Remarks = request.Note
+            };
+            _db.FeeReceipts.Add(receipt);
+            
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            return new FeePaymentResponse
+            {
+                FeePaymentId = payment.FeePaymentId,
+                StudentId = payment.StudentId,
+                StudentName = studentFee.Student?.StudentName ?? string.Empty,
+                AdmissionNumber = studentFee.Student?.AdmissionNo ?? string.Empty,
+                StudentFeeId = payment.StudentFeeId,
+                FeeInstallmentId = payment.FeeInstallmentId,
+                Amount = payment.Amount,
+                PaymentMethod = payment.PaymentMode,
+                TransactionReference = payment.TransactionReference,
+                Remarks = payment.Remarks,
+                PaymentDate = payment.PaymentDate,
+                Status = payment.Status,
+                ReceiptNumber = payment.ReceiptNumber
+            };
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
     }
 
 

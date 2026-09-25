@@ -614,7 +614,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(a => a.StaffAttendanceSession)
                 .Where(a => a.StaffAttendanceSession.AttendanceDate.Date >= startDate
                             && a.StaffAttendanceSession.AttendanceDate.Date <= endDate
-                            && a.StaffAttendanceSession.StaffType == request.StaffType
+                            && (!request.StaffType.HasValue || a.StaffAttendanceSession.StaffType == request.StaffType)
                             && a.IsActive)
                 .OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt)
                 .ToListAsync();
@@ -666,7 +666,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                                 absentCount++;
                                 break;
                             case AttendanceStatus.Late:
-                                dailyStatus.Add("L");
+                                dailyStatus.Add("LT");
                                 lateCount++;
                                 break;
                             case AttendanceStatus.Leave:
