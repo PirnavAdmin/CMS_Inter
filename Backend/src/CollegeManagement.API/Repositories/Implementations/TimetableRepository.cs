@@ -207,6 +207,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var entity = new Timetable
             {
+                CampusId = dto.CampusId,
                 BoardId = dto.BoardId,
                 AcademicLevelId = dto.AcademicLevelId,
                 AcademicYearId = dto.AcademicYearId,
@@ -236,6 +237,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var entity = await _context.Timetables.FirstOrDefaultAsync(t => t.Id == id);
             if (entity != null)
             {
+                entity.CampusId = dto.CampusId;
                 entity.BoardId = dto.BoardId;
                 entity.AcademicLevelId = dto.AcademicLevelId;
                 entity.AcademicYearId = dto.AcademicYearId;
@@ -361,6 +363,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var targetSlots = sourceSlots.Select(s => new Timetable
             {
+                CampusId = s.CampusId,
                 BoardId = s.BoardId,
                 AcademicLevelId = s.AcademicLevelId,
                 AcademicYearId = dto.TargetAcademicYearId,
@@ -399,6 +402,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (campusId.HasValue)
             {
                 entities = entities.Where(e =>
+                    e.CampusId == campusId.Value ||
                     (sections.TryGetValue(e.SectionId, out var sec) && sec.CampusId == campusId.Value) ||
                     (staffs.TryGetValue(e.StaffId, out var st) && st.CampusId == campusId.Value) ||
                     (rooms.TryGetValue(e.RoomId, out var rm) && rm.CampusId == campusId.Value)
@@ -408,6 +412,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return entities.Select(e => new TimetableResponseDto
             {
                 Id = e.Id,
+                CampusId = e.CampusId,
                 BoardId = e.BoardId,
                 BoardName = boards.GetValueOrDefault(e.BoardId, string.Empty),
                 AcademicLevelId = e.AcademicLevelId,

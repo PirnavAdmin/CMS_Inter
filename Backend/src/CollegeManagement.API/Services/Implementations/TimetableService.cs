@@ -90,6 +90,11 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.ProgramId = section.ProgramId ?? throw new InvalidOperationException($"Section {dto.SectionId} has no ProgramId assigned.");
             }
 
+            if (!dto.CampusId.HasValue)
+            {
+                dto.CampusId = section.CampusId;
+            }
+
             await ValidateSlotAndConflictsAsync(dto.AcademicYearId, dto.SectionId, dto.StaffId, dto.RoomId, dto.DayOfWeek, dto.PeriodId, dto.SubjectId, dto.BoardId, dto.GroupId, dto.AcademicLevelId, excludeId: null);
 
             int id = await _timetableRepository.AddAsync(dto);
@@ -117,6 +122,11 @@ namespace CollegeManagement.API.Services.Implementations
             if (!dto.ProgramId.HasValue || dto.ProgramId.Value <= 0)
             {
                 dto.ProgramId = existing.ProgramId;
+            }
+
+            if (!dto.CampusId.HasValue)
+            {
+                dto.CampusId = existing.CampusId;
             }
 
             await ValidateSlotAndConflictsAsync(dto.AcademicYearId, dto.SectionId, dto.StaffId, dto.RoomId, dto.DayOfWeek, dto.PeriodId, dto.SubjectId, dto.BoardId, dto.GroupId, dto.AcademicLevelId, excludeId: id);
@@ -609,6 +619,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                             var newSlot = new Timetable
                             {
+                                CampusId = sec.CampusId,
                                 BoardId = dto.BoardId,
                                 AcademicLevelId = dto.AcademicLevelId,
                                 AcademicYearId = dto.AcademicYearId,
