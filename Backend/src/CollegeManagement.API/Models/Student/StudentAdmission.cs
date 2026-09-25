@@ -101,7 +101,12 @@ namespace CollegeManagement.API.Models
         [MaxLength(10)]
         public string? Pincode { get; set; }
 
-        // Academic Relations
+        // Academic Relations & Campus
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? CampusNavigation { get; set; }
+
         public int BoardId { get; set; }
 
         public int AcademicYearId { get; set; }
@@ -170,5 +175,42 @@ namespace CollegeManagement.API.Models
         public DateTime CreatedAt { get; set; }
 
         public DateTime? UpdatedAt { get; set; }
+
+        // Residential & Transport Allocation
+        [MaxLength(30)]
+        public string? StudentType { get; set; }
+
+        public bool? TransportRequired { get; set; }
+
+        [MaxLength(20)]
+        public string? BusType { get; set; }
+
+        public int? RouteId { get; set; }
+
+        [MaxLength(100)]
+        public string? BusRoute { get; set; }
+
+        public int? PickupPointId { get; set; }
+
+        [MaxLength(100)]
+        public string? PickupPoint { get; set; }
+
+        public int? HostelId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelBlock { get; set; }
+
+        public int? RoomId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelRoom { get; set; }
+
+        public int? BedId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelBed { get; set; }
+
+        [MaxLength(50)]
+        public string? HallTicketNumber { get; set; }
     }
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building,
+  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
@@ -9,6 +9,7 @@ import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -61,8 +62,11 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/settings/number-series", icon: settingsNumberSeriesIcon },
   { path: "/dashboard/settings/templates", icon: settingsTemplatesIcon },
   { path: "/dashboard/settings/audit-logs", icon: settingsAuditLogsIcon },
+  { path: "/dashboard/settings/roles-permissions", icon: ShieldCheck },
   { path: "/dashboard/designations", icon: generatedSidebarIcons.department },
   { path: "/dashboard/promotions", icon: promotionIcon },
+  { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
+  { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -158,6 +162,7 @@ export const menu = [
     section: "Finance",
     items: [
       { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon },
+      { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll },
     ],
   },
   {
@@ -176,7 +181,15 @@ export const menu = [
   {
     section: "Administration",
     items: [
-      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
+      {
+        to: "/dashboard/settings",
+        label: "Settings",
+        icon: boardAcademicYearIcon,
+        children: [
+          { to: "/dashboard/settings", label: "General Settings", icon: Settings },
+          { to: "/dashboard/settings/roles-permissions", label: "Roles & Permissions", icon: ShieldCheck },
+        ],
+      },
     ],
   },
 ];
@@ -370,17 +383,20 @@ export default function DashboardLayout({
     setSelectedBoard,
     setSelectedAcademicYear,
   } = useAcademicContext();
+  const { campuses, activeCampuses, selectedCampus, setSelectedCampus } = useCampusContext();
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [campusOpen, setCampusOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const actionsRef = useRef(null);
   const searchRef = useRef(null);
+  const campusRef = useRef(null);
   const boardRef = useRef(null);
   const yearRef = useRef(null);
   const sidebarNavRef = useRef(null);
@@ -392,10 +408,10 @@ export default function DashboardLayout({
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title) ?? pageMenuItem?.icon;
   const pageTitleNode = <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>;
 
-
-
-
-
+  const navbarCampuses = useMemo(() => {
+    if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
+    return (campuses || []).filter((c) => c && c.isActive !== false && String(c.status || "").toLowerCase() !== "inactive");
+  }, [activeCampuses, campuses]);
 
   const resolvedBreadcrumb = useMemo(() => {
     const provided = Array.isArray(breadcrumb) ? breadcrumb : [];
@@ -403,15 +419,11 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const user = readUser();
-  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const activeMenu = isParent ? parentMenu : menu;
-  const currentSearchIndex = isParent ? parentSearchIndex : searchIndex;
-  const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
-
-  const profileName = isParent ? (user?.name || "Suresh Kumar") : (user?.name && user.name !== user?.email ? user.name : "CMS Admin");
-  const profileEmail = isParent ? (user?.email || "parent@pirnav.com") : (user?.email || "Admin@CMS.com");
-  const profileRole = isParent ? "Parent" : (user?.role || "admin");
-  const pendingActionCount = currentNotifications.reduce((total, item) => total + item.count, 0);
+  const rawEmail = user?.email;
+  const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
+  const profileRole = user?.role || "admin";
+  const pendingActionCount = MOCK_NOTIFICATIONS.reduce((total, item) => total + item.count, 0);
 
   const rememberSidebarScroll = () => {
     const scrollTop = sidebarNavRef.current?.scrollTop || 0;
@@ -454,6 +466,7 @@ export default function DashboardLayout({
         setProfileOpen(false);
       }
       if (searchRef.current && !searchRef.current.contains(e.target)) setSearchOpen(false);
+      if (campusRef.current && !campusRef.current.contains(e.target)) setCampusOpen(false);
       if (boardRef.current && !boardRef.current.contains(e.target)) setBoardOpen(false);
       if (yearRef.current && !yearRef.current.contains(e.target)) setYearOpen(false);
     };
@@ -462,6 +475,7 @@ export default function DashboardLayout({
         setNotifOpen(false);
         setProfileOpen(false);
         setSearchOpen(false);
+        setCampusOpen(false);
         setBoardOpen(false);
         setYearOpen(false);
       }
@@ -503,7 +517,9 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
-    if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
+    if (basePath === "/dashboard/settings") {
+      return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
+    }
     if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
       return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
     }
@@ -660,6 +676,82 @@ export default function DashboardLayout({
 
           <div className="cms-top-actions" ref={actionsRef}>
             <div className="cms-academic-selectors">
+              {/* Campus Selector */}
+              <div className="cms-academic-dropdown-wrap" ref={campusRef}>
+                <button
+                  type="button"
+                  className={`cms-academic-btn ${campusOpen ? "is-open" : ""}`}
+                  onClick={() => {
+                    setCampusOpen((v) => !v);
+                    setBoardOpen(false);
+                    setYearOpen(false);
+                    setNotifOpen(false);
+                    setProfileOpen(false);
+                  }}
+                  disabled={!navbarCampuses?.length}
+                  aria-label="Select Campus"
+                  aria-expanded={campusOpen}
+                >
+                  <div className="cms-academic-btn-icon">
+                    <Building2 size={16} color="var(--cms-primary)" />
+                  </div>
+                  <div className="cms-academic-btn-text">
+                    <span className="cms-academic-btn-label">Campus</span>
+                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code}>
+                      {selectedCampus?.name || selectedCampus?.code || "Main Campus"}
+                    </span>
+                  </div>
+                  <ChevronDown size={12} className="cms-academic-btn-arrow" />
+                </button>
+
+                {campusOpen && (
+                  <div className="cms-academic-dropdown-panel">
+                    <div className="cms-academic-panel-header">Select Campus Branch</div>
+                    <div className="cms-academic-panel-list">
+                      {!navbarCampuses?.length ? (
+                        <div className="cms-academic-panel-empty">No active campuses available</div>
+                      ) : (
+                        navbarCampuses.map((c) => {
+                          const isSelected =
+                            String(selectedCampus?.id) === String(c.id) ||
+                            String(selectedCampus?.campusId) === String(c.campusId) ||
+                            (selectedCampus?.code && selectedCampus.code === c.code);
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
+                              onClick={() => {
+                                setSelectedCampus(c);
+                                setCampusOpen(false);
+                              }}
+                            >
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", textAlign: "left" }}>
+                                <span className="cms-academic-item-name" title={c.name}>{c.name}</span>
+                                <span style={{ fontSize: "11px", color: "var(--cms-muted)" }}>{c.code}</span>
+                              </div>
+                              {isSelected && <CheckCircle2 size={16} className="cms-academic-check" />}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                    <div className="cms-academic-panel-footer">
+                      <button
+                        type="button"
+                        className="cms-academic-manage-btn"
+                        onClick={() => {
+                          setCampusOpen(false);
+                          navigate("/dashboard/settings/campus-configuration");
+                        }}
+                      >
+                        <Settings size={14} /> Manage Campuses
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Board Selector */}
               <div className="cms-academic-dropdown-wrap" ref={boardRef}>
                 {isParent ? (
@@ -877,38 +969,10 @@ export default function DashboardLayout({
 
             {profileOpen ? (
               <div className="cms-dropdown">
-                <div className="cms-dropdown-head"><strong title={profileName}>{profileName}</strong><div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{profileEmail}</div><div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 3 }}>{profileRole}</div></div>
-                <Link
-                  to={isParent ? "/parent-dashboard/profile" : "/dashboard/settings"}
-                  className="cms-dropdown-item"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    closeOnMobile();
-                  }}
-                >
-                  <User size={15} /> My Profile
-                </Link>
-                <Link
-                  to={isParent ? "/parent-dashboard/settings" : "/dashboard/settings"}
-                  className="cms-dropdown-item"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    closeOnMobile();
-                  }}
-                >
-                  <Settings size={15} /> Settings
-                </Link>
-                <button
-                  type="button"
-                  className="cms-dropdown-item danger"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    closeOnMobile();
-                    logout();
-                  }}
-                >
-                  <LogOut size={15} /> Logout
-                </button>
+                <div className="cms-dropdown-head"><strong>{profileName}</strong><div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{profileEmail}</div><div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 3 }}>{profileRole}</div></div>
+                <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings/my-profile"); }}><User size={15} /> My Profile</button>
+                <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings"); }}><Settings size={15} /> Settings</button>
+                <button type="button" className="cms-dropdown-item danger" onClick={logout}><LogOut size={15} /> Logout</button>
               </div>
             ) : null}
           </div>

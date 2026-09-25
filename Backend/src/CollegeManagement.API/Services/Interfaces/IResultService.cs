@@ -8,7 +8,7 @@ namespace CollegeManagement.API.Services.Interfaces
     public interface IResultService
     {
         // --- Core Generation & Preconditions ---
-        Task<ResultReadinessDto> GetResultReadinessAsync(int? boardId, int? academicYearId, int? academicLevelId, int? groupId, string? programId, int examinationId);
+        Task<ResultReadinessDto> GetResultReadinessAsync(int? boardId, int? academicYearId, int? academicLevelId, int? groupId, string? programId, int examinationId, int? campusId = null);
         Task<List<SectionResultSummaryDto>> GenerateResultsAsync(ProcessResultRequestDto request);
         Task<ProcessResultResponseDto> ProcessResultsAsync(ProcessResultRequestDto request);
         
@@ -17,6 +17,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> PublishSectionResultsAsync(int sectionId, int examId, DateTime? publishDate = null);
         Task<bool> PublishGroupResultsAsync(int groupId, int examId, DateTime? publishDate = null);
         Task<bool> PublishResultsAsync(PublishResultRequestDto request);
+        Task<IEnumerable<PublishedExamResultGroupDto>> GetPublishedResultsAsync(int? boardId = null, int? academicYearId = null, int? groupId = null, int? campusId = null);
 
         // --- Student Self-Service Portal ---
         Task<IEnumerable<StudentSelfResultDto>> GetStudentSelfResultsAsync(int studentId);
@@ -41,14 +42,16 @@ namespace CollegeManagement.API.Services.Interfaces
             string? programId,
             int? sectionId,
             int? examId,
-            string? search = null);
+            string? search = null,
+            int? campusId = null);
 
         Task<IEnumerable<RankListDto>> GetRankListAsync(
             int boardId,
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId);
+            int examId,
+            int? campusId = null);
 
         // --- Analytics & Statistics ---
         Task<ResultAnalyticsDto> GetResultAnalyticsAsync(
@@ -57,7 +60,8 @@ namespace CollegeManagement.API.Services.Interfaces
             int? academicLevelId,
             int? groupId,
             string? programId,
-            int? examId);
+            int? examId,
+            int? campusId = null);
 
         Task<IEnumerable<StudentResultDto>> GetFailedStudentsAsync(
             int? boardId = null,
@@ -65,13 +69,15 @@ namespace CollegeManagement.API.Services.Interfaces
             int? academicLevelId = null,
             int? groupId = null,
             string? programId = null,
-            int? examId = null);
+            int? examId = null,
+            int? campusId = null);
         Task<ResultStatisticsDto> GetResultStatisticsAsync(
             int? boardId = null,
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null);
+            int? examId = null,
+            int? campusId = null);
         Task<ResultAnalysisDto> GetResultAnalysisAsync(
             int boardId,
             int academicYearId,
@@ -93,14 +99,16 @@ namespace CollegeManagement.API.Services.Interfaces
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId);
+            int examId,
+            int? campusId = null);
 
         Task<IEnumerable<ExportResultDto>> GetResultsForExportAsync(
             int boardId,
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId);
+            int examId,
+            int? campusId = null);
 
         Task<GetResultsResponseDto> GetResultsAsync(GetResultsRequestDto request);
         Task<bool> RequestRevaluationAsync(RevaluationRequestDto request);
@@ -111,6 +119,7 @@ namespace CollegeManagement.API.Services.Interfaces
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null);
+            int? examId = null,
+            int? campusId = null);
     }
 }

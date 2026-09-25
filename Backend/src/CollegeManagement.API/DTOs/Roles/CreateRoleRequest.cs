@@ -7,5 +7,8 @@ namespace CollegeManagement.API.DTOs.Roles
         [Required]
         [StringLength(50)]
         public string RoleName { get; set; } = string.Empty;
+
+        [StringLength(255)]
+        public string? Description { get; set; }
     }
 }

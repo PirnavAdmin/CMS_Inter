@@ -1,10 +1,12 @@
-﻿using System;
+using System;
 
 namespace CollegeManagement.API.Models.Hostel
 {
     public class HostelBlock
     {
         public int HostelId { get; set; }
+
+        public int? CampusId { get; set; } = 1;
 
         public string HostelName { get; set; } = string.Empty;
 

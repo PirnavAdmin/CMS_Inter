@@ -22,9 +22,16 @@ namespace CollegeManagement.API.Services
         // STUDENT CRUD
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync()
+        public async Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null)
         {
-            return await _repository.GetAllAsync();
+            return await _repository.GetAllAsync(boardId, academicLevelId, groupId, programId, sectionId, status, campusId);
         }
 
         public async Task<StudentResponse?> GetByIdAsync(int studentId)
@@ -156,7 +163,8 @@ namespace CollegeManagement.API.Services
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive)
+            bool? isActive,
+            int? campusId = null)
         {
             return await _repository.SearchAsync(
                 search,
@@ -165,7 +173,8 @@ namespace CollegeManagement.API.Services
                 academicLevelId,
                 groupId,
                 sectionId,
-                isActive);
+                isActive,
+                campusId);
         }
 
 

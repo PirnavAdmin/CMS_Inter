@@ -16,15 +16,6 @@ public class CertificateRepository : ICertificateRepository
 {
     private readonly DatabaseContext _database;
 
-    private class StudentDetailsQueryModel
-    {
-        public int StudentId { get; set; }
-        public string? StudentName { get; set; }
-        public string? GroupName { get; set; }
-        public string? AcademicLevel { get; set; }
-        public string? AcademicYear { get; set; }
-    }
-
     public CertificateRepository(DatabaseContext database)
     {
         _database = database;
@@ -37,69 +28,31 @@ public class CertificateRepository : ICertificateRepository
         string? search = null,
         string? status = null,
         string? certificateType = null,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
 
-        // Safe query with joins to ensure Student Name, Group, Academic Year, FatherName, RollNo, etc. are ALWAYS populated from StudentAdmissions / Students
-        var sql = @"
-            SELECT 
-                c.*,
-                COALESCE(NULLIF(TRIM(c.AdmissionNo), ''), NULLIF(TRIM(sa.AdmissionNo), ''), NULLIF(TRIM(s.AdmissionNo), ''), '') AS S_AdmissionNo,
-                COALESCE(NULLIF(TRIM(c.StudentName), ''), NULLIF(TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))), ''), NULLIF(TRIM(s.StudentName), ''), '') AS S_StudentName,
-                COALESCE(NULLIF(TRIM(s.FatherName), ''), NULLIF(TRIM(sa.FatherName), ''), '') AS S_FatherName,
-                COALESCE(NULLIF(TRIM(s.MotherName), ''), NULLIF(TRIM(sa.MotherName), ''), 'Anita Devi') AS S_MotherName,
-                COALESCE(NULLIF(TRIM(s.RollNo), ''), '') AS S_RollNo,
-                COALESCE(NULLIF(TRIM(c.GroupName), ''), NULLIF(TRIM(g.GroupName), ''), '') AS S_GroupName,
-                COALESCE(NULLIF(TRIM(c.AcademicLevel), ''), NULLIF(TRIM(al.LevelName), ''), '1st Year') AS S_AcademicLevel,
-                COALESCE(NULLIF(TRIM(c.AcademicYear), ''), NULLIF(TRIM(ay.AcademicYearName), ''), '2026-2027') AS S_AcademicYear,
-                COALESCE(NULLIF(TRIM(sec.SectionName), ''), 'A') AS S_SectionName,
-                COALESCE(NULLIF(TRIM(b.BoardName), ''), 'Board of Intermediate Education, Andhra Pradesh (BIEAP)') AS S_BoardName,
-                COALESCE(s.DateOfBirth, sa.DateOfBirth) AS S_DateOfBirth
-            FROM `certificates` c
-            LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
-            LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
-            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
-            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
-            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
-            LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
-            LEFT JOIN `Boards` b ON b.BoardId = COALESCE(s.BoardId, sa.BoardId)
-            ORDER BY 1 DESC;";
+        var parameters = new DynamicParameters();
+        parameters.Add("p_Search", search?.Trim(), DbType.String);
+        parameters.Add("p_Status", status?.Trim(), DbType.String);
+        parameters.Add("p_CertificateType", certificateType?.Trim(), DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            var rawRows = await connection.QueryAsync<dynamic>(new CommandDefinition(sql, cancellationToken: ct));
-            var dtos = rawRows.Select(MapDynamicToDto).ToList();
+            var rawRows = await connection.QueryAsync<dynamic>(new CommandDefinition(
+                "sp_GetCertificates",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
-            return dtos.Where(c =>
+            var results = rawRows.Select(MapDynamicToDto).ToList();
+            if (campusId.HasValue)
             {
-                if (c == null) return false;
-
-                if (!string.IsNullOrWhiteSpace(status) && status != "All" && status != "All Status")
-                {
-                    if (!string.Equals(c.Status, status, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                }
-
-                if (!string.IsNullOrWhiteSpace(certificateType) && certificateType != "All")
-                {
-                    if (!string.Equals(c.CertificateType, certificateType, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                }
-
-                if (!string.IsNullOrWhiteSpace(search))
-                {
-                    var s = search.Trim();
-                    var match = (c.CertificateNumber?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                                (c.AdmissionNo?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                                (c.StudentName?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                                (c.CertificateType?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                                (c.Purpose?.Contains(s, StringComparison.OrdinalIgnoreCase) ?? false);
-                    if (!match) return false;
-                }
-
-                return true;
-            }).ToList();
+                results = results.Where(r => r.CampusId == campusId.Value).ToList();
+            }
+            return results;
         }
         catch (OperationCanceledException)
         {
@@ -107,7 +60,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"GetAllAsync Fallback Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.GetAllAsync] Error: {ex.Message}");
             return new List<CertificateResponseDto>();
         }
     }
@@ -123,38 +76,16 @@ public class CertificateRepository : ICertificateRepository
 
         using var connection = _database.CreateConnection();
 
-        var cols = await GetCertificateTableColumnsAsync(connection);
-        var pk = cols.Contains("CertificateId") ? "c.CertificateId" : "c.Id";
-
-        var sql = $@"
-            SELECT 
-                c.*,
-                COALESCE(NULLIF(TRIM(c.AdmissionNo), ''), NULLIF(TRIM(sa.AdmissionNo), ''), NULLIF(TRIM(s.AdmissionNo), ''), '') AS S_AdmissionNo,
-                COALESCE(NULLIF(TRIM(c.StudentName), ''), NULLIF(TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))), ''), NULLIF(TRIM(s.StudentName), ''), '') AS S_StudentName,
-                COALESCE(NULLIF(TRIM(s.FatherName), ''), NULLIF(TRIM(sa.FatherName), ''), '') AS S_FatherName,
-                COALESCE(NULLIF(TRIM(s.MotherName), ''), NULLIF(TRIM(sa.MotherName), ''), 'Anita Devi') AS S_MotherName,
-                COALESCE(NULLIF(TRIM(s.RollNo), ''), '') AS S_RollNo,
-                COALESCE(NULLIF(TRIM(c.GroupName), ''), NULLIF(TRIM(g.GroupName), ''), '') AS S_GroupName,
-                COALESCE(NULLIF(TRIM(c.AcademicLevel), ''), NULLIF(TRIM(al.LevelName), ''), '1st Year') AS S_AcademicLevel,
-                COALESCE(NULLIF(TRIM(c.AcademicYear), ''), NULLIF(TRIM(ay.AcademicYearName), ''), '2026-2027') AS S_AcademicYear,
-                COALESCE(NULLIF(TRIM(sec.SectionName), ''), 'A') AS S_SectionName,
-                COALESCE(NULLIF(TRIM(b.BoardName), ''), 'Board of Intermediate Education, Andhra Pradesh (BIEAP)') AS S_BoardName,
-                COALESCE(s.DateOfBirth, sa.DateOfBirth) AS S_DateOfBirth
-            FROM `certificates` c
-            LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
-            LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
-            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
-            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
-            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
-            LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
-            LEFT JOIN `Boards` b ON b.BoardId = COALESCE(s.BoardId, sa.BoardId)
-            WHERE {pk} = @id
-            LIMIT 1;";
+        var parameters = new DynamicParameters();
+        parameters.Add("p_CertificateId", id, DbType.Int32);
 
         try
         {
-            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                new CommandDefinition(sql, new { id }, cancellationToken: ct));
+            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
+                "sp_GetCertificateById",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
             return row == null ? null : MapDynamicToDto(row);
         }
@@ -164,12 +95,42 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"GetByIdAsync Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.GetByIdAsync] Error: {ex.Message}");
             return null;
         }
     }
 
     // =========================================================
+    // GET BY CERTIFICATE NUMBER
+    // =========================================================
+    public async Task<CertificateResponseDto?> GetByCertificateNumberAsync(
+        string certificateNumber,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(certificateNumber)) return null;
+
+        using var connection = _database.CreateConnection();
+
+        var parameters = new DynamicParameters();
+        parameters.Add("p_CertificateNumber", certificateNumber.Trim(), DbType.String);
+
+        try
+        {
+            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
+                "sp_GetCertificateByCertificateNo",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
+            return row == null ? null : MapDynamicToDto(row);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateRepository.GetByCertificateNumberAsync] Error: {ex.Message}");
+            return null;
+        }
+    }
+
     // =========================================================
     // GET CERTIFICATE PREVIEW (Fully Hydrated Template & Data)
     // =========================================================
@@ -181,43 +142,16 @@ public class CertificateRepository : ICertificateRepository
 
         using var connection = _database.CreateConnection();
 
-        var sql = $@"
-            SELECT 
-                c.*,
-                COALESCE(NULLIF(TRIM(c.StudentName), ''), NULLIF(TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))), ''), NULLIF(TRIM(s.StudentName), ''), '') AS Hydrated_StudentName,
-                COALESCE(NULLIF(TRIM(s.FatherName), ''), NULLIF(TRIM(sa.FatherName), ''), '') AS Hydrated_FatherName,
-                COALESCE(NULLIF(TRIM(s.MotherName), ''), NULLIF(TRIM(sa.MotherName), ''), 'Anita Devi') AS Hydrated_MotherName,
-                COALESCE(NULLIF(TRIM(c.AdmissionNo), ''), NULLIF(TRIM(sa.AdmissionNo), ''), NULLIF(TRIM(s.AdmissionNo), ''), '') AS Hydrated_AdmissionNo,
-                COALESCE(NULLIF(TRIM(s.RollNo), ''), '') AS Hydrated_RollNo,
-                COALESCE(NULLIF(TRIM(c.GroupName), ''), NULLIF(TRIM(g.GroupName), ''), '') AS Hydrated_GroupName,
-                COALESCE(NULLIF(TRIM(c.AcademicLevel), ''), NULLIF(TRIM(al.LevelName), ''), '1st Year') AS Hydrated_AcademicLevel,
-                COALESCE(NULLIF(TRIM(c.AcademicYear), ''), NULLIF(TRIM(ay.AcademicYearName), ''), '2026-2027') AS Hydrated_AcademicYear,
-                COALESCE(NULLIF(TRIM(b.BoardName), ''), 'Board of Intermediate Education, Andhra Pradesh (BIEAP)') AS Hydrated_BoardName,
-                COALESCE(NULLIF(TRIM(sec.SectionName), ''), 'A') AS Hydrated_SectionName,
-                COALESCE(s.DateOfBirth, sa.DateOfBirth) AS Hydrated_Dob,
-                COALESCE(s.Gender, sa.Gender, '') AS Hydrated_Gender,
-                COALESCE(s.BloodGroup, sa.BloodGroup, 'O+') AS Hydrated_BloodGroup,
-                COALESCE(s.MobileNumber, sa.StudentMobileNumber, '') AS Hydrated_Mobile,
-                COALESCE(s.Medium, sa.Medium, 'English') AS Hydrated_Medium,
-                COALESCE(s.AdmissionDate, sa.AdmissionDate) AS Hydrated_AdmissionDate,
-                COALESCE(s.Nationality, sa.Nationality, 'Indian') AS Hydrated_Nationality,
-                COALESCE(s.Religion, sa.Religion, 'Hindu') AS Hydrated_Religion,
-                COALESCE(s.Category, sa.Category, 'General') AS Hydrated_Caste
-            FROM `certificates` c
-            LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo = c.AdmissionNo) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
-            LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo = c.AdmissionNo)
-            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(s.GroupId, sa.GroupId)
-            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(s.AcademicYearId, sa.AcademicYearId)
-            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(s.AcademicLevelId, sa.AcademicLevelId)
-            LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
-            LEFT JOIN `Boards` b ON b.BoardId = COALESCE(s.BoardId, sa.BoardId)
-            WHERE c.Id = @id
-            LIMIT 1;";
+        var parameters = new DynamicParameters();
+        parameters.Add("p_CertificateId", id, DbType.Int32);
 
         try
         {
-            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                new CommandDefinition(sql, new { id }, cancellationToken: ct));
+            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
+                "sp_GetCertificatePreviewData",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
             if (row == null) return null;
 
@@ -299,7 +233,7 @@ public class CertificateRepository : ICertificateRepository
             string bloodGroup = dict.ContainsKey("Hydrated_BloodGroup") && dict["Hydrated_BloodGroup"] != null ? dict["Hydrated_BloodGroup"].ToString()!.Trim() : "O+";
             string mobile = dict.ContainsKey("Hydrated_Mobile") && dict["Hydrated_Mobile"] != null ? dict["Hydrated_Mobile"].ToString()!.Trim() : "";
 
-            // 2. Fetch or resolve matching template from `templates` table (Settings Templates)
+            // 2. Fetch template settings using stored procedure
             string canonicalType = "Bonafide Certificate";
             string codeGuess = "certificate-bonafide";
             string shortCode = "BC";
@@ -359,36 +293,18 @@ public class CertificateRepository : ICertificateRepository
                 defaultOrientation = "Landscape";
             }
 
-            var templateSql = @"
-                SELECT * FROM `templates` 
-                WHERE IsActive = 1 
-                  AND (
-                    TemplateCode = @shortCode
-                    OR TemplateCode = @codeGuess
-                    OR LOWER(TemplateCode) = LOWER(@rawType)
-                    OR LOWER(Title) = LOWER(@canonicalType)
-                    OR LOWER(Title) = LOWER(@rawType)
-                    OR (LOWER(Title) LIKE CONCAT('%', LOWER(@rawType), '%') AND TemplateCode NOT IN ('BONAFIDE_TSBIE', 'BONAFIDE_BIEAP', 'STUDY_CONDUCT_CERT', 'TRANSFER_CERTIFICATE'))
-                  )
-                ORDER BY 
-                  CASE 
-                    WHEN TemplateCode = @shortCode THEN 1
-                    WHEN TemplateCode = @codeGuess THEN 2
-                    WHEN LOWER(Title) = LOWER(@canonicalType) THEN 3
-                    WHEN LOWER(Title) = LOWER(@rawType) THEN 4
-                    WHEN LOWER(TemplateCode) = LOWER(@rawType) THEN 5
-                    ELSE 6
-                  END ASC,
-                  Id DESC 
-                LIMIT 1;";
+            var tParams = new DynamicParameters();
+            tParams.Add("p_ShortCode", shortCode, DbType.String);
+            tParams.Add("p_CodeGuess", codeGuess, DbType.String);
+            tParams.Add("p_CanonicalType", canonicalType, DbType.String);
+            tParams.Add("p_RawType", certType.Trim(), DbType.String);
+            tParams.Add("p_CampusId", campusId, DbType.Int32);
 
-            var dbTemplate = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                new CommandDefinition(templateSql, new { 
-                    shortCode,
-                    codeGuess,
-                    canonicalType,
-                    rawType = certType.Trim() 
-                }, cancellationToken: ct));
+            var dbTemplate = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
+                "sp_GetTemplateForCertificate",
+                tParams,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
             string templateCode = shortCode;
             string templateTitle = defaultTitle;
@@ -783,7 +699,7 @@ public class CertificateRepository : ICertificateRepository
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"GetPreviewAsync Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.GetPreviewAsync] Error: {ex.Message}");
             return null;
         }
     }
@@ -792,79 +708,56 @@ public class CertificateRepository : ICertificateRepository
     // GET WORKFLOW STATS
     // =========================================================
     public async Task<CertificateWorkflowStatsDto> GetWorkflowStatsAsync(
+        int? campusId = null,
         CancellationToken ct = default)
     {
-        var all = await GetAllAsync(null, null, null, ct);
+        using var connection = _database.CreateConnection();
 
-        return new CertificateWorkflowStatsDto
+        try
         {
-            TotalCount = all.Count,
-            GeneratedCount = all.Count(c => string.Equals(c.Status, "Generated", StringComparison.OrdinalIgnoreCase) || string.Equals(c.Status, "Active", StringComparison.OrdinalIgnoreCase)),
-            ReviewedCount = all.Count(c => string.Equals(c.Status, "Reviewed", StringComparison.OrdinalIgnoreCase)),
-            ApprovedCount = all.Count(c => string.Equals(c.Status, "Approved", StringComparison.OrdinalIgnoreCase)),
-            IssuedCount = all.Count(c => string.Equals(c.Status, "Issued", StringComparison.OrdinalIgnoreCase)),
-            CancelledCount = all.Count(c => string.Equals(c.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) || string.Equals(c.Status, "Deleted", StringComparison.OrdinalIgnoreCase) || !c.IsActive)
-        };
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
+
+            var stats = await connection.QueryFirstOrDefaultAsync<CertificateWorkflowStatsDto>(new CommandDefinition(
+                "sp_GetCertificateWorkflowStats",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
+            return stats ?? new CertificateWorkflowStatsDto();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateRepository.GetWorkflowStatsAsync] Error: {ex.Message}");
+            return new CertificateWorkflowStatsDto();
+        }
     }
 
     // =========================================================
     // GET STUDENTS DROPDOWN
     // =========================================================
     public async Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
 
-        var sql = @"
-            SELECT 
-                StudentId, AdmissionNo, RollNo, StudentName, GroupName, AcademicYear, AcademicLevel, Section
-            FROM (
-                SELECT 
-                    s.StudentId AS StudentId,
-                    COALESCE(NULLIF(s.AdmissionNo, ''), CONCAT('ADM-', s.StudentId)) AS AdmissionNo,
-                    COALESCE(s.RollNo, '') AS RollNo,
-                    COALESCE(NULLIF(s.StudentName, ''), 'Student') AS StudentName,
-                    COALESCE(g.GroupName, '') AS GroupName,
-                    COALESCE(ay.AcademicYearName, '') AS AcademicYear,
-                    COALESCE(al.LevelName, '1st Year') AS AcademicLevel,
-                    COALESCE(sec.SectionName, '') AS Section,
-                    COALESCE(s.IsActive, 1) AS IsActive
-                FROM `Students` s
-                LEFT JOIN `Groups` g ON g.GroupId = s.GroupId
-                LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = s.AcademicYearId
-                LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = s.AcademicLevelId
-                LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
-
-                UNION ALL
-
-                SELECT 
-                    sa.AdmissionId AS StudentId,
-                    COALESCE(NULLIF(sa.AdmissionNo, ''), CONCAT('ADM-', sa.AdmissionId)) AS AdmissionNo,
-                    '' AS RollNo,
-                    TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))) AS StudentName,
-                    COALESCE(g.GroupName, '') AS GroupName,
-                    COALESCE(ay.AcademicYearName, '') AS AcademicYear,
-                    '1st Year' AS AcademicLevel,
-                    '' AS Section,
-                    COALESCE(sa.IsActive, 1) AS IsActive
-                FROM `StudentAdmissions` sa
-                LEFT JOIN `Groups` g ON g.GroupId = sa.GroupId
-                LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = sa.AcademicYearId
-                WHERE NOT EXISTS (SELECT 1 FROM `Students` s2 WHERE s2.AdmissionNo = sa.AdmissionNo AND sa.AdmissionNo IS NOT NULL AND sa.AdmissionNo <> '')
-            ) combined
-            WHERE IsActive = 1
-            ORDER BY StudentName ASC;";
-
         try
         {
-            var list = await connection.QueryAsync<StudentCertificateDropdownDto>(
-                new CommandDefinition(sql, cancellationToken: ct));
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
+
+            var list = await connection.QueryAsync<StudentCertificateDropdownDto>(new CommandDefinition(
+                "sp_GetStudentsForCertificateDropdown",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
             return list.ToList();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"GetStudentsDropdownAsync Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.GetStudentsDropdownAsync] Error: {ex.Message}");
             return new List<StudentCertificateDropdownDto>();
         }
     }
@@ -882,222 +775,26 @@ public class CertificateRepository : ICertificateRepository
 
         var requestDate = request.RequestDate ?? DateTime.UtcNow;
 
-        // Fetch student details from Students / StudentAdmissions
-        var studentSql = @"
-            SELECT 
-                COALESCE(s.StudentId, sa.AdmissionId, 0) AS StudentId,
-                COALESCE(NULLIF(TRIM(CONCAT(sa.FirstName, ' ', COALESCE(sa.LastName, ''))), ''), s.StudentName, @admissionNo) AS StudentName,
-                COALESCE(g.GroupName, '') AS GroupName,
-                COALESCE(al.LevelName, '1st Year') AS AcademicLevel,
-                COALESCE(ay.AcademicYearName, '') AS AcademicYear
-            FROM `Students` s
-            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(s.AdmissionNo) OR sa.AdmissionId = s.StudentId)
-            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
-            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
-            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
-            WHERE TRIM(s.AdmissionNo) = TRIM(@admissionNo) OR TRIM(sa.AdmissionNo) = TRIM(@admissionNo)
-            LIMIT 1;";
-
-        var student = await connection.QueryFirstOrDefaultAsync<StudentDetailsQueryModel>(
-            new CommandDefinition(studentSql, new { admissionNo = request.AdmissionNo.Trim() }, cancellationToken: ct));
-
-        // If not found in Students, try StudentAdmissions directly
-        if (student == null)
-        {
-            var saSql = @"
-                SELECT 
-                    sa.AdmissionId AS StudentId,
-                    COALESCE(NULLIF(TRIM(CONCAT(sa.FirstName, ' ', COALESCE(sa.LastName, ''))), ''), @admissionNo) AS StudentName,
-                    COALESCE(g.GroupName, '') AS GroupName,
-                    COALESCE(al.LevelName, '1st Year') AS AcademicLevel,
-                    COALESCE(ay.AcademicYearName, '') AS AcademicYear
-                FROM `StudentAdmissions` sa
-                LEFT JOIN `Groups` g ON g.GroupId = sa.GroupId
-                LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = sa.AcademicYearId
-                LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = sa.AcademicLevelId
-                WHERE TRIM(sa.AdmissionNo) = TRIM(@admissionNo)
-                LIMIT 1;";
-
-            student = await connection.QueryFirstOrDefaultAsync<StudentDetailsQueryModel>(
-                new CommandDefinition(saSql, new { admissionNo = request.AdmissionNo.Trim() }, cancellationToken: ct));
-        }
-
-        string studentName = !string.IsNullOrWhiteSpace(student?.StudentName) 
-            ? student.StudentName 
-            : request.AdmissionNo.Trim();
-        string groupName = !string.IsNullOrWhiteSpace(student?.GroupName) ? student.GroupName : "";
-        string academicLevel = !string.IsNullOrWhiteSpace(student?.AcademicLevel) ? student.AcademicLevel : "1st Year";
-        string academicYear = !string.IsNullOrWhiteSpace(student?.AcademicYear) ? student.AcademicYear : $"{DateTime.UtcNow.Year}-{DateTime.UtcNow.Year + 1}";
-        int studentId = (student != null && student.StudentId > 0) ? student.StudentId : 1;
-
-        var yearNum = DateTime.UtcNow.Year.ToString();
-        var certPrefix = request.CertificateType switch
-        {
-            "Bonafide Certificate" => "BON",
-            "Study Certificate" => "STU",
-            "Conduct Certificate" => "CND",
-            "Transfer Certificate" => "TC",
-            "Transfer Certificate (TC)" => "TC",
-            "Migration Certificate" => "MIG",
-            "Course Completion Certificate" => "CMP",
-            "Intermediate Pass Certificate" => "IPC",
-            "Fee Due / Clearance Certificate" => "FEE",
-            "Extracurricular Achievement Certificate" => "ACH",
-            _ => "CERT"
-        };
-
-        var certNumber = $"{certPrefix}-{yearNum}-{Guid.NewGuid().ToString("N")[..6].ToUpper()}";
-
-        // Check if certificates table has modern columns
-        var existingCols = await GetCertificateTableColumnsAsync(connection);
-
-        int newId = 0;
+        var parameters = new DynamicParameters();
+        parameters.Add("p_AdmissionNo", request.AdmissionNo.Trim(), DbType.String);
+        parameters.Add("p_CertificateType", request.CertificateType.Trim(), DbType.String);
+        parameters.Add("p_Purpose", request.Purpose.Trim(), DbType.String);
+        parameters.Add("p_RequestDate", requestDate, DbType.DateTime);
+        parameters.Add("p_Remarks", request.Remarks?.Trim(), DbType.String);
 
         try
         {
-            if (existingCols.Contains("CertificateNumber") && existingCols.Contains("StudentName"))
-            {
-                var insertSql = @"
-                    INSERT INTO `certificates` (
-                        CertificateNumber, StudentId, AdmissionNo, StudentName, GroupName, AcademicLevel, AcademicYear,
-                        CertificateType, Purpose, Status, Remarks, RequestDate, IssueDate, IsActive, CreatedAt
-                    ) VALUES (
-                        @certNumber, @studentId, @admissionNo, @studentName, @groupName, @academicLevel, @academicYear,
-                        @certificateType, @purpose, 'Generated', @remarks, @requestDate, @requestDate, 1, UTC_TIMESTAMP()
-                    );
-                    SELECT LAST_INSERT_ID();";
-
-                var rawId = await connection.ExecuteScalarAsync<object>(
-                    new CommandDefinition(insertSql, new
-                    {
-                        certNumber,
-                        studentId,
-                        admissionNo = request.AdmissionNo.Trim(),
-                        studentName,
-                        groupName,
-                        academicLevel,
-                        academicYear,
-                        certificateType = request.CertificateType.Trim(),
-                        purpose = request.Purpose.Trim(),
-                        remarks = request.Remarks?.Trim(),
-                        requestDate
-                    }, cancellationToken: ct));
-
-                if (rawId != null && rawId != DBNull.Value)
-                {
-                    newId = Convert.ToInt32(rawId);
-                }
-            }
-            else
-            {
-                // Fallback for legacy DB schema: (StudentId, CertificateNo, CertificateType, Purpose, IssueDate, Remarks, Status, CreatedAt, IsActive)
-                var insertLegacySql = @"
-                    INSERT INTO `certificates` (
-                        StudentId, CertificateNo, CertificateType, Purpose, IssueDate, Remarks, Status, CreatedAt, IsActive
-                    ) VALUES (
-                        @studentId, @certNumber, @certificateType, @purpose, @requestDate, @remarks, 'Generated', UTC_TIMESTAMP(), 1
-                    );
-                    SELECT LAST_INSERT_ID();";
-
-                var rawId = await connection.ExecuteScalarAsync<object>(
-                    new CommandDefinition(insertLegacySql, new
-                    {
-                        studentId,
-                        certNumber,
-                        certificateType = request.CertificateType.Trim(),
-                        purpose = request.Purpose.Trim(),
-                        requestDate,
-                        remarks = request.Remarks?.Trim()
-                    }, cancellationToken: ct));
-
-                if (rawId != null && rawId != DBNull.Value)
-                {
-                    newId = Convert.ToInt32(rawId);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[CertificateRepository.GenerateAsync] Insert Error for {request.AdmissionNo}: {ex.Message}");
-        }
-
-        CertificateResponseDto? createdRecord = null;
-        if (newId > 0)
-        {
-            createdRecord = await GetByIdAsync(newId, ct);
-        }
-
-        // Secondary verification lookup by certificate number if ID lookup was null or newId == 0
-        if (createdRecord == null)
-        {
-            createdRecord = await GetByCertificateNumberAsync(certNumber, ct);
-        }
-
-        // Final in-memory fallback to ensure the frontend always gets the newly generated certificate record
-        if (createdRecord == null)
-        {
-            createdRecord = new CertificateResponseDto
-            {
-                CertificateId = newId,
-                CertificateNumber = certNumber,
-                StudentId = studentId,
-                AdmissionNo = request.AdmissionNo.Trim(),
-                StudentName = studentName,
-                GroupName = groupName,
-                AcademicLevel = academicLevel,
-                AcademicYear = academicYear,
-                CertificateType = request.CertificateType.Trim(),
-                Purpose = request.Purpose.Trim(),
-                Remarks = request.Remarks?.Trim() ?? string.Empty,
-                Status = "Generated",
-                RequestDate = requestDate,
-                IssueDate = requestDate,
-                GeneratedAt = requestDate,
-                IsActive = true
-            };
-        }
-
-        return createdRecord;
-    }
-
-    public async Task<CertificateResponseDto?> GetByCertificateNumberAsync(
-        string certificateNumber,
-        CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(certificateNumber)) return null;
-
-        using var connection = _database.CreateConnection();
-
-        var cols = await GetCertificateTableColumnsAsync(connection);
-        var certCol = cols.Contains("CertificateNumber") ? "c.CertificateNumber" : "c.CertificateNo";
-
-        var sql = $@"
-            SELECT 
-                c.*,
-                COALESCE(c.AdmissionNo, sa.AdmissionNo, s.AdmissionNo, '') AS S_AdmissionNo,
-                COALESCE(c.StudentName, NULLIF(TRIM(CONCAT(sa.FirstName, ' ', COALESCE(sa.LastName, ''))), ''), s.StudentName, '') AS S_StudentName,
-                COALESCE(c.GroupName, g.GroupName, '') AS S_GroupName,
-                COALESCE(c.AcademicLevel, al.LevelName, '1st Year') AS S_AcademicLevel,
-                COALESCE(c.AcademicYear, ay.AcademicYearName, '') AS S_AcademicYear
-            FROM `certificates` c
-            LEFT JOIN `StudentAdmissions` sa ON (TRIM(sa.AdmissionNo) = TRIM(c.AdmissionNo) OR sa.AdmissionId = c.StudentId)
-            LEFT JOIN `Students` s ON s.StudentId = c.StudentId OR TRIM(s.AdmissionNo) = TRIM(c.AdmissionNo)
-            LEFT JOIN `Groups` g ON g.GroupId = COALESCE(sa.GroupId, s.GroupId)
-            LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = COALESCE(sa.AcademicYearId, s.AcademicYearId)
-            LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = COALESCE(sa.AcademicLevelId, s.AcademicLevelId)
-            WHERE {certCol} = @certificateNumber
-            LIMIT 1;";
-
-        try
-        {
-            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                new CommandDefinition(sql, new { certificateNumber = certificateNumber.Trim() }, cancellationToken: ct));
+            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
+                "sp_GenerateCertificate",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
             return row == null ? null : MapDynamicToDto(row);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"GetByCertificateNumberAsync Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.GenerateAsync] Error for {request.AdmissionNo}: {ex.Message}");
             return null;
         }
     }
@@ -1120,7 +817,26 @@ public class CertificateRepository : ICertificateRepository
         string? admissionNo,
         CancellationToken ct = default)
     {
-        return await GetAllAsync(admissionNo, null, null, ct);
+        using var connection = _database.CreateConnection();
+
+        var parameters = new DynamicParameters();
+        parameters.Add("p_AdmissionNo", admissionNo?.Trim(), DbType.String);
+
+        try
+        {
+            var rawRows = await connection.QueryAsync<dynamic>(new CommandDefinition(
+                "sp_GetCertificateHistory",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
+            return rawRows.Select(MapDynamicToDto).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateRepository.GetHistoryAsync] Error: {ex.Message}");
+            return new List<CertificateResponseDto>();
+        }
     }
 
     public async Task<CertificateResponseDto?> VerifyAsync(
@@ -1130,11 +846,26 @@ public class CertificateRepository : ICertificateRepository
         if (string.IsNullOrWhiteSpace(certificateNo))
             return null;
 
-        var byCert = await GetByCertificateNumberAsync(certificateNo, ct);
-        if (byCert != null) return byCert;
+        using var connection = _database.CreateConnection();
 
-        var all = await GetAllAsync(null, null, null, ct);
-        return all.FirstOrDefault(c => string.Equals(c.CertificateNumber?.Trim(), certificateNo.Trim(), StringComparison.OrdinalIgnoreCase));
+        var parameters = new DynamicParameters();
+        parameters.Add("p_CertificateNumber", certificateNo.Trim(), DbType.String);
+
+        try
+        {
+            var row = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
+                "sp_VerifyCertificate",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+
+            return row == null ? null : MapDynamicToDto(row);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateRepository.VerifyAsync] Error: {ex.Message}");
+            return null;
+        }
     }
 
     public async Task<CertificateResponseDto?> ReissueAsync(
@@ -1157,28 +888,29 @@ public class CertificateRepository : ICertificateRepository
     {
         using var connection = _database.CreateConnection();
 
-        var sql = @"
-            UPDATE `certificates`
-            SET 
-                CertificateType = COALESCE(NULLIF(@type, ''), CertificateType),
-                Purpose = COALESCE(NULLIF(@purpose, ''), Purpose),
-                IssueDate = @issueDate,
-                Remarks = @remarks
-            WHERE StudentId = (SELECT StudentId FROM `Students` WHERE AdmissionNo = @admissionNo LIMIT 1)
-            ORDER BY 1 DESC
-            LIMIT 1;";
+        var parameters = new DynamicParameters();
+        parameters.Add("p_AdmissionNo", request.AdmissionNo.Trim(), DbType.String);
+        parameters.Add("p_CertificateType", request.CertificateType?.Trim(), DbType.String);
+        parameters.Add("p_Purpose", request.Purpose?.Trim(), DbType.String);
+        parameters.Add("p_IssueDate", request.IssueDate, DbType.DateTime);
+        parameters.Add("p_Remarks", request.Remarks?.Trim(), DbType.String);
 
-        await connection.ExecuteAsync(new CommandDefinition(sql, new
+        try
         {
-            type = request.CertificateType?.Trim(),
-            purpose = request.Purpose?.Trim(),
-            issueDate = request.IssueDate,
-            remarks = request.Remarks?.Trim(),
-            admissionNo = request.AdmissionNo.Trim()
-        }, cancellationToken: ct));
+            await connection.ExecuteAsync(new CommandDefinition(
+                "sp_UpdateCertificateByAdmissionNo",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
-        var all = await GetAllAsync(request.AdmissionNo.Trim(), null, null, ct);
-        return all.FirstOrDefault();
+            var all = await GetAllAsync(request.AdmissionNo.Trim(), null, null, null, ct);
+            return all.FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CertificateRepository.UpdateByAdmissionNoAsync] Error: {ex.Message}");
+            return null;
+        }
     }
 
     public async Task<bool> MoveStatusAsync(
@@ -1192,19 +924,24 @@ public class CertificateRepository : ICertificateRepository
 
         using var connection = _database.CreateConnection();
 
+        var parameters = new DynamicParameters();
+        parameters.Add("p_CertificateId", id, DbType.Int32);
+        parameters.Add("p_NewStatus", status.Trim(), DbType.String);
+        parameters.Add("p_IssuedBy", issuedBy?.Trim() ?? "Admin", DbType.String);
+
         try
         {
-            var cols = await GetCertificateTableColumnsAsync(connection);
-            var pk = cols.Contains("CertificateId") ? "CertificateId" : "Id";
+            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_MoveCertificateStatus",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
-            var sql = $"UPDATE `certificates` SET Status = @status WHERE {pk} = @id;";
-
-            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, new { id, status }, cancellationToken: ct));
             return affected > 0;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"MoveStatusAsync Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.MoveStatusAsync] Error: {ex.Message}");
             return false;
         }
     }
@@ -1215,10 +952,16 @@ public class CertificateRepository : ICertificateRepository
     {
         using var connection = _database.CreateConnection();
 
+        var parameters = new DynamicParameters();
+        parameters.Add("p_ReviewedBy", reviewedBy.Trim(), DbType.String);
+
         try
         {
-            var sql = "UPDATE `certificates` SET Status = 'Reviewed' WHERE Status IN ('Generated', 'Requested', 'Pending');";
-            return await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: ct));
+            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_BulkReviewCertificates",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
         }
         catch
         {
@@ -1232,10 +975,16 @@ public class CertificateRepository : ICertificateRepository
     {
         using var connection = _database.CreateConnection();
 
+        var parameters = new DynamicParameters();
+        parameters.Add("p_ApprovedBy", approvedBy.Trim(), DbType.String);
+
         try
         {
-            var sql = "UPDATE `certificates` SET Status = 'Approved' WHERE Status = 'Reviewed';";
-            return await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: ct));
+            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_BulkApproveCertificates",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
         }
         catch
         {
@@ -1249,10 +998,16 @@ public class CertificateRepository : ICertificateRepository
     {
         using var connection = _database.CreateConnection();
 
+        var parameters = new DynamicParameters();
+        parameters.Add("p_IssuedBy", issuedBy.Trim(), DbType.String);
+
         try
         {
-            var sql = "UPDATE `certificates` SET Status = 'Issued' WHERE Status = 'Approved';";
-            return await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: ct));
+            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_BulkIssueCertificates",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
         }
         catch
         {
@@ -1268,18 +1023,22 @@ public class CertificateRepository : ICertificateRepository
 
         using var connection = _database.CreateConnection();
 
+        var parameters = new DynamicParameters();
+        parameters.Add("p_CertificateId", id, DbType.Int32);
+
         try
         {
-            var cols = await GetCertificateTableColumnsAsync(connection);
-            var pk = cols.Contains("CertificateId") ? "CertificateId" : "Id";
+            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_CancelCertificate",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
-            var sql = $"UPDATE `certificates` SET Status = 'Cancelled' WHERE {pk} = @id;";
-            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, new { id }, cancellationToken: ct));
             return affected > 0;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"CancelAsync Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.CancelAsync] Error: {ex.Message}");
             return false;
         }
     }
@@ -1292,18 +1051,22 @@ public class CertificateRepository : ICertificateRepository
 
         using var connection = _database.CreateConnection();
 
+        var parameters = new DynamicParameters();
+        parameters.Add("p_CertificateId", id, DbType.Int32);
+
         try
         {
-            var cols = await GetCertificateTableColumnsAsync(connection);
-            var pk = cols.Contains("CertificateId") ? "CertificateId" : "Id";
+            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+                "sp_DeleteCertificate",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
 
-            var sql = $"DELETE FROM `certificates` WHERE {pk} = @id;";
-            var affected = await connection.ExecuteAsync(new CommandDefinition(sql, new { id }, cancellationToken: ct));
             return affected > 0;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"DeleteAsync Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.DeleteAsync] Error: {ex.Message}");
             return false;
         }
     }
@@ -1360,100 +1123,38 @@ public class CertificateRepository : ICertificateRepository
         int? groupId,
         int? sectionId,
         string? search,
+        int? campusId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
 
-        var sql = @"
-            SELECT 
-                StudentId, AdmissionNo, RollNo, StudentName, GroupName, SectionName, AcademicYear, BoardName
-            FROM (
-                SELECT 
-                    s.StudentId AS StudentId,
-                    COALESCE(NULLIF(s.AdmissionNo, ''), CONCAT('ADM-', s.StudentId)) AS AdmissionNo,
-                    COALESCE(s.RollNo, '') AS RollNo,
-                    COALESCE(NULLIF(s.StudentName, ''), 'Student') AS StudentName,
-                    COALESCE(g.GroupName, '') AS GroupName,
-                    COALESCE(sec.SectionName, '') AS SectionName,
-                    COALESCE(ay.AcademicYearName, '') AS AcademicYear,
-                    COALESCE(b.BoardName, '') AS BoardName,
-                    s.AcademicYearId,
-                    s.BoardId,
-                    s.GroupId,
-                    s.SectionId,
-                    COALESCE(s.IsActive, 1) AS IsActive
-                FROM `Students` s
-                LEFT JOIN `Groups` g ON g.GroupId = s.GroupId
-                LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
-                LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = s.AcademicYearId
-                LEFT JOIN `Boards` b ON b.BoardId = s.BoardId
-
-                UNION ALL
-
-                SELECT 
-                    sa.AdmissionId AS StudentId,
-                    COALESCE(NULLIF(sa.AdmissionNo, ''), CONCAT('ADM-', sa.AdmissionId)) AS AdmissionNo,
-                    '' AS RollNo,
-                    TRIM(CONCAT(COALESCE(sa.FirstName, ''), ' ', COALESCE(sa.LastName, ''))) AS StudentName,
-                    COALESCE(g.GroupName, '') AS GroupName,
-                    '' AS SectionName,
-                    COALESCE(ay.AcademicYearName, '') AS AcademicYear,
-                    COALESCE(b.BoardName, '') AS BoardName,
-                    sa.AcademicYearId,
-                    sa.BoardId,
-                    sa.GroupId,
-                    CAST(NULL AS SIGNED) AS SectionId,
-                    COALESCE(sa.IsActive, 1) AS IsActive
-                FROM `StudentAdmissions` sa
-                LEFT JOIN `Groups` g ON g.GroupId = sa.GroupId
-                LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = sa.AcademicYearId
-                LEFT JOIN `Boards` b ON b.BoardId = sa.BoardId
-                WHERE NOT EXISTS (SELECT 1 FROM `Students` s2 WHERE s2.AdmissionNo = sa.AdmissionNo AND sa.AdmissionNo IS NOT NULL AND sa.AdmissionNo <> '')
-            ) combined
-            WHERE IsActive = 1
-              AND (@academicYearId IS NULL OR AcademicYearId = @academicYearId)
-              AND (@boardId IS NULL OR BoardId = @boardId)
-              AND (@groupId IS NULL OR GroupId = @groupId)
-              AND (@sectionId IS NULL OR SectionId = @sectionId)
-              AND (
-                  @search IS NULL OR @search = '' OR
-                  AdmissionNo LIKE CONCAT('%', @search, '%') OR
-                  StudentName LIKE CONCAT('%', @search, '%') OR
-                  RollNo LIKE CONCAT('%', @search, '%')
-              )
-            ORDER BY StudentName ASC;";
+        var parameters = new DynamicParameters();
+        parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+        parameters.Add("p_BoardId", boardId, DbType.Int32);
+        parameters.Add("p_GroupId", groupId, DbType.Int32);
+        parameters.Add("p_SectionId", sectionId, DbType.Int32);
+        parameters.Add("p_Search", search?.Trim(), DbType.String);
+        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            var list = (await connection.QueryAsync<BulkEligibleStudentDto>(
-                new CommandDefinition(sql, new { academicYearId, boardId, groupId, sectionId, search }, cancellationToken: ct))).ToList();
+            var list = (await connection.QueryAsync<BulkEligibleStudentDto>(new CommandDefinition(
+                "sp_GetBulkEligibleStudentsForCertificates",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct))).ToList();
 
             return list;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"GetBulkEligibleStudentsAsync Error: {ex.Message}");
+            Console.WriteLine($"[CertificateRepository.GetBulkEligibleStudentsAsync] Error: {ex.Message}");
             return new List<BulkEligibleStudentDto>();
         }
     }
 
-    private static async Task<HashSet<string>> GetCertificateTableColumnsAsync(IDbConnection connection)
-    {
-        try
-        {
-            var cols = await connection.QueryAsync<string>(@"
-                SELECT COLUMN_NAME FROM information_schema.columns 
-                WHERE table_schema = DATABASE() AND table_name = 'certificates';");
-            return cols.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Id", "CertificateNo", "Status" };
-        }
-    }
-
     // =========================================================
-    // DYNAMIC ROW MAPPER (Handles both Legacy & New DB columns)
+    // DYNAMIC ROW MAPPER (Handles all DB column names)
     // =========================================================
     private static CertificateResponseDto MapDynamicToDto(dynamic row)
     {
@@ -1557,6 +1258,18 @@ public class CertificateRepository : ICertificateRepository
         if (dict.ContainsKey("DateOfBirth") && dict["DateOfBirth"] is DateTime d1) dob = d1;
         else if (dict.ContainsKey("S_DateOfBirth") && dict["S_DateOfBirth"] is DateTime d2) dob = d2;
 
+        int? campusId = null;
+        if (dict.ContainsKey("CampusId") && dict["CampusId"] != null)
+            campusId = Convert.ToInt32(dict["CampusId"]);
+        else if (dict.ContainsKey("S_CampusId") && dict["S_CampusId"] != null)
+            campusId = Convert.ToInt32(dict["S_CampusId"]);
+
+        string? campusName = null;
+        if (dict.ContainsKey("CampusName") && dict["CampusName"] != null)
+            campusName = dict["CampusName"].ToString()!.Trim();
+        else if (dict.ContainsKey("S_CampusName") && dict["S_CampusName"] != null)
+            campusName = dict["S_CampusName"].ToString()!.Trim();
+
         return new CertificateResponseDto
         {
             CertificateId = id,
@@ -1580,6 +1293,8 @@ public class CertificateRepository : ICertificateRepository
             Section = section,
             BoardName = boardName,
             DateOfBirth = dob,
+            CampusId = campusId,
+            CampusName = campusName,
             IsActive = !status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) && !status.Equals("Deleted", StringComparison.OrdinalIgnoreCase)
         };
     }

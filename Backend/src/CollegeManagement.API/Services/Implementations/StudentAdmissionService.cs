@@ -103,9 +103,9 @@ namespace CollegeManagement.API.Services.Implementations
         // =====================================================
 
         public async Task<IEnumerable<StudentAdmissionResponseDto>>
-            GetAllAsync()
+            GetAllAsync(int? campusId = null)
         {
-            return await _repository.GetAllAsync();
+            return await _repository.GetAllAsync(campusId);
         }
 
 

@@ -1,8 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import apiClient from "@/api/axios.js";
-import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { getAuthToken } from "@/features/authStorage.js";
+import apiClient from "../api/axios.js";
+import { apiEndpoints } from "../api/apiEndpoints.js";
+import { getAuthToken } from "../features/authStorage.js";
+import { useCampusContext } from "./CampusContext.jsx";
 
 const AcademicContext = createContext(null);
 const BOARD_STORAGE_KEY = "cms_selected_board";
@@ -21,12 +22,12 @@ const BOARD_CODE_TO_NAME = {
 };
 
 const DEFAULT_BOARDS = [
-  { id: "1", code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh", boardName: "Board of Intermediate Education, Andhra Pradesh" },
-  { id: "2", code: "TGBIE", name: "Telangana Board of Intermediate Education", boardName: "Telangana Board of Intermediate Education" },
-  { id: "3", code: "CBSE", name: "Central Board of Secondary Education", boardName: "Central Board of Secondary Education" },
-  { id: "4", code: "CISCE", name: "Council for the Indian School Certificate Examinations", boardName: "Council for the Indian School Certificate Examinations" },
-  { id: "5", code: "PUC-KA", name: "Karnataka Pre-University Education", boardName: "Karnataka Pre-University Education" },
-  { id: "6", code: "DGE-TN", name: "Tamil Nadu State Board – Higher Secondary", boardName: "Tamil Nadu State Board – Higher Secondary" },
+  { id: "1", boardId: 1, code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh", boardName: "Board of Intermediate Education, Andhra Pradesh" },
+  { id: "2", boardId: 2, code: "TGBIE", name: "Telangana Board of Intermediate Education", boardName: "Telangana Board of Intermediate Education" },
+  { id: "3", boardId: 3, code: "CBSE", name: "Central Board of Secondary Education", boardName: "Central Board of Secondary Education" },
+  { id: "4", boardId: 4, code: "CISCE", name: "Council for the Indian School Certificate Examinations", boardName: "Council for the Indian School Certificate Examinations" },
+  { id: "5", boardId: 5, code: "PUC-KA", name: "Karnataka Pre-University Education", boardName: "Karnataka Pre-University Education" },
+  { id: "6", boardId: 6, code: "DGE-TN", name: "Tamil Nadu State Board – Higher Secondary", boardName: "Tamil Nadu State Board – Higher Secondary" },
 ];
 
 const DEFAULT_ACADEMIC_YEARS = [
@@ -35,9 +36,7 @@ const DEFAULT_ACADEMIC_YEARS = [
   { id: "3", code: "2024-2025", name: "2024-2025", label: "2024-2025" },
 ];
 
-// Board/academic-year APIs are not entirely consistent about envelopes. Some
-// deployments return `Items`, while others wrap that result in `data`/`Data`.
-// Unwrap the known response shapes before deciding the list is empty.
+// Unwrap API response shapes
 const asList = (response) => {
   const unwrap = (value, depth = 0) => {
     if (Array.isArray(value)) return value;
@@ -55,46 +54,63 @@ const asList = (response) => {
 
   return unwrap(response?.data ?? response);
 };
+
 const valueOf = (item, ...keys) => keys.map((key) => item?.[key]).find((value) => value !== undefined && value !== null);
 const normalize = (value) => String(value ?? "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "");
+
 const isActive = (item) => {
   const value = valueOf(item, "isActive", "IsActive", "active", "Active", "status", "Status");
   const text = String(value ?? "").trim().toLowerCase();
   return value == null || !(value === false || value === 0 || text === "false" || text === "inactive");
 };
+
 const boardIdOf = (board) => valueOf(board, "id", "boardId", "BoardId");
 const yearIdOf = (year) => valueOf(year, "id", "academicYearId", "AcademicYearId");
 const readStored = (key) => { try { const stored = localStorage.getItem(key); return stored ? JSON.parse(stored) : null; } catch { return null; } };
 const persist = (key, value) => { try { if (value) localStorage.setItem(key, JSON.stringify(value)); else localStorage.removeItem(key); } catch { /* storage can be unavailable */ } };
+
 const mapBoard = (item, index) => {
-  const id = valueOf(item, "boardId", "BoardId", "id", "Id") ?? index + 1;
+  const id = valueOf(item, "boardId", "BoardId", "id", "Id") ?? (index !== undefined ? index + 1 : 1);
   const rawCode = valueOf(item, "boardCode", "BoardCode", "code", "Code") ?? `BOARD-${id}`;
   const rawName = valueOf(item, "boardName", "BoardName", "fullName", "FullName", "name", "Name");
   const codeKey = String(rawCode).trim().toLowerCase();
   const nameKey = String(rawName || "").trim().toLowerCase();
   const resolvedName = (rawName && rawName !== rawCode) ? rawName : (BOARD_CODE_TO_NAME[codeKey] || BOARD_CODE_TO_NAME[nameKey] || rawName || rawCode);
-  return { ...item, id: String(id), code: String(rawCode), name: String(resolvedName), boardName: String(resolvedName) };
+  return { ...item, id: String(id), boardId: Number(id) || id, code: String(rawCode), name: String(resolvedName), boardName: String(resolvedName) };
 };
+
 const mapYear = (item, index) => {
   const id = valueOf(item, "academicYearId", "AcademicYearId", "id", "Id") ?? index + 1;
   const name = valueOf(item, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "code", "Code") ?? id;
   return { ...item, id: String(id), code: String(name), name: String(name), label: String(name) };
 };
+
 const uniqueById = (items = []) => Array.from(items.reduce((lookup, item) => {
-  const id = String(item?.id ?? "").trim();
+  const id = String(item?.id ?? item?.boardId ?? "").trim();
   const identity = id || normalize(item?.code ?? item?.name ?? item?.label);
   if (identity && !lookup.has(identity)) lookup.set(identity, item);
   return lookup;
 }, new Map()).values());
-const sameBoard = (left, right) => String(boardIdOf(left) ?? "") === String(boardIdOf(right) ?? "") || normalize(left?.code ?? left?.name ?? left?.boardName) === normalize(right?.code ?? right?.name ?? right?.boardName);
+
+const sameBoard = (left, right) => {
+  if (!left || !right) return false;
+  const leftId = String(boardIdOf(left) ?? "");
+  const rightId = String(boardIdOf(right) ?? "");
+  if (leftId && rightId && leftId === rightId) return true;
+  return normalize(left?.code ?? left?.name ?? left?.boardName) === normalize(right?.code ?? right?.name ?? right?.boardName);
+};
+
 const sameYear = (left, right) => String(yearIdOf(left) ?? "") === String(yearIdOf(right) ?? "") || normalize(left?.code ?? left?.name ?? left?.label) === normalize(right?.code ?? right?.name ?? right?.label);
 
 export function AcademicProvider({ children }) {
   useLocation();
-  // Re-evaluate storage when navigation occurs after login/logout. Academic
-  // masters are private application data and should not load on public pages.
   const isAuthenticated = Boolean(getAuthToken());
-  const [boards, setBoards] = useState(() => uniqueById(readStored("cms_cached_boards") || DEFAULT_BOARDS));
+
+  // Connect to Campus Context to filter boards dynamically based on selected campus
+  const campusContext = useCampusContext();
+  const selectedCampus = campusContext?.selectedCampus;
+
+  const [allBoards, setAllBoards] = useState(() => uniqueById(readStored("cms_cached_boards") || DEFAULT_BOARDS));
   const [academicYears, setAcademicYears] = useState(() => uniqueById(readStored("cms_cached_academic_years") || DEFAULT_ACADEMIC_YEARS));
   const [boardsLoading, setBoardsLoading] = useState(false);
   const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
@@ -103,15 +119,97 @@ export function AcademicProvider({ children }) {
   const [selectedBoard, setSelectedBoardState] = useState(() => readStored(BOARD_STORAGE_KEY) || DEFAULT_BOARDS[0]);
   const [selectedAcademicYear, setSelectedAcademicYearState] = useState(() => readStored(YEAR_STORAGE_KEY) || DEFAULT_ACADEMIC_YEARS[0]);
   const [refreshToken, setRefreshToken] = useState(0);
+
   const selectedBoardId = boardIdOf(selectedBoard);
   const selectedAcademicYearId = yearIdOf(selectedAcademicYear);
   const refreshAcademicContext = useCallback(() => setRefreshToken((value) => value + 1), []);
 
+  // Filter boards based on selected campus's affiliated boards
+  const boards = useMemo(() => {
+    if (!selectedCampus) return allBoards;
+
+    const affiliated = Array.isArray(selectedCampus.affiliatedBoards) && selectedCampus.affiliatedBoards.length > 0
+      ? selectedCampus.affiliatedBoards
+      : [];
+
+    const boardIds = Array.isArray(selectedCampus.boardIds) && selectedCampus.boardIds.length > 0
+      ? selectedCampus.boardIds.map((id) => String(id))
+      : [];
+
+    const boardNames = Array.isArray(selectedCampus.boards) && selectedCampus.boards.length > 0
+      ? selectedCampus.boards.map((n) => normalize(n))
+      : [];
+
+    // If campus does not have any board restrictions defined, return allBoards
+    if (!affiliated.length && !boardIds.length && !boardNames.length) {
+      return allBoards;
+    }
+
+    // Match master boards with selected campus's affiliated board definitions
+    const matched = allBoards.filter((b) => {
+      const bId = String(b.id || b.boardId || "");
+      const bCode = normalize(b.code || b.boardCode || "");
+      const bName = normalize(b.name || b.boardName || "");
+
+      const matchesAffiliated = affiliated.some((aff) => {
+        const affId = String(aff.boardId || aff.id || "");
+        const affCode = normalize(aff.boardCode || aff.code || "");
+        const affName = normalize(aff.boardName || aff.name || "");
+        return (affId && affId === bId) || (affCode && affCode === bCode) || (affName && affName === bName);
+      });
+
+      const matchesId = boardIds.length > 0 && boardIds.includes(bId);
+      const matchesName = boardNames.length > 0 && (boardNames.includes(bName) || boardNames.includes(bCode));
+
+      return matchesAffiliated || matchesId || matchesName;
+    });
+
+    if (matched.length > 0) return matched;
+
+    // If affiliated list is available directly from campus object, map it
+    if (affiliated.length > 0) {
+      return uniqueById(affiliated.map(mapBoard));
+    }
+
+    if (boardNames.length > 0) {
+      return uniqueById(boardNames.map((name, index) => {
+        const foundFallback = DEFAULT_BOARDS.find((db) => normalize(db.name) === name || normalize(db.code) === name);
+        if (foundFallback) return foundFallback;
+        return {
+          id: String(index + 1),
+          boardId: index + 1,
+          code: name.slice(0, 6).toUpperCase(),
+          name,
+          boardName: name,
+        };
+      }));
+    }
+
+    return allBoards;
+  }, [allBoards, selectedCampus]);
+
+  // Keep selectedBoard in sync with the campus's available boards
+  useEffect(() => {
+    if (!boards?.length) return;
+
+    setSelectedBoardState((current) => {
+      const isCurrentValid = current && boards.some((b) => sameBoard(b, current));
+      if (isCurrentValid) return current;
+
+      const next = boards[0];
+      persist(BOARD_STORAGE_KEY, next);
+      return next;
+    });
+  }, [boards]);
+
   const setSelectedBoard = useCallback((boardOrId) => {
-    const board = typeof boardOrId === "object" && boardOrId !== null ? boardOrId : boards.find((item) => String(item.id) === String(boardOrId) || String(item.code) === String(boardOrId) || String(item.name) === String(boardOrId)) ?? null;
+    const pool = boards.length ? boards : allBoards;
+    const board = typeof boardOrId === "object" && boardOrId !== null 
+      ? boardOrId 
+      : pool.find((item) => String(item.id) === String(boardOrId) || String(item.code) === String(boardOrId) || String(item.name) === String(boardOrId)) ?? null;
     setSelectedBoardState(board);
     persist(BOARD_STORAGE_KEY, board);
-  }, [boards]);
+  }, [boards, allBoards]);
 
   const setSelectedAcademicYear = useCallback((yearOrId) => {
     const year = typeof yearOrId === "object" && yearOrId !== null ? yearOrId : academicYears.find((item) => String(item.id) === String(yearOrId) || normalize(item.code) === normalize(yearOrId) || normalize(item.name) === normalize(yearOrId)) ?? null;
@@ -124,6 +222,7 @@ export function AcademicProvider({ children }) {
     return () => window.removeEventListener("cms_academic_masters_updated", refreshAcademicContext);
   }, [refreshAcademicContext]);
 
+  // Fetch Master Boards
   useEffect(() => {
     if (!isAuthenticated) {
       setBoardsLoading(false);
@@ -136,27 +235,18 @@ export function AcademicProvider({ children }) {
       if (!active) return;
       const fetched = uniqueById(asList(response).filter(isActive).map(mapBoard));
       const nextBoards = fetched.length ? fetched : DEFAULT_BOARDS;
-      setBoards(nextBoards);
+      setAllBoards(nextBoards);
       persist("cms_cached_boards", nextBoards);
-      setSelectedBoardState((current) => {
-        const next = nextBoards.find((board) => sameBoard(board, current)) ?? nextBoards[0];
-        persist(BOARD_STORAGE_KEY, next);
-        return next;
-      });
     }).catch(() => {
       if (!active) return;
       const fallbackBoards = uniqueById(readStored("cms_cached_boards") || DEFAULT_BOARDS);
-      setBoards(fallbackBoards);
+      setAllBoards(fallbackBoards);
       setBoardsError("");
-      setSelectedBoardState((current) => {
-        const next = fallbackBoards.find((board) => sameBoard(board, current)) ?? fallbackBoards[0];
-        persist(BOARD_STORAGE_KEY, next);
-        return next;
-      });
     }).finally(() => active && setBoardsLoading(false));
     return () => { active = false; };
   }, [isAuthenticated, refreshToken]);
 
+  // Fetch Academic Years for the effective board
   useEffect(() => {
     if (!isAuthenticated) {
       setAcademicYearsLoading(false);
@@ -182,7 +272,8 @@ export function AcademicProvider({ children }) {
       if (!active) return;
       const fetched = uniqueById(asList(response).filter((year) => {
         const boardId = valueOf(year, "boardId", "BoardId");
-        return (boardId == null || String(boardId) === String(effectiveBoardId)) && isActive(year);
+        const name = String(valueOf(year, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "code", "Code") || "");
+        return (boardId == null || String(boardId) === String(effectiveBoardId)) && isActive(year) && !name.includes("2028") && !name.includes("2029");
       }).map(mapYear));
       const nextYears = fetched.length ? fetched : DEFAULT_ACADEMIC_YEARS;
       setAcademicYears(nextYears);
@@ -207,18 +298,59 @@ export function AcademicProvider({ children }) {
   }, [isAuthenticated, selectedBoardId, selectedBoard, refreshToken]);
 
   const value = useMemo(() => ({
-    boards, academicYears, selectedBoard, selectedBoardId, selectedAcademicYear, selectedAcademicYearId,
-    setSelectedBoard, setSelectedAcademicYear, boardsLoading, academicYearsLoading, boardsError, academicYearsError, refreshAcademicContext,
-  }), [academicYears, academicYearsError, academicYearsLoading, boards, boardsError, boardsLoading, refreshAcademicContext, selectedAcademicYear, selectedAcademicYearId, selectedBoard, selectedBoardId, setSelectedAcademicYear, setSelectedBoard]);
+    boards,
+    allBoards,
+    academicYears,
+    selectedBoard,
+    selectedBoardId,
+    selectedAcademicYear,
+    selectedAcademicYearId,
+    setSelectedBoard,
+    setSelectedAcademicYear,
+    boardsLoading,
+    academicYearsLoading,
+    boardsError,
+    academicYearsError,
+    refreshAcademicContext,
+  }), [
+    academicYears,
+    academicYearsError,
+    academicYearsLoading,
+    boards,
+    allBoards,
+    boardsError,
+    boardsLoading,
+    refreshAcademicContext,
+    selectedAcademicYear,
+    selectedAcademicYearId,
+    selectedBoard,
+    selectedBoardId,
+    setSelectedAcademicYear,
+    setSelectedBoard,
+  ]);
+
   return <AcademicContext.Provider value={value}>{children}</AcademicContext.Provider>;
 }
 
 export function useAcademicContext() {
   const context = useContext(AcademicContext);
   return context ?? {
-    boards: [], academicYears: [], selectedBoard: null, selectedBoardId: undefined,
-    selectedAcademicYear: null, selectedAcademicYearId: undefined, boardsLoading: false, academicYearsLoading: false,
-    boardsError: "", academicYearsError: "",
-    setSelectedBoard: () => {}, setSelectedAcademicYear: () => {}, refreshAcademicContext: () => {},
+    boards: [],
+    allBoards: [],
+    academicYears: [],
+    selectedBoard: null,
+    selectedBoardId: undefined,
+    selectedAcademicYear: null,
+    selectedAcademicYearId: undefined,
+    boardsLoading: false,
+    academicYearsLoading: false,
+    boardsError: "",
+    academicYearsError: "",
+    setSelectedBoard: () => {},
+    setSelectedAcademicYear: () => {},
+    refreshAcademicContext: () => {},
   };
 }
+
+export const useAcademic = useAcademicContext;
+export default AcademicContext;

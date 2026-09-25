@@ -37,11 +37,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             // Fetch staff members filtered by staff type, board, and optional department
             var query = _context.Staffs
-                .Where(f => !f.IsDeleted && (f.Status == "Active" || f.Status == null));
+                .Where(f => !f.IsDeleted && (f.Status == "Active" || f.Status == null)); if (request.CampusId.HasValue) query = query.Where(f => f.CampusId == request.CampusId.Value);
 
             if (request.BoardId.HasValue && request.BoardId.Value > 0)
             {
-                query = query.Where(f => f.BoardId == request.BoardId.Value);
+                query = query.Where(f => f.BoardId == request.BoardId.Value || f.BoardId == null || f.BoardId == 0);
             }
 
             if (request.StaffType.HasValue)
@@ -59,6 +59,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)
             {
                 query = query.Where(f => f.DepartmentId == request.DepartmentId.Value);
+            }
+
+            if (request.CampusId.HasValue && request.CampusId.Value > 0)
+            {
+                query = query.Where(f => f.CampusId == request.CampusId.Value);
             }
 
             var facultyList = await query
@@ -189,13 +194,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.StaffAttendances)
                 .FirstOrDefaultAsync(s => s.AttendanceDate.Date == targetDate
                                           && s.StaffType == request.StaffType
-                                          && (request.DepartmentId == null || s.DepartmentId == request.DepartmentId));
+                                          && (request.DepartmentId == null || s.DepartmentId == request.DepartmentId)
+                                          && (request.CampusId == null || s.CampusId == request.CampusId));
 
             if (session == null)
             {
                 session = new StaffAttendanceSession
                 {
-                    AttendanceDate = targetDate,
+                    AttendanceDate = targetDate, CampusId = request.CampusId,
                     DepartmentId = request.DepartmentId > 0 ? request.DepartmentId : null,
                     StaffType = request.StaffType,
                     TotalStaffCount = request.StaffAttendances.Count,
@@ -402,7 +408,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                     session = new StaffAttendanceSession
                     {
-                        AttendanceDate = targetDate,
+                        AttendanceDate = targetDate, CampusId = request.CampusId,
                         DepartmentId = request.DepartmentId > 0 ? request.DepartmentId : null,
                         StaffType = request.StaffType,
                         TotalStaffCount = await query.CountAsync(),
@@ -541,7 +547,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var monthHolidays = await _context.Holidays
                 .Where(h => !h.IsDeleted && h.Status == "Active"
                          && h.StartDate <= monthEndDate && h.EndDate >= monthStartDate
-                         && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"))
+                         && (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only") && (!request.CampusId.HasValue || h.CampusId == request.CampusId))
                 .ToListAsync();
 
             var dayHeaders = new List<DayHeaderDto>();
@@ -581,7 +587,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (request.BoardId.HasValue && request.BoardId.Value > 0)
             {
-                facultyQuery = facultyQuery.Where(f => f.BoardId == request.BoardId.Value);
+                facultyQuery = facultyQuery.Where(f => f.BoardId == request.BoardId.Value || f.BoardId == null || f.BoardId == 0);
             }
 
             if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)
@@ -592,6 +598,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (request.FacultyId.HasValue && request.FacultyId.Value > 0)
             {
                 facultyQuery = facultyQuery.Where(f => f.Id == request.FacultyId.Value);
+            }
+
+            if (request.CampusId.HasValue && request.CampusId.Value > 0)
+            {
+                facultyQuery = facultyQuery.Where(f => f.CampusId == request.CampusId.Value);
             }
 
             var facultyList = await facultyQuery.OrderBy(f => f.FirstName).ToListAsync();

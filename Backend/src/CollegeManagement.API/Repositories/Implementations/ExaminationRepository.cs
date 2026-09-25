@@ -148,26 +148,54 @@ namespace CollegeManagement.API.Repositories.Implementations
             var p = new DynamicParameters();
             p.Add("p_ExaminationId", examinationId);
 
-            var exam = await Connection.QueryFirstOrDefaultAsync<Examination>(
+            var row = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_GetExaminationById",
                 p,
                 commandType: CommandType.StoredProcedure);
 
-            if (exam != null)
-            {
-                var schedules = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
-                    "sp_GetExamSchedulesByExamination",
-                    (schedule, subject) =>
-                    {
-                        schedule.Subject = subject;
-                        return schedule;
-                    },
-                    p,
-                    splitOn: "SubjectName",
-                    commandType: CommandType.StoredProcedure);
+            if (row == null) return null;
 
-                exam.ExamSchedules = schedules.ToList();
-            }
+            var exam = new Examination
+            {
+                ExaminationId = (int)row.ExamId,
+                ExamCode = (string?)row.ExamCode,
+                ExamName = (string)row.ExamName,
+                BoardId = (int)row.BoardId,
+                AcademicYearId = (int)row.AcademicYearId,
+                AcademicLevelId = (int)row.AcademicLevelId,
+                GroupId = (int)row.GroupId,
+                ProgramId = (int?)row.ProgramId,
+                AssessmentTypeId = (int)row.AssessmentTypeId,
+                StartDate = row.StartDate is DateTime dtStart ? DateOnly.FromDateTime(dtStart) : (row.StartDate is DateOnly dStart ? dStart : DateOnly.FromDateTime(Convert.ToDateTime(row.StartDate))),
+                EndDate = row.EndDate is DateTime dtEnd ? DateOnly.FromDateTime(dtEnd) : (row.EndDate is DateOnly dEnd ? dEnd : DateOnly.FromDateTime(Convert.ToDateTime(row.EndDate))),
+                Description = (string?)row.Description,
+                ExamPattern = (string?)row.ExamPattern,
+                TotalMarks = (int?)row.TotalMarks,
+                PassPercentage = row.PassPercentage != null ? Convert.ToDecimal(row.PassPercentage) : null,
+                Status = (string)(row.Status ?? "DRAFT"),
+                IsActive = Convert.ToBoolean(row.IsActive),
+                CreatedAt = (DateTime)row.CreatedAt,
+                UpdatedAt = (DateTime?)row.UpdatedAt,
+                Board = new Board { BoardId = (int)row.BoardId, BoardName = (string)(row.BoardName ?? string.Empty) },
+                AcademicYear = new AcademicYear { AcademicYearId = (int)row.AcademicYearId, AcademicYearName = (string)(row.AcademicYearName ?? row.AcademicYear ?? string.Empty) },
+                AcademicLevel = new AcademicLevel { AcademicLevelId = (int)row.AcademicLevelId, LevelName = (string)(row.AcademicLevelName ?? row.AcademicLevel ?? string.Empty) },
+                Group = new Group { GroupId = (int)row.GroupId, GroupName = (string)(row.GroupName ?? string.Empty) },
+                Program = row.ProgramId != null ? new AcademicProgram { ProgramId = (int)row.ProgramId, ProgramName = (string)(row.ProgramName ?? string.Empty) } : null,
+                AssessmentType = new AssessmentType { AssessmentTypeId = (int)row.AssessmentTypeId, AssessmentTypeName = (string)(row.ExamType ?? string.Empty) }
+            };
+
+            var schedules = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
+                "sp_GetExamSchedulesByExamination",
+                (schedule, subject) =>
+                {
+                    schedule.Subject = subject;
+                    return schedule;
+                },
+                p,
+                splitOn: "SubjectName",
+                commandType: CommandType.StoredProcedure);
+
+            exam.ExamSchedules = schedules.ToList();
 
             return exam;
         }
@@ -183,13 +211,41 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_AssessmentTypeId", filter.AssessmentTypeId > 0 ? filter.AssessmentTypeId : null);
             p.Add("p_Status", string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status);
             p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter.SearchTerm) ? null : filter.SearchTerm);
+            p.Add("p_CampusId", filter.CampusId > 0 ? filter.CampusId : null);
 
-            var results = await Connection.QueryAsync<Examination>(
+            var rows = await Connection.QueryAsync<dynamic>(
                 "sp_GetExaminations",
                 p,
                 commandType: CommandType.StoredProcedure);
 
-            return results;
+            return rows.Select(row => new Examination
+            {
+                ExaminationId = (int)row.ExamId,
+                ExamCode = (string?)row.ExamCode,
+                ExamName = (string)row.ExamName,
+                BoardId = (int)row.BoardId,
+                AcademicYearId = (int)row.AcademicYearId,
+                AcademicLevelId = (int)row.AcademicLevelId,
+                GroupId = (int)row.GroupId,
+                ProgramId = (int?)row.ProgramId,
+                AssessmentTypeId = (int)row.AssessmentTypeId,
+                StartDate = row.StartDate is DateTime dtStart ? DateOnly.FromDateTime(dtStart) : (row.StartDate is DateOnly dStart ? dStart : DateOnly.FromDateTime(Convert.ToDateTime(row.StartDate))),
+                EndDate = row.EndDate is DateTime dtEnd ? DateOnly.FromDateTime(dtEnd) : (row.EndDate is DateOnly dEnd ? dEnd : DateOnly.FromDateTime(Convert.ToDateTime(row.EndDate))),
+                Description = (string?)row.Description,
+                ExamPattern = (string?)row.ExamPattern,
+                TotalMarks = (int?)row.TotalMarks,
+                PassPercentage = row.PassPercentage != null ? Convert.ToDecimal(row.PassPercentage) : null,
+                Status = (string)(row.Status ?? "DRAFT"),
+                IsActive = Convert.ToBoolean(row.IsActive),
+                CreatedAt = (DateTime)row.CreatedAt,
+                UpdatedAt = (DateTime?)row.UpdatedAt,
+                Board = new Board { BoardId = (int)row.BoardId, BoardName = (string)(row.BoardName ?? string.Empty) },
+                AcademicYear = new AcademicYear { AcademicYearId = (int)row.AcademicYearId, AcademicYearName = (string)(row.AcademicYearName ?? row.AcademicYear ?? string.Empty) },
+                AcademicLevel = new AcademicLevel { AcademicLevelId = (int)row.AcademicLevelId, LevelName = (string)(row.AcademicLevelName ?? row.AcademicLevel ?? string.Empty) },
+                Group = new Group { GroupId = (int)row.GroupId, GroupName = (string)(row.GroupName ?? string.Empty) },
+                Program = row.ProgramId != null ? new AcademicProgram { ProgramId = (int)row.ProgramId, ProgramName = (string)(row.ProgramName ?? string.Empty) } : null,
+                AssessmentType = new AssessmentType { AssessmentTypeId = (int)row.AssessmentTypeId, AssessmentTypeName = (string)(row.ExamType ?? string.Empty) }
+            }).ToList();
         }
 
         public async Task<IEnumerable<ExaminationResponse>> GetExaminationResponsesAsync(ExaminationSearchRequestDto filter)
@@ -203,6 +259,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_AssessmentTypeId", filter.AssessmentTypeId > 0 ? filter.AssessmentTypeId : null);
             p.Add("p_Status", string.IsNullOrWhiteSpace(filter.Status) ? null : filter.Status);
             p.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter.SearchTerm) ? null : filter.SearchTerm);
+            p.Add("p_CampusId", filter.CampusId > 0 ? filter.CampusId : null);
 
             var results = await Connection.QueryAsync<ExaminationResponse>(
                 "sp_GetExaminations",

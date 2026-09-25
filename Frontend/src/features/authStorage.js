@@ -23,6 +23,21 @@ export const clearAuthSession = () => {
     try { window.localStorage.removeItem(key); } catch { /* Storage may be unavailable. */ }
     try { window.sessionStorage.removeItem(key); } catch { /* Storage may be unavailable. */ }
   });
+  try {
+    window.localStorage.removeItem("staff_profile_data");
+    window.sessionStorage.removeItem("staff_profile_data");
+    // Also remove any namespaced staff profiles
+    Object.keys(window.localStorage || {}).forEach((k) => {
+      if (k.startsWith("staff_profile_")) {
+        window.localStorage.removeItem(k);
+      }
+    });
+    Object.keys(window.sessionStorage || {}).forEach((k) => {
+      if (k.startsWith("staff_profile_")) {
+        window.sessionStorage.removeItem(k);
+      }
+    });
+  } catch { /* Storage unavailable */ }
 };
 
 export const saveAuthSession = ({ token, user, role }, persistent) => {

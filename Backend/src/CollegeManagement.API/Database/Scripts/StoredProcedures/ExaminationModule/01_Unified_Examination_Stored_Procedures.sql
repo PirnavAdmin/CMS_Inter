@@ -37,7 +37,7 @@ DELIMITER //
 -- 1. sp_GetExaminations
 -- Retrieves all examinations with rich academic context and pre-aggregated counts
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_GetExaminations(
+CREATE PROCEDURE `sp_GetExaminations`(
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
     IN p_AcademicLevelId INT,
@@ -46,7 +46,8 @@ CREATE PROCEDURE sp_GetExaminations(
     IN p_AssessmentTypeId INT,
     IN p_Status VARCHAR(50),
     IN p_SearchTerm VARCHAR(150)
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         e.ExamId,
@@ -119,9 +120,10 @@ END //
 -- 2. sp_GetExaminationById
 -- Retrieves single examination details with all foreign key names
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_GetExaminationById(
+CREATE PROCEDURE `sp_GetExaminationById`(
     IN p_ExaminationId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         e.ExamId,
@@ -179,7 +181,7 @@ END //
 -- 3. sp_CreateExamination
 -- Inserts a new examination and returns the newly generated ExamId
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_CreateExamination(
+CREATE PROCEDURE `sp_CreateExamination`(
     IN p_ExamCode VARCHAR(50),
     IN p_ExamName VARCHAR(150),
     IN p_BoardId INT,
@@ -195,9 +197,10 @@ CREATE PROCEDURE sp_CreateExamination(
     IN p_TotalMarks INT,
     IN p_PassPercentage DECIMAL(5,2),
     IN p_Status VARCHAR(50)
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    INSERT INTO Examinations (
+    INSERT INTO `Examinations` (
         ExamCode,
         ExamName,
         BoardId,
@@ -216,7 +219,7 @@ BEGIN
         IsActive,
         CreatedAt,
         UpdatedAt
-    ) VALUES (
+    , CampusId) VALUES (
         p_ExamCode,
         p_ExamName,
         p_BoardId,
@@ -228,7 +231,7 @@ BEGIN
         p_StartDate,
         p_EndDate,
         p_Description,
-        COALESCE(p_ExamPattern, 'REGULAR_ACADEMIC'),
+        COALESCE(p_ExamPattern, 'REGULAR_ACADEMIC', p_CampusId),
         p_TotalMarks,
         p_PassPercentage,
         COALESCE(p_Status, 'DRAFT'),
@@ -244,7 +247,7 @@ END //
 -- 4. sp_UpdateExamination
 -- Updates existing examination details
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_UpdateExamination(
+CREATE PROCEDURE `sp_UpdateExamination`(
     IN p_ExamId INT,
     IN p_ExamName VARCHAR(150),
     IN p_BoardId INT,
@@ -260,10 +263,10 @@ CREATE PROCEDURE sp_UpdateExamination(
     IN p_TotalMarks INT,
     IN p_PassPercentage DECIMAL(5,2),
     IN p_Status VARCHAR(50)
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    UPDATE Examinations
-    SET 
+    UPDATE `Examinations` SET 
         ExamName = COALESCE(p_ExamName, ExamName),
         BoardId = COALESCE(p_BoardId, BoardId),
         AcademicYearId = COALESCE(p_AcademicYearId, AcademicYearId),
@@ -286,12 +289,12 @@ END //
 -- 5. sp_DeleteExamination
 -- Soft deletes an examination entry
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_DeleteExamination(
+CREATE PROCEDURE `sp_DeleteExamination`(
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    UPDATE Examinations
-    SET 
+    UPDATE `Examinations` SET 
         IsActive = 0,
         UpdatedAt = UTC_TIMESTAMP()
     WHERE ExamId = p_ExamId;
@@ -301,9 +304,10 @@ END //
 -- 6. sp_GetExamSchedulesByExamination
 -- Retrieves all schedules for an examination ordered by date and time
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_GetExamSchedulesByExamination(
+CREATE PROCEDURE `sp_GetExamSchedulesByExamination`(
     IN p_ExaminationId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         es.ScheduleId AS ExamScheduleId,
@@ -337,9 +341,10 @@ END //
 -- 7. sp_GetExamScheduleById
 -- Retrieves single schedule by ID
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_GetExamScheduleById(
+CREATE PROCEDURE `sp_GetExamScheduleById`(
     IN p_ExamScheduleId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         es.ScheduleId AS ExamScheduleId,
@@ -371,7 +376,7 @@ END //
 -- 8. sp_CreateExamSchedule
 -- Inserts a new schedule entry and returns the newly generated ScheduleId
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_CreateExamSchedule(
+CREATE PROCEDURE `sp_CreateExamSchedule`(
     IN p_ExamId INT,
     IN p_SubjectId INT,
     IN p_ExamDate DATETIME,
@@ -386,7 +391,8 @@ CREATE PROCEDURE sp_CreateExamSchedule(
     IN p_ExamMode VARCHAR(50),
     IN p_MaxMarks DECIMAL(10,2),
     IN p_PassingMarks DECIMAL(10,2)
-)
+,
+    IN p_CampusId INT)
 BEGIN
     INSERT INTO ExamSchedules (
         ExamId,
@@ -433,7 +439,7 @@ END //
 -- 9. sp_UpdateExamSchedule
 -- Updates an existing schedule entry
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_UpdateExamSchedule(
+CREATE PROCEDURE `sp_UpdateExamSchedule`(
     IN p_ScheduleId INT,
     IN p_SubjectId INT,
     IN p_ExamDate DATETIME,
@@ -448,7 +454,8 @@ CREATE PROCEDURE sp_UpdateExamSchedule(
     IN p_ExamMode VARCHAR(50),
     IN p_MaxMarks DECIMAL(10,2),
     IN p_PassingMarks DECIMAL(10,2)
-)
+,
+    IN p_CampusId INT)
 BEGIN
     UPDATE ExamSchedules
     SET 
@@ -473,9 +480,10 @@ END //
 -- 10. sp_DeleteExamSchedule
 -- Soft deletes an exam schedule
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_DeleteExamSchedule(
+CREATE PROCEDURE `sp_DeleteExamSchedule`(
     IN p_ScheduleId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     UPDATE ExamSchedules
     SET 
@@ -488,9 +496,10 @@ END //
 -- 11. sp_PublishExamSchedules
 -- Publishes examination schedules from a comma-separated ID list
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_PublishExamSchedules(
+CREATE PROCEDURE `sp_PublishExamSchedules`(
     IN p_ScheduleIds TEXT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     UPDATE ExamSchedules
     SET 
@@ -503,12 +512,12 @@ END //
 -- 12. sp_FinalizeExaminationSchedule
 -- Transitions examination to SCHEDULED and activates all its schedules
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_FinalizeExaminationSchedule(
+CREATE PROCEDURE `sp_FinalizeExaminationSchedule`(
     IN p_ExaminationId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    UPDATE Examinations
-    SET 
+    UPDATE `Examinations` SET 
         Status = 'SCHEDULED',
         UpdatedAt = UTC_TIMESTAMP()
     WHERE ExamId = p_ExaminationId;
@@ -524,9 +533,10 @@ END //
 -- 13. sp_GetEligibleSubjectsForExam
 -- Retrieves eligible subjects based on the examination's Board, Level, and Group
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_GetEligibleSubjectsForExam(
+CREATE PROCEDURE `sp_GetEligibleSubjectsForExam`(
     IN p_ExaminationId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         s.SubjectId,
@@ -549,13 +559,14 @@ END //
 -- 14. sp_CheckRoomConflict
 -- Checks whether a room/hall is already occupied during a given date & time slot
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_CheckRoomConflict(
+CREATE PROCEDURE `sp_CheckRoomConflict`(
     IN p_ExamDate DATE,
     IN p_StartTime TIME,
     IN p_EndTime TIME,
     IN p_Hall VARCHAR(100),
     IN p_ExcludeScheduleId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT COUNT(*) AS ConflictCount
     FROM ExamSchedules es
@@ -570,13 +581,14 @@ END //
 -- 15. sp_CheckInvigilatorConflict
 -- Checks whether an invigilator is already assigned during a given date & time slot
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_CheckInvigilatorConflict(
+CREATE PROCEDURE `sp_CheckInvigilatorConflict`(
     IN p_ExamDate DATE,
     IN p_StartTime TIME,
     IN p_EndTime TIME,
     IN p_Invigilator VARCHAR(150),
     IN p_ExcludeScheduleId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT COUNT(*) AS ConflictCount
     FROM ExamSchedules es
@@ -591,10 +603,11 @@ END //
 -- 16. sp_GenerateHallTickets
 -- Generates hall tickets for eligible active students matching the exam's academic scope
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_GenerateHallTickets(
+CREATE PROCEDURE `sp_GenerateHallTickets`(
     IN p_ExaminationId INT,
     IN p_BatchId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     -- Insert tickets for students who do not already have one
     INSERT INTO HallTickets (ExaminationId, StudentId, BatchId, GeneratedAt)
@@ -639,11 +652,12 @@ END //
 -- 17. sp_AssignInvigilator
 -- Assigns an invigilator to an exam schedule slot
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_AssignInvigilator(
+CREATE PROCEDURE `sp_AssignInvigilator`(
     IN p_ExamScheduleId INT,
     IN p_InvigilatorId INT,
     IN p_HallNumber VARCHAR(50)
-)
+,
+    IN p_CampusId INT)
 BEGIN
     INSERT INTO InvigilatorAssignments (
         ExamScheduleId,
@@ -662,9 +676,10 @@ END //
 -- 18. sp_GetInvigilatorsBySchedule
 -- Retrieves invigilator assignments for an exam schedule
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE sp_GetInvigilatorsBySchedule(
+CREATE PROCEDURE `sp_GetInvigilatorsBySchedule`(
     IN p_ExamScheduleId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         ia.Id AS InvigilatorAssignmentId,

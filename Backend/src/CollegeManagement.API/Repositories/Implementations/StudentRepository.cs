@@ -23,15 +23,163 @@ namespace CollegeManagement.API.Repositories
         // GET ALL STUDENTS
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync()
+        public async Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
-            var result = await connection.QueryAsync<StudentListItemDto>(
-                "sp_GetAllStudents",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var parameters = new DynamicParameters();
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    parameters.Add("p_CampusId", campusId.Value, DbType.Int32);
+                }
+                else
+                {
+                    parameters.Add("p_CampusId", null, DbType.Int32);
+                }
 
-            return result.ToList();
+                var result = (await connection.QueryAsync<StudentListItemDto>(
+                    "sp_GetAllStudents",
+                    parameters,
+                    commandType: CommandType.StoredProcedure)).ToList();
+
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                }
+                if (boardId.HasValue && boardId.Value > 0)
+                {
+                    result = result.Where(x => x.BoardId == boardId.Value).ToList();
+                }
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                {
+                    result = result.Where(x => x.AcademicLevelId == academicLevelId.Value).ToList();
+                }
+                if (groupId.HasValue && groupId.Value > 0)
+                {
+                    result = result.Where(x => x.GroupId == groupId.Value).ToList();
+                }
+                if (programId.HasValue && programId.Value > 0)
+                {
+                    result = result.Where(x => x.ProgramId == programId.Value).ToList();
+                }
+                if (sectionId.HasValue && sectionId.Value > 0)
+                {
+                    result = result.Where(x => x.SectionId == sectionId.Value).ToList();
+                }
+                if (!string.IsNullOrWhiteSpace(status))
+                {
+                    result = result.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
+                }
+
+                return result;
+            }
+            catch
+            {
+                try
+                {
+                    var result = (await connection.QueryAsync<StudentListItemDto>(
+                        "sp_GetAllStudents",
+                        commandType: CommandType.StoredProcedure)).ToList();
+
+                    if (campusId.HasValue && campusId.Value > 0)
+                    {
+                        result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                    }
+                    if (boardId.HasValue && boardId.Value > 0)
+                    {
+                        result = result.Where(x => x.BoardId == boardId.Value).ToList();
+                    }
+                    if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    {
+                        result = result.Where(x => x.AcademicLevelId == academicLevelId.Value).ToList();
+                    }
+                    if (groupId.HasValue && groupId.Value > 0)
+                    {
+                        result = result.Where(x => x.GroupId == groupId.Value).ToList();
+                    }
+                    if (programId.HasValue && programId.Value > 0)
+                    {
+                        result = result.Where(x => x.ProgramId == programId.Value).ToList();
+                    }
+                    if (sectionId.HasValue && sectionId.Value > 0)
+                    {
+                        result = result.Where(x => x.SectionId == sectionId.Value).ToList();
+                    }
+                    if (!string.IsNullOrWhiteSpace(status))
+                    {
+                        result = result.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
+                    }
+
+                    return result;
+                }
+                catch
+                {
+                    var query = _context.Students
+                        .Include(s => s.BoardNavigation)
+                        .Include(s => s.AcademicYear)
+                        .Include(s => s.AcademicLevelNavigation)
+                        .Include(s => s.GroupNavigation)
+                        .Include(s => s.SectionNavigation)
+                        .Include(s => s.CampusNavigation)
+                        .AsNoTracking()
+                        .AsQueryable();
+
+                    if (campusId.HasValue && campusId.Value > 0)
+                        query = query.Where(s => s.CampusId == campusId.Value);
+                    if (boardId.HasValue && boardId.Value > 0)
+                        query = query.Where(s => s.BoardId == boardId.Value);
+                    if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                        query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
+                    if (groupId.HasValue && groupId.Value > 0)
+                        query = query.Where(s => s.GroupId == groupId.Value);
+                    if (programId.HasValue && programId.Value > 0)
+                        query = query.Where(s => s.ProgramId == programId.Value);
+                    if (sectionId.HasValue && sectionId.Value > 0)
+                        query = query.Where(s => s.SectionId == sectionId.Value);
+                    if (!string.IsNullOrWhiteSpace(status))
+                        query = query.Where(s => s.Status == status);
+
+                    return await query
+                        .OrderBy(s => s.StudentName)
+                        .Select(s => new StudentListItemDto
+                        {
+                            StudentId = s.StudentId,
+                            AdmissionNo = s.AdmissionNo ?? "",
+                            RollNo = s.RollNo ?? "",
+                            StudentName = s.StudentName,
+                            Photo = s.Photo,
+                            Gender = s.Gender,
+                            Email = s.Email,
+                            MobileNumber = s.MobileNumber,
+                            CampusId = s.CampusId,
+                            CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
+                            BoardId = s.BoardId,
+                            BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
+                            AcademicYearId = s.AcademicYearId,
+                            AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
+                            AcademicLevelId = s.AcademicLevelId ?? 0,
+                            AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
+                            GroupId = s.GroupId ?? 0,
+                            GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                            SectionId = s.SectionId ?? 0,
+                            SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                            ProgramId = s.ProgramId ?? 0,
+                            IsActive = s.IsActive,
+                            Status = s.Status,
+                            CreatedAt = s.CreatedAt
+                        })
+                        .ToListAsync();
+                }
+            }
         }
 
 
@@ -198,8 +346,9 @@ namespace CollegeManagement.API.Repositories
             {
                 normalizedEmail = request.Email.Trim().ToUpperInvariant();
                 var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
+                    "sp_CheckUserEmailExists",
+                    new { p_Email = normalizedEmail },
+                    commandType: CommandType.StoredProcedure);
 
                 if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
                 {
@@ -273,12 +422,11 @@ namespace CollegeManagement.API.Repositories
 
                 if (!string.IsNullOrWhiteSpace(normalizedEmail))
                 {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                    await connection.ExecuteAsync(
+                        "sp_UpdateUserEmailByLinkedEntity",
+                        new { p_StaffId = (int?)null, p_StudentId = studentId, p_Email = normalizedEmail },
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
@@ -318,12 +466,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 0, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 0 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result == 1;
@@ -378,8 +525,9 @@ namespace CollegeManagement.API.Repositories
             {
                 normalizedEmail = request.Email.Trim().ToUpperInvariant();
                 var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
+                    "sp_CheckUserEmailExists",
+                    new { p_Email = normalizedEmail },
+                    commandType: CommandType.StoredProcedure);
 
                 if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
                 {
@@ -427,12 +575,11 @@ namespace CollegeManagement.API.Repositories
 
                 if (!string.IsNullOrWhiteSpace(normalizedEmail))
                 {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                    await connection.ExecuteAsync(
+                        "sp_UpdateUserEmailByLinkedEntity",
+                        new { p_StaffId = (int?)null, p_StudentId = studentId, p_Email = normalizedEmail },
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
@@ -548,12 +695,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 0, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 0 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result >= 0;
@@ -591,12 +737,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 1, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 1 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result >= 0;
@@ -661,27 +806,108 @@ namespace CollegeManagement.API.Repositories
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive)
+            bool? isActive,
+            int? campusId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
-            var result = await connection.QueryAsync<StudentListItemDto>(
-                "sp_SearchStudents",
-                new
+            try
+            {
+                var result = await connection.QueryAsync<StudentListItemDto>(
+                    "sp_SearchStudents",
+                    new
+                    {
+                        p_Search = string.IsNullOrWhiteSpace(search)
+                            ? null
+                            : search.Trim(),
+
+                        p_BoardId = boardId,
+                        p_AcademicYearId = academicYearId,
+                        p_AcademicLevelId = academicLevelId,
+                        p_GroupId = groupId,
+                        p_SectionId = sectionId,
+                        p_IsActive = isActive,
+                        p_CampusId = campusId
+                    },
+                    commandType: CommandType.StoredProcedure);
+
+                return result.ToList();
+            }
+            catch
+            {
+                // Resilient EF Core Fallback
+                var query = _context.Students
+                    .Include(s => s.BoardNavigation)
+                    .Include(s => s.AcademicYear)
+                    .Include(s => s.AcademicLevelNavigation)
+                    .Include(s => s.GroupNavigation)
+                    .Include(s => s.SectionNavigation)
+                    .Include(s => s.CampusNavigation)
+                    .AsNoTracking()
+                    .AsQueryable();
+
+                if (campusId.HasValue && campusId.Value > 0)
+                    query = query.Where(s => s.CampusId == campusId.Value);
+
+                if (boardId.HasValue && boardId.Value > 0)
+                    query = query.Where(s => s.BoardId == boardId.Value);
+
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                    query = query.Where(s => s.AcademicYearId == academicYearId.Value);
+
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
+
+                if (groupId.HasValue && groupId.Value > 0)
+                    query = query.Where(s => s.GroupId == groupId.Value);
+
+                if (sectionId.HasValue && sectionId.Value > 0)
+                    query = query.Where(s => s.SectionId == sectionId.Value);
+
+                if (isActive.HasValue)
+                    query = query.Where(s => s.IsActive == isActive.Value);
+
+                if (!string.IsNullOrWhiteSpace(search))
                 {
-                    p_Search = string.IsNullOrWhiteSpace(search)
-                        ? null
-                        : search.Trim(),
+                    var sTerm = search.Trim();
+                    query = query.Where(s =>
+                        s.StudentName.Contains(sTerm) ||
+                        s.AdmissionNo.Contains(sTerm) ||
+                        (s.RollNo != null && s.RollNo.Contains(sTerm)) ||
+                        (s.MobileNumber != null && s.MobileNumber.Contains(sTerm)) ||
+                        (s.Email != null && s.Email.Contains(sTerm)));
+                }
 
-                    p_BoardId = boardId,
-                    p_AcademicYearId = academicYearId,
-                    p_GroupId = groupId,
-                    p_SectionId = sectionId,
-                    p_IsActive = isActive
-                },
-                commandType: CommandType.StoredProcedure);
-
-            return result.ToList();
+                return await query
+                    .OrderBy(s => s.StudentName)
+                    .Select(s => new StudentListItemDto
+                    {
+                        StudentId = s.StudentId,
+                        AdmissionNo = s.AdmissionNo,
+                        RollNo = s.RollNo ?? string.Empty,
+                        StudentName = s.StudentName,
+                        Photo = s.Photo,
+                        Gender = s.Gender,
+                        Email = s.Email,
+                        MobileNumber = s.MobileNumber,
+                        CampusId = s.CampusId,
+                        CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
+                        BoardId = s.BoardId,
+                        BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
+                        AcademicYearId = s.AcademicYearId,
+                        AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
+                        AcademicLevelId = s.AcademicLevelId ?? 0,
+                        AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
+                        GroupId = s.GroupId ?? 0,
+                        GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                        SectionId = s.SectionId ?? 0,
+                        SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                        IsActive = s.IsActive,
+                        Status = s.Status,
+                        CreatedAt = s.CreatedAt
+                    })
+                    .ToListAsync();
+            }
         }
 
 
@@ -796,8 +1022,13 @@ namespace CollegeManagement.API.Repositories
         {
             var connection = _context.Database.GetDbConnection();
             var rows = await connection.ExecuteAsync(
-                "UPDATE Students SET Photo = @Photo, UpdatedAt = CURRENT_TIMESTAMP WHERE StudentId = @StudentId",
-                new { Photo = photoPath, StudentId = studentId });
+                "sp_UpdateStudentPhotoPath",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_PhotoPath = photoPath
+                },
+                commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
@@ -813,8 +1044,15 @@ namespace CollegeManagement.API.Repositories
                 throw new ArgumentException($"Invalid document column: {documentColumn}");
 
             var connection = _context.Database.GetDbConnection();
-            var sql = $"UPDATE Students SET `{safeColumn}` = @DocumentPath, UpdatedAt = CURRENT_TIMESTAMP WHERE StudentId = @StudentId";
-            var rows = await connection.ExecuteAsync(sql, new { DocumentPath = documentPath, StudentId = studentId });
+            var rows = await connection.ExecuteAsync(
+                "sp_UpdateStudentDocumentPath",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_DocumentColumn = safeColumn,
+                    p_DocumentPath = documentPath
+                },
+                commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
@@ -844,72 +1082,37 @@ namespace CollegeManagement.API.Repositories
                 await connection.OpenAsync();
             }
 
-            string? normalizedEmail = null;
-            if (!string.IsNullOrWhiteSpace(request.Email))
-            {
-                normalizedEmail = request.Email.Trim().ToUpperInvariant();
-                var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
-
-                if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
+            var rows = await connection.ExecuteAsync(
+                "sp_UpdateStudentSelfProfile",
+                new
                 {
-                    throw new InvalidOperationException($"Email address '{request.Email}' is already registered to another user account.");
-                }
-            }
+                    p_StudentId = studentId,
+                    p_MobileNumber = request.MobileNumber,
+                    p_Email = request.Email,
+                    p_Address = request.Address,
+                    p_City = request.City,
+                    p_District = request.District,
+                    p_State = request.State,
+                    p_Pincode = request.Pincode,
+                    p_BloodGroup = request.BloodGroup,
+                    p_AadhaarNumber = request.AadhaarNumber,
+                    p_Nationality = request.Nationality,
+                    p_Religion = request.Religion,
+                    p_PreviousSchool = request.PreviousSchool,
+                    p_PreviousHallTicketNumber = request.PreviousHallTicketNumber,
+                    p_PreviousBoard = request.PreviousBoard,
+                    p_PreviousYearOfPassing = request.PreviousYearOfPassing,
+                    p_PreviousPercentage = request.PreviousPercentage,
+                    p_FatherMobile = request.FatherMobile,
+                    p_FatherEmail = request.FatherEmail,
+                    p_MotherMobile = request.MotherMobile,
+                    p_MotherEmail = request.MotherEmail,
+                    p_GuardianMobile = request.GuardianMobile,
+                    p_GuardianEmail = request.GuardianEmail
+                },
+                commandType: CommandType.StoredProcedure);
 
-            using var transaction = connection.BeginTransaction();
-            try
-            {
-                var rows = await connection.ExecuteAsync(
-                    "sp_UpdateStudentSelfProfile",
-                    new
-                    {
-                        p_StudentId = studentId,
-                        p_MobileNumber = request.MobileNumber,
-                        p_Email = request.Email,
-                        p_Address = request.Address,
-                        p_City = request.City,
-                        p_District = request.District,
-                        p_State = request.State,
-                        p_Pincode = request.Pincode,
-                        p_BloodGroup = request.BloodGroup,
-                        p_AadhaarNumber = request.AadhaarNumber,
-                        p_Nationality = request.Nationality,
-                        p_Religion = request.Religion,
-                        p_PreviousSchool = request.PreviousSchool,
-                        p_PreviousHallTicketNumber = request.PreviousHallTicketNumber,
-                        p_PreviousBoard = request.PreviousBoard,
-                        p_PreviousYearOfPassing = request.PreviousYearOfPassing,
-                        p_PreviousPercentage = request.PreviousPercentage,
-                        p_FatherMobile = request.FatherMobile,
-                        p_FatherEmail = request.FatherEmail,
-                        p_MotherMobile = request.MotherMobile,
-                        p_MotherEmail = request.MotherEmail,
-                        p_GuardianMobile = request.GuardianMobile,
-                        p_GuardianEmail = request.GuardianEmail
-                    },
-                    transaction: transaction,
-                    commandType: CommandType.StoredProcedure);
-
-                if (!string.IsNullOrWhiteSpace(normalizedEmail))
-                {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
-                }
-
-                transaction.Commit();
-                return rows > 0;
-            }
-            catch
-            {
-                try { transaction.Rollback(); } catch { }
-                throw;
-            }
+            return rows > 0;
         }
     }
 }

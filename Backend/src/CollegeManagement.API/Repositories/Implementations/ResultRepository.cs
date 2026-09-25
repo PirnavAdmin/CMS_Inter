@@ -102,19 +102,19 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// Retrieves all published results.
         /// </summary>
         public async Task<GetResultsResponseDto> GetResultsAsync(
-    GetResultsRequestDto request)
+            GetResultsRequestDto request)
         {
-
+            request ??= new GetResultsRequestDto();
             var parameters = new DynamicParameters();
 
-            parameters.Add("p_BoardId", request.BoardId);
-            parameters.Add("p_AcademicYearId", request.AcademicYearId);
-            parameters.Add("p_AcademicLevelId", request.AcademicLevelId);
-            parameters.Add("p_GroupId", request.GroupId);
-            parameters.Add("p_ExamId", request.ExamId);
+            parameters.Add("p_BoardId", request.BoardId ?? 0);
+            parameters.Add("p_AcademicYearId", request.AcademicYearId ?? 0);
+            parameters.Add("p_AcademicLevelId", request.AcademicLevelId ?? 0);
+            parameters.Add("p_GroupId", request.GroupId ?? 0);
+            parameters.Add("p_ExamId", request.ExamId ?? 0);
             parameters.Add("p_Search", request.Search);
-            parameters.Add("p_PageNumber", request.PageNumber);
-            parameters.Add("p_PageSize", request.PageSize);
+            parameters.Add("p_PageNumber", request.PageNumber <= 0 ? 1 : request.PageNumber);
+            parameters.Add("p_PageSize", request.PageSize <= 0 ? 10 : request.PageSize);
 
             using var multi = await Connection.QueryMultipleAsync(
                 "sp_GetResults",
@@ -251,40 +251,20 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// Retrieves the published rank list.
         /// </summary>
         public async Task<IEnumerable<RankListDto>> GetRankListAsync(
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId)
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId,
+            int? campusId = null)
         {
-           
-
             var parameters = new DynamicParameters();
-
-            parameters.Add(
-                "p_BoardId",
-                boardId,
-                DbType.Int32);
-
-            parameters.Add(
-                "p_AcademicYearId",
-                academicYearId,
-                DbType.Int32);
-
-            parameters.Add(
-                "p_AcademicLevelId",
-                academicLevelId,
-                DbType.Int32);
-
-            parameters.Add(
-                "p_GroupId",
-                groupId,
-                DbType.Int32);
-
-            parameters.Add(
-                "p_ExamId",
-                examId,
-                DbType.Int32);
+            parameters.Add("p_BoardId", boardId, DbType.Int32);
+            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+            parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
+            parameters.Add("p_GroupId", groupId, DbType.Int32);
+            parameters.Add("p_ExamId", examId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             var result = await Connection.QueryAsync<RankListDto>(
                 "sp_GetRankList",
@@ -302,7 +282,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null)
+            int? examId = null,
+            int? campusId = null)
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_BoardId", boardId, DbType.Int32);
@@ -310,6 +291,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
             parameters.Add("p_GroupId", groupId, DbType.Int32);
             parameters.Add("p_ExamId", examId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             var result = await Connection.QueryAsync<StudentResultDto>(
                 "sp_GetFailedStudents",
@@ -327,7 +309,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null)
+            int? examId = null,
+            int? campusId = null)
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_BoardId", boardId, DbType.Int32);
@@ -335,6 +318,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
             parameters.Add("p_GroupId", groupId, DbType.Int32);
             parameters.Add("p_ExamId", examId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             var result = await Connection.QueryFirstOrDefaultAsync<ResultStatisticsDto>(
                 "sp_GetResultStatistics",
@@ -348,11 +332,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// Retrieves result analysis.
         /// </summary>
         public async Task<ResultAnalysisDto> GetResultAnalysisAsync(
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId)
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId)
         {
             var parameters = new DynamicParameters();
 
@@ -406,12 +390,12 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// Retrieves the student's published result memo data.
         /// </summary>
         public async Task<IEnumerable<ResultDto>> DownloadMemoAsync(
-    int studentId,
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId)
+            int studentId,
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId)
         {
             var result = await Connection.QueryAsync<ResultDto>(
                 "sp_DownloadMemo",
@@ -472,7 +456,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
-            int? examId = null)
+            int? examId = null,
+            int? campusId = null)
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_BoardId", boardId, DbType.Int32);
@@ -480,6 +465,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
             parameters.Add("p_GroupId", groupId, DbType.Int32);
             parameters.Add("p_ExamId", examId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             var result = await Connection.QuerySingleOrDefaultAsync<ResultDashboardDto>(
                 "sp_GetResultDashboard",
@@ -489,12 +475,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             return result ?? new ResultDashboardDto();
         }
 
-        
-
-
         public async Task<bool> UpdateResultAsync(
-    int resultId,
-    UpdateResultRequestDto request)
+            int resultId,
+            UpdateResultRequestDto request)
         {
             var affected = await Connection.ExecuteScalarAsync<int>(
                 "sp_UpdateResult",
@@ -512,21 +495,20 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
 
         public async Task<IEnumerable<DownloadResultsPdfDto>> GetResultsForPdfAsync(
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId)
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId,
+            int? campusId = null)
         {
-           
-
             var parameters = new DynamicParameters();
-
             parameters.Add("p_BoardId", boardId, DbType.Int32);
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
             parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
             parameters.Add("p_GroupId", groupId, DbType.Int32);
             parameters.Add("p_ExamId", examId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             var results = await Connection.QueryAsync<DownloadResultsPdfDto>(
                 "sp_DownloadResultsPdf",
@@ -537,21 +519,20 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
 
         public async Task<IEnumerable<ExportResultDto>> GetResultsForExportAsync(
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId)
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId,
+            int? campusId = null)
         {
-           
-
             var parameters = new DynamicParameters();
-
             parameters.Add("p_BoardId", boardId, DbType.Int32);
             parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
             parameters.Add("p_AcademicLevelId", academicLevelId, DbType.Int32);
             parameters.Add("p_GroupId", groupId, DbType.Int32);
             parameters.Add("p_ExamId", examId, DbType.Int32);
+            parameters.Add("p_CampusId", campusId, DbType.Int32);
 
             return await Connection.QueryAsync<ExportResultDto>(
                 "sp_DownloadResultsPdf",

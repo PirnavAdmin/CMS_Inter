@@ -22,9 +22,9 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> IsAadhaarUniqueAsync(string aadhaar, int? excludeId = null);
 
         Task<(List<Staff> Items, int TotalCount)> GetPagedStaffAsync(StaffQueryParams queryParams);
-        Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null);
+        Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null);
         Task<string> GenerateNextEmployeeIdAsync(string staffType);
-        Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null);
+        Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null);
 
         Task<Staff> AddAsync(Staff staff);
         Task AddRangeAsync(IEnumerable<Staff> staffs);

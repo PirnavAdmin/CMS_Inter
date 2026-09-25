@@ -13,6 +13,8 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
 
         public string? ExamCode { get; set; }
 
+        public int? CampusId { get; set; } = 1;
+
         [Required]
         public string ExamName { get; set; } = string.Empty;
 

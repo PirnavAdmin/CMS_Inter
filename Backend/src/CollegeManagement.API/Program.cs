@@ -14,11 +14,15 @@ using CollegeManagement.API.Repositories.Implementations.Hostel;
 using CollegeManagement.API.Repositories.Implementations.Transport;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
+using CollegeManagement.API.Repositories.Interfaces.Payroll;
+using CollegeManagement.API.Repositories.Implementations.Payroll;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Implementations;
 using CollegeManagement.API.Services.Implementations.Hostel;
+using CollegeManagement.API.Services.Implementations.Payroll;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
+using CollegeManagement.API.Services.Interfaces.Payroll;
 using CollegeManagement.API.Services.Location;
 using CollegeManagement.API.Validators.StaffValidators;
 using FluentValidation;
@@ -32,6 +36,13 @@ using MySqlConnector;
 var builder = WebApplication.CreateBuilder(args);
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
+#region Dapper Type Handlers
+Dapper.SqlMapper.AddTypeHandler(new DateOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new NullableDateOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new TimeOnlyTypeHandler());
+Dapper.SqlMapper.AddTypeHandler(new NullableTimeOnlyTypeHandler());
+#endregion
 
 #region Controllers & JSON
 builder.Services.AddControllers()
@@ -104,10 +115,12 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateStaffDtoValidator>();
 #region Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
 builder.Services.AddScoped<IOtpRepository, OtpRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
 builder.Services.AddScoped<IBoardRepository, BoardRepository>();
+builder.Services.AddScoped<ICampusRepository, CampusRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IDesignationRepository, DesignationRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
@@ -121,6 +134,7 @@ builder.Services.AddScoped<IAttendanceRepository, AttendanceRepository>();
 builder.Services.AddScoped<IStaffAttendanceRepository, StaffAttendanceRepository>();
 builder.Services.AddScoped<IStudentRepository, StudentRepository>();
 builder.Services.AddScoped<IStudentAdmissionRepository, StudentAdmissionRepository>();
+builder.Services.AddScoped<IStudentImportRepository, StudentImportRepository>();
 builder.Services.AddScoped<IAssignmentRepository, AssignmentRepository>();
 builder.Services.AddScoped<IAssignmentSubmissionRepository, AssignmentSubmissionRepository>();
 builder.Services.AddScoped<IExaminationRepository, ExaminationRepository>();
@@ -170,6 +184,9 @@ builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepo
 builder.Services.AddScoped<ITransportDashboardRepository, TransportDashboardRepository>();
 builder.Services.AddScoped<ITransportReportRepository, TransportReportRepository>();
 builder.Services.AddScoped<ITransportRepository, TransportRepository>();
+
+// Payroll Repositories
+builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
 #endregion
 
 #region Services
@@ -188,6 +205,7 @@ builder.Services.AddScoped<IAttendanceTimingConfigService, AttendanceTimingConfi
 builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
+builder.Services.AddScoped<ICampusService, CampusService>();
 builder.Services.AddScoped<ILookupCacheService, LookupCacheService>();
 builder.Services.AddScoped<IBoardExportService, BoardExportService>();
 builder.Services.AddScoped<IDesignationService, DesignationService>();
@@ -232,6 +250,10 @@ builder.Services.AddScoped<IRoomTypeConfigService, RoomTypeConfigService>();
 builder.Services.AddScoped<IRoomMasterService, RoomMasterService>();
 builder.Services.AddScoped<IHostelBedService, HostelBedService>();
 builder.Services.AddScoped<IHostelWardenAssignmentService, HostelWardenAssignmentService>();
+builder.Services.AddScoped<IHostelFeeConfigRepository, HostelFeeConfigRepository>();
+builder.Services.AddScoped<IHostelFeeConfigService, HostelFeeConfigService>();
+builder.Services.AddScoped<IFineRuleRepository, FineRuleRepository>();
+builder.Services.AddScoped<IFineRuleService, FineRuleService>();
 builder.Services.AddScoped<IHostelStudentAllocationService, HostelStudentAllocationService>();
 builder.Services.AddScoped<IHostelAttendanceService, HostelAttendanceService>();
 builder.Services.AddScoped<IHostelOutpassLeaveService, HostelOutpassLeaveService>();
@@ -252,6 +274,9 @@ builder.Services.AddScoped<ITransportDashboardService, TransportDashboardService
 builder.Services.AddScoped<ITransportReportService, TransportReportService>();
 builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
 builder.Services.AddScoped<ITransportService, TransportService>();
+
+// Payroll Service
+builder.Services.AddScoped<IPayrollService, PayrollService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>

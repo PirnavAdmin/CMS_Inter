@@ -1,15 +1,8 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 
-const ADMIN_EMAIL = "admin@cms.com";
 const PASSWORD_RESET_CONTEXT_KEY = "cms-password-reset-context";
 const ACCOUNT_TYPES = new Set(["admin", "user"]);
-
-export const adminLogin = (data) =>
-  apiClient.post(apiEndpoints.admin.login, {
-    email: data.email,
-    password: data.password,
-  });
 
 export const userLogin = (data) =>
   apiClient.post(apiEndpoints.auth.login, {
@@ -27,6 +20,7 @@ export const loginUser = async (credentials) => {
     logLoginResponse(response.status);
     return normalizeLoginResponse(response.data, emailOrMobile);
   } catch (authError) {
+<<<<<<< HEAD
     // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
     if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
       logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
@@ -58,6 +52,8 @@ export const loginUser = async (credentials) => {
         message: "Login successful.",
       };
     }
+=======
+>>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
     throw authError;
   }
 };
@@ -312,12 +308,40 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
   if (expectedAccountType === "admin" && !isAdmin) {
     throw new Error("Authentication failed because the server returned an invalid admin response.");
   }
+<<<<<<< HEAD
   const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
   const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
+=======
+  let jwtClaims = {};
+  try {
+    const parts = token.split(".");
+    if (parts.length >= 2) {
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = decodeURIComponent(
+        atob(base64)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+      jwtClaims = JSON.parse(decoded);
+    }
+  } catch {}
+
+  const staffId = data.StaffId || data.staffId || payload.StaffId || payload.staffId || jwtClaims.StaffId || jwtClaims.staffId || null;
+  const employeeId = data.EmployeeId || data.employeeId || payload.EmployeeId || payload.employeeId || jwtClaims.EmployeeId || jwtClaims.employeeId || null;
+  const userName = data.Name || data.name || data.fullName || payload.Name || payload.name || payload.fullName || jwtClaims.unique_name || jwtClaims.name || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || "Staff Member";
+
+  const rawEmail = data.Email || data.email || payload.Email || payload.email || jwtClaims.email || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || enteredEmail;
+  const userEmail = Array.isArray(rawEmail) ? String(rawEmail[0] || "").trim() : String(rawEmail || "").trim();
+
+>>>>>>> 5df4e6652c1435385477ca5c70c4383e58e6f734
   const user = {
     id: data.AdminId || data.adminId || data.UserId || data.userId || data.id || data.Id || payload.AdminId || payload.adminId || payload.UserId || payload.userId || payload.id || payload.Id,
-    name: data.Name || data.name || data.fullName || payload.Name || payload.name || payload.fullName || "CMS User",
-    email: data.email || data.Email || payload.email || payload.Email || enteredEmail,
+    staffId: staffId ? (Number(staffId) || staffId) : null,
+    employeeId: employeeId || null,
+    name: userName,
+    fullName: userName,
+    email: userEmail,
     role,
     isAdmin,
   };

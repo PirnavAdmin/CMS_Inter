@@ -41,17 +41,16 @@ import {
   formatDate,
   todayISO,
 } from "@/data/feeManagementData.js";
-import { HOSTEL_BLOCKS, HOSTEL_ROOMS_DATA } from "@/modules/hostel/data/hostelData.js";
 import "./FeeManagementPage.css";
 
 const TABS = ["Overview", "Fee Setup", "Student Fee Ledger"];
-const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Scholarships"];
+const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Transport Fees", "Scholarships", "Fine"];
 const LEDGER_TABS = [
-  { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Fee Collection", label: "Fee Collection" },
+  { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Payment History", label: "Payment History" },
 ];
-const FEE_TYPE_CATEGORIES = ["Admission", "Academic", "Examination", "Facility", "Activity", "Other"];
+const FEE_TYPE_CATEGORIES = ["Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous"];
 const PAGE_SIZE = 5;
 const OVERVIEW_TABS = [
   { id: "overdue", label: "Overdue Fees", icon: AlertCircle },
@@ -59,7 +58,6 @@ const OVERVIEW_TABS = [
   { id: "recent", label: "Recent Payments", icon: ReceiptText },
 ];
 const CHART_COLORS = ["var(--cms-primary)", "var(--cms-green)", "var(--cms-amber)"];
-const HOSTEL_FEE_CONFIG_STORAGE_KEY = "pirnav_hostel_fee_configs_v1";
 const FACILITY_FEE_NAMES = ["hostel fee", "transport fee"];
 
 const getCollection = (payload) => {
@@ -173,36 +171,190 @@ const isDedicatedFacilityFeeType = (item) => {
   return FACILITY_FEE_NAMES.some((name) => identity === name || identity.startsWith(`${name} `));
 };
 
-const parseCurrencyNumber = (value) => Number(String(value ?? "").replace(/[^\d.]/g, "")) || 0;
+const normalizeTransportStatus = (...values) => (
+  values.some((value) => value === "Active" || value === true || value === 1) ? "Active" : "Inactive"
+);
 
-const seedHostelFeeConfigs = () => HOSTEL_ROOMS_DATA.map((room) => {
-  const block = HOSTEL_BLOCKS.find((item) => item.code === room.block);
+const normalizeTransportRouteRows = (rows = []) => rows.map((row) => ({
+  id: read(row, "routeId", "RouteId", "id", "Id"),
+  routeCode: textValue(row, "routeCode", "RouteCode", "code", "Code"),
+  routeName: textValue(row, "routeName", "RouteName", "name", "Name") || "Route",
+  routeStart: textValue(row, "startLocation", "StartLocation", "routeStart", "RouteStart"),
+  routeEnd: textValue(row, "endLocation", "EndLocation", "routeEnd", "RouteEnd"),
+  totalDistanceKm: numberValue(row, "distanceKm", "DistanceKm", "totalDistanceKm", "TotalDistanceKm", "distance", "Distance"),
+  minDistanceKm: numberValue(row, "minRangeKm", "MinRangeKm", "minDistanceKm", "MinDistanceKm"),
+  minBaseFare: numberValue(row, "nonAcBaseFare", "NonAcBaseFare", "defaultMonthlyFee", "DefaultMonthlyFee", "minBaseFare", "MinBaseFare"),
+  ratePerKm: numberValue(row, "nonAcRatePerKm", "NonAcRatePerKm", "ratePerKm", "RatePerKm"),
+  acMinBaseFare: numberValue(row, "acBaseFare", "AcBaseFare", "ACBaseFare", "acMinBaseFare", "AcMinBaseFare"),
+  acRatePerKm: numberValue(row, "acRatePerKm", "AcRatePerKm", "ACRatePerKm"),
+  status: normalizeTransportStatus(read(row, "status", "Status"), read(row, "isActive", "IsActive"), read(row, "active", "Active")),
+}));
+
+const normalizeTransportPickupRows = (rows = []) => rows.map((row) => ({
+  id: read(row, "pickupPointId", "PickupPointId", "id", "Id"),
+  routeId: read(row, "routeId", "RouteId"),
+  routeName: textValue(row, "routeName", "RouteName"),
+  pickupName: textValue(row, "pickupPointName", "PickupPointName", "stopName", "StopName", "pickupName", "PickupName") || "Pickup Point",
+  landmark: textValue(row, "landmark", "Landmark", "stopAddress", "StopAddress"),
+  sequenceNumber: numberValue(row, "sequenceNo", "SequenceNo", "sequenceNumber", "SequenceNumber", "stopOrder", "StopOrder") || 1,
+  pickupTime: textValue(row, "pickupTime", "PickupTime").slice(0, 5) || "07:30",
+  dropTime: textValue(row, "dropTime", "DropTime").slice(0, 5) || "16:15",
+  distanceKm: numberValue(row, "distanceFromStart", "DistanceFromStart", "distanceFromSchool", "DistanceFromSchool", "distanceKm", "DistanceKm"),
+  monthlyFee: numberValue(row, "monthlyFee", "MonthlyFee"),
+  status: normalizeTransportStatus(read(row, "status", "Status"), read(row, "isActive", "IsActive"), read(row, "active", "Active")),
+}));
+
+const normalizeHostelBlockRows = (rows = []) => rows.map((row) => ({
+  id: read(row, "hostelId", "HostelId", "id", "Id"),
+  name: textValue(row, "hostelName", "HostelName", "name", "Name") || "Hostel Block",
+  code: textValue(row, "hostelCode", "HostelCode", "code", "Code"),
+  status: textValue(row, "status", "Status") || "Active",
+})).filter((row) => row.id);
+
+const normalizeHostelRoomTypeRows = (rows = []) => rows.map((row) => ({
+  id: read(row, "roomTypeId", "RoomTypeId", "id", "Id"),
+  name: textValue(row, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification", "name", "Name") || "Room Type",
+  capacity: numberValue(row, "bedCapacity", "BedCapacity", "capacity", "Capacity"),
+  acType: textValue(row, "acType", "AcType"),
+  status: textValue(row, "status", "Status") || "Active",
+})).filter((row) => row.id);
+
+const normalizeHostelFeeRows = (rows = []) => rows.map((row, index) => {
+  const id = read(row, "feeConfigId", "FeeConfigId", "id", "Id");
+  const hostelId = read(row, "hostelId", "HostelId");
+  const roomTypeId = read(row, "roomTypeId", "RoomTypeId");
   return {
-    id: `${room.block}-${room.roomNo}`,
-    hostelBlock: room.block,
-    hostelName: block?.name || room.block,
-    roomNo: room.roomNo,
-    roomType: room.type,
-    feePlan: "Monthly",
-    feeAmount: parseCurrencyNumber(room.fee),
-    securityDeposit: 0,
-    status: "Active",
+    id: String(id ?? `hostel-fee-${index}`),
+    feeConfigId: id,
+    hostelId: hostelId ? String(hostelId) : "",
+    hostelBlock: hostelId ? String(hostelId) : textValue(row, "hostelCode", "HostelCode"),
+    hostelName: textValue(row, "hostelName", "HostelName") || "Hostel Block",
+    roomTypeId: roomTypeId ? String(roomTypeId) : "",
+    roomType: textValue(row, "roomTypeName", "RoomTypeName", "roomTypeSpecification", "RoomTypeSpecification") || "Room Type",
+    feePlan: textValue(row, "feeFrequency", "FeeFrequency") || "Monthly",
+    feeAmount: numberValue(row, "hostelFeeAmount", "HostelFeeAmount", "feeAmount", "FeeAmount"),
+    securityDeposit: numberValue(row, "securityDeposit", "SecurityDeposit"),
+    totalFee: optionalNumberValue(row, "totalFee", "TotalFee"),
+    effectiveFrom: textValue(row, "effectiveDate", "EffectiveDate").slice(0, 10) || todayISO(),
+    status: textValue(row, "status", "Status") || "Active",
   };
 });
 
-const readHostelFeeConfigs = () => {
-  if (typeof window === "undefined") return seedHostelFeeConfigs();
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(HOSTEL_FEE_CONFIG_STORAGE_KEY) || "[]");
-    return Array.isArray(parsed) && parsed.length ? parsed : seedHostelFeeConfigs();
-  } catch {
-    return seedHostelFeeConfigs();
-  }
+const normalizeFineRuleRows = (rows = []) => rows.map((row, index) => {
+  const id = read(row, "fineRuleId", "FineRuleId", "id", "Id");
+  const feeTypeId = read(row, "applicableFeeId", "ApplicableFeeId", "feeTypeId", "FeeTypeId");
+  return {
+    id: String(id ?? `fine-${index}`),
+    fineRuleId: id,
+    ruleName: textValue(row, "fineRuleName", "FineRuleName", "ruleName", "RuleName") || "Fine Rule",
+    feeTypeId: feeTypeId ? String(feeTypeId) : "",
+    feeTypeName: textValue(row, "applicableFeeName", "ApplicableFeeName", "feeTypeName", "FeeTypeName") || "Fee",
+    fineType: textValue(row, "fineType", "FineType") || "Fixed Amount",
+    fineAmount: numberValue(row, "fineAmount", "FineAmount"),
+    gracePeriod: numberValue(row, "gracePeriod", "GracePeriod"),
+    status: textValue(row, "status", "Status") || "Active",
+  };
+});
+
+const addDaysISO = (isoDate, days = 0) => {
+  const base = new Date(String(isoDate || "").slice(0, 10));
+  if (Number.isNaN(base.getTime())) return "";
+  base.setDate(base.getDate() + Number(days || 0));
+  return base.toISOString().slice(0, 10);
 };
 
-const writeHostelFeeConfigs = (rows) => {
-  if (typeof window !== "undefined") window.localStorage.setItem(HOSTEL_FEE_CONFIG_STORAGE_KEY, JSON.stringify(rows));
+const daysBetweenISO = (fromDate, toDate = todayISO()) => {
+  const from = new Date(String(fromDate || "").slice(0, 10));
+  const to = new Date(String(toDate || "").slice(0, 10));
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0;
+  return Math.floor((to.getTime() - from.getTime()) / 86400000);
 };
+
+const fineRuleMatchesFee = (rule, feeItem = {}) => {
+  const ruleId = String(rule.feeTypeId || "").trim();
+  const itemId = String(feeItem.id || feeItem.feeTypeId || "").trim();
+  if (ruleId && itemId && ruleId === itemId) return true;
+  return normalizeKey(rule.feeTypeName) === normalizeKey(feeItem.type || feeItem.name);
+};
+
+const calculateFineAmount = (rule, overdueDays, baseAmount = 0) => {
+  const fineAmount = Math.max(Number(rule.fineAmount || 0), 0);
+  if (fineAmount <= 0 || overdueDays <= 0) return 0;
+  if (rule.fineType === "Percentage") {
+    return Math.max((Number(baseAmount || 0) * fineAmount) / 100, 0);
+  }
+  return fineAmount;
+};
+
+const calculateAccountFines = (account = {}, fineRules = []) => {
+  const feeItems = (account.feeItems || []).filter((item) => !String(item.id || "").startsWith("fine-"));
+  const schedules = (account.installments || []).filter((item) => (
+    Number(item.balance || 0) > 0
+    && item.dueDate
+    && normalizeKey(item.status) !== "paid"
+  ));
+  const today = todayISO();
+
+  return fineRules
+    .filter((rule) => rule.status === "Active" && Number(rule.fineAmount || 0) > 0)
+    .flatMap((rule) => {
+      const matchedFee = feeItems.find((feeItem) => fineRuleMatchesFee(rule, feeItem));
+      if (!matchedFee) return [];
+      const candidates = schedules.length ? schedules : [{
+        no: matchedFee.id,
+        dueDate: matchedFee.dueDate || account.nextDueDate,
+        balance: account.balance,
+        amount: matchedFee.payableAmount || matchedFee.originalAmount,
+      }];
+      return candidates.map((schedule) => {
+        const graceDate = addDaysISO(schedule.dueDate, Number(rule.gracePeriod || 0));
+        if (!graceDate || today <= graceDate || Number(schedule.balance || 0) <= 0) return null;
+        const overdueDays = daysBetweenISO(graceDate, today);
+        const amount = calculateFineAmount(rule, overdueDays, schedule.balance || schedule.amount || matchedFee.payableAmount || matchedFee.originalAmount);
+        if (amount <= 0) return null;
+        return {
+          id: `fine-${rule.id}-${schedule.no || schedule.dueDate}`,
+          ruleId: rule.id,
+          type: rule.ruleName,
+          feeTypeName: rule.feeTypeName,
+          dueDate: schedule.dueDate,
+          graceDate,
+          overdueDays,
+          originalAmount: amount,
+          payableAmount: amount,
+          concessionAmount: 0,
+          selected: true,
+          required: false,
+          isFine: true,
+        };
+      }).filter(Boolean);
+    });
+};
+
+const applyFineRulesToAccount = (account = {}, fineRules = []) => {
+  const baseItems = (account.feeItems || []).filter((item) => !String(item.id || "").startsWith("fine-"));
+  const fineItems = calculateAccountFines({ ...account, feeItems: baseItems }, fineRules);
+  const totalFine = fineItems.reduce((sum, item) => sum + Number(item.payableAmount || 0), 0);
+  if (!totalFine) return { ...account, feeItems: baseItems, fineItems: [], totalFine: 0 };
+  const balance = Math.max(Number(account.balance || 0) + totalFine, 0);
+  return {
+    ...account,
+    feeItems: [...baseItems, ...fineItems],
+    fineItems,
+    totalFine,
+    totalPayable: Number(account.totalPayable || 0) + totalFine,
+    balance,
+    feeStatus: accountStatusFor({
+      payable: Number(account.totalPayable || 0) + totalFine,
+      paid: account.totalPaid,
+      balance,
+      dueDate: account.nextDueDate,
+      status: account.feeStatus,
+    }),
+  };
+};
+
+const applyFineRulesToAccounts = (accounts = [], fineRules = []) => accounts.map((account) => applyFineRulesToAccount(account, fineRules));
 
 const valueTokens = (...values) => values
   .flatMap((value) => String(value ?? "").split(/[/,|()-]+/))
@@ -449,25 +601,21 @@ const programOption = (item) => toSelectOptions(
   ["programName", "ProgramName", "name", "Name", "programCode", "ProgramCode"],
 )[0] || null;
 
-const sectionOption = (item) => {
-  const group = read(item, "group", "Group");
-  const option = toSelectOptions([item], ["sectionId", "SectionId", "id", "Id"], ["sectionName", "SectionName", "section", "Section", "name", "Name"])[0];
-  return option ? {
-    ...option,
-    groupId: textValue(item, "groupId", "GroupId") || textValue(group, "groupId", "GroupId", "id", "Id"),
-    groupName: textValue(item, "groupName", "GroupName") || textValue(group, "groupName", "GroupName", "name", "Name"),
-    academicYearId: textValue(item, "academicYearId", "AcademicYearId"),
-    academicLevelId: textValue(item, "academicLevelId", "AcademicLevelId"),
-  } : null;
-};
-
 const categoryForFeeType = (name = "") => {
   const normalized = String(name).toLowerCase();
   if (normalized.includes("admission")) return "Admission";
   if (normalized.includes("exam")) return "Examination";
-  if (normalized.includes("transport") || normalized.includes("hostel") || normalized.includes("uniform") || normalized.includes("id card")) return "Facility";
+  if (normalized.includes("transport")) return "Transport";
+  if (normalized.includes("hostel")) return "Hostel";
+  if (normalized.includes("uniform") || normalized.includes("id card")) return "Facility";
   if (normalized.includes("activity") || normalized.includes("sports")) return "Activity";
   return "Academic";
+};
+
+const normalizeFeeTypeCategory = (category, fallbackName = "") => {
+  const value = String(category || "").trim();
+  const matched = FEE_TYPE_CATEGORIES.find((item) => item.toLowerCase() === value.toLowerCase());
+  return matched || categoryForFeeType(fallbackName);
 };
 
 const feeTypeCodeFor = (name = "") => {
@@ -490,7 +638,10 @@ const feeTypeOption = (item) => {
     id: String(read(item, "feeTypeId", "FeeTypeId", "typeId", "TypeId") ?? read(feeType, "feeTypeId", "FeeTypeId", "id", "Id", "typeId", "TypeId") ?? read(item, "id", "Id") ?? ""),
     name,
     code: textValue(item, "feeTypeCode", "FeeTypeCode", "code", "Code") || textValue(feeType, "feeTypeCode", "FeeTypeCode", "code", "Code") || feeTypeCodeFor(name),
-    category: textValue(item, "category", "Category", "feeCategory", "FeeCategory") || textValue(feeType, "category", "Category", "feeCategory", "FeeCategory") || categoryForFeeType(name),
+    category: normalizeFeeTypeCategory(
+      textValue(item, "category", "Category", "feeCategory", "FeeCategory") || textValue(feeType, "category", "Category", "feeCategory", "FeeCategory"),
+      name,
+    ),
     status: isActiveStatus(status) ? "Active" : "Inactive",
   };
 };
@@ -624,6 +775,8 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const existing = grouped.get(key);
     const row = existing || {
       id: structureId,
+      structureName: textValue(item, "structureName", "StructureName", "name", "Name"),
+      description: textValue(item, "description", "Description"),
       boardId: textValue(item, "boardId", "BoardId") || textValue(itemBoard, "boardId", "BoardId", "id", "Id"),
       board: textValue(item, "boardName", "BoardName") || textValue(itemBoard, "boardName", "BoardName", "name", "Name") || textValue(item, "boardId", "BoardId"),
       academicYearId,
@@ -873,10 +1026,11 @@ const withPaymentContext = (payment, accounts = []) => {
 const normalizeInstallmentRows = (rows, account) => rows.map((item, index) => ({
   id: read(item, "feeInstallmentId", "FeeInstallmentId", "installmentId", "InstallmentId", "id", "Id"),
   feeInstallmentId: read(item, "feeInstallmentId", "FeeInstallmentId", "installmentId", "InstallmentId", "id", "Id"),
-  no: Number(read(item, "installmentNo", "InstallmentNo", "scheduleNo", "ScheduleNo", "no", "No") || index + 1),
+  no: Number(read(item, "installmentNumber", "InstallmentNumber", "installmentNo", "InstallmentNo", "scheduleNo", "ScheduleNo", "no", "No") || index + 1),
+  label: textValue(item, "feeSchedule", "FeeSchedule", "scheduleName", "ScheduleName", "installmentName", "InstallmentName"),
   amount: numberValue(item, "amount", "Amount", "installmentAmount", "InstallmentAmount", "payableAmount", "PayableAmount", "dueAmount", "DueAmount"),
   paid: optionalNumberValue(item, "paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid"),
-  balance: optionalNumberValue(item, "balance", "Balance", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"),
+  balance: optionalNumberValue(item, "balance", "Balance", "balanceAmount", "BalanceAmount", "outstandingBalance", "OutstandingBalance", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"),
   dueDate: textValue(item, "dueDate", "DueDate", "date", "Date"),
   status: textValue(item, "status", "Status") || account.feeStatus || "Pending",
 })).map((item) => ({
@@ -1082,6 +1236,12 @@ const printFeeList = (title, columns, rows) => {
 
 function StatusBadge({ status }) {
   return <span className={`cms-badge ${feeStatusTone(status)}`}>{status}</span>;
+}
+
+function PaymentStatusBadge({ status }) {
+  const value = status || "Paid";
+  const tone = ["success", "paid", "completed"].includes(normalizeKey(value)) ? "cms-badge-active" : feeStatusTone(value);
+  return <span className={`cms-badge ${tone}`}>{value}</span>;
 }
 
 function SummaryCard({ icon: Icon, label, value, hint, tone, onClick }) {
@@ -1762,6 +1922,11 @@ function ReceiptModal({ receipt, onClose }) {
 
 /* --------------------------- Student fee details -------------------------- */
 function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false }) {
+  const feeBreakdownTotals = account.feeItems.reduce((totals, item) => ({
+    original: totals.original + Number(item.originalAmount || 0),
+    concession: totals.concession + Number(item.concessionAmount || 0),
+    payable: totals.payable + Number(item.payableAmount || 0),
+  }), { original: 0, concession: 0, payable: 0 });
   const receiptFallback = (txn) => ({
     ...txn,
     studentName: account.studentName,
@@ -1838,6 +2003,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
               <div><span>Original Fee</span><strong>{formatCurrency(account.totalOriginal)}</strong></div>
               <div><span>Concession</span><strong>{formatCurrency(account.totalConcession)}</strong></div>
               <div><span>Scheduled Fees</span><strong>{formatCurrency(account.courseFee)}</strong></div>
+              {account.totalFine ? <div><span>Fine</span><strong>{formatCurrency(account.totalFine)}</strong></div> : null}
               <div><span>Total Payable</span><strong>{formatCurrency(account.totalPayable)}</strong></div>
               <div><span>Total Paid</span><strong>{formatCurrency(account.totalPaid)}</strong></div>
               <div><span>Outstanding Balance</span><strong>{formatCurrency(account.balance)}</strong></div>
@@ -1874,10 +2040,10 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                 <tfoot>
                   <tr>
                     <td><strong>Total Fee</strong></td>
-                    <td className="num"><strong>{formatCurrency(account.totalOriginal)}</strong></td>
+                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.original)}</strong></td>
                     <td />
-                    <td className="num"><strong>{formatCurrency(account.totalConcession)}</strong></td>
-                    <td className="num"><strong>{formatCurrency(account.totalPayable)}</strong></td>
+                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.concession)}</strong></td>
+                    <td className="num"><strong>{formatCurrency(feeBreakdownTotals.payable)}</strong></td>
                   </tr>
                 </tfoot>
               </table>
@@ -1895,7 +2061,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
                   <tbody>
                     {account.installments.map((item) => (
                       <tr key={item.no}>
-                        <td><strong>Fee Schedule {item.no}</strong></td>
+                        <td><strong>{item.label || `Fee Schedule ${item.no}`}</strong></td>
                         <td>{formatDate(item.dueDate)}</td>
                         <td className="num">{formatCurrency(item.amount)}</td>
                         <td className="num">{formatCurrency(item.paid)}</td>
@@ -1941,7 +2107,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
 }
 
 /* ----------------------------- Student ledger ---------------------------- */
-function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error = "" }) {
+function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading = false, error = "" }) {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ academicYear: "", group: "", section: "", paymentPlan: "", feeStatus: "" });
   const [page, setPage] = useState(1);
@@ -1973,7 +2139,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
     && matchesAnyNormalized(filters.group, selectedGroupLabel, item.groupId, item.groupName)
   ));
   const paymentPlanOptions = PAYMENT_PLANS.map((plan) => ({ value: plan, label: feeScheduleLabel(plan) }));
-  const rows = normalizeFeeAccountDataset(accounts.filter((item) => {
+  const rows = applyFineRulesToAccounts(normalizeFeeAccountDataset(accounts.filter((item) => {
     const term = search.trim().toLowerCase();
     const selectedSectionLabel = optionLabel(sectionOptions, filters.section);
     const matchesSearch = !term
@@ -1985,7 +2151,7 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
       && matchesAnyNormalized(filters.section, selectedSectionLabel, item.sectionId, item.section, `${item.group || ""} / ${item.section || ""}`)
       && matchesAnyNormalized(filters.paymentPlan, feeScheduleLabel(filters.paymentPlan), item.paymentPlan, feeScheduleLabel(item.paymentPlan))
       && matchesAnyNormalized(filters.feeStatus, filters.feeStatus, item.feeStatus);
-  }));
+  })), fineRules);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginatedRows = pageItems(rows, page);
   useEffect(() => {
@@ -2059,19 +2225,19 @@ function LedgerTab({ accounts, onView, onPrint, masters, loading = false, error 
   );
 }
 
-function FeeCollectionTab({ accounts, onCollect, loading = false, error = "" }) {
+function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false, error = "" }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const setSearchTerm = (value) => {
     setSearch(value);
     setPage(1);
   };
-  const rows = normalizeFeeAccountDataset(accounts.filter((item) => {
+  const rows = applyFineRulesToAccounts(normalizeFeeAccountDataset(accounts.filter((item) => {
     const term = search.trim().toLowerCase();
     return !term
       || item.studentName.toLowerCase().includes(term)
       || item.admissionNo.toLowerCase().includes(term);
-  }));
+  })), fineRules);
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const paginatedRows = pageItems(rows, page);
 
@@ -2315,6 +2481,8 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
     const programId = Number(values.programId || 0);
     if (initial?.id) {
       return {
+        ...(values.structureName ? { structureName: values.structureName } : {}),
+        ...(values.description ? { description: values.description } : {}),
         ...(programId ? { programId } : {}),
         isActive: values.status !== "Inactive",
       };
@@ -2489,7 +2657,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
 function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
   const [draft, setDraft] = useState({
     name: initial?.name || "",
-    category: initial?.category || FEE_TYPE_CATEGORIES[1],
+    category: normalizeFeeTypeCategory(initial?.category, initial?.name),
     status: initial?.status || "Active",
   });
   const [error, setError] = useState("");
@@ -2503,7 +2671,7 @@ function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
     const nextType = {
       id: initial?.id || `custom-${Date.now()}`,
       name,
-      category: draft.category || "Other",
+      category: normalizeFeeTypeCategory(draft.category, name),
       status: draft.status || "Active",
     };
     setSaving(true);
@@ -2556,7 +2724,7 @@ function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
 const feeTypePayload = (item) => ({
   FeeTypeName: item.name,
   FeeTypeCode: item.code || feeTypeCodeFor(item.name),
-  Category: item.category || "Other",
+  Category: normalizeFeeTypeCategory(item.category, item.name),
   IsActive: item.status !== "Inactive",
 });
 
@@ -2820,6 +2988,207 @@ function ScholarshipsTab({ scholarships, onChange, onToast, onRefresh }) {
   );
 }
 
+function FineRuleFormModal({ initial, fineRules, feeTypes, onClose, onSaved }) {
+  const activeFeeTypes = feeTypes.filter((item) => item.status !== "Inactive");
+  const firstFeeType = activeFeeTypes[0];
+  const [draft, setDraft] = useState({
+    ruleName: initial?.ruleName || "",
+    feeTypeId: initial?.feeTypeId || firstFeeType?.id || "",
+    fineType: initial?.fineType || "Fixed Amount",
+    fineAmount: initial?.fineAmount ?? "",
+    gracePeriod: initial?.gracePeriod ?? 0,
+    status: initial?.status || "Active",
+  });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const saveRule = async () => {
+    const ruleName = draft.ruleName.trim();
+    const selectedFeeType = activeFeeTypes.find((item) => String(item.id) === String(draft.feeTypeId));
+    const fineAmount = Number(draft.fineAmount || 0);
+    const gracePeriod = Number(draft.gracePeriod || 0);
+    if (!ruleName) return setError("Fine Rule Name is required");
+    if (!selectedFeeType) return setError("Applicable Fee / Fee Type is required");
+    if (!draft.fineType) return setError("Fine Type is required");
+    if (!Number.isFinite(fineAmount) || fineAmount <= 0) return setError("Fine Amount must be greater than 0");
+    if (draft.fineType === "Percentage" && fineAmount > 100) return setError("Percentage cannot exceed 100");
+    if (!Number.isFinite(gracePeriod) || gracePeriod < 0) return setError("Grace Period cannot be negative");
+    if (fineRules.some((item) => item.id !== initial?.id && normalizeKey(item.ruleName) === normalizeKey(ruleName))) return setError(`${ruleName} already exists`);
+
+    setSaving(true);
+    setError("");
+    try {
+      await onSaved({
+        id: initial?.id || "",
+        fineRuleId: initial?.fineRuleId || initial?.id || "",
+        ruleName,
+        feeTypeId: selectedFeeType.id,
+        feeTypeName: selectedFeeType.name,
+        fineType: draft.fineType,
+        fineAmount,
+        gracePeriod,
+        status: draft.status,
+      }, initial?.id ? "Fine rule updated" : "Fine rule added");
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+    return null;
+  };
+
+  return (
+    <Modal
+      title={initial?.id ? "Edit Fine Rule" : "Add Fine Rule"}
+      onClose={onClose}
+      footer={(
+        <>
+          <button className="cms-btn cms-btn-ghost" disabled={saving} onClick={onClose}>Cancel</button>
+          <button className="cms-btn cms-btn-primary" disabled={saving} onClick={saveRule}>{saving ? "Saving..." : "Save Fine Rule"}</button>
+        </>
+      )}
+    >
+      <div className="cms-form-grid">
+        <div className="cms-field">
+          <label htmlFor="fine-rule-name">Fine Rule Name <span className="req">*</span></label>
+          <input id="fine-rule-name" value={draft.ruleName} onChange={(event) => setDraft((current) => ({ ...current, ruleName: event.target.value }))} />
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-fee-type">Applicable Fee / Fee Type <span className="req">*</span></label>
+          <select id="fine-fee-type" value={draft.feeTypeId} onChange={(event) => setDraft((current) => ({ ...current, feeTypeId: event.target.value }))}>
+            {!activeFeeTypes.length ? <option value="">No active fee types</option> : null}
+            {activeFeeTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-type">Fine Type <span className="req">*</span></label>
+          <select id="fine-type" value={draft.fineType} onChange={(event) => setDraft((current) => ({ ...current, fineType: event.target.value }))}>
+            <option value="Fixed Amount">Fixed Amount</option>
+            <option value="Percentage">Percentage</option>
+          </select>
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-amount">Fine Amount <span className="req">*</span></label>
+          <input id="fine-amount" type="number" min="0" max={draft.fineType === "Percentage" ? "100" : undefined} value={draft.fineAmount} onChange={(event) => setDraft((current) => ({ ...current, fineAmount: event.target.value }))} />
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-grace">Grace Period</label>
+          <input id="fine-grace" type="number" min="0" value={draft.gracePeriod} onChange={(event) => setDraft((current) => ({ ...current, gracePeriod: event.target.value }))} />
+        </div>
+        <div className="cms-field">
+          <label htmlFor="fine-status">Status</label>
+          <select id="fine-status" value={draft.status} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+      {error ? <p className="cms-error">{error}</p> : null}
+    </Modal>
+  );
+}
+
+function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
+  const [formItem, setFormItem] = useState(null);
+  const [deletingId, setDeletingId] = useState("");
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(fineRules.length / PAGE_SIZE));
+  const paginatedFineRules = pageItems(fineRules, page);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const fineRulePayload = (item) => ({
+    fineRuleName: item.ruleName,
+    applicableFeeId: Number(item.feeTypeId),
+    fineType: item.fineType,
+    fineAmount: Number(item.fineAmount) || 0,
+    gracePeriod: Number(item.gracePeriod) || 0,
+    status: item.status || "Active",
+  });
+
+  const saveFineRule = async (item, message) => {
+    const id = item.fineRuleId || item.id;
+    if (id) {
+      await apiClient.put(apiEndpoints.fee.fineRuleById(id), fineRulePayload(item));
+    } else {
+      await apiClient.post(apiEndpoints.fee.fineRules, fineRulePayload(item));
+    }
+    onToast(message);
+    setFormItem(null);
+    await onRefresh();
+  };
+
+  const deleteFineRule = async (item) => {
+    const id = item.fineRuleId || item.id;
+    if (!id) return;
+    setDeletingId(String(item.id));
+    try {
+      await apiClient.delete(apiEndpoints.fee.fineRuleById(id));
+      onToast("Fine rule deactivated");
+      await onRefresh();
+    } catch (err) {
+      onToast(getApiErrorMessage(err));
+    } finally {
+      setDeletingId("");
+    }
+  };
+
+  return (
+    <div className="cms-card cms-fee-types-card">
+      <div className="cms-card-head">
+        <div>
+          <h2>Fine</h2>
+          <p>Configure overdue fee fine rules for unpaid fee schedules.</p>
+        </div>
+        <button className="cms-btn cms-btn-primary" onClick={() => setFormItem({})}><Plus size={14} /> Add Fine Rule</button>
+      </div>
+      <div className="cms-card-body cms-fee-toolbar">
+        {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
+        <div className="cms-table-wrap">
+          <table className="cms-table cms-fee-setup-table cms-fee-fine-table">
+            <thead>
+              <tr><th>Fine Rule Name</th><th>Applicable Fee</th><th>Fine Type</th><th className="num">Fine Amount</th><th>Grace Period</th><th>Status</th><th className="cms-fee-actions-col">Actions</th></tr>
+            </thead>
+            <tbody>
+              {paginatedFineRules.map((item) => (
+                <tr key={item.id}>
+                  <td><strong>{item.ruleName}</strong></td>
+                  <td>{item.feeTypeName}</td>
+                  <td>{item.fineType}</td>
+                  <td className="num">{item.fineType === "Percentage" ? `${Number(item.fineAmount || 0)}%` : formatCurrency(item.fineAmount)}</td>
+                  <td>{Number(item.gracePeriod || 0)} days</td>
+                  <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
+                  <td className="cms-fee-actions-col">
+                    <div className="cms-actions">
+                      <button type="button" className="cms-action-btn" title="Edit fine rule" aria-label="Edit fine rule" onClick={() => setFormItem(item)}><Pencil size={15} /></button>
+                      <button type="button" className="cms-action-btn delete" title="Deactivate fine rule" aria-label="Deactivate fine rule" disabled={deletingId === String(item.id)} onClick={() => deleteFineRule(item)}><Trash2 size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!loading && !fineRules.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No fine rules configured.</td></tr> : null}
+              {loading ? <tr><td colSpan={7} className="cms-fee-empty-row">Loading fine rules...</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        <TablePagination page={page} totalItems={fineRules.length} onPageChange={setPage} />
+        <p className="cms-fee-note"><CheckCircle size={14} /> Fine applies only after due date plus grace period when an outstanding balance remains.</p>
+      </div>
+      {formItem ? (
+        <FineRuleFormModal
+          initial={formItem.id ? formItem : null}
+          fineRules={fineRules}
+          feeTypes={feeTypes}
+          onClose={() => setFormItem(null)}
+          onSaved={saveFineRule}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes, masters, masterErrors }) {
   const [editing, setEditing] = useState(null);
   const [loadingEditId, setLoadingEditId] = useState("");
@@ -2959,25 +3328,37 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
   );
 }
 
-function HostelFeesTab({ configs, onChange, onToast }) {
+function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh }) {
   const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
   const [page, setPage] = useState(1);
+  const feeTableStyle = { width: "100%", tableLayout: "fixed" };
+  const textCellStyle = { whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.35 };
+  const nowrapCellStyle = { whiteSpace: "nowrap" };
 
-  const blockOptions = HOSTEL_BLOCKS.map((block) => ({
-    value: block.code,
+  const blockOptions = masters.blocks.map((block) => ({
+    value: String(block.id),
     label: block.name,
+    code: block.code,
   }));
-  const roomTypeOptions = Array.from(new Set(HOSTEL_ROOMS_DATA.map((room) => room.type).filter(Boolean)));
+  const roomTypeOptions = masters.roomTypes.map((roomType) => ({
+    value: String(roomType.id),
+    label: roomType.name,
+  }));
   const defaultBlock = blockOptions[0];
-  const defaultRoomType = roomTypeOptions[0] || "";
+  const defaultRoomType = roomTypeOptions[0];
 
   const createDraft = (row = null) => ({
-    id: row?.id || `hostel-fee-${Date.now()}`,
-    hostelBlock: row?.hostelBlock || defaultBlock?.value || "",
+    id: row?.id || "",
+    feeConfigId: row?.feeConfigId || row?.id || "",
+    hostelId: row?.hostelId || row?.hostelBlock || defaultBlock?.value || "",
+    hostelBlock: row?.hostelBlock || row?.hostelId || defaultBlock?.value || "",
     hostelName: row?.hostelName || defaultBlock?.label || "",
     roomNo: row?.roomNo || "All Rooms",
-    roomType: row?.roomType || defaultRoomType,
-    feePlan: row?.feePlan || "Annual",
+    roomTypeId: row?.roomTypeId || defaultRoomType?.value || "",
+    roomType: row?.roomType || defaultRoomType?.label || "",
+    feePlan: row?.feePlan || "Monthly",
     feeAmount: row?.feeAmount ?? "",
     securityDeposit: row?.securityDeposit ?? 0,
     effectiveFrom: row?.effectiveFrom || todayISO(),
@@ -2993,24 +3374,52 @@ function HostelFeesTab({ configs, onChange, onToast }) {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const saveConfig = () => {
+  const saveConfig = async () => {
     const feeAmount = Number(editing.feeAmount);
-    if (!editing.hostelBlock || !editing.roomType || !Number.isFinite(feeAmount) || feeAmount <= 0) {
+    if (!editing.hostelId || !editing.roomTypeId || !Number.isFinite(feeAmount) || feeAmount <= 0) {
       onToast("Select hostel block, room type, and enter a valid hostel fee");
       return;
     }
-    const block = blockOptions.find((option) => option.value === editing.hostelBlock);
-    const nextConfig = {
-      ...editing,
-      hostelName: block?.label || editing.hostelName || editing.hostelBlock,
-      feeAmount,
+    const payload = {
+      hostelId: Number(editing.hostelId),
+      roomTypeId: Number(editing.roomTypeId),
+      feeFrequency: editing.feePlan,
+      hostelFeeAmount: feeAmount,
       securityDeposit: Number(editing.securityDeposit) || 0,
-      roomNo: editing.roomNo || "All Rooms",
+      effectiveDate: editing.effectiveFrom || todayISO(),
+      status: editing.status || "Active",
     };
-    const exists = configs.some((item) => item.id === nextConfig.id);
-    onChange(exists ? configs.map((item) => (item.id === nextConfig.id ? nextConfig : item)) : [nextConfig, ...configs]);
-    onToast(exists ? "Hostel fee configuration updated" : "Hostel fee configuration added");
-    setEditing(null);
+    setSaving(true);
+    try {
+      const id = editing.feeConfigId || editing.id;
+      if (id) {
+        await apiClient.put(apiEndpoints.hostel.feeById(id), payload);
+      } else {
+        await apiClient.post(apiEndpoints.hostel.fees, payload);
+      }
+      onToast(id ? "Hostel fee configuration updated" : "Hostel fee configuration added");
+      setEditing(null);
+      await onRefresh();
+    } catch (err) {
+      onToast(getApiErrorMessage(err) || "Unable to save hostel fee configuration");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteConfig = async (item) => {
+    const id = item.feeConfigId || item.id;
+    if (!id) return;
+    setDeletingId(String(item.id));
+    try {
+      await apiClient.delete(apiEndpoints.hostel.feeById(id));
+      onToast("Hostel fee configuration deactivated");
+      await onRefresh();
+    } catch (err) {
+      onToast(getApiErrorMessage(err) || "Unable to deactivate hostel fee configuration");
+    } finally {
+      setDeletingId("");
+    }
   };
 
   return (
@@ -3020,20 +3429,21 @@ function HostelFeesTab({ configs, onChange, onToast }) {
           <h2>Hostel Fees</h2>
           <p>Dedicated hostel fee configuration, separate from normal Fee Types.</p>
         </div>
-        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd}><Plus size={14} /> Add Hostel Fee</button>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!blockOptions.length || !roomTypeOptions.length || loading}><Plus size={14} /> Add Hostel Fee</button>
       </div>
       <div className="cms-card-body cms-fee-toolbar">
+        {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
         <div className="cms-table-wrap cms-fee-config-wrap cms-hostel-fees-wrap">
-          <table className="cms-table cms-fee-config-table cms-fee-setup-table cms-hostel-fees-table">
+          <table className="cms-table cms-fee-config-table cms-fee-setup-table cms-hostel-fees-table" style={feeTableStyle}>
             <colgroup>
-              <col className="cms-hostel-block-col" />
-              <col className="cms-hostel-room-type-col" />
-              <col className="cms-hostel-plan-col" />
-              <col className="cms-hostel-amount-col" />
-              <col className="cms-hostel-deposit-col" />
-              <col className="cms-hostel-total-col" />
-              <col className="cms-hostel-status-col" />
-              <col className="cms-hostel-actions-col" />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "16%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "7%" }} />
             </colgroup>
             <thead>
               <tr><th>Hostel Block</th><th>Room Type</th><th>Fee Frequency</th><th className="num">Hostel Fee</th><th className="num">Security Deposit</th><th className="num">Total Fee</th><th>Status</th><th className="cms-fee-actions-col">Actions</th></tr>
@@ -3041,20 +3451,23 @@ function HostelFeesTab({ configs, onChange, onToast }) {
             <tbody>
               {paginatedConfigs.map((item) => (
                 <tr key={item.id}>
-                  <td><strong>{item.hostelName}</strong><small>{item.hostelBlock}</small></td>
-                  <td>{item.roomType}</td>
-                  <td>{item.feePlan}</td>
+                  <td style={textCellStyle}><strong>{item.hostelName}</strong></td>
+                  <td style={textCellStyle}>{item.roomType}</td>
+                  <td style={nowrapCellStyle}>{item.feePlan}</td>
                   <td className="num">{formatCurrency(item.feeAmount)}</td>
                   <td className="num">{formatCurrency(item.securityDeposit)}</td>
-                  <td className="num"><strong>{formatCurrency(Number(item.feeAmount || 0) + Number(item.securityDeposit || 0))}</strong></td>
-                  <td><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
+                  <td className="num"><strong>{formatCurrency(item.totalFee ?? (Number(item.feeAmount || 0) + Number(item.securityDeposit || 0)))}</strong></td>
+                  <td style={nowrapCellStyle}><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
                   <td className="cms-fee-actions-col">
                     <div className="cms-actions">
                       <button type="button" className="cms-action-btn" title="Edit hostel fee" aria-label="Edit hostel fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
+                      <button type="button" className="cms-action-btn delete" title="Deactivate hostel fee" aria-label="Deactivate hostel fee" disabled={deletingId === String(item.id)} onClick={() => deleteConfig(item)}><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
               ))}
+              {!loading && !configs.length ? <tr><td colSpan={8} className="cms-fee-empty-row">No hostel fee configurations found.</td></tr> : null}
+              {loading ? <tr><td colSpan={8} className="cms-fee-empty-row">Loading hostel fee configurations...</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -3067,8 +3480,8 @@ function HostelFeesTab({ configs, onChange, onToast }) {
           onClose={() => setEditing(null)}
           footer={(
             <>
-              <button className="cms-btn cms-btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="cms-btn cms-btn-primary" onClick={saveConfig}>Save Hostel Fee</button>
+              <button className="cms-btn cms-btn-ghost" disabled={saving} onClick={() => setEditing(null)}>Cancel</button>
+              <button className="cms-btn cms-btn-primary" disabled={saving} onClick={saveConfig}>{saving ? "Saving..." : "Save Hostel Fee"}</button>
             </>
           )}
         >
@@ -3077,10 +3490,10 @@ function HostelFeesTab({ configs, onChange, onToast }) {
               <label htmlFor="hostel-fee-block">Hostel Block <span className="req">*</span></label>
               <select
                 id="hostel-fee-block"
-                value={editing.hostelBlock}
+                value={editing.hostelId}
                 onChange={(event) => {
                   const block = blockOptions.find((option) => option.value === event.target.value);
-                  setEditing((current) => ({ ...current, hostelBlock: event.target.value, hostelName: block?.label || "" }));
+                  setEditing((current) => ({ ...current, hostelId: event.target.value, hostelBlock: event.target.value, hostelName: block?.label || "" }));
                 }}
               >
                 {blockOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -3088,8 +3501,15 @@ function HostelFeesTab({ configs, onChange, onToast }) {
             </div>
             <div className="cms-field">
               <label htmlFor="hostel-fee-room-type">Room Type <span className="req">*</span></label>
-              <select id="hostel-fee-room-type" value={editing.roomType} onChange={(event) => setEditing((current) => ({ ...current, roomType: event.target.value }))}>
-                {roomTypeOptions.map((roomType) => <option key={roomType} value={roomType}>{roomType}</option>)}
+              <select
+                id="hostel-fee-room-type"
+                value={editing.roomTypeId}
+                onChange={(event) => {
+                  const roomType = roomTypeOptions.find((option) => option.value === event.target.value);
+                  setEditing((current) => ({ ...current, roomTypeId: event.target.value, roomType: roomType?.label || "" }));
+                }}
+              >
+                {roomTypeOptions.map((roomType) => <option key={roomType.value} value={roomType.value}>{roomType.label}</option>)}
               </select>
             </div>
             <div className="cms-field">
@@ -3097,7 +3517,6 @@ function HostelFeesTab({ configs, onChange, onToast }) {
               <select id="hostel-fee-plan" value={editing.feePlan} onChange={(event) => setEditing((current) => ({ ...current, feePlan: event.target.value }))}>
                 <option value="Monthly">Monthly</option>
                 <option value="Quarterly">Quarterly</option>
-                <option value="Half Yearly">Half Yearly</option>
                 <option value="Annual">Annual</option>
               </select>
             </div>
@@ -3127,7 +3546,179 @@ function HostelFeesTab({ configs, onChange, onToast }) {
   );
 }
 
-function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, scholarships, onScholarshipsChange, hostelFeeConfigs, onHostelFeeConfigsChange, structures, onToast, onRefresh, loading, error, masters, masterErrors }) {
+function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRefresh }) {
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const feeTableStyle = { width: "100%", tableLayout: "fixed" };
+  const textCellStyle = { whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.35 };
+  const nowrapCellStyle = { whiteSpace: "nowrap" };
+  const totalPages = Math.max(1, Math.ceil(pickupPoints.length / PAGE_SIZE));
+  const paginatedConfigs = pageItems(pickupPoints, page);
+  const routeOptions = routes.map((route) => ({ value: route.id, label: `${route.routeName}${route.routeCode ? ` (${route.routeCode})` : ""}` }));
+  const routeNameFor = (routeId, fallback = "") => routeOptions.find((option) => String(option.value) === String(routeId))?.label || fallback || "-";
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const createDraft = (row = null) => ({
+    id: row?.id || "",
+    routeId: row?.routeId || routeOptions[0]?.value || "",
+    pickupName: row?.pickupName || "",
+    landmark: row?.landmark || "",
+    sequenceNumber: row?.sequenceNumber || 1,
+    distanceKm: row?.distanceKm ?? "",
+    monthlyFee: row?.monthlyFee ?? "",
+    pickupTime: row?.pickupTime || "07:30",
+    dropTime: row?.dropTime || "16:15",
+    status: row?.status || "Active",
+  });
+
+  const openAdd = () => setEditing(createDraft());
+  const openEdit = (item) => setEditing(createDraft(item));
+
+  const saveTransportFee = async () => {
+    const monthlyFee = Number(editing.monthlyFee);
+    const distanceKm = Number(editing.distanceKm);
+    if (!editing.routeId || !editing.pickupName || !Number.isFinite(monthlyFee) || monthlyFee < 0 || !Number.isFinite(distanceKm) || distanceKm < 0) {
+      onToast("Select route, pickup point, distance, and a valid monthly fare");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        routeId: Number(editing.routeId),
+        pickupPointName: editing.pickupName,
+        landmark: editing.landmark || "Main Landmark",
+        sequenceNo: Number(editing.sequenceNumber) || 1,
+        pickupTime: editing.pickupTime ? (editing.pickupTime.length === 5 ? `${editing.pickupTime}:00` : editing.pickupTime) : "07:30:00",
+        dropTime: editing.dropTime ? (editing.dropTime.length === 5 ? `${editing.dropTime}:00` : editing.dropTime) : "16:15:00",
+        distanceFromStart: distanceKm,
+        monthlyFee,
+        status: editing.status === "Active",
+      };
+      if (editing.id) {
+        await apiClient.put(apiEndpoints.transport.pickupPointById(editing.id), payload);
+      } else {
+        await apiClient.post(apiEndpoints.transport.pickupPoints, payload);
+      }
+      onToast(editing.id ? "Transport fee configuration updated" : "Transport fee configuration added");
+      setEditing(null);
+      onRefresh();
+    } catch (err) {
+      onToast(getApiErrorMessage(err) || "Unable to save transport fee configuration");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="cms-card cms-fee-types-card">
+      <div className="cms-card-head">
+        <div>
+          <h2>Transport Fees</h2>
+          <p>Route and pickup-point based transport fare configuration.</p>
+        </div>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={openAdd} disabled={!routes.length || loading}><Plus size={14} /> Add Transport Fee</button>
+      </div>
+      <div className="cms-card-body cms-fee-toolbar">
+        {error ? <div className="cms-alert cms-alert-error">{error}</div> : null}
+        <div className="cms-table-wrap cms-fee-config-wrap cms-hostel-fees-wrap">
+          <table className="cms-table cms-fee-config-table cms-fee-setup-table cms-hostel-fees-table" style={feeTableStyle}>
+            <colgroup>
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "12%" }} />
+            </colgroup>
+            <thead>
+              <tr><th>Route</th><th>Pickup Point</th><th className="num">Distance</th><th className="num">Monthly Fare</th><th className="num">Annual Fare</th><th>Status</th><th className="cms-fee-actions-col">Actions</th></tr>
+            </thead>
+            <tbody>
+              {paginatedConfigs.map((item) => (
+                <tr key={item.id}>
+                  <td style={textCellStyle}><strong>{routeNameFor(item.routeId, item.routeName)}</strong></td>
+                  <td style={textCellStyle}>{item.pickupName} ({item.pickupTime} - {item.dropTime})</td>
+                  <td className="num">{item.distanceKm} km</td>
+                  <td className="num">{formatCurrency(item.monthlyFee)}</td>
+                  <td className="num"><strong>{formatCurrency(Number(item.monthlyFee || 0) * 12)}</strong></td>
+                  <td style={nowrapCellStyle}><span className={`cms-badge ${item.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"}`}>{item.status}</span></td>
+                  <td className="cms-fee-actions-col">
+                    <div className="cms-actions">
+                      <button type="button" className="cms-action-btn" title="Edit transport fee" aria-label="Edit transport fee" onClick={() => openEdit(item)}><Pencil size={15} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!loading && !pickupPoints.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No transport fee configurations found.</td></tr> : null}
+              {loading ? <tr><td colSpan={7} className="cms-fee-empty-row">Loading transport fee configurations...</td></tr> : null}
+            </tbody>
+          </table>
+        </div>
+        <TablePagination page={page} totalItems={pickupPoints.length} onPageChange={setPage} />
+        <p className="cms-fee-note"><CheckCircle size={14} /> Transport Fee is resolved from route pickup-point monthly fare configuration.</p>
+      </div>
+      {editing ? (
+        <Modal
+          title={editing.id ? "Edit Transport Fee" : "Add Transport Fee"}
+          onClose={() => setEditing(null)}
+          footer={(
+            <>
+              <button className="cms-btn cms-btn-ghost" disabled={saving} onClick={() => setEditing(null)}>Cancel</button>
+              <button className="cms-btn cms-btn-primary" disabled={saving} onClick={saveTransportFee}>{saving ? "Saving..." : "Save Transport Fee"}</button>
+            </>
+          )}
+        >
+          <div className="cms-form-grid">
+            <div className="cms-field full">
+              <label htmlFor="transport-fee-route">Route <span className="req">*</span></label>
+              <select id="transport-fee-route" value={editing.routeId} onChange={(event) => setEditing((current) => ({ ...current, routeId: event.target.value }))}>
+                {routeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </div>
+            <div className="cms-field">
+              <label htmlFor="transport-fee-pickup">Pickup Point <span className="req">*</span></label>
+              <input id="transport-fee-pickup" value={editing.pickupName} onChange={(event) => setEditing((current) => ({ ...current, pickupName: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="transport-fee-distance">Distance from School (KM) <span className="req">*</span></label>
+              <input id="transport-fee-distance" type="number" min="0" value={editing.distanceKm} onChange={(event) => setEditing((current) => ({ ...current, distanceKm: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="transport-fee-monthly">Monthly Fare <span className="req">*</span></label>
+              <input id="transport-fee-monthly" type="number" min="0" value={editing.monthlyFee} onChange={(event) => setEditing((current) => ({ ...current, monthlyFee: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="transport-fee-sequence">Sequence Number</label>
+              <input id="transport-fee-sequence" type="number" min="1" value={editing.sequenceNumber} onChange={(event) => setEditing((current) => ({ ...current, sequenceNumber: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="transport-fee-pickup-time">Morning Pickup Time</label>
+              <input id="transport-fee-pickup-time" type="time" value={editing.pickupTime} onChange={(event) => setEditing((current) => ({ ...current, pickupTime: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="transport-fee-drop-time">Evening Drop Time</label>
+              <input id="transport-fee-drop-time" type="time" value={editing.dropTime} onChange={(event) => setEditing((current) => ({ ...current, dropTime: event.target.value }))} />
+            </div>
+            <div className="cms-field">
+              <label htmlFor="transport-fee-status">Status</label>
+              <select id="transport-fee-status" value={editing.status} onChange={(event) => setEditing((current) => ({ ...current, status: event.target.value }))}>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </div>
+  );
+}
+
+function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, scholarships, onScholarshipsChange, hostelFees, transportFees, fineRules, structures, onToast, onRefresh, loading, error, masters, masterErrors }) {
   return (
     <div className="cms-fee-stack">
       <div className="cms-fee-tabs cms-fee-subtabs" role="tablist" aria-label="Fee setup">
@@ -3157,13 +3748,33 @@ function FeeSetupTab({ setupTab, onSetupTabChange, feeTypes, onFeeTypesChange, s
           masterErrors={masterErrors}
         />
       ) : null}
-      {setupTab === "Hostel Fees" ? <HostelFeesTab configs={hostelFeeConfigs} onChange={onHostelFeeConfigsChange} onToast={onToast} /> : null}
+      {setupTab === "Hostel Fees" ? (
+        <HostelFeesTab
+          configs={hostelFees.configs}
+          masters={hostelFees.masters}
+          loading={hostelFees.loading}
+          error={hostelFees.error}
+          onToast={onToast}
+          onRefresh={onRefresh}
+        />
+      ) : null}
+      {setupTab === "Transport Fees" ? (
+        <TransportFeesTab
+          routes={transportFees.routes}
+          pickupPoints={transportFees.pickupPoints}
+          loading={transportFees.loading}
+          error={transportFees.error}
+          onToast={onToast}
+          onRefresh={onRefresh}
+        />
+      ) : null}
       {setupTab === "Scholarships" ? <ScholarshipsTab scholarships={scholarships} onChange={onScholarshipsChange} onToast={onToast} onRefresh={onRefresh} /> : null}
+      {setupTab === "Fine" ? <FineTab fineRules={fineRules.rows} feeTypes={feeTypes} loading={fineRules.loading} error={fineRules.error} onToast={onToast} onRefresh={onRefresh} /> : null}
     </div>
   );
 }
 
-function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, onView, onPrint, onCollect, onReceipt, masters, loading, errors }) {
+function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts, collectionAccounts, paymentHistoryRows, fineRules, onView, onPrint, onCollect, onReceipt, masters, loading, errors }) {
   return (
     <div className="cms-fee-stack">
       <div className="cms-fee-tabs cms-fee-subtabs" role="tablist" aria-label="Student fee ledger">
@@ -3180,8 +3791,8 @@ function StudentFeeLedgerSection({ ledgerTab, onLedgerTabChange, ledgerAccounts,
           </button>
         ))}
       </div>
-      {ledgerTab === "Student Fee Ledger" ? <LedgerTab accounts={ledgerAccounts} onView={onView} onPrint={onPrint} masters={masters} loading={loading.ledger} error={errors.ledger} /> : null}
-      {ledgerTab === "Fee Collection" ? <FeeCollectionTab accounts={collectionAccounts} onCollect={onCollect} loading={loading.collection} error={errors.collection} /> : null}
+      {ledgerTab === "Student Fee Ledger" ? <LedgerTab accounts={ledgerAccounts} fineRules={fineRules} onView={onView} onPrint={onPrint} masters={masters} loading={loading.ledger} error={errors.ledger} /> : null}
+      {ledgerTab === "Fee Collection" ? <FeeCollectionTab accounts={collectionAccounts} fineRules={fineRules} onCollect={onCollect} loading={loading.collection} error={errors.collection} /> : null}
       {ledgerTab === "Payment History" ? <HistoryTab transactions={paymentHistoryRows} onReceipt={onReceipt} loading={loading.ledger} error={errors.ledger} /> : null}
     </div>
   );
@@ -3293,7 +3904,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
                 <td className="num">{formatCurrency(row.amount)}</td>
                 <td>{row.method}</td>
                 <td>{row.reference || "-"}</td>
-                <td><StatusBadge status={row.status || "Paid"} /></td>
+                <td><PaymentStatusBadge status={row.status || "Paid"} /></td>
                 <td>
                   <button className="cms-action-btn" title="View receipt" aria-label="View receipt" disabled={loadingReceiptId === row.id} onClick={() => viewReceipt(row)}><ReceiptText size={15} /></button>
                 </td>
@@ -3308,7 +3919,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
 }
 
 /* -------------------------------- Page ---------------------------------- */
-export default function FeeManagementPage() {
+export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTab = FEE_SETUP_TABS[0], initialLedgerTab = LEDGER_TABS[0].id } = {}) {
   const {
     boards: contextBoards,
     academicYears: contextAcademicYears,
@@ -3317,17 +3928,20 @@ export default function FeeManagementPage() {
     selectedBoardId,
     selectedAcademicYearId,
   } = useAcademicContext();
-  const [tab, setTab] = useState(TABS[0]);
-  const [setupTab, setSetupTab] = useState(FEE_SETUP_TABS[0]);
-  const [ledgerTab, setLedgerTab] = useState(LEDGER_TABS[0].id);
+  const [tab, setTab] = useState(initialTab);
+  const [setupTab, setSetupTab] = useState(initialSetupTab);
+  const [ledgerTab, setLedgerTab] = useState(initialLedgerTab);
   const [selectedId, setSelectedId] = useState(null);
   const [selectedSource, setSelectedSource] = useState("");
   const [collecting, setCollecting] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const [toast, setToast] = useState("");
   const [feeTypes, setFeeTypes] = useState([]);
-  const [hostelFeeConfigs, setHostelFeeConfigs] = useState(() => readHostelFeeConfigs());
+  const [hostelFees, setHostelFees] = useState({ configs: [], masters: { blocks: [], roomTypes: [] }, loading: false, error: "" });
+  const [transportFees, setTransportFees] = useState({ routes: [], pickupPoints: [], loading: false, error: "" });
   const [scholarships, setScholarships] = useState([]);
+  const [fineRules, setFineRules] = useState([]);
+  const [fineRuleState, setFineRuleState] = useState({ loading: false, error: "" });
   const [apiStructures, setApiStructures] = useState([]);
   const [structureLoading, setStructureLoading] = useState(false);
   const [structureError, setStructureError] = useState("");
@@ -3380,7 +3994,8 @@ export default function FeeManagementPage() {
   const overviewAccounts = ledgerAccounts;
   const selectedAccounts = selectedSource === "collection" ? [...collectionAccounts, ...ledgerAccounts] : [...ledgerAccounts, ...collectionAccounts];
   const selectedBase = selectedId ? selectedAccounts.find((item) => item.id === selectedId) : null;
-  const selected = selectedDetail || selectedBase;
+  const selectedRaw = selectedDetail || selectedBase;
+  const selected = selectedRaw ? applyFineRulesToAccount(selectedRaw, fineRules) : null;
   const modalOpen = Boolean(collecting || receipt);
   const paymentHistoryRows = useMemo(() => {
     const rows = [];
@@ -3403,11 +4018,6 @@ export default function FeeManagementPage() {
 
   const saveFeeTypes = (nextTypes) => {
     setFeeTypes(nextTypes.filter((item) => !isDedicatedFacilityFeeType(item)));
-  };
-
-  const saveHostelFeeConfigs = (nextConfigs) => {
-    setHostelFeeConfigs(nextConfigs);
-    writeHostelFeeConfigs(nextConfigs);
   };
 
   const saveScholarships = (nextScholarships) => {
@@ -3547,19 +4157,59 @@ export default function FeeManagementPage() {
     const requestId = structureRequestRef.current + 1;
     structureRequestRef.current = requestId;
     setStructureLoading(true);
+    setTransportFees((current) => ({ ...current, loading: true, error: "" }));
+    setHostelFees((current) => ({ ...current, loading: true, error: "" }));
+    setFineRuleState({ loading: true, error: "" });
     setStructureError("");
     setMasterErrors({});
-    const [typesResult, structuresResult, scholarshipsResult, yearsResult, levelsResult, groupsResult, sectionsResult, programsResult] = await Promise.allSettled([
+    const [typesResult, structuresResult, scholarshipsResult, yearsResult, levelsResult, groupsResult, programsResult, transportRoutesResult, transportPickupsResult, hostelFeesResult, hostelBlocksResult, hostelRoomTypesResult, fineRulesResult] = await Promise.allSettled([
       apiClient.get(apiEndpoints.fee.feeTypes),
       apiClient.get(apiEndpoints.fee.getStructures),
       apiClient.get(apiEndpoints.fee.scholarships),
       apiClient.get(apiEndpoints.academicYears.getAll),
       apiClient.get(apiEndpoints.boards.getAcademicLevels),
       apiClient.get(apiEndpoints.groups.getAll, { params: { isActive: true } }).catch(() => apiClient.get(apiEndpoints.groups.dropdown)),
-      apiClient.get(apiEndpoints.sections.getAll),
       apiClient.get(apiEndpoints.programs.getAll),
+      apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
+      apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+      apiClient.get(apiEndpoints.hostel.fees),
+      apiClient.get(apiEndpoints.hostel.blocks),
+      apiClient.get(apiEndpoints.hostel.roomTypes),
+      apiClient.get(apiEndpoints.fee.fineRules),
     ]);
     if (structureRequestRef.current !== requestId) return;
+    const transportError = [transportRoutesResult, transportPickupsResult]
+      .filter((result) => result.status === "rejected")
+      .map((result) => getApiErrorMessage(result.reason))
+      .filter(Boolean)
+      .join(" ");
+    setTransportFees({
+      routes: transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [],
+      pickupPoints: transportPickupsResult.status === "fulfilled" ? normalizeTransportPickupRows(getCollection(transportPickupsResult.value.data)) : [],
+      loading: false,
+      error: transportError,
+    });
+    const hostelError = [hostelFeesResult, hostelBlocksResult, hostelRoomTypesResult]
+      .filter((result) => result.status === "rejected")
+      .map((result) => getApiErrorMessage(result.reason))
+      .filter(Boolean)
+      .join(" ");
+    setHostelFees({
+      configs: hostelFeesResult.status === "fulfilled" ? normalizeHostelFeeRows(getCollection(hostelFeesResult.value.data)) : [],
+      masters: {
+        blocks: hostelBlocksResult.status === "fulfilled" ? normalizeHostelBlockRows(getCollection(hostelBlocksResult.value.data)) : [],
+        roomTypes: hostelRoomTypesResult.status === "fulfilled" ? normalizeHostelRoomTypeRows(getCollection(hostelRoomTypesResult.value.data)) : [],
+      },
+      loading: false,
+      error: hostelError,
+    });
+    if (fineRulesResult.status === "fulfilled") {
+      setFineRules(normalizeFineRuleRows(getCollection(fineRulesResult.value.data)));
+      setFineRuleState({ loading: false, error: "" });
+    } else {
+      setFineRules([]);
+      setFineRuleState({ loading: false, error: getApiErrorMessage(fineRulesResult.reason) });
+    }
     const allYearOptions = yearsResult.status === "fulfilled"
       ? toSelectOptions(
         getCollection(yearsResult.value.data),
@@ -3623,9 +4273,7 @@ export default function FeeManagementPage() {
       groups: groupsResult.status === "fulfilled"
         ? groupOptions
         : current.groups,
-      sections: sectionsResult.status === "fulfilled"
-        ? getCollection(sectionsResult.value.data).map(sectionOption).filter(Boolean)
-        : current.sections,
+      sections: current.sections,
       programs: programsResult.status === "fulfilled"
         ? programOptions
         : current.programs,
@@ -3635,7 +4283,6 @@ export default function FeeManagementPage() {
       years: yearsResult.status === "rejected" ? getApiErrorMessage(yearsResult.reason) || contextAcademicYearsError || "" : contextAcademicYearsError || "",
       levels: levelsResult.status === "rejected" ? getApiErrorMessage(levelsResult.reason) : "",
       groups: groupsResult.status === "rejected" ? getApiErrorMessage(groupsResult.reason) : "",
-      sections: sectionsResult.status === "rejected" ? getApiErrorMessage(sectionsResult.reason) : "",
       programs: programsResult.status === "rejected" ? getApiErrorMessage(programsResult.reason) : "",
       scholarships: scholarshipsResult.status === "rejected" ? getApiErrorMessage(scholarshipsResult.reason) : "",
     });
@@ -3756,8 +4403,9 @@ export default function FeeManagementPage() {
           onFeeTypesChange={saveFeeTypes}
           scholarships={scholarships}
           onScholarshipsChange={saveScholarships}
-          hostelFeeConfigs={hostelFeeConfigs}
-          onHostelFeeConfigsChange={saveHostelFeeConfigs}
+          hostelFees={hostelFees}
+          transportFees={transportFees}
+          fineRules={{ rows: fineRules, loading: fineRuleState.loading, error: fineRuleState.error }}
           structures={structures}
           onToast={setToast}
           onRefresh={loadFeeApiData}
@@ -3783,6 +4431,7 @@ export default function FeeManagementPage() {
           ledgerAccounts={ledgerAccounts}
           collectionAccounts={collectionAccounts}
           paymentHistoryRows={paymentHistoryRows}
+          fineRules={fineRules}
           onView={(id) => { setSelectedId(id); setSelectedSource("ledger"); }}
           onPrint={printStudentStatement}
           onCollect={openCollectPayment}

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -107,8 +107,23 @@ namespace CollegeManagement.API.Models
 
 
         // =========================================================
-        // ACADEMIC FOREIGN KEYS
+        // ACADEMIC FOREIGN KEYS & CAMPUS
         // =========================================================
+
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public Campus? CampusNavigation { get; set; }
+
+        [NotMapped]
+        public Campus? Campus { get => CampusNavigation; set => CampusNavigation = value; }
+
+        [NotMapped]
+        public string AdmissionNumber { get => AdmissionNo; set => AdmissionNo = value; }
+
+        [NotMapped]
+        public string? RollNumber { get => RollNo; set => RollNo = value; }
+
 
         public int? BoardId { get; set; }
 
@@ -132,6 +147,9 @@ namespace CollegeManagement.API.Models
 
         [ForeignKey(nameof(GroupId))]
         public Group? GroupNavigation { get; set; }
+
+        [NotMapped]
+        public Group? Group { get => GroupNavigation; set => GroupNavigation = value; }
 
 
         public int? ProgramId { get; set; }
@@ -158,6 +176,9 @@ namespace CollegeManagement.API.Models
 
         [ForeignKey(nameof(SectionId))]
         public Section? SectionNavigation { get; set; }
+
+        [NotMapped]
+        public Section? Section { get => SectionNavigation; set => SectionNavigation = value; }
 
 
         // =========================================================

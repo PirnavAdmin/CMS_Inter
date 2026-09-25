@@ -15,6 +15,8 @@ namespace CollegeManagement.API.Models.Holiday
         [MaxLength(20)]
         public string HolidayCode { get; set; } = string.Empty;
 
+        public int? CampusId { get; set; } = 1;
+
         public int? AcademicYearId { get; set; }
 
         public int? BoardId { get; set; }

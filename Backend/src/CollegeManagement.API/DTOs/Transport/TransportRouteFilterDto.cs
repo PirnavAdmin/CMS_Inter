@@ -7,7 +7,13 @@ namespace CollegeManagement.API.Dtos.Transport
 
         public string? Search { get; set; }
 
+        public int? CampusId { get; set; }
+
         public bool? Status { get; set; }
+
+        public string? BusType { get; set; }
+
+        public bool? IsAc { get; set; }
 
         public string SortBy { get; set; } = "createdAt";
 

@@ -106,9 +106,9 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null)
+        public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null)
         {
-            return await _staffRepository.GetStaffDropdownAsync(staffType);
+            return await _staffRepository.GetStaffDropdownAsync(staffType, campusId);
         }
 
         public async Task<StaffResponseDto?> GetStaffByIdAsync(int id)
@@ -167,9 +167,9 @@ namespace CollegeManagement.API.Services.Implementations
             return await _staffRepository.GenerateNextEmployeeIdAsync(staffType);
         }
 
-        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null)
+        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)
         {
-            return await _staffRepository.GetDashboardStatsAsync(boardId);
+            return await _staffRepository.GetDashboardStatsAsync(boardId, campusId);
         }
 
         public async Task<StaffResponseDto> CreateStaffAsync(CreateStaffDto dto)
@@ -332,6 +332,8 @@ namespace CollegeManagement.API.Services.Implementations
             if (!string.IsNullOrWhiteSpace(dto.Aadhaar) && !await _staffRepository.IsAadhaarUniqueAsync(dto.Aadhaar))
                 throw new ConflictException($"Aadhaar number '{dto.Aadhaar}' is already registered.");
 
+            var (resolvedBoardId, resolvedBoardName, _) = await ResolveBoardAsync(dto.BoardId, dto.BoardName ?? dto.Board, dto.BoardCode);
+
             var staff = _mapper.Map<Staff>(dto);
             staff.EmployeeId = employeeId;
             staff.StaffType = staffType;
@@ -339,8 +341,9 @@ namespace CollegeManagement.API.Services.Implementations
             staff.Department = deptName;
             staff.DesignationId = resolvedDesignationId;
             staff.Designation = resolvedDesignationName;
-            staff.BoardId = dto.BoardId;
-            staff.BoardName = dto.BoardName ?? dto.Board;
+            staff.BoardId = resolvedBoardId;
+            staff.BoardName = resolvedBoardName;
+            staff.CampusId = dto.CampusId;
             staff.Gender = !string.IsNullOrWhiteSpace(dto.Gender) ? dto.Gender : (!string.IsNullOrWhiteSpace(staff.Gender) ? staff.Gender : "Male");
             staff.DateOfBirth = dto.DateOfBirth.HasValue ? dto.DateOfBirth.Value : (staff.DateOfBirth != default ? staff.DateOfBirth : DateTime.UtcNow.AddYears(-25));
             staff.Qualification = !string.IsNullOrWhiteSpace(dto.Qualification) ? dto.Qualification : (!string.IsNullOrWhiteSpace(staff.Qualification) ? staff.Qualification : "Graduate");
@@ -358,6 +361,30 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.DepartmentSpecific, dto.Documents, dto.DepartmentSpecificJson);
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
+
+            // Driver & Transport specific details
+            var isDriver = !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
+                || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase));
+
+            staff.IsDriver = isDriver;
+            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
+            {
+                staff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
+            }
+            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null)
+            {
+                staff.DrivingLicenseNumber = licVal.ToString()?.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+            {
+                staff.DrivingLicenseExpiryDate = expParsed;
+            }
+            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+            {
+                staff.DrivingLicenseExpiryDate = expParsed2;
+            }
 
             // ==================================================================================
             // ATOMIC TRANSACTION: Create Staff + User Account (Shared EF Core + Dapper Connection)
@@ -580,14 +607,20 @@ namespace CollegeManagement.API.Services.Implementations
                 resolvedDesignationName = existingStaff.Designation;
             }
 
+            var (resolvedBoardId, resolvedBoardName, _) = await ResolveBoardAsync(dto.BoardId ?? existingStaff.BoardId, dto.BoardName ?? dto.Board ?? existingStaff.BoardName, dto.BoardCode);
+
             _mapper.Map(dto, existingStaff);
             existingStaff.StaffType = staffType;
             existingStaff.DepartmentId = resolvedDepartmentId;
             existingStaff.Department = deptName;
             existingStaff.DesignationId = resolvedDesignationId;
             existingStaff.Designation = resolvedDesignationName;
-            existingStaff.BoardId = dto.BoardId ?? existingStaff.BoardId;
-            existingStaff.BoardName = dto.BoardName ?? dto.Board ?? existingStaff.BoardName;
+            existingStaff.BoardId = resolvedBoardId;
+            existingStaff.BoardName = resolvedBoardName;
+            if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
+            {
+                existingStaff.CampusId = dto.CampusId.Value;
+            }
 
             if (dto.JoiningDate.HasValue || dto.DateOfJoining.HasValue)
             {
@@ -604,6 +637,30 @@ namespace CollegeManagement.API.Services.Implementations
 
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
+
+            // Driver & Transport specific details
+            var isDriver = existingStaff.IsDriver || !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
+                || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase))
+                || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase));
+
+            existingStaff.IsDriver = isDriver;
+            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
+            {
+                existingStaff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
+            }
+            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null)
+            {
+                existingStaff.DrivingLicenseNumber = licVal.ToString()?.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+            {
+                existingStaff.DrivingLicenseExpiryDate = expParsed;
+            }
+            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+            {
+                existingStaff.DrivingLicenseExpiryDate = expParsed2;
+            }
 
             // Transactional update: Staff domain + Users sync
             var updateStrategy = _context.Database.CreateExecutionStrategy();
@@ -985,7 +1042,7 @@ namespace CollegeManagement.API.Services.Implementations
             return await DeleteDocumentAsync(staff.Id, documentType);
         }
 
-        public async Task<StaffImportResultDto> ImportStaffFromExcelAsync(IFormFile file, string? defaultStaffType = null)
+        public async Task<StaffImportResultDto> ImportStaffFromExcelAsync(IFormFile file, string? defaultStaffType = null, int? campusId = null)
         {
             if (file == null || file.Length == 0)
                 throw new ValidationException("Please upload a valid Excel file (.xlsx).");
@@ -1196,6 +1253,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 var staff = new Staff
                 {
+                    CampusId = campusId ?? 1,
                     EmployeeId = empId,
                     FirstName = fName,
                     MiddleName = mName,
@@ -1680,6 +1738,54 @@ namespace CollegeManagement.API.Services.Implementations
         // =========================================================================
         // PRIVATE HELPERS
         // =========================================================================
+
+        private async Task<(int? BoardId, string? BoardName, string? BoardCode)> ResolveBoardAsync(int? boardId, string? boardName, string? boardCode)
+        {
+            var rawName = boardName?.Trim();
+            var rawCode = boardCode?.Trim();
+
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                try
+                {
+                    var b = await _boardRepository.GetBoardByIdAsync(boardId.Value);
+                    if (b != null)
+                    {
+                        return (b.BoardId, b.BoardName, b.BoardCode);
+                    }
+                }
+                catch { }
+            }
+
+            try
+            {
+                var boards = (await _boardRepository.GetBoardsForExportAsync(new BoardExportRequest())).ToList();
+                if (boards.Any())
+                {
+                    var match = boards.FirstOrDefault(b =>
+                        (!string.IsNullOrWhiteSpace(rawCode) && string.Equals(b.BoardCode, rawCode, StringComparison.OrdinalIgnoreCase)) ||
+                        (!string.IsNullOrWhiteSpace(rawName) && (
+                            string.Equals(b.BoardName, rawName, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(b.BoardCode, rawName, StringComparison.OrdinalIgnoreCase)
+                        ))
+                    );
+
+                    if (match != null)
+                    {
+                        return (match.BoardId, match.BoardName, match.BoardCode);
+                    }
+
+                    var activeBoard = boards.FirstOrDefault(b => b.IsActive) ?? boards.FirstOrDefault();
+                    if (activeBoard != null)
+                    {
+                        return (activeBoard.BoardId, activeBoard.BoardName, activeBoard.BoardCode);
+                    }
+                }
+            }
+            catch { }
+
+            return (boardId, rawName, rawCode);
+        }
 
         private StaffProfileFullDto MapToFullProfileDto(Staff staff)
         {

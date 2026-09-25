@@ -5,6 +5,7 @@ namespace CollegeManagement.API.DTOs.Result
 {
     public class ProcessResultRequestDto
     {
+        public int? CampusId { get; set; }
         public int? BoardId { get; set; }
         public int? AcademicYearId { get; set; }
         public int? YearId { get => AcademicYearId; set => AcademicYearId = value; }

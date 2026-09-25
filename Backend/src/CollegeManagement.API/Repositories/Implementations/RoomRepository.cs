@@ -30,6 +30,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_IsActive", null, DbType.Boolean);
             parameters.Add("p_SearchTerm", null, DbType.String);
             parameters.Add("p_OnlyAvailable", 0, DbType.Int32);
+            parameters.Add("p_CampusId", null, DbType.Int32);
 
             return await Connection.QueryAsync<Room>(
                 "sp_GetRooms",
@@ -46,6 +47,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_IsActive", filter?.IsActive, DbType.Boolean);
             parameters.Add("p_SearchTerm", string.IsNullOrWhiteSpace(filter?.SearchTerm) ? null : filter.SearchTerm.Trim(), DbType.String);
             parameters.Add("p_OnlyAvailable", (filter?.OnlyAvailable == true || filter?.ExcludeAssigned == true) ? 1 : 0, DbType.Int32);
+            parameters.Add("p_CampusId", filter?.CampusId, DbType.Int32);
 
             return await Connection.QueryAsync<Room>(
                 "sp_GetRooms",

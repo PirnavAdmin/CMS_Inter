@@ -1,8 +1,13 @@
+using System;
+using System.Collections.Generic;
 using System.Data;
-using Dapper;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Promotion;
 using CollegeManagement.API.Repositories.Interfaces;
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -34,199 +39,27 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             await OpenAsync();
 
-            /*
-             * Normal progression:
-             *
-             * Example:
-             * Class 10 -> Intermediate 1st Year
-             *
-             * We intentionally do not use:
-             * - StudentDisciplinaryClearances
-             * - StudentFees
-             * - Results
-             *
-             * This prevents 500 errors when optional tables do not exist.
-             */
-
-            const string sql = @"
-SELECT
-    s.StudentId,
-
-    COALESCE(
-        NULLIF(s.AdmissionNo, ''),
-        NULLIF(s.RollNo, ''),
-        CAST(s.StudentId AS CHAR)
-    ) AS StudentCode,
-
-    s.StudentName,
-
-    s.AcademicYearId,
-    ay.AcademicYearName AS AcademicYear,
-
-    s.BoardId,
-    COALESCE(b.BoardName, '') AS BoardName,
-
-    COALESCE(al.LevelName, '') AS AcademicLevel,
-
-    s.GroupId,
-    g.GroupName,
-
-    s.ProgramId,
-    p.ProgramName,
-
-    COALESCE(sec.SectionName, '') AS Section,
-    s.Medium,
-
-    @TargetAcademicYearId AS TargetAcademicYearId,
-    tay.AcademicYearName AS TargetAcademicYear,
-
-    @TargetAcademicLevel AS TargetAcademicLevel,
-
-    @TargetGroupId AS TargetGroupId,
-    tg.GroupName AS TargetGroupName,
-
-    @TargetProgramId AS TargetProgramId,
-    tp.ProgramName AS TargetProgramName,
-
-    @TargetSection AS TargetSection,
-    @TargetMedium AS TargetMedium,
-
-    COALESCE(s.AttendancePercentage, 0) AS AttendancePercentage,
-
-    'Not Checked' AS ResultStatus,
-    '' AS FailedSubjects,
-    0 AS Backlogs,
-
-    'Eligible' AS EligibilityStatus,
-
-    'Eligible for normal progression.' AS EligibilityReason
-
-FROM Students s
-
-LEFT JOIN AcademicYears ay
-    ON ay.AcademicYearId = s.AcademicYearId
-
-LEFT JOIN Boards b
-    ON b.BoardId = s.BoardId
-
-LEFT JOIN AcademicLevels al
-    ON al.AcademicLevelId = s.AcademicLevelId
-
-LEFT JOIN Sections sec
-    ON sec.SectionId = s.SectionId
-
-LEFT JOIN `Groups` g
-    ON g.GroupId = s.GroupId
-
-LEFT JOIN Programs p
-    ON p.ProgramId = s.ProgramId
-
-LEFT JOIN AcademicYears tay
-    ON tay.AcademicYearId = @TargetAcademicYearId
-
-LEFT JOIN `Groups` tg
-    ON tg.GroupId = @TargetGroupId
-
-LEFT JOIN Programs tp
-    ON tp.ProgramId = @TargetProgramId
-
-WHERE s.IsActive = 1
-
-AND (
-    @AcademicYearId IS NULL
-    OR s.AcademicYearId = @AcademicYearId
-)
-
-AND (
-    @BoardId IS NULL
-    OR s.BoardId = @BoardId
-)
-
-AND (
-    @AcademicLevel IS NULL
-    OR TRIM(@AcademicLevel) = ''
-    OR al.LevelName = TRIM(@AcademicLevel)
-    OR (TRIM(@AcademicLevel) IN ('1st PUC', 'Intermediate 1st Year') AND s.AcademicLevelId IN (1, 5))
-    OR (TRIM(@AcademicLevel) IN ('2nd PUC', 'Intermediate 2nd Year') AND s.AcademicLevelId IN (2, 6))
-)
-
-AND (
-    @GroupId IS NULL
-    OR @GroupId = 0
-    OR s.GroupId = @GroupId
-    OR (@GroupId IN (34, 37) AND s.GroupId IN (34, 37))
-)
-
-AND (
-    @ProgramId IS NULL
-    OR @ProgramId = 0
-    OR s.ProgramId = @ProgramId
-)
-
-AND (
-    @Section IS NULL
-    OR TRIM(@Section) = ''
-    OR sec.SectionName = TRIM(@Section)
-)
-
-AND (
-    @Medium IS NULL
-    OR TRIM(@Medium) = ''
-    OR s.Medium = TRIM(@Medium)
-)
-
-AND (
-    @Search IS NULL
-    OR TRIM(@Search) = ''
-    OR s.StudentName LIKE CONCAT('%', @Search, '%')
-    OR s.AdmissionNo LIKE CONCAT('%', @Search, '%')
-    OR s.RollNo LIKE CONCAT('%', @Search, '%')
-    OR CAST(s.StudentId AS CHAR) LIKE CONCAT('%', @Search, '%')
-)
-
-AND (
-    @EligibilityStatus IS NULL
-    OR TRIM(@EligibilityStatus) = ''
-    OR 'Eligible' = TRIM(@EligibilityStatus)
-)
-
-AND NOT EXISTS
-(
-    SELECT 1
-    FROM PromotionHistories ph
-
-    WHERE ph.StudentId = s.StudentId
-
-    AND ph.IsRolledBack = 0
-
-    AND (
-        @TargetAcademicYearId IS NULL
-        OR ph.ToAcademicYearId = @TargetAcademicYearId
-    )
-)
-
-ORDER BY s.StudentName;
-";
-
             return await Connection.QueryAsync<EligibleStudentDto>(
-                sql,
+                "sp_GetEligiblePromotionStudents",
                 new
                 {
-                    q.AcademicYearId,
-                    q.BoardId,
-                    q.AcademicLevel,
-                    q.GroupId,
-                    q.ProgramId,
-                    q.Section,
-                    q.Medium,
-                    q.TargetAcademicYearId,
-                    q.TargetAcademicLevel,
-                    q.TargetGroupId,
-                    q.TargetSection,
-                    q.TargetMedium,
-                    q.Search,
-                    q.EligibilityStatus
-                });
+                    p_AcademicYearId = q.AcademicYearId,
+                    p_BoardId = q.BoardId,
+                    p_AcademicLevel = q.AcademicLevel,
+                    p_GroupId = q.GroupId,
+                    p_ProgramId = q.ProgramId,
+                    p_Section = q.Section,
+                    p_Medium = q.Medium,
+                    p_TargetAcademicYearId = q.TargetAcademicYearId,
+                    p_TargetAcademicLevel = q.TargetAcademicLevel,
+                    p_TargetGroupId = q.TargetGroupId,
+                    p_TargetSection = q.TargetSection,
+                    p_TargetMedium = q.TargetMedium,
+                    p_Search = q.Search,
+                    p_EligibilityStatus = q.EligibilityStatus,
+                    p_CampusId = q.CampusId
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         // ============================================================
@@ -341,14 +174,12 @@ ORDER BY s.StudentName;
                     {
                         StudentId = item.StudentId,
                         StudentName = item.StudentName,
-
                         PromotionStatus =
                             item.EligibilityStatus.Equals(
                                 "Eligible",
                                 StringComparison.OrdinalIgnoreCase)
                                 ? "Promoted"
                                 : "Failed",
-
                         Message = item.EligibilityReason
                     });
             }
@@ -364,9 +195,7 @@ ORDER BY s.StudentName;
 
             if (eligibleIds.Count == 0)
             {
-                response.FailedCount =
-                    response.TotalRequested;
-
+                response.FailedCount = response.TotalRequested;
                 return response;
             }
 
@@ -375,55 +204,15 @@ ORDER BY s.StudentName;
             try
             {
                 int? targetAcademicLevelId = request.TargetAcademicLevelId;
-                if (!targetAcademicLevelId.HasValue || targetAcademicLevelId <= 0)
-                {
-                    if (!string.IsNullOrWhiteSpace(request.TargetAcademicLevel))
-                    {
-                        targetAcademicLevelId = await Connection.ExecuteScalarAsync<int?>(
-                            "SELECT AcademicLevelId FROM AcademicLevels WHERE LOWER(TRIM(LevelName)) = LOWER(TRIM(@Level)) LIMIT 1;",
-                            new { Level = request.TargetAcademicLevel }, transaction);
-                    }
-                }
-
                 int? targetSectionId = request.TargetSectionId;
-                if (!targetSectionId.HasValue || targetSectionId <= 0)
-                {
-                    if (!string.IsNullOrWhiteSpace(request.TargetSection))
-                    {
-                        targetSectionId = await Connection.ExecuteScalarAsync<int?>(
-                            "SELECT SectionId FROM Sections WHERE LOWER(TRIM(SectionName)) = LOWER(TRIM(@Sec)) LIMIT 1;",
-                            new { Sec = request.TargetSection }, transaction);
-                    }
-                }
 
                 foreach (var studentId in eligibleIds)
                 {
-                    var student =
-                        await Connection.QuerySingleOrDefaultAsync<dynamic>(
-                            @"
-SELECT
-    s.StudentId,
-    s.StudentName,
-    s.AcademicYearId,
-    s.BoardId,
-    s.AcademicLevelId,
-    COALESCE(al.LevelName, '') AS AcademicLevel,
-    s.GroupId,
-    s.SectionId,
-    COALESCE(sec.SectionName, '') AS Section,
-    s.Medium
-FROM Students s
-LEFT JOIN AcademicLevels al ON al.AcademicLevelId = s.AcademicLevelId
-LEFT JOIN Sections sec ON sec.SectionId = s.SectionId
-WHERE s.StudentId = @StudentId
-AND s.IsActive = 1
-FOR UPDATE;
-",
-                            new
-                            {
-                                StudentId = studentId
-                            },
-                            transaction);
+                    var student = await Connection.QuerySingleOrDefaultAsync<dynamic>(
+                        "sp_GetStudentById",
+                        new { p_StudentId = studentId },
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
 
                     if (student == null)
                     {
@@ -431,154 +220,36 @@ FOR UPDATE;
                     }
 
                     await Connection.ExecuteAsync(
-                        @"
-INSERT INTO PromotionHistories
-(
-    StudentId,
-    PromotionBatchId,
-    FromBoardId,
-    ToBoardId,
-    FromAcademicYearId,
-    ToAcademicYearId,
-
-    FromClassId,
-    ToClassId,
-
-    FromSectionId,
-    ToSectionId,
-
-    FromGroupId,
-    ToGroupId,
-
-    PromotionDate,
-    PromotedBy,
-    Remarks,
-
-    IsRollback,
-    RollbackDate,
-    RollbackBy,
-    RollbackRemarks,
-
-    IsRolledBack,
-
-    FromAcademicLevel,
-    ToAcademicLevel,
-
-    FromSection,
-    ToSection,
-
-    Status
-)
-VALUES
-(
-    @StudentId,
-    @PromotionBatchId,
-    @FromBoardId,
-    @ToBoardId,
-    @FromAcademicYearId,
-    @ToAcademicYearId,
-
-    COALESCE(@FromClassId, 0),
-    COALESCE((SELECT AcademicLevelId FROM AcademicLevels WHERE LevelName = @ToAcademicLevel OR LevelCode = @ToAcademicLevel LIMIT 1), 0),
-
-    @FromSectionId,
-    (SELECT SectionId FROM Sections WHERE SectionName = @ToSection LIMIT 1),
-
-    @FromGroupId,
-    @ToGroupId,
-
-    UTC_TIMESTAMP(),
-    @PromotedBy,
-    @Remarks,
-
-    0,
-    NULL,
-    NULL,
-    NULL,
-
-    0,
-
-    @FromAcademicLevel,
-    @ToAcademicLevel,
-
-    @FromSection,
-    @ToSection,
-
-    'Promoted'
-);
-",
+                        "sp_PromoteSingleStudent",
                         new
                         {
-                            StudentId = studentId,
-                            PromotionBatchId = response.PromotionBatchId,
-                            FromBoardId = student.BoardId != null ? (int?)student.BoardId : null,
-                            ToBoardId = request.TargetBoardId,
-
-                            FromAcademicYearId = (int)student.AcademicYearId,
-
-                            ToAcademicYearId = request.TargetAcademicYearId,
-
-                            FromClassId = student.AcademicLevelId != null ? (int?)student.AcademicLevelId : null,
-
-                            FromSectionId = student.SectionId != null ? (int?)student.SectionId : null,
-
-                            FromGroupId = (int)student.GroupId,
-
-                            ToGroupId = request.TargetGroupId,
-
-                            FromAcademicLevel = (string)student.AcademicLevel,
-
-                            ToAcademicLevel = request.TargetAcademicLevel,
-
-                            FromSection = (string)student.Section,
-
-                            ToSection = request.TargetSection,
-
-                            PromotedBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy,
-
-                            Remarks = ""
+                            p_StudentId = studentId,
+                            p_PromotionBatchId = response.PromotionBatchId,
+                            p_FromBoardId = student.BoardId != null ? (int?)student.BoardId : null,
+                            p_ToBoardId = request.TargetBoardId,
+                            p_FromAcademicYearId = (int)student.AcademicYearId,
+                            p_ToAcademicYearId = request.TargetAcademicYearId,
+                            p_FromClassId = student.AcademicLevelId != null ? (int?)student.AcademicLevelId : null,
+                            p_ToClassId = targetAcademicLevelId,
+                            p_FromSectionId = student.SectionId != null ? (int?)student.SectionId : null,
+                            p_ToSectionId = targetSectionId,
+                            p_FromGroupId = (int)student.GroupId,
+                            p_ToGroupId = request.TargetGroupId,
+                            p_FromAcademicLevel = (string)student.AcademicLevelName,
+                            p_ToAcademicLevel = request.TargetAcademicLevel,
+                            p_FromSection = (string)student.SectionName,
+                            p_ToSection = request.TargetSection,
+                            p_PromotedBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy,
+                            p_TargetMedium = request.TargetMedium
                         },
-                        transaction);
-
-                    /* Target queries moved outside loop */
-
-                    /*
-                     * Update actual student record.
-                     */
-                    await Connection.ExecuteAsync(
-                        @"
-UPDATE Students
-SET
-    AcademicYearId = @AcademicYearId,
-    BoardId = COALESCE(@BoardId, BoardId),
-    AcademicLevelId = COALESCE(@TargetAcademicLevelId, AcademicLevelId),
-    GroupId = @GroupId,
-    SectionId = COALESCE(@TargetSectionId, SectionId),
-    Medium = COALESCE(@Medium, Medium),
-    UpdatedAt = UTC_TIMESTAMP()
-WHERE StudentId = @StudentId;
-",
-                        new
-                        {
-                            AcademicYearId = request.TargetAcademicYearId,
-                            BoardId = request.TargetBoardId,
-                            TargetAcademicLevelId = targetAcademicLevelId,
-                            GroupId = request.TargetGroupId,
-                            TargetSectionId = targetSectionId,
-                            Medium = request.TargetMedium,
-                            StudentId = studentId
-                        },
-                        transaction);
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
 
-                response.PromotedCount =
-                    eligibleIds.Count;
-
-                response.FailedCount =
-                    response.TotalRequested -
-                    response.PromotedCount;
+                response.PromotedCount = eligibleIds.Count;
+                response.FailedCount = response.TotalRequested - response.PromotedCount;
 
                 return response;
             }
@@ -597,178 +268,23 @@ WHERE StudentId = @StudentId;
         {
             await OpenAsync();
 
-            /*
-             * This SQL matches the ACTUAL PromotionHistories table.
-             *
-             * There is no FromBoardId / ToBoardId.
-             * There is no FromMedium / ToMedium.
-             * Primary key is Id.
-             * Rollback date is RollbackDate.
-             */
-
-            const string sql = @"
-SELECT
-
-    ph.Id AS PromotionId,
-
-    NULL AS PromotionBatchId,
-
-    ph.StudentId,
-
-    COALESCE(
-        NULLIF(s.AdmissionNo, ''),
-        NULLIF(s.RollNo, ''),
-        CAST(s.StudentId AS CHAR)
-    ) AS StudentCode,
-    COALESCE(s.AdmissionNo, '') AS AdmissionNo,
-    s.StudentName,
-
-    fay.AcademicYearName AS SourceAcademicYear,
-
-    s.BoardId AS SourceBoardId,
-    COALESCE(fb.BoardName, '') AS SourceBoard,
-
-    ph.FromAcademicLevel AS SourceAcademicLevel,
-
-    ph.FromGroupId AS SourceGroupId,
-    fg.GroupName AS SourceGroup,
-
-    ph.FromSection AS SourceSection,
-
-    s.Medium AS SourceMedium,
-
-    tay.AcademicYearName AS TargetAcademicYear,
-
-    s.BoardId AS TargetBoardId,
-    COALESCE(tb.BoardName, '') AS TargetBoard,
-
-    ph.ToAcademicLevel AS TargetAcademicLevel,
-
-    ph.ToGroupId AS TargetGroupId,
-    tg.GroupName AS TargetGroup,
-
-    ph.ToSection AS TargetSection,
-
-    s.Medium AS TargetMedium,
-
-    ph.Status AS PromotionStatus,
-
-    ph.PromotionDate,
-
-    ph.PromotedBy,
-
-    ph.IsRolledBack AS RollbackStatus,
-
-    ph.RollbackDate AS RollbackDate,
-
-    ph.RollbackRemarks AS RollbackReason
-
-FROM PromotionHistories ph
-
-INNER JOIN Students s
-    ON s.StudentId = ph.StudentId
-
-LEFT JOIN AcademicYears fay
-    ON fay.AcademicYearId = ph.FromAcademicYearId
-
-LEFT JOIN AcademicYears tay
-    ON tay.AcademicYearId = ph.ToAcademicYearId
-
-LEFT JOIN Boards fb
-    ON fb.BoardId = s.BoardId
-
-LEFT JOIN Boards tb
-    ON tb.BoardId = s.BoardId
-
-LEFT JOIN `Groups` fg
-    ON fg.GroupId = ph.FromGroupId
-
-LEFT JOIN `Groups` tg
-    ON tg.GroupId = ph.ToGroupId
-
-WHERE
-    (
-        @AcademicYearId IS NULL
-        OR ph.FromAcademicYearId = @AcademicYearId
-    )
-
-AND
-    (
-        @TargetAcademicYearId IS NULL
-        OR ph.ToAcademicYearId = @TargetAcademicYearId
-    )
-
-AND
-    (
-        @AcademicLevel IS NULL
-        OR TRIM(@AcademicLevel) = ''
-        OR ph.FromAcademicLevel = TRIM(@AcademicLevel)
-    )
-
-AND
-    (
-        @TargetAcademicLevel IS NULL
-        OR TRIM(@TargetAcademicLevel) = ''
-        OR ph.ToAcademicLevel = TRIM(@TargetAcademicLevel)
-    )
-
-AND
-    (
-        @GroupId IS NULL
-        OR ph.FromGroupId = @GroupId
-    )
-
-AND
-    (
-        @Section IS NULL
-        OR TRIM(@Section) = ''
-        OR ph.FromSection = TRIM(@Section)
-    )
-
-AND
-    (
-        @StudentId IS NULL
-        OR ph.StudentId = @StudentId
-    )
-
-AND
-    (
-        @Search IS NULL
-        OR TRIM(@Search) = ''
-        OR s.StudentName LIKE CONCAT('%', @Search, '%')
-        OR s.AdmissionNo LIKE CONCAT('%', @Search, '%')
-        OR s.RollNo LIKE CONCAT('%', @Search, '%')
-    )
-
-AND
-    (
-        @PromotionStatus IS NULL
-        OR TRIM(@PromotionStatus) = ''
-        OR ph.Status = TRIM(@PromotionStatus)
-        OR (
-            TRIM(@PromotionStatus) = 'RolledBack'
-            AND ph.IsRolledBack = 1
-        )
-    )
-
-AND
-    (
-        @FromDate IS NULL
-        OR ph.PromotionDate >= @FromDate
-    )
-
-AND
-    (
-        @ToDate IS NULL
-        OR ph.PromotionDate < DATE_ADD(@ToDate, INTERVAL 1 DAY)
-    )
-
-ORDER BY ph.Id DESC;
-";
-
             return await Connection.QueryAsync<PromotionHistoryDto>(
-                sql,
-                q);
+                "sp_GetPromotionHistory",
+                new
+                {
+                    p_AcademicYearId = q.AcademicYearId,
+                    p_TargetAcademicYearId = q.TargetAcademicYearId,
+                    p_AcademicLevel = q.AcademicLevel,
+                    p_TargetAcademicLevel = q.TargetAcademicLevel,
+                    p_GroupId = q.GroupId,
+                    p_Section = q.Section,
+                    p_StudentId = q.StudentId,
+                    p_Search = q.Search,
+                    p_PromotionStatus = q.PromotionStatus,
+                    p_FromDate = q.FromDate,
+                    p_ToDate = q.ToDate
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         // ============================================================
@@ -780,161 +296,62 @@ ORDER BY ph.Id DESC;
         {
             await OpenAsync();
 
-            using var transaction =
-                Connection.BeginTransaction();
+            using var transaction = Connection.BeginTransaction();
 
             try
             {
-                var row =
-                    await Connection.QuerySingleOrDefaultAsync<dynamic>(
-                        @"
-SELECT
-    ph.Id,
-    ph.StudentId,
-    s.StudentName,
-    ph.IsRolledBack
-FROM PromotionHistories ph
-INNER JOIN Students s
-    ON s.StudentId = ph.StudentId
-WHERE ph.Id = @PromotionId
-FOR UPDATE;
-",
-                        new
-                        {
-                            PromotionId =
-                                request.PromotionId
-                        },
-                        transaction);
-
-                if (row == null)
-                {
-                    throw new InvalidOperationException(
-                        "Promotion was not found.");
-                }
-
-                bool alreadyRolledBack =
-                    Convert.ToBoolean(row.IsRolledBack);
-
-                if (alreadyRolledBack)
-                {
-                    throw new InvalidOperationException(
-                        "Promotion has already been rolled back.");
-                }
-
-                /*
-                 * Only latest active promotion can be rolled back.
-                 */
-                var newer =
-                    await Connection.ExecuteScalarAsync<int>(
-                        @"
-SELECT COUNT(*)
-FROM PromotionHistories
-WHERE StudentId = @StudentId
-AND Id > @PromotionId
-AND IsRolledBack = 0;
-",
-                        new
-                        {
-                            StudentId =
-                                (int)row.StudentId,
-
-                            PromotionId =
-                                request.PromotionId
-                        },
-                        transaction);
-
-                if (newer > 0)
-                {
-                    throw new InvalidOperationException(
-                        "Only the latest active promotion can be rolled back.");
-                }
-
-                /*
-                 * Restore student to previous academic details.
-                 *
-                 * Actual columns:
-                 * FromAcademicYearId
-                 * FromAcademicLevel
-                 * FromGroupId
-                 * FromSection
-                 */
-                await Connection.ExecuteAsync(
-                    @"
-UPDATE Students s
-
-INNER JOIN PromotionHistories ph
-    ON ph.Id = @PromotionId
-
-SET
-    s.AcademicYearId = ph.FromAcademicYearId,
-    s.AcademicLevelId = COALESCE(NULLIF(ph.FromClassId, 0), s.AcademicLevelId),
-    s.GroupId = ph.FromGroupId,
-    s.SectionId = COALESCE(NULLIF(ph.FromSectionId, 0), s.SectionId),
-    s.UpdatedAt = UTC_TIMESTAMP()
-
-WHERE s.StudentId = ph.StudentId;
-",
+                var history = (await Connection.QueryAsync<PromotionHistoryDto>(
+                    "sp_GetPromotionHistory",
                     new
                     {
-                        PromotionId =
-                            request.PromotionId
+                        p_AcademicYearId = (int?)null,
+                        p_TargetAcademicYearId = (int?)null,
+                        p_AcademicLevel = (string?)null,
+                        p_TargetAcademicLevel = (string?)null,
+                        p_GroupId = (int?)null,
+                        p_Section = (string?)null,
+                        p_StudentId = (int?)null,
+                        p_Search = (string?)null,
+                        p_PromotionStatus = (string?)null,
+                        p_FromDate = (DateTime?)null,
+                        p_ToDate = (DateTime?)null
                     },
-                    transaction);
+                    transaction,
+                    commandType: CommandType.StoredProcedure))
+                    .FirstOrDefault(x => x.PromotionId == request.PromotionId);
 
-                /*
-                 * Mark promotion as rolled back.
-                 */
+                if (history == null)
+                {
+                    throw new InvalidOperationException("Promotion was not found.");
+                }
+
+                if (history.RollbackStatus)
+                {
+                    throw new InvalidOperationException("Promotion has already been rolled back.");
+                }
+
                 await Connection.ExecuteAsync(
-                    @"
-UPDATE PromotionHistories
-
-SET
-    IsRollback = 1,
-    IsRolledBack = 1,
-    Status = 'RolledBack',
-    RollbackDate = UTC_TIMESTAMP(),
-    RollbackBy = @RollbackBy,
-    RollbackRemarks = @Reason
-
-WHERE Id = @PromotionId;
-",
+                    "sp_RollbackPromotionRecord",
                     new
                     {
-                        PromotionId =
-                            request.PromotionId,
-
-                        Reason =
-                            request.Reason,
-
-                        RollbackBy =
-                            string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy
+                        p_PromotionId = request.PromotionId,
+                        p_RollbackBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy,
+                        p_Reason = request.Reason
                     },
-                    transaction);
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
 
                 return new RollbackResponse
                 {
-                    PromotionId =
-                        request.PromotionId,
-
-                    StudentId =
-                        (int)row.StudentId,
-
-                    StudentName =
-                        (string)row.StudentName,
-
-                    RollbackStatus =
-                        "RolledBack",
-
-                    RollbackReason =
-                        request.Reason,
-
-                    RolledBackAt =
-                        DateTime.UtcNow,
-
-                    RolledBackBy =
-                        string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy
+                    PromotionId = request.PromotionId,
+                    StudentId = history.StudentId,
+                    StudentName = history.StudentName,
+                    RollbackStatus = "RolledBack",
+                    RollbackReason = request.Reason,
+                    RolledBackAt = DateTime.UtcNow,
+                    RolledBackBy = string.IsNullOrWhiteSpace(performedBy) ? "System" : performedBy
                 };
             }
             catch
@@ -954,75 +371,38 @@ WHERE Id = @PromotionId;
         {
             await OpenAsync();
 
-            var student =
-                await Connection.QuerySingleOrDefaultAsync<dynamic>(
-                    @"
-SELECT
-    s.StudentId,
-    s.BoardId,
-    s.AcademicYearId,
-    s.AcademicLevelId,
-    COALESCE(al.LevelName, '') AS AcademicLevel,
-    s.GroupId,
-    s.SectionId,
-    COALESCE(sec.SectionName, '') AS Section,
-    s.Medium
-FROM Students s
-LEFT JOIN AcademicLevels al ON al.AcademicLevelId = s.AcademicLevelId
-LEFT JOIN Sections sec ON sec.SectionId = s.SectionId
-WHERE s.StudentId = @StudentId
-AND s.IsActive = 1;
-",
-                    new
-                    {
-                        StudentId = studentId
-                    });
+            var student = await Connection.QuerySingleOrDefaultAsync<dynamic>(
+                "sp_GetStudentById",
+                new { p_StudentId = studentId },
+                commandType: CommandType.StoredProcedure);
 
             if (student == null)
             {
                 return null;
             }
 
-                    int sourceYearId = student.AcademicYearId != null ? Convert.ToInt32(student.AcademicYearId) : 1;
-                    int sourceGroupId = student.GroupId != null ? Convert.ToInt32(student.GroupId) : 1;
-                    string sourceLevel = student.AcademicLevel != null ? Convert.ToString(student.AcademicLevel) : "Junior Inter";
-                    string sourceSection = student.Section != null ? Convert.ToString(student.Section) : "A";
+            int sourceYearId = student.AcademicYearId != null ? Convert.ToInt32(student.AcademicYearId) : 1;
+            int sourceGroupId = student.GroupId != null ? Convert.ToInt32(student.GroupId) : 1;
+            string sourceLevel = student.AcademicLevelName != null ? Convert.ToString(student.AcademicLevelName) : "Junior Inter";
+            string sourceSection = student.SectionName != null ? Convert.ToString(student.SectionName) : "A";
 
-                    var preview =
-                        await PreviewAsync(
-                            new PromotionPreviewRequest
-                            {
-                                SourceAcademicYearId = sourceYearId,
-                                SourceBoardId = student.BoardId != null ? Convert.ToInt32(student.BoardId) : (int?)null,
-                                SourceAcademicLevel = sourceLevel,
-                                SourceGroupId = sourceGroupId,
-                                SourceSection = sourceSection,
-                                SourceMedium = student.Medium != null ? Convert.ToString(student.Medium) : (string?)null,
-
-                        TargetAcademicYearId =
-                            request.TargetAcademicYearId,
-
-                        TargetBoardId =
-                            request.TargetBoardId,
-
-                        TargetAcademicLevel =
-                            request.TargetAcademicLevel,
-
-                        TargetGroupId =
-                            request.TargetGroupId,
-
-                        TargetSection =
-                            request.TargetSection,
-
-                        TargetMedium =
-                            request.TargetMedium,
-
-                        StudentIds =
-                            new List<int>
-                            {
-                                studentId
-                            }
-                    });
+            var preview = await PreviewAsync(
+                new PromotionPreviewRequest
+                {
+                    SourceAcademicYearId = sourceYearId,
+                    SourceBoardId = student.BoardId != null ? Convert.ToInt32(student.BoardId) : (int?)null,
+                    SourceAcademicLevel = sourceLevel,
+                    SourceGroupId = sourceGroupId,
+                    SourceSection = sourceSection,
+                    SourceMedium = student.Medium != null ? Convert.ToString(student.Medium) : (string?)null,
+                    TargetAcademicYearId = request.TargetAcademicYearId,
+                    TargetBoardId = request.TargetBoardId,
+                    TargetAcademicLevel = request.TargetAcademicLevel,
+                    TargetGroupId = request.TargetGroupId,
+                    TargetSection = request.TargetSection,
+                    TargetMedium = request.TargetMedium,
+                    StudentIds = new List<int> { studentId }
+                });
 
             if (preview.EligibleCount == 0)
             {
@@ -1033,46 +413,27 @@ AND s.IsActive = 1;
             await PromoteStudentsAsync(
                 new PromoteStudentsRequest
                 {
-                    StudentIds =
-                        new List<int>
-                        {
-                            studentId
-                        },
-
+                    StudentIds = new List<int> { studentId },
                     SourceAcademicYearId = sourceYearId,
                     SourceBoardId = student.BoardId != null ? Convert.ToInt32(student.BoardId) : (int?)null,
                     SourceAcademicLevel = sourceLevel,
                     SourceGroupId = sourceGroupId,
                     SourceSection = sourceSection,
                     SourceMedium = student.Medium != null ? Convert.ToString(student.Medium) : (string?)null,
-
-                    TargetAcademicYearId =
-                        request.TargetAcademicYearId,
-
-                    TargetBoardId =
-                        request.TargetBoardId,
-
-                    TargetAcademicLevel =
-                        request.TargetAcademicLevel,
-
-                    TargetGroupId =
-                        request.TargetGroupId,
-
-                    TargetSection =
-                        request.TargetSection,
-
-                    TargetMedium =
-                        request.TargetMedium
+                    TargetAcademicYearId = request.TargetAcademicYearId,
+                    TargetBoardId = request.TargetBoardId,
+                    TargetAcademicLevel = request.TargetAcademicLevel,
+                    TargetGroupId = request.TargetGroupId,
+                    TargetSection = request.TargetSection,
+                    TargetMedium = request.TargetMedium
                 },
                 performedBy);
 
-            return
-                (await GetHistoryAsync(
-                    new PromotionHistoryQuery
-                    {
-                        StudentId = studentId
-                    }))
-                .FirstOrDefault();
+            return (await GetHistoryAsync(
+                new PromotionHistoryQuery
+                {
+                    StudentId = studentId
+                })).FirstOrDefault();
         }
 
         // ============================================================
@@ -1083,43 +444,23 @@ AND s.IsActive = 1;
         {
             await OpenAsync();
 
-            var response =
-                new AllocationResponse();
-
-            int? targetLevelId = request.TargetAcademicLevelId;
-            if (!targetLevelId.HasValue || targetLevelId <= 0)
-            {
-                if (!string.IsNullOrWhiteSpace(request.TargetAcademicLevel))
-                {
-                    targetLevelId = await Connection.ExecuteScalarAsync<int?>(
-                        "SELECT AcademicLevelId FROM AcademicLevels WHERE LOWER(TRIM(LevelName)) = LOWER(TRIM(@Level)) LIMIT 1;",
-                        new { Level = request.TargetAcademicLevel });
-                }
-            }
-
+            var response = new AllocationResponse();
             var ids = request.StudentIds.Distinct().ToList();
             if (ids.Count > 0)
             {
                 try
                 {
-                    var affected = await Connection.ExecuteAsync(
-                        @"
-UPDATE Students
-SET
-    AcademicYearId = @AcademicYearId,
-    AcademicLevelId = COALESCE(@TargetAcademicLevelId, AcademicLevelId),
-    GroupId = @GroupId,
-    UpdatedAt = UTC_TIMESTAMP()
-WHERE StudentId IN @Ids
-AND IsActive = 1;
-",
+                    var json = JsonSerializer.Serialize(ids);
+                    await Connection.ExecuteAsync(
+                        "sp_AllocateStudentGroup",
                         new
                         {
-                            AcademicYearId = request.TargetAcademicYearId,
-                            TargetAcademicLevelId = targetLevelId,
-                            GroupId = request.TargetGroupId,
-                            Ids = ids
-                        });
+                            p_StudentIdsJson = json,
+                            p_TargetAcademicYearId = request.TargetAcademicYearId,
+                            p_TargetAcademicLevelId = request.TargetAcademicLevelId,
+                            p_TargetGroupId = request.TargetGroupId
+                        },
+                        commandType: CommandType.StoredProcedure);
 
                     response.UpdatedCount = ids.Count;
                     foreach (var id in ids)
@@ -1159,43 +500,23 @@ AND IsActive = 1;
             await OpenAsync();
 
             var response = new AllocationResponse();
-
-            int? targetLevelId = request.TargetAcademicLevelId;
-            if (!targetLevelId.HasValue || targetLevelId <= 0)
-            {
-                if (!string.IsNullOrWhiteSpace(request.TargetAcademicLevel))
-                {
-                    targetLevelId = await Connection.ExecuteScalarAsync<int?>(
-                        "SELECT AcademicLevelId FROM AcademicLevels WHERE LOWER(TRIM(LevelName)) = LOWER(TRIM(@Level)) LIMIT 1;",
-                        new { Level = request.TargetAcademicLevel });
-                }
-            }
-
             var ids = request.StudentIds.Distinct().ToList();
             if (ids.Count > 0)
             {
                 try
                 {
-                    var affected = await Connection.ExecuteAsync(
-                        @"
-UPDATE Students
-SET
-    AcademicYearId = CASE WHEN @AcademicYearId > 0 THEN @AcademicYearId ELSE AcademicYearId END,
-    AcademicLevelId = COALESCE(@TargetAcademicLevelId, AcademicLevelId),
-    GroupId = CASE WHEN @GroupId > 0 THEN @GroupId ELSE GroupId END,
-    ProgramId = @ProgramId,
-    UpdatedAt = UTC_TIMESTAMP()
-WHERE StudentId IN @Ids
-AND IsActive = 1;
-",
+                    var json = JsonSerializer.Serialize(ids);
+                    await Connection.ExecuteAsync(
+                        "sp_AllocateStudentProgram",
                         new
                         {
-                            AcademicYearId = request.TargetAcademicYearId,
-                            TargetAcademicLevelId = targetLevelId,
-                            GroupId = request.TargetGroupId,
-                            ProgramId = request.TargetProgramId,
-                            Ids = ids
-                        });
+                            p_StudentIdsJson = json,
+                            p_TargetAcademicYearId = request.TargetAcademicYearId,
+                            p_TargetAcademicLevelId = request.TargetAcademicLevelId,
+                            p_TargetGroupId = request.TargetGroupId,
+                            p_TargetProgramId = request.TargetProgramId
+                        },
+                        commandType: CommandType.StoredProcedure);
 
                     response.UpdatedCount = ids.Count;
                     foreach (var id in ids)
@@ -1234,56 +555,24 @@ AND IsActive = 1;
         {
             await OpenAsync();
 
-            var response =
-                new AllocationResponse();
-
-            int? targetSecLevelId = request.TargetAcademicLevelId;
-            if (!targetSecLevelId.HasValue || targetSecLevelId <= 0)
-            {
-                if (!string.IsNullOrWhiteSpace(request.TargetAcademicLevel))
-                {
-                    targetSecLevelId = await Connection.ExecuteScalarAsync<int?>(
-                        "SELECT AcademicLevelId FROM AcademicLevels WHERE LOWER(TRIM(LevelName)) = LOWER(TRIM(@Level)) LIMIT 1;",
-                        new { Level = request.TargetAcademicLevel });
-                }
-            }
-
-            int? targetSecSectionId = request.TargetSectionId;
-            if (!targetSecSectionId.HasValue || targetSecSectionId <= 0)
-            {
-                if (!string.IsNullOrWhiteSpace(request.TargetSection))
-                {
-                    targetSecSectionId = await Connection.ExecuteScalarAsync<int?>(
-                        "SELECT SectionId FROM Sections WHERE LOWER(TRIM(SectionName)) = LOWER(TRIM(@Sec)) LIMIT 1;",
-                        new { Sec = request.TargetSection });
-                }
-            }
-
+            var response = new AllocationResponse();
             var ids = request.StudentIds.Distinct().ToList();
             if (ids.Count > 0)
             {
                 try
                 {
-                    var affected = await Connection.ExecuteAsync(
-                        @"
-UPDATE Students
-SET
-    AcademicYearId = @AcademicYearId,
-    AcademicLevelId = COALESCE(@TargetAcademicLevelId, AcademicLevelId),
-    GroupId = @GroupId,
-    SectionId = COALESCE(@TargetSectionId, SectionId),
-    UpdatedAt = UTC_TIMESTAMP()
-WHERE StudentId IN @Ids
-AND IsActive = 1;
-",
+                    var json = JsonSerializer.Serialize(ids);
+                    await Connection.ExecuteAsync(
+                        "sp_AllocateStudentSection",
                         new
                         {
-                            AcademicYearId = request.TargetAcademicYearId,
-                            TargetAcademicLevelId = targetSecLevelId,
-                            GroupId = request.TargetGroupId,
-                            TargetSectionId = targetSecSectionId,
-                            Ids = ids
-                        });
+                            p_StudentIdsJson = json,
+                            p_TargetAcademicYearId = request.TargetAcademicYearId,
+                            p_TargetAcademicLevelId = request.TargetAcademicLevelId,
+                            p_TargetGroupId = request.TargetGroupId,
+                            p_TargetSectionId = request.TargetSectionId
+                        },
+                        commandType: CommandType.StoredProcedure);
 
                     response.UpdatedCount = ids.Count;
                     foreach (var id in ids)
@@ -1322,162 +611,51 @@ AND IsActive = 1;
         {
             await OpenAsync();
 
-            /*
-             * IMPORTANT:
-             *
-             * This query ONLY uses columns that exist in your
-             * actual PromotionHistories table.
-             *
-             * Removed:
-             * ph.FromBoardId
-             * ph.ToBoardId
-             * ph.FromMedium
-             * ph.ToMedium
-             *
-             * Your previous 500 error was caused by:
-             *
-             * WHERE ph.FromBoardId = ...
-             *
-             * because FromBoardId does not exist.
-             */
+            var historyItems = await Connection.QueryAsync<PromotionHistoryDto>(
+                "sp_GetPromotionHistory",
+                new
+                {
+                    p_AcademicYearId = q.AcademicYearId,
+                    p_TargetAcademicYearId = q.TargetAcademicYearId,
+                    p_AcademicLevel = q.AcademicLevel,
+                    p_TargetAcademicLevel = q.TargetAcademicLevel,
+                    p_GroupId = q.GroupId,
+                    p_Section = q.Section,
+                    p_StudentId = (int?)null,
+                    p_Search = (string?)null,
+                    p_PromotionStatus = q.PromotionStatus,
+                    p_FromDate = (DateTime?)null,
+                    p_ToDate = (DateTime?)null
+                },
+                commandType: CommandType.StoredProcedure);
 
-            const string sql = @"
-SELECT
-    ph.Id AS PromotionId,
-    ph.StudentId,
-    COALESCE(s.AdmissionNo, '') AS AdmissionNo,
-    s.StudentName,
-    fay.AcademicYearName AS SourceAcademicYear,
-    ph.FromAcademicLevel AS SourceLevel,
-    tay.AcademicYearName AS TargetAcademicYear,
-    ph.ToAcademicLevel AS TargetLevel,
-    fg.GroupName AS SourceGroup,
-    tg.GroupName AS TargetGroup,
-    ph.FromSection AS SourceSection,
-    ph.ToSection AS TargetSection,
-    CASE
-        WHEN ph.IsRolledBack = 1
-            THEN 'Not Eligible'
-        ELSE 'Eligible'
-    END AS EligibilityStatus,
-    ph.Status AS PromotionStatus,
-    ph.PromotionDate
-FROM PromotionHistories ph
-INNER JOIN Students s
-    ON s.StudentId = ph.StudentId
-LEFT JOIN AcademicYears fay
-    ON fay.AcademicYearId = ph.FromAcademicYearId
-LEFT JOIN AcademicYears tay
-    ON tay.AcademicYearId = ph.ToAcademicYearId
-LEFT JOIN `Groups` fg
-    ON fg.GroupId = ph.FromGroupId
-LEFT JOIN `Groups` tg
-    ON tg.GroupId = ph.ToGroupId
-
-WHERE
-
-    (
-        @AcademicYearId IS NULL
-        OR ph.FromAcademicYearId = @AcademicYearId
-    )
-
-AND
-    (
-        @TargetAcademicYearId IS NULL
-        OR ph.ToAcademicYearId = @TargetAcademicYearId
-    )
-
-AND
-    (
-        @AcademicLevel IS NULL
-        OR TRIM(@AcademicLevel) = ''
-        OR ph.FromAcademicLevel = TRIM(@AcademicLevel)
-    )
-
-AND
-    (
-        @TargetAcademicLevel IS NULL
-        OR TRIM(@TargetAcademicLevel) = ''
-        OR ph.ToAcademicLevel = TRIM(@TargetAcademicLevel)
-    )
-
-AND
-    (
-        @GroupId IS NULL
-        OR ph.FromGroupId = @GroupId
-    )
-
-AND
-    (
-        @TargetGroupId IS NULL
-        OR ph.ToGroupId = @TargetGroupId
-    )
-
-AND
-    (
-        @Section IS NULL
-        OR TRIM(@Section) = ''
-        OR ph.FromSection = TRIM(@Section)
-    )
-
-AND
-    (
-        @TargetSection IS NULL
-        OR TRIM(@TargetSection) = ''
-        OR ph.ToSection = TRIM(@TargetSection)
-    )
-
-AND
-    (
-        @PromotionStatus IS NULL
-        OR TRIM(@PromotionStatus) = ''
-        OR ph.Status = TRIM(@PromotionStatus)
-    )
-
-ORDER BY ph.Id DESC;
-";
-
-            var details =
-                (await Connection.QueryAsync<PromotionReportDetailDto>(
-                    sql,
-                    q))
-                .ToList();
+            if (q.CampusId.HasValue) { var validStudents = await _context.Students.Where(s => s.CampusId == q.CampusId.Value).Select(s => s.StudentId).ToListAsync(); historyItems = historyItems.Where(x => validStudents.Contains(x.StudentId)).ToList(); } var details = historyItems.Select(x => new PromotionReportDetailDto
+            {
+                PromotionId = x.PromotionId,
+                StudentId = x.StudentId,
+                AdmissionNo = x.AdmissionNo,
+                StudentName = x.StudentName,
+                SourceAcademicYear = x.SourceAcademicYear,
+                SourceLevel = x.SourceAcademicLevel,
+                TargetAcademicYear = x.TargetAcademicYear,
+                TargetLevel = x.TargetAcademicLevel,
+                SourceGroup = x.SourceGroup,
+                TargetGroup = x.TargetGroup,
+                SourceSection = x.SourceSection,
+                TargetSection = x.TargetSection,
+                EligibilityStatus = x.RollbackStatus ? "Not Eligible" : "Eligible",
+                PromotionStatus = x.PromotionStatus,
+                PromotionDate = x.PromotionDate
+            }).ToList();
 
             return new PromotionReportResponse
             {
-                TotalStudents =
-                    details.Count,
-
-                EligibleStudents =
-                    details.Count(x =>
-                        x.EligibilityStatus.Equals(
-                            "Eligible",
-                            StringComparison.OrdinalIgnoreCase)),
-
-                NotEligibleStudents =
-                    details.Count(x =>
-                        x.EligibilityStatus.Equals(
-                            "Not Eligible",
-                            StringComparison.OrdinalIgnoreCase)),
-
-                PromotedStudents =
-                    details.Count(x =>
-                        x.PromotionStatus.Equals(
-                            "Promoted",
-                            StringComparison.OrdinalIgnoreCase)),
-
-                NotPromotedStudents =
-                    details.Count(x =>
-                        !x.PromotionStatus.Equals(
-                            "Promoted",
-                            StringComparison.OrdinalIgnoreCase)),
-
-                RolledBackStudents =
-                    details.Count(x =>
-                        x.PromotionStatus.Equals(
-                            "RolledBack",
-                            StringComparison.OrdinalIgnoreCase)),
-
+                TotalStudents = details.Count,
+                EligibleStudents = details.Count(x => x.EligibilityStatus.Equals("Eligible", StringComparison.OrdinalIgnoreCase)),
+                NotEligibleStudents = details.Count(x => x.EligibilityStatus.Equals("Not Eligible", StringComparison.OrdinalIgnoreCase)),
+                PromotedStudents = details.Count(x => x.PromotionStatus.Equals("Promoted", StringComparison.OrdinalIgnoreCase)),
+                NotPromotedStudents = details.Count(x => !x.PromotionStatus.Equals("Promoted", StringComparison.OrdinalIgnoreCase)),
+                RolledBackStudents = details.Count(x => x.PromotionStatus.Equals("RolledBack", StringComparison.OrdinalIgnoreCase)),
                 Details = details
             };
         }
