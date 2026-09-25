@@ -110,7 +110,7 @@ namespace CollegeManagement.API.Models
         // ACADEMIC FOREIGN KEYS & CAMPUS
         // =========================================================
 
-        public int? CampusId { get; set; }
+        public int? CampusId { get; set; } public int? AdmittedById { get; set; }
 
         [ForeignKey(nameof(CampusId))]
         public Campus? CampusNavigation { get; set; }

@@ -120,5 +120,7 @@ namespace CollegeManagement.API.DTOs
         public int GroupId { get; set; }
 
         public int ProgramId { get; set; }
+
+        public int? CampusId { get; set; }
     }
 }

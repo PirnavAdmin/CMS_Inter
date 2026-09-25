@@ -50,7 +50,7 @@ const LEDGER_TABS = [
   { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Payment History", label: "Payment History" },
 ];
-const FEE_TYPE_CATEGORIES = ["Admission", "Academic", "Examination", "Facility", "Activity", "Other"];
+const FEE_TYPE_CATEGORIES = ["Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous"];
 const PAGE_SIZE = 5;
 const OVERVIEW_TABS = [
   { id: "overdue", label: "Overdue Fees", icon: AlertCircle },
@@ -605,9 +605,17 @@ const categoryForFeeType = (name = "") => {
   const normalized = String(name).toLowerCase();
   if (normalized.includes("admission")) return "Admission";
   if (normalized.includes("exam")) return "Examination";
-  if (normalized.includes("transport") || normalized.includes("hostel") || normalized.includes("uniform") || normalized.includes("id card")) return "Facility";
+  if (normalized.includes("transport")) return "Transport";
+  if (normalized.includes("hostel")) return "Hostel";
+  if (normalized.includes("uniform") || normalized.includes("id card")) return "Facility";
   if (normalized.includes("activity") || normalized.includes("sports")) return "Activity";
   return "Academic";
+};
+
+const normalizeFeeTypeCategory = (category, fallbackName = "") => {
+  const value = String(category || "").trim();
+  const matched = FEE_TYPE_CATEGORIES.find((item) => item.toLowerCase() === value.toLowerCase());
+  return matched || categoryForFeeType(fallbackName);
 };
 
 const feeTypeCodeFor = (name = "") => {
@@ -630,7 +638,10 @@ const feeTypeOption = (item) => {
     id: String(read(item, "feeTypeId", "FeeTypeId", "typeId", "TypeId") ?? read(feeType, "feeTypeId", "FeeTypeId", "id", "Id", "typeId", "TypeId") ?? read(item, "id", "Id") ?? ""),
     name,
     code: textValue(item, "feeTypeCode", "FeeTypeCode", "code", "Code") || textValue(feeType, "feeTypeCode", "FeeTypeCode", "code", "Code") || feeTypeCodeFor(name),
-    category: textValue(item, "category", "Category", "feeCategory", "FeeCategory") || textValue(feeType, "category", "Category", "feeCategory", "FeeCategory") || categoryForFeeType(name),
+    category: normalizeFeeTypeCategory(
+      textValue(item, "category", "Category", "feeCategory", "FeeCategory") || textValue(feeType, "category", "Category", "feeCategory", "FeeCategory"),
+      name,
+    ),
     status: isActiveStatus(status) ? "Active" : "Inactive",
   };
 };
@@ -2646,7 +2657,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
 function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
   const [draft, setDraft] = useState({
     name: initial?.name || "",
-    category: initial?.category || FEE_TYPE_CATEGORIES[1],
+    category: normalizeFeeTypeCategory(initial?.category, initial?.name),
     status: initial?.status || "Active",
   });
   const [error, setError] = useState("");
@@ -2660,7 +2671,7 @@ function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
     const nextType = {
       id: initial?.id || `custom-${Date.now()}`,
       name,
-      category: draft.category || "Other",
+      category: normalizeFeeTypeCategory(draft.category, name),
       status: draft.status || "Active",
     };
     setSaving(true);
@@ -2713,7 +2724,7 @@ function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
 const feeTypePayload = (item) => ({
   FeeTypeName: item.name,
   FeeTypeCode: item.code || feeTypeCodeFor(item.name),
-  Category: item.category || "Other",
+  Category: normalizeFeeTypeCategory(item.category, item.name),
   IsActive: item.status !== "Inactive",
 });
 
