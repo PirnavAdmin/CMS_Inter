@@ -45,14 +45,14 @@ namespace CollegeManagement.API.Services.Implementations
             return await _timetableRepository.GetPagedAsync(queryParams);
         }
 
-        public async Task<IEnumerable<TimetableResponseDto>> GetFacultyTimetableAsync(int facultyId, int? academicYearId = null)
+        public async Task<IEnumerable<TimetableResponseDto>> GetFacultyTimetableAsync(int facultyId, int? academicYearId = null, int? campusId = null)
         {
-            return await _timetableRepository.GetByFacultyIdAsync(facultyId, academicYearId);
+            return await _timetableRepository.GetByFacultyIdAsync(facultyId, academicYearId, campusId);
         }
 
-        public async Task<IEnumerable<TimetableResponseDto>> GetSectionTimetableAsync(int sectionId, int? academicYearId = null, bool? isPublished = null)
+        public async Task<IEnumerable<TimetableResponseDto>> GetSectionTimetableAsync(int sectionId, int? academicYearId = null, bool? isPublished = null, int? campusId = null)
         {
-            return await _timetableRepository.GetBySectionIdAsync(sectionId, academicYearId, isPublished);
+            return await _timetableRepository.GetBySectionIdAsync(sectionId, academicYearId, isPublished, campusId);
         }
 
         public async Task<IEnumerable<TimetableResponseDto>> GetStudentTimetableAsync(int studentId)
@@ -166,9 +166,9 @@ namespace CollegeManagement.API.Services.Implementations
             return true;
         }
 
-        public async Task<IEnumerable<AllocatedFacultyDto>> GetAllocatedFacultiesAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? sectionId, int? subjectId)
+        public async Task<IEnumerable<AllocatedFacultyDto>> GetAllocatedFacultiesAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? sectionId, int? subjectId, int? campusId = null)
         {
-            return await _timetableRepository.GetAllocatedFacultiesAsync(boardId, academicLevelId, academicYearId, groupId, sectionId, subjectId);
+            return await _timetableRepository.GetAllocatedFacultiesAsync(boardId, academicLevelId, academicYearId, groupId, sectionId, subjectId, campusId);
         }
 
         public async Task<ValidateTimetableResultDto> ValidateSectionTimetableAsync(int sectionId, int academicYearId)

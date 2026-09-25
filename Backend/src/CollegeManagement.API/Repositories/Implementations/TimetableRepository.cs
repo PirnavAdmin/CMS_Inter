@@ -125,7 +125,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<IEnumerable<TimetableResponseDto>> GetByFacultyIdAsync(int facultyId, int? academicYearId = null)
+        public async Task<IEnumerable<TimetableResponseDto>> GetByFacultyIdAsync(int facultyId, int? academicYearId = null, int? campusId = null)
         {
             if (IsRelational)
             {
@@ -145,22 +145,23 @@ namespace CollegeManagement.API.Repositories.Implementations
                             p_StaffId = facultyId,
                             p_RoomId = (int?)null,
                             p_IsPublished = (int?)null,
-                            p_ApprovalStatus = (int?)null
+                            p_ApprovalStatus = (int?)null,
+                            p_CampusId = campusId
                         },
                         commandType: CommandType.StoredProcedure);
                 }
                 catch
                 {
-                    return await GetInMemoryTimetableDtosAsync(t => t.StaffId == facultyId && (academicYearId == null || t.AcademicYearId == academicYearId) && t.IsPublished);
+                    return await GetInMemoryTimetableDtosAsync(t => t.StaffId == facultyId && (academicYearId == null || t.AcademicYearId == academicYearId) && t.IsPublished, campusId);
                 }
             }
             else
             {
-                return await GetInMemoryTimetableDtosAsync(t => t.StaffId == facultyId && (academicYearId == null || t.AcademicYearId == academicYearId) && t.IsPublished);
+                return await GetInMemoryTimetableDtosAsync(t => t.StaffId == facultyId && (academicYearId == null || t.AcademicYearId == academicYearId) && t.IsPublished, campusId);
             }
         }
 
-        public async Task<IEnumerable<TimetableResponseDto>> GetBySectionIdAsync(int sectionId, int? academicYearId = null, bool? isPublished = null)
+        public async Task<IEnumerable<TimetableResponseDto>> GetBySectionIdAsync(int sectionId, int? academicYearId = null, bool? isPublished = null, int? campusId = null)
         {
             if (IsRelational)
             {
@@ -180,7 +181,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                             p_StaffId = (int?)null,
                             p_RoomId = (int?)null,
                             p_IsPublished = isPublished.HasValue ? (isPublished.Value ? 1 : 0) : (int?)null,
-                            p_ApprovalStatus = (int?)null
+                            p_ApprovalStatus = (int?)null,
+                            p_CampusId = campusId
                         },
                         commandType: CommandType.StoredProcedure);
                 }
@@ -188,14 +190,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     return await GetInMemoryTimetableDtosAsync(t => t.SectionId == sectionId &&
                                                                   (academicYearId == null || t.AcademicYearId == academicYearId) &&
-                                                                  (isPublished == null || t.IsPublished == isPublished));
+                                                                  (isPublished == null || t.IsPublished == isPublished), campusId);
                 }
             }
             else
             {
                 return await GetInMemoryTimetableDtosAsync(t => t.SectionId == sectionId &&
                                                               (academicYearId == null || t.AcademicYearId == academicYearId) &&
-                                                              (isPublished == null || t.IsPublished == isPublished));
+                                                              (isPublished == null || t.IsPublished == isPublished), campusId);
             }
         }
 
@@ -320,11 +322,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 (excludeId == null || t.Id != excludeId.Value));
         }
 
-        public async Task<IEnumerable<AllocatedFacultyDto>> GetAllocatedFacultiesAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? sectionId, int? subjectId)
+        public async Task<IEnumerable<AllocatedFacultyDto>> GetAllocatedFacultiesAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? sectionId, int? subjectId, int? campusId = null)
         {
             var allocations = await _context.StaffSubjectAllocations
                 .Include(a => a.Staff)
-                .Where(a => (subjectId == null || a.SubjectId == subjectId) && a.Staff != null && !a.Staff.IsDeleted)
+                .Where(a => (subjectId == null || a.SubjectId == subjectId) && a.Staff != null && !a.Staff.IsDeleted && (campusId == null || a.Staff.CampusId == campusId))
                 .ToListAsync();
 
             return allocations.Select(a => new AllocatedFacultyDto

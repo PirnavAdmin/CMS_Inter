@@ -105,12 +105,13 @@ namespace CollegeManagement.API.Services.Implementations
             return await strategy.ExecuteAsync(async () =>
             {
                 using var transaction = await _context.Database.BeginTransactionAsync();
+                var dbTransaction = transaction.GetDbTransaction();
                 try
                 {
                     var board = _mapper.Map<Board>(request);
-                    var savedBoard = await _boardRepository.CreateBoardAsync(board);
+                    var savedBoard = await _boardRepository.CreateBoardAsync(board, dbTransaction);
 
-                    await _boardRepository.ReplaceAcademicLevelsAsync(savedBoard.BoardId, request.AcademicLevelIds);
+                    await _boardRepository.ReplaceAcademicLevelsAsync(savedBoard.BoardId, request.AcademicLevelIds, dbTransaction);
 
                     // Insert CREATE AuditLog entry
                     var audit = new AuditLog
@@ -156,10 +157,11 @@ namespace CollegeManagement.API.Services.Implementations
             return await strategy.ExecuteAsync(async () =>
             {
                 using var transaction = await _context.Database.BeginTransactionAsync();
+                var dbTransaction = transaction.GetDbTransaction();
                 try
                 {
                     // Retrieve current state from DB inside the active transaction before mapping mutation
-                    var oldBoard = await _boardRepository.GetBoardByIdAsync(boardId);
+                    var oldBoard = await _boardRepository.GetBoardByIdAsync(boardId, dbTransaction);
                     if (oldBoard == null)
                     {
                         throw new NotFoundException($"Board with ID {boardId} was not found.");
@@ -173,7 +175,7 @@ namespace CollegeManagement.API.Services.Implementations
                     var boardToUpdate = _mapper.Map<Board>(request);
                     boardToUpdate.BoardId = boardId;
 
-                    var (updatedBoard, affectedRows) = await _boardRepository.UpdateBoardAsync(boardToUpdate, request.RowVersion);
+                    var (updatedBoard, affectedRows) = await _boardRepository.UpdateBoardAsync(boardToUpdate, request.RowVersion, dbTransaction);
                     if (affectedRows == -1)
                     {
                         throw new NotFoundException($"Board with ID {boardId} was not found.");
@@ -183,7 +185,7 @@ namespace CollegeManagement.API.Services.Implementations
                         throw new ConflictException("Board was modified by another user. Please refresh and try again.");
                     }
 
-                    await _boardRepository.ReplaceAcademicLevelsAsync(boardId, request.AcademicLevelIds);
+                    await _boardRepository.ReplaceAcademicLevelsAsync(boardId, request.AcademicLevelIds, dbTransaction);
 
                     // Construct human-readable field comparison summary
                     var auditDescription = BuildUpdateDescription(oldBoard, request);
@@ -279,9 +281,10 @@ namespace CollegeManagement.API.Services.Implementations
             return await strategy.ExecuteAsync(async () =>
             {
                 using var transaction = await _context.Database.BeginTransactionAsync();
+                var dbTransaction = transaction.GetDbTransaction();
                 try
                 {
-                    var affected = await _boardRepository.ChangeBoardStatusAsync(boardId, request.RowVersion, request.Status);
+                    var affected = await _boardRepository.ChangeBoardStatusAsync(boardId, request.RowVersion, request.Status, dbTransaction);
                     if (affected == -1)
                     {
                         throw new NotFoundException($"Board with ID {boardId} was not found.");
