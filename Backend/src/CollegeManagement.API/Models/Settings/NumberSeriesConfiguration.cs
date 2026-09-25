@@ -38,6 +38,8 @@ namespace CollegeManagement.API.Models.Settings
 
         public bool IsActive { get; set; } = true;
 
+        public int? CampusId { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
