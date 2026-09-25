@@ -180,6 +180,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int?>("BoardId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
@@ -572,6 +575,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int>("BoardId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
@@ -876,6 +882,85 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("BoardAssessments");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.Campus", b =>
+                {
+                    b.Property<int>("CampusId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("CampusId"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<string>("CampusCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("CampusName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("ContactPhone")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsHQ")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("CampusId");
+
+                    b.ToTable("Campuses");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.CampusBoard", b =>
+                {
+                    b.Property<int>("CampusBoardId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("CampusBoardId"));
+
+                    b.Property<int>("BoardId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CampusId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.HasKey("CampusBoardId");
+
+                    b.HasIndex("BoardId");
+
+                    b.HasIndex("CampusId");
+
+                    b.ToTable("CampusBoards");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.Certificate", b =>
                 {
                     b.Property<int>("CertificateId")
@@ -899,6 +984,9 @@ namespace CollegeManagement.API.Migrations
 
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
 
                     b.Property<string>("CertificateNumber")
                         .IsRequired()
@@ -925,9 +1013,6 @@ namespace CollegeManagement.API.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("tinyint(1)")
                         .HasDefaultValue(true);
-
-                    b.Property<bool?>("IsVerified")
-                        .HasColumnType("tinyint(1)");
 
                     b.Property<DateTime?>("IssueDate")
                         .HasColumnType("datetime(6)");
@@ -970,6 +1055,8 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("CertificateId");
+
+                    b.HasIndex("CampusId");
 
                     b.HasIndex("CertificateNumber")
                         .IsUnique();
@@ -1042,6 +1129,9 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("DepartmentId"));
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1071,6 +1161,8 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("DepartmentId");
+
+                    b.HasIndex("CampusId");
 
                     b.ToTable("Departments");
                 });
@@ -1193,6 +1285,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int>("BoardId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1269,6 +1364,9 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -1292,6 +1390,8 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CampusId");
 
                     b.HasIndex("DepartmentId");
 
@@ -1317,6 +1417,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<string>("BloodGroup")
                         .HasMaxLength(10)
                         .HasColumnType("varchar(10)");
+
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -1681,6 +1784,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int>("BoardId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime(6)")
@@ -1714,6 +1820,8 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("AcademicLevelId");
 
                     b.HasIndex("AcademicYearId");
+
+                    b.HasIndex("CampusId");
 
                     b.HasIndex("GroupId");
 
@@ -1961,6 +2069,51 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("StudentFeeComponents");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.FineRule", b =>
+                {
+                    b.Property<int>("FineRuleId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("FineRuleId"));
+
+                    b.Property<int>("ApplicableFeeId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<decimal>("FineAmount")
+                        .HasColumnType("decimal(10,2)");
+
+                    b.Property<string>("FineRuleName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("FineType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<int>("GracePeriod")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("FineRuleId");
+
+                    b.HasIndex("ApplicableFeeId");
+
+                    b.ToTable("FineRules");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.GradingSystem", b =>
                 {
                     b.Property<int>("GradingSystemId")
@@ -2153,6 +2306,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int?>("BoardId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -2325,6 +2481,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int?>("BoardId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -2454,6 +2613,61 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("OTPs");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.Permission", b =>
+                {
+                    b.Property<int>("PermissionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("PermissionId"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<string>("CategoryLabel")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.Property<string>("PermissionCode")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("SubModule")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.HasKey("PermissionId");
+
+                    b.HasIndex("PermissionCode")
+                        .IsUnique();
+
+                    b.HasIndex("SubModule", "Action")
+                        .IsUnique();
+
+                    b.ToTable("Permissions");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.PickupPoint", b =>
                 {
                     b.Property<long>("PickupPointId")
@@ -2575,6 +2789,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int>("BoardId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -2631,6 +2848,8 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("AcademicYearId");
 
                     b.HasIndex("BoardId");
+
+                    b.HasIndex("CampusId");
 
                     b.HasIndex("ExamId");
 
@@ -2715,10 +2934,26 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RoleId"));
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsSystemRole")
+                        .HasColumnType("tinyint(1)");
+
                     b.Property<string>("RoleName")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
 
                     b.HasKey("RoleId");
 
@@ -2726,6 +2961,33 @@ namespace CollegeManagement.API.Migrations
                         .IsUnique();
 
                     b.ToTable("Roles");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.RolePermission", b =>
+                {
+                    b.Property<int>("RolePermissionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RolePermissionId"));
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RoleId")
+                        .HasColumnType("int");
+
+                    b.HasKey("RolePermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.HasIndex("RoleId", "PermissionId")
+                        .IsUnique();
+
+                    b.ToTable("RolePermissions");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Section", b =>
@@ -2743,6 +3005,9 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<int?>("BoardId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("CampusId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
@@ -2807,6 +3072,9 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -2866,6 +3134,10 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int")
+                        .HasColumnName("CampusId");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -2913,6 +3185,8 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CampusId");
+
                     b.HasIndex("Category");
 
                     b.HasIndex("IsActive");
@@ -2950,6 +3224,9 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("varchar(10)");
 
                     b.Property<int?>("BoardId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CampusId")
                         .HasColumnType("int");
 
                     b.Property<string>("City")
@@ -2998,6 +3275,16 @@ namespace CollegeManagement.API.Migrations
                     b.Property<string>("DocumentsJson")
                         .HasColumnType("longtext");
 
+                    b.Property<int?>("DrivingExperienceYears")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("DrivingLicenseExpiryDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("DrivingLicenseNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
                     b.Property<string>("EducationJson")
                         .HasColumnType("longtext");
 
@@ -3038,6 +3325,9 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("varchar(20)");
 
                     b.Property<bool>("IsDeleted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("IsDriver")
                         .HasColumnType("tinyint(1)");
 
                     b.Property<DateTime>("JoiningDate")
@@ -3127,6 +3417,8 @@ namespace CollegeManagement.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BoardId");
+
+                    b.HasIndex("CampusId");
 
                     b.HasIndex("DepartmentId");
 
@@ -3242,6 +3534,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<DateTime>("AttendanceDate")
                         .HasColumnType("datetime(6)");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -3280,6 +3575,8 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("StaffSessionId");
+
+                    b.HasIndex("CampusId");
 
                     b.HasIndex("DepartmentId");
 
@@ -3524,6 +3821,9 @@ namespace CollegeManagement.API.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<int?>("AdmittedById")
+                        .HasColumnType("int");
+
                     b.Property<decimal?>("AnnualIncome")
                         .HasColumnType("decimal(18,2)");
 
@@ -3543,6 +3843,9 @@ namespace CollegeManagement.API.Migrations
 
                     b.Property<decimal?>("CGPA")
                         .HasColumnType("decimal(5,2)");
+
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
 
                     b.Property<string>("CasteCertificate")
                         .HasMaxLength(500)
@@ -3780,6 +4083,8 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasIndex("BoardId");
 
+                    b.HasIndex("CampusId");
+
                     b.HasIndex("GroupId");
 
                     b.HasIndex("ProgramId");
@@ -3820,6 +4125,9 @@ namespace CollegeManagement.API.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)");
 
+                    b.Property<int?>("AdmittedById")
+                        .HasColumnType("int");
+
                     b.Property<decimal?>("AnnualIncome")
                         .HasColumnType("decimal(18,2)");
 
@@ -3841,6 +4149,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<string>("BusType")
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)");
+
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
 
                     b.Property<string>("Category")
                         .HasMaxLength(100)
@@ -4049,6 +4360,8 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("datetime(6)");
 
                     b.HasKey("AdmissionId");
+
+                    b.HasIndex("CampusId");
 
                     b.ToTable("StudentAdmissions");
                 });
@@ -4299,6 +4612,9 @@ namespace CollegeManagement.API.Migrations
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("PeriodId"));
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -4327,6 +4643,8 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("PeriodId");
 
+                    b.HasIndex("CampusId");
+
                     b.ToTable("Periods");
                 });
 
@@ -4337,6 +4655,9 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("int");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -4363,6 +4684,8 @@ namespace CollegeManagement.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CampusId");
+
                     b.ToTable("PeriodStructures");
                 });
 
@@ -4381,6 +4704,9 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<int>("BoardId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("CampusId")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
@@ -4405,6 +4731,8 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("AcademicYearId");
 
                     b.HasIndex("BoardId");
+
+                    b.HasIndex("CampusId");
 
                     b.HasIndex("GroupId");
 
@@ -4467,6 +4795,9 @@ namespace CollegeManagement.API.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)")
                         .HasColumnName("BlockName");
+
+                    b.Property<int>("CampusId")
+                        .HasColumnType("int");
 
                     b.Property<int>("Capacity")
                         .HasColumnType("int");
@@ -4531,6 +4862,9 @@ namespace CollegeManagement.API.Migrations
                     b.Property<int>("BoardId")
                         .HasColumnType("int");
 
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -4575,6 +4909,8 @@ namespace CollegeManagement.API.Migrations
                     b.HasIndex("AcademicYearId");
 
                     b.HasIndex("BoardId");
+
+                    b.HasIndex("CampusId");
 
                     b.HasIndex("GroupId");
 
@@ -5038,13 +5374,11 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnName("LicenseExpiry");
 
                     b.Property<string>("LicenceNumber")
-                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("varchar(50)")
                         .HasColumnName("LicenseNo");
 
                     b.Property<string>("MobileNumber")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("varchar(20)")
                         .HasColumnName("MobileNo");
@@ -5085,6 +5419,9 @@ namespace CollegeManagement.API.Migrations
 
                     b.Property<decimal>("AcRatePerKm")
                         .HasColumnType("decimal(65,30)");
+
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)");
@@ -5224,6 +5561,9 @@ namespace CollegeManagement.API.Migrations
                         .HasColumnType("bigint");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("VehicleId"));
+
+                    b.Property<int?>("CampusId")
+                        .HasColumnType("int");
 
                     b.Property<int>("Capacity")
                         .HasColumnType("int");
@@ -5456,6 +5796,43 @@ namespace CollegeManagement.API.Migrations
                         .IsUnique();
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.UserPermission", b =>
+                {
+                    b.Property<int>("UserPermissionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("UserPermissionId"));
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("AssignedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsGranted")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("UserPermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.HasIndex("UserId", "PermissionId")
+                        .IsUnique();
+
+                    b.ToTable("UserPermissions");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.VehicleMaintenance", b =>
@@ -5740,15 +6117,49 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("Board");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.CampusBoard", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Board", "Board")
+                        .WithMany("CampusBoards")
+                        .HasForeignKey("BoardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany("CampusBoards")
+                        .HasForeignKey("CampusId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Board");
+
+                    b.Navigation("Campus");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.Certificate", b =>
                 {
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
                     b.HasOne("CollegeManagement.API.Models.Student", "Student")
                         .WithMany()
                         .HasForeignKey("StudentId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.Navigation("Campus");
+
                     b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Department", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
+                    b.Navigation("Campus");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.ExamSchedule", b =>
@@ -5822,9 +6233,15 @@ namespace CollegeManagement.API.Migrations
 
             modelBuilder.Entity("CollegeManagement.API.Models.Faculty.Designation", b =>
                 {
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
                     b.HasOne("CollegeManagement.API.Models.Department", "Department")
                         .WithMany()
                         .HasForeignKey("DepartmentId");
+
+                    b.Navigation("Campus");
 
                     b.Navigation("Department");
                 });
@@ -5963,6 +6380,10 @@ namespace CollegeManagement.API.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
                     b.HasOne("CollegeManagement.API.Models.Group", "Group")
                         .WithMany()
                         .HasForeignKey("GroupId")
@@ -5979,6 +6400,8 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("AcademicYear");
 
                     b.Navigation("Board");
+
+                    b.Navigation("Campus");
 
                     b.Navigation("Group");
 
@@ -6040,6 +6463,17 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("FeeStructureComponent");
 
                     b.Navigation("StudentFee");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.FineRule", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Fee.FeeType", "ApplicableFee")
+                        .WithMany()
+                        .HasForeignKey("ApplicableFeeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ApplicableFee");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Group", b =>
@@ -6226,6 +6660,10 @@ namespace CollegeManagement.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
                     b.HasOne("CollegeManagement.API.Models.Examination", "Examination")
                         .WithMany()
                         .HasForeignKey("ExamId")
@@ -6256,6 +6694,8 @@ namespace CollegeManagement.API.Migrations
 
                     b.Navigation("Board");
 
+                    b.Navigation("Campus");
+
                     b.Navigation("Examination");
 
                     b.Navigation("Group");
@@ -6282,6 +6722,25 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("Result");
 
                     b.Navigation("Student");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.RolePermission", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CollegeManagement.API.Models.Role", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Section", b =>
@@ -6344,11 +6803,24 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("RoomNavigation");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.Settings.Template", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
+                    b.Navigation("Campus");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.Staff.Staff", b =>
                 {
                     b.HasOne("CollegeManagement.API.Models.Board", "BoardRef")
                         .WithMany()
                         .HasForeignKey("BoardId");
+
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
 
                     b.HasOne("CollegeManagement.API.Models.Department", "DepartmentRef")
                         .WithMany()
@@ -6360,6 +6832,8 @@ namespace CollegeManagement.API.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("BoardRef");
+
+                    b.Navigation("Campus");
 
                     b.Navigation("DepartmentRef");
 
@@ -6406,9 +6880,15 @@ namespace CollegeManagement.API.Migrations
 
             modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceSession", b =>
                 {
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
                     b.HasOne("CollegeManagement.API.Models.Department", "Department")
                         .WithMany()
                         .HasForeignKey("DepartmentId");
+
+                    b.Navigation("Campus");
 
                     b.Navigation("Department");
                 });
@@ -6509,6 +6989,10 @@ namespace CollegeManagement.API.Migrations
                         .HasForeignKey("BoardId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("CollegeManagement.API.Models.Campus", "CampusNavigation")
+                        .WithMany("Students")
+                        .HasForeignKey("CampusId");
+
                     b.HasOne("CollegeManagement.API.Models.Group", "GroupNavigation")
                         .WithMany()
                         .HasForeignKey("GroupId")
@@ -6529,11 +7013,22 @@ namespace CollegeManagement.API.Migrations
 
                     b.Navigation("BoardNavigation");
 
+                    b.Navigation("CampusNavigation");
+
                     b.Navigation("GroupNavigation");
 
                     b.Navigation("ProgramNavigation");
 
                     b.Navigation("SectionNavigation");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.StudentAdmission", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Campus", "CampusNavigation")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
+                    b.Navigation("CampusNavigation");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.StudentTransportAssignment", b =>
@@ -6587,6 +7082,24 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("GroupNavigation");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.Timetable.Period", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
+                    b.Navigation("Campus");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Timetable.PeriodStructure", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
+                    b.Navigation("Campus");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.PeriodStructureAssignment", b =>
                 {
                     b.HasOne("CollegeManagement.API.Models.AcademicLevel", "AcademicLevel")
@@ -6607,6 +7120,10 @@ namespace CollegeManagement.API.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
                     b.HasOne("CollegeManagement.API.Models.Group", "Group")
                         .WithMany()
                         .HasForeignKey("GroupId")
@@ -6623,6 +7140,8 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("AcademicYear");
 
                     b.Navigation("Board");
+
+                    b.Navigation("Campus");
 
                     b.Navigation("Group");
 
@@ -6667,6 +7186,10 @@ namespace CollegeManagement.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
+                        .WithMany()
+                        .HasForeignKey("CampusId");
+
                     b.HasOne("CollegeManagement.API.Models.Group", "Group")
                         .WithMany()
                         .HasForeignKey("GroupId")
@@ -6708,6 +7231,8 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("AcademicYear");
 
                     b.Navigation("Board");
+
+                    b.Navigation("Campus");
 
                     b.Navigation("Group");
 
@@ -7040,6 +7565,25 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("Student");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.UserPermission", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Permission", "Permission")
+                        .WithMany("UserPermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CollegeManagement.API.Models.User", "User")
+                        .WithMany("UserPermissions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.VehicleMaintenance", b =>
                 {
                     b.HasOne("CollegeManagement.API.Models.TransportVehicle", "Vehicle")
@@ -7074,6 +7618,15 @@ namespace CollegeManagement.API.Migrations
             modelBuilder.Entity("CollegeManagement.API.Models.Board", b =>
                 {
                     b.Navigation("BoardAcademicLevels");
+
+                    b.Navigation("CampusBoards");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Campus", b =>
+                {
+                    b.Navigation("CampusBoards");
+
+                    b.Navigation("Students");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Country", b =>
@@ -7158,8 +7711,17 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("GroupPrograms");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.Permission", b =>
+                {
+                    b.Navigation("RolePermissions");
+
+                    b.Navigation("UserPermissions");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.Role", b =>
                 {
+                    b.Navigation("RolePermissions");
+
                     b.Navigation("Users");
                 });
 
@@ -7188,6 +7750,11 @@ namespace CollegeManagement.API.Migrations
             modelBuilder.Entity("CollegeManagement.API.Models.Timetable.TimetableBackup", b =>
                 {
                     b.Navigation("Slots");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.User", b =>
+                {
+                    b.Navigation("UserPermissions");
                 });
 #pragma warning restore 612, 618
         }

@@ -8,6 +8,7 @@ export const routePaths = {
   dashboard: "/dashboard",
   rolesPermissions: "/dashboard/settings/roles-permissions",
   studentDashboard: "/student-dashboard",
+  parentDashboard: "/parent-dashboard",
   hostel: "/dashboard/hostel",
   hostelMaster: "/dashboard/hostel/master",
   hostelStudents: "/dashboard/hostel/students",

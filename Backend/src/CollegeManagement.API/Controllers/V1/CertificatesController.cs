@@ -42,7 +42,7 @@ public class CertificatesController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<CollegeManagement.API.DTOs.Settings.TemplateResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetActiveTemplates(CancellationToken ct = default)
     {
-        var templates = await _templateService.GetActiveTemplatesByCategoryAsync("Certificate", ct);
+        var templates = await _templateService.GetActiveTemplatesByCategoryAsync("Certificate", null, ct);
         return Ok(templates);
     }
 
@@ -58,7 +58,7 @@ public class CertificatesController : ControllerBase
         if (string.IsNullOrWhiteSpace(templateCode))
             return BadRequest(new { message = "Template code is required." });
 
-        var template = await _templateService.GetTemplateByCodeAsync(templateCode, ct);
+        var template = await _templateService.GetTemplateByCodeAsync(templateCode, null, ct);
         if (template == null)
             return NotFound(new { message = $"Certificate template with code '{templateCode}' not found." });
 
@@ -80,7 +80,7 @@ public class CertificatesController : ControllerBase
     {
         try
         {
-            var result = await _templateService.RenderTemplateAsync(request, ct);
+            var result = await _templateService.RenderTemplateAsync(request, null, ct);
             return Ok(result);
         }
         catch (System.ComponentModel.DataAnnotations.ValidationException ex)

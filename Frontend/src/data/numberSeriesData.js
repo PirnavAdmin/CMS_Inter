@@ -245,7 +245,7 @@ export const MOCK_GENERATED_HISTORY = {
   "receipt-no": [
     { id: 1, val: "FEE-20260904-000011", student: "Rahul Kumar", admNo: "ADM-17", type: "Tuition Fee", amount: "₹25,000", date: "04 Sep 2026" },
     { id: 2, val: "FEE-20260904-000010", student: "Sneha Reddy", admNo: "ADM-16", type: "Admission Fee", amount: "₹15,000", date: "04 Sep 2026" },
-    { id: 3, val: "FEE-20260903-000009", student: "Aditya Joshi", admNo: "ADM-15", type: "Lab & Library Fee", amount: "₹8,500", date: "03 Sep 2026" },
+    { id: 3, val: "FEE-20260903-000009", student: "Aditya Joshi", admNo: "ADM-15", type: "Laboratory Fee", amount: "₹8,500", date: "03 Sep 2026" },
     { id: 4, val: "FEE-20260903-000008", student: "Pooja Hegde", admNo: "ADM-14", type: "Transport Fee", amount: "₹12,000", date: "03 Sep 2026" },
     { id: 5, val: "FEE-20260902-000007", student: "Venkatesh Rao", admNo: "ADM-13", type: "Hostel Fee", amount: "₹35,000", date: "02 Sep 2026" },
   ],

@@ -174,6 +174,8 @@ public class CertificateRepository : ICertificateRepository
             if (string.IsNullOrWhiteSpace(studentName) && !string.IsNullOrWhiteSpace(admissionNo))
                 studentName = admissionNo;
             if (string.IsNullOrWhiteSpace(studentName)) studentName = "Student";
+            
+            int? campusId = dict.ContainsKey("CampusId") && dict["CampusId"] != null ? Convert.ToInt32(dict["CampusId"]) : null;
 
             string rawFather = dict.ContainsKey("Hydrated_FatherName") && dict["Hydrated_FatherName"] != null ? dict["Hydrated_FatherName"].ToString()!.Trim() : "";
             string fatherName = !string.IsNullOrWhiteSpace(rawFather) 
@@ -232,6 +234,8 @@ public class CertificateRepository : ICertificateRepository
             string gender = dict.ContainsKey("Hydrated_Gender") && dict["Hydrated_Gender"] != null ? dict["Hydrated_Gender"].ToString()!.Trim() : "";
             string bloodGroup = dict.ContainsKey("Hydrated_BloodGroup") && dict["Hydrated_BloodGroup"] != null ? dict["Hydrated_BloodGroup"].ToString()!.Trim() : "O+";
             string mobile = dict.ContainsKey("Hydrated_Mobile") && dict["Hydrated_Mobile"] != null ? dict["Hydrated_Mobile"].ToString()!.Trim() : "";
+
+
 
             // 2. Fetch template settings using stored procedure
             string canonicalType = "Bonafide Certificate";

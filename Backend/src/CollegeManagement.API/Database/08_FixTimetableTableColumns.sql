@@ -26,7 +26,8 @@ CREATE PROCEDURE sp_GetTimetables(
     IN p_DayOfWeek INT,
     IN p_FacultyId INT,
     IN p_RoomId INT,
-    IN p_IsPublished TINYINT(1)
+    IN p_IsPublished TINYINT(1),
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -86,6 +87,7 @@ BEGIN
       AND (p_FacultyId IS NULL OR t.FacultyId = p_FacultyId)
       AND (p_RoomId IS NULL OR t.RoomId = p_RoomId)
       AND (p_IsPublished IS NULL OR t.IsPublished = p_IsPublished)
+      AND (p_CampusId IS NULL OR sec.CampusId = p_CampusId)
     ORDER BY t.DayOfWeek ASC, t.PeriodId ASC;
 END //
 DELIMITER ;

@@ -10,6 +10,8 @@ namespace CollegeManagement.API.Models.Timetable
         [Key]
         public int PeriodId { get; set; }
 
+        public int? CampusId { get; set; }
+
         [NotMapped]
         public int? PeriodStructureId { get; set; }
 
@@ -34,6 +36,9 @@ namespace CollegeManagement.API.Models.Timetable
         public DateTime? UpdatedAt { get; set; }
 
         // Navigation
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
+
         [NotMapped]
         public virtual PeriodStructure? PeriodStructure { get; set; }
     }

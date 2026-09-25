@@ -826,6 +826,22 @@
   margin-bottom: clamp(10px, 1.2vw, 16px);
 }
 
+.cms-page-heading-with-back {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  text-align: left;
+  width: 100%;
+}
+
+.cms-page-heading-with-back > * {
+  align-self: flex-start;
+  justify-self: start;
+  text-align: left;
+  margin-left: 0;
+}
+
 .cms-page-head h1 {
   margin: 0;
   font-size: clamp(19px, 1.5vw, 22px);

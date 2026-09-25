@@ -102,7 +102,16 @@ namespace CollegeManagement.API.Services.Exports
                 // 4. Parents & Guardian Card
                 col.Item().Element(ComposeParentsCard);
 
-                // 5. Previous Education & Remarks (if present)
+                // 5. Residential & Transport Allocation Card (if present)
+                if (!string.IsNullOrWhiteSpace(_model.StudentType) ||
+                    _model.TransportRequired == true ||
+                    !string.IsNullOrWhiteSpace(_model.HostelBlock) ||
+                    !string.IsNullOrWhiteSpace(_model.BusRoute))
+                {
+                    col.Item().Element(ComposeResidentialAndTransportCard);
+                }
+
+                // 6. Previous Education & Remarks (if present)
                 if (!string.IsNullOrWhiteSpace(_model.PreviousSchool) || !string.IsNullOrWhiteSpace(_model.Remarks))
                 {
                     col.Item().Element(ComposePreviousEducationCard);
@@ -263,6 +272,39 @@ namespace CollegeManagement.API.Services.Exports
                         KeyVal(c.Item(), "Mobile", _model.GuardianMobile ?? "N/A");
                         KeyVal(c.Item(), "Annual Income", _model.AnnualIncome.HasValue ? $"Rs. {_model.AnnualIncome:N2}" : "N/A");
                     });
+                });
+            });
+        }
+
+        private void ComposeResidentialAndTransportCard(IContainer container)
+        {
+            container.Border(1).BorderColor(BorderColor).Column(col =>
+            {
+                col.Item().Background(HeaderBg).PaddingHorizontal(10).PaddingVertical(4).Text("RESIDENTIAL & TRANSPORT ALLOCATION")
+                    .FontSize(9).Bold().FontColor(PrimaryNavy);
+
+                col.Item().Background(Colors.White).Padding(10).Grid(grid =>
+                {
+                    grid.Columns(3);
+                    grid.Spacing(6);
+
+                    grid.Item().Element(e => KeyVal(e, "Student Type", _model.StudentType ?? "Day Scholar"));
+                    grid.Item().Element(e => KeyVal(e, "Hall Ticket No", _model.HallTicketNumber ?? "N/A"));
+                    grid.Item().Element(e => KeyVal(e, "Transport Required", _model.TransportRequired == true ? "Yes" : "No"));
+
+                    if (!string.IsNullOrWhiteSpace(_model.HostelBlock) || !string.IsNullOrWhiteSpace(_model.HostelRoom) || !string.IsNullOrWhiteSpace(_model.HostelBed))
+                    {
+                        grid.Item().Element(e => KeyVal(e, "Hostel Block", _model.HostelBlock ?? "N/A"));
+                        grid.Item().Element(e => KeyVal(e, "Room", _model.HostelRoom ?? "N/A"));
+                        grid.Item().Element(e => KeyVal(e, "Bed", _model.HostelBed ?? "N/A"));
+                    }
+
+                    if (_model.TransportRequired == true || !string.IsNullOrWhiteSpace(_model.BusRoute) || !string.IsNullOrWhiteSpace(_model.PickupPoint))
+                    {
+                        grid.Item().Element(e => KeyVal(e, "Bus Type", _model.BusType ?? "N/A"));
+                        grid.Item().Element(e => KeyVal(e, "Bus Route", _model.BusRoute ?? "N/A"));
+                        grid.Item().Element(e => KeyVal(e, "Pickup Point", _model.PickupPoint ?? "N/A"));
+                    }
                 });
             });
         }
