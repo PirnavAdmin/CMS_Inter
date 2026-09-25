@@ -78,6 +78,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(a => a.StaffAttendanceSession)
                 .Where(a => a.StaffAttendanceSession.AttendanceDate.Date == targetDate
                             && (!request.StaffType.HasValue || a.StaffAttendanceSession.StaffType == request.StaffType.Value)
+                            && (!request.CampusId.HasValue || a.StaffAttendanceSession.CampusId == request.CampusId.Value)
                             && a.IsActive)
                 .OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt)
                 .ToListAsync();
@@ -86,11 +87,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .GroupBy(a => a.FacultyId)
                 .ToDictionary(g => g.Key, g => g.First());
 
-            // Check if today is an official institution holiday
             bool isHoliday = await _context.Holidays.AnyAsync(h =>
                 !h.IsDeleted && h.Status == "Active" &&
                 targetDate >= h.StartDate.Date && targetDate <= h.EndDate.Date &&
-                (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only"));
+                (h.AppliesTo == "All Students & Staff" || h.AppliesTo == "Staff Only") &&
+                (!request.CampusId.HasValue || h.CampusId == request.CampusId.Value));
 
             // Check approved leaves for these faculty members on target date
             var staffIds = facultyList.Select(f => f.Id).ToList();
@@ -383,7 +384,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     .Include(s => s.StaffAttendances)
                     .FirstOrDefaultAsync(s => s.AttendanceDate.Date == targetDate
                                               && s.StaffType == request.StaffType
-                                              && (s.DepartmentId == null || (request.DepartmentId.HasValue && s.DepartmentId == request.DepartmentId.Value)));
+                                              && (s.DepartmentId == null || (request.DepartmentId.HasValue && s.DepartmentId == request.DepartmentId.Value))
+                                              && (!request.CampusId.HasValue || s.CampusId == request.CampusId.Value));
 
                 if (session != null && session.IsLocked)
                 {
@@ -404,6 +406,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                     if (request.DepartmentId.HasValue && request.DepartmentId.Value > 0)
                     {
                         query = query.Where(f => f.DepartmentId == request.DepartmentId.Value);
+                    }
+
+                    if (request.CampusId.HasValue && request.CampusId.Value > 0)
+                    {
+                        query = query.Where(f => f.CampusId == request.CampusId.Value);
                     }
 
                     session = new StaffAttendanceSession
@@ -615,6 +622,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Where(a => a.StaffAttendanceSession.AttendanceDate.Date >= startDate
                             && a.StaffAttendanceSession.AttendanceDate.Date <= endDate
                             && a.StaffAttendanceSession.StaffType == request.StaffType
+                            && (!request.CampusId.HasValue || a.StaffAttendanceSession.CampusId == request.CampusId.Value)
                             && a.IsActive)
                 .OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt)
                 .ToListAsync();

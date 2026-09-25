@@ -168,7 +168,7 @@ public class DashboardRepository : IDashboardRepository
             // Fallback to EF Core below
         }
 
-        return await ComputeKPIsFallbackAsync(boardId, academicYearId, dateVal, ct);
+        return await ComputeKPIsFallbackAsync(boardId, academicYearId, campusId, dateVal, ct);
     }
 
     public async Task<StudentsOverviewResponseDto> GetStudentsOverviewAsync(
@@ -227,7 +227,7 @@ public class DashboardRepository : IDashboardRepository
             // Fallback to EF Core below
         }
 
-        return await ComputeStudentsOverviewFallbackAsync(boardId, academicYearId, ct);
+        return await ComputeStudentsOverviewFallbackAsync(boardId, academicYearId, campusId, ct);
     }
 
     public async Task<GroupDistributionResponseDto> GetGroupDistributionAsync(
@@ -275,7 +275,7 @@ public class DashboardRepository : IDashboardRepository
             // Fallback to EF Core below
         }
 
-        return await ComputeGroupDistributionFallbackAsync(boardId, academicYearId, ct);
+        return await ComputeGroupDistributionFallbackAsync(boardId, academicYearId, campusId, ct);
     }
 
     public async Task<StudentsAttendanceTodayResponseDto> GetStudentAttendanceAsync(
@@ -320,7 +320,7 @@ public class DashboardRepository : IDashboardRepository
             // Fallback to EF Core below
         }
 
-        return await ComputeStudentAttendanceFallbackAsync(boardId, academicYearId, dateVal, viewBy, ct);
+        return await ComputeStudentAttendanceFallbackAsync(boardId, academicYearId, dateVal, viewBy, campusId, ct);
     }
 
     public async Task<StaffAttendanceTodayResponseDto> GetStaffAttendanceAsync(
@@ -357,7 +357,7 @@ public class DashboardRepository : IDashboardRepository
             // Fallback to EF Core below
         }
 
-        return await ComputeStaffAttendanceFallbackAsync(boardId, dateVal, staffType, ct);
+        return await ComputeStaffAttendanceFallbackAsync(boardId, dateVal, staffType, campusId, ct);
     }
 
     public async Task<CertificateRequestsSummaryResponseDto> GetCertificateRequestsAsync(
@@ -561,6 +561,7 @@ public class DashboardRepository : IDashboardRepository
     private async Task<DashboardSummaryResponseDto> ComputeKPIsFallbackAsync(
         int? boardId,
         int? academicYearId,
+        int? campusId,
         DateTime dateVal,
         CancellationToken ct)
     {
@@ -570,13 +571,13 @@ public class DashboardRepository : IDashboardRepository
         {
             // 1. Total Students from StudentAdmissions (fallback to Students)
             int totalStudents = await _db.StudentAdmissions.AsNoTracking()
-                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId))
+                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
                 .CountAsync(ct);
 
             if (totalStudents == 0)
             {
                 totalStudents = await _db.Students.AsNoTracking()
-                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId))
+                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                     .CountAsync(ct);
             }
             summary.TotalStudents = totalStudents;
@@ -584,7 +585,7 @@ public class DashboardRepository : IDashboardRepository
 
             // 2. Teaching & Non-Teaching Staff
             var staffList = await _db.Staffs.AsNoTracking()
-                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0))
+                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value))
                 .ToListAsync(ct);
 
             summary.TeachingStaff = staffList.Count(st =>
@@ -599,11 +600,11 @@ public class DashboardRepository : IDashboardRepository
 
             // 3. Groups & Sections
             summary.TotalGroups = await _db.Groups.AsNoTracking()
-                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId))
+                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId) && (!campusId.HasValue || g.CampusId == campusId.Value))
                 .CountAsync(ct);
 
             summary.TotalSections = await _db.Sections.AsNoTracking()
-                .Where(sec => sec.IsActive && (!boardId.HasValue || sec.BoardId == boardId) && (!academicYearId.HasValue || sec.AcademicYearId == academicYearId))
+                .Where(sec => sec.IsActive && (!boardId.HasValue || sec.BoardId == boardId) && (!academicYearId.HasValue || sec.AcademicYearId == academicYearId) && (!campusId.HasValue || sec.CampusId == campusId.Value))
                 .CountAsync(ct);
 
             // 4. Academic Year name
@@ -615,13 +616,13 @@ public class DashboardRepository : IDashboardRepository
 
             // 5. Total Subjects
             summary.TotalSubjects = await _db.Subjects.AsNoTracking()
-                .Where(sub => sub.IsActive && (!boardId.HasValue || sub.BoardId == boardId))
+                .Where(sub => sub.IsActive && (!boardId.HasValue || sub.BoardId == boardId) && (!campusId.HasValue || sub.CampusId == campusId.Value))
                 .CountAsync(ct);
 
             // 6. Upcoming exams
             var targetDateOnly = DateOnly.FromDateTime(dateVal);
             summary.UpcomingExams = await _db.Examinations.AsNoTracking()
-                .Where(e => e.IsActive && e.EndDate >= targetDateOnly && (!boardId.HasValue || e.BoardId == boardId) && (!academicYearId.HasValue || e.AcademicYearId == academicYearId))
+                .Where(e => e.IsActive && e.EndDate >= targetDateOnly && (!boardId.HasValue || e.BoardId == boardId) && (!academicYearId.HasValue || e.AcademicYearId == academicYearId) && (!campusId.HasValue || e.CampusId == campusId.Value))
                 .CountAsync(ct);
         }
         catch { }
@@ -632,6 +633,7 @@ public class DashboardRepository : IDashboardRepository
     private async Task<IReadOnlyList<StudentMonthlyTrendDto>> ComputeMonthlyAdmissionsTrendFallbackAsync(
         int? boardId,
         int? academicYearId,
+        int? campusId,
         CancellationToken ct)
     {
         var result = new List<StudentMonthlyTrendDto>();
@@ -639,14 +641,14 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             var admissionDates = await _db.StudentAdmissions.AsNoTracking()
-                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId))
+                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
                 .Select(sa => (DateTime?)(sa.AdmissionDate != default ? sa.AdmissionDate : sa.CreatedAt))
                 .ToListAsync(ct);
 
             if (!admissionDates.Any())
             {
                 admissionDates = await _db.Students.AsNoTracking()
-                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId))
+                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                     .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
                     .ToListAsync(ct);
             }
@@ -676,6 +678,7 @@ public class DashboardRepository : IDashboardRepository
     private async Task<StudentsOverviewResponseDto> ComputeStudentsOverviewFallbackAsync(
         int? boardId,
         int? academicYearId,
+        int? campusId,
         CancellationToken ct)
     {
         var overview = new StudentsOverviewResponseDto();
@@ -683,14 +686,14 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             var genders = await _db.StudentAdmissions.AsNoTracking()
-                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId))
+                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
                 .Select(sa => sa.Gender ?? string.Empty)
                 .ToListAsync(ct);
 
             if (!genders.Any())
             {
                 genders = await _db.Students.AsNoTracking()
-                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId))
+                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                     .Select(s => s.Gender ?? string.Empty)
                     .ToListAsync(ct);
             }
@@ -720,7 +723,7 @@ public class DashboardRepository : IDashboardRepository
                 new() { Category = "Gender", Label = "Girls", Count = overview.FemaleStudents, Percentage = overview.FemalePercentage, Color = "#EC4899" }
             };
 
-            overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, ct);
+            overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, campusId, ct);
         }
         catch { }
 
@@ -730,6 +733,7 @@ public class DashboardRepository : IDashboardRepository
     private async Task<GroupDistributionResponseDto> ComputeGroupDistributionFallbackAsync(
         int? boardId,
         int? academicYearId,
+        int? campusId,
         CancellationToken ct)
     {
         var response = new GroupDistributionResponseDto();
@@ -737,12 +741,12 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             var groups = await _db.Groups.AsNoTracking()
-                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId))
+                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId) && (!campusId.HasValue || g.CampusId == campusId.Value))
                 .OrderBy(g => g.GroupName)
                 .ToListAsync(ct);
 
             var studentGroupCounts = await _db.StudentAdmissions.AsNoTracking()
-                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId))
+                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
                 .GroupBy(sa => sa.GroupId)
                 .Select(g => new { GroupId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
@@ -750,7 +754,7 @@ public class DashboardRepository : IDashboardRepository
             if (!studentGroupCounts.Any())
             {
                 studentGroupCounts = await _db.Students.AsNoTracking()
-                    .Where(s => s.IsActive && s.GroupId.HasValue && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId))
+                    .Where(s => s.IsActive && s.GroupId.HasValue && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                     .GroupBy(s => s.GroupId!.Value)
                     .Select(g => new { GroupId = g.Key, Count = g.Count() })
                     .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
@@ -793,6 +797,7 @@ public class DashboardRepository : IDashboardRepository
         int? academicYearId,
         DateTime dateVal,
         string? viewBy,
+        int? campusId,
         CancellationToken ct)
     {
         var summary = new StudentsAttendanceTodayResponseDto
@@ -803,13 +808,13 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             int total = await _db.Students.AsNoTracking()
-                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId))
+                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                 .CountAsync(ct);
 
             if (total == 0)
             {
                 total = await _db.StudentAdmissions.AsNoTracking()
-                    .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId))
+                    .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
                     .CountAsync(ct);
             }
 
@@ -847,6 +852,7 @@ public class DashboardRepository : IDashboardRepository
         int? boardId,
         DateTime dateVal,
         string? staffType,
+        int? campusId,
         CancellationToken ct)
     {
         var summary = new StaffAttendanceTodayResponseDto
@@ -857,7 +863,7 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             var staffList = await _db.Staffs.AsNoTracking()
-                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0))
+                .Where(st => !st.IsDeleted && (st.Status == null || st.Status == "Active") && (!boardId.HasValue || st.BoardId == boardId || st.BoardId == null || st.BoardId == 0) && (!campusId.HasValue || st.CampusId == campusId.Value))
                 .ToListAsync(ct);
 
             string filter = (staffType ?? "all").ToLower();

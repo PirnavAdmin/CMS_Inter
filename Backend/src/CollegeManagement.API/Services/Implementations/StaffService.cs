@@ -162,9 +162,9 @@ namespace CollegeManagement.API.Services.Implementations
             return MapToFullProfileDto(staff);
         }
 
-        public async Task<string> GetNextEmployeeIdAsync(string staffType)
+        public async Task<string> GetNextEmployeeIdAsync(string staffType, int campusId = 1)
         {
-            return await _staffRepository.GenerateNextEmployeeIdAsync(staffType);
+            return await _staffRepository.GenerateNextEmployeeIdAsync(staffType, campusId);
         }
 
         public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)
@@ -180,7 +180,7 @@ namespace CollegeManagement.API.Services.Implementations
             string employeeId = dto.EmployeeId?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(employeeId))
             {
-                employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType);
+                employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, dto.CampusId ?? 1);
             }
 
             // Department resolution
@@ -1170,7 +1170,7 @@ namespace CollegeManagement.API.Services.Implementations
                 // Auto-generate employee ID if empty or validate uniqueness
                 if (string.IsNullOrWhiteSpace(empId))
                 {
-                    empId = await _staffRepository.GenerateNextEmployeeIdAsync(sType);
+                    empId = await _staffRepository.GenerateNextEmployeeIdAsync(sType, campusId ?? 1);
                 }
                 else if (toAdd.Any(x => x.EmployeeId == empId) || !await _staffRepository.IsEmployeeIdUniqueAsync(empId))
                 {
