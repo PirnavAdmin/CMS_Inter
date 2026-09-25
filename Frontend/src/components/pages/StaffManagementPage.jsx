@@ -41,6 +41,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
+import { loadCachedDepartments, loadCachedDesignations } from "./DepartmentManagementPage.jsx";
 import * as XLSX from "xlsx";
 import "./StaffManagementPage.css";
 import totalStaffIcon from "@/assets/dashboard-3d/add-staff.png";
@@ -1243,16 +1244,30 @@ function useStaffTypeOptions(staffType) {
         try {
           const deptRes = await apiClient.get(apiEndpoints.departments.getAll, {
             params: staffType ? { staffType: apiStaffType } : {},
+            skipGlobalLoader: true,
+            silent: true,
+            skipErrorLog: true,
           });
           deptData = deptRes?.data?.items || deptRes?.data?.data || (Array.isArray(deptRes?.data) ? deptRes.data : []);
         } catch {
-          const lookupRes = await apiClient.get(apiEndpoints.faculty.lookupDepartments, {
-            params: staffType ? { staffType: apiStaffType } : {},
-          });
-          deptData = lookupRes?.data?.items || lookupRes?.data?.data || (Array.isArray(lookupRes?.data) ? lookupRes.data : []);
+          try {
+            const lookupRes = await apiClient.get(apiEndpoints.faculty.lookupDepartments, {
+              params: staffType ? { staffType: apiStaffType } : {},
+              skipGlobalLoader: true,
+              silent: true,
+              skipErrorLog: true,
+            });
+            deptData = lookupRes?.data?.items || lookupRes?.data?.data || (Array.isArray(lookupRes?.data) ? lookupRes.data : []);
+          } catch {
+            deptData = [];
+          }
         }
 
-        const filteredDepts = deptData.filter((d) => {
+        if (!Array.isArray(deptData) || deptData.length === 0) {
+          deptData = loadCachedDepartments();
+        }
+
+        const filteredDepts = (Array.isArray(deptData) ? deptData : []).filter((d) => {
           if (!d) return false;
           if (d.isActive === false || d.status === "Inactive") return false;
           const deptName = typeof d === "object" ? d.name || d.departmentName || "" : String(d || "");
@@ -1277,16 +1292,30 @@ function useStaffTypeOptions(staffType) {
               includeInactive: false,
               ...(staffType ? { staffType: apiStaffType } : {}),
             },
+            skipGlobalLoader: true,
+            silent: true,
+            skipErrorLog: true,
           });
           desigData = desigRes?.data?.items || desigRes?.data?.data || (Array.isArray(desigRes?.data) ? desigRes.data : []);
         } catch {
-          const lookupRes = await apiClient.get(apiEndpoints.faculty.lookupDesignations, {
-            params: staffType ? { staffType: apiStaffType } : {},
-          });
-          desigData = lookupRes?.data?.items || lookupRes?.data?.data || (Array.isArray(lookupRes?.data) ? lookupRes.data : []);
+          try {
+            const lookupRes = await apiClient.get(apiEndpoints.faculty.lookupDesignations, {
+              params: staffType ? { staffType: apiStaffType } : {},
+              skipGlobalLoader: true,
+              silent: true,
+              skipErrorLog: true,
+            });
+            desigData = lookupRes?.data?.items || lookupRes?.data?.data || (Array.isArray(lookupRes?.data) ? lookupRes.data : []);
+          } catch {
+            desigData = [];
+          }
         }
 
-        const filteredDesigs = desigData.filter((d) => {
+        if (!Array.isArray(desigData) || desigData.length === 0) {
+          desigData = loadCachedDesignations();
+        }
+
+        const filteredDesigs = (Array.isArray(desigData) ? desigData : []).filter((d) => {
           if (!d) return false;
           if (d.isActive === false || d.status === "Inactive") return false;
           const desigName = typeof d === "object" ? d.name || d.designationName || "" : String(d || "");
@@ -3200,20 +3229,35 @@ function StaffList({ records = [], setRecords, forced }) {
           : (tab === "Teaching" || tab === "Non-Teaching" ? (tab === "Non-Teaching" ? "NonTeaching" : "Teaching") : undefined);
         const params = staffTypeParam ? { staffType: staffTypeParam } : {};
 
-        const [deptRes, desigRes] = await Promise.allSettled([
-          apiClient.get(apiEndpoints.departments.getAll, { params }),
-          apiClient.get(apiEndpoints.designations.getAll, { params: { includeInactive: false, ...params } }),
-        ]);
+        let deptItems = [];
+        let desigItems = [];
 
-        if (isMounted) {
+        try {
+          const [deptRes, desigRes] = await Promise.allSettled([
+            apiClient.get(apiEndpoints.departments.getAll, { params, skipGlobalLoader: true, silent: true, skipErrorLog: true }),
+            apiClient.get(apiEndpoints.designations.getAll, { params: { includeInactive: false, ...params }, skipGlobalLoader: true, silent: true, skipErrorLog: true }),
+          ]);
+
           if (deptRes.status === "fulfilled" && deptRes.value?.data) {
-            const items = deptRes.value.data.items || deptRes.value.data.data || (Array.isArray(deptRes.value.data) ? deptRes.value.data : []);
-            setApiFilterDepts(items);
+            deptItems = deptRes.value.data.items || deptRes.value.data.data || (Array.isArray(deptRes.value.data) ? deptRes.value.data : []);
           }
           if (desigRes.status === "fulfilled" && desigRes.value?.data) {
-            const items = desigRes.value.data.items || desigRes.value.data.data || (Array.isArray(desigRes.value.data) ? desigRes.value.data : []);
-            setApiFilterDesigs(items);
+            desigItems = desigRes.value.data.items || desigRes.value.data.data || (Array.isArray(desigRes.value.data) ? desigRes.value.data : []);
           }
+        } catch {
+          // ignore
+        }
+
+        if (deptItems.length === 0) {
+          deptItems = loadCachedDepartments();
+        }
+        if (desigItems.length === 0) {
+          desigItems = loadCachedDesignations();
+        }
+
+        if (isMounted) {
+          setApiFilterDepts(deptItems);
+          setApiFilterDesigs(desigItems);
         }
       } catch (err) {
         console.warn("Failed to load department/designation filter options from API:", err);

@@ -45,3 +45,5 @@ namespace CollegeManagement.API.Models.Settings
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 }
+
+

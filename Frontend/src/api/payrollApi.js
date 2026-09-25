@@ -116,6 +116,16 @@ export const createSalaryAssignment = async (payload) => {
   }
 };
 
+export const updateSalaryAssignment = async (id, payload) => {
+  try {
+    const res = await apiClient.put(apiEndpoints.payroll.updateSalaryAssignment(id), payload);
+    return unwrapResponse(res);
+  } catch (error) {
+    console.warn(`payrollApi.updateSalaryAssignment(${id}) error:`, getApiErrorMessage(error));
+    throw error;
+  }
+};
+
 export const deleteSalaryAssignment = async (id) => {
   try {
     const res = await apiClient.delete(apiEndpoints.payroll.deleteSalaryAssignment(id));
@@ -358,7 +368,13 @@ export const getAdvanceRepaymentHistory = async (params = {}) => {
 
 export const getPayrollSummary = async (params = {}) => {
   try {
-    const res = await apiClient.get(apiEndpoints.payroll.summary, { params });
+    const now = new Date();
+    const queryParams = {
+      month: params.month || (now.getMonth() + 1),
+      year: params.year || now.getFullYear(),
+      ...params,
+    };
+    const res = await apiClient.get(apiEndpoints.payroll.summary, { params: queryParams, skipGlobalLoader: true });
     return unwrapResponse(res);
   } catch (error) {
     console.warn("payrollApi.getPayrollSummary error:", getApiErrorMessage(error));

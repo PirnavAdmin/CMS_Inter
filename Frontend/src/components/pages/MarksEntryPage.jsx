@@ -3,6 +3,7 @@ import DashboardLayout from "../layout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import { SkeletonButton, SkeletonPage, SkeletonRow } from "@/components/common/Ui.jsx";
 import * as XLSX from "xlsx";
 import {
@@ -24,7 +25,8 @@ const grade = (value) =>
   value >= 90 ? "A+" : value >= 80 ? "A" : value >= 70 ? "B+" : value >= 60 ? "B" : value >= 50 ? "C" : value >= 40 ? "D" : "F";
 const editableStatuses = ["NOT STARTED", "DRAFT", "REJECTED"];
 
-const buildMarksPayload = (workspace, evalId) => {
+const buildMarksPayload = (workspace, evalId, campusId = null) => {
+  const effectiveCampusId = Number(campusId || workspace?.campusId) || 1;
   const formattedMarks = (workspace?.rows || []).map((row) => {
     const isAbsent = Boolean(row.absent);
     const internal = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Math.round(Number(row.internal || 0));
@@ -41,6 +43,7 @@ const buildMarksPayload = (workspace, evalId) => {
       : Math.round(Number(row.total || 0));
 
     return {
+      campusId: effectiveCampusId,
       studentId: Number(row.studentId),
       internalMarks: internal,
       practicalMarks: practical,
@@ -58,6 +61,7 @@ const buildMarksPayload = (workspace, evalId) => {
   });
 
   return {
+    campusId: effectiveCampusId,
     evaluationId: String(evalId || workspace?.evaluationId || ""),
     rowVersion: Number(workspace?.rowVersion || 0),
     remarks: "Marks Entry",
@@ -68,7 +72,8 @@ const buildMarksPayload = (workspace, evalId) => {
   };
 };
 
-const buildAdminMarksPayload = (workspace) => {
+const buildAdminMarksPayload = (workspace, campusId = null) => {
+  const effectiveCampusId = Number(campusId || workspace?.campusId) || 1;
   const studentMarks = (workspace?.rows || []).map((row) => {
     const isAbsent = Boolean(row.absent);
     const internal = isAbsent || workspace?.mode === "OBJECTIVE" ? 0 : Number(row.internal || 0);
@@ -85,6 +90,7 @@ const buildAdminMarksPayload = (workspace) => {
       : Number(row.total || 0);
 
     return {
+      campusId: effectiveCampusId,
       ...(row.markId ? { markId: Number(row.markId) } : {}),
       studentId: Number(row.studentId),
       internal,
@@ -98,6 +104,7 @@ const buildAdminMarksPayload = (workspace) => {
   });
 
   return {
+    campusId: effectiveCampusId,
     studentMarks,
     students: studentMarks,
   };
@@ -248,11 +255,18 @@ const isLegalStatusTransition = (from, to) =>
 // Reusable Hook for Independent Academic Cascading Filters
 function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => {}) {
   const {
+    selectedCampus,
+    selectedCampusId,
+  } = useCampusContext();
+
+  const {
     selectedBoard,
     selectedBoardId,
     selectedAcademicYear,
     selectedAcademicYearId,
   } = useAcademicContext();
+
+  const activeCampusId = normalizeId((selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id) || "1");
 
   const [filters, setFilters] = useState({
     board: "",
@@ -299,23 +313,50 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     const loadBoardDeps = async () => {
       const selectedBoard = allBoards.find((b) => eq(b.id, filters.board));
 
-      // Fetch Years
+      // Fetch Years filtered by Campus and Board
       try {
         const yearsRes = await apiClient
-          .get(apiEndpoints.academicYears.active, {
-            params: { boardId: filters.board, isActive: true },
+          .get("/api/v1/academic-years", {
+            params: {
+              CampusId: activeCampusId,
+              campusId: activeCampusId,
+              boardId: filters.board,
+              BoardId: filters.board,
+              isActive: true,
+              Status: true,
+            },
+            headers: {
+              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+            },
           })
-          .catch(() => apiClient.get(apiEndpoints.academicYears.getAll));
+          .catch(() => apiClient.get(apiEndpoints.academicYears.getAll, {
+            params: {
+              CampusId: activeCampusId,
+              campusId: activeCampusId,
+              boardId: filters.board,
+              BoardId: filters.board,
+            },
+            headers: {
+              ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
+            },
+          }));
         const rawYears = unwrapRecords(yearsRes);
         const listYears = rawYears
           .map((y) => ({
             id: normalizeId(y.academicYearId ?? y.id),
             name: y.academicYearName ?? y.name,
             boardId: normalizeId(y.boardId),
+            campusId: normalizeId(y.campusId),
             isActive: y.isActive !== false && y.status !== false && y.status !== "Inactive",
             isCurrent: Boolean(y.isCurrent),
           }))
-          .filter((y) => y.isActive && (!y.boardId || eq(y.boardId, filters.board)) && !String(y.name || "").includes("2028") && !String(y.name || "").includes("2029"));
+          .filter((y) => {
+            if (!y.isActive) return false;
+            if (String(y.name || "").includes("2028") || String(y.name || "").includes("2029")) return false;
+            if (activeCampusId && y.campusId && normalizeId(y.campusId) !== normalizeId(activeCampusId)) return false;
+            if (filters.board && y.boardId && !eq(y.boardId, filters.board)) return false;
+            return true;
+          });
 
         if (isMounted) {
           setYears(listYears);
@@ -479,12 +520,17 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
       try {
         const res = await apiClient.get(apiEndpoints.sections.getAll, {
           params: {
+            campusId: activeCampusId || undefined,
+            CampusId: activeCampusId || undefined,
             BoardId: filters.board,
             AcademicYearId: filters.year,
             AcademicLevelId: filters.level,
             GroupId: filters.group,
             ProgramId: filters.program,
             IsActive: true,
+          },
+          headers: {
+            ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
           },
         });
         const raw = unwrapRecords(res);
@@ -513,12 +559,17 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
       try {
         const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
           params: {
+            campusId: activeCampusId || undefined,
+            CampusId: activeCampusId || undefined,
             boardId: filters.board,
             academicYearId: filters.year,
             academicLevelId: filters.level,
             groupId: filters.group,
             programId: filters.program || undefined,
             status: "COMPLETED",
+          },
+          headers: {
+            ...(activeCampusId ? { "X-Campus-Id": String(activeCampusId) } : {}),
           },
         });
         const rawExams = unwrapRecords(examsRes);
@@ -536,6 +587,7 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               status: rawStatus || (e.isCompleted ? "COMPLETED" : "DRAFT"),
               boardId: normalizeId(e.boardId ?? e.BoardId),
               academicYearId: normalizeId(e.academicYearId ?? e.AcademicYearId ?? e.yearId),
+              academicYearName: e.academicYearName ?? e.academicYear ?? "",
               academicLevelId: normalizeId(e.academicLevelId ?? e.AcademicLevelId),
               groupId: normalizeId(e.groupId ?? e.GroupId),
               programId: normalizeId(e.programId ?? e.ProgramId),
@@ -556,7 +608,15 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
 
             // Strict matching of academic scope when fields exist on exam
             if (filters.board && e.boardId && !eq(e.boardId, filters.board)) return false;
-            if (filters.year && e.academicYearId && !eq(e.academicYearId, filters.year)) return false;
+            if (filters.year) {
+              const selectedYearObj = years.find((y) => eq(y.id, filters.year));
+              const effYearName = String(selectedYearObj?.name || "").trim().toLowerCase();
+              const examYearId = normalizeId(e.academicYearId);
+              const examYearName = String(e.academicYearName || "").trim().toLowerCase();
+              const idMatches = examYearId && eq(examYearId, filters.year);
+              const nameMatches = effYearName && examYearName && (examYearName === effYearName || examYearName.includes(effYearName) || effYearName.includes(examYearName));
+              if (examYearId && !idMatches && !nameMatches) return false;
+            }
             if (filters.level && e.academicLevelId && !eq(e.academicLevelId, filters.level)) return false;
             if (filters.group && e.groupId && !eq(e.groupId, filters.group)) return false;
             if (filters.program && e.programId && !eq(e.programId, filters.program)) return false;
@@ -581,7 +641,21 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return () => {
       isMounted = false;
     };
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program]);
+  }, [filters.board, filters.year, filters.level, filters.group, filters.program, activeCampusId, years]);
+
+  // Reset cascading filters when navbar selected campus changes
+  useEffect(() => {
+    onReset();
+    setFilters({
+      board: "",
+      year: "",
+      level: "",
+      group: "",
+      program: "",
+      section: "",
+      exam: "",
+    });
+  }, [activeCampusId]);
 
   // Sync year when navbar selected academic year changes
   useEffect(() => {
@@ -635,6 +709,48 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
 }
 
 export default function MarksEntryPage({ embedded = false } = {}) {
+  const {
+    campuses: contextCampuses = [],
+    activeCampuses = [],
+    selectedCampus = null,
+    selectedCampusId = null,
+  } = useCampusContext();
+
+  const academicCtx = useAcademicContext();
+  const {
+    selectedBoard = null,
+    selectedBoardId = null,
+    setSelectedBoard = () => {},
+    selectedAcademicYear = null,
+    selectedAcademicYearId = null,
+    setSelectedAcademicYear = () => {},
+    boards: contextBoards = [],
+    academicYears: contextAcademicYears = [],
+  } = academicCtx;
+
+  const effectiveCampuses = useMemo(() => {
+    if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
+    return (contextCampuses || []).filter((c) => c && c.isActive !== false && String(c.status || "").toLowerCase() !== "inactive");
+  }, [activeCampuses, contextCampuses]);
+
+  const effectiveCampus = useMemo(() => {
+    const targetId = normalizeId(selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId);
+    if (targetId) {
+      const match = effectiveCampuses.find((c) => normalizeId(c.id) === targetId || normalizeId(c.campusId) === targetId);
+      if (match) return match;
+      if (selectedCampus && (normalizeId(selectedCampus.id) === targetId || normalizeId(selectedCampus.campusId) === targetId)) {
+        return selectedCampus;
+      }
+      return { id: targetId, campusId: targetId, name: selectedCampus?.name || `Campus ${targetId}` };
+    }
+    return selectedCampus || effectiveCampuses.find((c) => c.isHQ) || effectiveCampuses[0] || null;
+  }, [effectiveCampuses, selectedCampusId, selectedCampus]);
+
+  const effectiveCampusId = useMemo(() => {
+    const rawId = selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId ?? effectiveCampus?.campusId ?? effectiveCampus?.id;
+    return normalizeId(rawId || "1");
+  }, [effectiveCampus, selectedCampus, selectedCampusId]);
+
   // Navigation Tabs (Ref Screenshots 1, 2, 5): "entry" | "evaluation" | "students"
   const [tab, setTab] = useState("entry");
 
@@ -695,6 +811,118 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     };
   }, []);
 
+  const campusAffiliatedBoardIds = useMemo(() => {
+    if (!effectiveCampus) return [];
+    const ids = new Set();
+    if (Array.isArray(effectiveCampus.boardIds)) {
+      effectiveCampus.boardIds.forEach((id) => id && ids.add(normalizeId(id)));
+    }
+    if (Array.isArray(effectiveCampus.affiliatedBoards)) {
+      effectiveCampus.affiliatedBoards.forEach((b) => {
+        const bId = normalizeId(b.boardId ?? b.id);
+        if (bId) ids.add(bId);
+      });
+    }
+    return Array.from(ids);
+  }, [effectiveCampus]);
+
+  // Derive boards affiliated with active campus
+  const campusBoards = useMemo(() => {
+    const masterBoardsPool = allBoards.length > 0 ? allBoards : (contextBoards.length > 0 ? contextBoards : []);
+    if (!effectiveCampus) return masterBoardsPool;
+
+    const affiliated = Array.isArray(effectiveCampus.affiliatedBoards) && effectiveCampus.affiliatedBoards.length > 0
+      ? effectiveCampus.affiliatedBoards
+      : [];
+    const boardIds = campusAffiliatedBoardIds;
+
+    if (!affiliated.length && !boardIds.length) return masterBoardsPool;
+
+    const matched = masterBoardsPool.filter((b) => {
+      const bId = normalizeId(b.id ?? b.boardId);
+      const bCode = String(b.code || "").trim().toLowerCase();
+      const bName = String(b.name || "").trim().toLowerCase();
+      const matchesAff = affiliated.some((aff) => {
+        const affId = normalizeId(aff.boardId ?? aff.id);
+        const affCode = String(aff.boardCode ?? aff.code ?? "").trim().toLowerCase();
+        const affName = String(aff.boardName ?? aff.name ?? "").trim().toLowerCase();
+        return (affId && affId === bId) || (affCode && affCode === bCode) || (affName && affName === bName);
+      });
+      const matchesId = boardIds.length > 0 && boardIds.includes(bId);
+      return matchesAff || matchesId;
+    });
+
+    if (matched.length > 0) return matched;
+
+    if (affiliated.length > 0) {
+      return affiliated.map((item) => ({
+        ...item,
+        id: normalizeId(item.boardId ?? item.id),
+        boardId: normalizeId(item.boardId ?? item.id),
+        name: item.boardName ?? item.name,
+        code: item.boardCode ?? item.code ?? "",
+        isActive: true,
+      }));
+    }
+
+    return masterBoardsPool;
+  }, [allBoards, contextBoards, effectiveCampus, campusAffiliatedBoardIds]);
+
+  // 1. Campus Change -> Cascade Board Change
+  const prevCampusIdRef = useRef(effectiveCampusId);
+  useEffect(() => {
+    if (!effectiveCampusId || !campusBoards.length) return;
+
+    const isCampusSwitched = prevCampusIdRef.current !== effectiveCampusId;
+    prevCampusIdRef.current = effectiveCampusId;
+
+    const currentBoardId = normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId);
+    const isCurrentValid = currentBoardId && (
+      (campusAffiliatedBoardIds.length > 0 && campusAffiliatedBoardIds.includes(currentBoardId)) ||
+      campusBoards.some((b) => normalizeId(b.id ?? b.boardId) === currentBoardId)
+    );
+
+    if (!isCurrentValid || (isCampusSwitched && !campusAffiliatedBoardIds.includes(currentBoardId))) {
+      const nextBoard = campusBoards[0];
+      if (nextBoard && typeof setSelectedBoard === "function") {
+        setSelectedBoard(nextBoard);
+      }
+    }
+  }, [effectiveCampusId, campusBoards, campusAffiliatedBoardIds, selectedBoardId, selectedBoard, setSelectedBoard]);
+
+  // 2. Board Change -> Cascade Academic Year Change
+  const prevBoardIdRef = useRef(normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId));
+  useEffect(() => {
+    const currentBoardId = normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId);
+    if (!currentBoardId) return;
+
+    const isBoardSwitched = prevBoardIdRef.current !== currentBoardId;
+    prevBoardIdRef.current = currentBoardId;
+
+    const masterYears = contextAcademicYears.length > 0 ? contextAcademicYears : [];
+    const boardYears = masterYears.filter((y) => {
+      const yBoardId = normalizeId(y.boardId ?? y.BoardId);
+      return !yBoardId || yBoardId === currentBoardId;
+    });
+
+    if (boardYears.length === 0) return;
+
+    const currentYearId = normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId);
+    const isCurrentYearValid = currentYearId && boardYears.some((y) => normalizeId(y.id ?? y.academicYearId) === currentYearId);
+
+    if (!isCurrentYearValid || isBoardSwitched) {
+      const currentYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || selectedAcademicYear?.code || "").trim();
+      const matchingByName = currentYearName
+        ? boardYears.find((y) => String(y.name || y.code || "").trim().toLowerCase() === currentYearName.toLowerCase())
+        : null;
+      const nextYear = matchingByName || boardYears.find((y) => y.isActive !== false) || boardYears[0];
+
+      if (nextYear && typeof setSelectedAcademicYear === "function") {
+        setSelectedAcademicYear(nextYear);
+      }
+    }
+  }, [selectedBoardId, selectedBoard, contextAcademicYears, selectedAcademicYearId, selectedAcademicYear, setSelectedAcademicYear]);
+
   // ==========================================
   // TAB 1: MARKS ENTRY STATE & WORKFLOW
   // ==========================================
@@ -716,7 +944,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   const [validationResult, setValidationResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  const entry = useAcademicFilterState(allBoards, guard, () => setEntryApplied(false));
+  const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false));
 
   // Helper to load schedules & search evaluations for an examination in Marks Entry
   const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
@@ -770,18 +998,47 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
       const [evalSearchRes, marksRes] = await Promise.all([
         apiClient
-          .post(evalSearchUrl, {
-            boardId: Number(entry.filters.board),
-            academicYearId: Number(entry.filters.year),
-            academicLevelId: Number(entry.filters.level),
-            groupId: Number(entry.filters.group),
-            sectionId: Number(sectionId),
-            examinationId: Number(examId),
-          })
-          .catch(() => apiClient.get("/api/v1/faculty/evaluations").catch(() => null)),
+          .post(
+            evalSearchUrl,
+            {
+              campusId: Number(effectiveCampusId) || 1,
+              boardId: Number(entry.filters.board),
+              academicYearId: Number(entry.filters.year),
+              academicLevelId: Number(entry.filters.level),
+              groupId: Number(entry.filters.group),
+              sectionId: Number(sectionId),
+              examinationId: Number(examId),
+            },
+            {
+              headers: {
+                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+              },
+            }
+          )
+          .catch(() =>
+            apiClient
+              .get("/api/v1/faculty/evaluations", {
+                headers: {
+                  ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+                },
+              })
+              .catch(() => null)
+          ),
         apiClient
-          .get(`/api/v1/marks/exam/${examId}`)
-          .catch(() => apiClient.get(`/api/v1/marks?examinationId=${examId}`).catch(() => null)),
+          .get(`/api/v1/marks/exam/${examId}`, {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          })
+          .catch(() =>
+            apiClient
+              .get(`/api/v1/marks?examinationId=${examId}`, {
+                headers: {
+                  ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+                },
+              })
+              .catch(() => null)
+          ),
       ]);
 
       const existingEvals = unwrapRecords(evalSearchRes) || [];
@@ -898,8 +1155,12 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     try {
       // 1. Fetch Students for the selected section
       const studentsRes = await apiClient
-        .get(apiEndpoints.students.getBySection(entry.filters.section))
-        .catch(() => apiClient.get(`/api/v1/students/section/${entry.filters.section}`));
+        .get(apiEndpoints.students.getBySection(entry.filters.section), {
+          params: { campusId: effectiveCampusId || undefined }
+        })
+        .catch(() => apiClient.get(`/api/v1/students/section/${entry.filters.section}`, {
+          params: { campusId: effectiveCampusId || undefined }
+        }));
       const rawStudents = unwrapRecords(studentsRes);
       const studentList = (rawStudents || [])
         .map((s) => ({
@@ -918,6 +1179,8 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       // 2. Fetch Completed Examinations strictly matching academic scope
       const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
         params: {
+          campusId: effectiveCampusId || undefined,
+          CampusId: effectiveCampusId || undefined,
           boardId: entry.filters.board,
           academicYearId: entry.filters.year,
           academicLevelId: entry.filters.level,
@@ -1048,8 +1311,8 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         let allExamMarks = [];
         try {
           const marksRes = await apiClient
-            .get(`/api/v1/marks/exam/${entryExamId}`)
-            .catch(() => apiClient.get(`/api/v1/marks?examinationId=${entryExamId}`).catch(() => null));
+            .get(`/api/v1/marks/exam/${entryExamId}`, { params: { campusId: effectiveCampusId } })
+            .catch(() => apiClient.get(`/api/v1/marks?examinationId=${entryExamId}`, { params: { campusId: effectiveCampusId } }).catch(() => null));
           allExamMarks = unwrapRecords(marksRes) || [];
           const subjMarks = allExamMarks.filter(
             (m) =>
@@ -1090,7 +1353,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             const evalStudentsUrl = apiEndpoints.evaluations?.students
               ? apiEndpoints.evaluations.students(evalId)
               : `/api/v1/evaluations/${evalId}/students`;
-            const evalStudentsRes = await apiClient.get(evalStudentsUrl);
+            const evalStudentsRes = await apiClient.get(evalStudentsUrl, { params: { campusId: effectiveCampusId } });
             const resData = evalStudentsRes?.data || {};
             evalStatus = resData.status || evalStatus;
             rowVer = resData.rowVersion || rowVer;
@@ -1242,7 +1505,10 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         const levelName = getMasterName(entry.levels, academicLevelId, "Academic Level");
         const yearName = getMasterName(entry.years, academicYearId, "Academic Year");
 
+        const campusId = Number(effectiveCampusId) || 1;
+
         const bulkPayload = {
+          campusId,
           marks: missingRows.map((row) => {
             const isAbsent = Boolean(row.absent);
             const intMarks = isAbsent ? 0 : Math.round(Number(row.internal || 0));
@@ -1259,6 +1525,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               : Math.round(Number(row.total || 0));
 
             return {
+              campusId,
               studentId: Number(row.studentId),
               examinationId: examIdNum,
               subjectId: subjectIdNum,
@@ -1286,7 +1553,11 @@ export default function MarksEntryPage({ embedded = false } = {}) {
           }),
         };
 
-        await apiClient.post("/api/v1/marks/bulk", bulkPayload);
+        await apiClient.post("/api/v1/marks/bulk", bulkPayload, {
+          headers: {
+            ...(campusId ? { "X-Campus-Id": String(campusId) } : {}),
+          },
+        });
       }
 
       return compositeId;
@@ -1747,7 +2018,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         workspace.evaluationId ||
         `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
 
-      const payload = buildMarksPayload(workspace, evalId);
+      const payload = buildMarksPayload(workspace, evalId, effectiveCampusId);
 
       const saveMarksUrl = apiEndpoints.evaluations?.saveMarks
         ? apiEndpoints.evaluations.saveMarks(evalId)
@@ -1757,7 +2028,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         await apiClient.put(saveMarksUrl, payload);
       } catch (putErr) {
         // If faculty endpoint fails (e.g. backend LINQ ExamId bug on SaveFacultyDraftMarksAsync), persist via evaluation marks editor
-        const adminPayload = buildAdminMarksPayload(workspace);
+        const adminPayload = buildAdminMarksPayload(workspace, effectiveCampusId);
         await apiClient.put(`/api/v1/evaluations/${evalId}/marks`, adminPayload);
       }
 
@@ -1812,7 +2083,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         workspace.evaluationId ||
         `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
 
-      const marksPayload = buildMarksPayload(workspace, evalId);
+      const marksPayload = buildMarksPayload(workspace, evalId, effectiveCampusId);
 
       const saveMarksUrl = apiEndpoints.evaluations?.saveMarks
         ? apiEndpoints.evaluations.saveMarks(evalId)
@@ -1822,7 +2093,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         await apiClient.put(saveMarksUrl, marksPayload);
       } catch (putErr) {
         // If faculty endpoint fails (e.g. backend LINQ ExamId bug), persist via evaluation marks editor
-        const adminPayload = buildAdminMarksPayload(workspace);
+        const adminPayload = buildAdminMarksPayload(workspace, effectiveCampusId);
         await apiClient.put(`/api/v1/evaluations/${evalId}/marks`, adminPayload);
       }
 
@@ -1883,7 +2154,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         workspace.evaluationId ||
         `${workspace.subjectId}_${workspace.sectionId}_${workspace.examinationId}`;
 
-      const adminPayload = buildAdminMarksPayload(workspace);
+      const adminPayload = buildAdminMarksPayload(workspace, effectiveCampusId);
       const adminSaveUrl = `/api/v1/evaluations/${evalId}/marks`;
 
       await apiClient.put(adminSaveUrl, adminPayload);
@@ -1931,7 +2202,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   const [evaluationSearch, setEvaluationSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
 
-  const evalState = useAcademicFilterState(allBoards, guard, () => setEvalApplied(false));
+  const evalState = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEvalApplied(false));
 
   // Handle Switching Between Main Tabs: Reset cascading filters from scratch (preserving Board and Year)
   const handleTabChange = (nextTab) => {
@@ -1985,8 +2256,20 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     try {
       // 1. Fetch Students
       const studRes = await apiClient
-        .get(apiEndpoints.students.getBySection(evalState.filters.section))
-        .catch(() => apiClient.get(`/api/v1/students/section/${evalState.filters.section}`));
+        .get(apiEndpoints.students.getBySection(evalState.filters.section), {
+          params: { campusId: effectiveCampusId || undefined },
+          headers: {
+            ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+          },
+        })
+        .catch(() =>
+          apiClient.get(`/api/v1/students/section/${evalState.filters.section}`, {
+            params: { campusId: effectiveCampusId || undefined },
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          })
+        );
       const rawStudents = unwrapRecords(studRes);
       const studentList = (rawStudents || [])
         .map((s) => ({
@@ -2007,7 +2290,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       let schedules = selectedExam?.schedules || [];
       if (!schedules.length) {
         try {
-          const detailRes = await apiClient.get(`/api/v1/examinations/${evalState.filters.exam}`).catch(() => null);
+          const detailRes = await apiClient
+            .get(`/api/v1/examinations/${evalState.filters.exam}`, {
+              headers: {
+                ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+              },
+            })
+            .catch(() => null);
           const detail = detailRes?.data || detailRes;
           if (detail?.schedules?.length) {
             schedules = detail.schedules;
@@ -2047,15 +2336,30 @@ export default function MarksEntryPage({ embedded = false } = {}) {
       // 3. Search evaluations
       const evalSearchUrl = apiEndpoints.evaluations?.search || "/api/v1/evaluations/search";
       const evalSearchRes = await apiClient
-        .post(evalSearchUrl, {
-          boardId: Number(evalState.filters.board),
-          academicYearId: Number(evalState.filters.year),
-          academicLevelId: Number(evalState.filters.level),
-          groupId: Number(evalState.filters.group),
-          sectionId: Number(evalState.filters.section),
-          examinationId: Number(evalState.filters.exam),
-        })
-        .catch(() => apiClient.get("/api/v1/faculty/evaluations"));
+        .post(
+          evalSearchUrl,
+          {
+            campusId: Number(effectiveCampusId) || 1,
+            boardId: Number(evalState.filters.board),
+            academicYearId: Number(evalState.filters.year),
+            academicLevelId: Number(evalState.filters.level),
+            groupId: Number(evalState.filters.group),
+            sectionId: Number(evalState.filters.section),
+            examinationId: Number(evalState.filters.exam),
+          },
+          {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          }
+        )
+        .catch(() =>
+          apiClient.get("/api/v1/faculty/evaluations", {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          })
+        );
 
       const existingEvals = unwrapRecords(evalSearchRes);
       const evalMap = {};
@@ -2134,6 +2438,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         const analysisUrl = apiEndpoints.studentAnalysis?.getAll || "/api/v1/student-analysis";
         const analysisRes = await apiClient.get(analysisUrl, {
           params: {
+            campusId: effectiveCampusId || undefined,
             boardId: evalState.filters.board,
             academicYearId: evalState.filters.year,
             academicLevelId: evalState.filters.level,
@@ -2281,24 +2586,42 @@ export default function MarksEntryPage({ embedded = false } = {}) {
     try {
       if (to === "VERIFIED") {
         const verifyAllUrl = apiEndpoints.evaluations?.verifyAll || "/api/v1/evaluations/verify-all";
-        await apiClient.post(verifyAllUrl, {
-          boardId: Number(evalState.filters.board),
-          academicYearId: Number(evalState.filters.year),
-          academicLevelId: Number(evalState.filters.level),
-          groupId: Number(evalState.filters.group),
-          sectionId: Number(evalState.filters.section),
-          examinationId: Number(evalState.filters.exam),
-        });
+        await apiClient.post(
+          verifyAllUrl,
+          {
+            campusId: Number(effectiveCampusId) || 1,
+            boardId: Number(evalState.filters.board),
+            academicYearId: Number(evalState.filters.year),
+            academicLevelId: Number(evalState.filters.level),
+            groupId: Number(evalState.filters.group),
+            sectionId: Number(evalState.filters.section),
+            examinationId: Number(evalState.filters.exam),
+          },
+          {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          }
+        );
       } else if (to === "APPROVED") {
         const approveAllUrl = apiEndpoints.evaluations?.approveAll || "/api/v1/evaluations/approve-all";
-        await apiClient.post(approveAllUrl, {
-          boardId: Number(evalState.filters.board),
-          academicYearId: Number(evalState.filters.year),
-          academicLevelId: Number(evalState.filters.level),
-          groupId: Number(evalState.filters.group),
-          sectionId: Number(evalState.filters.section),
-          examinationId: Number(evalState.filters.exam),
-        });
+        await apiClient.post(
+          approveAllUrl,
+          {
+            campusId: Number(effectiveCampusId) || 1,
+            boardId: Number(evalState.filters.board),
+            academicYearId: Number(evalState.filters.year),
+            academicLevelId: Number(evalState.filters.level),
+            groupId: Number(evalState.filters.group),
+            sectionId: Number(evalState.filters.section),
+            examinationId: Number(evalState.filters.exam),
+          },
+          {
+            headers: {
+              ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}),
+            },
+          }
+        );
       }
 
       setWorkspaces((all) => {
@@ -2547,7 +2870,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             <FilterCard
               mode="entry"
               filters={entry.filters}
-              boards={allBoards}
+              boards={campusBoards.length > 0 ? campusBoards : allBoards}
               years={entry.years}
               levels={entry.levels}
               groups={entry.groups}
@@ -2630,7 +2953,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
             <FilterCard
               mode="evaluation"
               filters={evalState.filters}
-              boards={allBoards}
+              boards={campusBoards.length > 0 ? campusBoards : allBoards}
               years={evalState.years}
               levels={evalState.levels}
               groups={evalState.groups}
@@ -2709,12 +3032,13 @@ export default function MarksEntryPage({ embedded = false } = {}) {
                               : `/api/v1/evaluations/${evalId}/students`;
                             let markItems = [];
                             try {
-                              const res = await apiClient.get(evalStudentsUrl);
+                              const res = await apiClient.get(evalStudentsUrl, { params: { campusId: effectiveCampusId } });
                               markItems = res.data?.students || res.data?.marksList || [];
                             } catch {
                               // If evaluation endpoint records not ready, load from marks table
                               const marksRes = await apiClient.get(
-                                `/api/v1/marks/exam/${item.examinationId || evalState.filters.exam}`
+                                `/api/v1/marks/exam/${item.examinationId || evalState.filters.exam}`,
+                                { params: { campusId: effectiveCampusId } }
                               );
                               const allExamMarks = unwrapRecords(marksRes);
                               markItems = allExamMarks.filter(

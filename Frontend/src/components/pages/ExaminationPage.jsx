@@ -28,6 +28,7 @@ import {
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../common/Ui.jsx";
@@ -1284,7 +1285,7 @@ const normalizeScheduleRecord = (
   const fallbackStrength = groupReqStrength > 0
     ? groupReqStrength
     : (getGroupStudents(examContext, resolvedGroupId, programsList, studentsList).length ||
-       Number(examContext?.candidateCount) || 0);
+      Number(examContext?.candidateCount) || 0);
 
   // Reconstruct hallAssignments if missing or empty, checking roomNameVal, hallNames, hallId, roomId, etc.
   let hallAssignments = [];
@@ -1436,7 +1437,8 @@ const normalizeScheduleRecord = (
 };
 
 // Format schedule entry to strict backend API DTO
-const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = []) => {
+const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = [], targetCampusId = null) => {
+  const effectiveCampusNum = Number(targetCampusId || s.campusId) || 1;
   const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName);
   const examNumericId = Number(targetExamId || s.examId);
   const groupNumericId = Number(s.groupId);
@@ -1511,6 +1513,7 @@ const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = []) =>
     : (Number(s.candidateCount) || 0);
 
   return {
+    campusId: effectiveCampusNum,
     examinationId: isNaN(examNumericId) ? (targetExamId || s.examId) : examNumericId,
     groupId: isNaN(groupNumericId) ? s.groupId : groupNumericId,
     subjectId: subjectNumericId > 0 ? subjectNumericId : 0,
@@ -1563,7 +1566,7 @@ const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = []) =>
 };
 
 // Persist bulk or single examination schedules to backend DB (Batch endpoint for combined objective exams)
-const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], roomsList = []) => {
+const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], roomsList = [], targetCampusId = null) => {
   if (!schedulesList || !schedulesList.length) {
     return [];
   }
@@ -1572,6 +1575,7 @@ const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], r
   const standardDtoList = [];
 
   for (const s of schedulesList) {
+    const effectiveCampusNum = Number(targetCampusId || s.campusId) || 1;
     const isCombinedSchedule =
       s.scheduleMode === "PATTERN_WISE" ||
       Boolean(s.patternName) ||
@@ -1582,9 +1586,10 @@ const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], r
         .map(Number)
         .filter((id) => !isNaN(id) && id > 0);
 
-      const dto = formatScheduleDto(s, examId, facultyList, roomsList);
+      const dto = formatScheduleDto(s, examId, facultyList, roomsList, effectiveCampusNum);
 
       const batchPayload = {
+        campusId: effectiveCampusNum,
         examinationId: Number(examId),
         groupId: Number(s.groupId) || s.groupId,
         subjectIds: validSubIds,
@@ -1618,7 +1623,8 @@ const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], r
       const created = batchRes.data?.data ?? batchRes.data ?? [];
       results.push(...ensureArray(created));
     } else {
-      standardDtoList.push(formatScheduleDto(s, examId, facultyList, roomsList));
+      const effectiveCampusNum = Number(targetCampusId || s.campusId) || 1;
+      standardDtoList.push(formatScheduleDto(s, examId, facultyList, roomsList, effectiveCampusNum));
     }
   }
 
@@ -1632,7 +1638,8 @@ const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], r
 };
 
 // Update existing schedule in backend DB
-const updateScheduleInBackend = async (examId, scheduleId, scheduleData, facultyList = [], roomsList = []) => {
+const updateScheduleInBackend = async (examId, scheduleId, scheduleData, facultyList = [], roomsList = [], targetCampusId = null) => {
+  const effectiveCampusNum = Number(targetCampusId || scheduleData?.campusId) || 1;
   const targetIds = ensureArray(scheduleData?.allScheduleIds || [scheduleId]).filter(Boolean);
   let lastRes = null;
   for (let i = 0; i < targetIds.length; i++) {
@@ -1644,13 +1651,13 @@ const updateScheduleInBackend = async (examId, scheduleId, scheduleData, faculty
         ...scheduleData,
         id: sId,
         ...(subIdForThis ? { subjectId: subIdForThis } : {}),
-      }, examId, facultyList, roomsList);
+      }, examId, facultyList, roomsList, effectiveCampusNum);
       const res = await apiClient.put(`/api/v1/examinations/${examId}/schedules/${sId}`, dto);
       lastRes = res.data?.data ?? res.data;
     }
   }
   if (!lastRes) {
-    const dto = formatScheduleDto(scheduleData, examId, facultyList, roomsList);
+    const dto = formatScheduleDto(scheduleData, examId, facultyList, roomsList, effectiveCampusNum);
     const res = await apiClient.post(`/api/v1/examinations/${examId}/schedules`, [dto]);
     lastRes = res.data?.data ?? res.data;
   }
@@ -1699,7 +1706,20 @@ const normalizeExamRecord = (e) => {
     e?.categoryName ??
     e?.rawCategory;
 
-  const resolvedExamCategory = rawCat ? String(rawCat).trim() : (getResolvedExamCategory(e) || "Regular");
+  let resolvedExamCategory = "Regular";
+  const catCandidate = rawCat ? String(rawCat).trim() : "";
+  if (catCandidate.toLowerCase() === "objective" || catCandidate.toLowerCase().includes("objective")) {
+    resolvedExamCategory = "Objective";
+  } else if (catCandidate.toLowerCase() === "others") {
+    resolvedExamCategory = "Others";
+  } else if (catCandidate.toLowerCase() === "regular") {
+    resolvedExamCategory = "Regular";
+  } else if (isCombinedExamination(e)) {
+    resolvedExamCategory = "Objective";
+  } else {
+    resolvedExamCategory = catCandidate || "Regular";
+  }
+
   const pat = e?.examPattern ?? e?.pattern ?? "";
   const rawGroupPatterns = e?.selectedGroupPatterns || {};
   const selectedGroupPatterns = { ...rawGroupPatterns };
@@ -1709,15 +1729,22 @@ const normalizeExamRecord = (e) => {
     });
   }
 
+  const rawCampusId = e?.campusId ?? e?.CampusId ?? e?.campus?.id ?? e?.campus?.campusId;
+  const campusId = rawCampusId ? normalizeId(rawCampusId) : "";
+
   return {
     id,
+    campusId: campusId || normalizeId(e?.campus?.id ?? e?.campus?.campusId ?? ""),
     code: e?.examCode ?? e?.code ?? "",
     name: e?.examName ?? e?.name ?? "Examination",
     examCategory: resolvedExamCategory,
     customCategoryName: e?.customCategoryName || "",
-    boardId: normalizeId(e?.boardId),
-    yearId: normalizeId(e?.academicYearId ?? e?.yearId),
-    academicYearId: normalizeId(e?.academicYearId ?? e?.yearId),
+    boardId: normalizeId(e?.boardId ?? e?.BoardId),
+    boardName: e?.boardName ?? e?.board?.name ?? e?.BoardName ?? "",
+    yearId: normalizeId(e?.academicYearId ?? e?.yearId ?? e?.AcademicYearId ?? e?.YearId),
+    academicYearId: normalizeId(e?.academicYearId ?? e?.yearId ?? e?.AcademicYearId ?? e?.YearId),
+    academicYear: e?.academicYear ?? e?.academicYearName ?? e?.yearName ?? e?.AcademicYear ?? e?.AcademicYearName ?? "",
+    academicYearName: e?.academicYearName ?? e?.academicYear ?? e?.yearName ?? e?.AcademicYearName ?? e?.AcademicYear ?? "",
     academicLevelIds: levelIds,
     levelIds,
     levelId: levelIds[0] || "",
@@ -1743,7 +1770,7 @@ const normalizeExamRecord = (e) => {
     description: e?.description || "",
     status: normalizeStatus(e?.status || "DRAFT"),
     scheduleMode:
-      e?.scheduleMode || getExaminationScheduleMode(e),
+      e?.scheduleMode || (resolvedExamCategory === "Objective" ? "PATTERN_WISE" : (resolvedExamCategory === "Regular" ? "SUBJECT_WISE" : getExaminationScheduleMode(e))),
     schedules: ensureArray(rawSchedules).map((entry) => ({
       ...normalizeScheduleRecord(entry, groupIds[0] || e?.groupId, e, [], selectedSubjectIds, roomsList, facultyList, programsList, studentsList),
       examId: id,
@@ -1759,16 +1786,27 @@ export const pageConfig = {
 
 // ---------- MAIN EXAMINATION PAGE COMPONENT ----------
 export default function ExaminationPage() {
+  const {
+    campuses: contextCampuses = [],
+    activeCampuses = [],
+    selectedCampus = null,
+    selectedCampusId = null,
+  } = useCampusContext();
+
   const academicCtx = useAcademicContext();
   const {
     selectedBoard = null,
     selectedBoardId = null,
+    setSelectedBoard = () => {},
     selectedAcademicYear = null,
     selectedAcademicYearId = null,
+    setSelectedAcademicYear = () => {},
+    boards: contextBoards = [],
     academicYears: contextAcademicYears = [],
   } = academicCtx;
 
   // Master state replacing static mock arrays
+  const [campusesList, setCampusesList] = useState([]);
   const [boards, setBoards] = useState([]);
   const [academicYears, setAcademicYears] = useState([]);
   const [academicLevels, setAcademicLevels] = useState([]);
@@ -1841,7 +1879,157 @@ export default function ExaminationPage() {
     setToast({ message, type });
   }, []);
 
-  const loadExaminations = useCallback(async (isRetry = false) => {
+  const effectiveCampuses = useMemo(() => {
+    if (campusesList.length > 0) return campusesList;
+    if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
+    return (contextCampuses || []).filter((c) => c && c.isActive !== false && String(c.status || "").toLowerCase() !== "inactive");
+  }, [campusesList, activeCampuses, contextCampuses]);
+
+  const effectiveCampus = useMemo(() => {
+    const targetId = normalizeId(selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId);
+    if (targetId) {
+      const match = effectiveCampuses.find((c) => normalizeId(c.id) === targetId || normalizeId(c.campusId) === targetId);
+      if (match) return match;
+      if (selectedCampus && (normalizeId(selectedCampus.id) === targetId || normalizeId(selectedCampus.campusId) === targetId)) {
+        return selectedCampus;
+      }
+      return { id: targetId, campusId: targetId, name: selectedCampus?.name || `Campus ${targetId}` };
+    }
+    return (
+      selectedCampus ||
+      effectiveCampuses.find((c) => c.isHQ) ||
+      effectiveCampuses[0] ||
+      null
+    );
+  }, [effectiveCampuses, selectedCampusId, selectedCampus]);
+
+  const effectiveCampusId = useMemo(() => {
+    const rawId = selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId ?? effectiveCampus?.campusId ?? effectiveCampus?.id;
+    return normalizeId(rawId || "1");
+  }, [effectiveCampus, selectedCampus, selectedCampusId]);
+
+  const campusAffiliatedBoardIds = useMemo(() => {
+    if (!effectiveCampus) return [];
+    const ids = new Set();
+    if (Array.isArray(effectiveCampus.boardIds)) {
+      effectiveCampus.boardIds.forEach((id) => id && ids.add(normalizeId(id)));
+    }
+    if (Array.isArray(effectiveCampus.affiliatedBoards)) {
+      effectiveCampus.affiliatedBoards.forEach((b) => {
+        const bId = normalizeId(b.boardId ?? b.id);
+        if (bId) ids.add(bId);
+      });
+    }
+    return Array.from(ids);
+  }, [effectiveCampus]);
+
+  const campusBoards = useMemo(() => {
+    const masterBoardsPool = boards.length > 0 ? boards : (contextBoards.length > 0 ? contextBoards : []);
+    if (!effectiveCampus) return masterBoardsPool;
+
+    const affiliated = Array.isArray(effectiveCampus.affiliatedBoards) && effectiveCampus.affiliatedBoards.length > 0
+      ? effectiveCampus.affiliatedBoards
+      : [];
+    const boardIds = campusAffiliatedBoardIds;
+
+    if (!affiliated.length && !boardIds.length) {
+      return masterBoardsPool;
+    }
+
+    const matched = masterBoardsPool.filter((b) => {
+      const bId = normalizeId(b.id ?? b.boardId);
+      const bCode = String(b.code || b.boardCode || "").trim().toLowerCase();
+      const bName = String(b.name || b.boardName || "").trim().toLowerCase();
+
+      const matchesAffiliated = affiliated.some((aff) => {
+        const affId = normalizeId(aff.boardId ?? aff.id);
+        const affCode = String(aff.boardCode ?? aff.code ?? "").trim().toLowerCase();
+        const affName = String(aff.boardName ?? aff.name ?? "").trim().toLowerCase();
+        return (affId && affId === bId) || (affCode && affCode === bCode) || (affName && affName === bName);
+      });
+
+      const matchesId = boardIds.length > 0 && boardIds.includes(bId);
+      return matchesAffiliated || matchesId;
+    });
+
+    if (matched.length > 0) return matched;
+
+    if (affiliated.length > 0) {
+      return affiliated.map((item) => ({
+        ...item,
+        id: normalizeId(item.boardId ?? item.id),
+        boardId: normalizeId(item.boardId ?? item.id),
+        name: item.boardName ?? item.name,
+        code: item.boardCode ?? item.code ?? "",
+        isActive: true,
+      }));
+    }
+
+    return masterBoardsPool;
+  }, [boards, contextBoards, effectiveCampus, campusAffiliatedBoardIds]);
+
+  // 1. Campus Change -> Cascade Board Change
+  const prevCampusIdRef = useRef(effectiveCampusId);
+  useEffect(() => {
+    if (!effectiveCampusId || !campusBoards.length) return;
+
+    const isCampusSwitched = prevCampusIdRef.current !== effectiveCampusId;
+    prevCampusIdRef.current = effectiveCampusId;
+
+    const currentBoardId = normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId);
+    const isCurrentValid = currentBoardId && (
+      (campusAffiliatedBoardIds.length > 0 && campusAffiliatedBoardIds.includes(currentBoardId)) ||
+      campusBoards.some((b) => normalizeId(b.id ?? b.boardId) === currentBoardId)
+    );
+
+    // If current board is not affiliated with this campus, or campus just switched and board not in new campus, cascade
+    if (!isCurrentValid || (isCampusSwitched && !campusAffiliatedBoardIds.includes(currentBoardId))) {
+      const nextBoard = campusBoards[0];
+      if (nextBoard && typeof setSelectedBoard === "function") {
+        setSelectedBoard(nextBoard);
+      }
+    }
+  }, [effectiveCampusId, campusBoards, campusAffiliatedBoardIds, selectedBoardId, selectedBoard, setSelectedBoard]);
+
+  // 2. Board Change -> Cascade Academic Year Change
+  const prevBoardIdRef = useRef(normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId));
+  useEffect(() => {
+    const currentBoardId = normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId);
+    if (!currentBoardId) return;
+
+    const isBoardSwitched = prevBoardIdRef.current !== currentBoardId;
+    prevBoardIdRef.current = currentBoardId;
+
+    const masterYears = academicYears.length > 0 ? academicYears : (contextAcademicYears.length > 0 ? contextAcademicYears : []);
+    const boardYears = masterYears.filter((y) => {
+      const yBoardId = normalizeId(y.boardId ?? y.BoardId);
+      return !yBoardId || yBoardId === currentBoardId;
+    });
+
+    if (boardYears.length === 0) return;
+
+    const currentYearId = normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId);
+    const isCurrentYearValid = currentYearId && boardYears.some((y) => normalizeId(y.id ?? y.academicYearId) === currentYearId);
+
+    if (!isCurrentYearValid || isBoardSwitched) {
+      const currentYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || selectedAcademicYear?.code || "").trim();
+      const matchingByName = currentYearName
+        ? boardYears.find((y) => String(y.name || y.code || "").trim().toLowerCase() === currentYearName.toLowerCase())
+        : null;
+      const nextYear = matchingByName || boardYears.find((y) => y.isActive !== false) || boardYears[0];
+
+      if (nextYear && typeof setSelectedAcademicYear === "function") {
+        setSelectedAcademicYear(nextYear);
+      }
+    }
+  }, [selectedBoardId, selectedBoard, academicYears, contextAcademicYears, selectedAcademicYearId, selectedAcademicYear, setSelectedAcademicYear]);
+
+  const loadExaminations = useCallback(async (
+    isRetry = false,
+    targetCampusId = effectiveCampusId,
+    targetBoardId = selectedBoardId,
+    targetYearId = selectedAcademicYearId
+  ) => {
     loadExamsAbortRef.current?.abort();
     const controller = new AbortController();
     loadExamsAbortRef.current = controller;
@@ -1849,12 +2037,70 @@ export default function ExaminationPage() {
     setExamsLoading(true);
     setExamsError(null);
     try {
-      const response = await apiClient.get("/api/v1/examinations", { signal });
+      const effCampus = targetCampusId ?? effectiveCampusId;
+      const effBoard = targetBoardId ?? selectedBoardId;
+      const effYear = targetYearId ?? selectedAcademicYearId;
+
+      const params = {};
+      if (effCampus) {
+        params.campusId = Number(effCampus) || effCampus;
+      }
+      if (effBoard) {
+        params.boardId = Number(effBoard) || effBoard;
+      }
+      if (effYear) {
+        params.AcademicYearId = Number(effYear) || effYear;
+      }
+
+      const headers = {
+        ...(effCampus ? { "X-Campus-Id": String(effCampus) } : {}),
+      };
+
+      const response = await apiClient.get("/api/v1/examinations", { signal, params, headers });
       if (signal.aborted) return;
       const raw = unwrap(response);
       const normalized = raw.map((record) => normalizeExamRecord(record));
-      setExams(normalized);
-      const initialSchedules = normalized.flatMap((exam, index) =>
+
+      const effCampusStr = effCampus ? normalizeId(effCampus) : "";
+      const effBoardStr = effBoard ? normalizeId(effBoard) : "";
+      const effYearStr = effYear ? normalizeId(effYear) : "";
+      const effYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.code || "").trim().toLowerCase();
+
+      // Tenant isolation: match campus, board, and academic year
+      const filteredExams = normalized.filter((exam) => {
+        // 1. Campus isolation
+        if (effCampusStr) {
+          const examCampId = normalizeId(exam.campusId);
+          if (examCampId) {
+            if (examCampId !== effCampusStr) return false;
+          } else if (campusAffiliatedBoardIds.length > 0 && exam.boardId) {
+            if (!campusAffiliatedBoardIds.includes(normalizeId(exam.boardId))) {
+              return false;
+            }
+          }
+        }
+
+        // 2. Board isolation
+        if (effBoardStr && exam.boardId) {
+          if (normalizeId(exam.boardId) !== effBoardStr) return false;
+        }
+
+        // 3. Academic Year isolation
+        if (effYearStr) {
+          const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
+          const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+          const idMatches = examYearId && examYearId === effYearStr;
+          const nameMatches = effYearName && examYearName && (examYearName === effYearName || examYearName.includes(effYearName) || effYearName.includes(examYearName));
+          if (examYearId && !idMatches && !nameMatches) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      setExams(filteredExams);
+      const initialSchedules = filteredExams.flatMap((exam, index) =>
         Array.isArray(raw[index]?.schedules) || Array.isArray(raw[index]?.examinationSchedules)
           ? (exam.schedules || []).map((entry) => ({ ...entry, examId: exam.id }))
           : []
@@ -1863,22 +2109,26 @@ export default function ExaminationPage() {
         setSchedules(initialSchedules);
       }
       // Concurrently fetch schedule rows for active examinations to ensure room/hall occupancy is fully known
-      const activeExams = normalized.filter((e) => ["DRAFT", "SCHEDULED"].includes(e.status));
+      const activeExams = filteredExams.filter((e) => ["DRAFT", "SCHEDULED"].includes(e.status));
       settleWithConcurrency(
         activeExams, 3, (e) =>
-          apiClient.get(`/api/v1/examinations/${e.id}/schedules`, { signal }).then((res) => {
-            const sRaw = unwrap(res);
-            const fallbackGid = e.groupIds?.[0] || e.groupId;
-            return sRaw.map((entry) => ({
-              ...normalizeScheduleRecord(entry, fallbackGid, e, groupsRef.current, eligibleSubjectsRef.current, roomsRef.current, facultyRef.current, programsRef.current, studentsRef.current),
-              examId: e.id,
-            }));
-          }),
+        apiClient.get(`/api/v1/examinations/${e.id}/schedules`, {
+          signal,
+          params: effCampus ? { campusId: effCampus } : {},
+          headers: effCampus ? { "X-Campus-Id": String(effCampus) } : {},
+        }).then((res) => {
+          const sRaw = unwrap(res);
+          const fallbackGid = e.groupIds?.[0] || e.groupId;
+          return sRaw.map((entry) => ({
+            ...normalizeScheduleRecord(entry, fallbackGid, e, groupsRef.current, eligibleSubjectsRef.current, roomsRef.current, facultyRef.current, programsRef.current, studentsRef.current),
+            examId: e.id,
+          }));
+        }).catch(() => []),
         signal
       ).then((results) => {
         if (signal.aborted) return;
         const fetchedSchedules = results
-          .filter((r) => r.status === "fulfilled")
+          .filter((r) => r.status === "fulfilled" && Array.isArray(r.value))
           .flatMap((r) => r.value);
         if (fetchedSchedules.length > 0) {
           setSchedules((prev) => {
@@ -1890,7 +2140,7 @@ export default function ExaminationPage() {
         }
       });
       if (isRetry) showToast("Examinations reloaded successfully.", "success");
-      return normalized;
+      return filteredExams;
     } catch (error) {
       if (signal.aborted) return;
       setExams([]);
@@ -1899,7 +2149,7 @@ export default function ExaminationPage() {
     } finally {
       if (!signal.aborted) setExamsLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, effectiveCampusId, selectedBoardId, selectedAcademicYearId, selectedAcademicYear, campusAffiliatedBoardIds]);
 
   // Robust Student Fetching & Enrichment from Students, Admissions, and Active Endpoints
   const fetchStudentsList = useCallback(async (signal) => {
@@ -2006,9 +2256,10 @@ export default function ExaminationPage() {
   }, []);
 
   // Robust Room & Exam Hall Fetching via GET /api/v1/rooms
-  const fetchRoomsList = useCallback(async (filters = {}, signal) => {
+  const fetchRoomsList = useCallback(async (filters = {}, signal, targetCampusId = effectiveCampusId) => {
     try {
       const params = {};
+      if (targetCampusId) params.campusId = targetCampusId;
       if (filters?.building) params.Building = filters.building;
       if (filters?.blockName || filters?.block) params.BlockName = filters.blockName || filters.block;
       if (filters?.floor) params.Floor = filters.floor;
@@ -2031,6 +2282,8 @@ export default function ExaminationPage() {
         if (!r) continue;
         const id = normalizeId(r.roomId ?? r.RoomId ?? r.id ?? r.Id ?? r._id);
         const roomNo = String(r.roomNumber ?? r.RoomNumber ?? r.roomCode ?? r.RoomCode ?? r.roomNo ?? r.RoomNo ?? "").trim();
+        const rCampusId = normalizeId(r.campusId ?? r.CampusId ?? targetCampusId);
+        if (targetCampusId && r.campusId && normalizeId(r.campusId) !== normalizeId(targetCampusId)) continue;
         const dedupKey = id || roomNo.toLowerCase();
         if (!dedupKey || seenKeys.has(dedupKey)) continue;
         seenKeys.add(dedupKey);
@@ -2057,6 +2310,7 @@ export default function ExaminationPage() {
         normalizedRooms.push({
           id: id || `room-${dedupKey}`,
           roomId: id,
+          campusId: rCampusId,
           name: roomName,
           roomName,
           roomNumber: roomNo || roomName,
@@ -2082,7 +2336,7 @@ export default function ExaminationPage() {
       console.warn("fetchRoomsList encountered an issue:", e);
       return [];
     }
-  }, []);
+  }, [effectiveCampusId]);
 
   // 1. Initial Mount: Active Boards, Patterns, Exam Types, Rooms, Faculty, Academic Levels, Groups, Students
   useEffect(() => {
@@ -2091,13 +2345,20 @@ export default function ExaminationPage() {
     const { signal } = controller;
     const fetchInitialMasterData = async () => {
       try {
-        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, groupsRes, subjectsRes, programsRes] =
+        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, groupsRes, subjectsRes, programsRes, campusesRes] =
           await Promise.allSettled([
             apiClient.get("/api/v1/boards/active", { signal }).catch((error) => {
               if (signal.aborted) throw error;
               return apiClient.get("/api/v1/boards", { signal });
             }),
-            apiClient.get("/api/v1/academic-years", { signal }).catch(() => null),
+            apiClient.get("/api/v1/academic-years", {
+              signal,
+              params: {
+                ...(effectiveCampusId ? { campusId: effectiveCampusId, CampusId: effectiveCampusId } : {}),
+                ...(selectedBoardId ? { boardId: selectedBoardId, BoardId: selectedBoardId } : {}),
+                isActive: true,
+              },
+            }).catch(() => null),
             apiClient.get("/api/v1/examinations/patterns", { signal }),
             apiClient.get("/api/v1/examinations/types", { signal }),
             apiClient.get("/api/v1/staff", { signal, params: { staffType: "Teaching" } }),
@@ -2105,13 +2366,28 @@ export default function ExaminationPage() {
             apiClient.get("/api/v1/groups", { signal }),
             apiClient.get("/api/v1/subjects", { signal }).catch(() => null),
             apiClient.get("/api/v1/programs", { signal }),
+            apiClient.get("/api/v1/campuses", { signal, params: { isActive: true } }).catch(() => null),
           ]);
 
         if (!isMounted) return;
 
         // Independent enrichment must not delay publishing master data.
         void fetchStudentsList(signal);
-        void fetchRoomsList({}, signal);
+        void fetchRoomsList({ campusId: effectiveCampusId }, signal, effectiveCampusId);
+
+        if (campusesRes?.status === "fulfilled" && campusesRes.value) {
+          const rawCampuses = unwrap(campusesRes.value);
+          const loadedCampuses = rawCampuses.map((c) => ({
+            ...c,
+            id: normalizeId(c.campusId ?? c.id),
+            campusId: normalizeId(c.campusId ?? c.id),
+            name: c.campusName ?? c.name,
+            isActive: c.isActive !== false,
+          })).filter((c) => c.id && c.isActive);
+          if (loadedCampuses.length > 0) {
+            setCampusesList(loadedCampuses);
+          }
+        }
 
         if (boardsRes.status === "fulfilled") {
           const rawBoards = unwrap(boardsRes.value);
@@ -2132,10 +2408,11 @@ export default function ExaminationPage() {
           const rawYears = unwrap(yearsRes.value);
           const mappedYears = rawYears
             .map((y) => ({
-              id: normalizeId(y.academicYearId ?? y.id),
-              name: y.academicYearName ?? y.yearName ?? y.name,
-              code: y.code ?? y.academicYearName ?? y.name,
-              boardId: normalizeId(y.boardId),
+              id: normalizeId(y.academicYearId ?? y.id ?? y.AcademicYearId),
+              name: y.academicYearName ?? y.yearName ?? y.name ?? y.AcademicYearName,
+              code: y.code ?? y.academicYearName ?? y.name ?? y.AcademicYearName,
+              boardId: normalizeId(y.boardId ?? y.BoardId),
+              campusId: normalizeId(y.campusId ?? y.CampusId),
               isActive: y.isActive !== false,
             }))
             .filter((y) => y.name);
@@ -2267,7 +2544,7 @@ export default function ExaminationPage() {
       }
     };
 
-    loadExaminations();
+    loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
     fetchInitialMasterData();
     return () => {
       isMounted = false;
@@ -2276,27 +2553,71 @@ export default function ExaminationPage() {
         loadExamsAbortRef.current.abort();
       }
     };
-  }, [showToast, loadExaminations, fetchRoomsList, fetchStudentsList]);
+  }, [showToast, fetchRoomsList, fetchStudentsList]);
+
+  // Reactive refresh when navbar campus, board or year changes
+  useEffect(() => {
+    setExamId("");
+    setDetail(null);
+    setEditingExam(null);
+    loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
+    fetchRoomsList({ campusId: effectiveCampusId }, undefined, effectiveCampusId);
+  }, [effectiveCampusId, selectedBoardId, selectedAcademicYearId, loadExaminations, fetchRoomsList]);
 
   const query = search.trim().toLowerCase();
 
-  const list = exams.filter(
-    (exam) =>
-      (!filters.groupId || (exam.groupIds || [exam.groupId]).map(normalizeId).includes(filters.groupId)) &&
-      (!filters.programId || (exam.programIds || [exam.programId]).map(normalizeId).includes(filters.programId)) &&
-      (!filters.levelId || (exam.levelIds || [exam.levelId]).map(normalizeId).includes(filters.levelId)) &&
-      (!query ||
-        [
-          exam.code,
-          exam.name,
-          codeOf(boards, exam.boardId),
-          getGroupNames(exam, groups),
-          getLevelNames(exam, academicLevels),
-          exam.examCategory,
-          exam.examPattern,
-          exam.status,
-        ].some((val) => String(val || "").toLowerCase().includes(query))),
-  );
+  const list = exams.filter((exam) => {
+    // 1. Campus isolation
+    if (effectiveCampusId) {
+      const examCampId = normalizeId(exam.campusId);
+      if (examCampId) {
+        if (examCampId !== normalizeId(effectiveCampusId)) return false;
+      } else if (campusAffiliatedBoardIds.length > 0 && exam.boardId) {
+        if (!campusAffiliatedBoardIds.includes(normalizeId(exam.boardId))) {
+          return false;
+        }
+      }
+    }
+
+    // 2. Board isolation
+    if (selectedBoardId && exam.boardId) {
+      if (normalizeId(exam.boardId) !== normalizeId(selectedBoardId)) return false;
+    }
+
+    // 3. Academic Year isolation
+    if (selectedAcademicYearId) {
+      const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
+      const selYearId = normalizeId(selectedAcademicYearId);
+      const selYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.code || "").trim().toLowerCase();
+      const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+
+      const idMatches = examYearId && examYearId === selYearId;
+      const nameMatches = selYearName && examYearName && (examYearName === selYearName || examYearName.includes(selYearName) || selYearName.includes(examYearName));
+      if (examYearId && !idMatches && !nameMatches) {
+        return false;
+      }
+    }
+
+    if (filters.groupId && !(exam.groupIds || [exam.groupId]).map(normalizeId).includes(filters.groupId)) return false;
+    if (filters.programId && !(exam.programIds || [exam.programId]).map(normalizeId).includes(filters.programId)) return false;
+    if (filters.levelId && !(exam.levelIds || [exam.levelId]).map(normalizeId).includes(filters.levelId)) return false;
+
+    if (query) {
+      const matchesSearch = [
+        exam.code,
+        exam.name,
+        codeOf(boards, exam.boardId),
+        getGroupNames(exam, groups),
+        getLevelNames(exam, academicLevels),
+        exam.examCategory,
+        exam.examPattern,
+        exam.status,
+      ].some((val) => String(val || "").toLowerCase().includes(query));
+      if (!matchesSearch) return false;
+    }
+
+    return true;
+  });
 
   const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   const shownExams = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -2448,6 +2769,9 @@ export default function ExaminationPage() {
           }
 
           await apiClient.put(`/api/v1/examinations/${editingExamId}`, {
+            campusId: Number(effectiveCampusId) || 1,
+            examCode: newRecord.examCode || newRecord.code || undefined,
+            code: newRecord.examCode || newRecord.code || undefined,
             examName: newRecord.name,
             name: newRecord.name,
             examCategory: newRecord.examCategory,
@@ -2475,7 +2799,7 @@ export default function ExaminationPage() {
             scheduleMode: newRecord.scheduleMode,
           });
 
-          await loadExaminations();
+          await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
           showToast("Examination updated successfully.", "success");
           setViewMode("list");
           setEditingExamId(null);
@@ -2486,6 +2810,9 @@ export default function ExaminationPage() {
       } else {
         try {
           const res = await apiClient.post("/api/v1/examinations", {
+            campusId: Number(effectiveCampusId) || 1,
+            examCode: newRecord.examCode || newRecord.code || undefined,
+            code: newRecord.examCode || newRecord.code || undefined,
             examName: newRecord.name,
             name: newRecord.name,
             examCategory: newRecord.examCategory,
@@ -2519,7 +2846,9 @@ export default function ExaminationPage() {
 
           let createdRecord = null;
           try {
-            const detailRes = await apiClient.get(`/api/v1/examinations/${createdId}`);
+            const detailRes = await apiClient.get(`/api/v1/examinations/${createdId}`, {
+              params: { campusId: effectiveCampusId },
+            });
             const backendExam = unwrap(detailRes);
             if (backendExam && (backendExam.id || backendExam.examinationId)) {
               createdRecord = normalizeExamRecord(backendExam);
@@ -2537,7 +2866,7 @@ export default function ExaminationPage() {
           });
 
           setExams((prev) => [draftRecord, ...prev.filter((e) => normalizeId(e.id) !== createdId)]);
-          await loadExaminations();
+          await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
           setSearch("");
           setFilters({ groupId: "", programId: "", levelId: "" });
           setPage(1);
@@ -2574,7 +2903,9 @@ export default function ExaminationPage() {
     try {
       mutationRef.current = true;
       setDeleteLoading(true);
-      await apiClient.delete(`/api/v1/examinations/${remove.id}`);
+      await apiClient.delete(`/api/v1/examinations/${remove.id}`, {
+        params: { campusId: effectiveCampusId },
+      });
       setExams((prev) => {
         const next = prev.filter((item) => String(item.id) !== String(remove.id));
 
@@ -2598,11 +2929,13 @@ export default function ExaminationPage() {
     mutationRef.current = true;
     setCancelLoading(true);
     try {
-      const response = await apiClient.patch(`/api/v1/examinations/${cancelExamTarget.id}/cancel`, {});
+      const response = await apiClient.patch(`/api/v1/examinations/${cancelExamTarget.id}/cancel`, {}, {
+        params: { campusId: effectiveCampusId },
+      });
       const record = response.data?.data ?? response.data;
       const returnedStatus = record?.status || record?.examinationStatus || "CANCELLED";
       setExams((previous) => previous.map((exam) => String(exam.id) === String(cancelExamTarget.id) ? { ...exam, status: normalizeStatus(returnedStatus) } : exam));
-      await loadExaminations();
+      await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
       showToast(`Examination "${cancelExamTarget.name}" cancelled successfully.`, "success");
     } catch (error) {
       showToast(getApiErrorMessage(error) || "Failed to cancel examination.", "error");
@@ -2646,8 +2979,10 @@ export default function ExaminationPage() {
       if (readiness.length) throw new Error(readiness.join(" "));
       if (examEntries.some((entry) => !entry.id)) throw new Error("Reload schedules before finalizing.");
 
-      await apiClient.post(`/api/v1/examinations/${examToFinalize.id}/finalize-schedule`);
-      await loadExaminations();
+      await apiClient.post(`/api/v1/examinations/${examToFinalize.id}/finalize-schedule`, null, {
+        params: { campusId: effectiveCampusId },
+      });
+      await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
       setExamId("");
       setSearch("");
       setFilters({ groupId: "", programId: "", levelId: "" });
@@ -2762,9 +3097,9 @@ export default function ExaminationPage() {
     try {
       if (isEditingId) {
         if (!schedules.some((entry) => entry.id === normalizeId(isEditingId) && entry.examId === normalizeId(targetExamId))) throw new Error("Reload the persisted schedule before editing.");
-        await updateScheduleInBackend(targetExamId, isEditingId, newSchedules[0], faculty, rooms);
+        await updateScheduleInBackend(targetExamId, isEditingId, newSchedules[0], faculty, rooms, effectiveCampusId);
       } else {
-        await saveSchedulesToBackend(targetExamId, newSchedules, faculty, rooms);
+        await saveSchedulesToBackend(targetExamId, newSchedules, faculty, rooms, effectiveCampusId);
       }
       const response = await apiClient.get("/api/v1/examinations/" + targetExamId + "/schedules");
       const examCtx = currentExam || exams.find((e) => normalizeId(e.id) === normalizeId(targetExamId));
@@ -2843,10 +3178,11 @@ export default function ExaminationPage() {
   if (viewMode === "add" || viewMode === "edit") {
     return (
       <ExamForm
+        campusId={effectiveCampusId}
         exams={exams}
         schedules={schedules}
         editId={editingExamId}
-        boards={boards}
+        boards={campusBoards.length > 0 ? campusBoards : boards}
         academicYears={academicYears.length > 0 ? academicYears : contextAcademicYears}
         academicLevels={academicLevels}
         groups={groups}
@@ -3124,15 +3460,14 @@ export default function ExaminationPage() {
                             <button
                               type="button"
                               className="cms-btn cms-btn-primary"
-                              onClick={() => loadExaminations(true)}
+                              onClick={() => loadExaminations(true, effectiveCampusId, selectedBoardId, selectedAcademicYearId)}
                               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                             >
                               <RefreshCw size={14} /> Retry Fetching Examinations
                             </button>
                           </div>
                         ) : (
-                          "No examinations match the current filters."
-                        )}
+                          "No examinations match the current filters.")}
                       </div>
                     </td>
                   </tr>
@@ -3328,6 +3663,7 @@ export default function ExaminationPage() {
 
               // 4. Update the examination record
               await apiClient.put(`/api/v1/examinations/${examId}`, {
+                campusId: Number(editingExam.campusId || effectiveCampusId) || 1,
                 examName: editingExam.name || editingExam.examName,
                 examCategory: editingExam.examCategory || "Regular",
                 customCategoryName: editingExam.customCategoryName,
@@ -3389,7 +3725,7 @@ export default function ExaminationPage() {
                 }
               }
 
-              await loadExaminations();
+              await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
               setEditingExam(null);
               showToast("Examination period updated successfully.", "success");
             } catch (err) {
@@ -3509,12 +3845,16 @@ function SearchableSingleSelect({
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) {
         setOpen(false);
-        commitMatch();
+        if (selectedOpt) {
+          setSearch(selectedOpt.name || "");
+        } else {
+          setSearch("");
+        }
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [commitMatch, disabled]);
+  }, [selectedOpt, disabled]);
 
   const filteredOptions = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
@@ -3815,6 +4155,7 @@ function SearchableMultiSelect({
 
 // ---------- FORM COMPONENT WITH LIVE ACADEMIC CASCADING HIERARCHY ----------
 function ExamForm({
+  campusId = "",
   exams,
   schedules,
   editId,
@@ -3987,12 +4328,19 @@ function ExamForm({
   useEffect(() => {
     if (existing) return;
     let active = true;
+    const targetCampus = Number(campusId) || 1;
     apiClient
-      .get("/api/v1/settings/number-series/EXAM_CODE")
+      .get(`/api/v1/settings/number-series/EXAM_CODE?campusId=${targetCampus}`)
       .then((res) => {
         if (!active) return;
         const preview = res?.data?.data?.livePreview ?? res?.data?.livePreview;
-        if (preview) setExamCodePreview(preview);
+        if (preview) {
+          setExamCodePreview(preview);
+          setForm((prev) => ({
+            ...prev,
+            code: prev.code || preview,
+          }));
+        }
       })
       .catch(() => {
         // Silently handle error, fallback placeholder will be used
@@ -4000,12 +4348,13 @@ function ExamForm({
     return () => {
       active = false;
     };
-  }, [existing]);
+  }, [existing, campusId]);
 
   const [form, setForm] = useState(() =>
     existing
       ? {
         ...existing,
+        campusId: normalizeId(existing.campusId || campusId || "1"),
         boardId: normalizeId(existing.boardId || defaultBoardId),
         yearId: normalizeId(existing.yearId ?? existing.academicYearId ?? defaultYearId),
         academicYearId: normalizeId(existing.yearId ?? existing.academicYearId ?? defaultYearId),
@@ -4022,12 +4371,14 @@ function ExamForm({
         examType: existing.examType || "",
       }
       : {
+        campusId: normalizeId(campusId || "1"),
         code: "",
         name: "",
         examCategory: "", // MANUAL SELECTION ONLY: starts empty so user must explicitly choose
         customCategoryName: "",
         boardId: defaultBoardId,
         yearId: defaultYearId,
+        academicYearId: defaultYearId,
         levelId: "",
         levelIds: [],
         groupId: "",
@@ -4124,9 +4475,24 @@ function ExamForm({
     const load = async () => {
       try {
         const [yearsResponse, levelsResponse, groupsResponse] = await Promise.allSettled([
-          apiClient.get("/api/v1/academic-years", { params: { boardId: form.boardId } }),
-          apiClient.get("/api/v1/academic-levels", { params: { boardId: form.boardId } }),
-          apiClient.get("/api/v1/groups/board/" + form.boardId),
+          apiClient.get("/api/v1/academic-years", {
+            params: {
+              ...(campusId ? { campusId, CampusId: campusId } : {}),
+              boardId: form.boardId,
+              BoardId: form.boardId,
+              isActive: true,
+            },
+          }),
+          apiClient.get("/api/v1/academic-levels", {
+            params: {
+              ...(campusId ? { campusId, CampusId: campusId } : {}),
+              boardId: form.boardId,
+              BoardId: form.boardId,
+            },
+          }),
+          apiClient.get("/api/v1/groups/board/" + form.boardId, {
+            params: campusId ? { campusId, CampusId: campusId } : {},
+          }),
         ]);
         if (!active) return;
 
@@ -4653,6 +5019,14 @@ function ExamForm({
           : {}),
       };
 
+      if (n === "examCategory") {
+        if (v === "Objective") {
+          next.scheduleMode = "PATTERN_WISE";
+        } else if (v === "Regular") {
+          next.scheduleMode = "SUBJECT_WISE";
+        }
+      }
+
       // Combined examinations (non-Regular) are conducted combinely on a single date, so startDate === endDate
       if (isCombinedExamination(next)) {
         if (n === "startDate") {
@@ -4880,8 +5254,8 @@ function ExamForm({
     const payload = {
       ...form,
       id: existing?.id,
-      examCode: existing?.examCode || existing?.code || undefined,
-      code: existing?.examCode || existing?.code || undefined,
+      examCode: existing?.examCode || existing?.code || form.code || examCodePreview || undefined,
+      code: existing?.examCode || existing?.code || form.code || examCodePreview || undefined,
       endDate: isCombined ? form.startDate : form.endDate,
       levelId: form.levelIds[0] || "",
       groupId: activeGroupIds[0] || "",
@@ -5343,8 +5717,8 @@ function ExamForm({
               <div className="cms-form-grid cols-3">
                 <Field
                   label="Examination Code"
-                  value={existing ? (form.code || existing?.examCode || "") : ""}
-                  placeholder={!existing ? (examCodePreview || "Code will be generated on save") : ""}
+                  value={existing ? (form.code || existing?.examCode || "") : (form.code || examCodePreview || "")}
+                  placeholder={!existing ? (examCodePreview || "Generating code...") : ""}
                   readOnly={true}
                 />
                 <Field

@@ -53,5 +53,11 @@ namespace CollegeManagement.API.DTOs.Students
         public bool IsActive { get; set; }
 
         public DateTime? CreatedAt { get; set; }
+
+        // Residential & Transport Summary
+        public string? StudentType { get; set; }
+        public bool? TransportRequired { get; set; }
+        public string? HostelBlock { get; set; }
+        public string? BusRoute { get; set; }
     }
 }
