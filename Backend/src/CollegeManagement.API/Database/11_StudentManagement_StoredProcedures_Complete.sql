@@ -1028,7 +1028,8 @@ CREATE PROCEDURE `sp_GetStudentsAndSectionsForAllocation`
     IN p_AcademicYearId INT,
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
-    IN p_ProgramId INT
+    IN p_ProgramId INT,
+    IN p_CampusId INT
 )
 BEGIN
     -- 1. Students in admission order
@@ -1043,6 +1044,7 @@ BEGIN
       AND s.AcademicLevelId = p_AcademicLevelId
       AND s.GroupId = p_GroupId
       AND s.ProgramId = p_ProgramId
+      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
       AND (s.IsActive = 1 OR s.IsActive IS NULL)
     ORDER BY
         s.AdmissionDate ASC,
@@ -1059,6 +1061,7 @@ BEGIN
       AND s.AcademicLevelId = p_AcademicLevelId
       AND s.GroupId = p_GroupId
       AND s.ProgramId = p_ProgramId
+      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
       AND s.IsActive = 1
     ORDER BY
         s.SectionName ASC;
@@ -1086,7 +1089,8 @@ CREATE PROCEDURE `sp_GetAllocatedStudentsForRollNumbering`
     IN p_AcademicYearId INT,
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
-    IN p_ProgramId INT
+    IN p_ProgramId INT,
+    IN p_CampusId INT
 )
 BEGIN
     SELECT
@@ -1102,6 +1106,7 @@ BEGIN
       AND s.AcademicLevelId = p_AcademicLevelId
       AND s.GroupId = p_GroupId
       AND s.ProgramId = p_ProgramId
+      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
       AND s.SectionId IS NOT NULL
       AND (s.IsActive = 1 OR s.IsActive IS NULL)
     ORDER BY

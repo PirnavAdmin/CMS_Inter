@@ -37,9 +37,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             return conn;
         }
 
-        public async Task<IEnumerable<Designation>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null)
+        public async Task<IEnumerable<Designation>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
         {
-            var dtos = await GetAllDtosAsync(includeInactive, staffType, departmentId);
+            var dtos = await GetAllDtosAsync(includeInactive, staffType, departmentId, campusId);
             return dtos.Select(d => new Designation
             {
                 Id = d.Id,
@@ -52,7 +52,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }).ToList();
         }
 
-        public async Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null)
+        public async Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
         {
             try
             {
@@ -63,7 +63,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     {
                         p_IncludeInactive = includeInactive ? 1 : 0,
                         p_StaffType = staffType ?? "",
-                        p_DepartmentId = departmentId ?? 0
+                        p_DepartmentId = departmentId ?? 0,
+                        p_CampusId = campusId
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -83,6 +84,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 if (!string.IsNullOrWhiteSpace(staffType) && !staffType.Equals("all", StringComparison.OrdinalIgnoreCase))
                 {
                     query = query.Where(d => d.StaffType == staffType || d.StaffType == "Both");
+                }
+                
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    query = query.Where(d => d.CampusId == campusId.Value || d.CampusId == null);
                 }
 
                 var list = await query.OrderBy(d => d.Name).ToListAsync();
@@ -154,7 +160,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<Designation?> GetByNameAsync(string name)
+        public async Task<Designation?> GetByNameAsync(string name, int? campusId = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
 
@@ -163,17 +169,17 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var conn = await GetOpenConnectionAsync();
                 return await conn.QueryFirstOrDefaultAsync<Designation>(
                     "sp_GetDesignationByName",
-                    new { p_Name = name.Trim() },
+                    new { p_Name = name.Trim(), p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
             }
             catch
             {
                 var norm = name.Trim().ToLower();
-                return await _context.Designations.AsNoTracking().FirstOrDefaultAsync(d => d.Name.ToLower() == norm);
+                return await _context.Designations.AsNoTracking().FirstOrDefaultAsync(d => d.Name.ToLower() == norm && (d.CampusId == campusId || d.CampusId == null));
             }
         }
 
-        public async Task<bool> IsNameUniqueAsync(string name, int? excludeId = null)
+        public async Task<bool> IsNameUniqueAsync(string name, int? excludeId = null, int? campusId = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return true;
 
@@ -182,7 +188,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var conn = await GetOpenConnectionAsync();
                 var count = await conn.ExecuteScalarAsync<int>(
                     "sp_ValidateDesignationNameUnique",
-                    new { p_Name = name.Trim(), p_ExcludeId = excludeId },
+                    new { p_Name = name.Trim(), p_ExcludeId = excludeId, p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
 
                 return count == 0;
@@ -192,7 +198,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 var norm = name.Trim().ToLower();
                 return !await _context.Designations.AnyAsync(d =>
                     d.Name.ToLower() == norm &&
-                    (!excludeId.HasValue || d.Id != excludeId.Value));
+                    (!excludeId.HasValue || d.Id != excludeId.Value) &&
+                    (d.CampusId == campusId || d.CampusId == null));
             }
         }
 
@@ -235,7 +242,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_Name = designation.Name.Trim(),
                         p_DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : 0,
                         p_StaffType = designation.StaffType ?? "Both",
-                        p_IsActive = designation.IsActive ? 1 : 0
+                        p_IsActive = designation.IsActive ? 1 : 0,
+                        p_CampusId = designation.CampusId
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -264,7 +272,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_Name = designation.Name.Trim(),
                         p_DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : 0,
                         p_StaffType = designation.StaffType ?? "Both",
-                        p_IsActive = designation.IsActive ? 1 : 0
+                        p_IsActive = designation.IsActive ? 1 : 0,
+                        p_CampusId = designation.CampusId
                     },
                     commandType: CommandType.StoredProcedure);
             }
@@ -278,6 +287,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     existing.StaffType = designation.StaffType ?? "Both";
                     existing.IsActive = designation.IsActive;
                     existing.UpdatedAt = DateTime.UtcNow;
+                    existing.CampusId = designation.CampusId;
 
                     _context.Designations.Update(existing);
                     await _context.SaveChangesAsync();
@@ -306,13 +316,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<DesignationSummaryDto> GetSummaryAsync()
+        public async Task<DesignationSummaryDto> GetSummaryAsync(int? campusId = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
                 var summary = await conn.QueryFirstOrDefaultAsync<DesignationSummaryDto>(
                     "sp_GetDesignationSummary",
+                    new { p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
 
                 if (summary != null) return summary;
@@ -321,10 +332,10 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             return new DesignationSummaryDto
             {
-                TotalDesignations = await _context.Designations.CountAsync(),
-                ActiveDesignations = await _context.Designations.CountAsync(d => d.IsActive),
-                InactiveDesignations = await _context.Designations.CountAsync(d => !d.IsActive),
-                AssignedStaffCount = await _context.Staffs.CountAsync(s => s.DesignationId.HasValue && s.DesignationId > 0 && !s.IsDeleted)
+                TotalDesignations = await _context.Designations.CountAsync(d => d.CampusId == campusId || d.CampusId == null),
+                ActiveDesignations = await _context.Designations.CountAsync(d => d.IsActive && (d.CampusId == campusId || d.CampusId == null)),
+                InactiveDesignations = await _context.Designations.CountAsync(d => !d.IsActive && (d.CampusId == campusId || d.CampusId == null)),
+                AssignedStaffCount = await _context.Staffs.CountAsync(s => s.DesignationId.HasValue && s.DesignationId > 0 && !s.IsDeleted && (s.CampusId == campusId || s.CampusId == null))
             };
         }
     }

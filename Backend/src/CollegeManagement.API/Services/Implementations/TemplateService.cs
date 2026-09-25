@@ -100,32 +100,34 @@ namespace CollegeManagement.API.Services.Implementations
             string? search,
             string? category,
             bool? isActive,
+            int? campusId = null,
             CancellationToken ct = default)
         {
-            return await _repository.GetAllAsync(pageNumber, pageSize, search, category, isActive, ct);
+            return await _repository.GetAllAsync(pageNumber, pageSize, search, category, isActive, campusId, ct);
         }
 
         public async Task<IReadOnlyList<TemplateResponseDto>> GetActiveTemplatesByCategoryAsync(
             string? category,
+            int? campusId = null,
             CancellationToken ct = default)
         {
-            var templates = await _repository.GetActiveByCategoryAsync(category, ct);
+            var templates = await _repository.GetActiveByCategoryAsync(category, campusId, ct);
             return templates.Select(MapToDto).ToList();
         }
 
-        public async Task<TemplateResponseDto?> GetTemplateByIdAsync(int id, CancellationToken ct = default)
+        public async Task<TemplateResponseDto?> GetTemplateByIdAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
-            var template = await _repository.GetByIdAsync(id, ct);
+            var template = await _repository.GetByIdAsync(id, campusId, ct);
             return template != null ? MapToDto(template) : null;
         }
 
-        public async Task<TemplateResponseDto?> GetTemplateByCodeAsync(string templateCode, CancellationToken ct = default)
+        public async Task<TemplateResponseDto?> GetTemplateByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default)
         {
-            var template = await _repository.GetByCodeAsync(templateCode, ct);
+            var template = await _repository.GetByCodeAsync(templateCode, campusId, ct);
             return template != null ? MapToDto(template) : null;
         }
 
-        public async Task<TemplateResponseDto> CreateTemplateAsync(CreateTemplateDto dto, CancellationToken ct = default)
+        public async Task<TemplateResponseDto> CreateTemplateAsync(CreateTemplateDto dto, int? campusId = null, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(dto.TemplateCode))
                 throw new ValidationException("Template code is required.");
@@ -138,7 +140,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             var cleanCode = dto.TemplateCode.Trim().ToUpperInvariant().Replace(" ", "_");
 
-            var exists = await _repository.ExistsByCodeAsync(cleanCode, null, ct);
+            var exists = await _repository.ExistsByCodeAsync(cleanCode, null, campusId, ct);
             if (exists)
                 throw new ValidationException($"Template with code '{cleanCode}' already exists.");
 
@@ -154,14 +156,15 @@ namespace CollegeManagement.API.Services.Implementations
                 IsActive = dto.IsActive,
                 Version = "1",
                 CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = DateTime.UtcNow,
+                CampusId = campusId
             };
 
             var created = await _repository.CreateAsync(template, ct);
             return MapToDto(created);
         }
 
-        public async Task<TemplateResponseDto?> UpdateTemplateAsync(int id, UpdateTemplateDto dto, CancellationToken ct = default)
+        public async Task<TemplateResponseDto?> UpdateTemplateAsync(int id, UpdateTemplateDto dto, int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0)
                 throw new ValidationException("Invalid template ID.");
@@ -172,7 +175,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (string.IsNullOrWhiteSpace(dto.ContentBody))
                 throw new ValidationException("Template content body is required.");
 
-            var existing = await _repository.GetByIdAsync(id, ct);
+            var existing = await _repository.GetByIdAsync(id, campusId, ct);
             if (existing == null) return null;
 
             var placeholders = ExtractPlaceholders(dto.ContentBody, dto.Placeholders);
@@ -184,27 +187,29 @@ namespace CollegeManagement.API.Services.Implementations
                 Category = string.IsNullOrWhiteSpace(dto.Category) ? existing.Category : dto.Category.Trim(),
                 ContentBody = dto.ContentBody,
                 PlaceholdersJson = JsonSerializer.Serialize(placeholders),
-                IsActive = dto.IsActive
+                IsActive = dto.IsActive,
+                CampusId = campusId
             };
 
-            var updated = await _repository.UpdateAsync(id, toUpdate, ct);
+            var updated = await _repository.UpdateAsync(id, toUpdate, campusId, ct);
             return updated != null ? MapToDto(updated) : null;
         }
 
-        public async Task<bool> DeleteTemplateAsync(int id, CancellationToken ct = default)
+        public async Task<bool> DeleteTemplateAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return false;
-            return await _repository.DeleteAsync(id, ct);
+            return await _repository.DeleteAsync(id, campusId, ct);
         }
 
-        public async Task<bool> ToggleTemplateActiveAsync(int id, CancellationToken ct = default)
+        public async Task<bool> ToggleTemplateActiveAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return false;
-            return await _repository.ToggleActiveAsync(id, ct);
+            return await _repository.ToggleActiveAsync(id, campusId, ct);
         }
 
         public async Task<RenderedTemplateResponseDto> RenderTemplateAsync(
             RenderCertificateTemplateRequestDto request,
+            int? campusId = null,
             CancellationToken ct = default)
         {
             if (request == null)
@@ -215,7 +220,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (!string.IsNullOrWhiteSpace(request.TemplateCode))
             {
                 var code = request.TemplateCode.Trim();
-                template = await _repository.GetByCodeAsync(code, ct);
+                template = await _repository.GetByCodeAsync(code, campusId, ct);
                 if (template == null)
                 {
                     var alias = code.ToUpperInvariant() switch
@@ -241,7 +246,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (template == null && request.TemplateId.HasValue && request.TemplateId.Value > 0)
             {
-                template = await _repository.GetByIdAsync(request.TemplateId.Value, ct);
+                template = await _repository.GetByIdAsync(request.TemplateId.Value, campusId, ct);
             }
 
             // Fallback default: BC or BONAFIDE_CERT or any first active Certificate template

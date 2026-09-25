@@ -37,12 +37,13 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? staffType = null,
             [FromQuery] string? type = null,
             [FromQuery] string? facultyType = null,
-            [FromQuery] int? departmentId = null)
+            [FromQuery] int? departmentId = null,
+            [FromQuery] int? campusId = null)
         {
             var effectiveStaffType = !string.IsNullOrWhiteSpace(staffType) 
                 ? staffType 
                 : (!string.IsNullOrWhiteSpace(type) ? type : facultyType);
-            var result = await _designationService.GetAllAsync(includeInactive, effectiveStaffType, departmentId);
+            var result = await _designationService.GetAllAsync(includeInactive, effectiveStaffType, departmentId, campusId);
             return Ok(result);
         }
 
@@ -66,9 +67,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("summary")]
         [ProducesResponseType(typeof(DesignationSummaryDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetSummary()
+        public async Task<IActionResult> GetSummary([FromQuery] int? campusId = null)
         {
-            var result = await _designationService.GetSummaryAsync();
+            var result = await _designationService.GetSummaryAsync(campusId);
             return Ok(result);
         }
 
@@ -80,9 +81,9 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(DesignationResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<IActionResult> Create([FromBody] CreateDesignationDto dto)
+        public async Task<IActionResult> Create([FromBody] CreateDesignationDto dto, [FromQuery] int? campusId = null)
         {
-            var result = await _designationService.CreateAsync(dto);
+            var result = await _designationService.CreateAsync(dto, campusId);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
 
@@ -95,9 +96,9 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdateDesignationDto dto)
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateDesignationDto dto, [FromQuery] int? campusId = null)
         {
-            var result = await _designationService.UpdateAsync(id, dto);
+            var result = await _designationService.UpdateAsync(id, dto, campusId);
             if (result == null) return NotFound(new { message = $"Designation with ID {id} not found." });
             return Ok(result);
         }
@@ -126,9 +127,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// Validate designation name uniqueness.
         /// </summary>
         [HttpGet("validate-name")]
-        public async Task<IActionResult> ValidateName([FromQuery] string name, [FromQuery] int? excludeId = null)
+        public async Task<IActionResult> ValidateName([FromQuery] string name, [FromQuery] int? excludeId = null, [FromQuery] int? campusId = null)
         {
-            var isValid = await _designationService.ValidateNameAsync(name, excludeId);
+            var isValid = await _designationService.ValidateNameAsync(name, excludeId, campusId);
             return Ok(new { isValid, message = isValid ? "Name is available." : "Name is already in use." });
         }
 
@@ -139,13 +140,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("import-excel")]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> ImportExcel([FromForm] DesignationImportExcelRequestDto dto)
+        public async Task<IActionResult> ImportExcel([FromForm] DesignationImportExcelRequestDto dto, [FromQuery] int? campusId = null)
         {
             if (dto.File == null || dto.File.Length == 0)
             {
                 return BadRequest(new { message = "Please provide a valid Excel file (.xlsx or .xls)." });
             }
-            var result = await _designationService.ImportDesignationsFromExcelAsync(dto.File, dto.DefaultStaffType, dto.DefaultDepartmentId);
+            var result = await _designationService.ImportDesignationsFromExcelAsync(dto.File, dto.DefaultStaffType, dto.DefaultDepartmentId, campusId);
             return Ok(result);
         }
 
@@ -155,20 +156,20 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPost("import")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> ImportDesignations([FromForm] DesignationImportExcelRequestDto? formDto, [FromBody] DesignationBulkImportRequestDto? jsonDto)
+        public async Task<IActionResult> ImportDesignations([FromForm] DesignationImportExcelRequestDto? formDto, [FromBody] DesignationBulkImportRequestDto? jsonDto, [FromQuery] int? campusId = null)
         {
             if (Request.HasFormContentType && Request.Form.Files.Count > 0)
             {
                 var file = Request.Form.Files[0];
                 var staffType = Request.Form["defaultStaffType"].FirstOrDefault() ?? Request.Form["staffType"].FirstOrDefault();
                 int? deptId = int.TryParse(Request.Form["defaultDepartmentId"].FirstOrDefault() ?? Request.Form["departmentId"].FirstOrDefault(), out int id) ? id : null;
-                var result = await _designationService.ImportDesignationsFromExcelAsync(file, staffType, deptId);
+                var result = await _designationService.ImportDesignationsFromExcelAsync(file, staffType, deptId, campusId);
                 return Ok(result);
             }
 
             if (jsonDto != null && jsonDto.Designations != null && jsonDto.Designations.Any())
             {
-                var result = await _designationService.BulkImportDesignationsAsync(jsonDto.Designations, jsonDto.DefaultStaffType);
+                var result = await _designationService.BulkImportDesignationsAsync(jsonDto.Designations, jsonDto.DefaultStaffType, campusId);
                 return Ok(result);
             }
 
@@ -182,13 +183,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("bulk")]
         [HttpPost("bulk-import")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> BulkImport([FromBody] List<CreateDesignationDto> dtos, [FromQuery] string? staffType = null)
+        public async Task<IActionResult> BulkImport([FromBody] List<CreateDesignationDto> dtos, [FromQuery] string? staffType = null, [FromQuery] int? campusId = null)
         {
             if (dtos == null || !dtos.Any())
             {
                 return BadRequest(new { message = "Designation list cannot be empty." });
             }
-            var result = await _designationService.BulkImportDesignationsAsync(dtos, staffType);
+            var result = await _designationService.BulkImportDesignationsAsync(dtos, staffType, campusId);
             return Ok(result);
         }
 
@@ -198,10 +199,10 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("export-template")]
         [HttpGet("template")]
-        public async Task<IActionResult> DownloadTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null)
+        public async Task<IActionResult> DownloadTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
         {
             var effectiveStaffType = staffType ?? type;
-            var (bytes, contentType, fileName) = await _designationService.GenerateDesignationTemplateExcelAsync(effectiveStaffType);
+            var (bytes, contentType, fileName) = await _designationService.GenerateDesignationTemplateExcelAsync(effectiveStaffType, campusId);
             return File(bytes, contentType, fileName);
         }
 
@@ -214,10 +215,11 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> ExportExcel(
             [FromQuery] string? staffType = null,
             [FromQuery] string? type = null,
-            [FromQuery] int? departmentId = null)
+            [FromQuery] int? departmentId = null,
+            [FromQuery] int? campusId = null)
         {
             var effectiveStaffType = staffType ?? type;
-            var (bytes, contentType, fileName) = await _designationService.ExportDesignationsExcelAsync(effectiveStaffType, departmentId);
+            var (bytes, contentType, fileName) = await _designationService.ExportDesignationsExcelAsync(effectiveStaffType, departmentId, campusId);
             return File(bytes, contentType, fileName);
         }
     }

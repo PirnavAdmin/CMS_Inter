@@ -48,7 +48,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicYearId = request.AcademicYearId,
                     p_AcademicLevelId = request.AcademicLevelId,
                     p_GroupId = request.GroupId,
-                    p_ProgramId = request.ProgramId
+                    p_ProgramId = request.ProgramId,
+                    p_CampusId = request.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -136,7 +137,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     AcademicYearId = request.AcademicYearId,
                     AcademicLevelId = request.AcademicLevelId,
                     GroupId = request.GroupId,
-                    ProgramId = request.ProgramId
+                    ProgramId = request.ProgramId,
+                    CampusId = request.CampusId
                 };
 
             var preview = await PreviewSectionAllocationAsync(filter);
@@ -181,7 +183,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicYearId = request.AcademicYearId,
                     p_AcademicLevelId = request.AcademicLevelId,
                     p_GroupId = request.GroupId,
-                    p_ProgramId = request.ProgramId
+                    p_ProgramId = request.ProgramId,
+                    p_CampusId = request.CampusId
                 },
                 commandType: CommandType.StoredProcedure)).ToList();
 
@@ -247,7 +250,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     AcademicYearId = request.AcademicYearId,
                     AcademicLevelId = request.AcademicLevelId,
                     GroupId = request.GroupId,
-                    ProgramId = request.ProgramId
+                    ProgramId = request.ProgramId,
+                    CampusId = request.CampusId
                 };
 
             var preview = await PreviewRollNumberAllocationAsync(filter);

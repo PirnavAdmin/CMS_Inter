@@ -192,10 +192,18 @@ const withFallbackNotice = (data, usingFallback = true, error = null) => ({
   },
 });
 
-export async function getRoles() {
+export async function getRoles(filters = {}) {
   if (rbacEndpoints.roles) {
     try {
-      const response = await apiClient.get(rbacEndpoints.roles, { skipGlobalLoader: true });
+      const params = {};
+      if (filters?.campusId) params.campusId = filters.campusId;
+      if (filters?.boardId) params.boardId = filters.boardId;
+      if (filters?.academicYearId) params.academicYearId = filters.academicYearId;
+
+      const response = await apiClient.get(rbacEndpoints.roles, {
+        params: Object.keys(params).length ? params : undefined,
+        skipGlobalLoader: true,
+      });
       const apiRoles = normalizeApiArray(response.data).map(normalizeRole).filter((role) => role.name);
       if (apiRoles.length) {
         const seedsByCode = new Map(ROLE_SEEDS.map((role) => [role.code, role]));
@@ -342,14 +350,23 @@ export async function updateRolePermissions(roleId, payload) {
   return withFallbackNotice(normalized);
 }
 
-export async function getRoleMembers(roleId, roleCode) {
+export async function getRoleMembers(roleId, roleCode, filters = {}) {
   const numericRoleId = resolveRoleId(roleId);
   if (rbacEndpoints.roleMembers && numericRoleId) {
     try {
       const endpoint = typeof rbacEndpoints.roleMembers === "function"
         ? rbacEndpoints.roleMembers(numericRoleId, roleCode)
         : `${rbacEndpoints.roleMembers}/${numericRoleId}/members`;
-      const response = await apiClient.get(endpoint, { skipGlobalLoader: true });
+
+      const params = {};
+      if (filters?.campusId) params.campusId = filters.campusId;
+      if (filters?.boardId) params.boardId = filters.boardId;
+      if (filters?.academicYearId) params.academicYearId = filters.academicYearId;
+
+      const response = await apiClient.get(endpoint, {
+        params: Object.keys(params).length ? params : undefined,
+        skipGlobalLoader: true,
+      });
       const members = normalizeApiArray(response.data);
       return withFallbackNotice(members, false);
     } catch (error) {
@@ -437,14 +454,19 @@ const normalizeUserAssignment = (u) => ({
 export async function getUserRoleAssignments(params = {}) {
   if (rbacEndpoints.userAssignments) {
     try {
+      const queryParams = {
+        search: params.search || "",
+        roleId: params.roleId ? resolveRoleId(params.roleId) : undefined,
+        userType: params.userType || undefined,
+        campusId: params.campusId || undefined,
+        boardId: params.boardId || undefined,
+        academicYearId: params.academicYearId || undefined,
+        pageNumber: params.page || 1,
+        pageSize: params.pageSize || 8,
+      };
+
       const response = await apiClient.get(rbacEndpoints.userAssignments, {
-        params: {
-          search: params.search || "",
-          roleId: params.roleId ? resolveRoleId(params.roleId) : undefined,
-          userType: params.userType || undefined,
-          pageNumber: params.page || 1,
-          pageSize: params.pageSize || 8,
-        },
+        params: queryParams,
         skipGlobalLoader: true,
       });
       const data = response.data?.data ?? response.data;

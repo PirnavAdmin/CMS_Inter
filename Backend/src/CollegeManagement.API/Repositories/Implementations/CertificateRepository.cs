@@ -298,6 +298,7 @@ public class CertificateRepository : ICertificateRepository
             tParams.Add("p_CodeGuess", codeGuess, DbType.String);
             tParams.Add("p_CanonicalType", canonicalType, DbType.String);
             tParams.Add("p_RawType", certType.Trim(), DbType.String);
+            tParams.Add("p_CampusId", campusId, DbType.Int32);
 
             var dbTemplate = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
                 "sp_GetTemplateForCertificate",

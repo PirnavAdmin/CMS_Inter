@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs
 {
@@ -12,6 +12,7 @@ namespace CollegeManagement.API.DTOs
         public int AcademicLevelId { get; set; }
         public int GroupId { get; set; }
         public int ProgramId { get; set; }
+        public int? CampusId { get; set; }
     }
 
 
@@ -64,6 +65,8 @@ namespace CollegeManagement.API.DTOs
         public int GroupId { get; set; }
 
         public int ProgramId { get; set; }
+
+        public int? CampusId { get; set; }
     }
 
 
