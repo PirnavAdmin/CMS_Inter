@@ -351,6 +351,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (!sourceSlots.Any())
                 return;
 
+            var targetSection = await _context.Sections.FindAsync(dto.TargetSectionId);
+
             // Remove existing slots in the target section for the target academic year before copying
             var existingTargetSlots = await _context.Timetables
                 .Where(t => t.SectionId == dto.TargetSectionId && t.AcademicYearId == dto.TargetAcademicYearId)
@@ -363,7 +365,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var targetSlots = sourceSlots.Select(s => new Timetable
             {
-                CampusId = s.CampusId,
+                CampusId = targetSection?.CampusId ?? s.CampusId,
                 BoardId = s.BoardId,
                 AcademicLevelId = s.AcademicLevelId,
                 AcademicYearId = dto.TargetAcademicYearId,
