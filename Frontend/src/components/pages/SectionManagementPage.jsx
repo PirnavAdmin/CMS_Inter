@@ -21,6 +21,7 @@ import { Skeleton, SkeletonRow } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout";
 import "./SectionManagementPage.css";
 
@@ -56,6 +57,45 @@ const normalizeEntityList = (response, normalize) => {
   const items = unwrapList(response).map(normalize);
   if (items.some((item) => !item.id)) throw new Error("Backend data contains a record without an ID. Please reload and try again.");
   return items;
+};
+
+const normalizeCampus = (item) => {
+  if (!item || typeof item !== "object") return item;
+  const rawId = item.campusId ?? item.id ?? item.CampusId ?? item.Id;
+  const id = rawId != null ? String(rawId) : "";
+  const numericId = typeof rawId === "number" ? rawId : parseInt(rawId, 10) || 0;
+  const name = getFirstNonEmptyString(item.campusName, item.name, item.CampusName, item.Name);
+  const code = getFirstNonEmptyString(item.campusCode, item.code, item.CampusCode, item.Code);
+  const affiliatedBoards = Array.isArray(item.affiliatedBoards)
+    ? item.affiliatedBoards
+    : Array.isArray(item.AffiliatedBoards)
+      ? item.AffiliatedBoards
+      : [];
+  const boardIds = Array.isArray(item.boardIds)
+    ? item.boardIds.map((bid) => Number(bid)).filter((bid) => !isNaN(bid))
+    : Array.isArray(item.BoardIds)
+      ? item.BoardIds.map((bid) => Number(bid)).filter((bid) => !isNaN(bid))
+      : affiliatedBoards.map((b) => Number(b.boardId ?? b.id)).filter((bid) => !isNaN(bid));
+  const boards = affiliatedBoards.length > 0
+    ? affiliatedBoards.map((b) => b.boardName || b.name || b.boardCode || b.code)
+    : Array.isArray(item.boards)
+      ? item.boards
+      : [];
+  return {
+    ...item,
+    id: id || String(numericId),
+    campusId: numericId || Number(id) || id,
+    name,
+    campusName: name,
+    code,
+    campusCode: code,
+    isActive: isActiveRecord(item, true),
+    status: item.status ?? (isActiveRecord(item, true) ? "Active" : "Inactive"),
+    affiliatedBoards,
+    boardIds,
+    boards,
+    isHQ: Boolean(item.isHQ ?? item.IsHQ ?? false),
+  };
 };
 
 const normalizeBoard = (item) => ({
@@ -127,7 +167,8 @@ const normalizeTeacher = (item) => ({
 
 const normalizeRoom = (item) => ({
   ...item,
-  id: normalizeId(item.roomId ?? item.id),
+  id: normalizeId(item.roomId ?? item.id ?? item.RoomId ?? item.Id),
+  campusId: normalizeId(item.campusId ?? item.CampusId),
   roomNo: getFirstNonEmptyString(item.roomNumber, item.roomNo, item.roomCode, item.name, item.room),
   capacity: item.capacity ?? 0,
   roomType: getFirstNonEmptyString(item.roomType),
@@ -140,24 +181,25 @@ const normalizeRoom = (item) => ({
 
 const normalizeSection = (item) => ({
   ...item,
-  id: normalizeId(item.sectionId ?? item.id),
-  boardId: normalizeId(item.boardId),
+  id: normalizeId(item.sectionId ?? item.id ?? item.SectionId ?? item.Id),
+  campusId: normalizeId(item.campusId ?? item.CampusId),
+  boardId: normalizeId(item.boardId ?? item.BoardId),
   board: getFirstNonEmptyString(item.boardName, item.board),
   boardCode: getFirstNonEmptyString(item.boardCode),
-  academicYearId: normalizeId(item.academicYearId),
+  academicYearId: normalizeId(item.academicYearId ?? item.AcademicYearId),
   academicYear: getFirstNonEmptyString(item.academicYearName, item.academicYear),
-  academicLevelId: normalizeId(item.academicLevelId),
+  academicLevelId: normalizeId(item.academicLevelId ?? item.AcademicLevelId),
   academicLevel: getFirstNonEmptyString(item.academicLevel, item.academicLevelName, item.levelName, item.yearOfStudy),
-  groupId: normalizeId(item.groupId),
+  groupId: normalizeId(item.groupId ?? item.GroupId),
   group: getFirstNonEmptyString(item.groupName, item.group),
   groupProgramId: normalizeId(item.groupProgramId),
-  programId: normalizeId(item.programId ?? item.groupProgramId),
+  programId: normalizeId(item.programId ?? item.groupProgramId ?? item.ProgramId),
   program: getFirstNonEmptyString(item.programName, item.programme, item.program),
-  name: getFirstNonEmptyString(item.sectionName, item.name),
-  roomId: normalizeId(item.roomId),
+  name: getFirstNonEmptyString(item.sectionName, item.name, item.SectionName),
+  roomId: normalizeId(item.roomId ?? item.RoomId),
   roomNo: getFirstNonEmptyString(item.roomNumber, item.roomName, item.room),
   block: getFirstNonEmptyString(item.blockName, item.buildingName, item.building, item.block),
-  classTeacherId: normalizeId(item.inchargeId ?? item.classTeacherId ?? item.teacherId ?? item.facultyId),
+  classTeacherId: normalizeId(item.inchargeId ?? item.classTeacherId ?? item.teacherId ?? item.facultyId ?? item.InchargeId),
   teacher: getFirstNonEmptyString(item.inchargeName, item.classTeacherName, item.facultyName, item.teacher, item.incharge),
   facultyEmployeeId: getFirstNonEmptyString(item.facultyEmployeeId, item.employeeId, item.employeeCode),
   strength: Number(item.maximumStrength ?? item.capacity ?? item.strength ?? 0),
@@ -176,10 +218,11 @@ const ROOM_ENDPOINTS = {
 };
 const SECTION_BULK_ENDPOINT = apiEndpoints.sections.bulk;
 
-const sectionPayload = (form, context = form) => {
+const sectionPayload = (form, context = form, campusId) => {
   const program = context.program;
   const teacherId = form.classTeacherId ? Number(form.classTeacherId) : null;
-  return {
+  const targetCampusId = campusId ?? context.campusId ?? form.campusId;
+  const payload = {
     boardId: Number(context.boardId),
     academicYearId: Number(context.academicYearId),
     academicLevelId: Number(context.academicLevelId),
@@ -191,20 +234,31 @@ const sectionPayload = (form, context = form) => {
     maximumStrength: Number(form.strength),
     isActive: form.status === "Active",
   };
+  if (targetCampusId != null && String(targetCampusId).trim() !== "") {
+    payload.campusId = Number(targetCampusId);
+  }
+  return payload;
 };
 
-const roomPayload = (form) => ({
-  roomNumber: form.roomNo.trim(),
-  capacity: Number(form.capacity),
-  roomType: form.roomType,
-  building: form.building.trim(),
-  floor: String(form.floor).trim(),
-  isActive: form.isActive === "Active",
-});
+const roomPayload = (form, campusId) => {
+  const targetCampusId = campusId ?? form.campusId;
+  const payload = {
+    roomNumber: form.roomNo.trim(),
+    capacity: Number(form.capacity),
+    roomType: form.roomType,
+    building: form.building.trim(),
+    floor: String(form.floor).trim(),
+    isActive: form.isActive === "Active",
+  };
+  if (targetCampusId != null && String(targetCampusId).trim() !== "") {
+    payload.campusId = Number(targetCampusId);
+  }
+  return payload;
+};
 
 const sameText = (a, b) => String(a ?? "").trim().replace(/\s+/g, " ").toLowerCase() === String(b ?? "").trim().replace(/\s+/g, " ").toLowerCase();
-const matchesRoom = (room, payload) => room.id && sameText(room.roomNo, payload.roomNumber) && Number(room.capacity) === payload.capacity && sameText(room.building, payload.building) && sameText(room.floor, payload.floor) && room.roomType === payload.roomType && (room.statusKnown === false || room.isActive === payload.isActive);
-const matchesSection = (section, payload) => section.id && sameText(section.name, payload.sectionName) && ["boardId", "academicYearId", "academicLevelId", "groupId", "programId", "roomId"].every((key) => normalizeId(section[key]) === normalizeId(payload[key])) && normalizeId(section.classTeacherId) === normalizeId(payload.inchargeId) && Number(section.strength) === payload.maximumStrength && (section.statusKnown === false || section.isActive === payload.isActive);
+const matchesRoom = (room, payload) => room.id && sameText(room.roomNo, payload.roomNumber) && Number(room.capacity) === payload.capacity && sameText(room.building, payload.building) && sameText(room.floor, payload.floor) && room.roomType === payload.roomType && (!payload.campusId || !room.campusId || normalizeId(room.campusId) === normalizeId(payload.campusId)) && (room.statusKnown === false || room.isActive === payload.isActive);
+const matchesSection = (section, payload) => section.id && sameText(section.name, payload.sectionName) && ["boardId", "academicYearId", "academicLevelId", "groupId", "programId", "roomId"].every((key) => normalizeId(section[key]) === normalizeId(payload[key])) && (!payload.campusId || !section.campusId || normalizeId(section.campusId) === normalizeId(payload.campusId)) && normalizeId(section.classTeacherId) === normalizeId(payload.inchargeId) && Number(section.strength) === payload.maximumStrength && (section.statusKnown === false || section.isActive === payload.isActive);
 const verifyBulkResult = (response, count) => {
   const result = response?.data?.data ?? response?.data;
   if (result?.errors?.length) throw new Error(result.errors.join(" "));
@@ -650,6 +704,13 @@ function BulkRoomAllocationPreview({ allocations, requested, errors, onChange, p
 
 export default function SectionManagementPage() {
   const {
+    campuses: contextCampuses,
+    activeCampuses,
+    selectedCampus,
+    selectedCampusId,
+  } = useCampusContext();
+
+  const {
     selectedBoard,
     selectedBoardId,
     selectedAcademicYear,
@@ -659,6 +720,7 @@ export default function SectionManagementPage() {
   // First Tab is Room Management ("rooms"), Second Tab is Section Management ("sections")
   const [activeTab, setActiveTab] = useState("rooms");
 
+  const [campusesList, setCampusesList] = useState([]);
   const [boardsList, setBoardsList] = useState([]);
   const [academicYearsList, setAcademicYearsList] = useState([]);
   const [academicLevelsList, setAcademicLevelsList] = useState([]);
@@ -700,15 +762,86 @@ export default function SectionManagementPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
+  const effectiveCampuses = useMemo(() => {
+    if (campusesList.length > 0) return campusesList;
+    if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
+    return (contextCampuses || []).filter((c) => c && c.isActive !== false && String(c.status || "").toLowerCase() !== "inactive");
+  }, [campusesList, activeCampuses, contextCampuses]);
+
+  const effectiveCampus = useMemo(() => {
+    if (!effectiveCampuses.length) return selectedCampus || null;
+    const targetId = normalizeId(selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId);
+    return (
+      effectiveCampuses.find((c) => normalizeId(c.id) === targetId || normalizeId(c.campusId) === targetId) ||
+      effectiveCampuses.find((c) => c.isHQ) ||
+      effectiveCampuses[0] ||
+      selectedCampus ||
+      null
+    );
+  }, [effectiveCampuses, selectedCampusId, selectedCampus]);
+
+  const effectiveCampusId = useMemo(() => {
+    if (!effectiveCampus) return "";
+    return normalizeId(effectiveCampus.campusId ?? effectiveCampus.id);
+  }, [effectiveCampus]);
+
+  const campusBoards = useMemo(() => {
+    if (!effectiveCampus) return boardsList;
+
+    const affiliated = Array.isArray(effectiveCampus.affiliatedBoards) && effectiveCampus.affiliatedBoards.length > 0
+      ? effectiveCampus.affiliatedBoards
+      : [];
+
+    const boardIds = Array.isArray(effectiveCampus.boardIds) && effectiveCampus.boardIds.length > 0
+      ? effectiveCampus.boardIds.map((id) => normalizeId(id))
+      : affiliated.map((b) => normalizeId(b.boardId ?? b.id)).filter(Boolean);
+
+    if (!affiliated.length && !boardIds.length) {
+      return boardsList;
+    }
+
+    const matched = boardsList.filter((b) => {
+      const bId = normalizeId(b.id ?? b.boardId);
+      const bCode = String(b.code || "").trim().toLowerCase();
+      const bName = String(b.name || "").trim().toLowerCase();
+
+      const matchesAffiliated = affiliated.some((aff) => {
+        const affId = normalizeId(aff.boardId ?? aff.id);
+        const affCode = String(aff.boardCode ?? aff.code ?? "").trim().toLowerCase();
+        const affName = String(aff.boardName ?? aff.name ?? "").trim().toLowerCase();
+        return (affId && affId === bId) || (affCode && affCode === bCode) || (affName && affName === bName);
+      });
+
+      const matchesId = boardIds.length > 0 && boardIds.includes(bId);
+      return matchesAffiliated || matchesId;
+    });
+
+    if (matched.length > 0) return matched;
+
+    if (affiliated.length > 0) {
+      return affiliated.map((item) => normalizeBoard({
+        ...item,
+        id: item.boardId ?? item.id,
+        boardId: item.boardId ?? item.id,
+        name: item.boardName ?? item.name,
+        code: item.boardCode ?? item.code,
+        isActive: true,
+      }));
+    }
+
+    return boardsList;
+  }, [boardsList, effectiveCampus]);
+
   const effectiveNavbarBoard = useMemo(() => {
-    if (!boardsList.length) return null;
-    return boardsList.find(
+    const pool = campusBoards.length ? campusBoards : boardsList;
+    if (!pool.length) return null;
+    return pool.find(
       (b) =>
         normalizeId(b.id) === normalizeId(selectedBoardId) ||
         (selectedBoard?.code && String(b.code || "").trim().toLowerCase() === String(selectedBoard.code).trim().toLowerCase()) ||
         (selectedBoard?.name && String(b.name || "").trim().toLowerCase() === String(selectedBoard.name).trim().toLowerCase())
-    ) || boardsList[0] || null;
-  }, [boardsList, selectedBoardId, selectedBoard]);
+    ) || pool[0] || null;
+  }, [campusBoards, boardsList, selectedBoardId, selectedBoard]);
 
   const effectiveNavbarYear = useMemo(() => {
     if (!academicYearsList.length || !effectiveNavbarBoard) return null;
@@ -837,18 +970,24 @@ export default function SectionManagementPage() {
     }, 3500);
   }, []);
 
-  const loadRooms = useCallback(async () => {
-    const response = await apiClient.get(apiEndpoints.rooms.getAll);
-    const next = normalizeEntityList(response, normalizeRoom);
-    next.sort((a, b) => {
-      const numA = Number(a.id);
-      const numB = Number(b.id);
-      if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA !== numB) return numB - numA;
-      return 0;
-    });
-    setRooms(next);
-    return next;
-  }, []);
+  const loadRooms = useCallback(async (targetCampusId = effectiveCampusId) => {
+    try {
+      const params = targetCampusId ? { campusId: targetCampusId } : undefined;
+      const response = await apiClient.get(apiEndpoints.rooms.getAll, { params });
+      const next = normalizeEntityList(response, normalizeRoom);
+      next.sort((a, b) => {
+        const numA = Number(a.id);
+        const numB = Number(b.id);
+        if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA !== numB) return numB - numA;
+        return 0;
+      });
+      setRooms(next);
+      return next;
+    } catch (err) {
+      console.warn("Could not load rooms:", err);
+      return [];
+    }
+  }, [effectiveCampusId]);
 
   const loadStudentCounts = useCallback(async () => {
     try {
@@ -871,19 +1010,25 @@ export default function SectionManagementPage() {
     }
   }, []);
 
-  const loadSections = useCallback(async () => {
-    const response = await apiClient.get(apiEndpoints.sections.getAll);
-    const next = normalizeEntityList(response, normalizeSection);
-    next.sort((a, b) => {
-      const numA = Number(a.id);
-      const numB = Number(b.id);
-      if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA !== numB) return numB - numA;
-      return 0;
-    });
-    setSections(next);
-    loadStudentCounts();
-    return next;
-  }, [loadStudentCounts]);
+  const loadSections = useCallback(async (targetCampusId = effectiveCampusId) => {
+    try {
+      const params = targetCampusId ? { campusId: targetCampusId } : undefined;
+      const response = await apiClient.get(apiEndpoints.sections.getAll, { params });
+      const next = normalizeEntityList(response, normalizeSection);
+      next.sort((a, b) => {
+        const numA = Number(a.id);
+        const numB = Number(b.id);
+        if (!Number.isNaN(numA) && !Number.isNaN(numB) && numA !== numB) return numB - numA;
+        return 0;
+      });
+      setSections(next);
+      loadStudentCounts();
+      return next;
+    } catch (err) {
+      console.warn("Could not load sections:", err);
+      return [];
+    }
+  }, [effectiveCampusId, loadStudentCounts]);
 
   useEffect(() => {
     let active = true;
@@ -891,6 +1036,7 @@ export default function SectionManagementPage() {
     const groupRequests = groupRequestRef;
     const programRequests = programRequestRef;
     Promise.allSettled([
+      apiClient.get(apiEndpoints.campuses.list, { params: { isActive: true } }),
       apiClient.get(apiEndpoints.boards.getAll, { params: { Status: true, PageNumber: 1, PageSize: 100 } }),
       apiClient.get(apiEndpoints.academicYears.active),
       apiClient.get(apiEndpoints.rooms.getAll),
@@ -899,8 +1045,12 @@ export default function SectionManagementPage() {
       apiClient.get(apiEndpoints.students.getAll),
     ]).then((results) => {
       if (!active) return;
-      const [boardsResult, yearsResult, roomsResult, sectionsResult, staffResult, studentsResult] = results;
-      if (boardsResult.status === "fulfilled") {
+      const [campusesResult, boardsResult, yearsResult, roomsResult, sectionsResult, staffResult, studentsResult] = results;
+      if (campusesResult?.status === "fulfilled") {
+        const loadedCampuses = unwrapList(campusesResult.value).map(normalizeCampus).filter((item) => item.id && item.isActive);
+        setCampusesList(loadedCampuses);
+      }
+      if (boardsResult?.status === "fulfilled") {
         const loadedBoards = unwrapList(boardsResult.value).map(normalizeBoard).filter((item) => item.id && item.isActive);
         setBoardsList(loadedBoards);
         const embeddedLevels = loadedBoards.flatMap(embeddedBoardLevels);
@@ -914,8 +1064,8 @@ export default function SectionManagementPage() {
           });
         }
       }
-      if (yearsResult.status === "fulfilled") setAcademicYearsList(unwrapList(yearsResult.value).map(normalizeYear).filter((item) => item.id && item.isActive));
-      if (roomsResult.status === "fulfilled") {
+      if (yearsResult?.status === "fulfilled") setAcademicYearsList(unwrapList(yearsResult.value).map(normalizeYear).filter((item) => item.id && item.isActive));
+      if (roomsResult?.status === "fulfilled") {
         const fetchedRooms = normalizeEntityList(roomsResult.value, normalizeRoom);
         fetchedRooms.sort((a, b) => {
           const numA = Number(a.id);
@@ -925,7 +1075,7 @@ export default function SectionManagementPage() {
         });
         setRooms(fetchedRooms);
       }
-      if (sectionsResult.status === "fulfilled") {
+      if (sectionsResult?.status === "fulfilled") {
         const fetchedSections = normalizeEntityList(sectionsResult.value, normalizeSection);
         fetchedSections.sort((a, b) => {
           const numA = Number(a.id);
@@ -949,7 +1099,7 @@ export default function SectionManagementPage() {
           return Array.from(map.values());
         });
       }
-      if (staffResult.status === "fulfilled") {
+      if (staffResult?.status === "fulfilled") {
         const staffData = unwrapList(staffResult.value).map(normalizeTeacher);
         const teachingStaff = staffData.filter(
           (item) => item.isActive && String(item.staffType || "Teaching").toLowerCase() === "teaching"
@@ -976,6 +1126,13 @@ export default function SectionManagementPage() {
     }).catch((error) => { if (active) say(getApiErrorMessage(error)); }).finally(() => { if (active) setInitialLoading(false); });
     return () => { active = false; ++boardRequests.current; ++groupRequests.current; ++programRequests.current; if (toastTimer.current) clearTimeout(toastTimer.current); };
   }, [say]);
+
+  // Reactive refresh when navbar campus changes
+  useEffect(() => {
+    if (initialLoading) return;
+    loadRooms(effectiveCampusId);
+    loadSections(effectiveCampusId);
+  }, [effectiveCampusId, loadRooms, loadSections, initialLoading]);
 
   const loadPrograms = useCallback(async (groupId, programId = "") => {
     const requestId = ++programRequestRef.current;
@@ -1039,7 +1196,8 @@ export default function SectionManagementPage() {
 
   const loadBoardDependencies = useCallback(async (boardId, preserve = {}) => {
     const requestId = ++boardRequestRef.current;
-    const board = boardsList.find((item) => item.isActive && item.id === normalizeId(boardId));
+    const pool = campusBoards.length ? campusBoards : boardsList;
+    const board = pool.find((item) => item.isActive && item.id === normalizeId(boardId));
     const embedded = embeddedBoardLevels(board);
     setAcademicLevelsList(embedded);
     setSectionForm((current) => ({
@@ -1072,7 +1230,7 @@ export default function SectionManagementPage() {
       if (requestId === boardRequestRef.current) setDependentLoading((current) => ({ ...current, board: false }));
       await groupsRequest;
     }
-  }, [boardsList, academicYearsList, loadGroups, say]);
+  }, [campusBoards, boardsList, academicYearsList, loadGroups, say]);
 
   // Lookup maps
   const boardsById = useMemo(() => new Map(boardsList.map((b) => [String(b.id), b])), [boardsList]);
@@ -1117,13 +1275,23 @@ export default function SectionManagementPage() {
     };
   }, [boardsById, yearsById, levelsById, groupsById, programsById, roomsById, teachersById]);
 
-  const roomAllowed = (room, row, otherRows = []) => Boolean(room?.id && room.isActive && room.roomType === "Classroom" &&
+  const campusRooms = useMemo(() => {
+    if (!effectiveCampusId) return rooms;
+    return rooms.filter((r) => !r.campusId || normalizeId(r.campusId) === effectiveCampusId);
+  }, [rooms, effectiveCampusId]);
+
+  const roomAllowed = (room, row, otherRows = []) => Boolean(
+    room?.id &&
+    room.isActive &&
+    room.roomType === "Classroom" &&
+    (!effectiveCampusId || !room.campusId || normalizeId(room.campusId) === effectiveCampusId) &&
     (row.status !== "Active" || (![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
-      .some((section) => section.status === "Active" && normalizeId(section.roomId) === normalizeId(room.id)))));
+      .some((section) => section.status === "Active" && normalizeId(section.roomId) === normalizeId(room.id))))
+  );
   const teacherAllowed = (teacher, row, otherRows = []) => isTeachingStaff(teacher) &&
     (row.status !== "Active" || ![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
       .some((section) => section.status === "Active" && normalizeId(section.classTeacherId) === normalizeId(teacher.id)));
-  const roomOptionsFor = (row, others = []) => rooms.filter((room) => roomAllowed(room, row, others))
+  const roomOptionsFor = (row, others = []) => campusRooms.filter((room) => roomAllowed(room, row, others))
     .map((room) => ({ value: normalizeId(room.id), label: room.roomNo + " (Cap: " + room.capacity + ")" }));
   const teacherOptionsFor = (row, others = []) => teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
     .map((teacher) => ({ value: normalizeId(teacher.id), label: teacher.employeeId ? teacher.name + " (" + teacher.employeeId + ")" : teacher.name }));
@@ -1133,7 +1301,7 @@ export default function SectionManagementPage() {
   const availableRooms = previewOption(roomOptionsFor(sectionForm), sectionForm.roomId, previewSection?.roomNo || "Current Room");
   const availableTeachers = previewOption(teacherOptionsFor(sectionForm), sectionForm.classTeacherId, previewSection?.teacher || "Current Incharge");
 
-  const bulkRoomOptionsFor = (row, others = []) => rooms.filter((room) => roomAllowed(room, row, others))
+  const bulkRoomOptionsFor = (row, others = []) => campusRooms.filter((room) => roomAllowed(room, row, others))
     .map((room) => ({ value: normalizeId(room.id), label: String(room.roomNo) }));
   const bulkTeacherOptionsFor = (row, others = []) => teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
     .map((teacher) => ({ value: normalizeId(teacher.id), label: teacher.name }));
@@ -1144,6 +1312,7 @@ export default function SectionManagementPage() {
   const filteredSections = useMemo(() => {
     const q = search.trim().toLowerCase();
     return sections.filter((sec) => {
+      if (effectiveCampusId && sec.campusId && normalizeId(sec.campusId) !== effectiveCampusId) return false;
       const d = resolveSection(sec);
       if (filters.boardId && normalizeId(sec.boardId) !== normalizeId(filters.boardId)) return false;
       if (filters.academicYearId && normalizeId(sec.academicYearId) !== normalizeId(filters.academicYearId)) return false;
@@ -1166,7 +1335,7 @@ export default function SectionManagementPage() {
         sec.status,
       ].some((val) => String(val || "").toLowerCase().includes(q));
     });
-  }, [sections, filters, search, resolveSection]);
+  }, [sections, filters, search, resolveSection, effectiveCampusId]);
 
   const sectionPages = Math.max(1, Math.ceil(filteredSections.length / (sectionPageSize || 5)));
   const shownSections = filteredSections.slice((page - 1) * (sectionPageSize || 5), page * (sectionPageSize || 5));
@@ -1174,6 +1343,7 @@ export default function SectionManagementPage() {
   const filteredRooms = useMemo(() => {
     const q = roomSearch.trim().toLowerCase();
     return rooms.filter((r) => {
+      if (effectiveCampusId && r.campusId && normalizeId(r.campusId) !== effectiveCampusId) return false;
       if (roomFilters.building && r.building !== roomFilters.building) return false;
       if (roomFilters.floor && String(r.floor) !== roomFilters.floor) return false;
       if (roomFilters.roomType && r.roomType !== roomFilters.roomType) return false;
@@ -1187,7 +1357,7 @@ export default function SectionManagementPage() {
         r.isActive ? "Active" : "Inactive",
       ].some((val) => String(val || "").toLowerCase().includes(q));
     });
-  }, [rooms, roomSearch, roomFilters]);
+  }, [rooms, roomSearch, roomFilters, effectiveCampusId]);
 
   const roomPages = Math.max(1, Math.ceil(filteredRooms.length / (roomPageSize || 5)));
   const shownRooms = filteredRooms.slice((roomPage - 1) * (roomPageSize || 5), roomPage * (roomPageSize || 5));
@@ -1201,12 +1371,13 @@ export default function SectionManagementPage() {
   // Dropdowns
   const selectedSection = useMemo(() => sections.find((item) => normalizeId(item.id) === normalizeId(selectedSectionId)), [sections, selectedSectionId]);
   const boardOptions = useMemo(() => {
-    const options = boardsList.filter((b) => b.isActive).map((b) => ({ value: String(b.id), label: b.name }));
+    const pool = campusBoards.length ? campusBoards : boardsList;
+    const options = pool.filter((b) => b.isActive).map((b) => ({ value: String(b.id), label: b.name }));
     if (sectionFormMode === "preview" && selectedSection?.boardId && !options.some((item) => normalizeId(item.value) === normalizeId(selectedSection.boardId))) {
       options.unshift({ value: String(selectedSection.boardId), label: selectedSection.board || "Current Board" });
     }
     return options;
-  }, [boardsList, selectedSection, sectionFormMode]);
+  }, [campusBoards, boardsList, selectedSection, sectionFormMode]);
 
   const filteredYearOptions = useMemo(() => {
     const options = academicYearsList
@@ -1237,19 +1408,19 @@ export default function SectionManagementPage() {
   }, [academicLevelsList, selectedSection, sectionFormMode]);
 
   const uniqueOptions = (items) => items.filter((item, index) => item.value && items.findIndex((other) => other.value === item.value) === index);
-  const sectionBoardFilterOptions = uniqueOptions([...boardsList.map((item) => ({ value: item.id, label: item.name })), ...sections.map((item) => ({ value: item.boardId, label: item.board || "Board" }))]);
+  const sectionBoardFilterOptions = uniqueOptions([...(campusBoards.length ? campusBoards : boardsList).map((item) => ({ value: item.id, label: item.name })), ...sections.map((item) => ({ value: item.boardId, label: item.board || "Board" }))]);
   const sectionYearFilterOptions = uniqueOptions([...academicYearsList.filter((item) => !filters.boardId || yearBelongsToBoard(item, filters.boardId)).map((item) => ({ value: item.id, label: item.name })), ...sections.filter((item) => !filters.boardId || normalizeId(item.boardId) === normalizeId(filters.boardId)).map((item) => ({ value: item.academicYearId, label: item.academicYear || "Academic Year" }))]);
-  const sectionGroupFilterOptions = uniqueOptions(sections.filter((item) => !filters.boardId || normalizeId(item.boardId) === normalizeId(filters.boardId)).map((item) => ({ value: item.groupId, label: item.group || "Group" })));
-  const sectionProgramFilterOptions = uniqueOptions(sections.filter((item) => (!filters.boardId || normalizeId(item.boardId) === normalizeId(filters.boardId)) && (!filters.groupId || normalizeId(item.groupId) === normalizeId(filters.groupId))).map((item) => ({ value: item.programId, label: item.program || "Program" })));
+  const sectionGroupFilterOptions = uniqueOptions(sections.filter((item) => (!effectiveCampusId || !item.campusId || normalizeId(item.campusId) === effectiveCampusId) && (!filters.boardId || normalizeId(item.boardId) === normalizeId(filters.boardId))).map((item) => ({ value: item.groupId, label: item.group || "Group" })));
+  const sectionProgramFilterOptions = uniqueOptions(sections.filter((item) => (!effectiveCampusId || !item.campusId || normalizeId(item.campusId) === effectiveCampusId) && (!filters.boardId || normalizeId(item.boardId) === normalizeId(filters.boardId)) && (!filters.groupId || normalizeId(item.groupId) === normalizeId(filters.groupId))).map((item) => ({ value: item.programId, label: item.program || "Program" })));
   const sectionLevelFilterOptions = uniqueOptions([
     ...academicLevelsList.filter((item) => item.isActive && (!filters.boardId || !item.boardId || normalizeId(item.boardId) === normalizeId(filters.boardId))).map((item) => ({ value: normalizeId(item.id), label: item.name })),
-    ...boardsList.filter((board) => !filters.boardId || board.id === normalizeId(filters.boardId)).flatMap(embeddedBoardLevels).map((item) => ({ value: normalizeId(item.id), label: item.name })),
-    ...sections.filter((item) => !filters.boardId || normalizeId(item.boardId) === normalizeId(filters.boardId)).map((item) => ({ value: normalizeId(item.academicLevelId), label: item.academicLevel || "Academic Level" }))
+    ...(campusBoards.length ? campusBoards : boardsList).filter((board) => !filters.boardId || board.id === normalizeId(filters.boardId)).flatMap(embeddedBoardLevels).map((item) => ({ value: normalizeId(item.id), label: item.name })),
+    ...sections.filter((item) => (!effectiveCampusId || !item.campusId || normalizeId(item.campusId) === effectiveCampusId) && (!filters.boardId || normalizeId(item.boardId) === normalizeId(filters.boardId))).map((item) => ({ value: normalizeId(item.academicLevelId), label: item.academicLevel || "Academic Level" }))
   ]);
 
-  const roomBuildings = useMemo(() => [...new Set(rooms.map((r) => r.building).filter(Boolean))], [rooms]);
-  const roomFloors = useMemo(() => [...new Set(rooms.map((r) => String(r.floor)).filter(Boolean))], [rooms]);
-  const roomFilterTypes = useMemo(() => [...new Set(rooms.map((r) => r.roomType).filter(Boolean))], [rooms]);
+  const roomBuildings = useMemo(() => [...new Set(campusRooms.map((r) => r.building).filter(Boolean))], [campusRooms]);
+  const roomFloors = useMemo(() => [...new Set(campusRooms.map((r) => String(r.floor)).filter(Boolean))], [campusRooms]);
+  const roomFilterTypes = useMemo(() => [...new Set(campusRooms.map((r) => r.roomType).filter(Boolean))], [campusRooms]);
 
   const openAddSection = () => {
     if (operationRef.current) return;
@@ -1261,12 +1432,14 @@ export default function SectionManagementPage() {
     setSectionFormMode("add");
     setSectionCreationType("single");
     setFieldErrors({});
-    const boardId = effectiveNavbarBoard ? normalizeId(effectiveNavbarBoard.id) : (boardsList.some((item) => item.id === normalizeId(filters.boardId)) ? normalizeId(filters.boardId) : "");
+    const pool = campusBoards.length ? campusBoards : boardsList;
+    const boardId = effectiveNavbarBoard ? normalizeId(effectiveNavbarBoard.id) : (pool.some((item) => item.id === normalizeId(filters.boardId)) ? normalizeId(filters.boardId) : (pool[0]?.id ? normalizeId(pool[0].id) : ""));
     const academicYearId = effectiveNavbarYear ? normalizeId(effectiveNavbarYear.id) : (academicYearsList.some((item) => item.id === normalizeId(filters.academicYearId) && yearBelongsToBoard(item, boardId)) ? normalizeId(filters.academicYearId) : "");
-    const academicLevelId = embeddedBoardLevels(boardsList.find((item) => item.id === boardId)).some((item) => item.id === normalizeId(filters.academicLevelId)) || sections.some((item) => item.boardId === boardId && item.academicLevelId === normalizeId(filters.academicLevelId)) ? normalizeId(filters.academicLevelId) : "";
+    const academicLevelId = embeddedBoardLevels(pool.find((item) => item.id === boardId)).some((item) => item.id === normalizeId(filters.academicLevelId)) || sections.some((item) => item.boardId === boardId && item.academicLevelId === normalizeId(filters.academicLevelId)) ? normalizeId(filters.academicLevelId) : "";
     const groupId = boardId && sections.some((item) => item.boardId === boardId && item.groupId === normalizeId(filters.groupId)) ? normalizeId(filters.groupId) : "";
     const programId = groupId && sections.some((item) => item.groupId === groupId && item.programId === normalizeId(filters.programId)) ? normalizeId(filters.programId) : "";
     setSectionForm({
+      campusId: effectiveCampusId,
       boardId,
       academicYearId,
       groupId,
@@ -1305,6 +1478,7 @@ export default function SectionManagementPage() {
     setSectionCreationType("single");
     setFieldErrors({});
     setSectionForm({
+      campusId: sec.campusId || effectiveCampusId,
       boardId: sec.boardId ? String(sec.boardId) : "",
       academicYearId: sec.academicYearId ? String(sec.academicYearId) : "",
       groupId: sec.groupId ? String(sec.groupId) : "",
@@ -1340,6 +1514,7 @@ export default function SectionManagementPage() {
     setRoomCreationType("single");
     setRoomFieldErrors({});
     setRoomForm({
+      campusId: effectiveCampusId,
       roomNo: "",
       capacity: "",
       roomType: "",
@@ -1359,6 +1534,7 @@ export default function SectionManagementPage() {
     setRoomCreationType("single");
     setRoomFieldErrors({});
     setRoomForm({
+      campusId: room.campusId || effectiveCampusId,
       roomNo: room.roomNo || "",
       capacity: String(room.capacity || ""),
       roomType: room.roomType || "Classroom",
@@ -1402,7 +1578,7 @@ export default function SectionManagementPage() {
     if (!Number.isInteger(count) || count < 1 || count > 100) nextErrors.roomCount = "Room count must be between 1 and 100";
     if (!sequence || nextErrors.roomCount) return setRoomFieldErrors(nextErrors);
     const next = reconcileBulkRoomAllocations(bulkRoomAllocations, bulkRoomForm);
-    const duplicateErrors = validateBulkRoomAllocations(next, rooms, count);
+    const duplicateErrors = validateBulkRoomAllocations(next, campusRooms, count);
     Object.keys(nextErrors).filter((key) => key.startsWith("bulk_")).forEach((key) => delete nextErrors[key]);
     setBulkRoomAllocations(next);
     if (!bulkRoomAllocations.length) setBulkRoomPage(1);
@@ -1466,12 +1642,12 @@ export default function SectionManagementPage() {
       }
 
       const isEdit = Boolean(selectedSectionId);
-      const payload = sectionPayload(sectionForm, { ...sectionForm, program: programObj });
+      const payload = sectionPayload(sectionForm, { ...sectionForm, program: programObj }, effectiveCampusId);
       await runMutation(isEdit ? "UPDATE_SECTION" : "ADD_SECTION",
         () => isEdit ? apiClient.put(apiEndpoints.sections.update(selectedSectionId), payload) : apiClient.post(apiEndpoints.sections.create, payload),
         async () => {
-          const next = await loadSections();
-          await loadRooms();
+          const next = await loadSections(effectiveCampusId);
+          await loadRooms(effectiveCampusId);
           if (!next.some((item) => (!isEdit || item.id === selectedSectionId) && matchesSection(item, payload))) throw new Error("The saved Section was not found with the requested values.");
         },
         () => {
@@ -1519,13 +1695,13 @@ export default function SectionManagementPage() {
         return;
       }
 
-      const payloads = bulkSections.map((item) => sectionPayload(item, { ...sectionForm, program: programObj }));
+      const payloads = bulkSections.map((item) => sectionPayload(item, { ...sectionForm, program: programObj }, effectiveCampusId));
       const { boardId: board, academicYearId: year, academicLevelId: level, groupId: group, programId: program } = payloads[0];
       await runMutation("BULK_SECTION",
-        () => apiClient.post(SECTION_BULK_ENDPOINT, { boardId: board, academicYearId: year, academicLevelId: level, groupId: group, programId: program, sections: payloads.map(({ sectionName, roomId, inchargeId, maximumStrength, isActive }) => ({ sectionName, roomId, inchargeId, maximumStrength, isActive })) }),
+        () => apiClient.post(SECTION_BULK_ENDPOINT, { boardId: board, academicYearId: year, academicLevelId: level, groupId: group, programId: program, campusId: Number(effectiveCampusId) || undefined, sections: payloads.map(({ sectionName, roomId, inchargeId, maximumStrength, isActive }) => ({ sectionName, roomId, inchargeId, maximumStrength, isActive, campusId: Number(effectiveCampusId) || undefined })) }),
         async (response) => {
-          const next = await loadSections();
-          await loadRooms();
+          const next = await loadSections(effectiveCampusId);
+          await loadRooms(effectiveCampusId);
           verifyBulkResult(response, payloads.length);
           if (!payloads.every((payload) => next.some((item) => matchesSection(item, payload)))) throw new Error("Not all requested Sections were found in the backend data.");
         },
@@ -1554,14 +1730,14 @@ export default function SectionManagementPage() {
       const count = Number(form.roomCount);
       if (!parseRoomNumberSequence(form.startRoomNo)) errors.startRoomNo = "First Room Number must end with a numeric suffix";
       if (!Number.isInteger(count) || count < 1 || count > 100) errors.roomCount = "Room count must be between 1 and 100";
-      Object.assign(errors, validateBulkRoomAllocations(bulkRoomAllocations, rooms, count));
+      Object.assign(errors, validateBulkRoomAllocations(bulkRoomAllocations, campusRooms, count));
       const numbers = generateRoomNumbers(form.startRoomNo, count);
       if (bulkRoomAllocations.some((row, index) => row.roomNo !== numbers[index])) errors.bulk = "Prepare the Room Allocation Preview again after changing the sequence.";
       forms = bulkRoomAllocations.map((row) => ({ ...form, ...row }));
     } else {
       forms = [roomForm];
       if (!roomForm.roomNo.trim() || roomForm.roomNo.trim().length > 50) errors.roomNo = "Room Number must contain 1 to 50 characters";
-      if (rooms.some((room) => normalizeId(room.id) !== normalizeId(selectedRoomId) && sameText(room.roomNo, roomForm.roomNo))) errors.roomNo = "Room Number already exists";
+      if (campusRooms.some((room) => normalizeId(room.id) !== normalizeId(selectedRoomId) && sameText(room.roomNo, roomForm.roomNo))) errors.roomNo = "Room Number already exists";
       if (!Number.isInteger(Number(roomForm.capacity)) || Number(roomForm.capacity) < 1 || Number(roomForm.capacity) > 1000) errors.capacity = "Capacity must be an integer from 1 to 1000";
       if (!ROOM_TYPES.includes(roomForm.roomType)) errors.roomType = "Room Type is required";
       const assigned = sections.filter((section) => section.status === "Active" && normalizeId(section.roomId) === normalizeId(selectedRoomId));
@@ -1575,11 +1751,11 @@ export default function SectionManagementPage() {
     }
     setRoomFieldErrors(errors);
     if (Object.keys(errors).length) return;
-    const payloads = forms.map(roomPayload);
+    const payloads = forms.map((f) => roomPayload(f, effectiveCampusId));
     await runMutation(isBulk ? "BULK_ROOM" : isEdit ? "UPDATE_ROOM" : "ADD_ROOM",
-      () => isBulk ? apiClient.post(ROOM_ENDPOINTS.bulk, { rooms: payloads }) : isEdit ? apiClient.put(ROOM_ENDPOINTS.update(selectedRoomId), payloads[0]) : apiClient.post(ROOM_ENDPOINTS.create, payloads[0]),
+      () => isBulk ? apiClient.post(ROOM_ENDPOINTS.bulk, { campusId: Number(effectiveCampusId) || undefined, rooms: payloads }) : isEdit ? apiClient.put(ROOM_ENDPOINTS.update(selectedRoomId), payloads[0]) : apiClient.post(ROOM_ENDPOINTS.create, payloads[0]),
       async (response) => {
-        const next = await loadRooms();
+        const next = await loadRooms(effectiveCampusId);
         if (isBulk) verifyBulkResult(response, payloads.length);
         if (!payloads.every((payload) => next.some((room) => (!isEdit || room.id === selectedRoomId) && matchesRoom(room, payload)))) throw new Error("The saved Rooms were not found with the requested values.");
       },
@@ -1703,7 +1879,7 @@ export default function SectionManagementPage() {
 
         const errors = [];
         const seenInFile = new Set();
-        const existingRoomsSet = new Set(rooms.map((r) => String(r.roomNo || "").trim().toLowerCase()));
+        const existingRoomsSet = new Set(campusRooms.map((r) => String(r.roomNo || "").trim().toLowerCase()));
         const validPayloads = [];
         let duplicateCount = 0;
 
@@ -1842,14 +2018,14 @@ export default function SectionManagementPage() {
     if (isImporting) return;
 
     setIsImporting(true);
-    const payloads = validationResult.validPayloads.map(roomPayload);
+    const payloads = validationResult.validPayloads.map((f) => roomPayload(f, effectiveCampusId));
 
     try {
       await runMutation(
         "BULK_ROOM_IMPORT",
-        () => apiClient.post(ROOM_ENDPOINTS.bulk, { rooms: payloads }),
+        () => apiClient.post(ROOM_ENDPOINTS.bulk, { campusId: Number(effectiveCampusId) || undefined, rooms: payloads }),
         async (response) => {
-          const next = await loadRooms();
+          const next = await loadRooms(effectiveCampusId);
           verifyBulkResult(response, payloads.length);
           if (!payloads.every((payload) => next.some((room) => matchesRoom(room, payload)))) {
             throw new Error("Some imported Rooms could not be verified in the backend data.");
@@ -1929,8 +2105,8 @@ export default function SectionManagementPage() {
       "DELETE_SECTION:" + sec.id,
       () => apiClient.delete(apiEndpoints.sections.delete(sec.id)),
       async () => {
-        const next = await loadSections();
-        await loadRooms();
+        const next = await loadSections(effectiveCampusId);
+        await loadRooms(effectiveCampusId);
         closeDeleteSectionModal(true);
         if (next.some((item) => item.id === sec.id)) {
           throw new Error("The Section is still present in the backend data.");
@@ -1966,7 +2142,7 @@ export default function SectionManagementPage() {
       "DELETE_ROOM:" + rm.id,
       () => apiClient.delete(ROOM_ENDPOINTS.delete(rm.id)),
       async () => {
-        const next = await loadRooms();
+        const next = await loadRooms(effectiveCampusId);
         closeDeleteRoomModal(true);
         if (next.some((item) => item.id === rm.id)) throw new Error("The Room is still present in the backend data.");
       },
@@ -1978,8 +2154,10 @@ export default function SectionManagementPage() {
   };
 
   const exportAllocationExcel = () => {
-    if (!rooms.length && !sections.length) return say("No room or section allocation data is available to export.");
-    downloadAllocationWorkbook(rooms, sections, resolveSection);
+    const scopeRooms = rooms.filter((r) => !effectiveCampusId || !r.campusId || normalizeId(r.campusId) === effectiveCampusId);
+    const scopeSections = sections.filter((s) => !effectiveCampusId || !s.campusId || normalizeId(s.campusId) === effectiveCampusId);
+    if (!scopeRooms.length && !scopeSections.length) return say("No room or section allocation data is available to export.");
+    downloadAllocationWorkbook(scopeRooms, scopeSections, resolveSection);
     say("Section and room allocation workbook downloaded successfully.");
   };
 
