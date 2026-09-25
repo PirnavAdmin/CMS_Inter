@@ -194,10 +194,37 @@ export const menu = [
   },
 ];
 
+export const parentMenu = [
+  {
+    section: "Main",
+    items: [
+      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon },
+    ],
+  },
+  {
+    section: "Student & Academics",
+    items: [
+      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon },
+      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon },
+      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon },
+      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon },
+      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon },
+      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon },
+      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon },
+      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon },
+      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon },
+    ],
+  },
+];
+
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
 const MOCK_NOTIFICATIONS = [];
+const PARENT_NOTIFICATIONS = [
+  { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
+  { id: "pn-2", title: "Upcoming Examinations", count: 5, to: "/parent-dashboard/examinations", label: "exam timetable" },
+];
 const PENDING_STATUSES = new Set(["pending", "draft", "requested", "generated", "reviewed", "new", "created", "incomplete", "unpublished"]);
 
 const unwrapNotificationPayload = (payload) => {
@@ -230,6 +257,19 @@ const searchIndex = menu.flatMap((g) =>
     ...(item.children || []).map((c) => ({ to: c.to, label: c.label, section: item.label })),
   ]),
 );
+
+const parentSearchIndex = [
+  ...parentMenu.flatMap((g) =>
+    g.items.flatMap((item) => [
+      { to: item.to, label: item.label, section: g.section },
+    ]),
+  ),
+  { to: "/parent-dashboard/academics", label: "Results & Marks Memo", section: "Student & Academics" },
+  { to: "/parent-dashboard/notifications", label: "Notifications", section: "Student & Academics" },
+  { to: "/parent-dashboard/profile", label: "Profile", section: "Account" },
+  { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
+];
+
 const breadcrumbLinkForLabel = (label) =>
   searchIndex.find((item) => item.label.toLowerCase() === String(label).toLowerCase())?.to;
 
@@ -243,6 +283,8 @@ const menuBreadcrumbForPath = (pathname) => {
     let matches = false;
     if (path === "/dashboard") {
       matches = pathname === "/dashboard";
+    } else if (path === "/parent-dashboard") {
+      matches = pathname === "/parent-dashboard";
     } else if (path === "/dashboard/attendance" || path === "/dashboard/attendance/student") {
       matches =
         !pathname.startsWith("/dashboard/attendance/staff") &&
@@ -261,7 +303,8 @@ const menuBreadcrumbForPath = (pathname) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  menu.forEach((group) => {
+  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : menu;
+  activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
       (item.children || []).forEach((child) => {
@@ -449,9 +492,9 @@ export default function DashboardLayout({
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = q ? searchIndex.filter((i) => i.label.toLowerCase().includes(q)) : searchIndex;
+    const list = q ? currentSearchIndex.filter((i) => i.label.toLowerCase().includes(q)) : currentSearchIndex;
     return list.slice(0, 8);
-  }, [query]);
+  }, [query, currentSearchIndex]);
 
   const goTo = (to) => {
     rememberSidebarScroll();
@@ -510,11 +553,28 @@ export default function DashboardLayout({
           <img className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
         </div>
         <nav className="cms-nav" ref={sidebarNavRef} onScroll={rememberSidebarScroll}>
-          {menu.map((group) => (
+          {activeMenu.map((group) => (
             <div key={group.section}>
               <div className="cms-nav-group">{group.section}</div>
               {group.items.map((item) => {
                 const active = isActive(item.to);
+                if (item.isLogout) {
+                  return (
+                    <button
+                      key={item.to}
+                      type="button"
+                      className="cms-nav-link"
+                      style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit" }}
+                      onClick={() => {
+                        closeOnMobile();
+                        logout();
+                      }}
+                    >
+                      <SidebarIcon icon={item.icon} />
+                      <span className="cms-nav-label">{item.label}</span>
+                    </button>
+                  );
+                }
                 if (item.children) {
                   const isFacultyMenu = item.to === "/dashboard/faculty";
                   const isAttendanceMenu = item.to === "/dashboard/attendance";
@@ -694,32 +754,53 @@ export default function DashboardLayout({
 
               {/* Board Selector */}
               <div className="cms-academic-dropdown-wrap" ref={boardRef}>
-                <button
-                  type="button"
-                  className={`cms-academic-btn ${boardOpen ? "is-open" : ""}`}
-                  onClick={() => {
-                    setBoardOpen((v) => !v);
-                    setYearOpen(false);
-                    setNotifOpen(false);
-                    setProfileOpen(false);
-                  }}
-                  disabled={boardsLoading || !boards.length}
-                  aria-label="Select Board"
-                  aria-expanded={boardOpen}
-                >
-                  <div className="cms-academic-btn-icon">
-                    <NavbarIcon src={navbarBoardIcon} />
+                {isParent ? (
+                  <div
+                    className="cms-academic-btn"
+                    style={{ cursor: "default", userSelect: "none" }}
+                    aria-label="Board"
+                  >
+                    <div className="cms-academic-btn-icon">
+                      <NavbarIcon src={navbarBoardIcon} />
+                    </div>
+                    <div className="cms-academic-btn-text">
+                      <span className="cms-academic-btn-label">Board</span>
+                      <span
+                        className="cms-academic-btn-value"
+                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                      >
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                      </span>
+                    </div>
                   </div>
-                  <div className="cms-academic-btn-text">
-                    <span className="cms-academic-btn-label">Board</span>
-                    <span className="cms-academic-btn-value" title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code}>
-                      {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No active boards available")}
-                    </span>
-                  </div>
-                  <ChevronDown size={12} className="cms-academic-btn-arrow" />
-                </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={`cms-academic-btn ${boardOpen ? "is-open" : ""}`}
+                    onClick={() => {
+                      setBoardOpen((v) => !v);
+                      setYearOpen(false);
+                      setNotifOpen(false);
+                      setProfileOpen(false);
+                    }}
+                    disabled={boardsLoading || !boards.length}
+                    aria-label="Select Board"
+                    aria-expanded={boardOpen}
+                  >
+                    <div className="cms-academic-btn-icon">
+                      <NavbarIcon src={navbarBoardIcon} />
+                    </div>
+                    <div className="cms-academic-btn-text">
+                      <span className="cms-academic-btn-label">Board</span>
+                      <span className="cms-academic-btn-value" title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code}>
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No active boards available")}
+                      </span>
+                    </div>
+                    <ChevronDown size={12} className="cms-academic-btn-arrow" />
+                  </button>
+                )}
 
-                {boardOpen && (
+                {!isParent && boardOpen && (
                   <div className="cms-academic-dropdown-panel">
                     <div className="cms-academic-panel-header">Select Board</div>
                     <div className="cms-academic-panel-list">
@@ -809,40 +890,77 @@ export default function DashboardLayout({
                         );
                       })}
                     </div>
-                    <div className="cms-academic-panel-footer">
-                      <button
-                        type="button"
-                        className="cms-academic-manage-btn"
-                        onClick={() => {
-                          setYearOpen(false);
-                          navigate("/dashboard/board-academic-year?tab=academic-years");
-                        }}
-                      >
-                        <Settings size={14} /> Manage Academic Years
-                      </button>
-                    </div>
+                    {!isParent && (
+                      <div className="cms-academic-panel-footer">
+                        <button
+                          type="button"
+                          className="cms-academic-manage-btn"
+                          onClick={() => {
+                            setYearOpen(false);
+                            navigate("/dashboard/board-academic-year?tab=academic-years");
+                          }}
+                        >
+                          <Settings size={14} /> Manage Academic Years
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
             <ThemeToggle variant="dashboard" />
-            <button className="cms-icon-btn" aria-label={`${pendingActionCount} sample notifications`} aria-expanded={notifOpen} onClick={() => { setNotifOpen((open) => !open); setProfileOpen(false); }}>
-              <NavbarIcon src={navbarNotificationsIcon} />{pendingActionCount > 0 ? <span className="cms-notification-badge">{pendingActionCount > 99 ? "99+" : pendingActionCount}</span> : null}
-            </button>
+            {isParent ? (
+              <Link
+                to="/parent-dashboard/notifications"
+                className="cms-icon-btn"
+                style={{ textDecoration: "none" }}
+                aria-label={`${pendingActionCount} notifications`}
+                onClick={() => {
+                  setNotifOpen(false);
+                  setProfileOpen(false);
+                  closeOnMobile();
+                }}
+              >
+                <NavbarIcon src={navbarNotificationsIcon} />
+                {pendingActionCount > 0 ? (
+                  <span className="cms-notification-badge">
+                    {pendingActionCount > 99 ? "99+" : pendingActionCount}
+                  </span>
+                ) : null}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="cms-icon-btn"
+                aria-label={`${pendingActionCount} sample notifications`}
+                aria-expanded={notifOpen}
+                onClick={() => {
+                  setNotifOpen((open) => !open);
+                  setProfileOpen(false);
+                }}
+              >
+                <NavbarIcon src={navbarNotificationsIcon} />
+                {pendingActionCount > 0 ? (
+                  <span className="cms-notification-badge">
+                    {pendingActionCount > 99 ? "99+" : pendingActionCount}
+                  </span>
+                ) : null}
+              </button>
+            )}
             <button className="cms-profile-btn" onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}>
               <span className="cms-avatar">{initials(profileName)}</span>
               <span className="cms-profile-meta"><strong>{profileName}</strong><span>{profileRole}</span></span>
             </button>
 
-            {notifOpen ? (
+            {!isParent && notifOpen ? (
               <div className="cms-dropdown cms-notifications-dropdown">
                 <div className="cms-dropdown-head cms-notifications-head">
                   <div><strong>Notifications</strong><small>Sample activity</small></div>
                 </div>
-                {MOCK_NOTIFICATIONS.map((notification) => (
+                {currentNotifications.map((notification) => (
                   <button key={notification.id} type="button" className="cms-notif-item" onClick={() => { setNotifOpen(false); goTo(notification.to); }}>
                     <span className="cms-notif-count">{notification.count}</span>
-                    <span><p>{notification.title}</p><small>Open {notification.label}s</small></span>
+                    <span><p>{notification.title}</p><small>Open {notification.label}</small></span>
                     <ChevronRight size={15} aria-hidden="true" />
                   </button>
                 ))}

@@ -174,6 +174,8 @@ public class CertificateRepository : ICertificateRepository
             if (string.IsNullOrWhiteSpace(studentName) && !string.IsNullOrWhiteSpace(admissionNo))
                 studentName = admissionNo;
             if (string.IsNullOrWhiteSpace(studentName)) studentName = "Student";
+            
+            int? campusId = dict.ContainsKey("CampusId") && dict["CampusId"] != null ? Convert.ToInt32(dict["CampusId"]) : null;
 
             string rawFather = dict.ContainsKey("Hydrated_FatherName") && dict["Hydrated_FatherName"] != null ? dict["Hydrated_FatherName"].ToString()!.Trim() : "";
             string fatherName = !string.IsNullOrWhiteSpace(rawFather) 
