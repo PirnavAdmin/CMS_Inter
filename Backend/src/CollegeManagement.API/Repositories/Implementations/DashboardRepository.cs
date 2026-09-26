@@ -200,7 +200,7 @@ public class DashboardRepository : IDashboardRepository
 
             if (overview.MonthlyTrend == null || !overview.MonthlyTrend.Any())
             {
-                overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, ct);
+                overview.MonthlyTrend = await ComputeMonthlyAdmissionsTrendFallbackAsync(boardId, academicYearId, campusId, ct);
             }
 
             if (overview.TotalStudents == 0 && overview.MonthlyTrend.Any())
@@ -600,7 +600,7 @@ public class DashboardRepository : IDashboardRepository
 
             // 3. Groups & Sections
             summary.TotalGroups = await _db.Groups.AsNoTracking()
-                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId) && (!campusId.HasValue || g.CampusId == campusId.Value))
+                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId))
                 .CountAsync(ct);
 
             summary.TotalSections = await _db.Sections.AsNoTracking()
@@ -616,7 +616,7 @@ public class DashboardRepository : IDashboardRepository
 
             // 5. Total Subjects
             summary.TotalSubjects = await _db.Subjects.AsNoTracking()
-                .Where(sub => sub.IsActive && (!boardId.HasValue || sub.BoardId == boardId) && (!campusId.HasValue || sub.CampusId == campusId.Value))
+                .Where(sub => sub.IsActive && (!boardId.HasValue || sub.BoardId == boardId))
                 .CountAsync(ct);
 
             // 6. Upcoming exams
@@ -741,7 +741,7 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             var groups = await _db.Groups.AsNoTracking()
-                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId) && (!campusId.HasValue || g.CampusId == campusId.Value))
+                .Where(g => g.IsActive && (!boardId.HasValue || g.BoardId == boardId) && (!academicYearId.HasValue || g.AcademicYearId == academicYearId))
                 .OrderBy(g => g.GroupName)
                 .ToListAsync(ct);
 
@@ -807,26 +807,28 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            int total = await _db.Students.AsNoTracking()
-                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
-                .CountAsync(ct);
 
-            if (total == 0)
-            {
-                total = await _db.StudentAdmissions.AsNoTracking()
-                    .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
-                    .CountAsync(ct);
-            }
 
+            var attendancesQuery = _db.Attendances.AsNoTracking()
+                .Where(a => a.AttendanceDate.Date == dateVal.Date && a.IsActive);
+
+            if (boardId.HasValue)
+                attendancesQuery = attendancesQuery.Where(a => a.BoardId == boardId.Value);
+
+            if (academicYearId.HasValue)
+                attendancesQuery = attendancesQuery.Where(a => a.AcademicYearId == academicYearId.Value);
+
+            if (campusId.HasValue)
+                attendancesQuery = attendancesQuery.Where(a => _db.Students.Any(s => s.StudentId == a.StudentId && s.CampusId == campusId.Value));
+
+            var attendances = await attendancesQuery.ToListAsync(ct);
+
+            int total = attendances.Count;
             summary.TotalStudents = total;
-
-            var attendances = await _db.Attendances.AsNoTracking()
-                .Where(a => a.AttendanceDate.Date == dateVal.Date && a.IsActive)
-                .ToListAsync(ct);
 
             int present = attendances.Count(a => (byte)a.Status == 1);
             int halfDay = attendances.Count(a => (byte)a.Status == 3 || (byte)a.Status == 4);
-            int absent = total > 0 ? Math.Max(0, total - present - halfDay) : 0;
+            int absent = attendances.Count(a => (byte)a.Status == 2);
 
             summary.Present = present;
             summary.HalfDay = halfDay;
@@ -881,7 +883,8 @@ public class DashboardRepository : IDashboardRepository
             var staffIds = staffList.Select(st => st.Id).ToHashSet();
 
             var staffAtt = await _db.StaffAttendances.AsNoTracking()
-                .Where(sa => sa.IsActive && staffIds.Contains(sa.FacultyId))
+                .Include(sa => sa.StaffAttendanceSession)
+                .Where(sa => sa.IsActive && sa.StaffAttendanceSession != null && sa.StaffAttendanceSession.AttendanceDate.Date == dateVal.Date && staffIds.Contains(sa.FacultyId))
                 .ToListAsync(ct);
 
             int present = staffAtt.Count(a => (byte)a.Status == 1 || (byte)a.Status == 2);
