@@ -27,6 +27,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, FormModal, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import apiEndpoints from "@/api/apiEndpoints.js";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./TransportPage.css";
 
 const sectionTabs = [
@@ -562,6 +564,8 @@ function assertTransportDeleteSucceeded(response) {
 }
 
 export default function TransportPage() {
+  const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
+  const { selectedCampusId } = useCampusContext();
   const [activeSection, setActiveSection] = useState("dashboard");
   const [activeSetupTab, setActiveSetupTab] = useState("routes");
   const [activeOperationTab, setActiveOperationTab] = useState("vehicleAssignments");
@@ -602,6 +606,16 @@ export default function TransportPage() {
 
   const fetchTransportData = async () => {
     setIsLoading(true);
+    setRoutes([]); setPickupPoints([]); setVehicles([]); setDrivers([]); setAttendants([]);
+    setVehicleAssignments([]); setStudentAssignments([]); setTrips([]); setMaintenance([]); setGpsSnapshots([]); setDashboardMetrics(null);
+    const scoped = (items) => items.filter((item) => {
+      const campusId = item?.campusId ?? item?.CampusId;
+      const boardId = item?.boardId ?? item?.BoardId;
+      const academicYearId = item?.academicYearId ?? item?.AcademicYearId;
+      return (campusId == null || String(campusId) === String(selectedCampusId))
+        && (boardId == null || String(boardId) === String(selectedBoardId))
+        && (academicYearId == null || String(academicYearId) === String(selectedAcademicYearId));
+    });
     try {
       const driverListUrl = `${apiEndpoints.faculty.list}?PageNumber=1&PageSize=1000`;
       if (import.meta.env.DEV) {
@@ -662,7 +676,7 @@ export default function TransportPage() {
       }
 
       if (routesRes.status === "fulfilled" && routesRes.value?.data) {
-        const items = extractList(routesRes.value.data);
+        const items = scoped(extractList(routesRes.value.data));
         setRoutes(
           items.map((r) => ({
             id: r.routeId || r.id,
@@ -684,7 +698,7 @@ export default function TransportPage() {
       }
 
       if (pickupsRes.status === "fulfilled" && pickupsRes.value?.data) {
-        const items = extractList(pickupsRes.value.data);
+        const items = scoped(extractList(pickupsRes.value.data));
         setPickupPoints(
           items.map((p) => ({
             id: p.pickupPointId || p.id,
@@ -703,7 +717,7 @@ export default function TransportPage() {
       }
 
       if (vehiclesRes.status === "fulfilled" && vehiclesRes.value?.data) {
-        const items = extractList(vehiclesRes.value.data);
+        const items = scoped(extractList(vehiclesRes.value.data));
         setVehicles(
           items.map((v) => ({
             id: v.vehicleId || v.id,
@@ -724,7 +738,7 @@ export default function TransportPage() {
       }
 
       if (staffRes.status === "fulfilled" && staffRes.value?.data) {
-        const items = extractList(staffRes.value.data);
+        const items = scoped(extractList(staffRes.value.data));
         setNonTeachingStaff(
           items
             .filter((staff) => {
@@ -767,7 +781,7 @@ export default function TransportPage() {
       }
 
       if (attendantsRes.status === "fulfilled" && attendantsRes.value?.data) {
-        const items = extractList(attendantsRes.value.data);
+        const items = scoped(extractList(attendantsRes.value.data));
         setAttendants(
           items.map((a) => ({
             id: a.attendantId || a.id,
@@ -782,7 +796,7 @@ export default function TransportPage() {
       }
 
       if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
-        const items = extractList(assignmentsRes.value.data);
+        const items = scoped(extractList(assignmentsRes.value.data));
         setVehicleAssignments(
           items.map((va) => ({
             id: va.assignmentId || va.id,
@@ -803,7 +817,7 @@ export default function TransportPage() {
       }
 
       if (tripsRes.status === "fulfilled" && tripsRes.value?.data) {
-        const tripsData = tripsRes.value.data?.data?.trips || tripsRes.value.data?.data || extractList(tripsRes.value.data);
+        const tripsData = scoped(tripsRes.value.data?.data?.trips || tripsRes.value.data?.data || extractList(tripsRes.value.data));
         if (Array.isArray(tripsData)) {
           setTrips(
             tripsData.map((t) => ({
@@ -829,9 +843,9 @@ export default function TransportPage() {
       }
 
       if (gpsRes.status === "fulfilled" && gpsRes.value?.data) {
-        const gpsData = Array.isArray(gpsRes.value.data?.data)
+        const gpsData = scoped(Array.isArray(gpsRes.value.data?.data)
           ? gpsRes.value.data.data
-          : extractList(gpsRes.value.data);
+          : extractList(gpsRes.value.data));
         if (Array.isArray(gpsData)) {
           setGpsSnapshots(
             gpsData.map((g) => ({
@@ -850,7 +864,7 @@ export default function TransportPage() {
       }
 
       if (maintenanceRes.status === "fulfilled" && maintenanceRes.value?.data) {
-        const items = extractList(maintenanceRes.value.data);
+        const items = scoped(extractList(maintenanceRes.value.data));
         setMaintenance(
           items.map((m) => ({
             id: m.maintenanceId || m.id,
@@ -868,7 +882,7 @@ export default function TransportPage() {
       }
 
       if (studentRes.status === "fulfilled" && studentRes.value?.data) {
-        const items = extractList(studentRes.value.data);
+        const items = scoped(extractList(studentRes.value.data));
         setStudentAssignments(
           items.map((s) => ({
             id: s.assignmentId || s.id,
@@ -899,7 +913,7 @@ export default function TransportPage() {
 
   useEffect(() => {
     fetchTransportData();
-  }, []);
+  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
   const vehicleOptions = vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.vehicleNumber }));

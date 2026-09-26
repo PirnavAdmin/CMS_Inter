@@ -39,6 +39,10 @@ const studentStatus = (v) => STUDENT_LABEL[v] ?? (v === "Half-Day" ? "Half Day" 
 const staffStatus = (v) => STAFF_LABEL[v] ?? v ?? "—";
 const status = (v, staff = false) => staff ? staffStatus(v) : studentStatus(v);
 const studentSessionStatus = (row, session) => studentStatus(get(row, `${session}Status`, `${session}AttendanceStatus`, `${session}SessionStatus`, session, `${session}Attendance`));
+const attendancePercentage = (row) => {
+  const parsed = Number.parseFloat(String(get(row, "attendancePercentage", "percentage") ?? 0).replace("%", ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 const staffType = (v) => {
   if (v === "" || v == null) return undefined;
   const n = Number(v);
@@ -49,12 +53,12 @@ const ATTENDANCE_PAGE_SIZE = 5;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
 function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
 
-function AttendancePagination({ page, totalRows, onPageChange }) {
+function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
  const currentPage = Math.min(page, totalPages);
  const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
  const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
- return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start}-{end} of {totalRows} records</span><div className="att-pagination-controls"><button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button></div></nav>;
+ return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span><div className="att-pagination-controls"><button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button></div></nav>;
 }
 
 export default function AttendancePage() { const { area = "student" } = useParams(), staff = area === "staff"; const [notice, setNotice] = useState({ message: "", type: "success" }), [importOpen, setImportOpen] = useState(false); const say = (message, type = "success") => setNotice({ message, type }); return <><DashboardLayout title={staff ? "Staff Attendance" : "Student Attendance"} subtitle={staff ? "View and manage teaching and non-teaching staff attendance" : "View and manage student attendance records"} breadcrumb={["Operations", "Attendance"]} actions={<button type="button" className="cms-btn cms-btn-primary attendance-import-trigger" onClick={() => setImportOpen(true)}><Upload size={16} /> Import Attendance</button>}><main className="attendance-module"><Screen key={staff ? "staff" : "student"} staff={staff} say={say} /></main></DashboardLayout>{importOpen && <AttendanceImportModal staff={staff} say={say} onClose={() => setImportOpen(false)} />}<Toast message={notice.message} type={notice.type} onClose={() => setNotice({ message: "", type: "success" })} /></>; }
@@ -257,6 +261,7 @@ function Screen({ staff = false, say }) {
  const [editing, setEditing] = useState(null);
  const [search, setSearch] = useState(() => restoredState?.search || "");
  const [page, setPage] = useState(() => restoredState?.page || 1);
+ const [attendanceThreshold, setAttendanceThreshold] = useState(75);
  const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
  const [dirty, setDirty] = useState(false);
  const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
@@ -497,9 +502,13 @@ function Screen({ staff = false, say }) {
      .some((value) => String(value ?? "").toLowerCase().includes(normalizedSearch));
  }).filter((r) => staff ? (!f.status || staffStatus(r.status) === f.status) : (!f.status || [studentSessionStatus(r, "morning"), studentSessionStatus(r, "afternoon")].includes(f.status)));
 
- const totalPages = Math.max(1, Math.ceil(visible.length / ATTENDANCE_PAGE_SIZE));
+ const normalizedThreshold = attendanceThreshold === "" ? 0 : Number(attendanceThreshold);
+ const defaulterRows = f.view === "Defaulters"
+   ? visible.filter((row) => attendancePercentage(row) < normalizedThreshold)
+   : visible;
+ const totalPages = Math.max(1, Math.ceil(defaulterRows.length / ATTENDANCE_PAGE_SIZE));
  const currentPage = Math.min(page, totalPages);
- const pagedRows = visible.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
+ const pagedRows = defaulterRows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
 
  useEffect(() => {
    if (skipInitialPageReset.current) {
@@ -516,9 +525,9 @@ function Screen({ staff = false, say }) {
      <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
      {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
      {loaded && (f.view === "Monthly Report" ? (
-       <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
+     <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
      ) : !staff && f.view === "Defaulters" ? (
-       <Defaulters rows={rows} />
+       <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} onPageChange={setPage} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
      ) : (
        <>
          {activeHoliday && (
@@ -1037,9 +1046,33 @@ function MonthRow({ r, headers, staff }) {
   );
 }
 
-function Defaulters({ rows }) {
+function Defaulters({ rows, totalRows, page, onPageChange, threshold, onThresholdChange }) {
+  const normalizedThreshold = threshold === "" ? 0 : Number(threshold);
   return (
-    <section className="att-card att-table-card">
+    <>
+      <section className="att-card att-defaulter-threshold">
+        <label className="att-field">
+          <span>Attendance Threshold</span>
+          <div className="att-threshold-input">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              inputMode="numeric"
+              value={threshold}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next === "") return onThresholdChange("");
+                const numberValue = Number(next);
+                if (Number.isFinite(numberValue)) onThresholdChange(Math.min(100, Math.max(0, numberValue)));
+              }}
+            />
+            <span>%</span>
+          </div>
+        </label>
+      </section>
+      <section className="att-card att-table-card">
       <div className="att-scroll">
         <table className="cms-table att-table">
           <thead>
@@ -1050,6 +1083,7 @@ function Defaulters({ rows }) {
               <th>Group</th>
               <th>Section</th>
               <th>Attendance %</th>
+              <th>Shortage %</th>
             </tr>
           </thead>
           <tbody>
@@ -1061,12 +1095,13 @@ function Defaulters({ rows }) {
                   <td>{get(r, "admissionNo", "admissionNumber") || "—"}</td>
                   <td>{get(r, "groupName") || "—"}</td>
                   <td>{get(r, "sectionName") || "—"}</td>
-                  <td>{get(r, "attendancePercentage", "percentage") ?? "—"}%</td>
+                  <td>{attendancePercentage(r)}%</td>
+                  <td>{Math.max(0, normalizedThreshold - attendancePercentage(r))}%</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="6">
+                <td colSpan="7">
                   <div className="cms-empty">No students are below this threshold.</div>
                 </td>
               </tr>
@@ -1074,6 +1109,8 @@ function Defaulters({ rows }) {
           </tbody>
         </table>
       </div>
+      <AttendancePagination page={page} totalRows={totalRows} onPageChange={onPageChange} unit="students" />
     </section>
+    </>
   );
 }
