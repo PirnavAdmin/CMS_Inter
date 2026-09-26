@@ -384,6 +384,15 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+if (args.Contains("--test-timetable"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var tester = new CollegeManagement.API.Tests.TimetableOptimizationTester(connStr);
+    await tester.RunAsync();
+    return;
+}
+
+
 #region Pipeline Middleware
 var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
