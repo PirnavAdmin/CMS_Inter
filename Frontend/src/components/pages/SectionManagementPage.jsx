@@ -43,6 +43,23 @@ const isActiveRecord = (item, defaultActive = false) => {
 };
 const isTeachingStaff = (item) => Boolean(item?.id && item.isActive && String(item.staffType).trim().toLowerCase() === "teaching");
 
+const isSectionActive = (section) => {
+  if (!section) return false;
+  if (section.status === "Active" || section.isActive === true) return true;
+  return isActiveRecord(section, false);
+};
+
+const getActiveSectionForRoom = (roomOrId, sectionsList = []) => {
+  const rId = normalizeId(typeof roomOrId === "object" ? roomOrId?.id : roomOrId);
+  if (!rId) return null;
+  return (
+    sectionsList.find(
+      (sec) =>
+        normalizeId(sec.roomId) === rId && isSectionActive(sec)
+    ) || null
+  );
+};
+
 const unwrapList = (response) => {
   const payload = response?.data;
   if (Array.isArray(payload)) return payload;
@@ -272,19 +289,17 @@ const sanitizeExcelCell = (value) => {
 
 const getRoomAllocationDetails = (rooms, sections) =>
   rooms.map((room) => {
-    const section = sections.find(
-      (item) => item.status === "Active" && normalizeId(item.roomId) === normalizeId(room.id)
-    );
+    const section = getActiveSectionForRoom(room, sections);
     const eligible = room.isActive && room.roomType === "Classroom";
     return {
       room,
       section,
-      allocationStatus: !room.isActive
-        ? "Inactive"
-        : room.roomType !== "Classroom"
-          ? "Not Eligible for Section"
-          : section
-            ? "Allocated"
+      allocationStatus: section
+        ? "Allocated"
+        : !room.isActive
+          ? "Inactive"
+          : room.roomType !== "Classroom"
+            ? "Not Eligible for Section"
             : "Available",
       remainingCapacity: eligible ? Math.max(0, Number(room.capacity || 0) - Number(section?.strength || 0)) : 0,
     };
@@ -334,7 +349,7 @@ const buildRoomAvailabilityRows = (rooms, sections, resolveSection) =>
 const buildSectionAllocationRows = (sections, rooms, resolveSection) =>
   sections.map((section, index) => {
     const detail = resolveSection(section);
-    const room = rooms.find((item) => normalizeId(item.id) === normalizeId(section.roomId));
+    const room = Boolean(section.roomId) ? rooms.find((item) => normalizeId(item.id) === normalizeId(section.roomId)) : null;
     return {
       "S.No": index + 1,
       "Section Name": sanitizeExcelCell(section.name),
@@ -904,6 +919,7 @@ export default function SectionManagementPage() {
   const [deleteRoomModalState, setDeleteRoomModalState] = useState({
     isOpen: false,
     room: null,
+    assignedSection: null,
   });
 
   // Screen View state replacing modals
@@ -1241,6 +1257,19 @@ export default function SectionManagementPage() {
   const roomsById = useMemo(() => new Map(rooms.map((r) => [String(r.id), r])), [rooms]);
   const teachersById = useMemo(() => new Map(teachersList.map((t) => [String(t.id), t])), [teachersList]);
 
+  const activeSectionsByRoomId = useMemo(() => {
+    const map = new Map();
+    for (const sec of sections) {
+      if (isSectionActive(sec) && sec.roomId) {
+        const rId = normalizeId(sec.roomId);
+        if (!map.has(rId)) {
+          map.set(rId, sec);
+        }
+      }
+    }
+    return map;
+  }, [sections]);
+
   const resolveSection = useCallback((section) => {
     const board = boardsById.get(String(section.boardId));
     const year = yearsById.get(String(section.academicYearId));
@@ -1285,12 +1314,12 @@ export default function SectionManagementPage() {
     room.isActive &&
     room.roomType === "Classroom" &&
     (!effectiveCampusId || !room.campusId || normalizeId(room.campusId) === effectiveCampusId) &&
-    (row.status !== "Active" || (![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
-      .some((section) => section.status === "Active" && normalizeId(section.roomId) === normalizeId(room.id))))
+    (!isSectionActive(row) || (![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
+      .some((section) => isSectionActive(section) && normalizeId(section.roomId) === normalizeId(room.id))))
   );
   const teacherAllowed = (teacher, row, otherRows = []) => isTeachingStaff(teacher) &&
-    (row.status !== "Active" || ![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
-      .some((section) => section.status === "Active" && normalizeId(section.classTeacherId) === normalizeId(teacher.id)));
+    (!isSectionActive(row) || ![...sections.filter((section) => normalizeId(section.id) !== normalizeId(selectedSectionId)), ...otherRows]
+      .some((section) => isSectionActive(section) && normalizeId(section.classTeacherId) === normalizeId(teacher.id)));
   const roomOptionsFor = (row, others = []) => campusRooms.filter((room) => roomAllowed(room, row, others))
     .map((room) => ({ value: normalizeId(room.id), label: room.roomNo + " (Cap: " + room.capacity + ")" }));
   const teacherOptionsFor = (row, others = []) => teachersList.filter((teacher) => teacherAllowed(teacher, row, others))
@@ -1740,7 +1769,7 @@ export default function SectionManagementPage() {
       if (campusRooms.some((room) => normalizeId(room.id) !== normalizeId(selectedRoomId) && sameText(room.roomNo, roomForm.roomNo))) errors.roomNo = "Room Number already exists";
       if (!Number.isInteger(Number(roomForm.capacity)) || Number(roomForm.capacity) < 1 || Number(roomForm.capacity) > 1000) errors.capacity = "Capacity must be an integer from 1 to 1000";
       if (!ROOM_TYPES.includes(roomForm.roomType)) errors.roomType = "Room Type is required";
-      const assigned = sections.filter((section) => section.status === "Active" && normalizeId(section.roomId) === normalizeId(selectedRoomId));
+      const assigned = sections.filter((section) => isSectionActive(section) && normalizeId(section.roomId) === normalizeId(selectedRoomId));
       if (assigned.length) {
         const current = roomsById.get(normalizeId(selectedRoomId));
         if (!sameText(roomForm.roomNo, current?.roomNo)) errors.roomNo = "An allocated Room cannot be renamed";
@@ -2120,10 +2149,15 @@ export default function SectionManagementPage() {
   };
 
   const openDeleteRoomModal = (room) => {
-    if (operationRef.current || initialLoading) return;
+    if (operationRef.current || initialLoading || !room) return;
+    const assignedSection = activeSectionsByRoomId.get(normalizeId(room.id)) || getActiveSectionForRoom(room, sections);
+    if (assignedSection) {
+      say("Cannot delete this room because it is assigned to an active section.", "error");
+    }
     setDeleteRoomModalState({
       isOpen: true,
       room,
+      assignedSection,
     });
   };
 
@@ -2132,17 +2166,28 @@ export default function SectionManagementPage() {
     setDeleteRoomModalState({
       isOpen: false,
       room: null,
+      assignedSection: null,
     });
   };
 
   const confirmDeleteRoom = async () => {
     const rm = deleteRoomModalState.room;
     if (!rm || operationRef.current) return;
+
+    // Frontend pre-validation before room deletion
+    const assignedSection = activeSectionsByRoomId.get(normalizeId(rm.id)) || getActiveSectionForRoom(rm, sections);
+    if (assignedSection) {
+      say("Cannot delete this room because it is assigned to an active section.", "error");
+      closeDeleteRoomModal(true);
+      return;
+    }
+
     await runMutation(
       "DELETE_ROOM:" + rm.id,
       () => apiClient.delete(ROOM_ENDPOINTS.delete(rm.id)),
       async () => {
         const next = await loadRooms(effectiveCampusId);
+        await loadSections(effectiveCampusId);
         closeDeleteRoomModal(true);
         if (next.some((item) => item.id === rm.id)) throw new Error("The Room is still present in the backend data.");
       },
@@ -2298,52 +2343,62 @@ export default function SectionManagementPage() {
                       {initialLoading ? (
                         Array.from({ length: roomPageSize }, (_, index) => <SkeletonRow key={index} columns={7} />)
                       ) : shownRooms.length ? (
-                        shownRooms.map((room) => (
-                          <tr key={room.id}>
-                            <td className="cms-sec-name-cell">{room.roomNo}</td>
-                            <td className="cms-cell-center">{room.building}</td>
-                            <td className="cms-cell-center">{room.floor}</td>
-                            <td>{room.roomType}</td>
-                            <td className="cms-cell-center">{room.capacity}</td>
-                            <td>
-                              <span
-                                className={`cms-sec-status-badge ${room.isActive ? "cms-badge-active" : "cms-badge-inactive"
-                                  }`}
-                              >
-                                {room.isActive ? "Active" : "Inactive"}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="cms-sec-table-actions">
-                                <button
-                                  type="button"
-                                  className="cms-sec-action-btn"
-                                  title="View Details"
-                                  onClick={() => openEditRoom(room, true)}
+                        shownRooms.map((room) => {
+                          const assignedSection = activeSectionsByRoomId.get(normalizeId(room.id)) || getActiveSectionForRoom(room, sections);
+                          const isAllocated = Boolean(assignedSection);
+                          return (
+                            <tr key={room.id}>
+                              <td className="cms-sec-name-cell">{room.roomNo}</td>
+                              <td className="cms-cell-center">{room.building}</td>
+                              <td className="cms-cell-center">{room.floor}</td>
+                              <td>{room.roomType}</td>
+                              <td className="cms-cell-center">{room.capacity}</td>
+                              <td>
+                                <span
+                                  className={`cms-sec-status-badge ${room.isActive ? "cms-badge-active" : "cms-badge-inactive"
+                                    }`}
                                 >
-                                  <Eye size={14} />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cms-sec-action-btn"
-                                  title="Edit Room"
-                                  onClick={() => openEditRoom(room, false)}
-                                >
-                                  <Pencil size={14} />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="cms-sec-action-btn cms-sec-delete-action"
-                                  title="Delete Room"
-                                  disabled={Boolean(operation)}
-                                  onClick={() => openDeleteRoomModal(room)}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                                  {room.isActive ? "Active" : "Inactive"}
+                                </span>
+                              </td>
+                              <td>
+                                <div className="cms-sec-table-actions">
+                                  <button
+                                    type="button"
+                                    className="cms-sec-action-btn"
+                                    title="View Details"
+                                    onClick={() => openEditRoom(room, true)}
+                                  >
+                                    <Eye size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-sec-action-btn"
+                                    title="Edit Room"
+                                    onClick={() => openEditRoom(room, false)}
+                                  >
+                                    <Pencil size={14} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="cms-sec-action-btn cms-sec-delete-action"
+                                    title={isAllocated ? "Assigned to active section" : "Delete Room"}
+                                    disabled={Boolean(operation) || isAllocated}
+                                    onClick={() => {
+                                      if (isAllocated) {
+                                        say("Cannot delete this room because it is assigned to an active section.", "error");
+                                        return;
+                                      }
+                                      openDeleteRoomModal(room);
+                                    }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
                           <td colSpan="7" style={{ textAlign: "center", padding: "24px" }}>
@@ -3731,59 +3786,85 @@ export default function SectionManagementPage() {
         )}
 
         {/* Room Delete Confirmation Modal (Theme-Based Clean Dialog) */}
-        {deleteRoomModalState.isOpen && (
-          <div className="cms-overlay" onClick={closeDeleteRoomModal}>
-            <div
-              className="cms-modal cms-delete-modal"
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="delete-room-title"
-            >
-              <div className="cms-delete-modal-content">
-                <div className="cms-delete-modal-icon confirm">
-                  <Trash2 size={24} />
+        {deleteRoomModalState.isOpen && (() => {
+          const rm = deleteRoomModalState.room;
+          const assignedSection = deleteRoomModalState.assignedSection || (rm ? activeSectionsByRoomId.get(normalizeId(rm.id)) || getActiveSectionForRoom(rm, sections) : null);
+          const isAllocated = Boolean(assignedSection);
+
+          return (
+            <div className="cms-overlay" onClick={closeDeleteRoomModal}>
+              <div
+                className="cms-modal cms-delete-modal"
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="delete-room-title"
+              >
+                <div className="cms-delete-modal-content">
+                  <div className={`cms-delete-modal-icon ${isAllocated ? "" : "confirm"}`}>
+                    {isAllocated ? (
+                      <AlertCircle size={26} />
+                    ) : (
+                      <Trash2 size={24} />
+                    )}
+                  </div>
+
+                  <h3 id="delete-room-title" className="cms-delete-modal-title">
+                    {isAllocated
+                      ? "Cannot Delete Room"
+                      : `Delete Room "${rm?.roomNo}"?`}
+                  </h3>
+
+                  <p className="cms-delete-modal-desc">
+                    {isAllocated ? (
+                      <>
+                        Cannot delete room <strong>"{rm?.roomNo}"</strong> because it is assigned to an active section.
+                      </>
+                    ) : (
+                      "This action will remove the room from institutional records. This cannot be undone."
+                    )}
+                  </p>
+
+                  {isAllocated && (
+                    <div className="cms-delete-modal-alert">
+                      Room "{rm?.roomNo}" is currently assigned to active section "{assignedSection?.name}". Please reassign or remove the room from the section before deleting.
+                    </div>
+                  )}
                 </div>
 
-                <h3 id="delete-room-title" className="cms-delete-modal-title">
-                  Delete Room "{deleteRoomModalState.room?.roomNo}"?
-                </h3>
+                <div className="cms-modal-foot">
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-ghost"
+                    onClick={() => closeDeleteRoomModal()}
+                    disabled={operation === `DELETE_ROOM:${rm?.id}`}
+                  >
+                    {isAllocated ? "Close" : "Cancel"}
+                  </button>
 
-                <p className="cms-delete-modal-desc">
-                  This action will remove the room from institutional records. This cannot be undone.
-                </p>
-              </div>
-
-              <div className="cms-modal-foot">
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-ghost"
-                  onClick={() => closeDeleteRoomModal()}
-                  disabled={operation === `DELETE_ROOM:${deleteRoomModalState.room?.id}`}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-danger"
-                  onClick={confirmDeleteRoom}
-                  disabled={operation === `DELETE_ROOM:${deleteRoomModalState.room?.id}`}
-                >
-                  {operation === `DELETE_ROOM:${deleteRoomModalState.room?.id}` ? (
-                    <>
-                      Deleting…
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 size={14} /> Delete Room
-                    </>
+                  {!isAllocated && (
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-danger"
+                      onClick={confirmDeleteRoom}
+                      disabled={operation === `DELETE_ROOM:${rm?.id}`}
+                    >
+                      {operation === `DELETE_ROOM:${rm?.id}` ? (
+                        <>
+                          Deleting…
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 size={14} /> Delete Room
+                        </>
+                      )}
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Global Toast Notification */}
         {toast && (
