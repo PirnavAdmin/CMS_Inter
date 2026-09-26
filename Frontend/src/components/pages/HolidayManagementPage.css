@@ -36,7 +36,22 @@
 [data-theme="dark"] .holiday-stat.is-violet { --holiday-accent: var(--cms-violet); }
 [data-theme="dark"] .holiday-stat.is-completed { --holiday-accent: var(--cms-green); }
 .holiday-list-card { overflow: hidden; }
-.holiday-filters { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--cms-border); flex-wrap: wrap; }
+/* Compact Holiday List header */
+.holiday-list-card > .cms-card-head {
+  padding: 12px 16px;
+  min-height: auto;
+}
+
+.holiday-list-card > .cms-card-head h2 {
+  margin: 0;
+  line-height: 1.25;
+}
+
+.holiday-list-card > .cms-card-head p {
+  margin: 3px 0 0;
+  line-height: 1.35;
+}
+.holiday-filters { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--cms-border); flex-wrap: wrap; }
 .holiday-search { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 11px; border: 1px solid var(--cms-border); border-radius: 8px; color: var(--cms-muted); background: var(--cms-surface); }
 .holiday-filters > .holiday-search { flex: 1 1 280px; max-width: 380px; }
 .holiday-search input { width: 100%; min-width: 0; height: 37px; border: 0; outline: 0; color: var(--cms-text); background: transparent; font: inherit; font-size: 13px; }

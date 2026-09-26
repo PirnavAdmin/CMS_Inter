@@ -3,6 +3,7 @@ import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
 import { holidayRecords } from "@/data/mockData.js";
 import "./HolidayManagementPage.css";
@@ -159,6 +160,7 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
 
 export default function HolidayManagementPage() {
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext();
+  const { selectedCampusId } = useCampusContext();
   const [holidays, setHolidays] = useState(holidayRecords);
   const [summary, setSummary] = useState({ total: 8, national: 3, festival: 5, upcoming: 7, completed: 1 });
   const [loading, setLoading] = useState(false);
@@ -180,6 +182,7 @@ export default function HolidayManagementPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      setHolidays([]);
       const [summaryRes, listRes] = await Promise.allSettled([
         holidayApi.getSummary({ academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined }),
         holidayApi.getHolidays({ academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined, page: 1, pageSize: 100 }),
@@ -190,14 +193,17 @@ export default function HolidayManagementPage() {
       }
 
       if (listRes.status === "fulfilled" && Array.isArray(listRes.value?.data) && listRes.value.data.length > 0) {
-        setHolidays(listRes.value.data);
+        setHolidays(listRes.value.data.filter((holiday) => {
+          const campusId = holiday?.campusId ?? holiday?.CampusId;
+          return campusId == null || String(campusId) === String(selectedCampusId);
+        }));
       }
     } catch (err) {
       console.warn("Using local holiday data fallback:", err);
     } finally {
       setLoading(false);
     }
-  }, [selectedAcademicYearId, selectedBoardId]);
+  }, [selectedAcademicYearId, selectedBoardId, selectedCampusId]);
 
   useEffect(() => {
     loadData();
