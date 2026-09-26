@@ -32,6 +32,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(IEnumerable<RoomResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll([FromQuery] RoomFilterDto? filter)
         {
+            filter ??= new RoomFilterDto();
+            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+            {
+                filter.CampusId = ResolveCampusId();
+            }
+
             var result = await _roomService.GetAllAsync(filter);
             return Ok(result);
         }
@@ -59,6 +65,11 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                if (dto.CampusId <= 0)
+                {
+                    dto.CampusId = ResolveCampusId();
+                }
+
                 var result = await _roomService.CreateAsync(dto);
                 return CreatedAtAction(nameof(GetById), new { id = result.RoomId }, result);
             }
@@ -78,6 +89,11 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                if (request.CampusId <= 0)
+                {
+                    request.CampusId = ResolveCampusId();
+                }
+
                 var result = await _roomService.BulkCreateAsync(request);
                 return Created(string.Empty, result);
             }
@@ -95,6 +111,11 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetAvailable([FromQuery] RoomFilterDto? filter)
         {
             filter ??= new RoomFilterDto();
+            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+            {
+                filter.CampusId = ResolveCampusId();
+            }
+
             filter.OnlyAvailable = true;
             if (string.IsNullOrWhiteSpace(filter.RoomType))
             {
@@ -116,6 +137,11 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                if (dto.CampusId <= 0)
+                {
+                    dto.CampusId = ResolveCampusId();
+                }
+
                 var result = await _roomService.UpdateAsync(id, dto);
                 if (result == null) return NotFound(new { message = $"Room with ID {id} not found." });
                 return Ok(result);
@@ -137,6 +163,26 @@ namespace CollegeManagement.API.Controllers.V1
             var success = await _roomService.DeleteAsync(id);
             if (!success) return NotFound(new { message = $"Room with ID {id} not found." });
             return NoContent();
+        }
+
+        private int ResolveCampusId(int? explicitlyProvided = null)
+        {
+            if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
+                return explicitlyProvided.Value;
+
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
+                int.TryParse(headerVal.FirstOrDefault(), out int campusId) && campusId > 0)
+            {
+                return campusId;
+            }
+
+            var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+            if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+            {
+                return claimCampusId;
+            }
+
+            return 1;
         }
     }
 }

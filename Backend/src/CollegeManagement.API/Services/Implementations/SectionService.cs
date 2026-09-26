@@ -163,6 +163,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 var singleReq = new CreateSectionRequest
                 {
+                    CampusId = request.CampusId > 0 ? request.CampusId : 1,
                     BoardId = request.BoardId,
                     Board = request.Board,
                     AcademicYearId = request.AcademicYearId,

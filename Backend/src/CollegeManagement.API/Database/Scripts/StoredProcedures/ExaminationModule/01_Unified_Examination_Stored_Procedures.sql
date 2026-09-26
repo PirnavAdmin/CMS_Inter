@@ -201,6 +201,7 @@ CREATE PROCEDURE `sp_CreateExamination`(
     IN p_CampusId INT)
 BEGIN
     INSERT INTO `Examinations` (
+        CampusId,
         ExamCode,
         ExamName,
         BoardId,
@@ -219,7 +220,8 @@ BEGIN
         IsActive,
         CreatedAt,
         UpdatedAt
-    , CampusId) VALUES (
+    ) VALUES (
+        IFNULL(p_CampusId, 1),
         p_ExamCode,
         p_ExamName,
         p_BoardId,
@@ -231,7 +233,7 @@ BEGIN
         p_StartDate,
         p_EndDate,
         p_Description,
-        COALESCE(p_ExamPattern, 'REGULAR_ACADEMIC', p_CampusId),
+        COALESCE(p_ExamPattern, 'REGULAR_ACADEMIC'),
         p_TotalMarks,
         p_PassPercentage,
         COALESCE(p_Status, 'DRAFT'),
@@ -267,6 +269,7 @@ CREATE PROCEDURE `sp_UpdateExamination`(
     IN p_CampusId INT)
 BEGIN
     UPDATE `Examinations` SET 
+        CampusId = COALESCE(p_CampusId, CampusId),
         ExamName = COALESCE(p_ExamName, ExamName),
         BoardId = COALESCE(p_BoardId, BoardId),
         AcademicYearId = COALESCE(p_AcademicYearId, AcademicYearId),

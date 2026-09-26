@@ -6,6 +6,7 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
     public class CreateExamScheduleRequest
     {
         public int ExaminationId { get; set; }
+        public int? CampusId { get; set; } = 1;
 
         public int? GroupId { get; set; }
 
