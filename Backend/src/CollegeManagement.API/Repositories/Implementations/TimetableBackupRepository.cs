@@ -306,8 +306,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                     _context.Timetables.RemoveRange(currentSlots);
                 }
 
+                var sectionEntity = await _context.Sections.FindAsync(sectionId);
+
                 var restoredEntities = backupSlotsToRestore.Select(s => new Timetable
                 {
+                    CampusId = sectionEntity?.CampusId,
                     BoardId = s.BoardId,
                     AcademicLevelId = s.AcademicLevelId,
                     AcademicYearId = s.AcademicYearId,

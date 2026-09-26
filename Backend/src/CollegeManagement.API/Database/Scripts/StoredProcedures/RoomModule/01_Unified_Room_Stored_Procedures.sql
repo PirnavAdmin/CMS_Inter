@@ -1,7 +1,9 @@
 -- ====================================================================================
--- College Management System - Unified Rooms Module Stored Procedures
+-- College Management System - Unified Rooms Module Stored Procedures (Multi-Campus)
 -- Run this script in MySQL Workbench or your MySQL CLI
 -- ====================================================================================
+
+USE `u819242402_CLM_System`;
 
 -- ------------------------------------------------------------------------------------
 -- STEP 1: DROP ALL EXISTING / OLD ROOM PROCEDURES
@@ -20,7 +22,7 @@ DELIMITER //
 -- ------------------------------------------------------------------------------------
 -- 1. sp_GetRooms
 -- Retrieves rooms with optional filtering by Building/Block, Floor, RoomType,
--- Active status, search query, and availability (not assigned to active sections).
+-- Active status, search query, availability, and CampusId.
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetRooms`(
     IN p_Building VARCHAR(100),
@@ -28,11 +30,13 @@ CREATE PROCEDURE `sp_GetRooms`(
     IN p_RoomType VARCHAR(50),
     IN p_IsActive TINYINT(1),
     IN p_SearchTerm VARCHAR(100),
-    IN p_OnlyAvailable TINYINT(1)
+    IN p_OnlyAvailable TINYINT(1),
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
         r.RoomId,
+        r.CampusId,
         COALESCE(r.RoomCode, r.RoomNumber, '') AS RoomCode,
         COALESCE(r.RoomName, r.RoomNumber, '') AS RoomName,
         r.RoomNumber,
@@ -47,7 +51,8 @@ BEGIN
         r.CreatedAt,
         r.UpdatedAt
     FROM `Rooms` r
-    WHERE (
+    WHERE (p_CampusId IS NULL OR p_CampusId = 0 OR r.CampusId = p_CampusId)
+      AND (
             p_Building IS NULL OR p_Building = '' OR 
             LOWER(TRIM(r.BlockName)) = LOWER(TRIM(p_Building))
           )
@@ -95,6 +100,7 @@ CREATE PROCEDURE `sp_GetRoomById`(
 BEGIN
     SELECT 
         RoomId,
+        CampusId,
         COALESCE(RoomCode, RoomNumber, '') AS RoomCode,
         COALESCE(RoomName, RoomNumber, '') AS RoomName,
         RoomNumber,
@@ -122,6 +128,7 @@ CREATE PROCEDURE `sp_GetRoomByCode`(
 BEGIN
     SELECT 
         RoomId,
+        CampusId,
         COALESCE(RoomCode, RoomNumber, '') AS RoomCode,
         COALESCE(RoomName, RoomNumber, '') AS RoomName,
         RoomNumber,
@@ -143,9 +150,10 @@ END //
 
 -- ------------------------------------------------------------------------------------
 -- 4. sp_CreateRoom
--- Inserts a new room record and returns the generated RoomId
+-- Inserts a new room record with CampusId and returns the generated RoomId
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_CreateRoom`(
+    IN p_CampusId INT,
     IN p_RoomCode VARCHAR(50),
     IN p_RoomName VARCHAR(100),
     IN p_Capacity INT,
@@ -160,6 +168,7 @@ BEGIN
     SET v_Block = COALESCE(p_BlockName, p_Building, '');
 
     INSERT INTO `Rooms` (
+        CampusId,
         RoomNumber,
         RoomCode,
         RoomName,
@@ -170,6 +179,7 @@ BEGIN
         IsActive,
         CreatedAt
     ) VALUES (
+        IFNULL(p_CampusId, 1),
         p_RoomCode,
         p_RoomCode,
         COALESCE(p_RoomName, p_RoomCode),
@@ -186,10 +196,11 @@ END //
 
 -- ------------------------------------------------------------------------------------
 -- 5. sp_UpdateRoom
--- Updates an existing room record
+-- Updates an existing room record including CampusId
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_UpdateRoom`(
     IN p_RoomId INT,
+    IN p_CampusId INT,
     IN p_RoomCode VARCHAR(50),
     IN p_RoomName VARCHAR(100),
     IN p_Capacity INT,
@@ -204,7 +215,8 @@ BEGIN
     SET v_Block = COALESCE(p_BlockName, p_Building, '');
 
     UPDATE `Rooms`
-    SET RoomNumber = p_RoomCode,
+    SET CampusId = IFNULL(p_CampusId, CampusId),
+        RoomNumber = p_RoomCode,
         RoomCode = p_RoomCode,
         RoomName = COALESCE(p_RoomName, p_RoomCode),
         BlockName = v_Block,

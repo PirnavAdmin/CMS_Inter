@@ -11,6 +11,8 @@ namespace CollegeManagement.API.Models.Timetable
         [Key]
         public int Id { get; set; }
 
+        public int? CampusId { get; set; }
+
         [Required]
         public int BoardId { get; set; }
 
@@ -56,6 +58,9 @@ namespace CollegeManagement.API.Models.Timetable
         public DateTime? UpdatedAt { get; set; }
 
         // Navigation Properties
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
+
         [ForeignKey(nameof(BoardId))]
         public virtual Board? Board { get; set; }
 

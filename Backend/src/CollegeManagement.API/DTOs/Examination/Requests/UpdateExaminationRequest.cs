@@ -11,6 +11,7 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
         private int? _assessmentTypeId;
 
         public string? ExamCode { get; set; }
+        public int? CampusId { get; set; }
         public string? ExamName { get; set; }
         public int? BoardId { get; set; }
         public int? AcademicYearId { get; set; }

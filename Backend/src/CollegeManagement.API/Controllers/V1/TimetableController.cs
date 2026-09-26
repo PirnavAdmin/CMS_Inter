@@ -121,9 +121,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicYearId,
             [FromQuery] int? groupId,
             [FromQuery] int? sectionId,
-            [FromQuery] int? subjectId)
+            [FromQuery] int? subjectId,
+            [FromQuery] int? campusId = null)
         {
-            var result = await _timetableService.GetAllocatedFacultiesAsync(boardId, academicLevelId, academicYearId, groupId, sectionId, subjectId);
+            var result = await _timetableService.GetAllocatedFacultiesAsync(boardId, academicLevelId, academicYearId, groupId, sectionId, subjectId, campusId);
             return Ok(result);
         }
 
@@ -132,9 +133,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("faculty/{facultyId:int}")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetByFaculty(int facultyId, [FromQuery] int? academicYearId = null)
+        public async Task<IActionResult> GetByFaculty(int facultyId, [FromQuery] int? academicYearId = null, [FromQuery] int? campusId = null)
         {
-            var result = await _timetableService.GetFacultyTimetableAsync(facultyId, academicYearId);
+            var result = await _timetableService.GetFacultyTimetableAsync(facultyId, academicYearId, campusId);
             return Ok(result);
         }
 
@@ -162,9 +163,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("section/{sectionId:int}")]
         [ProducesResponseType(typeof(IEnumerable<TimetableResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetBySection(int sectionId, [FromQuery] int? academicYearId = null, [FromQuery] bool? isPublished = null)
+        public async Task<IActionResult> GetBySection(int sectionId, [FromQuery] int? academicYearId = null, [FromQuery] bool? isPublished = null, [FromQuery] int? campusId = null)
         {
-            var result = await _timetableService.GetSectionTimetableAsync(sectionId, academicYearId, isPublished);
+            var result = await _timetableService.GetSectionTimetableAsync(sectionId, academicYearId, isPublished, campusId);
             return Ok(result);
         }
 

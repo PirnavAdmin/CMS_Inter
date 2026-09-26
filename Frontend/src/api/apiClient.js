@@ -154,13 +154,21 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (import.meta.env.DEV) {
-      console.error("API response error:", {
-        url: originalRequest?.url,
-        method: originalRequest?.method,
-        status: error.response?.status,
-        data: error.response?.data,
-      });
+    if (import.meta.env.DEV && !originalRequest?.silent && !originalRequest?.skipErrorLog) {
+      if (!error.response) {
+        console.warn("API network warning (server unreachable or proxy empty response):", {
+          url: originalRequest?.url,
+          method: originalRequest?.method,
+          message: error?.message,
+        });
+      } else {
+        console.error("API response error:", {
+          url: originalRequest?.url,
+          method: originalRequest?.method,
+          status: error.response?.status,
+          data: error.response?.data,
+        });
+      }
     }
 
     if (isHtmlResponse(error.response?.data)) {

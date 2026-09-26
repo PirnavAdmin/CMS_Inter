@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
@@ -21,10 +21,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        public async Task<IEnumerable<PeriodStructureListItemDto>> GetAllAsync()
+        public async Task<IEnumerable<PeriodStructureListItemDto>> GetAllAsync(int? campusId = null)
         {
             return await Connection.QueryAsync<PeriodStructureListItemDto>(
                 "sp_GetPeriodStructures",
+                new { p_CampusId = campusId },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -42,6 +43,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_CreatePeriodStructure",
                 new
                 {
+                    p_CampusId = structure.CampusId,
                     p_Name = structure.Name,
                     p_DayStartTime = structure.DayStartTime,
                     p_PeriodDurationMinutes = structure.PeriodDurationMinutes,
@@ -61,6 +63,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 new
                 {
                     p_Id = structure.Id,
+                    p_CampusId = structure.CampusId,
                     p_Name = structure.Name,
                     p_DayStartTime = structure.DayStartTime,
                     p_PeriodDurationMinutes = structure.PeriodDurationMinutes,
@@ -130,6 +133,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_AssignPeriodStructure",
                 new
                 {
+                    p_CampusId = assignment.CampusId,
                     p_PeriodStructureId = assignment.PeriodStructureId,
                     p_BoardId = assignment.BoardId,
                     p_AcademicLevelId = assignment.AcademicLevelId,
@@ -148,7 +152,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<PeriodStructure?> GetActiveByContextAsync(int boardId, int academicLevelId, int academicYearId, int? groupId)
+        public async Task<PeriodStructure?> GetActiveByContextAsync(int boardId, int academicLevelId, int academicYearId, int? groupId, int? campusId = null)
         {
             return await Connection.QueryFirstOrDefaultAsync<PeriodStructure>(
                 "sp_GetActivePeriodStructureByContext",
@@ -157,7 +161,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_BoardId = boardId,
                     p_AcademicLevelId = academicLevelId,
                     p_AcademicYearId = academicYearId,
-                    p_GroupId = groupId
+                    p_GroupId = groupId,
+                    p_CampusId = campusId
                 },
                 commandType: CommandType.StoredProcedure);
         }

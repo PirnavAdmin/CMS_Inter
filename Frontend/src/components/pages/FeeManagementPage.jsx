@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CalendarClock,
   CheckCircle,
+  ChevronDown,
   Copy,
   Eye,
   Pencil,
@@ -1188,6 +1189,218 @@ const printFeeTarget = (target) => {
   }, 50);
 };
 
+const printReceiptElement = async (receiptElement) => {
+  if (!receiptElement) {
+    printFeeTarget("receipt");
+    return;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.title = "Payment Receipt";
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.opacity = "0";
+  document.body.appendChild(iframe);
+
+  const printWindow = iframe.contentWindow;
+  const printDocument = printWindow?.document;
+  if (!printWindow || !printDocument) {
+    iframe.remove();
+    printFeeTarget("receipt");
+    return;
+  }
+
+  const pageStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    .map((node) => {
+      if (node.tagName.toLowerCase() === "link") {
+        return `<link rel="stylesheet" href="${node.href}">`;
+      }
+      return `<style>${node.textContent || ""}</style>`;
+    })
+    .join("");
+
+  printDocument.open();
+  printDocument.write(`<!doctype html>
+    <html>
+      <head>
+        <title>Payment Receipt</title>
+        ${pageStyles}
+        <style>
+          @page { size: A4; margin: 14mm; }
+          html, body { margin: 0; background: #fff; }
+          body { color: #1C2416; }
+          .cms-fee-receipt {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            border: 0;
+            box-shadow: none;
+          }
+        </style>
+      </head>
+      <body>${receiptElement.outerHTML}</body>
+    </html>`);
+  printDocument.close();
+
+  const waitForImages = Promise.all(Array.from(printDocument.images).map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      image.onload = resolve;
+      image.onerror = resolve;
+    });
+  }));
+  const waitForStyles = Promise.all(Array.from(printDocument.querySelectorAll('link[rel="stylesheet"]')).map((link) => (
+    new Promise((resolve) => {
+      if (link.sheet) {
+        resolve();
+        return;
+      }
+      link.onload = resolve;
+      link.onerror = resolve;
+      window.setTimeout(resolve, 1000);
+    })
+  )));
+  const waitForFonts = printDocument.fonts?.ready || Promise.resolve();
+
+  await Promise.all([waitForStyles, waitForImages, waitForFonts]);
+  await new Promise((resolve) => printWindow.requestAnimationFrame(() => resolve()));
+
+  const cleanup = () => {
+    printWindow.removeEventListener("afterprint", cleanup);
+    window.setTimeout(() => iframe.remove(), 300);
+  };
+  printWindow.addEventListener("afterprint", cleanup);
+  printWindow.focus();
+  printWindow.print();
+};
+
+const printStudentFeeAccountElement = async (accountElement) => {
+  if (!accountElement) {
+    printFeeTarget("student");
+    return;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.title = "Student Fee Account";
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.opacity = "0";
+  document.body.appendChild(iframe);
+
+  const printWindow = iframe.contentWindow;
+  const printDocument = printWindow?.document;
+  if (!printWindow || !printDocument) {
+    iframe.remove();
+    printFeeTarget("student");
+    return;
+  }
+
+  const pageStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    .map((node) => {
+      if (node.tagName.toLowerCase() === "link") {
+        return `<link rel="stylesheet" href="${node.href}">`;
+      }
+      return `<style>${node.textContent || ""}</style>`;
+    })
+    .join("");
+
+  printDocument.open();
+  printDocument.write(`<!doctype html>
+    <html>
+      <head>
+        <title>Student Fee Account</title>
+        ${pageStyles}
+        <style>
+          @page { size: A4; margin: 12mm; }
+          html, body { margin: 0; background: #fff; }
+          body { color: #1C2416; }
+          .cms-fee-student-print {
+            display: grid;
+            gap: 8px;
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 0;
+            overflow: visible;
+            background: #fff;
+          }
+          .cms-fee-student-print .cms-fee-block {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            margin: 0;
+            padding: 8px;
+            border-color: #d1d5db;
+            background: #fff;
+          }
+          .cms-fee-student-print .cms-fee-block h3 {
+            margin: 0 0 6px;
+            font-size: 12px;
+          }
+          .cms-fee-student-print .cms-fee-kv {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 7px 10px;
+          }
+          .cms-fee-student-print .cms-fee-kv span { font-size: 9.5px; }
+          .cms-fee-student-print .cms-fee-kv strong { font-size: 11px; }
+          .cms-fee-student-print .cms-table-wrap {
+            overflow: visible;
+          }
+          .cms-fee-student-print .cms-table {
+            width: 100%;
+            min-width: 0;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 9.5px;
+          }
+          .cms-fee-student-print .cms-table th,
+          .cms-fee-student-print .cms-table td {
+            padding: 4px 5px;
+            border-color: #d1d5db;
+            color: #111827;
+          }
+          .cms-fee-student-print .cms-action-btn,
+          .cms-fee-student-print .cms-btn {
+            display: none !important;
+          }
+        </style>
+      </head>
+      <body>${accountElement.outerHTML}</body>
+    </html>`);
+  printDocument.close();
+
+  const waitForStyles = Promise.all(Array.from(printDocument.querySelectorAll('link[rel="stylesheet"]')).map((link) => (
+    new Promise((resolve) => {
+      if (link.sheet) {
+        resolve();
+        return;
+      }
+      link.onload = resolve;
+      link.onerror = resolve;
+      window.setTimeout(resolve, 1000);
+    })
+  )));
+  const waitForFonts = printDocument.fonts?.ready || Promise.resolve();
+
+  await Promise.all([waitForStyles, waitForFonts]);
+  await new Promise((resolve) => printWindow.requestAnimationFrame(() => resolve()));
+
+  const cleanup = () => {
+    printWindow.removeEventListener("afterprint", cleanup);
+    window.setTimeout(() => iframe.remove(), 300);
+  };
+  printWindow.addEventListener("afterprint", cleanup);
+  printWindow.focus();
+  printWindow.print();
+};
+
 const escapePrintValue = (value) => String(value ?? "-")
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
@@ -1509,8 +1722,9 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
       <div className="cms-card cms-fee-overview-card" ref={overviewRef}>
         <div className="cms-card-head">
           <h2>Fee Management Overview</h2>
-          {overviewTab === "overdue" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Overdue Fees", dueColumns, overdue)}><Printer size={14} /> Print List</button> : null}
-          {overviewTab === "upcoming" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Upcoming Fee Schedules", dueColumns, upcoming)}><Printer size={14} /> Print List</button> : null}
+          {overviewTab === "overdue" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Overdue Fees", dueColumns, overdue)}><Printer size={14} /> Export</button> : null}
+          {overviewTab === "upcoming" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Upcoming Fee Schedules", dueColumns, upcoming)}><Printer size={14} /> Export</button> : null}
+          {overviewTab === "recent" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Recent Payments", recentColumns, recent)}><Printer size={14} /> Export</button> : null}
         </div>
         <div className="cms-card-body cms-fee-overview-shell">
           <div className="cms-fee-overview-tabs" role="tablist" aria-label="Fee Management Overview">
@@ -1629,9 +1843,6 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
                     ))}
                   </tbody>
                 </table>
-                <div className="cms-fee-print-row">
-                  <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Recent Payments", recentColumns, recent)}><Printer size={14} /> Print List</button>
-                </div>
                 <TablePagination page={recentPage} totalItems={recent.length} onPageChange={setRecentPage} />
               </div>
             ) : null}
@@ -1645,8 +1856,13 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
 /* ---------------------------- Collect payment ---------------------------- */
 function CollectPaymentModal({ account, onClose, onSaved }) {
   const pending = account.installments.filter((item) => normalizeKey(item.status) !== "paid" && Number(item.balance || 0) > 0);
-  const [target, setTarget] = useState(pending.length ? String(pending[0].no) : "full");
-  const [amount, setAmount] = useState(String(pending.length ? pending[0].balance : account.balance));
+  const installmentIdFor = (item) => item?.feeInstallmentId || item?.installmentId || item?.id || null;
+  const firstPendingId = pending.length ? installmentIdFor(pending[0]) : null;
+  const [target, setTarget] = useState(firstPendingId ? "schedules" : "full");
+  const [selectedInstallmentIds, setSelectedInstallmentIds] = useState(firstPendingId ? [String(firstPendingId)] : []);
+  const selectedPending = pending.filter((item) => selectedInstallmentIds.includes(String(installmentIdFor(item))));
+  const selectedScheduleTotal = selectedPending.reduce((sum, item) => sum + Number(item.balance || 0), 0);
+  const [amount, setAmount] = useState(String(firstPendingId ? selectedScheduleTotal : account.balance));
   const [date, setDate] = useState(todayISO());
   const [method, setMethod] = useState("Cash");
   const [reference, setReference] = useState("");
@@ -1658,24 +1874,44 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
   const savingRef = useRef(false);
   const isReferenceRequired = method && method !== "Cash";
 
-  const selectTarget = (value) => {
-    setTarget(value);
+  const setFullBalanceTarget = () => {
+    setTarget("full");
+    setSelectedInstallmentIds([]);
     setError("");
-    if (value === "full") {
-      setAmount(String(account.balance));
-      return;
-    }
-    const installment = pending.find((item) => String(item.no) === value);
-    setAmount(String(installment ? installment.balance : account.balance));
+    setAmount(String(account.balance));
   };
+
+  const toggleScheduleTarget = (item) => {
+    const installmentId = installmentIdFor(item);
+    if (!installmentId) return;
+    setTarget("schedules");
+    setError("");
+    setSelectedInstallmentIds((current) => {
+      const key = String(installmentId);
+      const next = current.includes(key) ? current.filter((id) => id !== key) : [...current, key];
+      const nextTotal = pending
+        .filter((pendingItem) => next.includes(String(installmentIdFor(pendingItem))))
+        .reduce((sum, pendingItem) => sum + Number(pendingItem.balance || 0), 0);
+      setAmount(String(nextTotal || ""));
+      return next;
+    });
+  };
+  const targetLabel = target === "full"
+    ? `Pay Full Remaining Balance - ${formatCurrency(account.balance)}`
+    : selectedPending.length
+      ? `${selectedPending.length} schedule${selectedPending.length === 1 ? "" : "s"} selected - ${formatCurrency(selectedScheduleTotal)}`
+      : "Select pending fee schedules";
 
   const save = async () => {
     if (savingRef.current) return null;
     const value = Number(amount || 0);
     const discountValue = Number(discount || 0);
     const fineValue = Number(fine || 0);
+    const selectedIds = target === "full" ? [] : selectedInstallmentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
     if (!Number.isFinite(value) || value <= 0) return setError("Enter a valid payment amount");
     if (discountValue > value + fineValue) return setError("Discount cannot exceed the payment amount plus fine");
+    if (target !== "full" && !selectedIds.length) return setError("Select at least one pending fee schedule");
+    if (target !== "full" && value > selectedScheduleTotal) return setError(`Amount cannot exceed the selected schedule total of ${formatCurrency(selectedScheduleTotal)}`);
     if (value > account.balance) return setError(`Amount cannot exceed the outstanding balance of ${formatCurrency(account.balance)}`);
     if (!method) return setError("Payment Method is required");
     if (isReferenceRequired && !reference.trim()) return setError("Transaction / Reference Number is required for this payment method");
@@ -1685,14 +1921,13 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
     if (!Number.isFinite(assignmentIdValue) || assignmentIdValue <= 0) return setError("Student fee assignment ID must be a valid number");
     const studentIdValue = Number(account.studentId || 0);
     if (!Number.isFinite(studentIdValue) || studentIdValue <= 0) return setError("Student ID is required to collect payment");
-    const installment = target === "full" ? null : pending.find((item) => String(item.no) === target);
     savingRef.current = true;
     setSaving(true);
     try {
       const response = await apiClient.post(apiEndpoints.fee.collect, {
         studentId: studentIdValue,
         studentFeeId: assignmentIdValue,
-        feeInstallmentId: installment?.feeInstallmentId || installment?.installmentId || installment?.id || null,
+        feeInstallmentIds: selectedIds,
         amount: value,
         paymentDate: date ? new Date(date).toISOString() : null,
         paymentMode: method,
@@ -1744,15 +1979,34 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
 
         <div className="cms-form-grid cols-3">
           <div className="cms-field full">
-            <label htmlFor="collect-target">Pay Towards</label>
-            <select id="collect-target" value={target} onChange={(event) => selectTarget(event.target.value)}>
+            <label>Pay Towards</label>
+            <details className="cms-fee-pay-towards">
+              <summary className="cms-fee-pay-towards-trigger">
+                <span>{targetLabel}</span>
+                <span className="cms-fee-pay-towards-arrow" aria-hidden="true">
+                  <ChevronDown size={16} strokeWidth={2} />
+                </span>
+              </summary>
+              <div className="cms-fee-pay-towards-menu">
+                <label className="cms-fee-pay-option is-strong">
+                  <input className="cms-fee-pay-checkbox" type="checkbox" checked={target === "full"} onChange={setFullBalanceTarget} />
+                  <span className="cms-fee-pay-option-text">Pay Full Remaining Balance - {formatCurrency(account.balance)}</span>
+                </label>
+                {pending.length ? <div className="cms-fee-pay-divider" /> : null}
               {pending.map((item) => (
-                <option key={item.no} value={String(item.no)}>
-                  Fee Schedule {item.no} - {formatCurrency(item.balance)} due {formatDate(item.dueDate)}
-                </option>
+                  <label key={installmentIdFor(item) || item.no} className="cms-fee-pay-option">
+                    <input
+                      className="cms-fee-pay-checkbox"
+                      type="checkbox"
+                      checked={target !== "full" && selectedInstallmentIds.includes(String(installmentIdFor(item)))}
+                      onChange={() => toggleScheduleTarget(item)}
+                    />
+                    <span className="cms-fee-pay-option-text">Fee Schedule {item.no} - {formatCurrency(item.balance)} due {formatDate(item.dueDate)}</span>
+                  </label>
               ))}
-              <option value="full">Pay Full Remaining Balance - {formatCurrency(account.balance)}</option>
-            </select>
+                {!pending.length ? <div className="cms-fee-empty-row">No pending fee schedules.</div> : null}
+              </div>
+            </details>
           </div>
           <div className="cms-field">
             <label htmlFor="collect-amount">Amount <span className="req">*</span></label>
@@ -1793,6 +2047,7 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
 
 /* ------------------------------- Receipt -------------------------------- */
 function ReceiptModal({ receipt, onClose }) {
+  const receiptRef = useRef(null);
   const visibleRows = (rows) => rows.filter(([, value]) => value !== undefined && value !== null && value !== "" && value !== "-");
   const studentRows = visibleRows([
     ["Student Name", receipt.studentName],
@@ -1832,11 +2087,11 @@ function ReceiptModal({ receipt, onClose }) {
       footer={(
         <>
           <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
-          <button className="cms-btn cms-btn-primary" onClick={() => printFeeTarget("receipt")}><Printer size={14} /> Print Receipt</button>
+          <button className="cms-btn cms-btn-primary" onClick={() => printReceiptElement(receiptRef.current)}><Printer size={14} /> Print Receipt</button>
         </>
       )}
     >
-      <div className="cms-fee-receipt cms-fee-receipt-print">
+      <div ref={receiptRef} className="cms-fee-receipt cms-fee-receipt-print">
         <div className="cms-fee-receipt-head">
           <img src={collegeLogo} alt="Pirnav College logo" />
           <div>
@@ -1922,6 +2177,7 @@ function ReceiptModal({ receipt, onClose }) {
 
 /* --------------------------- Student fee details -------------------------- */
 function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false }) {
+  const accountPrintRef = useRef(null);
   const feeBreakdownTotals = account.feeItems.reduce((totals, item) => ({
     original: totals.original + Number(item.originalAmount || 0),
     concession: totals.concession + Number(item.concessionAmount || 0),
@@ -1970,7 +2226,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
             <span>{account.admissionNo} &middot; {account.group} / {account.section}</span>
           </div>
           <div className="cms-fee-drawer-actions">
-            <button className="cms-btn cms-btn-ghost" onClick={() => printFeeTarget("student")}>
+            <button className="cms-btn cms-btn-ghost" onClick={() => printStudentFeeAccountElement(accountPrintRef.current)}>
               <Printer size={14} /> Print
             </button>
             {allowCollect ? (
@@ -1982,7 +2238,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
           </div>
         </div>
 
-        <div className="cms-card-body cms-fee-drawer-body cms-fee-student-print">
+        <div ref={accountPrintRef} className="cms-card-body cms-fee-drawer-body cms-fee-student-print">
           <section className="cms-fee-block">
             <h3>Student Information</h3>
             <div className="cms-fee-kv">
@@ -3868,7 +4124,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
         <div className="cms-fee-head-actions">
           <span className="cms-badge cms-badge-info">{rows.length} transactions</span>
           <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Payment History", historyColumns, rows)}>
-            <Printer size={14} /> Print
+            <Printer size={14} /> Export
           </button>
         </div>
       </div>

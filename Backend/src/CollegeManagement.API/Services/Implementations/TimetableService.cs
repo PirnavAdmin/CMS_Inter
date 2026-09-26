@@ -45,14 +45,14 @@ namespace CollegeManagement.API.Services.Implementations
             return await _timetableRepository.GetPagedAsync(queryParams);
         }
 
-        public async Task<IEnumerable<TimetableResponseDto>> GetFacultyTimetableAsync(int facultyId, int? academicYearId = null)
+        public async Task<IEnumerable<TimetableResponseDto>> GetFacultyTimetableAsync(int facultyId, int? academicYearId = null, int? campusId = null)
         {
-            return await _timetableRepository.GetByFacultyIdAsync(facultyId, academicYearId);
+            return await _timetableRepository.GetByFacultyIdAsync(facultyId, academicYearId, campusId);
         }
 
-        public async Task<IEnumerable<TimetableResponseDto>> GetSectionTimetableAsync(int sectionId, int? academicYearId = null, bool? isPublished = null)
+        public async Task<IEnumerable<TimetableResponseDto>> GetSectionTimetableAsync(int sectionId, int? academicYearId = null, bool? isPublished = null, int? campusId = null)
         {
-            return await _timetableRepository.GetBySectionIdAsync(sectionId, academicYearId, isPublished);
+            return await _timetableRepository.GetBySectionIdAsync(sectionId, academicYearId, isPublished, campusId);
         }
 
         public async Task<IEnumerable<TimetableResponseDto>> GetStudentTimetableAsync(int studentId)
@@ -90,6 +90,11 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.ProgramId = section.ProgramId ?? throw new InvalidOperationException($"Section {dto.SectionId} has no ProgramId assigned.");
             }
 
+            if (!dto.CampusId.HasValue)
+            {
+                dto.CampusId = section.CampusId;
+            }
+
             await ValidateSlotAndConflictsAsync(dto.AcademicYearId, dto.SectionId, dto.StaffId, dto.RoomId, dto.DayOfWeek, dto.PeriodId, dto.SubjectId, dto.BoardId, dto.GroupId, dto.AcademicLevelId, excludeId: null);
 
             int id = await _timetableRepository.AddAsync(dto);
@@ -117,6 +122,11 @@ namespace CollegeManagement.API.Services.Implementations
             if (!dto.ProgramId.HasValue || dto.ProgramId.Value <= 0)
             {
                 dto.ProgramId = existing.ProgramId;
+            }
+
+            if (!dto.CampusId.HasValue)
+            {
+                dto.CampusId = existing.CampusId;
             }
 
             await ValidateSlotAndConflictsAsync(dto.AcademicYearId, dto.SectionId, dto.StaffId, dto.RoomId, dto.DayOfWeek, dto.PeriodId, dto.SubjectId, dto.BoardId, dto.GroupId, dto.AcademicLevelId, excludeId: id);
@@ -166,9 +176,9 @@ namespace CollegeManagement.API.Services.Implementations
             return true;
         }
 
-        public async Task<IEnumerable<AllocatedFacultyDto>> GetAllocatedFacultiesAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? sectionId, int? subjectId)
+        public async Task<IEnumerable<AllocatedFacultyDto>> GetAllocatedFacultiesAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? sectionId, int? subjectId, int? campusId = null)
         {
-            return await _timetableRepository.GetAllocatedFacultiesAsync(boardId, academicLevelId, academicYearId, groupId, sectionId, subjectId);
+            return await _timetableRepository.GetAllocatedFacultiesAsync(boardId, academicLevelId, academicYearId, groupId, sectionId, subjectId, campusId);
         }
 
         public async Task<ValidateTimetableResultDto> ValidateSectionTimetableAsync(int sectionId, int academicYearId)
@@ -609,6 +619,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                             var newSlot = new Timetable
                             {
+                                CampusId = sec.CampusId,
                                 BoardId = dto.BoardId,
                                 AcademicLevelId = dto.AcademicLevelId,
                                 AcademicYearId = dto.AcademicYearId,

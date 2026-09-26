@@ -188,6 +188,35 @@ namespace CollegeManagement.API.DTOs.Students
         public DateTime? UpdatedAt { get; set; }
 
         public string? Remarks { get; set; }
+
+        // Residential & Transport Allocation
+        public string? StudentType { get; set; }
+
+        public bool? TransportRequired { get; set; }
+
+        public string? BusType { get; set; }
+
+        public int? RouteId { get; set; }
+
+        public string? BusRoute { get; set; }
+
+        public int? PickupPointId { get; set; }
+
+        public string? PickupPoint { get; set; }
+
+        public int? HostelId { get; set; }
+
+        public string? HostelBlock { get; set; }
+
+        public int? RoomId { get; set; }
+
+        public string? HostelRoom { get; set; }
+
+        public int? BedId { get; set; }
+
+        public string? HostelBed { get; set; }
+
+        public string? HallTicketNumber { get; set; }
     }
 }
 

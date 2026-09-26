@@ -29,9 +29,9 @@ namespace CollegeManagement.API.Services.Implementations
             _mapper = mapper;
         }
 
-        public async Task<IEnumerable<PeriodStructureListItemDto>> GetAllAsync()
+        public async Task<IEnumerable<PeriodStructureListItemDto>> GetAllAsync(int? campusId = null)
         {
-            var structures = (await _periodStructureRepository.GetAllAsync()).ToList();
+            var structures = (await _periodStructureRepository.GetAllAsync(campusId)).ToList();
             foreach (var s in structures)
             {
                 var assignments = await _periodStructureRepository.GetAssignmentsByStructureIdAsync(s.Id);
@@ -103,6 +103,7 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var structureEntity = new PeriodStructure
             {
+                CampusId = dto.CampusId,
                 Name = dto.Name,
                 DayStartTime = dto.DayStartTime,
                 PeriodDurationMinutes = dto.PeriodDurationMinutes,
@@ -126,6 +127,7 @@ namespace CollegeManagement.API.Services.Implementations
             var existing = await _periodStructureRepository.GetByIdAsync(id);
             if (existing == null) return null;
 
+            existing.CampusId = dto.CampusId;
             existing.Name = dto.Name;
             existing.DayStartTime = dto.DayStartTime;
             existing.PeriodDurationMinutes = dto.PeriodDurationMinutes;
@@ -165,6 +167,7 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var assignment = new PeriodStructureAssignment
             {
+                CampusId = dto.CampusId,
                 PeriodStructureId = dto.PeriodStructureId,
                 BoardId = dto.BoardId,
                 AcademicLevelId = dto.AcademicLevelId,
@@ -179,6 +182,7 @@ namespace CollegeManagement.API.Services.Implementations
             return assignments.FirstOrDefault(a => a.Id == assignmentId) ?? new PeriodStructureAssignmentResponseDto
             {
                 Id = assignmentId,
+                CampusId = dto.CampusId,
                 PeriodStructureId = dto.PeriodStructureId,
                 BoardId = dto.BoardId,
                 AcademicLevelId = dto.AcademicLevelId,
@@ -188,9 +192,9 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<PeriodResponseDto>> GetActiveTeachingPeriodsForContextAsync(int boardId, int academicLevelId, int academicYearId, int? groupId)
+        public async Task<IEnumerable<PeriodResponseDto>> GetActiveTeachingPeriodsForContextAsync(int boardId, int academicLevelId, int academicYearId, int? groupId, int? campusId = null)
         {
-            var allContextPeriods = (await _periodRepository.GetByContextAsync(boardId, academicLevelId, academicYearId, groupId)).ToList();
+            var allContextPeriods = (await _periodRepository.GetByContextAsync(boardId, academicLevelId, academicYearId, groupId, campusId)).ToList();
             var teachingOnly = allContextPeriods.Where(p => p.IsActive && !p.IsBreak).OrderBy(p => p.DisplayOrder).ToList();
 
             if (teachingOnly.Count == 0)
@@ -201,9 +205,9 @@ namespace CollegeManagement.API.Services.Implementations
             return _mapper.Map<IEnumerable<PeriodResponseDto>>(teachingOnly);
         }
 
-        public async Task<IEnumerable<PeriodResponseDto>> GetPeriodsByContextAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId)
+        public async Task<IEnumerable<PeriodResponseDto>> GetPeriodsByContextAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? campusId = null)
         {
-            var periods = await _periodRepository.GetByContextAsync(boardId, academicLevelId, academicYearId, groupId);
+            var periods = await _periodRepository.GetByContextAsync(boardId, academicLevelId, academicYearId, groupId, campusId);
             return _mapper.Map<IEnumerable<PeriodResponseDto>>(periods);
         }
 
@@ -347,6 +351,7 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     // Update existing period in-place to preserve PeriodId references in Timetables table
                     var existingPeriod = existingPeriods[i];
+                    existingPeriod.CampusId = structure.CampusId;
                     existingPeriod.PeriodName = name;
                     existingPeriod.StartTime = start;
                     existingPeriod.EndTime = end;
@@ -361,6 +366,7 @@ namespace CollegeManagement.API.Services.Implementations
                     // Add new period if structure expanded
                     var newPeriod = new Period
                     {
+                        CampusId = structure.CampusId,
                         PeriodStructureId = structure.Id,
                         PeriodName = name,
                         StartTime = start,

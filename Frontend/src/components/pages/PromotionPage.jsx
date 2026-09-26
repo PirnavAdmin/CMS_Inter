@@ -6,6 +6,7 @@ import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import {
   getEligibleStudents,
   previewPromotion,
@@ -149,6 +150,9 @@ export default function PromotionPage({ screen = "promotion" }) {
     selectedAcademicYearId,
     selectedAcademicYear,
   } = useAcademicContext();
+
+  const campusCtx = useCampusContext();
+  const activeCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
 
   const [allocationTab, setAllocationTab] = useState("program");
   const [setup, setSetup] = useState(EMPTY_SETUP);
@@ -324,8 +328,10 @@ export default function PromotionPage({ screen = "promotion" }) {
     setStudentsLoaded(false);
     setStudents([]);
     setSelectedIds([]);
+    setHistoryLoaded(false);
+    setReportLoaded(false);
     setError("");
-  }, [selectedBoardId, selectedAcademicYearId, nextAcademicYearObj]);
+  }, [selectedBoardId, selectedAcademicYearId, nextAcademicYearObj, activeCampusId]);
 
   // Resolve academic levels associated with the active board
   const boardLevels = useMemo(() => {
@@ -465,6 +471,7 @@ export default function PromotionPage({ screen = "promotion" }) {
 
   const eligibleParams = useCallback(() => {
     return compactParams({
+      CampusId: numericId(activeCampusId),
       AcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
       BoardId: numericId(setup.board || selectedBoardId),
       AcademicLevel: academicLevelLabel(setup.fromLevel),
@@ -476,7 +483,7 @@ export default function PromotionPage({ screen = "promotion" }) {
       TargetGroupId: numericId(setup.toGroup),
       TargetSection: setup.toSection,
     });
-  }, [academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup]);
+  }, [activeCampusId, academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup]);
 
   const fetchEligibleStudents = useCallback(async () => {
     setStudentsLoading(true);
@@ -625,6 +632,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     setError("");
     try {
       const rows = await getPromotionHistory(compactParams({
+        campusId: numericId(activeCampusId),
         academicYearId: numericId(historyFilters.academicYearId || selectedAcademicYearId),
         academicLevel: historyFilters.academicLevel,
         groupId: numericId(historyFilters.groupId),
@@ -645,7 +653,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     } finally {
       setHistoryLoading(false);
     }
-  }, [historyFilters, selectedAcademicYearId]);
+  }, [activeCampusId, historyFilters, selectedAcademicYearId]);
 
   useEffect(() => {
     if (activeTab === "history" && !historyLoaded) fetchHistory();
@@ -674,6 +682,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     setError("");
     try {
       const res = await getPromotionReport(compactParams({
+        campusId: numericId(activeCampusId),
         academicYearId: numericId(selectedAcademicYearId),
       }));
       const data = unwrapObject(res);
@@ -687,7 +696,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     } finally {
       setReportLoading(false);
     }
-  }, [selectedAcademicYearId]);
+  }, [activeCampusId, selectedAcademicYearId]);
 
   useEffect(() => {
     if (activeTab === "report" && !reportLoaded) fetchReport();

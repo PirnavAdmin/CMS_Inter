@@ -1041,13 +1041,14 @@ namespace CollegeManagement.API.Services.Implementations
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId)
+            int examId,
+            int? campusId = null)
         {
             var memo = await GetStudentMemoAsync(studentId, examId);
             if (memo != null) return memo;
 
             return await _resultRepository.GetStudentResultAsync(
-                studentId, boardId, academicYearId, academicLevelId, groupId, examId);
+                studentId, boardId, academicYearId, academicLevelId, groupId, examId, campusId);
         }
 
         #endregion
@@ -1387,10 +1388,11 @@ namespace CollegeManagement.API.Services.Implementations
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId)
+            int examId,
+            int? campusId = null)
         {
             return await _resultRepository.GetResultAnalysisAsync(
-                boardId, academicYearId, academicLevelId, groupId, examId);
+                boardId, academicYearId, academicLevelId, groupId, examId, campusId);
         }
 
         #endregion
