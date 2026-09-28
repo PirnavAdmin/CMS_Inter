@@ -102,7 +102,7 @@ namespace CollegeManagement.API.Models
         public string? Pincode { get; set; }
 
         // Academic Relations & Campus
-        public int? CampusId { get; set; }
+        public int? CampusId { get; set; } public int? AdmittedById { get; set; }
 
         [ForeignKey(nameof(CampusId))]
         public virtual Campus? CampusNavigation { get; set; }

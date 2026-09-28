@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
@@ -20,10 +20,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        public async Task<IEnumerable<Period>> GetAllAsync()
+        public async Task<IEnumerable<Period>> GetAllAsync(int? campusId = null)
         {
             return await Connection.QueryAsync<Period>(
                 "sp_GetPeriods",
+                new { p_CampusId = campusId },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -43,7 +44,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<IEnumerable<Period>> GetByContextAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId)
+        public async Task<IEnumerable<Period>> GetByContextAsync(int? boardId, int? academicLevelId, int? academicYearId, int? groupId, int? campusId = null)
         {
             return await Connection.QueryAsync<Period>(
                 "sp_GetPeriodsByContext",
@@ -52,7 +53,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_BoardId = boardId,
                     p_AcademicLevelId = academicLevelId,
                     p_AcademicYearId = academicYearId,
-                    p_GroupId = groupId
+                    p_GroupId = groupId,
+                    p_CampusId = campusId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -63,6 +65,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_CreatePeriod",
                 new
                 {
+                    p_CampusId = period.CampusId,
                     p_PeriodStructureId = period.PeriodStructureId,
                     p_PeriodName = period.PeriodName,
                     p_StartTime = period.StartTime,
@@ -84,6 +87,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 new
                 {
                     p_PeriodId = period.PeriodId,
+                    p_CampusId = period.CampusId,
                     p_PeriodStructureId = period.PeriodStructureId,
                     p_PeriodName = period.PeriodName,
                     p_StartTime = period.StartTime,

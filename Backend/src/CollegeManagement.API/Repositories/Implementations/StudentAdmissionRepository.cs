@@ -68,12 +68,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 catch
                 {
                     const string sql = @"
-                        SELECT sa.*, b.BoardName, ay.AcademicYearName, g.GroupName, s.SectionName, c.CampusName
+                        SELECT sa.*, b.BoardName, ay.AcademicYearName, g.GroupName, c.CampusName, CONCAT(st.FirstName, ' ', st.LastName) AS AdmittedByName
                         FROM StudentAdmissions sa
                         LEFT JOIN Boards b ON sa.BoardId = b.BoardId
                         LEFT JOIN AcademicYears ay ON sa.AcademicYearId = ay.AcademicYearId
                         LEFT JOIN `Groups` g ON sa.GroupId = g.GroupId
-                        LEFT JOIN Sections s ON sa.SectionId = s.SectionId
+                        LEFT JOIN Staffs st ON sa.AdmittedById = st.Id
                         LEFT JOIN Campuses c ON sa.CampusId = c.CampusId
                         WHERE sa.IsActive = 1
                           AND (@CampusId IS NULL OR @CampusId = 0 OR sa.CampusId = @CampusId)
@@ -259,7 +259,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_City = request.City,
                         p_District = request.District,
                         p_State = request.State,
-                        p_Pincode = request.Pincode,
+                        p_Pincode = request.Pincode, p_AdmittedById = request.AdmittedById,
 
 
                         // -------------------------------------------------

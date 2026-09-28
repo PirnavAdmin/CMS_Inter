@@ -46,5 +46,11 @@ namespace CollegeManagement.API.Models.Settings
 
         [Column("UpdatedAt")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+        [Column("CampusId")]
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
     }
 }

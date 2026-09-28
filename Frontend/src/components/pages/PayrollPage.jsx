@@ -81,7 +81,7 @@ export default function PayrollPage({ mode = "payroll" }) {
           payrollApi.getSalaryRevisions(),
           payrollApi.getBonuses(),
           payrollApi.getSalaryAdvances(),
-          payrollApi.getPayrollSummary(),
+          payrollApi.getPayrollSummary({ month: new Date().getMonth() + 1, year: new Date().getFullYear() }),
         ]);
 
         if (!isMounted) return;
@@ -122,66 +122,133 @@ export default function PayrollPage({ mode = "payroll" }) {
           }
 
           // Employees & Assignments
-          const empList = empRes.status === "fulfilled" && Array.isArray(empRes.value) ? empRes.value : [];
-          const asgnList = asgnRes.status === "fulfilled" && Array.isArray(asgnRes.value) ? asgnRes.value : [];
+          const extractList = (val) => {
+            if (Array.isArray(val)) return val;
+            if (Array.isArray(val?.data)) return val.data;
+            if (Array.isArray(val?.items)) return val.items;
+            return [];
+          };
+          const empList = extractList(empRes.status === "fulfilled" ? empRes.value : null);
+          const asgnList = extractList(asgnRes.status === "fulfilled" ? asgnRes.value : null);
 
-          if (empList.length > 0 || asgnList.length > 0) {
-            const rawAssignments = asgnList.length > 0 ? asgnList : empList;
-            updated.assignments = rawAssignments.map((e) => ({
-              id: e.assignmentId ? `asgn-${e.assignmentId}` : `emp-${e.staffId || e.id}`,
-              numericId: e.assignmentId || e.staffId || e.id,
-              assignmentId: e.assignmentId,
-              staffId: e.employeeId || `STF-${e.staffId || e.id}`,
-              rawStaffId: e.staffId || e.id,
-              staffName: e.staffName || e.name || `Staff #${e.staffId || e.id}`,
-              staffType: e.staffType || "Teaching",
-              department: e.departmentName || e.department || "General",
-              designation: e.designation || e.designationName || "-",
-              structureId: e.salaryStructureId ? `struct-${e.salaryStructureId}` : null,
-              rawStructureId: e.salaryStructureId,
-              structureName: e.structureName || "Standard Grade",
-              basicPay: Number(e.basicPay || 0),
-              grossSalary: Number(e.grossSalary || 0),
-              totalDeductions: Number(e.totalDeductions || 0),
-              netSalary: Number(e.netSalary || 0),
-              effectiveFrom: e.effectiveFrom ? String(e.effectiveFrom).split("T")[0] : "",
-              status: e.status || "Active",
-              paymentMode: e.paymentMode || "Bank Transfer",
-              bankName: e.bankName || "State Bank of India",
-              accountNumber: e.accountNumber || "9876543210123",
-              ifscCode: e.ifscCode || "SBIN0001234",
-              panNumber: e.panNumber || "ABCDE1234F",
-              uanNumber: e.uanNumber || "100987654321",
-            }));
-            updated.apiEmployees = empList;
+          // Build employee lookup map by staffId
+          const empMap = new Map();
+          empList.forEach((emp) => {
+            const key = emp.staffId != null ? String(emp.staffId) : (emp.id != null ? String(emp.id) : null);
+            if (key) empMap.set(key, emp);
+          });
+
+          const rawAssignments = asgnList.length > 0 ? asgnList : empList;
+
+          if (rawAssignments.length > 0) {
+            updated.assignments = rawAssignments.map((e, index) => {
+              const staffKey = String(e.staffId ?? e.rawStaffId ?? e.id ?? "");
+              const empInfo = empMap.get(staffKey) || {};
+
+              const asgnId = e.assignmentId || empInfo.assignmentId || e.id || e.Id;
+              const numericId = asgnId || e.staffId || empInfo.staffId || index + 1;
+              const rowKey = asgnId ? `asgn-${asgnId}` : `emp-${e.staffId || empInfo.staffId || index + 1}`;
+
+              const staffName = (empInfo.staffName && empInfo.staffName.trim())
+                || (e.staffName && e.staffName.trim())
+                || (empInfo.name && empInfo.name.trim())
+                || (e.name && e.name.trim())
+                || (e.staffId || empInfo.staffId ? `Staff #${e.staffId || empInfo.staffId}` : "-");
+
+              const employeeId = (empInfo.employeeId && empInfo.employeeId.trim())
+                || (e.employeeId && e.employeeId.trim())
+                || (e.staffId || empInfo.staffId ? `STF-${e.staffId || empInfo.staffId}` : "-");
+
+              const department = (empInfo.departmentName && empInfo.departmentName.trim())
+                || (e.departmentName && e.departmentName.trim())
+                || (empInfo.department && empInfo.department.trim())
+                || (e.department && e.department.trim())
+                || "General";
+
+              const rawStaffType = empInfo.staffType || e.staffType || empInfo.employmentType || e.employmentType;
+              const staffType = (rawStaffType === "Teaching" || rawStaffType === "Non-Teaching")
+                ? rawStaffType
+                : (rawStaffType && String(rawStaffType).toLowerCase().includes("non") ? "Non-Teaching" : "Teaching");
+
+              const designation = (empInfo.designation && empInfo.designation.trim())
+                || (e.designation && e.designation.trim())
+                || (empInfo.designationName && empInfo.designationName.trim())
+                || (e.designationName && e.designationName.trim())
+                || "-";
+
+              const structureId = (e.salaryStructureId || empInfo.salaryStructureId)
+                ? `struct-${e.salaryStructureId || empInfo.salaryStructureId}`
+                : null;
+
+              const structureName = empInfo.structureName
+                || e.structureName
+                || (e.salaryStructureId || empInfo.salaryStructureId ? `Structure #${e.salaryStructureId || empInfo.salaryStructureId}` : "Standard Grade");
+
+              const basicPay = Number(empInfo.basicPay ?? e.basicPay ?? 0);
+              const grossSalary = Number(empInfo.grossSalary ?? e.grossSalary ?? 0);
+              const totalDeductions = Number(empInfo.totalDeductions ?? e.totalDeductions ?? 0);
+              const netSalary = Number(empInfo.netSalary ?? e.netSalary ?? 0);
+
+              return {
+                id: rowKey,
+                numericId,
+                assignmentId: asgnId,
+                staffId: employeeId,
+                rawStaffId: e.staffId || empInfo.staffId,
+                staffName,
+                staffType,
+                department,
+                designation,
+                structureId,
+                rawStructureId: e.salaryStructureId || empInfo.salaryStructureId,
+                structureName,
+                basicPay,
+                grossSalary,
+                totalDeductions,
+                netSalary,
+                effectiveFrom: (e.effectiveFrom || empInfo.effectiveFrom)
+                  ? String(e.effectiveFrom || empInfo.effectiveFrom).split("T")[0]
+                  : "",
+                status: e.status || empInfo.status || "Active",
+                paymentMode: e.paymentMode || empInfo.paymentMode || "Bank Transfer",
+                bankName: e.bankName || empInfo.bankName || "State Bank of India",
+                accountNumber: e.accountNumber || empInfo.accountNumber || "9876543210123",
+                ifscCode: e.ifscCode || empInfo.ifscCode || "SBIN0001234",
+                panNumber: e.panNumber || empInfo.panNumber || "ABCDE1234F",
+                uanNumber: e.uanNumber || empInfo.uanNumber || "100987654321",
+              };
+            });
+            updated.apiEmployees = empList.length > 0 ? empList : rawAssignments;
           }
 
           // Payslips
           if (slipRes.status === "fulfilled" && Array.isArray(slipRes.value) && slipRes.value.length > 0) {
             updated.payslips = slipRes.value.map((p) => {
+              const staffKey = String(p.staffId || p.rawStaffId || "");
+              const empInfo = empMap.get(staffKey) || {};
               const monthStr = p.payrollYear && p.payrollMonth
                 ? `${p.payrollYear}-${String(p.payrollMonth).padStart(2, "0")}`
                 : p.month || "2026-09";
               return {
                 id: p.payslipId ? `slip-${p.payslipId}` : p.id,
                 numericId: p.payslipId || p.id,
-                staffId: p.employeeId || `STF-${p.staffId}`,
+                staffId: p.employeeId || empInfo.employeeId || (p.staffId ? `STF-${p.staffId}` : "-"),
                 rawStaffId: p.staffId,
-                staffName: p.staffName,
-                staffType: p.staffType,
-                department: p.departmentName || p.department,
-                designation: p.designation,
+                staffName: p.staffName || empInfo.staffName || (p.staffId ? `Staff #${p.staffId}` : "-"),
+                staffType: p.staffType || empInfo.staffType || "Teaching",
+                department: p.departmentName || p.department || empInfo.departmentName || empInfo.department || "General",
+                designation: p.designation || empInfo.designation || "-",
                 month: monthStr,
                 periodLabel: p.periodLabel || monthStr,
                 year: p.payrollYear || 2026,
-                basicPay: Number(p.basicPay || 0),
+                basicPay: Number(p.basicPay || empInfo.basicPay || 0),
                 hra: Number(p.hra || 0),
                 da: Number(p.da || 0),
-                grossSalary: Number(p.grossSalary || 0),
-                totalDeductions: Number(p.totalDeductions || 0),
-                netSalary: Number(p.netSalary || 0),
+                grossSalary: Number(p.grossSalary || empInfo.grossSalary || 0),
+                totalDeductions: Number(p.totalDeductions || empInfo.totalDeductions || 0),
+                netSalary: Number(p.netSalary || empInfo.netSalary || 0),
                 status: p.payslipStatus || p.status || "Generated",
-                paymentMode: p.paymentMode || "Bank Transfer",
+                paymentMode: p.paymentMode || empInfo.paymentMode || "Bank Transfer",
                 generatedAt: p.generatedAt || new Date().toISOString(),
               };
             });
@@ -189,68 +256,80 @@ export default function PayrollPage({ mode = "payroll" }) {
 
           // Revisions
           if (revRes.status === "fulfilled" && Array.isArray(revRes.value) && revRes.value.length > 0) {
-            updated.revisions = revRes.value.map((r) => ({
-              id: r.id ? `rev-${r.id}` : r.id,
-              numericId: r.id,
-              staffId: r.employeeId || `STF-${r.staffId}`,
-              rawStaffId: r.staffId,
-              staffName: r.staffName || `Staff #${r.staffId}`,
-              staffType: r.staffType || "Teaching",
-              department: r.departmentName || r.department || "General",
-              designation: r.designation || "-",
-              currentSalary: Number(r.previousGrossSalary || r.currentSalary || 0),
-              revisedSalary: Number(r.newGrossSalary || r.revisedSalary || 0),
-              percentage: Number(r.revisionPercentage || 0),
-              effectiveDate: r.effectiveDate ? String(r.effectiveDate).split("T")[0] : "",
-              reason: r.reason || "",
-              status: r.status || "Pending",
-              approvedBy: r.approvedBy || null,
-            }));
+            updated.revisions = revRes.value.map((r) => {
+              const staffKey = String(r.staffId || r.rawStaffId || "");
+              const empInfo = empMap.get(staffKey) || {};
+              return {
+                id: r.id ? `rev-${r.id}` : r.id,
+                numericId: r.id,
+                staffId: r.employeeId || empInfo.employeeId || (r.staffId ? `STF-${r.staffId}` : "-"),
+                rawStaffId: r.staffId,
+                staffName: r.staffName || empInfo.staffName || (r.staffId ? `Staff #${r.staffId}` : "-"),
+                staffType: r.staffType || empInfo.staffType || "Teaching",
+                department: r.departmentName || r.department || empInfo.departmentName || empInfo.department || "General",
+                designation: r.designation || empInfo.designation || "-",
+                currentSalary: Number(r.previousGrossSalary || r.currentSalary || 0),
+                revisedSalary: Number(r.newGrossSalary || r.revisedSalary || 0),
+                percentage: Number(r.revisionPercentage || 0),
+                effectiveDate: r.effectiveDate ? String(r.effectiveDate).split("T")[0] : "",
+                reason: r.reason || "",
+                status: r.status || "Pending",
+                approvedBy: r.approvedBy || null,
+              };
+            });
           }
 
           // Bonuses
           if (bonusRes.status === "fulfilled" && Array.isArray(bonusRes.value) && bonusRes.value.length > 0) {
-            updated.bonuses = bonusRes.value.map((b) => ({
-              id: b.id ? `bonus-${b.id}` : b.id,
-              numericId: b.id,
-              staffId: b.employeeId || `STF-${b.staffId}`,
-              rawStaffId: b.staffId,
-              staffName: b.staffName || `Staff #${b.staffId}`,
-              staffType: b.staffType || "Teaching",
-              department: b.departmentName || b.department || "General",
-              type: b.bonusType || "Performance Bonus",
-              bonusType: b.bonusType || "Performance Bonus",
-              amount: Number(b.bonusAmount || 0),
-              bonusPercentage: Number(b.bonusPercentage || 0),
-              month: b.payrollYear && b.payrollMonth ? `${b.payrollYear}-${String(b.payrollMonth).padStart(2, "0")}` : "2026-09",
-              reason: b.reason || "",
-              status: b.status || "Pending",
-              approvedBy: b.approvedBy || null,
-            }));
+            updated.bonuses = bonusRes.value.map((b) => {
+              const staffKey = String(b.staffId || b.rawStaffId || "");
+              const empInfo = empMap.get(staffKey) || {};
+              return {
+                id: b.id ? `bonus-${b.id}` : b.id,
+                numericId: b.id,
+                staffId: b.employeeId || empInfo.employeeId || (b.staffId ? `STF-${b.staffId}` : "-"),
+                rawStaffId: b.staffId,
+                staffName: b.staffName || empInfo.staffName || (b.staffId ? `Staff #${b.staffId}` : "-"),
+                staffType: b.staffType || empInfo.staffType || "Teaching",
+                department: b.departmentName || b.department || empInfo.departmentName || empInfo.department || "General",
+                type: b.bonusType || "Performance Bonus",
+                bonusType: b.bonusType || "Performance Bonus",
+                amount: Number(b.bonusAmount || 0),
+                bonusPercentage: Number(b.bonusPercentage || 0),
+                month: b.payrollYear && b.payrollMonth ? `${b.payrollYear}-${String(b.payrollMonth).padStart(2, "0")}` : "2026-09",
+                reason: b.reason || "",
+                status: b.status || "Pending",
+                approvedBy: b.approvedBy || null,
+              };
+            });
           }
 
           // Salary Advances / Loans
           if (advRes.status === "fulfilled" && Array.isArray(advRes.value) && advRes.value.length > 0) {
-            updated.loans = advRes.value.map((a) => ({
-              id: a.id ? `adv-${a.id}` : a.id,
-              numericId: a.id,
-              staffId: a.employeeId || `STF-${a.staffId}`,
-              rawStaffId: a.staffId,
-              staffName: a.staffName || `Staff #${a.staffId}`,
-              staffType: a.staffType || "Teaching",
-              department: a.departmentName || a.department || "General",
-              advanceAmount: Number(a.advanceAmount || 0),
-              loanAmount: Number(a.advanceAmount || 0),
-              monthlyDeduction: Number(a.monthlyDeduction || 0),
-              emi: Number(a.monthlyDeduction || 0),
-              repaymentMonths: Number(a.repaymentMonths || 0),
-              tenureMonths: Number(a.repaymentMonths || 0),
-              disbursedDate: a.advanceDate ? String(a.advanceDate).split("T")[0] : "",
-              advanceDate: a.advanceDate ? String(a.advanceDate).split("T")[0] : "",
-              reason: a.reason || "",
-              status: a.status || "Pending",
-              approvedBy: a.approvedBy || null,
-            }));
+            updated.loans = advRes.value.map((a) => {
+              const staffKey = String(a.staffId || a.rawStaffId || "");
+              const empInfo = empMap.get(staffKey) || {};
+              return {
+                id: a.id ? `adv-${a.id}` : a.id,
+                numericId: a.id,
+                staffId: a.employeeId || empInfo.employeeId || (a.staffId ? `STF-${a.staffId}` : "-"),
+                rawStaffId: a.staffId,
+                staffName: a.staffName || empInfo.staffName || (a.staffId ? `Staff #${a.staffId}` : "-"),
+                staffType: a.staffType || empInfo.staffType || "Teaching",
+                department: a.departmentName || a.department || empInfo.departmentName || empInfo.department || "General",
+                advanceAmount: Number(a.advanceAmount || 0),
+                loanAmount: Number(a.advanceAmount || 0),
+                monthlyDeduction: Number(a.monthlyDeduction || 0),
+                emi: Number(a.monthlyDeduction || 0),
+                repaymentMonths: Number(a.repaymentMonths || 0),
+                tenureMonths: Number(a.repaymentMonths || 0),
+                disbursedDate: a.advanceDate ? String(a.advanceDate).split("T")[0] : "",
+                advanceDate: a.advanceDate ? String(a.advanceDate).split("T")[0] : "",
+                reason: a.reason || "",
+                status: a.status || "Pending",
+                approvedBy: a.approvedBy || null,
+              };
+            });
           }
 
           // Summary Metrics from API
@@ -886,10 +965,7 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
               key: "staffName",
               label: "Staff Name",
               render: (r) => (
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <strong style={{ fontSize: "13px" }}>{r.staffName}</strong>
-                  <span style={{ fontSize: "11px", color: "var(--cms-muted)" }}>{r.designation || r.department}</span>
-                </div>
+                <strong style={{ fontSize: "13px" }}>{r.staffName}</strong>
               ),
             },
             { key: "department", label: "Department" },
@@ -1188,13 +1264,11 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
 
     if (numericStaffIds.length > 0) {
       try {
-        if (selectedStaffIds.length === assignmentsList.length) {
+        if (selectedStaffIds.length > 1) {
           await payrollApi.generatePayslipsBulk({
+            staffIds: numericStaffIds,
             payrollMonth: Number(selectedMonth),
             payrollYear: Number(selectedYear),
-            staffType: categoryFilter === "All" ? null : categoryFilter,
-            departmentId: null,
-            paymentMode: "Bank Transfer",
           });
         } else {
           for (const sId of numericStaffIds) {
@@ -1202,8 +1276,6 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
               staffId: sId,
               payrollMonth: Number(selectedMonth),
               payrollYear: Number(selectedYear),
-              paymentMode: "Bank Transfer",
-              remarks: `Generated for ${periodLabel}`,
             }).catch(() => {});
           }
         }
@@ -2542,29 +2614,23 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
   }, [id, store.assignments]);
 
   const staffList = useMemo(() => {
-    const fromAssignments = (store.assignments || [])
+    const sourceList = Array.isArray(store.apiEmployees) && store.apiEmployees.length > 0
+      ? store.apiEmployees
+      : Array.isArray(store.assignments)
+      ? store.assignments
+      : [];
+
+    return sourceList
       .filter((a) => !staffType || a.staffType === staffType)
       .map((a) => ({
-        id: String(a.rawStaffId || a.staffId),
-        staffCode: a.staffId,
-        rawStaffId: a.rawStaffId || parseInt(String(a.staffId).replace(/\D+/g, ""), 10) || 1,
-        name: a.staffName,
-        department: a.department,
-        designation: a.designation,
+        id: String(a.rawStaffId || a.staffId || a.id),
+        staffCode: a.employeeId || a.staffId || a.staffCode || `STF-${a.rawStaffId || a.staffId}`,
+        rawStaffId: a.rawStaffId || a.staffId || parseInt(String(a.id || "").replace(/\D+/g, ""), 10) || 1,
+        name: a.staffName || a.name || `Staff #${a.rawStaffId || a.staffId}`,
+        department: a.departmentName || a.department || "General",
+        designation: a.designation || a.designationName || "-",
       }));
-
-    if (fromAssignments.length > 0) return fromAssignments;
-
-    return [
-      { id: "101", staffCode: "FAC-101", rawStaffId: 101, name: "Dr. K. Srinivas Rao", department: "Physics", designation: "HOD & Professor" },
-      { id: "102", staffCode: "FAC-102", rawStaffId: 102, name: "Mrs. Lakshmi Devi", department: "Mathematics", designation: "Assistant Professor" },
-      { id: "103", staffCode: "FAC-103", rawStaffId: 103, name: "Dr. Ramesh Babu", department: "Chemistry", designation: "Senior Lecturer" },
-      { id: "104", staffCode: "FAC-104", rawStaffId: 104, name: "Ms. Anitha Reddy", department: "English", designation: "Lecturer" },
-      { id: "201", staffCode: "NT-201", rawStaffId: 201, name: "Mr. Suresh Kumar", department: "Administration", designation: "Office Administrator" },
-      { id: "202", staffCode: "NT-202", rawStaffId: 202, name: "Mrs. Padmavathi", department: "Finance & Accounts", designation: "Senior Accountant" },
-      { id: "203", staffCode: "NT-203", rawStaffId: 203, name: "Mr. Venkat Rao", department: "Library", designation: "Head Librarian" },
-    ];
-  }, [store.assignments, staffType]);
+  }, [store.apiEmployees, store.assignments, staffType]);
 
   const [selectedStaffId, setSelectedStaffId] = useState(() => {
     if (existingAssignment) return String(existingAssignment.rawStaffId || existingAssignment.staffId);
@@ -2600,18 +2666,30 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
     let createdAsgnId = existingAssignment?.id || `asgn-${Date.now()}`;
     const numericStaffId = parseInt(String(chosenStaff.rawStaffId || chosenStaff.id || "").replace(/\D+/g, ""), 10) || 1;
     const numericStructId = parseInt(String(chosenStruct.numericId || chosenStruct.id || "").replace(/\D+/g, ""), 10) || 1;
+    const existingNumericId = existingAssignment?.numericId || parseInt(String(existingAssignment?.id || "").replace(/\D+/g, ""), 10) || null;
 
     try {
-      const payload = {
-        staffId: numericStaffId,
-        salaryStructureId: numericStructId,
-        effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : new Date().toISOString(),
-        basicPay: Number(chosenStruct.basicPay || 0),
-        status: existingAssignment?.status || "Active",
-      };
-      const res = await payrollApi.createSalaryAssignment(payload);
-      if (res?.assignmentId || res?.AssignmentId || res?.id || res?.Id) {
-        createdAsgnId = `asgn-${res.assignmentId || res.AssignmentId || res.id || res.Id}`;
+      if (existingAssignment && existingNumericId) {
+        await payrollApi.updateSalaryAssignment(existingNumericId, {
+          salaryStructureId: numericStructId,
+          effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : new Date().toISOString(),
+        });
+      } else {
+        const payload = {
+          staffId: numericStaffId,
+          salaryStructureId: numericStructId,
+          effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : new Date().toISOString(),
+          paymentMode: paymentMode || "Bank Transfer",
+          bankName: bankName || "",
+          accountNumber: accountNumber || "",
+          ifscCode: ifscCode || "",
+          panNumber: panNumber || "",
+          uanNumber: uanNumber || "",
+        };
+        const res = await payrollApi.createSalaryAssignment(payload);
+        if (res?.assignmentId || res?.AssignmentId || res?.id || res?.Id) {
+          createdAsgnId = `asgn-${res.assignmentId || res.AssignmentId || res.id || res.Id}`;
+        }
       }
     } catch (err) {
       console.warn("Failed to assign salary structure via API, persisting to local store:", err);

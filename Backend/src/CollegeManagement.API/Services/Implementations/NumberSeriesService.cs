@@ -58,9 +58,9 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync()
+        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync(int? campusId = null)
         {
-            var entities = await _repository.GetAllAsync();
+            var entities = await _repository.GetAllAsync(campusId);
             var dtos = new List<NumberSeriesResponseDto>();
 
             foreach (var entity in entities)
@@ -71,19 +71,19 @@ namespace CollegeManagement.API.Services.Implementations
             return dtos;
         }
 
-        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug)
+        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GetByCodeAsync(code);
+            var entity = await _repository.GetByCodeAsync(code, campusId);
             if (entity == null) return null;
 
             return MapToDto(entity);
         }
 
-        public async Task<NumberSeriesResponseDto?> UpdateSeriesAsync(string seriesCodeOrSlug, UpdateNumberSeriesDto dto)
+        public async Task<NumberSeriesResponseDto?> UpdateSeriesAsync(string seriesCodeOrSlug, UpdateNumberSeriesDto dto, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var existing = await _repository.GetByCodeAsync(code);
+            var existing = await _repository.GetByCodeAsync(code, campusId);
             if (existing == null) return null;
 
             var updated = await _repository.UpdateByCodeAsync(
@@ -92,17 +92,18 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.FormatPattern?.Trim() ?? string.Empty,
                 dto.NumberLength < 1 ? 4 : dto.NumberLength,
                 dto.StartNumber < 1 ? 1 : dto.StartNumber,
-                dto.Description?.Trim());
+                dto.Description?.Trim(),
+                campusId);
 
             if (updated == null) return null;
 
             return MapToDto(updated);
         }
 
-        public async Task<GenerateNumberSeriesResponseDto?> GenerateNextNumberAsync(string seriesCodeOrSlug, GenerateNumberSeriesRequestDto? context = null)
+        public async Task<GenerateNumberSeriesResponseDto?> GenerateNextNumberAsync(string seriesCodeOrSlug, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GenerateNextSequenceAsync(code);
+            var entity = await _repository.GenerateNextSequenceAsync(code, campusId);
             if (entity == null) return null;
 
             var generatedNumber = NumberSeriesPatternEvaluator.Evaluate(
@@ -123,10 +124,10 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null)
+        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GetByCodeAsync(code);
+            var entity = await _repository.GetByCodeAsync(code, campusId);
 
             var activePattern = pattern ?? entity?.FormatPattern ?? "{PREFIX}{SEQ}";
             var activeLength = numberLength ?? entity?.NumberLength ?? 4;

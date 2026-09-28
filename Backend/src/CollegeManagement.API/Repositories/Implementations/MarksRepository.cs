@@ -33,6 +33,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var rows = await Connection.QueryAsync(
                 "sp_GetAllMarks",
+                new { p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
 
             var list = new List<Mark>();
@@ -44,7 +45,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var row = await Connection.QueryFirstOrDefaultAsync(
                 "sp_GetMarkById",
-                new { p_MarkId = id },
+                new { p_MarkId = id, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
 
             return row != null ? MapMarkFromRow(row) : null;
@@ -58,7 +59,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     p_ExaminationId = examinationId,
                     p_SubjectId = subjectId,
-                    p_StudentId = studentId
+                    p_StudentId = studentId,
+                    p_CampusId = 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -74,7 +76,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var rows = await Connection.QueryAsync(
                 "sp_GetMarksByStudent",
-                new { p_StudentId = studentId },
+                new { p_StudentId = studentId, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
 
             var list = new List<Mark>();
@@ -86,7 +88,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var rows = await Connection.QueryAsync(
                 "sp_GetMarksBySubject",
-                new { p_SubjectId = subjectId },
+                new { p_SubjectId = subjectId, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
 
             var list = new List<Mark>();
@@ -103,7 +105,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var rows = await Connection.QueryAsync(
                 "sp_GetMarksByExam",
-                new { p_ExaminationId = examinationId },
+                new { p_ExaminationId = examinationId, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
 
             var list = new List<Mark>();
@@ -119,6 +121,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<Mark> CreateAsync(Mark mark)
         {
             var parameters = new DynamicParameters();
+            parameters.Add("p_CampusId", mark.CampusId);
             parameters.Add("p_Board", mark.Board ?? string.Empty);
             parameters.Add("p_BoardId", mark.BoardId);
             parameters.Add("p_AcademicYearId", mark.AcademicYearId);
@@ -161,6 +164,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_MarkId", mark.MarkId);
+            parameters.Add("p_CampusId", mark.CampusId);
             parameters.Add("p_InternalMarks", mark.InternalMarks);
             parameters.Add("p_PracticalMarks", mark.PracticalMarks);
             parameters.Add("p_TheoryMarks", mark.TheoryMarks);
@@ -194,7 +198,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var affected = await Connection.ExecuteScalarAsync<int>(
                 "sp_DeleteMark",
-                new { p_MarkId = id },
+                new { p_MarkId = id, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
 
             return affected > 0;
@@ -204,7 +208,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var affected = await Connection.ExecuteScalarAsync<int>(
                 "sp_RestoreMark",
-                new { p_MarkId = id },
+                new { p_MarkId = id, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
 
             return affected > 0;
@@ -275,6 +279,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_Status", filter.Status.HasValue ? (int)filter.Status.Value : 0);
             parameters.Add("p_Offset", offset);
             parameters.Add("p_Limit", pageSize);
+            parameters.Add("p_CampusId", filter.CampusId ?? 0);
 
             var rows = await Connection.QueryAsync(
                 "sp_GetFilteredEvaluations",
@@ -299,6 +304,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_StudentId", filter.StudentId ?? 0);
             parameters.Add("p_FacultyId", filter.FacultyId ?? 0);
             parameters.Add("p_Status", filter.Status.HasValue ? (int)filter.Status.Value : 0);
+            parameters.Add("p_CampusId", filter.CampusId ?? 0);
 
             return await Connection.ExecuteScalarAsync<int>(
                 "sp_GetFilteredEvaluationsCount",
@@ -314,7 +320,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     p_SubjectId = subjectId,
                     p_SectionId = sectionId,
-                    p_ExaminationId = examinationId
+                    p_ExaminationId = examinationId,
+                    p_CampusId = 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -334,7 +341,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_ExaminationId = examinationId,
                     p_TargetStatus = (int)targetStatus,
                     p_UserId = userId,
-                    p_Remarks = remarks
+                    p_Remarks = remarks,
+                    p_CampusId = 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -350,7 +358,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_SubjectId = subjectId,
                     p_SectionId = sectionId,
                     p_ExaminationId = examinationId,
-                    p_IsLocked = isLocked ? 1 : 0
+                    p_IsLocked = isLocked ? 1 : 0,
+                    p_CampusId = 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -420,6 +429,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     parameters.Add("p_Remarks", remarks);
                     parameters.Add("p_FacultyId", target.FacultyId);
                     parameters.Add("p_Status", (int)EvaluationStatus.SUBMITTED);
+                    parameters.Add("p_CampusId", target.CampusId > 0 ? target.CampusId : 1);
 
                     await Connection.QueryFirstOrDefaultAsync(
                         "sp_UpdateMark",

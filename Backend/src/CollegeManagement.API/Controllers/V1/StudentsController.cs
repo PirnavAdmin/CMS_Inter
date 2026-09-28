@@ -200,9 +200,15 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpGet]
         public async Task<IActionResult> GetAll(
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicLevelId = null,
+            [FromQuery] int? groupId = null,
+            [FromQuery] int? programId = null,
+            [FromQuery] int? sectionId = null,
+            [FromQuery] string? status = null,
             [FromQuery] int? campusId = null)
         {
-            var students = await _service.GetAllAsync(campusId);
+            var students = await _service.GetAllAsync(boardId, academicLevelId, groupId, programId, sectionId, status, campusId);
 
             return Ok(students);
         }

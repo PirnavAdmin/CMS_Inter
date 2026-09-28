@@ -44,12 +44,18 @@ public class FeeRepository : IFeeRepository
     }
 
 
-    public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync()
+    public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         using var c = Connection();
 
         return await c.QueryAsync<FeeTypeResponse>(
             "sp_GetFeeTypes",
+            new
+            {
+                p_CampusId = campusId,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
+            },
             commandType: CommandType.StoredProcedure);
     }
 
@@ -435,13 +441,18 @@ public class FeeRepository : IFeeRepository
     }
 
 
-    public async Task<IEnumerable<ScholarshipResponse>>
-        GetScholarshipsAsync()
+    public async Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         using var c = Connection();
 
         return await c.QueryAsync<ScholarshipResponse>(
             "sp_GetScholarships",
+            new
+            {
+                p_CampusId = campusId,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
+            },
             commandType: CommandType.StoredProcedure);
     }
 
@@ -650,7 +661,8 @@ public class FeeRepository : IFeeRepository
         int? sectionId = null,
         string? paymentPlan = null,
         string? status = null,
-        string? search = null)
+        string? search = null,
+        int? boardId = null)
     {
         try
         {
@@ -729,7 +741,8 @@ public class FeeRepository : IFeeRepository
                     p_SectionId = sectionId,
                     p_PaymentPlan = paymentPlan,
                     p_Status = status,
-                    p_Search = search
+                    p_Search = search,
+                    p_BoardId = boardId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -860,28 +873,130 @@ public class FeeRepository : IFeeRepository
         CreateFeePaymentAsync(
             CreateFeePaymentRequest request)
     {
-        using var c = Connection();
+        using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var studentFee = await _db.StudentFees
+                .Include(sf => sf.Student)
+                .FirstOrDefaultAsync(sf => sf.StudentFeeId == request.StudentFeeId && sf.StudentId == request.StudentId);
 
-        return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
-            "sp_CollectFeePayment",
-            new
+            if (studentFee == null)
+                throw new Exception("Student fee record not found.");
+
+            decimal discount = request.Discount < 0 ? 0 : request.Discount;
+            decimal fine = request.Fine < 0 ? 0 : request.Fine;
+            decimal finalAmount = request.Amount + fine - discount;
+
+            if (finalAmount <= 0)
+                throw new Exception("Final payment amount must be greater than zero.");
+            if (finalAmount > studentFee.BalanceAmount)
+                throw new Exception("Payment amount cannot exceed outstanding balance.");
+
+            var installments = new List<FeeInstallment>();
+            if (request.FeeInstallmentIds != null && request.FeeInstallmentIds.Any())
             {
-                p_StudentId = request.StudentId,
-                p_StudentFeeId = request.StudentFeeId,
-                p_FeeInstallmentId =
-                    request.FeeInstallmentId,
-                p_Amount = request.Amount,
-                p_PaymentDate =
-                    request.PaymentDate ?? DateTime.UtcNow,
-                p_PaymentMode = request.PaymentMode,
-                p_Discount = request.Discount,
-                p_Fine = request.Fine,
-                p_TransactionReference =
-                    request.TransactionReference,
-                p_Note = request.Note,
-                p_CollectedBy = request.CollectedBy
-            },
-            commandType: CommandType.StoredProcedure);
+                installments = await _db.FeeInstallments
+                    .Include(fi => fi.FeePaymentPlan)
+                    .Where(fi => request.FeeInstallmentIds.Contains(fi.FeeInstallmentId) && fi.FeePaymentPlan.StudentFeeId == request.StudentFeeId)
+                    .OrderBy(fi => fi.DueDate)
+                    .ToListAsync();
+                    
+                if (installments.Count != request.FeeInstallmentIds.Count)
+                    throw new Exception("One or more installments do not belong to this student fee.");
+            }
+
+            decimal remainingToDistribute = finalAmount;
+            foreach (var inst in installments)
+            {
+                if (remainingToDistribute <= 0) break;
+                
+                decimal amountToPay = Math.Min(remainingToDistribute, inst.BalanceAmount);
+                if (amountToPay > 0)
+                {
+                    inst.PaidAmount += amountToPay;
+                    inst.BalanceAmount = Math.Max(0, inst.Amount - inst.PaidAmount);
+                    inst.Status = inst.Amount <= inst.PaidAmount ? "Paid" : "PartiallyPaid";
+                    remainingToDistribute -= amountToPay;
+                }
+            }
+
+            studentFee.PaidAmount += finalAmount;
+            studentFee.BalanceAmount = Math.Max(0, studentFee.PayableAmount - studentFee.PaidAmount);
+            studentFee.Status = studentFee.PayableAmount <= studentFee.PaidAmount ? "Paid" : "PartiallyPaid";
+            studentFee.UpdatedAt = DateTime.UtcNow;
+
+            if (studentFee.Student != null)
+            {
+                studentFee.Student.FeeAmount = studentFee.PayableAmount;
+                studentFee.Student.FeePaid = studentFee.PaidAmount;
+                studentFee.Student.FeeStatus = studentFee.Status;
+                studentFee.Student.UpdatedAt = DateTime.UtcNow;
+            }
+
+            string? remarks = null;
+            if (!string.IsNullOrWhiteSpace(request.Note) || discount > 0 || fine > 0)
+            {
+                var parts = new List<string>();
+                if (!string.IsNullOrWhiteSpace(request.Note)) parts.Add(request.Note);
+                if (discount > 0) parts.Add($"Discount: {discount:F2}");
+                if (fine > 0) parts.Add($"Fine: {fine:F2}");
+                remarks = string.Join(" | ", parts);
+            }
+
+            var paymentDate = request.PaymentDate ?? DateTime.UtcNow;
+            var payment = new FeePayment
+            {
+                StudentId = request.StudentId,
+                StudentFeeId = request.StudentFeeId,
+                FeeInstallmentId = request.FeeInstallmentIds?.Count == 1 ? request.FeeInstallmentIds.First() : null,
+                Amount = finalAmount,
+                PaymentMode = request.PaymentMode.Trim(),
+                TransactionReference = request.TransactionReference,
+                Remarks = remarks,
+                PaymentDate = paymentDate,
+                Status = "Success",
+                CollectedBy = request.CollectedBy
+            };
+
+            _db.FeePayments.Add(payment);
+            await _db.SaveChangesAsync();
+
+            payment.ReceiptNumber = $"FEE-{paymentDate:yyyyMMdd}-{payment.FeePaymentId:D6}";
+            
+            var receipt = new FeeReceipt
+            {
+                FeePaymentId = payment.FeePaymentId,
+                ReceiptNumber = payment.ReceiptNumber,
+                ReceiptDate = paymentDate,
+                Remarks = request.Note
+            };
+            _db.FeeReceipts.Add(receipt);
+            
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+
+            return new FeePaymentResponse
+            {
+                FeePaymentId = payment.FeePaymentId,
+                StudentId = payment.StudentId,
+                StudentName = studentFee.Student?.StudentName ?? string.Empty,
+                AdmissionNumber = studentFee.Student?.AdmissionNo ?? string.Empty,
+                StudentFeeId = payment.StudentFeeId,
+                FeeInstallmentId = payment.FeeInstallmentId,
+                Amount = payment.Amount,
+                PaymentMethod = payment.PaymentMode,
+                TransactionReference = payment.TransactionReference,
+                Remarks = payment.Remarks,
+                PaymentDate = payment.PaymentDate,
+                Status = payment.Status,
+                ReceiptNumber = payment.ReceiptNumber
+            };
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
     }
 
 
@@ -935,7 +1050,7 @@ public class FeeRepository : IFeeRepository
     // =========================================================
 
     public async Task<IEnumerable<FeeCollectionResponse>>
-        GetFeeCollectionAsync(int? campusId = null, string? search = null)
+        GetFeeCollectionAsync(int? campusId = null, string? search = null, int? boardId = null, int? academicYearId = null)
     {
         try
         {
@@ -954,6 +1069,14 @@ public class FeeRepository : IFeeRepository
             if (campusId.HasValue && campusId.Value > 0)
             {
                 query = query.Where(sf => sf.Student.CampusId == campusId.Value);
+            }
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                query = query.Where(sf => sf.Student.BoardId == boardId.Value);
+            }
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+            {
+                query = query.Where(sf => sf.Student.AcademicYearId == academicYearId.Value);
             }
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -990,7 +1113,9 @@ public class FeeRepository : IFeeRepository
                 new
                 {
                     p_CampusId = campusId,
-                    p_Search = search
+                    p_Search = search,
+                    p_BoardId = boardId,
+                    p_AcademicYearId = academicYearId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -998,7 +1123,7 @@ public class FeeRepository : IFeeRepository
 
 
     public async Task<IEnumerable<FeeDueResponse>>
-        GetDueAsync(int? campusId = null)
+        GetDueAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         try
         {
@@ -1020,6 +1145,14 @@ public class FeeRepository : IFeeRepository
             if (campusId.HasValue && campusId.Value > 0)
             {
                 query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.CampusId == campusId.Value);
+            }
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.BoardId == boardId.Value);
+            }
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+            {
+                query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.AcademicYearId == academicYearId.Value);
             }
 
             var list = await query.ToListAsync();
@@ -1046,7 +1179,11 @@ public class FeeRepository : IFeeRepository
 
             return await c.QueryAsync<FeeDueResponse>(
                 "sp_GetDueFees",
-                new { p_CampusId = campusId },
+                new { 
+                    p_CampusId = campusId,
+                    p_BoardId = boardId,
+                    p_AcademicYearId = academicYearId
+                },
                 commandType: CommandType.StoredProcedure);
         }
     }
@@ -1057,7 +1194,7 @@ public class FeeRepository : IFeeRepository
     // =========================================================
 
     public async Task<FeeDashboardResponse>
-        GetDashboardAsync(int? campusId = null)
+        GetDashboardAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         try
         {
@@ -1066,7 +1203,11 @@ public class FeeRepository : IFeeRepository
             using var multi =
                 await c.QueryMultipleAsync(
                     "sp_GetFeeDashboard",
-                    new { p_CampusId = campusId },
+                    new { 
+                        p_CampusId = campusId,
+                        p_BoardId = boardId,
+                        p_AcademicYearId = academicYearId 
+                    },
                     commandType: CommandType.StoredProcedure);
 
             var r =

@@ -31,7 +31,8 @@ namespace CollegeManagement.API.Services.Interfaces
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId);
+            int examId,
+            int? campusId = null);
 
         // --- Rank List ---
         Task<List<RankListDto>> GetCompetitionRankListAsync(
@@ -83,7 +84,8 @@ namespace CollegeManagement.API.Services.Interfaces
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId);
+            int examId,
+            int? campusId = null);
 
         // --- Documents & Downloads ---
         Task<byte[]> DownloadMemoAsync(

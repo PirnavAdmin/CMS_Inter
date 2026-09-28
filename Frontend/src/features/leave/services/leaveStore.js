@@ -43,12 +43,13 @@ const mapLeaveRequest = (req) => {
     };
 };
 
-export const getLeaveRequests = async (staffId = null, departmentId = null, status = null) => {
+export const getLeaveRequests = async (staffId = null, departmentId = null, status = null, campusId = null) => {
     try {
         const params = new URLSearchParams();
         if (staffId) params.append('staffId', staffId);
         if (departmentId) params.append('departmentId', departmentId);
         if (status) params.append('status', status);
+        if (campusId) params.append('campusId', campusId);
 
         const response = await apiClient.get(`/api/v1/staff-attendance/leave?${params.toString()}`);
         const data = response.data?.data || response.data?.Data || [];
@@ -98,11 +99,12 @@ export const revokeApprovedLeave = async (leaveRequestId, adminRemark) => {
     });
 };
 
-export const getLeaveHistorySummary = async (departmentId = null, staffType = null) => {
+export const getLeaveHistorySummary = async (departmentId = null, staffType = null, campusId = null) => {
     try {
         const params = new URLSearchParams();
         if (departmentId) params.append('departmentId', departmentId);
         if (staffType) params.append('staffType', staffType);
+        if (campusId) params.append('campusId', campusId);
 
         const response = await apiClient.get(`/api/v1/staff-attendance/leave/history?${params.toString()}`);
         return response.data?.data || response.data?.Data || [];

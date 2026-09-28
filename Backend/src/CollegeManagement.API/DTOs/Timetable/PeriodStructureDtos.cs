@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace CollegeManagement.API.DTOs.Timetable
@@ -13,6 +13,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
     public class CreatePeriodStructureDto
     {
+        public int? CampusId { get; set; }
         public string Name { get; set; } = string.Empty;
         public TimeSpan DayStartTime { get; set; }
         public int PeriodDurationMinutes { get; set; }
@@ -23,6 +24,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
     public class UpdatePeriodStructureDto
     {
+        public int? CampusId { get; set; }
         public string Name { get; set; } = string.Empty;
         public TimeSpan DayStartTime { get; set; }
         public int PeriodDurationMinutes { get; set; }
@@ -47,6 +49,7 @@ namespace CollegeManagement.API.DTOs.Timetable
     public class PeriodStructureResponseDto
     {
         public int Id { get; set; }
+        public int? CampusId { get; set; }
         public string Name { get; set; } = string.Empty;
         public TimeSpan DayStartTime { get; set; }
         public int PeriodDurationMinutes { get; set; }
@@ -65,6 +68,7 @@ namespace CollegeManagement.API.DTOs.Timetable
     public class PeriodStructureListItemDto
     {
         public int Id { get; set; }
+        public int? CampusId { get; set; }
         public string Name { get; set; } = string.Empty;
         public TimeSpan DayStartTime { get; set; }
         public int PeriodDurationMinutes { get; set; }
@@ -108,6 +112,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
     public class AssignPeriodStructureDto
     {
+        public int? CampusId { get; set; }
         public int PeriodStructureId { get; set; }
         public int BoardId { get; set; }
         public int AcademicLevelId { get; set; }
@@ -119,6 +124,7 @@ namespace CollegeManagement.API.DTOs.Timetable
     public class PeriodStructureAssignmentResponseDto
     {
         public int Id { get; set; }
+        public int? CampusId { get; set; }
         public int PeriodStructureId { get; set; }
         public string PeriodStructureName { get; set; } = string.Empty;
         public int BoardId { get; set; }

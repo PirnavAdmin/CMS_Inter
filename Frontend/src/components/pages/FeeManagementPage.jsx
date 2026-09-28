@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CalendarClock,
   CheckCircle,
+  ChevronDown,
   Copy,
   Eye,
   Pencil,
@@ -24,10 +25,11 @@ import {
 } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
 import {
   COLLEGE_NAME,
@@ -50,7 +52,7 @@ const LEDGER_TABS = [
   { id: "Student Fee Ledger", label: "Fee Accounts" },
   { id: "Payment History", label: "Payment History" },
 ];
-const FEE_TYPE_CATEGORIES = ["Admission", "Academic", "Examination", "Facility", "Activity", "Other"];
+const FEE_TYPE_CATEGORIES = ["Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous"];
 const PAGE_SIZE = 5;
 const OVERVIEW_TABS = [
   { id: "overdue", label: "Overdue Fees", icon: AlertCircle },
@@ -80,6 +82,10 @@ const getObject = (payload) => {
   if (data && !Array.isArray(data)) return data;
   return {};
 };
+
+const cleanParams = (params = {}) => Object.fromEntries(
+  Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+);
 
 const read = (item, ...keys) => {
   const key = keys.find((candidate) => item?.[candidate] !== undefined && item?.[candidate] !== null && item?.[candidate] !== "");
@@ -208,6 +214,7 @@ const normalizeHostelBlockRows = (rows = []) => rows.map((row) => ({
   id: read(row, "hostelId", "HostelId", "id", "Id"),
   name: textValue(row, "hostelName", "HostelName", "name", "Name") || "Hostel Block",
   code: textValue(row, "hostelCode", "HostelCode", "code", "Code"),
+  campusId: read(row, "campusId", "CampusId"),
   status: textValue(row, "status", "Status") || "Active",
 })).filter((row) => row.id);
 
@@ -239,6 +246,17 @@ const normalizeHostelFeeRows = (rows = []) => rows.map((row, index) => {
     status: textValue(row, "status", "Status") || "Active",
   };
 });
+
+const filterHostelFeesByCampus = (configs = [], blocks = [], campusId = "") => {
+  if (!campusId) return { configs, blocks };
+  const campusBlocks = blocks.filter((block) => block.campusId && String(block.campusId) === String(campusId));
+  if (!campusBlocks.length) return { configs, blocks };
+  const campusBlockIds = new Set(campusBlocks.map((block) => String(block.id)));
+  return {
+    blocks: campusBlocks,
+    configs: configs.filter((config) => campusBlockIds.has(String(config.hostelId || config.hostelBlock))),
+  };
+};
 
 const normalizeFineRuleRows = (rows = []) => rows.map((row, index) => {
   const id = read(row, "fineRuleId", "FineRuleId", "id", "Id");
@@ -605,9 +623,17 @@ const categoryForFeeType = (name = "") => {
   const normalized = String(name).toLowerCase();
   if (normalized.includes("admission")) return "Admission";
   if (normalized.includes("exam")) return "Examination";
-  if (normalized.includes("transport") || normalized.includes("hostel") || normalized.includes("uniform") || normalized.includes("id card")) return "Facility";
+  if (normalized.includes("transport")) return "Transport";
+  if (normalized.includes("hostel")) return "Hostel";
+  if (normalized.includes("uniform") || normalized.includes("id card")) return "Facility";
   if (normalized.includes("activity") || normalized.includes("sports")) return "Activity";
   return "Academic";
+};
+
+const normalizeFeeTypeCategory = (category, fallbackName = "") => {
+  const value = String(category || "").trim();
+  const matched = FEE_TYPE_CATEGORIES.find((item) => item.toLowerCase() === value.toLowerCase());
+  return matched || categoryForFeeType(fallbackName);
 };
 
 const feeTypeCodeFor = (name = "") => {
@@ -630,7 +656,10 @@ const feeTypeOption = (item) => {
     id: String(read(item, "feeTypeId", "FeeTypeId", "typeId", "TypeId") ?? read(feeType, "feeTypeId", "FeeTypeId", "id", "Id", "typeId", "TypeId") ?? read(item, "id", "Id") ?? ""),
     name,
     code: textValue(item, "feeTypeCode", "FeeTypeCode", "code", "Code") || textValue(feeType, "feeTypeCode", "FeeTypeCode", "code", "Code") || feeTypeCodeFor(name),
-    category: textValue(item, "category", "Category", "feeCategory", "FeeCategory") || textValue(feeType, "category", "Category", "feeCategory", "FeeCategory") || categoryForFeeType(name),
+    category: normalizeFeeTypeCategory(
+      textValue(item, "category", "Category", "feeCategory", "FeeCategory") || textValue(feeType, "category", "Category", "feeCategory", "FeeCategory"),
+      name,
+    ),
     status: isActiveStatus(status) ? "Active" : "Inactive",
   };
 };
@@ -1177,6 +1206,218 @@ const printFeeTarget = (target) => {
   }, 50);
 };
 
+const printReceiptElement = async (receiptElement) => {
+  if (!receiptElement) {
+    printFeeTarget("receipt");
+    return;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.title = "Payment Receipt";
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.opacity = "0";
+  document.body.appendChild(iframe);
+
+  const printWindow = iframe.contentWindow;
+  const printDocument = printWindow?.document;
+  if (!printWindow || !printDocument) {
+    iframe.remove();
+    printFeeTarget("receipt");
+    return;
+  }
+
+  const pageStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    .map((node) => {
+      if (node.tagName.toLowerCase() === "link") {
+        return `<link rel="stylesheet" href="${node.href}">`;
+      }
+      return `<style>${node.textContent || ""}</style>`;
+    })
+    .join("");
+
+  printDocument.open();
+  printDocument.write(`<!doctype html>
+    <html>
+      <head>
+        <title>Payment Receipt</title>
+        ${pageStyles}
+        <style>
+          @page { size: A4; margin: 14mm; }
+          html, body { margin: 0; background: #fff; }
+          body { color: #1C2416; }
+          .cms-fee-receipt {
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            border: 0;
+            box-shadow: none;
+          }
+        </style>
+      </head>
+      <body>${receiptElement.outerHTML}</body>
+    </html>`);
+  printDocument.close();
+
+  const waitForImages = Promise.all(Array.from(printDocument.images).map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      image.onload = resolve;
+      image.onerror = resolve;
+    });
+  }));
+  const waitForStyles = Promise.all(Array.from(printDocument.querySelectorAll('link[rel="stylesheet"]')).map((link) => (
+    new Promise((resolve) => {
+      if (link.sheet) {
+        resolve();
+        return;
+      }
+      link.onload = resolve;
+      link.onerror = resolve;
+      window.setTimeout(resolve, 1000);
+    })
+  )));
+  const waitForFonts = printDocument.fonts?.ready || Promise.resolve();
+
+  await Promise.all([waitForStyles, waitForImages, waitForFonts]);
+  await new Promise((resolve) => printWindow.requestAnimationFrame(() => resolve()));
+
+  const cleanup = () => {
+    printWindow.removeEventListener("afterprint", cleanup);
+    window.setTimeout(() => iframe.remove(), 300);
+  };
+  printWindow.addEventListener("afterprint", cleanup);
+  printWindow.focus();
+  printWindow.print();
+};
+
+const printStudentFeeAccountElement = async (accountElement) => {
+  if (!accountElement) {
+    printFeeTarget("student");
+    return;
+  }
+
+  const iframe = document.createElement("iframe");
+  iframe.title = "Student Fee Account";
+  iframe.style.position = "fixed";
+  iframe.style.right = "0";
+  iframe.style.bottom = "0";
+  iframe.style.width = "0";
+  iframe.style.height = "0";
+  iframe.style.border = "0";
+  iframe.style.opacity = "0";
+  document.body.appendChild(iframe);
+
+  const printWindow = iframe.contentWindow;
+  const printDocument = printWindow?.document;
+  if (!printWindow || !printDocument) {
+    iframe.remove();
+    printFeeTarget("student");
+    return;
+  }
+
+  const pageStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    .map((node) => {
+      if (node.tagName.toLowerCase() === "link") {
+        return `<link rel="stylesheet" href="${node.href}">`;
+      }
+      return `<style>${node.textContent || ""}</style>`;
+    })
+    .join("");
+
+  printDocument.open();
+  printDocument.write(`<!doctype html>
+    <html>
+      <head>
+        <title>Student Fee Account</title>
+        ${pageStyles}
+        <style>
+          @page { size: A4; margin: 12mm; }
+          html, body { margin: 0; background: #fff; }
+          body { color: #1C2416; }
+          .cms-fee-student-print {
+            display: grid;
+            gap: 8px;
+            width: 100%;
+            max-width: none;
+            margin: 0;
+            padding: 0;
+            overflow: visible;
+            background: #fff;
+          }
+          .cms-fee-student-print .cms-fee-block {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            margin: 0;
+            padding: 8px;
+            border-color: #d1d5db;
+            background: #fff;
+          }
+          .cms-fee-student-print .cms-fee-block h3 {
+            margin: 0 0 6px;
+            font-size: 12px;
+          }
+          .cms-fee-student-print .cms-fee-kv {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 7px 10px;
+          }
+          .cms-fee-student-print .cms-fee-kv span { font-size: 9.5px; }
+          .cms-fee-student-print .cms-fee-kv strong { font-size: 11px; }
+          .cms-fee-student-print .cms-table-wrap {
+            overflow: visible;
+          }
+          .cms-fee-student-print .cms-table {
+            width: 100%;
+            min-width: 0;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 9.5px;
+          }
+          .cms-fee-student-print .cms-table th,
+          .cms-fee-student-print .cms-table td {
+            padding: 4px 5px;
+            border-color: #d1d5db;
+            color: #111827;
+          }
+          .cms-fee-student-print .cms-action-btn,
+          .cms-fee-student-print .cms-btn {
+            display: none !important;
+          }
+        </style>
+      </head>
+      <body>${accountElement.outerHTML}</body>
+    </html>`);
+  printDocument.close();
+
+  const waitForStyles = Promise.all(Array.from(printDocument.querySelectorAll('link[rel="stylesheet"]')).map((link) => (
+    new Promise((resolve) => {
+      if (link.sheet) {
+        resolve();
+        return;
+      }
+      link.onload = resolve;
+      link.onerror = resolve;
+      window.setTimeout(resolve, 1000);
+    })
+  )));
+  const waitForFonts = printDocument.fonts?.ready || Promise.resolve();
+
+  await Promise.all([waitForStyles, waitForFonts]);
+  await new Promise((resolve) => printWindow.requestAnimationFrame(() => resolve()));
+
+  const cleanup = () => {
+    printWindow.removeEventListener("afterprint", cleanup);
+    window.setTimeout(() => iframe.remove(), 300);
+  };
+  printWindow.addEventListener("afterprint", cleanup);
+  printWindow.focus();
+  printWindow.print();
+};
+
 const escapePrintValue = (value) => String(value ?? "-")
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
@@ -1498,8 +1739,9 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
       <div className="cms-card cms-fee-overview-card" ref={overviewRef}>
         <div className="cms-card-head">
           <h2>Fee Management Overview</h2>
-          {overviewTab === "overdue" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Overdue Fees", dueColumns, overdue)}><Printer size={14} /> Print List</button> : null}
-          {overviewTab === "upcoming" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Upcoming Fee Schedules", dueColumns, upcoming)}><Printer size={14} /> Print List</button> : null}
+          {overviewTab === "overdue" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Overdue Fees", dueColumns, overdue)}><Printer size={14} /> Export</button> : null}
+          {overviewTab === "upcoming" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Upcoming Fee Schedules", dueColumns, upcoming)}><Printer size={14} /> Export</button> : null}
+          {overviewTab === "recent" ? <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Recent Payments", recentColumns, recent)}><Printer size={14} /> Export</button> : null}
         </div>
         <div className="cms-card-body cms-fee-overview-shell">
           <div className="cms-fee-overview-tabs" role="tablist" aria-label="Fee Management Overview">
@@ -1618,9 +1860,6 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
                     ))}
                   </tbody>
                 </table>
-                <div className="cms-fee-print-row">
-                  <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Recent Payments", recentColumns, recent)}><Printer size={14} /> Print List</button>
-                </div>
                 <TablePagination page={recentPage} totalItems={recent.length} onPageChange={setRecentPage} />
               </div>
             ) : null}
@@ -1634,8 +1873,13 @@ function OverviewTab({ accounts, dashboard = null, dueRows = [], dashboardLoaded
 /* ---------------------------- Collect payment ---------------------------- */
 function CollectPaymentModal({ account, onClose, onSaved }) {
   const pending = account.installments.filter((item) => normalizeKey(item.status) !== "paid" && Number(item.balance || 0) > 0);
-  const [target, setTarget] = useState(pending.length ? String(pending[0].no) : "full");
-  const [amount, setAmount] = useState(String(pending.length ? pending[0].balance : account.balance));
+  const installmentIdFor = (item) => item?.feeInstallmentId || item?.installmentId || item?.id || null;
+  const firstPendingId = pending.length ? installmentIdFor(pending[0]) : null;
+  const [target, setTarget] = useState(firstPendingId ? "schedules" : "full");
+  const [selectedInstallmentIds, setSelectedInstallmentIds] = useState(firstPendingId ? [String(firstPendingId)] : []);
+  const selectedPending = pending.filter((item) => selectedInstallmentIds.includes(String(installmentIdFor(item))));
+  const selectedScheduleTotal = selectedPending.reduce((sum, item) => sum + Number(item.balance || 0), 0);
+  const [amount, setAmount] = useState(String(firstPendingId ? selectedScheduleTotal : account.balance));
   const [date, setDate] = useState(todayISO());
   const [method, setMethod] = useState("Cash");
   const [reference, setReference] = useState("");
@@ -1647,24 +1891,44 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
   const savingRef = useRef(false);
   const isReferenceRequired = method && method !== "Cash";
 
-  const selectTarget = (value) => {
-    setTarget(value);
+  const setFullBalanceTarget = () => {
+    setTarget("full");
+    setSelectedInstallmentIds([]);
     setError("");
-    if (value === "full") {
-      setAmount(String(account.balance));
-      return;
-    }
-    const installment = pending.find((item) => String(item.no) === value);
-    setAmount(String(installment ? installment.balance : account.balance));
+    setAmount(String(account.balance));
   };
+
+  const toggleScheduleTarget = (item) => {
+    const installmentId = installmentIdFor(item);
+    if (!installmentId) return;
+    setTarget("schedules");
+    setError("");
+    setSelectedInstallmentIds((current) => {
+      const key = String(installmentId);
+      const next = current.includes(key) ? current.filter((id) => id !== key) : [...current, key];
+      const nextTotal = pending
+        .filter((pendingItem) => next.includes(String(installmentIdFor(pendingItem))))
+        .reduce((sum, pendingItem) => sum + Number(pendingItem.balance || 0), 0);
+      setAmount(String(nextTotal || ""));
+      return next;
+    });
+  };
+  const targetLabel = target === "full"
+    ? `Pay Full Remaining Balance - ${formatCurrency(account.balance)}`
+    : selectedPending.length
+      ? `${selectedPending.length} schedule${selectedPending.length === 1 ? "" : "s"} selected - ${formatCurrency(selectedScheduleTotal)}`
+      : "Select pending fee schedules";
 
   const save = async () => {
     if (savingRef.current) return null;
     const value = Number(amount || 0);
     const discountValue = Number(discount || 0);
     const fineValue = Number(fine || 0);
+    const selectedIds = target === "full" ? [] : selectedInstallmentIds.map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0);
     if (!Number.isFinite(value) || value <= 0) return setError("Enter a valid payment amount");
     if (discountValue > value + fineValue) return setError("Discount cannot exceed the payment amount plus fine");
+    if (target !== "full" && !selectedIds.length) return setError("Select at least one pending fee schedule");
+    if (target !== "full" && value > selectedScheduleTotal) return setError(`Amount cannot exceed the selected schedule total of ${formatCurrency(selectedScheduleTotal)}`);
     if (value > account.balance) return setError(`Amount cannot exceed the outstanding balance of ${formatCurrency(account.balance)}`);
     if (!method) return setError("Payment Method is required");
     if (isReferenceRequired && !reference.trim()) return setError("Transaction / Reference Number is required for this payment method");
@@ -1674,14 +1938,13 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
     if (!Number.isFinite(assignmentIdValue) || assignmentIdValue <= 0) return setError("Student fee assignment ID must be a valid number");
     const studentIdValue = Number(account.studentId || 0);
     if (!Number.isFinite(studentIdValue) || studentIdValue <= 0) return setError("Student ID is required to collect payment");
-    const installment = target === "full" ? null : pending.find((item) => String(item.no) === target);
     savingRef.current = true;
     setSaving(true);
     try {
       const response = await apiClient.post(apiEndpoints.fee.collect, {
         studentId: studentIdValue,
         studentFeeId: assignmentIdValue,
-        feeInstallmentId: installment?.feeInstallmentId || installment?.installmentId || installment?.id || null,
+        feeInstallmentIds: selectedIds,
         amount: value,
         paymentDate: date ? new Date(date).toISOString() : null,
         paymentMode: method,
@@ -1733,15 +1996,34 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
 
         <div className="cms-form-grid cols-3">
           <div className="cms-field full">
-            <label htmlFor="collect-target">Pay Towards</label>
-            <select id="collect-target" value={target} onChange={(event) => selectTarget(event.target.value)}>
+            <label>Pay Towards</label>
+            <details className="cms-fee-pay-towards">
+              <summary className="cms-fee-pay-towards-trigger">
+                <span>{targetLabel}</span>
+                <span className="cms-fee-pay-towards-arrow" aria-hidden="true">
+                  <ChevronDown size={16} strokeWidth={2} />
+                </span>
+              </summary>
+              <div className="cms-fee-pay-towards-menu">
+                <label className="cms-fee-pay-option is-strong">
+                  <input className="cms-fee-pay-checkbox" type="checkbox" checked={target === "full"} onChange={setFullBalanceTarget} />
+                  <span className="cms-fee-pay-option-text">Pay Full Remaining Balance - {formatCurrency(account.balance)}</span>
+                </label>
+                {pending.length ? <div className="cms-fee-pay-divider" /> : null}
               {pending.map((item) => (
-                <option key={item.no} value={String(item.no)}>
-                  Fee Schedule {item.no} - {formatCurrency(item.balance)} due {formatDate(item.dueDate)}
-                </option>
+                  <label key={installmentIdFor(item) || item.no} className="cms-fee-pay-option">
+                    <input
+                      className="cms-fee-pay-checkbox"
+                      type="checkbox"
+                      checked={target !== "full" && selectedInstallmentIds.includes(String(installmentIdFor(item)))}
+                      onChange={() => toggleScheduleTarget(item)}
+                    />
+                    <span className="cms-fee-pay-option-text">Fee Schedule {item.no} - {formatCurrency(item.balance)} due {formatDate(item.dueDate)}</span>
+                  </label>
               ))}
-              <option value="full">Pay Full Remaining Balance - {formatCurrency(account.balance)}</option>
-            </select>
+                {!pending.length ? <div className="cms-fee-empty-row">No pending fee schedules.</div> : null}
+              </div>
+            </details>
           </div>
           <div className="cms-field">
             <label htmlFor="collect-amount">Amount <span className="req">*</span></label>
@@ -1782,6 +2064,7 @@ function CollectPaymentModal({ account, onClose, onSaved }) {
 
 /* ------------------------------- Receipt -------------------------------- */
 function ReceiptModal({ receipt, onClose }) {
+  const receiptRef = useRef(null);
   const visibleRows = (rows) => rows.filter(([, value]) => value !== undefined && value !== null && value !== "" && value !== "-");
   const studentRows = visibleRows([
     ["Student Name", receipt.studentName],
@@ -1821,11 +2104,11 @@ function ReceiptModal({ receipt, onClose }) {
       footer={(
         <>
           <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
-          <button className="cms-btn cms-btn-primary" onClick={() => printFeeTarget("receipt")}><Printer size={14} /> Print Receipt</button>
+          <button className="cms-btn cms-btn-primary" onClick={() => printReceiptElement(receiptRef.current)}><Printer size={14} /> Print Receipt</button>
         </>
       )}
     >
-      <div className="cms-fee-receipt cms-fee-receipt-print">
+      <div ref={receiptRef} className="cms-fee-receipt cms-fee-receipt-print">
         <div className="cms-fee-receipt-head">
           <img src={collegeLogo} alt="Pirnav College logo" />
           <div>
@@ -1911,6 +2194,7 @@ function ReceiptModal({ receipt, onClose }) {
 
 /* --------------------------- Student fee details -------------------------- */
 function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allowCollect = false }) {
+  const accountPrintRef = useRef(null);
   const feeBreakdownTotals = account.feeItems.reduce((totals, item) => ({
     original: totals.original + Number(item.originalAmount || 0),
     concession: totals.concession + Number(item.concessionAmount || 0),
@@ -1959,7 +2243,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
             <span>{account.admissionNo} &middot; {account.group} / {account.section}</span>
           </div>
           <div className="cms-fee-drawer-actions">
-            <button className="cms-btn cms-btn-ghost" onClick={() => printFeeTarget("student")}>
+            <button className="cms-btn cms-btn-ghost" onClick={() => printStudentFeeAccountElement(accountPrintRef.current)}>
               <Printer size={14} /> Print
             </button>
             {allowCollect ? (
@@ -1971,7 +2255,7 @@ function StudentFeeAccountScreen({ account, onClose, onCollect, onReceipt, allow
           </div>
         </div>
 
-        <div className="cms-card-body cms-fee-drawer-body cms-fee-student-print">
+        <div ref={accountPrintRef} className="cms-card-body cms-fee-drawer-body cms-fee-student-print">
           <section className="cms-fee-block">
             <h3>Student Information</h3>
             <div className="cms-fee-kv">
@@ -2177,7 +2461,7 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="cms-fee-empty-row">Loading fee accounts...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={11} />)
             ) : error ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
@@ -2256,7 +2540,7 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="cms-fee-empty-row">Loading fee accounts...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
             ) : error ? (
               <tr><td colSpan={9} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
@@ -2646,7 +2930,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, feeTyp
 function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
   const [draft, setDraft] = useState({
     name: initial?.name || "",
-    category: initial?.category || FEE_TYPE_CATEGORIES[1],
+    category: normalizeFeeTypeCategory(initial?.category, initial?.name),
     status: initial?.status || "Active",
   });
   const [error, setError] = useState("");
@@ -2660,7 +2944,7 @@ function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
     const nextType = {
       id: initial?.id || `custom-${Date.now()}`,
       name,
-      category: draft.category || "Other",
+      category: normalizeFeeTypeCategory(draft.category, name),
       status: draft.status || "Active",
     };
     setSaving(true);
@@ -2713,7 +2997,7 @@ function FeeTypeFormModal({ initial, feeTypes, onClose, onSaved }) {
 const feeTypePayload = (item) => ({
   FeeTypeName: item.name,
   FeeTypeCode: item.code || feeTypeCodeFor(item.name),
-  Category: item.category || "Other",
+  Category: normalizeFeeTypeCategory(item.category, item.name),
   IsActive: item.status !== "Inactive",
 });
 
@@ -3158,7 +3442,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
                 </tr>
               ))}
               {!loading && !fineRules.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No fine rules configured.</td></tr> : null}
-              {loading ? <tr><td colSpan={7} className="cms-fee-empty-row">Loading fine rules...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : null}
             </tbody>
           </table>
         </div>
@@ -3259,7 +3543,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="cms-fee-empty-row">Loading fee structures...</td></tr>
+              Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={6} />)
             ) : structures.length === 0 ? (
               <tr><td colSpan={6} className="cms-fee-empty-row">{error || "No fee structures found."}</td></tr>
             ) : paginatedStructures.map((row) => {
@@ -3456,7 +3740,7 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
                 </tr>
               ))}
               {!loading && !configs.length ? <tr><td colSpan={8} className="cms-fee-empty-row">No hostel fee configurations found.</td></tr> : null}
-              {loading ? <tr><td colSpan={8} className="cms-fee-empty-row">Loading hostel fee configurations...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />) : null}
             </tbody>
           </table>
         </div>
@@ -3644,7 +3928,7 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
                 </tr>
               ))}
               {!loading && !pickupPoints.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No transport fee configurations found.</td></tr> : null}
-              {loading ? <tr><td colSpan={7} className="cms-fee-empty-row">Loading transport fee configurations...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : null}
             </tbody>
           </table>
         </div>
@@ -3857,7 +4141,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
         <div className="cms-fee-head-actions">
           <span className="cms-badge cms-badge-info">{rows.length} transactions</span>
           <button className="cms-btn cms-btn-ghost cms-fee-mini-btn" type="button" onClick={() => printFeeList("Payment History", historyColumns, rows)}>
-            <Printer size={14} /> Print
+            <Printer size={14} /> Export
           </button>
         </div>
       </div>
@@ -3877,7 +4161,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="cms-fee-empty-row">Loading payment history...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={11} />)
             ) : error ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">Unable to load payment history: {error}</td></tr>
             ) : rows.length === 0 ? (
@@ -3917,6 +4201,8 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     selectedBoardId,
     selectedAcademicYearId,
   } = useAcademicContext();
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const selectedCampusValue = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id ?? "";
   const [tab, setTab] = useState(initialTab);
   const [setupTab, setSetupTab] = useState(initialSetupTab);
   const [ledgerTab, setLedgerTab] = useState(initialLedgerTab);
@@ -4035,8 +4321,18 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     accountRequestRef.current = { ...accountRequestRef.current, [source]: requestId };
     setAccountLoading((current) => ({ ...current, [source]: true }));
     setAccountErrors((current) => ({ ...current, [source]: "" }));
+    if (source === "collection") {
+      setCollectionAccounts([]);
+    } else {
+      setLedgerAccounts([]);
+    }
     try {
-      const response = await apiClient.get(endpoint);
+      const response = await apiClient.get(endpoint, {
+        params: cleanParams({
+          campusId: selectedCampusValue,
+          academicYearId: source === "ledger" ? selectedAcademicYearId : "",
+        }),
+      });
       if (accountRequestRef.current[source] !== requestId) return;
       const rows = getCollection(response.data);
       const context = await loadAccountContext(rows);
@@ -4092,18 +4388,21 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         setAccountLoading((current) => ({ ...current, [source]: false }));
       }
     }
-  }, [loadAccountContext]);
+  }, [loadAccountContext, selectedAcademicYearId, selectedCampusValue]);
 
   const loadOverviewData = useCallback(async () => {
     const requestId = overviewRequestRef.current + 1;
     overviewRequestRef.current = requestId;
     setDashboardLoaded(false);
     setOverviewError("");
-    const dashboardResult = await apiClient.get(apiEndpoints.fee.dashboard).then(
+    setDashboardData(null);
+    setDueRows([]);
+    const overviewParams = cleanParams({ campusId: selectedCampusValue });
+    const dashboardResult = await apiClient.get(apiEndpoints.fee.dashboard, { params: overviewParams }).then(
       (response) => ({ status: "fulfilled", response }),
       (error) => ({ status: "rejected", error }),
     );
-    const dueResult = await apiClient.get(apiEndpoints.fee.due || apiEndpoints.fee.getDue).then(
+    const dueResult = await apiClient.get(apiEndpoints.fee.due || apiEndpoints.fee.getDue, { params: overviewParams }).then(
       (response) => ({ status: "fulfilled", response }),
       (error) => ({ status: "rejected", error }),
     );
@@ -4120,7 +4419,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       .filter((result) => result.status === "rejected")
       .map((result) => getApiErrorMessage(result.error));
     if (messages.length) setOverviewError(messages.join(" "));
-  }, []);
+  }, [selectedCampusValue]);
 
   const loadMissingPaymentHistories = useCallback(async (accounts) => {
     const targets = accounts.filter((account) => (
@@ -4151,30 +4450,36 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     setFineRuleState({ loading: true, error: "" });
     setStructureError("");
     setMasterErrors({});
-    const [typesResult, structuresResult, scholarshipsResult, yearsResult, levelsResult, groupsResult, programsResult, transportRoutesResult, transportPickupsResult, hostelFeesResult, hostelBlocksResult, hostelRoomTypesResult, fineRulesResult] = await Promise.allSettled([
+    const [typesResult, structuresResult, scholarshipsResult, yearsResult, levelsResult, groupsResult, programsResult, transportRoutesResult, hostelFeesResult, hostelBlocksResult, hostelRoomTypesResult, fineRulesResult] = await Promise.allSettled([
       apiClient.get(apiEndpoints.fee.feeTypes),
-      apiClient.get(apiEndpoints.fee.getStructures),
+      apiClient.get(apiEndpoints.fee.getStructures, { params: cleanParams({ campusId: selectedCampusValue }) }),
       apiClient.get(apiEndpoints.fee.scholarships),
       apiClient.get(apiEndpoints.academicYears.getAll),
       apiClient.get(apiEndpoints.boards.getAcademicLevels),
       apiClient.get(apiEndpoints.groups.getAll, { params: { isActive: true } }).catch(() => apiClient.get(apiEndpoints.groups.dropdown)),
       apiClient.get(apiEndpoints.programs.getAll),
-      apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
-      apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+      apiClient.get(apiEndpoints.transport.routes, { params: cleanParams({ PageNumber: 1, PageSize: 1000, campusId: selectedCampusValue }) }),
       apiClient.get(apiEndpoints.hostel.fees),
       apiClient.get(apiEndpoints.hostel.blocks),
       apiClient.get(apiEndpoints.hostel.roomTypes),
       apiClient.get(apiEndpoints.fee.fineRules),
     ]);
     if (structureRequestRef.current !== requestId) return;
-    const transportError = [transportRoutesResult, transportPickupsResult]
+    const routeRows = transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [];
+    const pickupResults = routeRows.length
+      ? await Promise.allSettled(routeRows.map((route) => (
+        apiClient.get(apiEndpoints.transport.pickupPoints, { params: cleanParams({ PageNumber: 1, PageSize: 1000, routeId: route.id }) })
+      )))
+      : [];
+    if (structureRequestRef.current !== requestId) return;
+    const transportError = [transportRoutesResult, ...pickupResults]
       .filter((result) => result.status === "rejected")
       .map((result) => getApiErrorMessage(result.reason))
       .filter(Boolean)
       .join(" ");
     setTransportFees({
-      routes: transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [],
-      pickupPoints: transportPickupsResult.status === "fulfilled" ? normalizeTransportPickupRows(getCollection(transportPickupsResult.value.data)) : [],
+      routes: routeRows,
+      pickupPoints: normalizeTransportPickupRows(pickupResults.flatMap((result) => (result.status === "fulfilled" ? getCollection(result.value.data) : []))),
       loading: false,
       error: transportError,
     });
@@ -4183,10 +4488,13 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       .map((result) => getApiErrorMessage(result.reason))
       .filter(Boolean)
       .join(" ");
+    const hostelBlocks = hostelBlocksResult.status === "fulfilled" ? normalizeHostelBlockRows(getCollection(hostelBlocksResult.value.data)) : [];
+    const hostelConfigs = hostelFeesResult.status === "fulfilled" ? normalizeHostelFeeRows(getCollection(hostelFeesResult.value.data)) : [];
+    const campusHostelData = filterHostelFeesByCampus(hostelConfigs, hostelBlocks, selectedCampusValue);
     setHostelFees({
-      configs: hostelFeesResult.status === "fulfilled" ? normalizeHostelFeeRows(getCollection(hostelFeesResult.value.data)) : [],
+      configs: campusHostelData.configs,
       masters: {
-        blocks: hostelBlocksResult.status === "fulfilled" ? normalizeHostelBlockRows(getCollection(hostelBlocksResult.value.data)) : [],
+        blocks: campusHostelData.blocks,
         roomTypes: hostelRoomTypesResult.status === "fulfilled" ? normalizeHostelRoomTypeRows(getCollection(hostelRoomTypesResult.value.data)) : [],
       },
       loading: false,
@@ -4276,7 +4584,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       scholarships: scholarshipsResult.status === "rejected" ? getApiErrorMessage(scholarshipsResult.reason) : "",
     });
     if (structureRequestRef.current === requestId) setStructureLoading(false);
-  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions]);
+  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue]);
 
   const openCollectPayment = (id) => {
     setSelectedId(id);
@@ -4343,19 +4651,24 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
 
   useEffect(() => {
     loadOverviewData();
-    loadedTabsRef.current.add("Overview");
-  }, [loadOverviewData]);
+    loadedTabsRef.current.add(`Overview:${selectedCampusValue || ""}`);
+  }, [loadOverviewData, selectedCampusValue]);
 
   useEffect(() => {
-    const contextKey = `${selectedBoardId || ""}:${selectedAcademicYearId || ""}`;
-    const loadKey = tab === "Student Fee Ledger" ? `${tab}:${ledgerTab}:${contextKey}` : `${tab}:${contextKey}`;
+    const campusKey = selectedCampusValue || "";
+    const boardYearKey = `${selectedBoardId || ""}:${selectedAcademicYearId || ""}`;
+    const loadKey = tab === "Overview"
+      ? `${tab}:${campusKey}`
+      : tab === "Student Fee Ledger"
+        ? `${tab}:${ledgerTab}:${campusKey}:${ledgerTab === "Fee Collection" ? "" : selectedAcademicYearId || ""}`
+        : `${tab}:${campusKey}:${boardYearKey}`;
     if (loadedTabsRef.current.has(loadKey)) return;
     loadedTabsRef.current.add(loadKey);
     if (tab === "Overview") loadOverviewData();
     if (tab === "Fee Setup") loadFeeApiData();
     if (tab === "Student Fee Ledger" && ledgerTab === "Fee Collection") loadFeeAccounts("collection");
     if (tab === "Student Fee Ledger" && ledgerTab !== "Fee Collection") loadFeeAccounts("ledger");
-  }, [ledgerTab, loadFeeAccounts, loadFeeApiData, loadOverviewData, selectedAcademicYearId, selectedBoardId, tab]);
+  }, [ledgerTab, loadFeeAccounts, loadFeeApiData, loadOverviewData, selectedAcademicYearId, selectedBoardId, selectedCampusValue, tab]);
 
   useEffect(() => {
     if (tab !== "Student Fee Ledger" || ledgerTab !== "Payment History") return;

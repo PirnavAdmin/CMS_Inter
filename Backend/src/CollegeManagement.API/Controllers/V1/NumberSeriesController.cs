@@ -32,9 +32,9 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet]
         [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<NumberSeriesResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null)
         {
-            var result = await _numberSeriesService.GetAllSeriesAsync();
+            var result = await _numberSeriesService.GetAllSeriesAsync(campusId);
             return Ok(result);
         }
 
@@ -47,9 +47,9 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetByCode(string seriesCode)
+        public async Task<IActionResult> GetByCode(string seriesCode, [FromQuery] int? campusId = null)
         {
-            var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode);
+            var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, campusId);
             if (result == null)
             {
                 return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });
@@ -66,14 +66,14 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Update(string seriesCode, [FromBody] UpdateNumberSeriesDto dto)
+        public async Task<IActionResult> Update(string seriesCode, [FromBody] UpdateNumberSeriesDto dto, [FromQuery] int? campusId = null)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
 
-            var result = await _numberSeriesService.UpdateSeriesAsync(seriesCode, dto);
+            var result = await _numberSeriesService.UpdateSeriesAsync(seriesCode, dto, campusId);
             if (result == null)
             {
                 return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });
@@ -90,9 +90,9 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(GenerateNumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GenerateNext(string seriesCode, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateNumberSeriesRequestDto? context = null)
+        public async Task<IActionResult> GenerateNext(string seriesCode, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateNumberSeriesRequestDto? context = null, [FromQuery] int? campusId = null)
         {
-            var result = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, context);
+            var result = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, context, campusId);
             if (result == null)
             {
                 return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });
@@ -112,9 +112,10 @@ namespace CollegeManagement.API.Controllers.V1
             string seriesCode,
             [FromQuery] string? pattern = null,
             [FromQuery] int? numberLength = null,
-            [FromQuery] string? prefix = null)
+            [FromQuery] string? prefix = null,
+            [FromQuery] int? campusId = null)
         {
-            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix);
+            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix, campusId);
             return Ok(preview);
         }
     }

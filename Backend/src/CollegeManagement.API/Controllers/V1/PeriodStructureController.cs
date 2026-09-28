@@ -1,4 +1,4 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.Timetable;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -25,9 +25,9 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpGet]
         [ProducesResponseType(typeof(IEnumerable<PeriodStructureListItemDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null)
         {
-            var result = await _periodStructureService.GetAllAsync();
+            var result = await _periodStructureService.GetAllAsync(campusId);
             return Ok(result);
         }
 
@@ -94,9 +94,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? boardId,
             [FromQuery] int? academicLevelId,
             [FromQuery] int? academicYearId,
-            [FromQuery] int? groupId)
+            [FromQuery] int? groupId,
+            [FromQuery] int? campusId = null)
         {
-            var result = await _periodStructureService.GetPeriodsByContextAsync(boardId, academicLevelId, academicYearId, groupId);
+            var result = await _periodStructureService.GetPeriodsByContextAsync(boardId, academicLevelId, academicYearId, groupId, campusId);
             return Ok(result);
         }
     }

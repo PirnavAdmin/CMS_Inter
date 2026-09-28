@@ -17,7 +17,8 @@ DELIMITER //
 CREATE PROCEDURE sp_GetDashboardKPIs(
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
-    IN p_TargetDate DATE
+    IN p_TargetDate DATE,
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_TargetDate DATE;
@@ -57,14 +58,14 @@ BEGIN
     -- 1. Total Students from StudentAdmissions (fallback to Students table)
     SELECT COUNT(*) INTO v_TotalStudents
     FROM `StudentAdmissions` sa
-    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+    WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR sa.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
 
     IF v_TotalStudents = 0 THEN
         SELECT COUNT(*) INTO v_TotalStudents
         FROM `Students` s
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+        WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsActive = 1 OR s.IsActive IS NULL)
           AND (v_EffectiveAcademicYearId IS NULL OR s.AcademicYearId = v_EffectiveAcademicYearId)
           AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
     END IF;
@@ -72,7 +73,7 @@ BEGIN
     -- 2. Teaching Staff Count (Active, non-deleted, filtered by Board)
     SELECT COUNT(*) INTO v_TeachingStaff
     FROM `Staff` st
-    WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+    WHERE ((p_CampusId IS NULL OR st.CampusId = p_CampusId) AND st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
       AND (p_BoardId IS NULL OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0)
       AND (
@@ -85,7 +86,7 @@ BEGIN
     -- 3. Non-Teaching Staff Count
     SELECT COUNT(*) INTO v_NonTeachingStaff
     FROM `Staff` st
-    WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+    WHERE ((p_CampusId IS NULL OR st.CampusId = p_CampusId) AND st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
       AND (p_BoardId IS NULL OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0)
       AND (LOWER(st.StaffType) LIKE '%non%');
@@ -93,14 +94,14 @@ BEGIN
     -- 4. Total Groups Count
     SELECT COUNT(*) INTO v_TotalGroups
     FROM `Groups` g
-    WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
+    WHERE ((p_CampusId IS NULL OR g.CampusId = p_CampusId) AND g.IsActive = 1 OR g.IsActive IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR g.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR g.BoardId = p_BoardId);
 
     -- 5. Total Sections Count
     SELECT COUNT(*) INTO v_TotalSections
     FROM `Sections` sec
-    WHERE (sec.IsActive = 1 OR sec.IsActive IS NULL)
+    WHERE ((p_CampusId IS NULL OR sec.CampusId = p_CampusId) AND sec.IsActive = 1 OR sec.IsActive IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR sec.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR sec.BoardId = p_BoardId);
 
@@ -114,7 +115,7 @@ BEGIN
     -- 7. Upcoming Exams
     SELECT COUNT(*) INTO v_UpcomingExams
     FROM `Examinations` e
-    WHERE (e.IsActive = 1 OR e.IsActive IS NULL)
+    WHERE ((p_CampusId IS NULL OR e.CampusId = p_CampusId) AND e.IsActive = 1 OR e.IsActive IS NULL)
       AND e.EndDate >= v_TargetDate
       AND (v_EffectiveAcademicYearId IS NULL OR e.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR e.BoardId = p_BoardId);
@@ -122,7 +123,7 @@ BEGIN
     -- 8. Total Subjects
     SELECT COUNT(*) INTO v_TotalSubjects
     FROM `Subjects` sub
-    WHERE (sub.IsActive = 1 OR sub.IsActive IS NULL)
+    WHERE ((p_CampusId IS NULL OR sub.CampusId = p_CampusId) AND sub.IsActive = 1 OR sub.IsActive IS NULL)
       AND (p_BoardId IS NULL OR sub.BoardId = p_BoardId);
 
     -- Return final summary
@@ -151,7 +152,8 @@ END //
 CREATE PROCEDURE sp_GetDashboardSummary(
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
-    IN p_TargetDate DATE
+    IN p_TargetDate DATE,
+    IN p_CampusId INT
 )
 BEGIN
     CALL sp_GetDashboardKPIs(p_BoardId, p_AcademicYearId, p_TargetDate);
@@ -168,14 +170,15 @@ DELIMITER //
 
 CREATE PROCEDURE sp_GetDashboardStudentsOverview(
     IN p_BoardId INT,
-    IN p_AcademicYearId INT
+    IN p_AcademicYearId INT,
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_AdmissionsCount INT DEFAULT 0;
 
     SELECT COUNT(*) INTO v_AdmissionsCount
     FROM `StudentAdmissions` sa
-    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+    WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
       AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
 
@@ -193,7 +196,7 @@ BEGIN
             SUM(CASE WHEN sa.AcademicLevelId = 1 THEN 1 ELSE 0 END) AS FirstYearStudents,
             SUM(CASE WHEN sa.AcademicLevelId = 2 THEN 1 ELSE 0 END) AS SecondYearStudents
         FROM `StudentAdmissions` sa
-        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+        WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
 
@@ -203,7 +206,7 @@ BEGIN
             MIN(COALESCE(sa.AdmissionDate, sa.CreatedAt)) AS SortDate,
             COUNT(*) AS StudentsJoined
         FROM `StudentAdmissions` sa
-        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+        WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
           AND (sa.AdmissionDate IS NOT NULL OR sa.CreatedAt IS NOT NULL)
@@ -223,7 +226,7 @@ BEGIN
             SUM(CASE WHEN s.AcademicLevelId = 1 THEN 1 ELSE 0 END) AS FirstYearStudents,
             SUM(CASE WHEN s.AcademicLevelId = 2 THEN 1 ELSE 0 END) AS SecondYearStudents
         FROM `Students` s
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+        WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsActive = 1 OR s.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
 
@@ -232,7 +235,7 @@ BEGIN
             MIN(COALESCE(s.AdmissionDate, s.CreatedAt)) AS SortDate,
             COUNT(*) AS StudentsJoined
         FROM `Students` s
-        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+        WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsActive = 1 OR s.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
           AND (s.AdmissionDate IS NOT NULL OR s.CreatedAt IS NOT NULL)
@@ -252,14 +255,15 @@ DELIMITER //
 
 CREATE PROCEDURE sp_GetDashboardGroupDistribution(
     IN p_BoardId INT,
-    IN p_AcademicYearId INT
+    IN p_AcademicYearId INT,
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_AdmissionsCount INT DEFAULT 0;
 
     SELECT COUNT(*) INTO v_AdmissionsCount
     FROM `StudentAdmissions` sa
-    WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+    WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
       AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
 
@@ -327,14 +331,14 @@ BEGIN
     -- Total Students
     SELECT COUNT(*) INTO v_TotalStudents
     FROM `Students` s
-    WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+    WHERE ((p_CampusId IS NULL OR s.CampusId = p_CampusId) AND s.IsActive = 1 OR s.IsActive IS NULL)
       AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
 
     IF v_TotalStudents = 0 THEN
         SELECT COUNT(*) INTO v_TotalStudents
         FROM `StudentAdmissions` sa
-        WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+        WHERE ((p_CampusId IS NULL OR sa.CampusId = p_CampusId) AND sa.IsActive = 1 OR sa.IsActive IS NULL)
           AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
           AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId);
     END IF;
@@ -484,7 +488,7 @@ BEGIN
         COUNT(DISTINCT CASE WHEN LOWER(st.StaffType) LIKE '%non%' THEN st.Id END)
     INTO v_TeachingCount, v_NonTeachingCount
     FROM `Staff` st
-    WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+    WHERE ((p_CampusId IS NULL OR st.CampusId = p_CampusId) AND st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
       AND (p_BoardId IS NULL OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
 
@@ -626,7 +630,8 @@ CREATE PROCEDURE sp_GetDashboardUpcomingExaminations(
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
     IN p_TargetDate DATE,
-    IN p_Limit INT
+    IN p_Limit INT,
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_TargetDate DATE;
@@ -716,7 +721,8 @@ CREATE PROCEDURE sp_GetDashboardWeeklyAttendance(
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
     IN p_StartDate DATE,
-    IN p_EndDate DATE
+    IN p_EndDate DATE,
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -747,7 +753,8 @@ DELIMITER //
 
 CREATE PROCEDURE sp_GetDashboardFacultyWorkload(
     IN p_BoardId INT,
-    IN p_AcademicYearId INT
+    IN p_AcademicYearId INT,
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
