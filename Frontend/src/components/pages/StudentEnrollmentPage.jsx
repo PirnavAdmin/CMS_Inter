@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { env } from "@/config/env.js";
@@ -424,7 +424,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     finally { if (!saved) setSaving(false); }
   };
   const field = (key, props = {}) => ({ ...props, error: errors[key], onBlur: blur(key) });
-  if (loading) return embedded ? <div className="cms-card"><div className="cms-empty">Loading student profile...</div></div> : <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">Loading student profile...</div></div></DashboardLayout>;
+  if (loading) return embedded ? <div className="cms-card"><SkeletonPage variant="form" rows={8} /></div> : <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><SkeletonPage variant="form" rows={8} /></div></DashboardLayout>;
   if (!student) return embedded ? <div className="cms-card"><div className="cms-empty">{loadError || "Student record was not found."}</div></div> : <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{loadError || "Student record was not found."}</div></div></DashboardLayout>;
   const editor = <form onSubmit={submit} className="cms-card student-profile-edit" noValidate>
     {!embedded ? <div className="student-profile-edit-summary"><span><small>Student Name</small><b>{student.name}</b></span><span><small>Roll No.</small><b>{student.rollNo}</b></span><span><small>Admission No.</small><b>{student.admissionNo}</b></span></div> : null}

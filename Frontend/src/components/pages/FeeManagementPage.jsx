@@ -25,7 +25,7 @@ import {
 } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -2461,7 +2461,7 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="cms-fee-empty-row">Loading fee accounts...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={11} />)
             ) : error ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
@@ -2540,7 +2540,7 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="cms-fee-empty-row">Loading fee accounts...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
             ) : error ? (
               <tr><td colSpan={9} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
@@ -3442,7 +3442,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
                 </tr>
               ))}
               {!loading && !fineRules.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No fine rules configured.</td></tr> : null}
-              {loading ? <tr><td colSpan={7} className="cms-fee-empty-row">Loading fine rules...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : null}
             </tbody>
           </table>
         </div>
@@ -3543,7 +3543,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="cms-fee-empty-row">Loading fee structures...</td></tr>
+              Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={6} />)
             ) : structures.length === 0 ? (
               <tr><td colSpan={6} className="cms-fee-empty-row">{error || "No fee structures found."}</td></tr>
             ) : paginatedStructures.map((row) => {
@@ -3740,7 +3740,7 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
                 </tr>
               ))}
               {!loading && !configs.length ? <tr><td colSpan={8} className="cms-fee-empty-row">No hostel fee configurations found.</td></tr> : null}
-              {loading ? <tr><td colSpan={8} className="cms-fee-empty-row">Loading hostel fee configurations...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />) : null}
             </tbody>
           </table>
         </div>
@@ -3928,7 +3928,7 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
                 </tr>
               ))}
               {!loading && !pickupPoints.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No transport fee configurations found.</td></tr> : null}
-              {loading ? <tr><td colSpan={7} className="cms-fee-empty-row">Loading transport fee configurations...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : null}
             </tbody>
           </table>
         </div>
@@ -4161,7 +4161,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="cms-fee-empty-row">Loading payment history...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={11} />)
             ) : error ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">Unable to load payment history: {error}</td></tr>
             ) : rows.length === 0 ? (

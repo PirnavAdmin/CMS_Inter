@@ -24,7 +24,7 @@ import {
   Wrench,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { ConfirmDialog, FormModal, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, FormModal, Modal, SkeletonTable, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import apiEndpoints from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -2223,9 +2223,9 @@ export default function TransportPage() {
             <StatCard icon={UserCheck} label="Drivers & Attendants" value={drivers.length + attendants.length} hint="staff profiles" tone="violet" />
           </div>
         ) : null}
-        {reportLoading ? <div className="cms-transport-report-state">Loading transport report...</div> : null}
+        {reportLoading ? <SkeletonTable columns={6} rows={5} /> : null}
         {reportError ? <div className="cms-transport-report-state is-error">{reportError} Showing the currently loaded transport data where available.</div> : null}
-        <TableSection
+        {!reportLoading ? <TableSection
           title="Transport Report"
           subtitle="Live transport report data derived from fleet records."
           rows={reportRows}
@@ -2249,7 +2249,7 @@ export default function TransportPage() {
             try { await downloadTransportFile(apiEndpoints.transport.exportReportCsv, "transport-report.csv"); }
             catch (error) { setToast(`Unable to export CSV: ${getApiErrorMessage(error)}`); }
           }}
-        />
+        /> : null}
       </div>
     );
   };

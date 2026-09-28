@@ -13,7 +13,7 @@ import {
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { SkeletonPage, SkeletonRow, Toast } from "@/components/common/Ui.jsx";
 import "./BoardAcademicYearManagementPage.css";
 
 const PAGE_SIZE = 5;
@@ -657,11 +657,7 @@ function AcademicYearWorkspace() {
               </tr>
             </thead>
             <tbody>
-              {listLoading ? (
-                <tr>
-                  <td colSpan="7" className="bay-empty">Loading academic years...</td>
-                </tr>
-              ) : null}
+              {listLoading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : null}
               {!listLoading && !visible.length ? (
                 <tr>
                   <td colSpan="7" className="bay-empty">No academic years available.</td>
@@ -774,7 +770,7 @@ function AcademicYearWorkspace() {
             ) : null}
           </header>
           {detailsLoading ? (
-            <p className="bay-empty">Loading academic year details...</p>
+            <SkeletonPage variant="form" rows={6} />
           ) : selected ? (
             <dl>
               {[
@@ -1504,7 +1500,7 @@ export default function BoardAcademicYearManagementPage() {
                 </thead>
                 <tbody>
                   {boardListLoading ? (
-                    <tr><td colSpan="7" className="bay-empty">Loading boards...</td></tr>
+                    Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                   ) : boardRows.length ? boardRows.map((row) => (
                     <tr key={row.id}>
                       <td>
@@ -1612,7 +1608,7 @@ export default function BoardAcademicYearManagementPage() {
                   </div>
                 </header>
                 {boardDetailsLoading ? (
-                  <p className="bay-empty">Loading Board details...</p>
+                  <SkeletonPage variant="form" rows={6} />
                 ) : selected ? (
                   <dl>
                     {boardDetailEntries(selected)
