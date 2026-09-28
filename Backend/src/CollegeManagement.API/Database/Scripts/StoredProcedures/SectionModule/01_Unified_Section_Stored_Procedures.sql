@@ -343,10 +343,13 @@ BEGIN
     FROM `Sections` s
     WHERE s.IsActive = 1
       AND (
-          (p_RoomId IS NOT NULL AND p_RoomId > 0 AND s.RoomId = p_RoomId)
-          OR (p_RoomCode IS NOT NULL AND p_RoomCode <> '' AND s.RoomId IN (
-              SELECT r.RoomId FROM `Rooms` r WHERE r.RoomCode = p_RoomCode OR r.RoomNumber = p_RoomCode
-          ))
+          CASE 
+              WHEN p_RoomId IS NOT NULL AND p_RoomId > 0 THEN s.RoomId = p_RoomId
+              WHEN p_RoomCode IS NOT NULL AND p_RoomCode <> '' THEN s.RoomId IN (
+                  SELECT r.RoomId FROM `Rooms` r WHERE r.RoomCode = p_RoomCode OR r.RoomNumber = p_RoomCode
+              )
+              ELSE FALSE
+          END
       )
       AND (p_ExcludeSectionId IS NULL OR s.SectionId <> p_ExcludeSectionId)
     LIMIT 1;

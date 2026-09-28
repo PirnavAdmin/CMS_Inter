@@ -75,11 +75,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<Room?> GetByCodeAsync(string roomCode)
+        public async Task<Room?> GetByCodeAsync(string roomCode, int? campusId = null)
         {
             return await Connection.QueryFirstOrDefaultAsync<Room>(
                 "sp_GetRoomByCode",
-                new { p_RoomCode = roomCode?.Trim() },
+                new 
+                { 
+                    p_RoomCode = roomCode?.Trim(),
+                    p_CampusId = campusId ?? 0
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
