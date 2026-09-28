@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Timetable;
@@ -21,342 +22,257 @@ namespace CollegeManagement.API.Repositories.Implementations
             _context = context;
         }
 
-        private bool IsRelational => _context.Database.ProviderName != null && !_context.Database.ProviderName.Contains("InMemory");
-
-        private IDbConnection Connection => _context.Database.GetDbConnection();
+        private async Task<IDbConnection> GetOpenConnectionAsync()
+        {
+            var conn = _context.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open)
+            {
+                await conn.OpenAsync();
+            }
+            return conn;
+        }
 
         public async Task<TimetableBackupResponseDto?> GetPreviousBySectionAsync(int sectionId, int? academicYearId = null)
         {
-            if (IsRelational)
-            {
-                var header = await Connection.QueryFirstOrDefaultAsync<TimetableBackupResponseDto>(
-                    "sp_GetPreviousTimetable",
-                    new
-                    {
-                        p_SectionId = sectionId,
-                        p_AcademicYearId = academicYearId ?? 0
-                    },
-                    commandType: CommandType.StoredProcedure);
+            var conn = await GetOpenConnectionAsync();
 
-                if (header == null) return null;
+            string headerSql = @"
+                SELECT 
+                    tb.`Id`,
+                    tb.`BoardId`,
+                    b.`BoardName`,
+                    tb.`AcademicLevelId`,
+                    al.`LevelName` AS AcademicLevelName,
+                    tb.`AcademicYearId`,
+                    ay.`AcademicYearName`,
+                    tb.`GroupId`,
+                    g.`GroupName`,
+                    tb.`SectionId`,
+                    s.`SectionName`,
+                    tb.`ArchivedAt`,
+                    tb.`ArchivedBy`,
+                    tb.`ArchiveReason`
+                FROM `TimetableBackups` tb
+                LEFT JOIN `Boards` b ON b.`BoardId` = tb.`BoardId`
+                LEFT JOIN `AcademicLevels` al ON al.`AcademicLevelId` = tb.`AcademicLevelId`
+                LEFT JOIN `AcademicYears` ay ON ay.`AcademicYearId` = tb.`AcademicYearId`
+                LEFT JOIN `Groups` g ON g.`GroupId` = tb.`GroupId`
+                LEFT JOIN `Sections` s ON s.`SectionId` = tb.`SectionId`
+                WHERE tb.`SectionId` = @sectionId 
+                  AND (@academicYearId IS NULL OR @academicYearId <= 0 OR tb.`AcademicYearId` = @academicYearId)
+                ORDER BY tb.`ArchivedAt` DESC
+                LIMIT 1;
+            ";
 
-                var slots = (await Connection.QueryAsync<TimetableResponseDto>(
-                    "sp_GetPreviousTimetableSlots",
-                    new
-                    {
-                        p_TimetableBackupId = header.Id
-                    },
-                    commandType: CommandType.StoredProcedure)).ToList();
+            var header = await conn.QueryFirstOrDefaultAsync<TimetableBackupResponseDto>(headerSql, new { sectionId, academicYearId });
+            if (header == null) return null;
 
-                header.Slots = slots;
-                header.TotalSlots = slots.Count;
-                return header;
-            }
-            else
-            {
-                var entity = await _context.TimetableBackups
-                    .Include(b => b.Slots)
-                    .Where(b => b.SectionId == sectionId && (academicYearId == null || academicYearId <= 0 || b.AcademicYearId == academicYearId))
-                    .OrderByDescending(b => b.ArchivedAt)
-                    .FirstOrDefaultAsync();
+            string slotsSql = @"
+                SELECT 
+                    tbs.`OriginalTimetableId` AS Id,
+                    tbs.`OriginalTimetableId` AS TimetableId,
+                    tbs.`BoardId`,
+                    b.`BoardName`,
+                    tbs.`AcademicLevelId`,
+                    al.`LevelName` AS AcademicLevelName,
+                    al.`LevelName`,
+                    tbs.`AcademicYearId`,
+                    ay.`AcademicYearName`,
+                    tbs.`GroupId`,
+                    g.`GroupName`,
+                    tbs.`ProgramId`,
+                    p.`ProgramName`,
+                    tbs.`SectionId`,
+                    s.`SectionName`,
+                    tbs.`DayOfWeek`,
+                    CASE tbs.`DayOfWeek`
+                        WHEN 1 THEN 'Monday'
+                        WHEN 2 THEN 'Tuesday'
+                        WHEN 3 THEN 'Wednesday'
+                        WHEN 4 THEN 'Thursday'
+                        WHEN 5 THEN 'Friday'
+                        WHEN 6 THEN 'Saturday'
+                        WHEN 7 THEN 'Sunday'
+                        ELSE ''
+                    END AS DayName,
+                    tbs.`PeriodId`,
+                    prd.`PeriodName`,
+                    prd.`DisplayOrder` AS PeriodNumber,
+                    prd.`StartTime`,
+                    prd.`EndTime`,
+                    prd.`IsBreak`,
+                    tbs.`SubjectId`,
+                    sub.`SubjectName`,
+                    sub.`SubjectCode`,
+                    tbs.`StaffId`,
+                    tbs.`StaffId` AS FacultyId,
+                    st.`EmployeeId` AS StaffEmployeeId,
+                    st.`EmployeeId` AS FacultyEmployeeId,
+                    CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, '')) AS StaffName,
+                    CONCAT(COALESCE(st.`FirstName`, ''), ' ', COALESCE(st.`LastName`, '')) AS FacultyName,
+                    tbs.`RoomId`,
+                    rm.`RoomCode`,
+                    rm.`RoomName`,
+                    tbs.`IsPublished`,
+                    tbs.`ApprovalStatus`,
+                    CASE tbs.`ApprovalStatus`
+                        WHEN 0 THEN 'Draft'
+                        WHEN 1 THEN 'Published'
+                        WHEN 2 THEN 'Archived'
+                        WHEN 3 THEN 'Approved'
+                        ELSE 'Draft'
+                    END AS ApprovalStatusName,
+                    tbs.`Remarks`,
+                    tbs.`CreatedAt`
+                FROM `TimetableBackupSlots` tbs
+                LEFT JOIN `Boards` b ON b.`BoardId` = tbs.`BoardId`
+                LEFT JOIN `AcademicLevels` al ON al.`AcademicLevelId` = tbs.`AcademicLevelId`
+                LEFT JOIN `AcademicYears` ay ON ay.`AcademicYearId` = tbs.`AcademicYearId`
+                LEFT JOIN `Groups` g ON g.`GroupId` = tbs.`GroupId`
+                LEFT JOIN `Programs` p ON p.`ProgramId` = tbs.`ProgramId`
+                LEFT JOIN `Sections` s ON s.`SectionId` = tbs.`SectionId`
+                LEFT JOIN `Periods` prd ON prd.`PeriodId` = tbs.`PeriodId`
+                LEFT JOIN `Subjects` sub ON sub.`SubjectId` = tbs.`SubjectId`
+                LEFT JOIN `Staff` st ON st.`Id` = tbs.`StaffId`
+                LEFT JOIN `Rooms` rm ON rm.`RoomId` = tbs.`RoomId`
+                WHERE tbs.`TimetableBackupId` = @backupId
+                ORDER BY tbs.`DayOfWeek`, prd.`DisplayOrder`;
+            ";
 
-                if (entity == null) return null;
-
-                var board = await _context.Boards.FirstOrDefaultAsync(b => b.BoardId == entity.BoardId);
-                var level = await _context.AcademicLevels.FirstOrDefaultAsync(l => l.AcademicLevelId == entity.AcademicLevelId);
-                var year = await _context.AcademicYears.FirstOrDefaultAsync(y => y.AcademicYearId == entity.AcademicYearId);
-                var group = await _context.Groups.FirstOrDefaultAsync(g => g.GroupId == entity.GroupId);
-                var section = await _context.Sections.FirstOrDefaultAsync(s => s.SectionId == entity.SectionId);
-
-                var periodMap = await _context.Periods.ToDictionaryAsync(p => p.PeriodId, p => p);
-                var subjectMap = await _context.Subjects.ToDictionaryAsync(s => s.SubjectId, s => s);
-                var staffMap = await _context.Staffs.ToDictionaryAsync(f => f.Id, f => f);
-                var roomMap = await _context.Rooms.ToDictionaryAsync(r => r.RoomId, r => r);
-
-                var slotDtos = entity.Slots.Select(s => new TimetableResponseDto
-                {
-                    Id = s.OriginalTimetableId ?? s.Id,
-                    BoardId = s.BoardId,
-                    BoardName = board?.BoardName ?? string.Empty,
-                    AcademicLevelId = s.AcademicLevelId,
-                    LevelName = level?.LevelName ?? string.Empty,
-                    AcademicYearId = s.AcademicYearId,
-                    AcademicYearName = year?.AcademicYearName ?? string.Empty,
-                    GroupId = s.GroupId,
-                    GroupName = group?.GroupName ?? string.Empty,
-                    SectionId = s.SectionId,
-                    SectionName = section?.SectionName ?? string.Empty,
-                    DayOfWeek = s.DayOfWeek,
-                    PeriodId = s.PeriodId,
-                    PeriodName = periodMap.TryGetValue(s.PeriodId, out var p) ? p.PeriodName : string.Empty,
-                    StartTime = periodMap.TryGetValue(s.PeriodId, out var pTime) ? pTime.StartTime : TimeSpan.Zero,
-                    EndTime = periodMap.TryGetValue(s.PeriodId, out var pEndTime) ? pEndTime.EndTime : TimeSpan.Zero,
-                    IsBreak = periodMap.TryGetValue(s.PeriodId, out var pBreak) && pBreak.IsBreak,
-                    SubjectId = s.SubjectId,
-                    SubjectCode = subjectMap.TryGetValue(s.SubjectId, out var sub) ? sub.SubjectCode : string.Empty,
-                    SubjectName = subjectMap.TryGetValue(s.SubjectId, out var subName) ? subName.SubjectName : string.Empty,
-                    StaffId = s.StaffId,
-                    
-                    StaffName = staffMap.TryGetValue(s.StaffId, out var stf) ? $"{stf.FirstName} {stf.LastName}" : string.Empty,
-                    StaffEmployeeId = staffMap.TryGetValue(s.StaffId, out var stfe) ? stfe.EmployeeId : string.Empty,
-                    RoomId = s.RoomId,
-                    RoomCode = roomMap.TryGetValue(s.RoomId, out var rmCode) ? rmCode.RoomCode : string.Empty,
-                    RoomName = roomMap.TryGetValue(s.RoomId, out var rmName) ? rmName.RoomName : string.Empty,
-                    IsPublished = s.IsPublished,
-                    ApprovalStatus = (int)s.ApprovalStatus,
-                    ApprovalStatusName = s.ApprovalStatus.ToString(),
-                    Remarks = s.Remarks,
-                    CreatedAt = s.CreatedAt,
-                    UpdatedAt = s.UpdatedAt
-                }).ToList();
-
-                return new TimetableBackupResponseDto
-                {
-                    Id = entity.Id,
-                    BoardId = entity.BoardId,
-                    BoardName = board?.BoardName ?? string.Empty,
-                    AcademicLevelId = entity.AcademicLevelId,
-                    AcademicLevelName = level?.LevelName ?? string.Empty,
-                    AcademicYearId = entity.AcademicYearId,
-                    AcademicYearName = year?.AcademicYearName ?? string.Empty,
-                    GroupId = entity.GroupId,
-                    GroupName = group?.GroupName ?? string.Empty,
-                    SectionId = entity.SectionId,
-                    SectionName = section?.SectionName ?? string.Empty,
-                    ArchivedAt = entity.ArchivedAt,
-                    ArchivedBy = entity.ArchivedBy,
-                    ArchiveReason = entity.ArchiveReason,
-                    TotalSlots = slotDtos.Count,
-                    Slots = slotDtos
-                };
-            }
+            var slots = (await conn.QueryAsync<TimetableResponseDto>(slotsSql, new { backupId = header.Id })).ToList();
+            header.Slots = slots;
+            header.TotalSlots = slots.Count;
+            return header;
         }
 
         public async Task<int> ArchiveSectionTimetableAsync(int sectionId, int academicYearId, string? reason = null, string? user = null)
         {
-            if (IsRelational)
+            var conn = await GetOpenConnectionAsync();
+
+            var currentSlots = (await conn.QueryAsync<Timetable>("SELECT * FROM `Timetables` WHERE `SectionId` = @sectionId AND `AcademicYearId` = @academicYearId;", new { sectionId, academicYearId })).ToList();
+            if (!currentSlots.Any()) return 0;
+
+            // Delete old backups
+            var oldBackupIds = (await conn.QueryAsync<int>("SELECT `Id` FROM `TimetableBackups` WHERE `SectionId` = @sectionId AND `AcademicYearId` = @academicYearId;", new { sectionId, academicYearId })).ToList();
+            if (oldBackupIds.Any())
             {
-                var parameters = new DynamicParameters();
-                parameters.Add("p_SectionId", sectionId, DbType.Int32);
-                parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-                parameters.Add("p_ArchiveReason", reason, DbType.String, size: 250);
-                parameters.Add("p_ArchivedBy", user, DbType.String, size: 100);
-                parameters.Add("p_NewBackupId", dbType: DbType.Int32, direction: ParameterDirection.Output);
-
-                await Connection.ExecuteAsync(
-                    "sp_ArchiveSectionTimetable",
-                    parameters,
-                    commandType: CommandType.StoredProcedure);
-
-                return parameters.Get<int>("p_NewBackupId");
+                await conn.ExecuteAsync("DELETE FROM `TimetableBackupSlots` WHERE `TimetableBackupId` IN @oldBackupIds;", new { oldBackupIds });
+                await conn.ExecuteAsync("DELETE FROM `TimetableBackups` WHERE `Id` IN @oldBackupIds;", new { oldBackupIds });
             }
-            else
+
+            var first = currentSlots.First();
+            int newBackupId = await conn.ExecuteScalarAsync<int>(@"
+                INSERT INTO `TimetableBackups` (`BoardId`, `AcademicLevelId`, `AcademicYearId`, `GroupId`, `SectionId`, `ArchivedAt`, `ArchivedBy`, `ArchiveReason`, `CreatedAt`)
+                VALUES (@BoardId, @AcademicLevelId, @academicYearId, @GroupId, @sectionId, UTC_TIMESTAMP(), @user, @reason, UTC_TIMESTAMP());
+                SELECT LAST_INSERT_ID();
+            ", new
             {
-                var currentSlots = await _context.Timetables
-                    .Where(t => t.SectionId == sectionId && t.AcademicYearId == academicYearId)
-                    .ToListAsync();
+                first.BoardId,
+                first.AcademicLevelId,
+                academicYearId,
+                first.GroupId,
+                sectionId,
+                user = user ?? "System",
+                reason = reason ?? "Archived by user"
+            });
 
-                if (!currentSlots.Any()) return 0;
-
-                var oldBackups = await _context.TimetableBackups
-                    .Where(b => b.SectionId == sectionId && b.AcademicYearId == academicYearId)
-                    .ToListAsync();
-                if (oldBackups.Any())
-                {
-                    _context.TimetableBackups.RemoveRange(oldBackups);
-                    await _context.SaveChangesAsync();
-                }
-
-                var first = currentSlots.First();
-                var newBackup = new TimetableBackup
-                {
-                    BoardId = first.BoardId,
-                    AcademicLevelId = first.AcademicLevelId,
-                    AcademicYearId = academicYearId,
-                    GroupId = first.GroupId,
-                    SectionId = sectionId,
-                    ArchivedAt = DateTime.UtcNow,
-                    ArchivedBy = user,
-                    ArchiveReason = reason ?? "Archived by user",
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await _context.TimetableBackups.AddAsync(newBackup);
-                await _context.SaveChangesAsync();
-
-                var backupSlots = currentSlots.Select(s =>
-                {
-                    if (s.StaffId <= 0)
-                    {
-                        throw new InvalidOperationException($"Cannot create timetable backup because TimetableId {s.Id} has an invalid StaffId ({s.StaffId}).");
-                    }
-
-                    return new TimetableBackupSlot
-                {
-                    TimetableBackupId = newBackup.Id,
-                    OriginalTimetableId = s.Id,
-                    BoardId = s.BoardId,
-                    AcademicLevelId = s.AcademicLevelId,
-                    AcademicYearId = s.AcademicYearId,
-                    GroupId = s.GroupId,
-                    SectionId = s.SectionId,
-                    DayOfWeek = s.DayOfWeek,
-                    PeriodId = s.PeriodId,
-                    SubjectId = s.SubjectId,
-                    StaffId = s.StaffId,
-                    RoomId = s.RoomId,
-                    IsPublished = s.IsPublished,
-                    ApprovalStatus = s.ApprovalStatus,
-                    Remarks = s.Remarks,
-                    CreatedAt = DateTime.UtcNow
-                    };
-                }).ToList();
-
-                await _context.TimetableBackupSlots.AddRangeAsync(backupSlots);
-                _context.Timetables.RemoveRange(currentSlots);
-                await _context.SaveChangesAsync();
-
-                return newBackup.Id;
+            var sb = new StringBuilder();
+            sb.Append("INSERT INTO `TimetableBackupSlots` (`TimetableBackupId`, `OriginalTimetableId`, `BoardId`, `AcademicLevelId`, `AcademicYearId`, `GroupId`, `ProgramId`, `SectionId`, `DayOfWeek`, `PeriodId`, `SubjectId`, `StaffId`, `RoomId`, `IsPublished`, `ApprovalStatus`, `Remarks`, `CreatedAt`) VALUES ");
+            var p = new DynamicParameters();
+            for (int i = 0; i < currentSlots.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append($"(@bkId{i}, @origId{i}, @b{i}, @al{i}, @ay{i}, @g{i}, @pr{i}, @s{i}, @d{i}, @p{i}, @sub{i}, @st{i}, @r{i}, @pub{i}, @app{i}, @rem{i}, UTC_TIMESTAMP())");
+                var s = currentSlots[i];
+                p.Add($"bkId{i}", newBackupId);
+                p.Add($"origId{i}", s.Id);
+                p.Add($"b{i}", s.BoardId);
+                p.Add($"al{i}", s.AcademicLevelId);
+                p.Add($"ay{i}", s.AcademicYearId);
+                p.Add($"g{i}", s.GroupId);
+                p.Add($"pr{i}", s.ProgramId);
+                p.Add($"s{i}", s.SectionId);
+                p.Add($"d{i}", s.DayOfWeek);
+                p.Add($"p{i}", s.PeriodId);
+                p.Add($"sub{i}", s.SubjectId);
+                p.Add($"st{i}", s.StaffId > 0 ? s.StaffId : 1);
+                p.Add($"r{i}", s.RoomId > 0 ? s.RoomId : 1);
+                p.Add($"pub{i}", s.IsPublished ? 1 : 0);
+                p.Add($"app{i}", (int)s.ApprovalStatus);
+                p.Add($"rem{i}", s.Remarks);
             }
+            sb.AppendLine(";");
+            sb.AppendLine("DELETE FROM `Timetables` WHERE `SectionId` = @sectionId AND `AcademicYearId` = @academicYearId;");
+            p.Add("sectionId", sectionId);
+            p.Add("academicYearId", academicYearId);
+
+            await conn.ExecuteAsync(sb.ToString(), p);
+            return newBackupId;
         }
 
         public async Task<int> SwapRestoreSectionTimetableAsync(int sectionId, int academicYearId, string? user = null)
         {
-            if (IsRelational)
+            var conn = await GetOpenConnectionAsync();
+
+            int previousBackupId = await conn.ExecuteScalarAsync<int>(@"
+                SELECT `Id` FROM `TimetableBackups` 
+                WHERE `SectionId` = @sectionId AND `AcademicYearId` = @academicYearId 
+                ORDER BY `ArchivedAt` DESC LIMIT 1;
+            ", new { sectionId, academicYearId });
+
+            if (previousBackupId <= 0) return 0;
+
+            var backupSlots = (await conn.QueryAsync<TimetableBackupSlot>(@"
+                SELECT * FROM `TimetableBackupSlots` WHERE `TimetableBackupId` = @previousBackupId;
+            ", new { previousBackupId })).ToList();
+
+            if (!backupSlots.Any()) return 0;
+
+            // Delete existing current slots
+            await conn.ExecuteAsync("DELETE FROM `Timetables` WHERE `SectionId` = @sectionId AND `AcademicYearId` = @academicYearId;", new { sectionId, academicYearId });
+
+            // Insert backup slots into Timetables
+            var sb = new StringBuilder();
+            sb.Append("INSERT INTO `Timetables` (`CampusId`, `BoardId`, `AcademicLevelId`, `AcademicYearId`, `GroupId`, `ProgramId`, `SectionId`, `DayOfWeek`, `PeriodId`, `SubjectId`, `StaffId`, `RoomId`, `IsPublished`, `ApprovalStatus`, `Remarks`, `CreatedAt`) VALUES ");
+            var p = new DynamicParameters();
+            for (int i = 0; i < backupSlots.Count; i++)
             {
-                var parameters = new DynamicParameters();
-                parameters.Add("p_SectionId", sectionId, DbType.Int32);
-                parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-                parameters.Add("p_RestoredBy", user, DbType.String, size: 100);
-                parameters.Add("p_RestoredSlotsCount", dbType: DbType.Int32, direction: ParameterDirection.Output);
-
-                await Connection.ExecuteAsync(
-                    "sp_SwapSectionTimetableBackup",
-                    parameters,
-                    commandType: CommandType.StoredProcedure);
-
-                return parameters.Get<int>("p_RestoredSlotsCount");
+                if (i > 0) sb.Append(", ");
+                sb.Append($"(@c{i}, @b{i}, @al{i}, @ay{i}, @g{i}, @pr{i}, @s{i}, @d{i}, @p{i}, @sub{i}, @st{i}, @r{i}, 0, 0, @rem{i}, UTC_TIMESTAMP())");
+                var bs = backupSlots[i];
+                p.Add($"c{i}", 1);
+                p.Add($"b{i}", bs.BoardId);
+                p.Add($"al{i}", bs.AcademicLevelId);
+                p.Add($"ay{i}", bs.AcademicYearId);
+                p.Add($"g{i}", bs.GroupId);
+                p.Add($"pr{i}", bs.ProgramId);
+                p.Add($"s{i}", bs.SectionId);
+                p.Add($"d{i}", bs.DayOfWeek);
+                p.Add($"p{i}", bs.PeriodId);
+                p.Add($"sub{i}", bs.SubjectId);
+                p.Add($"st{i}", bs.StaffId);
+                p.Add($"r{i}", bs.RoomId);
+                p.Add($"rem{i}", bs.Remarks ?? "Restored from backup");
             }
-            else
-            {
-                var previousBackup = await _context.TimetableBackups
-                    .Include(b => b.Slots)
-                    .Where(b => b.SectionId == sectionId && b.AcademicYearId == academicYearId)
-                    .OrderByDescending(b => b.ArchivedAt)
-                    .FirstOrDefaultAsync();
+            sb.AppendLine(";");
 
-                if (previousBackup == null || !previousBackup.Slots.Any()) return 0;
+            // Delete used backup
+            sb.AppendLine("DELETE FROM `TimetableBackupSlots` WHERE `TimetableBackupId` = @previousBackupId;");
+            sb.AppendLine("DELETE FROM `TimetableBackups` WHERE `Id` = @previousBackupId;");
+            p.Add("previousBackupId", previousBackupId);
 
-                var currentSlots = await _context.Timetables
-                    .Where(t => t.SectionId == sectionId && t.AcademicYearId == academicYearId)
-                    .ToListAsync();
-
-                var backupSlotsToRestore = previousBackup.Slots.ToList();
-
-                _context.TimetableBackups.Remove(previousBackup);
-                await _context.SaveChangesAsync();
-
-                if (currentSlots.Any())
-                {
-                    var first = currentSlots.First();
-                    var newBackup = new TimetableBackup
-                    {
-                        BoardId = first.BoardId,
-                        AcademicLevelId = first.AcademicLevelId,
-                        AcademicYearId = academicYearId,
-                        GroupId = first.GroupId,
-                        SectionId = sectionId,
-                        ArchivedAt = DateTime.UtcNow,
-                        ArchivedBy = user,
-                        ArchiveReason = "Archived prior to restore",
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    await _context.TimetableBackups.AddAsync(newBackup);
-                    await _context.SaveChangesAsync();
-
-                    var newBackupSlots = currentSlots.Select(s =>
-                    {
-                        if (s.StaffId <= 0)
-                        {
-                            throw new InvalidOperationException($"Cannot create timetable backup because TimetableId {s.Id} has an invalid StaffId ({s.StaffId}).");
-                        }
-
-                        return new TimetableBackupSlot
-                    {
-                        TimetableBackupId = newBackup.Id,
-                        OriginalTimetableId = s.Id,
-                        BoardId = s.BoardId,
-                        AcademicLevelId = s.AcademicLevelId,
-                        AcademicYearId = s.AcademicYearId,
-                        GroupId = s.GroupId,
-                        SectionId = s.SectionId,
-                        DayOfWeek = s.DayOfWeek,
-                        PeriodId = s.PeriodId,
-                        SubjectId = s.SubjectId,
-                        StaffId = s.StaffId,
-                        RoomId = s.RoomId,
-                        IsPublished = s.IsPublished,
-                        ApprovalStatus = s.ApprovalStatus,
-                        Remarks = s.Remarks,
-                        CreatedAt = DateTime.UtcNow
-                        };
-                    }).ToList();
-
-                    await _context.TimetableBackupSlots.AddRangeAsync(newBackupSlots);
-                    _context.Timetables.RemoveRange(currentSlots);
-                }
-
-                var sectionEntity = await _context.Sections.FindAsync(sectionId);
-
-                var restoredEntities = backupSlotsToRestore.Select(s => new Timetable
-                {
-                    CampusId = sectionEntity?.CampusId,
-                    BoardId = s.BoardId,
-                    AcademicLevelId = s.AcademicLevelId,
-                    AcademicYearId = s.AcademicYearId,
-                    GroupId = s.GroupId,
-                    SectionId = s.SectionId,
-                    DayOfWeek = s.DayOfWeek,
-                    PeriodId = s.PeriodId,
-                    SubjectId = s.SubjectId,
-                    StaffId = s.StaffId,
-                    RoomId = s.RoomId,
-                    IsPublished = false,
-                    ApprovalStatus = TimetableApprovalStatus.Draft,
-                    Remarks = s.Remarks,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList();
-
-                await _context.Timetables.AddRangeAsync(restoredEntities);
-                await _context.SaveChangesAsync();
-
-                return restoredEntities.Count;
-            }
+            await conn.ExecuteAsync(sb.ToString(), p);
+            return backupSlots.Count;
         }
 
         public async Task DeleteBackupAsync(int sectionId, int academicYearId)
         {
-            if (IsRelational)
+            var conn = await GetOpenConnectionAsync();
+            var oldBackupIds = (await conn.QueryAsync<int>("SELECT `Id` FROM `TimetableBackups` WHERE `SectionId` = @sectionId AND `AcademicYearId` = @academicYearId;", new { sectionId, academicYearId })).ToList();
+            if (oldBackupIds.Any())
             {
-                await Connection.ExecuteAsync(
-                    "sp_DeleteTimetableBackup",
-                    new
-                    {
-                        p_SectionId = sectionId,
-                        p_AcademicYearId = academicYearId
-                    },
-                    commandType: CommandType.StoredProcedure);
-            }
-            else
-            {
-                var backups = await _context.TimetableBackups
-                    .Where(b => b.SectionId == sectionId && b.AcademicYearId == academicYearId)
-                    .ToListAsync();
-                if (backups.Any())
-                {
-                    _context.TimetableBackups.RemoveRange(backups);
-                    await _context.SaveChangesAsync();
-                }
+                await conn.ExecuteAsync("DELETE FROM `TimetableBackupSlots` WHERE `TimetableBackupId` IN @oldBackupIds;", new { oldBackupIds });
+                await conn.ExecuteAsync("DELETE FROM `TimetableBackups` WHERE `Id` IN @oldBackupIds;", new { oldBackupIds });
             }
         }
     }
