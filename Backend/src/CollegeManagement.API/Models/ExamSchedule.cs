@@ -81,5 +81,6 @@ namespace CollegeManagement.API.Models
         // Navigation Properties
         public Examination? Examination { get; set; }
         public Subject? Subject { get; set; }
+        public ICollection<InvigilatorAssignment> InvigilatorAssignments { get; set; } = new List<InvigilatorAssignment>();
     }
 }

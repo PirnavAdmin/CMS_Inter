@@ -1,9 +1,9 @@
-﻿DROP PROCEDURE IF EXISTS sp_CreateExamSchedule;
+DROP PROCEDURE IF EXISTS `sp_CreateExamSchedule`;
 DELIMITER //
-CREATE PROCEDURE sp_CreateExamSchedule(
+CREATE PROCEDURE `sp_CreateExamSchedule`(
     IN p_ExamId INT,
     IN p_SubjectId INT,
-    IN p_ExamDate DATE,
+    IN p_ExamDate DATETIME,
     IN p_StartTime TIME,
     IN p_EndTime TIME,
     IN p_SessionId VARCHAR(100),
@@ -14,7 +14,8 @@ CREATE PROCEDURE sp_CreateExamSchedule(
     IN p_Invigilator VARCHAR(150),
     IN p_ExamMode VARCHAR(50),
     IN p_MaxMarks DECIMAL(10,2),
-    IN p_PassingMarks DECIMAL(10,2)
+    IN p_PassingMarks DECIMAL(10,2),
+    IN p_CampusId INT
 )
 BEGIN
     INSERT INTO ExamSchedules (
@@ -33,7 +34,8 @@ BEGIN
         MaxMarks,
         PassingMarks,
         IsActive,
-        CreatedAt
+        CreatedAt,
+        UpdatedAt
     ) VALUES (
         p_ExamId,
         p_SubjectId,
@@ -50,7 +52,8 @@ BEGIN
         COALESCE(p_MaxMarks, 100.00),
         COALESCE(p_PassingMarks, 35.00),
         1,
-        NOW()
+        UTC_TIMESTAMP(),
+        NULL
     );
 
     SELECT LAST_INSERT_ID() AS ScheduleId;

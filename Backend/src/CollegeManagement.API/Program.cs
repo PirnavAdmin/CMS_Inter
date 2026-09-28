@@ -49,6 +49,9 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableDateOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableTimeOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
     });
