@@ -37,7 +37,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             // Fetch staff members filtered by staff type, board, and optional department
             var query = _context.Staffs
-                .Where(f => !f.IsDeleted && (f.Status == "Active" || f.Status == null)); if (request.CampusId.HasValue) query = query.Where(f => f.CampusId == request.CampusId.Value);
+                .Where(f => !f.IsDeleted); if (request.CampusId.HasValue) query = query.Where(f => f.CampusId == request.CampusId.Value);
 
             if (request.BoardId.HasValue && request.BoardId.Value > 0)
             {
@@ -394,7 +394,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 if (session == null)
                 {
-                    var query = _context.Staffs.Where(f => !f.IsDeleted && f.Status == "Active");
+                    var query = _context.Staffs.Where(f => !f.IsDeleted);
                     if (request.StaffType == StaffType.Teaching)
                     {
                         query = query.Where(f => f.StaffType == null || f.StaffType.ToLower() == "teaching");
@@ -578,7 +578,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var facultyQuery = _context.Staffs
-                .Where(f => !f.IsDeleted && f.Status == "Active");
+                .Where(f => !f.IsDeleted);
 
             if (request.StaffType.HasValue)
             {

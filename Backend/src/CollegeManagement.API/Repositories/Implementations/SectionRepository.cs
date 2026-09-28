@@ -264,7 +264,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
                 return await Connection.QueryFirstOrDefaultAsync<CollegeManagement.API.Models.Timetable.Room>(
                     "sp_GetRoomByCode",
-                    new { p_RoomCode = roomCode.Trim() },
+                    new { p_RoomCode = roomCode.Trim(), p_CampusId = 0 },
                     commandType: CommandType.StoredProcedure);
             }
 

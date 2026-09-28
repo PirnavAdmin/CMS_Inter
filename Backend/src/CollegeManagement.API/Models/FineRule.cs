@@ -25,6 +25,10 @@ namespace CollegeManagement.API.Models
         [Column(TypeName = "decimal(10,2)")]
         public decimal FineAmount { get; set; }
 
+        public int? CampusId { get; set; }
+        public int? BoardId { get; set; }
+        public int? AcademicYearId { get; set; }
+
         [Required]
         public int GracePeriod { get; set; } = 0;
 

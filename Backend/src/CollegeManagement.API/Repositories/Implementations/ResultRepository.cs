@@ -423,7 +423,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicYearId = academicYearId,
                     p_AcademicLevelId = academicLevelId,
                     p_GroupId = groupId,
-                    p_ExamId = examId
+                    p_ExamId = examId,
+                    p_CampusId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -443,7 +444,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_ResultId = request.ResultId,
                     p_StudentId = request.StudentId,
                     p_SubjectId = request.SubjectId ?? 0,
-                    p_Reason = request.Reason
+                    p_Reason = request.Reason,
+                    p_CampusId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -461,7 +463,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     "sp_GetRevaluationStatus",
                     new
                     {
-                        p_RevaluationId = revaluationId
+                        p_RevaluationId = revaluationId,
+                        p_CampusId = (int?)null
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -504,7 +507,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_InternalMarks = request.InternalMarks,
                     p_PracticalMarks = request.PracticalMarks,
                     p_ExternalMarks = request.ExternalMarks,
-                    p_UpdatedAt = DateTime.UtcNow
+                    p_UpdatedAt = DateTime.UtcNow,
+                    p_CampusId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 

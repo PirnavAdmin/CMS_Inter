@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getRoute } from "../../../api/transportDriverApi.js";
+import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverRoutePage({ onNavigateTab }) {
   const [routeDetails, setRouteDetails] = useState(null);
@@ -60,7 +61,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
   }, []);
 
   if (isLoading) {
-    return <div className="dp-page-container"><p>Loading route...</p></div>;
+    return <div className="dp-page-container"><SkeletonPage variant="page" /></div>;
   }
 
   if (error) {

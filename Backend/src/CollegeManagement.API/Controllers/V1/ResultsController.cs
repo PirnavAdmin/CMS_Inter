@@ -93,6 +93,10 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> GenerateResults([FromBody] ProcessResultRequestDto request)
         {
+            if (request == null || (request.ExamId <= 0 && request.ExaminationId <= 0))
+            {
+                return BadRequest(new { success = false, message = "Valid Examination ID is required." });
+            }
             request.CampusId = ResolveCampusId(request.CampusId);
             _logger.LogInformation("Generating results for Exam: {ExamId}, Group: {GroupId}", request.ExamId, request.GroupId);
             try
@@ -117,14 +121,20 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="sectionId">The Section ID to retrieve results for.</param>
         /// <param name="examId">The Examination ID.</param>
         /// <response code="200">Returns student marks, total marks, percentages, grades, PASS/FAIL results, and section ranks.</response>
+        /// <response code="400">Returned when sectionId or examId is invalid.</response>
         /// <response code="404">Returned when no results are found for the section.</response>
         [HttpGet("sections/{sectionId:int}")]
         [ProducesResponseType(typeof(SectionResultDetailDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetSectionResultDetail(
             [FromRoute] int sectionId,
             [FromQuery] int examId)
         {
+            if (sectionId <= 0 || examId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Valid Section ID and Exam ID are required." });
+            }
             _logger.LogInformation("Retrieving section result detail for Section: {SectionId}, Exam: {ExamId}", sectionId, examId);
             var detail = await _resultService.GetSectionResultDetailAsync(sectionId, examId);
             if (detail == null)
@@ -254,6 +264,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromRoute] int studentId,
             [FromQuery] int? examId = null)
         {
+            if (studentId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Valid Student ID is required." });
+            }
             _logger.LogInformation("Retrieving student marks memo for StudentId: {StudentId}, ExamId: {ExamId}", studentId, examId);
             var memo = await _resultService.GetStudentMemoAsync(studentId, examId);
             if (memo == null)
@@ -285,6 +299,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? groupId = null,
             [FromQuery] int? examId = null)
         {
+            if (studentId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Valid Student ID is required." });
+            }
             _logger.LogInformation("Retrieving student result. StudentId: {StudentId}, ExamId: {ExamId}", studentId, examId);
             var result = await _resultService.GetStudentMemoAsync(studentId, examId);
             if (result != null) return Ok(result);

@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
     public interface IFineRuleRepository
     {
         Task<FineRule> CreateAsync(FineRule fineRule);
-        Task<IEnumerable<FineRule>> GetAllAsync();
+        Task<IEnumerable<FineRule>> GetAllAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
         Task<FineRule?> GetByIdAsync(int id);
         Task<bool> UpdateAsync(FineRule fineRule);
         Task<bool> DeleteAsync(int id);

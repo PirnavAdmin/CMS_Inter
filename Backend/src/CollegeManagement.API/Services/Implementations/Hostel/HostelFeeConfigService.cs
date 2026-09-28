@@ -20,9 +20,9 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
             return await _repository.CreateAsync(request);
         }
 
-        public async Task<IEnumerable<HostelFeeConfigDto>> GetAllAsync(int? hostelId, string? status)
+        public async Task<IEnumerable<HostelFeeConfigDto>> GetAllAsync(int? hostelId, string? status, int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _repository.GetAllAsync(hostelId, status);
+            return await _repository.GetAllAsync(hostelId, status, campusId, boardId, academicYearId);
         }
 
         public async Task<HostelFeeConfigDto?> GetByIdAsync(int feeConfigId)

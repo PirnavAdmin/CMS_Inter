@@ -21,7 +21,6 @@ import { ConfirmDialog, Loader, StatusBadge, Toast } from "@/components/common/U
 import {
   ACTION_LABELS,
   ACTIONS,
-  ALL_PERMISSION_MODULES,
 } from "@/features/rolesPermissions/rolesPermissions.constants.js";
 import {
   assignRoleToUser,
@@ -33,11 +32,10 @@ import {
   getUserRoleDetails,
   getUserRoleAssignments,
   removeRoleFromUser,
-  rolesPermissionsApiConfig,
   updateRolePermissions,
   updateUserPermissions,
 } from "@/features/rolesPermissions/rolesPermissions.service.js";
-import { normalizePermissionPayload, togglePermissionAction } from "@/features/rolesPermissions/permissionUtils.jsx";
+import { normalizePermissionPayload, normalizeRoleCode, togglePermissionAction } from "@/features/rolesPermissions/permissionUtils.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./RolesPermissionsPage.css";
@@ -50,18 +48,6 @@ const parseNumericId = (val) => {
 };
 
 const PAGE_SIZE = 8;
-const REQUIRED_MANAGEMENT_ROLE_CODES = [
-  "HOD",
-  "FACULTY",
-  "STUDENT",
-  "PARENT",
-  "ACCOUNTS",
-  "EXAMINATION_CELL",
-  "LIBRARIAN",
-  "HOSTEL_WARDEN",
-  "PLACEMENT_OFFICER",
-  "BUS_DRIVER",
-];
 const ROLE_CODES_HIDDEN_FROM_ASSIGNMENT = new Set(["SUPER_ADMIN", "ADMIN"]);
 const MATRIX_ACTION_COLUMNS = [
   { key: ACTIONS.VIEW, label: "View" },
@@ -72,14 +58,22 @@ const MATRIX_ACTION_COLUMNS = [
 const MATRIX_ACTION_KEYS = MATRIX_ACTION_COLUMNS.map((action) => action.key);
 
 function getManageableRoles(roles = []) {
-  const rolesByCode = new Map();
-  roles.forEach((role) => {
-    if (role?.code && !rolesByCode.has(role.code)) rolesByCode.set(role.code, role);
-  });
-  return REQUIRED_MANAGEMENT_ROLE_CODES
-    .map((code) => rolesByCode.get(code))
-    .filter(Boolean);
+  return roles.filter((role) => (
+    !ROLE_CODES_HIDDEN_FROM_ASSIGNMENT.has(normalizeRoleCode(role?.code || role?.name))
+  ));
 }
+
+const getUniqueMembers = (members = []) => {
+  const identities = new Set();
+  return members.filter((member) => {
+    const identity = member?.id || member?.userCode || member?.userId;
+    if (!identity) return true;
+    const key = String(identity);
+    if (identities.has(key)) return false;
+    identities.add(key);
+    return true;
+  });
+};
 
 function getEditablePermissionTargets(modules = [], selectedRole, busy = false) {
   if (!selectedRole || selectedRole.isProtected || busy) return [];
@@ -109,11 +103,11 @@ function EmptyState({ title, message, action }) {
   );
 }
 
-function SearchBox({ value, onChange, placeholder, label }) {
+function SearchBox({ value, onChange, placeholder, label, inputRef }) {
   return (
     <label className="rbac-search" aria-label={label}>
       <Search size={16} aria-hidden="true" />
-      <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
+      <input ref={inputRef} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
     </label>
   );
 }
@@ -188,7 +182,7 @@ function initials(name = "User") {
     .toUpperCase();
 }
 
-function RoleList({ roles, selectedRoleId, onSelect, query, onQuery }) {
+function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, query, onQuery }) {
   const filteredRoles = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return roles;
@@ -207,22 +201,35 @@ function RoleList({ roles, selectedRoleId, onSelect, query, onQuery }) {
         {filteredRoles.length ? filteredRoles.map((role) => {
           const selected = String(role.id) === String(selectedRoleId);
           return (
-            <button
-              type="button"
+            <div
               className={`rbac-role-item ${selected ? "is-selected" : ""}`}
               key={role.id}
-              onClick={() => onSelect(role)}
             >
-              <RoleIcon role={role} selected={selected} />
-              <span className="rbac-role-copy">
-                <strong>{role.name}</strong>
-                <span className="rbac-role-flags">
-                  {role.isProtected ? <em>Protected</em> : null}
-                  {role.discoveredFrom ? <em>Configured</em> : null}
+              <button
+                type="button"
+                className="rbac-role-select"
+                onClick={() => onSelect(role)}
+                aria-pressed={selected}
+              >
+                <RoleIcon role={role} selected={selected} />
+                <span className="rbac-role-copy">
+                  <strong>{role.name}</strong>
+                  <span className="rbac-role-flags">
+                    {role.isProtected ? <em>Protected</em> : null}
+                    {role.discoveredFrom ? <em>Configured</em> : null}
+                  </span>
                 </span>
-              </span>
-              <span className="rbac-user-count" title="Assigned users">{role.assignedUserCount ?? 0}</span>
-            </button>
+              </button>
+              <button
+                type="button"
+                className="rbac-user-count"
+                title={`View ${role.name} members`}
+                aria-label={`View ${role.assignedUserCount == null ? "loading" : role.assignedUserCount} members assigned to ${role.name}`}
+                onClick={() => onOpenMembers(role)}
+              >
+                {role.assignedUserCount == null ? "—" : role.assignedUserCount}
+              </button>
+            </div>
           );
         }) : (
           <EmptyState title="No roles found" message="Try a different role name or code." />
@@ -232,46 +239,83 @@ function RoleList({ roles, selectedRoleId, onSelect, query, onQuery }) {
   );
 }
 
-function RoleMembersDialog({ role, members, loading, selectedMember, onSelectMember, onUseRolePermissions, onClose }) {
+function RoleMembersDialog({ role, members, loading, onSelectMember, onClose }) {
+  const [query, setQuery] = useState("");
+  const searchRef = useRef(null);
+  const filteredMembers = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return members;
+    return members.filter((member) => [
+      member.name,
+      member.fullName,
+      member.userId,
+      member.userCode,
+      member.employeeId,
+      member.studentId,
+      member.email,
+      member.phoneNumber,
+      member.mobile,
+      member.department,
+      member.designation,
+      member.status,
+    ].some((value) => String(value || "").toLowerCase().includes(normalizedQuery)));
+  }, [members, query]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    searchRef.current?.focus();
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   if (!role) return null;
   return createPortal(
-    <div className="rbac-modal-layer" role="presentation">
-      <section className="rbac-member-dialog" role="dialog" aria-modal="true" aria-label={`${role.name} members`}>
+    <div
+      className="rbac-modal-layer"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="rbac-member-dialog" role="dialog" aria-modal="true" aria-labelledby="rbac-member-dialog-title">
         <div className="rbac-member-dialog-head">
           <div>
-            <h3>{role.name} Members</h3>
-            <p>Select one member to configure individual permissions.</p>
+            <span className="rbac-member-dialog-title-row">
+              <h3 id="rbac-member-dialog-title">{role.name} Members</h3>
+              <strong className="rbac-member-dialog-count">{loading ? (role.assignedUserCount == null ? "—" : role.assignedUserCount) : members.length}</strong>
+            </span>
+            <p>Members currently assigned to this role.</p>
           </div>
           <button type="button" className="rbac-icon-action" onClick={onClose} aria-label="Close members dialog">
             <X size={16} aria-hidden="true" />
           </button>
         </div>
-        <div className="rbac-member-dialog-actions">
-          <button
-            type="button"
-            className={`rbac-member-role-default ${!selectedMember ? "is-selected" : ""}`}
-            onClick={onUseRolePermissions}
-          >
-            <ShieldCheck size={16} aria-hidden="true" />
-            <span>Configure role default permissions</span>
-            {!selectedMember ? <Check size={15} aria-hidden="true" /> : null}
-          </button>
-        </div>
+        <SearchBox
+          inputRef={searchRef}
+          value={query}
+          onChange={setQuery}
+          placeholder={`Search ${role.name.toLowerCase()} members...`}
+          label={`Search ${role.name} members`}
+        />
         <div className="rbac-member-list">
           {loading ? <Loader label="Loading role members..." /> : null}
-          {!loading && members.length ? members.map((member) => {
-            const selected = String(member.id) === String(selectedMember?.id);
+          {!loading && filteredMembers.length ? filteredMembers.map((member) => {
+            const memberId = member.userCode || member.employeeId || member.studentId || member.userId;
+            const contact = member.email || member.phoneNumber || member.mobile;
             return (
               <button
                 type="button"
-                key={member.id}
-                className={`rbac-member-item ${selected ? "is-selected" : ""}`}
+                key={member.id || member.userId}
+                className="rbac-member-item"
                 onClick={() => onSelectMember(member)}
               >
                 <span className="rbac-member-avatar">{initials(member.name)}</span>
                 <span className="rbac-member-copy">
                   <strong>{member.name}</strong>
-                  <small>{member.userId} - {[member.department, member.designation].filter(Boolean).join(" / ") || "No department"}</small>
+                  <small>{[memberId, member.department, member.designation].filter(Boolean).join(" - ") || "Member details unavailable"}</small>
+                  {contact ? <small>{contact}</small> : null}
                 </span>
                 <StatusBadge value={member.status || "Active"} />
               </button>
@@ -280,8 +324,14 @@ function RoleMembersDialog({ role, members, loading, selectedMember, onSelectMem
           {!loading && !members.length ? (
             <div className="rbac-member-empty">
               <Users size={24} aria-hidden="true" />
-              <strong>No members found</strong>
-              <span>This role does not have static members configured yet.</span>
+              <strong>No members assigned to this role.</strong>
+            </div>
+          ) : null}
+          {!loading && members.length > 0 && !filteredMembers.length ? (
+            <div className="rbac-member-empty">
+              <Search size={24} aria-hidden="true" />
+              <strong>No matching members found.</strong>
+              <span>Try a different name, ID, department, or contact.</span>
             </div>
           ) : null}
         </div>
@@ -379,8 +429,8 @@ function PermissionStateMark({ enabled, label }) {
   );
 }
 
-function UserRoleDetailsPanel({ user, permissions, roles, loading, error, onBack, onRetry }) {
-  const roleNameByCode = useMemo(() => new Map(roles.map((role) => [role.code, role.name])), [roles]);
+function UserRoleDetailsPanel({ user, permissions, roles, modules, loading, error, onBack, onRetry }) {
+  const roleNameByCode = useMemo(() => new Map(roles.map((role) => [normalizeRoleCode(role.code || role.name), role.name])), [roles]);
   const roleCodes = user?.roleCodes || [];
   const assignedRoleCode = roleCodes[0] || "";
   const permissionMap = useMemo(() => new Map((permissions || []).map((row) => [row.module, row.actions || []])), [permissions]);
@@ -428,11 +478,11 @@ function UserRoleDetailsPanel({ user, permissions, roles, loading, error, onBack
                   <dt>Current Role(s)</dt>
                   <dd className="rbac-role-chips">
                     {roleCodes.length ? roleCodes.map((code) => (
-                      <em key={code}>{roleNameByCode.get(code) || code}</em>
+                      <em key={code}>{roleNameByCode.get(normalizeRoleCode(code)) || code}</em>
                     )) : <small>No role assigned</small>}
                   </dd>
                 </div>
-                <div><dt>Assigned Role</dt><dd>{assignedRoleCode ? roleNameByCode.get(assignedRoleCode) || assignedRoleCode : "Not assigned"}</dd></div>
+                <div><dt>Assigned Role</dt><dd>{assignedRoleCode ? roleNameByCode.get(normalizeRoleCode(assignedRoleCode)) || assignedRoleCode : "Not assigned"}</dd></div>
                 <div><dt>Role Status</dt><dd><StatusBadge value={user.status || "Active"} /></dd></div>
               </dl>
             </section>
@@ -445,7 +495,7 @@ function UserRoleDetailsPanel({ user, permissions, roles, loading, error, onBack
                 <span>Module Name</span>
                 {MATRIX_ACTION_COLUMNS.map((action) => <span key={action.key}>{action.label}</span>)}
               </div>
-              {ALL_PERMISSION_MODULES.map((module) => {
+              {modules.map((module) => {
                 const actions = permissionMap.get(module.id) || [];
                 return (
                   <div className="rbac-detail-permission-row" key={module.id}>
@@ -476,7 +526,6 @@ function RoleDetails({
   permissions,
   setPermissions,
   onPersistPermissions,
-  onOpenMembers,
   onUseRolePermissions,
   loading,
   saving,
@@ -569,9 +618,6 @@ function RoleDetails({
               Role Default
             </button>
           ) : null}
-          <button type="button" className="cms-btn cms-btn-ghost" onClick={onOpenMembers} disabled={loading || saving}>
-            <Users size={15} /> Members
-          </button>
         </div>
       </div>
 
@@ -614,7 +660,7 @@ function RoleDetails({
   );
 }
 
-function UserRoleAssignment({ roles, contextFilters }) {
+function UserRoleAssignment({ roles, modules, contextFilters, onRoleAssignmentsChanged }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -652,9 +698,9 @@ function UserRoleAssignment({ roles, contextFilters }) {
   }, [loadAssignments]);
 
   const totalPages = Math.max(1, Math.ceil((result.total || 0) / PAGE_SIZE));
-  const roleNameByCode = useMemo(() => new Map(roles.map((role) => [role.code, role.name])), [roles]);
+  const roleNameByCode = useMemo(() => new Map(roles.map((role) => [normalizeRoleCode(role.code || role.name), role.name])), [roles]);
   const assignableRoles = useMemo(
-    () => roles.filter((role) => !ROLE_CODES_HIDDEN_FROM_ASSIGNMENT.has(role.code)),
+    () => roles.filter((role) => !ROLE_CODES_HIDDEN_FROM_ASSIGNMENT.has(normalizeRoleCode(role.code || role.name))),
     [roles],
   );
 
@@ -714,6 +760,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
       await removeRoleFromUser(user.id, roleCode);
       setToast({ type: "success", message: "Role assignment updated." });
       await loadAssignments();
+      await onRoleAssignmentsChanged?.();
     } catch (err) {
       setToast({ type: "error", message: err?.message || "Unable to remove role assignment." });
     } finally {
@@ -728,7 +775,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
       closeActionMenu();
       return;
     }
-    if (roleCode === "SUPER_ADMIN" || roleCode === "ADMIN") {
+    if (ROLE_CODES_HIDDEN_FROM_ASSIGNMENT.has(normalizeRoleCode(roleCode))) {
       setToast({ type: "error", message: "Protected administrator roles cannot be removed here." });
       closeActionMenu();
       return;
@@ -745,7 +792,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
 
   const assignRole = async (user, roleCode) => {
     if (!roleCode) return;
-    if ((user.roleCodes || []).includes(roleCode)) {
+    if ((user.roleCodes || []).some((code) => normalizeRoleCode(code) === normalizeRoleCode(roleCode))) {
       setToast({ type: "info", message: "This user already has that role." });
       return;
     }
@@ -755,6 +802,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
       setToast({ type: "success", message: "Role assignment updated." });
       closeActionMenu();
       await loadAssignments();
+      await onRoleAssignmentsChanged?.();
     } catch (err) {
       setToast({ type: "error", message: err?.message || "Unable to assign role." });
     } finally {
@@ -855,7 +903,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
       "--rbac-submenu-max-height": `${submenuMaxHeight}px`,
     };
     const currentRoleCode = (activeMenu.user.roleCodes || [])[0];
-    const removeDisabled = !currentRoleCode || ROLE_CODES_HIDDEN_FROM_ASSIGNMENT.has(currentRoleCode) || savingUserId === activeMenu.user.id;
+    const removeDisabled = !currentRoleCode || ROLE_CODES_HIDDEN_FROM_ASSIGNMENT.has(normalizeRoleCode(currentRoleCode)) || savingUserId === activeMenu.user.id;
 
     return createPortal(
       <div className="rbac-action-layer" ref={menuRef}>
@@ -908,7 +956,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
             <div className="rbac-role-submenu-title">Select Role to Assign</div>
             <div className="rbac-role-submenu-list">
               {assignableRoles.map((role) => {
-                const isCurrent = (activeMenu.user.roleCodes || []).includes(role.code);
+                const isCurrent = (activeMenu.user.roleCodes || []).some((code) => normalizeRoleCode(code) === normalizeRoleCode(role.code));
                 return (
                   <button
                     type="button"
@@ -939,6 +987,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
           user={detailsView.user}
           permissions={detailsView.permissions}
           roles={roles}
+          modules={modules}
           loading={detailsView.loading}
           error={detailsView.error}
           onBack={closeUserDetails}
@@ -988,7 +1037,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
                   <span>{[user.department, user.designation].filter(Boolean).join(" / ") || "Not provided"}</span>
                   <span className="rbac-role-chips">
                     {(user.roleCodes || []).length ? user.roleCodes.map((code) => (
-                      <em key={code}>{roleNameByCode.get(code) || code}</em>
+                      <em key={code}>{roleNameByCode.get(normalizeRoleCode(code)) || code}</em>
                     )) : <small>No role</small>}
                   </span>
                   <span><StatusBadge value={user.status || "Active"} /></span>
@@ -1034,7 +1083,7 @@ function UserRoleAssignment({ roles, contextFilters }) {
           loading={savingUserId === removalCandidate.user.id}
           confirmLabel="Remove Role"
           loadingLabel="Removing..."
-          message={`${removalCandidate.user.name} currently has ${roleNameByCode.get(removalCandidate.roleCode) || removalCandidate.roleCode}. This role will be removed from the user.`}
+          message={`${removalCandidate.user.name} currently has ${roleNameByCode.get(normalizeRoleCode(removalCandidate.roleCode)) || removalCandidate.roleCode}. This role will be removed from the user.`}
           onCancel={() => setRemovalCandidate(null)}
           onConfirm={confirmRemoveRole}
         />
@@ -1065,6 +1114,7 @@ export default function RolesPermissionsPage() {
   const [selectedRole, setSelectedRole] = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
   const [roleMembers, setRoleMembers] = useState([]);
+  const [membersRole, setMembersRole] = useState(null);
   const [permissions, setPermissions] = useState([]);
   const [lastSavedPermissions, setLastSavedPermissions] = useState([]);
   const [roleQuery, setRoleQuery] = useState("");
@@ -1077,6 +1127,34 @@ export default function RolesPermissionsPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const permissionSaveInFlightRef = useRef(false);
+  const selectedRoleIdRef = useRef(null);
+  const pageRequestRef = useRef(0);
+  const roleCountsRequestRef = useRef(0);
+
+  useEffect(() => {
+    selectedRoleIdRef.current = selectedRole?.id;
+  }, [selectedRole?.id]);
+
+  const refreshRoleCounts = useCallback(async () => {
+    const requestId = roleCountsRequestRef.current + 1;
+    roleCountsRequestRef.current = requestId;
+    setAllRoles((roles) => roles.map((role) => ({ ...role, assignedUserCount: null })));
+    setManageableRoles((roles) => roles.map((role) => ({ ...role, assignedUserCount: null })));
+    try {
+      const response = await getRoles(activeContextFilters);
+      if (roleCountsRequestRef.current !== requestId) return;
+      const nextAllRoles = response.data;
+      setAllRoles(nextAllRoles);
+      setManageableRoles(getManageableRoles(nextAllRoles));
+      setSelectedRole((role) => (
+        role
+          ? nextAllRoles.find((nextRole) => String(nextRole.id) === String(role.id)) || role
+          : role
+      ));
+    } catch (err) {
+      console.error("Failed to refresh role counts from /api/v1/roles/cards:", err);
+    }
+  }, [activeContextFilters]);
 
   const dirty = useMemo(
     () => JSON.stringify(normalizePermissionPayload(permissions)) !== JSON.stringify(normalizePermissionPayload(lastSavedPermissions)),
@@ -1100,10 +1178,19 @@ export default function RolesPermissionsPage() {
   const loadRoleMembers = useCallback(async (role, openDialog = false) => {
     if (!role) return;
     setMembersLoading(true);
-    if (openDialog) setMembersDialogOpen(true);
+    if (openDialog) {
+      setMembersRole(role);
+      setRoleMembers([]);
+      setMembersDialogOpen(true);
+    }
     try {
-      const response = await getRoleMembers(role.id, role.code, activeContextFilters);
-      setRoleMembers(response.data);
+      const members = getUniqueMembers((await getRoleMembers(role.id, role.code, activeContextFilters)).data || []);
+      setRoleMembers(members);
+      setMembersRole((current) => (
+        current && String(current.id) === String(role.id)
+          ? { ...current, assignedUserCount: role.assignedUserCount }
+          : current
+      ));
     } catch (err) {
       setRoleMembers([]);
       setToast({ type: "error", message: err?.message || "Unable to load role members." });
@@ -1130,6 +1217,8 @@ export default function RolesPermissionsPage() {
   }, [selectedRole]);
 
   const loadPage = useCallback(async () => {
+    const requestId = pageRequestRef.current + 1;
+    pageRequestRef.current = requestId;
     setLoading(true);
     setError("");
     try {
@@ -1137,30 +1226,40 @@ export default function RolesPermissionsPage() {
         getRoles(activeContextFilters),
         getModulesAndPermissions(),
       ]);
+      if (pageRequestRef.current !== requestId) return;
       const nextAllRoles = rolesResponse.data;
       const nextManageableRoles = getManageableRoles(nextAllRoles);
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
-      setModules(modulesResponse.data.length ? modulesResponse.data : ALL_PERMISSION_MODULES);
-      const role = nextManageableRoles.find((r) => String(r.id) === String(selectedRole?.id)) || nextManageableRoles[0] || null;
+      setModules(modulesResponse.data);
+      const role = nextManageableRoles.find((r) => String(r.id) === String(selectedRoleIdRef.current)) || nextManageableRoles[0] || null;
       setSelectedRole(role);
-      if (rolesResponse.meta?.usingFallback) {
-        setToast({ type: "info", message: "Roles & Permissions is using local fallback data until RBAC endpoints are connected." });
-      }
       if (role) {
         await loadPermissions(role);
         await loadRoleMembers(role);
       }
     } catch (err) {
-      setError(err?.message || "Unable to load roles and permissions.");
+      if (pageRequestRef.current === requestId) setError(err?.message || "Unable to load roles and permissions.");
     } finally {
-      setLoading(false);
+      if (pageRequestRef.current === requestId) setLoading(false);
     }
-  }, [activeContextFilters, loadPermissions, loadRoleMembers, selectedRole?.id]);
+  }, [activeContextFilters, loadPermissions, loadRoleMembers]);
 
   useEffect(() => {
     loadPage();
   }, [loadPage]);
+
+  useEffect(() => {
+    const handleStaffRecordsUpdated = () => {
+      refreshRoleCounts();
+    };
+    window.addEventListener("staff-records-updated", handleStaffRecordsUpdated);
+    window.addEventListener("roles-updated", handleStaffRecordsUpdated);
+    return () => {
+      window.removeEventListener("staff-records-updated", handleStaffRecordsUpdated);
+      window.removeEventListener("roles-updated", handleStaffRecordsUpdated);
+    };
+  }, [refreshRoleCounts]);
 
   useEffect(() => {
     if (!dirty) return undefined;
@@ -1180,13 +1279,18 @@ export default function RolesPermissionsPage() {
     setSelectedRole(role);
     setSelectedMember(null);
     await loadPermissions(role);
+    await loadRoleMembers(role);
+  };
+
+  const openRoleMembers = async (role) => {
     await loadRoleMembers(role, true);
   };
 
-  const openMembersForSelectedRole = async () => {
-    if (!selectedRole) return;
-    await loadRoleMembers(selectedRole, true);
-  };
+  const closeMembersDialog = useCallback(() => {
+    setMembersDialogOpen(false);
+    setMembersRole(null);
+    setRoleMembers([]);
+  }, []);
 
   const useRolePermissions = async () => {
     if (!selectedRole) return;
@@ -1197,12 +1301,14 @@ export default function RolesPermissionsPage() {
   };
 
   const selectMember = async (member) => {
-    if (!selectedRole || String(member.id) === String(selectedMember?.id)) {
-      setMembersDialogOpen(false);
+    const role = membersRole || selectedRole;
+    if (!role || (String(role.id) === String(selectedRole?.id) && String(member.id) === String(selectedMember?.id))) {
+      closeMembersDialog();
       return;
     }
     if (!guardDirty()) return;
-    await loadMemberPermissions(member, selectedRole);
+    setSelectedRole(role);
+    await loadMemberPermissions(member, role);
   };
 
   const selectTab = (tab) => {
@@ -1237,12 +1343,7 @@ export default function RolesPermissionsPage() {
         setPermissions(response.data);
         setLastSavedPermissions(response.data);
       }
-      setToast({
-        type: response.meta?.usingFallback ? "info" : "success",
-        message: response.meta?.usingFallback
-          ? `${member ? "Member" : "Role"} permissions saved in local fallback. Backend permission API is not available/connected yet.`
-          : `${member ? "Member" : "Role"} permissions saved.`,
-      });
+      setToast({ type: "success", message: `${member ? "Member" : "Role"} permissions saved.` });
       return true;
     } catch (err) {
       const sameRole = String(selectedRole?.id) === String(role.id);
@@ -1261,9 +1362,7 @@ export default function RolesPermissionsPage() {
     await persistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, permissions, lastSavedPermissions);
   };
 
-  const routeNote = rolesPermissionsApiConfig.updateRolePermissions
-    ? "Connected to RBAC service"
-    : "Local fallback active";
+  const routeNote = "Connected to RBAC service";
 
   return (
     <DashboardLayout
@@ -1297,6 +1396,7 @@ export default function RolesPermissionsPage() {
               roles={manageableRoles}
               selectedRoleId={selectedRole?.id}
               onSelect={selectRole}
+              onOpenMembers={openRoleMembers}
               query={roleQuery}
               onQuery={setRoleQuery}
             />
@@ -1307,7 +1407,6 @@ export default function RolesPermissionsPage() {
               permissions={permissions}
               setPermissions={setPermissions}
               onPersistPermissions={persistPermissions}
-              onOpenMembers={openMembersForSelectedRole}
               onUseRolePermissions={useRolePermissions}
               loading={permissionLoading}
               saving={saving}
@@ -1320,16 +1419,14 @@ export default function RolesPermissionsPage() {
           </div>
         ) : null}
 
-        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={allRoles} contextFilters={activeContextFilters} /> : null}
+        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={allRoles} modules={modules} contextFilters={activeContextFilters} onRoleAssignmentsChanged={refreshRoleCounts} /> : null}
         {membersDialogOpen ? (
           <RoleMembersDialog
-            role={selectedRole}
+            role={membersRole}
             members={roleMembers}
             loading={membersLoading}
-            selectedMember={selectedMember}
             onSelectMember={selectMember}
-            onUseRolePermissions={useRolePermissions}
-            onClose={() => setMembersDialogOpen(false)}
+            onClose={closeMembersDialog}
           />
         ) : null}
       </main>
