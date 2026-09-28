@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, Users, UserCheck, UserX, Megaphone, RotateCcw } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Field, Modal, Toast } from "@/components/common/Ui.jsx";
+import { Field, Modal, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -920,7 +920,7 @@ export default function PromotionPage({ screen = "promotion" }) {
                 </button>
               </div>
               {studentsLoading ? (
-                <div className="promotion-empty" role="status">Loading eligible students...</div>
+                <SkeletonTable columns={isFinalYear ? 9 : 10} rows={6} />
               ) : studentsLoaded ? (
                 <div className="cms-table-wrap">
                   <table className="cms-table promotion-table">
@@ -1085,7 +1085,7 @@ export default function PromotionPage({ screen = "promotion" }) {
               </button>
             </div>
             {historyLoading ? (
-              <div className="promotion-empty">Loading promotion history...</div>
+              <SkeletonTable columns={8} rows={6} />
             ) : historyLoaded ? (
               <HistoryTable rows={history} onRollback={setRollbackRecord} />
             ) : null}

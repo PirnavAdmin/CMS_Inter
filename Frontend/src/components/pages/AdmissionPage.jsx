@@ -2310,7 +2310,9 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             }}
           >
             {field.loading ? (
-              <div style={{ padding: "10px 12px", color: "#6f7a63" }}>Loading employees...</div>
+              <div style={{ padding: "10px 12px" }} role="status" aria-label="Loading employees">
+                {Array.from({ length: 3 }, (_, index) => <Skeleton key={index} style={{ height: 14, marginBottom: index === 2 ? 0 : 10, width: `${88 - (index * 12)}%` }} />)}
+              </div>
             ) : field.loadError ? (
               <div style={{ padding: "10px 12px", color: "#c43d3d" }}>{field.loadError}</div>
             ) : field.options?.length ? (

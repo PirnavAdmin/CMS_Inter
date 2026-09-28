@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonPage, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -3494,11 +3494,9 @@ function StaffList({ records = [], setRecords, forced }) {
               </thead>
               <tbody>
                 {loadingList ? (
-                  <tr>
-                    <td colSpan={showStaffType ? 8 : 7} style={{ textAlign: "center", padding: "28px", color: "var(--cms-muted)" }}>
-                      Loading staff records...
-                    </td>
-                  </tr>
+                  Array.from({ length: 6 }, (_, index) => (
+                    <SkeletonRow key={index} columns={showStaffType ? 8 : 7} />
+                  ))
                 ) : shown.length > 0 ? (
                   shown.map((r, idx) => (
                     <tr key={`staff-item-${r.id || r.employeeId || idx}`}>
@@ -4762,10 +4760,14 @@ function Pending({ records = [], setRecords, activity }) {
                 </tr>
               </thead>
               <tbody>
-                {shown.length === 0 ? (
+                {loading ? (
+                  Array.from({ length: 6 }, (_, index) => (
+                    <SkeletonRow key={index} columns={tab !== "Submitted" ? 9 : 8} />
+                  ))
+                ) : shown.length === 0 ? (
                   <tr>
                     <td colSpan={tab !== "Submitted" ? 9 : 8} style={{ textAlign: "center", padding: "32px", color: "var(--cms-muted)" }}>
-                      {loading ? "Loading submissions..." : `No ${tab.toLowerCase()} teaching staff records found.`}
+                      {`No ${tab.toLowerCase()} teaching staff records found.`}
                     </td>
                   </tr>
                 ) : (
@@ -4920,9 +4922,7 @@ function Details({ record, records, setRecords, id }) {
     return (
       <DashboardLayout title="Staff Details" breadcrumb={["People", "Staff Management"]}>
         <main className="staff-mock-page">
-          <p style={{ margin: "40px 0", textAlign: "center", color: "var(--cms-muted)" }}>
-            Loading staff details...
-          </p>
+          <SkeletonPage variant="form" rows={8} />
         </main>
       </DashboardLayout>
     );
@@ -5660,9 +5660,7 @@ export default function StaffManagementPage() {
     page = (
       <DashboardLayout title="Staff Details" breadcrumb={["People", "Staff Management"]}>
         <main className="staff-mock-page">
-          <p style={{ margin: "40px 0", textAlign: "center", color: "var(--cms-muted)" }}>
-            Loading staff details...
-          </p>
+          <SkeletonPage variant="form" rows={8} />
         </main>
       </DashboardLayout>
     );
