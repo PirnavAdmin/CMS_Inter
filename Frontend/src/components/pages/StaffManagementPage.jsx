@@ -3115,6 +3115,11 @@ function StaffList({ records = [], setRecords, forced }) {
     } finally {
       setRecords((prev) => prev.filter((r) => r.id !== remove.id));
       setRemove(null);
+      try {
+        window.dispatchEvent(new Event("staff-records-updated"));
+      } catch (error) {
+        console.warn("Unable to notify Roles & Permissions about the staff deletion:", error);
+      }
     }
   };
 
@@ -4908,6 +4913,11 @@ function Details({ record, records, setRecords, id }) {
       console.warn("PUT /api/v1/staff/{id} API error:", err);
     }
     setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? { ...r, ...updatedRecord } : r)));
+    try {
+      window.dispatchEvent(new Event("staff-records-updated"));
+    } catch (error) {
+      console.warn("Unable to notify Roles & Permissions about the staff update:", error);
+    }
     setToast("Staff details updated successfully.");
   };
 

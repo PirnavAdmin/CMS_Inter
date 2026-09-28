@@ -557,12 +557,6 @@ export const apiEndpoints = {
     delete: (id) => `/api/v1/holidays/${id}`,
   },
  
-  roles: {
-    list: "/api/v1/roles",
-    getAll: "/api/v1/roles",
-    getById: (id) => `/api/v1/roles/${id}`,
-  },
-
   transport: {
     routes: "/api/v1/transport/routes",
     routeById: (id) => `/api/v1/transport/routes/${id}`,
@@ -658,6 +652,7 @@ export const apiEndpoints = {
   roles: {
     cards: "/api/v1/roles/cards",
     list: "/api/v1/roles",
+    getAll: "/api/v1/roles",
     getById: (id) => `/api/v1/roles/${id}`,
     create: "/api/v1/roles",
     update: (id) => `/api/v1/roles/${id}`,
