@@ -45,7 +45,7 @@ public class FeeService : IFeeService
 
     public Task<StudentFeeResponse?> AssignStudentFeeAsync(AssignStudentFeeRequest r) { Id(r.StudentId, "StudentId"); Id(r.FeeStructureId, "FeeStructureId"); return _repo.AssignStudentFeeAsync(r); }
     public Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id) { Id(id, "StudentFeeId"); return _repo.GetStudentFeeAsync(id); }
-    public Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? campusId, int? ay, int? group, int? section, string? plan, string? status, string? search) => _repo.GetStudentFeeLedgerAsync(campusId, ay, group, section, plan, status, search);
+    public Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? campusId, int? ay, int? group, int? section, string? plan, string? status, string? search, int? boardId = null) => _repo.GetStudentFeeLedgerAsync(campusId, ay, group, section, plan, status, search, boardId);
     public Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int id) { Id(id, "StudentId"); return _repo.GetStudentFeeDetailsByStudentAsync(id); }
 
     public Task<FeeConcessionResponse?> ApplyFeeConcessionAsync(ApplyFeeConcessionRequest r)
@@ -86,9 +86,9 @@ public class FeeService : IFeeService
     public Task<IEnumerable<FeePaymentResponse>> GetFeePaymentsAsync(int id) { Id(id, "StudentId"); return _repo.GetFeePaymentsAsync(id); }
     public Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id) { Id(id, "FeePaymentId"); return _repo.GetFeePaymentByIdAsync(id); }
     public Task<FeeReceiptResponse?> GetReceiptAsync(string number) { Text(number, "ReceiptNumber"); return _repo.GetReceiptAsync(number.Trim()); }
-    public Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(int? campusId, string? search) => _repo.GetFeeCollectionAsync(campusId, search?.Trim());
-    public Task<IEnumerable<FeeDueResponse>> GetDueAsync(int? campusId = null) => _repo.GetDueAsync(campusId);
-    public Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null) => _repo.GetDashboardAsync(campusId);
+    public Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(int? campusId, string? search, int? boardId = null, int? academicYearId = null) => _repo.GetFeeCollectionAsync(campusId, search?.Trim(), boardId, academicYearId);
+    public Task<IEnumerable<FeeDueResponse>> GetDueAsync(int? campusId = null, int? boardId = null, int? academicYearId = null) => _repo.GetDueAsync(campusId, boardId, academicYearId);
+    public Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null, int? boardId = null, int? academicYearId = null) => _repo.GetDashboardAsync(campusId, boardId, academicYearId);
     public Task<FeeReportResponse> GetDailyReportAsync(int? campusId, DateTime? date) => _repo.GetDailyReportAsync(campusId, date);
     public Task<FeeReportResponse> GetMonthlyReportAsync(int? campusId, int? year, int? month) { if (year.HasValue && (year < 2000 || year > 2100)) throw new ArgumentException("Invalid year."); if (month.HasValue && (month < 1 || month > 12)) throw new ArgumentException("Invalid month."); return _repo.GetMonthlyReportAsync(campusId, year, month); }
 }

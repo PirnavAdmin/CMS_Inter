@@ -28,7 +28,7 @@ public interface IFeeService
 
     Task<StudentFeeResponse?> AssignStudentFeeAsync(AssignStudentFeeRequest request);
     Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id);
-    Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? campusId, int? academicYearId, int? groupId, int? sectionId, string? paymentPlan, string? status, string? search);
+    Task<IEnumerable<StudentFeeLedgerResponse>> GetStudentFeeLedgerAsync(int? campusId, int? academicYearId, int? groupId, int? sectionId, string? paymentPlan, string? status, string? search, int? boardId = null);
     Task<StudentFeeDetailsResponse?> GetStudentFeeDetailsByStudentAsync(int studentId);
     Task<FeeConcessionResponse?> ApplyFeeConcessionAsync(ApplyFeeConcessionRequest request);
 
@@ -40,9 +40,9 @@ public interface IFeeService
     Task<FeePaymentResponse?> GetFeePaymentByIdAsync(int id);
     Task<FeeReceiptResponse?> GetReceiptAsync(string receiptNumber);
 
-    Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(int? campusId, string? search);
-    Task<IEnumerable<FeeDueResponse>> GetDueAsync(int? campusId = null);
-    Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null);
+    Task<IEnumerable<FeeCollectionResponse>> GetFeeCollectionAsync(int? campusId, string? search, int? boardId = null, int? academicYearId = null);
+    Task<IEnumerable<FeeDueResponse>> GetDueAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
+    Task<FeeDashboardResponse> GetDashboardAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
     Task<FeeReportResponse> GetDailyReportAsync(int? campusId, DateTime? date);
     Task<FeeReportResponse> GetMonthlyReportAsync(int? campusId, int? year, int? month);
 }
