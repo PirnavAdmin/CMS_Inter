@@ -120,28 +120,37 @@ export default function PayrollPage({ mode = "payroll" }) {
           }
 
           // Employees & Assignments
-          if (empRes.status === "fulfilled" && Array.isArray(empRes.value?.data) && empRes.value.data.length > 0) {
-            updated.assignments = empRes.value.data.map((e) => ({
-              id: e.assignmentId ? `asgn-${e.assignmentId}` : `emp-${e.staffId}`,
-              numericId: e.assignmentId || e.staffId,
-              assignmentId: e.assignmentId,
-              staffId: e.employeeId || `STF-${e.staffId}`,
-              rawStaffId: e.staffId,
-              staffName: e.staffName,
-              staffType: e.staffType || "Teaching",
-              department: e.departmentName || "General",
-              designation: e.designation || "-",
-              structureId: e.salaryStructureId ? `struct-${e.salaryStructureId}` : null,
-              rawStructureId: e.salaryStructureId,
-              structureName: e.structureName || "Not Assigned",
-              basicPay: Number(e.basicPay || 0),
-              grossSalary: Number(e.grossSalary || 0),
-              totalDeductions: Number(e.totalDeductions || 0),
-              netSalary: Number(e.netSalary || 0),
-              effectiveFrom: e.effectiveFrom ? String(e.effectiveFrom).split("T")[0] : "",
-              status: e.status || "Active",
-            }));
-            updated.apiEmployees = empRes.value.data;
+          const empData = empRes.status === "fulfilled" && Array.isArray(empRes.value?.data) ? empRes.value.data : [];
+          const asgnData = asgnRes.status === "fulfilled" && Array.isArray(asgnRes.value?.data) ? asgnRes.value.data : [];
+          const rawList = asgnData.length > 0 ? asgnData : empData;
+
+          if (rawList.length > 0) {
+            updated.assignments = rawList.map((e, index) => {
+              const asgnId = e.assignmentId || e.id || e.Id;
+              const numericId = asgnId || e.staffId || index + 1;
+              const rowKey = asgnId ? `asgn-${asgnId}` : `emp-${e.staffId || index + 1}`;
+              return {
+                id: rowKey,
+                numericId,
+                assignmentId: asgnId,
+                staffId: e.employeeId || (e.staffId ? `STF-${e.staffId}` : "-"),
+                rawStaffId: e.staffId,
+                staffName: e.staffName || (e.staffId ? `Staff #${e.staffId}` : "-"),
+                staffType: e.staffType || "Teaching",
+                department: e.departmentName || "General",
+                designation: e.designation || "-",
+                structureId: e.salaryStructureId ? `struct-${e.salaryStructureId}` : null,
+                rawStructureId: e.salaryStructureId,
+                structureName: e.structureName || "Standard Grade",
+                basicPay: Number(e.basicPay || 0),
+                grossSalary: Number(e.grossSalary || 0),
+                totalDeductions: Number(e.totalDeductions || 0),
+                netSalary: Number(e.netSalary || 0),
+                effectiveFrom: e.effectiveFrom ? String(e.effectiveFrom).split("T")[0] : "",
+                status: e.status || "Active",
+              };
+            });
+            updated.apiEmployees = empData.length > 0 ? empData : rawList;
           }
 
           // Payslips
@@ -783,10 +792,7 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
               key: "staffName",
               label: "Staff Name",
               render: (r) => (
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <strong style={{ fontSize: "13px" }}>{r.staffName}</strong>
-                  <span style={{ fontSize: "11px", color: "var(--cms-muted)" }}>{r.designation || r.department}</span>
-                </div>
+                <strong style={{ fontSize: "13px" }}>{r.staffName}</strong>
               ),
             },
             { key: "department", label: "Department" },
@@ -2358,29 +2364,23 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
 // ----------------------------------------------------------------------
 function AssignSalaryScreen({ staffType = "Teaching", store, setStore, navigate, setToast }) {
   const staffList = useMemo(() => {
-    const fromAssignments = (store.assignments || [])
+    const sourceList = Array.isArray(store.apiEmployees) && store.apiEmployees.length > 0
+      ? store.apiEmployees
+      : Array.isArray(store.assignments)
+      ? store.assignments
+      : [];
+
+    return sourceList
       .filter((a) => !staffType || a.staffType === staffType)
       .map((a) => ({
-        id: String(a.rawStaffId || a.staffId),
-        staffCode: a.staffId,
-        rawStaffId: a.rawStaffId || parseInt(String(a.staffId).replace(/\D+/g, ""), 10) || 1,
-        name: a.staffName,
-        department: a.department,
-        designation: a.designation,
+        id: String(a.rawStaffId || a.staffId || a.id),
+        staffCode: a.employeeId || a.staffId || a.staffCode || `STF-${a.rawStaffId || a.staffId}`,
+        rawStaffId: a.rawStaffId || a.staffId || parseInt(String(a.id || "").replace(/\D+/g, ""), 10) || 1,
+        name: a.staffName || a.name || `Staff #${a.rawStaffId || a.staffId}`,
+        department: a.departmentName || a.department || "General",
+        designation: a.designation || a.designationName || "-",
       }));
-
-    if (fromAssignments.length > 0) return fromAssignments;
-
-    return [
-      { id: "101", staffCode: "FAC-101", rawStaffId: 101, name: "Dr. K. Srinivas Rao", department: "Physics", designation: "HOD & Professor" },
-      { id: "102", staffCode: "FAC-102", rawStaffId: 102, name: "Mrs. Lakshmi Devi", department: "Mathematics", designation: "Assistant Professor" },
-      { id: "103", staffCode: "FAC-103", rawStaffId: 103, name: "Dr. Ramesh Babu", department: "Chemistry", designation: "Senior Lecturer" },
-      { id: "104", staffCode: "FAC-104", rawStaffId: 104, name: "Ms. Anitha Reddy", department: "English", designation: "Lecturer" },
-      { id: "201", staffCode: "NT-201", rawStaffId: 201, name: "Mr. Suresh Kumar", department: "Administration", designation: "Office Administrator" },
-      { id: "202", staffCode: "NT-202", rawStaffId: 202, name: "Mrs. Padmavathi", department: "Finance & Accounts", designation: "Senior Accountant" },
-      { id: "203", staffCode: "NT-203", rawStaffId: 203, name: "Mr. Venkat Rao", department: "Library", designation: "Head Librarian" },
-    ];
-  }, [store.assignments, staffType]);
+  }, [store.apiEmployees, store.assignments, staffType]);
 
   const [selectedStaffId, setSelectedStaffId] = useState(staffList[0]?.id || "101");
   const [selectedStructId, setSelectedStructId] = useState(store.structures[0]?.id || "");

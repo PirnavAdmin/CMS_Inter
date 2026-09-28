@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || " https://superior-hatchery-gibberish.ngrok-free.dev ";
+  const apiBaseUrl = (env.VITE_API_BASE_URL || "http://localhost:5167").trim();
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
