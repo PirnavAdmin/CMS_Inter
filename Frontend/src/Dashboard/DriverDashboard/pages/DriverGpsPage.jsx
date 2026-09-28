@@ -16,6 +16,7 @@ import {
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getRoute, getGps } from "../../../api/transportDriverApi.js";
+import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverGpsPage() {
   const [routeDetails, setRouteDetails] = useState(null);
@@ -58,7 +59,7 @@ export default function DriverGpsPage() {
     return () => clearInterval(interval);
   }, [isTracking]);
 
-  if (loading) return <div className="dp-page-container"><p>Loading GPS Data...</p></div>;
+  if (loading) return <div className="dp-page-container"><SkeletonPage variant="dashboard" columns={4} /></div>;
   if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
 
   const stops = routeDetails?.stops || [];

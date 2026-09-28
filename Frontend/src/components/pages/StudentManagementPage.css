@@ -21,7 +21,7 @@
 .student-management-search input { width:100%; border:0; outline:0; padding:12px 0; background:transparent; color:var(--cms-text); font:inherit; }
 .student-management-filters {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   padding: 0;
   box-sizing: border-box;
@@ -47,7 +47,7 @@
 .student-credentials-about li { display: flex; align-items: center; gap: 8px; color: var(--cms-text); font-size: 14px; }
 .student-credentials-about svg { flex: 0 0 auto; color: var(--cms-primary); }
 @media (max-width: 560px) { .student-import-summary { grid-template-columns:1fr; } }
-@media (max-width: 1200px) { .student-management-filters { grid-template-columns:repeat(5,minmax(0,1fr)); } }
+@media (max-width: 1200px) { .student-management-filters { grid-template-columns:repeat(4,minmax(0,1fr)); } }
 @media (max-width: 900px) { .student-management-filters { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media (max-width: 560px) { .student-management-filter-row { padding:16px 16px 10px; } .student-management-search-row { align-items:stretch; flex-direction:column; padding:0 16px 18px; } .student-management-toolbar { min-width:0 !important; } .student-management-actions { justify-content:stretch; } .student-management-actions > .cms-btn { flex:1; } .student-management-filters { grid-template-columns:1fr; } }
 @media (max-width: 560px) { .student-credentials-filters, .student-credentials-about ul { grid-template-columns: 1fr; } }

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, CalendarDays, ChevronDown, Copy, Download, Eye, FileSpreadsheet, FileText, MoreVertical, Pencil, Power, Search, Trash2, UserPlus, UsersRound } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { SkeletonPage, SkeletonTable, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -754,7 +754,7 @@ function ProgrammeSections({ data, onRetry }) {
         <b>Sections for this Academic Level</b>
         <span>Sections are automatically loaded for the selected group and program.</span>
       </header>
-      {data.sectionsLoading ? <p>Loading sections...</p> : null}
+      {data.sectionsLoading ? <SkeletonText lines={2} widths={["42%", "68%"]} /> : null}
       {data.sectionsError ? (
         <div className="ttm-sections-error">
           <p className="ttm-validation-error">Unable to load sections. Please try again.</p>
@@ -1013,7 +1013,7 @@ function StructurePreview({ item, close, notify }) {
     <Modal title="View Period Structure" className="ttm-period-structure-modal ttm-period-structure-view-modal" onClose={close}>
       <div className="ttm-modal-body timetable-period-modal-body">
         {error ? <p className="ttm-validation-error">{error}</p> : null}
-        {!preview && !error ? <p>Loading period structure…</p> : null}
+        {!preview && !error ? <SkeletonPage variant="form" rows={4} /> : null}
         {structureDetail ? (
           <>
             <div className="ttm-structure-read-grid">
@@ -1192,7 +1192,7 @@ function Structures({ notify, initial }) {
 
   <section className="ttm-card">
         {loading ? (
-          <p className="ttm-empty">Loading period structures…</p>
+          <SkeletonTable columns={5} rows={5} />
         ) : !items.length ? (
           <p className="ttm-empty">No period structures are available.</p>
         ) : (
@@ -1522,7 +1522,7 @@ function Generate({ goDraft, notify, initial }) {
               </div>
               <div className="ttm-generate-sections">
                 <b>Sections ({data.sections.length})</b>
-                {data.sectionsLoading ? <span className="ttm-generate-state">Loading sections…</span> : data.sectionsError ? <button type="button" className="cms-btn cms-btn-ghost" onClick={state.reloadSections}>Retry sections</button> : <div className="ttm-generate-section-chips">
+                {data.sectionsLoading ? <div className="ttm-generate-state"><SkeletonText lines={2} widths={["38%", "62%"]} /></div> : data.sectionsError ? <button type="button" className="cms-btn cms-btn-ghost" onClick={state.reloadSections}>Retry sections</button> : <div className="ttm-generate-section-chips">
                   {data.sections.map((section) => <button type="button" key={section.id} className={String(section.id) === String(selectedSection?.id) ? "active" : ""} aria-pressed={String(section.id) === String(selectedSection?.id)} onClick={() => setSelectedSectionId(section.id)}>{section.name}</button>)}
                 </div>}
               </div>
@@ -1757,7 +1757,7 @@ function SubstitutionPreview({ context, close, notify }) {
             <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </Field>
         </div>
-        {loading ? <p className="ttm-empty">Loading faculty substitutions...</p> : null}
+        {loading ? <SkeletonTable columns={7} rows={5} /> : null}
         {!loading && error ? <p className="ttm-validation-error">{error}</p> : null}
         {!loading && !error && !rows.length ? <p className="ttm-empty">No faculty substitutions for this date.</p> : null}
         {!loading && !error && rows.length ? (
@@ -2586,7 +2586,7 @@ function LatestDraft({ notify }) {
       });
     return () => { active = false; };
   }, [notify, selectedCampusId]);
-  if (state.loading) return <Page title="Generated Timetable" subtitle="Loading the latest generated timetable…"><section className="ttm-card"><p className="ttm-empty">Loading timetable…</p></section></Page>;
+  if (state.loading) return <Page title="Generated Timetable" subtitle="Review generated timetables."><section className="ttm-card"><SkeletonTable columns={9} rows={6} /></section></Page>;
   if (!state.context?.sectionId) return <Page title="Generated Timetable" subtitle="Review generated timetables."><section className="ttm-card"><p className="ttm-empty">No generated timetable available.</p><div className="ttm-screen-actions"><Link className="cms-btn cms-btn-primary" to="/dashboard/timetable/generate">Generate Timetable</Link></div></section></Page>;
   return <Draft initial={state.context} notify={notify} />;
 }

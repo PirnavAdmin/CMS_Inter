@@ -15,6 +15,7 @@ import {
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getReports, getProfile } from "../../../api/transportDriverApi.js";
+import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverReportsPage() {
   const [filterType, setFilterType] = useState("All");
@@ -115,7 +116,7 @@ export default function DriverReportsPage() {
     window.print();
   };
 
-  if (loading) return <div className="dp-page-container"><p>Loading Reports Data...</p></div>;
+  if (loading) return <div className="dp-page-container"><SkeletonPage variant="table" columns={7} rows={6} /></div>;
   if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
 
   return (

@@ -2303,7 +2303,9 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             }}
           >
             {field.loading ? (
-              <div style={{ padding: "10px 12px", color: "#6f7a63" }}>Loading employees...</div>
+              <div style={{ padding: "10px 12px" }} role="status" aria-label="Loading employees">
+                {Array.from({ length: 3 }, (_, index) => <Skeleton key={index} style={{ height: 14, marginBottom: index === 2 ? 0 : 10, width: `${88 - (index * 12)}%` }} />)}
+              </div>
             ) : field.loadError ? (
               <div style={{ padding: "10px 12px", color: "#c43d3d" }}>{field.loadError}</div>
             ) : field.options?.length ? (
@@ -2968,6 +2970,9 @@ export default function AdmissionPage() {
       .filter(Boolean)
   ), [campuses]);
   const selectedCampusValue = selectedCampus?.campusId ?? selectedCampus?.id ?? "";
+  const admissionListParams = useMemo(() => (
+    selectedCampusValue ? { campusId: selectedCampusValue } : {}
+  ), [selectedCampusValue]);
   const admittedBySelectedLabel = admissionStaffLabel({
     employeeId: values.admittedByEmployeeId,
     fullName: values.admittedByEmployeeName,
@@ -3127,18 +3132,58 @@ export default function AdmissionPage() {
     ));
     return { room, roomType, config: config || null };
   }, [allocationMasterData.hostelBlocks, allocationMasterData.hostelFees, allocationMasterData.hostelRooms, allocationMasterData.hostelRoomTypes]);
+  const contextScopedAdmissions = useMemo(() => {
+    const contextBoardValue = selectedContextBoardValue || selectedBoardId;
+    const contextYearValue = selectedContextYearValue || selectedAcademicYearId;
+    return admissions.filter((row) => (
+      optionMatchesRecord(
+        selectedCampusValue,
+        campusOptions,
+        row.campusId,
+        row.values?.campus,
+        row.campus,
+        row.campusName,
+      )
+      && optionMatchesRecord(
+        contextBoardValue,
+        boardOptions,
+        row.boardId,
+        row.values?.board,
+        row.board,
+        row.boardName,
+      )
+      && optionMatchesRecord(
+        contextYearValue,
+        yearOptions,
+        row.academicYearId,
+        row.values?.year,
+        row.academicYear,
+        row.academicYearName,
+      )
+    ));
+  }, [
+    admissions,
+    boardOptions,
+    campusOptions,
+    selectedAcademicYearId,
+    selectedBoardId,
+    selectedCampusValue,
+    selectedContextBoardValue,
+    selectedContextYearValue,
+    yearOptions,
+  ]);
   const groupFilterOptions = useMemo(() => {
     const scopedMasterGroups = (masterOptions.groups || []).filter((item) => (
       scopedOptionMatches(selectedContextBoardValue, boardOptions, item.boardId, item.boardName, selectedContextBoardLabel)
       && scopedOptionMatches(selectedContextYearValue, yearOptions, item.academicYearId, item.academicYearName, selectedContextYearLabel)
     ));
-    const admissionGroups = admissions
+    const admissionGroups = contextScopedAdmissions
       .map((row) => optionFromRecord(row.groupId || row.values?.group, row.group || row.values?.groupName))
       .filter(Boolean);
     return uniqueOptionsByValue([...scopedMasterGroups, ...admissionGroups]);
   }, [
-    admissions,
     boardOptions,
+    contextScopedAdmissions,
     masterOptions.groups,
     selectedContextBoardLabel,
     selectedContextBoardValue,
@@ -3289,7 +3334,7 @@ export default function AdmissionPage() {
   }));
   const displayedAdmissions = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return admissions.filter((row) => {
+    return contextScopedAdmissions.filter((row) => {
       const matchesSearch = !term
         || String(row.studentName || "").toLowerCase().includes(term)
         || String(row.admissionNo || "").toLowerCase().includes(term);
@@ -3313,7 +3358,7 @@ export default function AdmissionPage() {
       const matchesStatus = !filters.status || normalizeAdmissionStatus(row.status) === filters.status;
       return matchesSearch && matchesYear && matchesGroup && matchesStatus;
     });
-  }, [academicYearFilterOptions, admissionYearDisplay, admissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
+  }, [academicYearFilterOptions, admissionYearDisplay, contextScopedAdmissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
   const totalPages = Math.max(1, Math.ceil(displayedAdmissions.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedAdmissions = displayedAdmissions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -3459,12 +3504,13 @@ export default function AdmissionPage() {
     document.save(`${safeExportFileName(`Admission ${admissionNo}`)}.pdf`);
   };
 
-  const refreshAdmissions = async () => {
+  const refreshAdmissions = useCallback(async () => {
     const requestId = admissionsRequestRef.current + 1;
     admissionsRequestRef.current = requestId;
     setListLoading(true);
+    setAdmissions([]);
     try {
-      const response = await apiClient.get(apiEndpoints.admissions.getAll);
+      const response = await apiClient.get(apiEndpoints.admissions.getAll, { params: admissionListParams });
       const apiRows = getCollection(response.data).map(normalizeAdmissionRow);
       if (admissionsRequestRef.current !== requestId) return apiRows;
       setAdmissions(apiRows);
@@ -3475,11 +3521,12 @@ export default function AdmissionPage() {
     } finally {
       if (admissionsRequestRef.current === requestId) setListLoading(false);
     }
-  };
+  }, [admissionListParams]);
 
   useEffect(() => {
+    setPage(1);
     refreshAdmissions();
-  }, []);
+  }, [refreshAdmissions, selectedContextBoardValue, selectedContextYearValue]);
 
   useEffect(() => {
     let cancelled = false;
