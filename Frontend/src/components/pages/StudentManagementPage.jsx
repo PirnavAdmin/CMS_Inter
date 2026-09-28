@@ -304,7 +304,6 @@ export default function StudentManagementPage() {
   const currentPage = Math.min(page, totalPages);
   const pageRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   useEffect(() => { if (!restoringFilters.current) setPage(1); }, [query, filters.level, filters.group, filters.programme, filters.section, filters.status, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
-  const values = (key) => [...new Set(students.map((student) => student[key]).filter(Boolean))];
   const updateFilter = (key, selectedValue) => {
     setFilters((current) => ({
       ...current,
@@ -458,7 +457,6 @@ export default function StudentManagementPage() {
             ["Group", "group", groupOptions, !filters.level],
             ["Programme", "programme", programmeOptions, !filters.group],
             ["Section", "section", sectionOptions, !filters.programme],
-            ["Status", "status", values("status").map((item) => ({ value: item, label: item })), false],
           ].map(([label, key, options, disabled]) => (
             <label className="cms-field" key={key}>
               <span>{label}</span>
