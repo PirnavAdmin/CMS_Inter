@@ -40,6 +40,9 @@ namespace CollegeManagement.API.Services.Exports
         public string GroupName { get; set; } = string.Empty;
         public string ProgramName { get; set; } = string.Empty;
         public string SectionName { get; set; } = string.Empty;
+        public string? StudentType { get; set; }
+        public string? HostelBlock { get; set; }
+        public string? BusRoute { get; set; }
 
         public string Status { get; set; } = "Active";
         public bool IsActive { get; set; } = true;

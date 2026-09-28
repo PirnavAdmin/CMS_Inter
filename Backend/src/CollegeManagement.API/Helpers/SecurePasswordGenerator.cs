@@ -12,7 +12,7 @@ namespace CollegeManagement.API.Helpers
         private const string UpperCaseChars = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // Excludes I, O
         private const string LowerCaseChars = "abcdefghijkmnpqrstuvwxyz"; // Excludes l, o
         private const string DigitChars = "23456789";                   // Excludes 0, 1
-        private const string SpecialChars = "!@#$%*?";
+        private const string SpecialChars = "@#$!";
         private const string AllChars = UpperCaseChars + LowerCaseChars + DigitChars + SpecialChars;
 
         /// <summary>

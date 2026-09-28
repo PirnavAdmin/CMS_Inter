@@ -11,7 +11,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [ApiController]
     [Route("api/v1/transport/driver")]
-    [Authorize(Roles = "Driver")]
+    [Authorize(Roles = "Driver,Bus Driver")]
     public class TransportDriverDashboardController : ControllerBase
     {
         private readonly AppDbContext _context;

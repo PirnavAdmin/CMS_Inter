@@ -20,6 +20,8 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
 
         // Academic Relations
+        public int? CampusId { get; set; } public int? AdmittedById { get; set; } public string? AdmittedByName { get; set; }
+        public string? CampusName { get; set; }
 
         public int BoardId { get; set; }
 

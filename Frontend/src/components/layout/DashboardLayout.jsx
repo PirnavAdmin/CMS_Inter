@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building,
+  ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
   Building2, LayoutDashboard, Users, BarChart3,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
@@ -9,6 +9,7 @@ import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -61,6 +62,7 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/settings/number-series", icon: settingsNumberSeriesIcon },
   { path: "/dashboard/settings/templates", icon: settingsTemplatesIcon },
   { path: "/dashboard/settings/audit-logs", icon: settingsAuditLogsIcon },
+  { path: "/dashboard/settings/roles-permissions", icon: ShieldCheck },
   { path: "/dashboard/designations", icon: generatedSidebarIcons.department },
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
@@ -179,7 +181,38 @@ export const menu = [
   {
     section: "Administration",
     items: [
-      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
+      {
+        to: "/dashboard/settings",
+        label: "Settings",
+        icon: boardAcademicYearIcon,
+        children: [
+          { to: "/dashboard/settings", label: "General Settings", icon: Settings },
+          { to: "/dashboard/settings/roles-permissions", label: "Roles & Permissions", icon: ShieldCheck },
+        ],
+      },
+    ],
+  },
+];
+
+export const parentMenu = [
+  {
+    section: "Main",
+    items: [
+      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon },
+    ],
+  },
+  {
+    section: "Student & Academics",
+    items: [
+      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon },
+      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon },
+      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon },
+      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon },
+      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon },
+      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon },
+      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon },
+      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon },
+      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon },
     ],
   },
 ];
@@ -188,6 +221,10 @@ const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
 const MOCK_NOTIFICATIONS = [];
+const PARENT_NOTIFICATIONS = [
+  { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
+  { id: "pn-2", title: "Upcoming Examinations", count: 5, to: "/parent-dashboard/examinations", label: "exam timetable" },
+];
 const PENDING_STATUSES = new Set(["pending", "draft", "requested", "generated", "reviewed", "new", "created", "incomplete", "unpublished"]);
 
 const unwrapNotificationPayload = (payload) => {
@@ -220,6 +257,19 @@ const searchIndex = menu.flatMap((g) =>
     ...(item.children || []).map((c) => ({ to: c.to, label: c.label, section: item.label })),
   ]),
 );
+
+const parentSearchIndex = [
+  ...parentMenu.flatMap((g) =>
+    g.items.flatMap((item) => [
+      { to: item.to, label: item.label, section: g.section },
+    ]),
+  ),
+  { to: "/parent-dashboard/academics", label: "Results & Marks Memo", section: "Student & Academics" },
+  { to: "/parent-dashboard/notifications", label: "Notifications", section: "Student & Academics" },
+  { to: "/parent-dashboard/profile", label: "Profile", section: "Account" },
+  { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
+];
+
 const breadcrumbLinkForLabel = (label) =>
   searchIndex.find((item) => item.label.toLowerCase() === String(label).toLowerCase())?.to;
 
@@ -233,6 +283,8 @@ const menuBreadcrumbForPath = (pathname) => {
     let matches = false;
     if (path === "/dashboard") {
       matches = pathname === "/dashboard";
+    } else if (path === "/parent-dashboard") {
+      matches = pathname === "/parent-dashboard";
     } else if (path === "/dashboard/attendance" || path === "/dashboard/attendance/student") {
       matches =
         !pathname.startsWith("/dashboard/attendance/staff") &&
@@ -251,7 +303,8 @@ const menuBreadcrumbForPath = (pathname) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  menu.forEach((group) => {
+  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : menu;
+  activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
       (item.children || []).forEach((child) => {
@@ -330,17 +383,20 @@ export default function DashboardLayout({
     setSelectedBoard,
     setSelectedAcademicYear,
   } = useAcademicContext();
+  const { campuses, activeCampuses, selectedCampus, setSelectedCampus } = useCampusContext();
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [campusOpen, setCampusOpen] = useState(false);
   const [boardOpen, setBoardOpen] = useState(false);
   const [yearOpen, setYearOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const actionsRef = useRef(null);
   const searchRef = useRef(null);
+  const campusRef = useRef(null);
   const boardRef = useRef(null);
   const yearRef = useRef(null);
   const sidebarNavRef = useRef(null);
@@ -352,10 +408,10 @@ export default function DashboardLayout({
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title) ?? pageMenuItem?.icon;
   const pageTitleNode = <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>;
 
-
-
-
-
+  const navbarCampuses = useMemo(() => {
+    if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
+    return (campuses || []).filter((c) => c && c.isActive !== false && String(c.status || "").toLowerCase() !== "inactive");
+  }, [activeCampuses, campuses]);
 
   const resolvedBreadcrumb = useMemo(() => {
     const provided = Array.isArray(breadcrumb) ? breadcrumb : [];
@@ -363,10 +419,15 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const user = readUser();
-  const profileName = user?.name && user.name !== user?.email ? user.name : "CMS Admin";
-  const profileEmail = user?.email || "Admin@CMS.com";
+  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
+  const activeMenu = isParent ? parentMenu : menu;
+  const currentSearchIndex = isParent ? parentSearchIndex : searchIndex;
+  const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
+  const rawEmail = user?.email;
+  const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
   const profileRole = user?.role || "admin";
-  const pendingActionCount = MOCK_NOTIFICATIONS.reduce((total, item) => total + item.count, 0);
+  const pendingActionCount = currentNotifications.reduce((total, item) => total + item.count, 0);
 
   const rememberSidebarScroll = () => {
     const scrollTop = sidebarNavRef.current?.scrollTop || 0;
@@ -409,6 +470,7 @@ export default function DashboardLayout({
         setProfileOpen(false);
       }
       if (searchRef.current && !searchRef.current.contains(e.target)) setSearchOpen(false);
+      if (campusRef.current && !campusRef.current.contains(e.target)) setCampusOpen(false);
       if (boardRef.current && !boardRef.current.contains(e.target)) setBoardOpen(false);
       if (yearRef.current && !yearRef.current.contains(e.target)) setYearOpen(false);
     };
@@ -417,6 +479,7 @@ export default function DashboardLayout({
         setNotifOpen(false);
         setProfileOpen(false);
         setSearchOpen(false);
+        setCampusOpen(false);
         setBoardOpen(false);
         setYearOpen(false);
       }
@@ -433,9 +496,9 @@ export default function DashboardLayout({
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = q ? searchIndex.filter((i) => i.label.toLowerCase().includes(q)) : searchIndex;
+    const list = q ? currentSearchIndex.filter((i) => i.label.toLowerCase().includes(q)) : currentSearchIndex;
     return list.slice(0, 8);
-  }, [query]);
+  }, [query, currentSearchIndex]);
 
   const goTo = (to) => {
     rememberSidebarScroll();
@@ -458,6 +521,9 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
+    if (basePath === "/dashboard/settings") {
+      return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
+    }
     if (basePath === "/hostel" || basePath === "/dashboard/hostel") {
       return pathname.startsWith("/hostel") || pathname.startsWith("/dashboard/hostel");
     }
@@ -491,11 +557,28 @@ export default function DashboardLayout({
           <img className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />
         </div>
         <nav className="cms-nav" ref={sidebarNavRef} onScroll={rememberSidebarScroll}>
-          {menu.map((group) => (
+          {activeMenu.map((group) => (
             <div key={group.section}>
               <div className="cms-nav-group">{group.section}</div>
               {group.items.map((item) => {
                 const active = isActive(item.to);
+                if (item.isLogout) {
+                  return (
+                    <button
+                      key={item.to}
+                      type="button"
+                      className="cms-nav-link"
+                      style={{ width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left", font: "inherit", color: "inherit" }}
+                      onClick={() => {
+                        closeOnMobile();
+                        logout();
+                      }}
+                    >
+                      <SidebarIcon icon={item.icon} />
+                      <span className="cms-nav-label">{item.label}</span>
+                    </button>
+                  );
+                }
                 if (item.children) {
                   const isFacultyMenu = item.to === "/dashboard/faculty";
                   const isAttendanceMenu = item.to === "/dashboard/attendance";
@@ -597,34 +680,131 @@ export default function DashboardLayout({
 
           <div className="cms-top-actions" ref={actionsRef}>
             <div className="cms-academic-selectors">
-              {/* Board Selector */}
-              <div className="cms-academic-dropdown-wrap" ref={boardRef}>
+              {/* Campus Selector */}
+              <div className="cms-academic-dropdown-wrap" ref={campusRef}>
                 <button
                   type="button"
-                  className={`cms-academic-btn ${boardOpen ? "is-open" : ""}`}
+                  className={`cms-academic-btn ${campusOpen ? "is-open" : ""}`}
                   onClick={() => {
-                    setBoardOpen((v) => !v);
+                    setCampusOpen((v) => !v);
+                    setBoardOpen(false);
                     setYearOpen(false);
                     setNotifOpen(false);
                     setProfileOpen(false);
                   }}
-                  disabled={boardsLoading || !boards.length}
-                  aria-label="Select Board"
-                  aria-expanded={boardOpen}
+                  disabled={!navbarCampuses?.length}
+                  aria-label="Select Campus"
+                  aria-expanded={campusOpen}
                 >
                   <div className="cms-academic-btn-icon">
-                    <NavbarIcon src={navbarBoardIcon} />
+                    <Building2 size={16} color="var(--cms-primary)" />
                   </div>
                   <div className="cms-academic-btn-text">
-                    <span className="cms-academic-btn-label">Board</span>
-                    <span className="cms-academic-btn-value" title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code}>
-                      {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No active boards available")}
+                    <span className="cms-academic-btn-label">Campus</span>
+                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code}>
+                      {selectedCampus?.name || selectedCampus?.code || "Main Campus"}
                     </span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
                 </button>
 
-                {boardOpen && (
+                {campusOpen && (
+                  <div className="cms-academic-dropdown-panel">
+                    <div className="cms-academic-panel-header">Select Campus Branch</div>
+                    <div className="cms-academic-panel-list">
+                      {!navbarCampuses?.length ? (
+                        <div className="cms-academic-panel-empty">No active campuses available</div>
+                      ) : (
+                        navbarCampuses.map((c) => {
+                          const isSelected =
+                            String(selectedCampus?.id) === String(c.id) ||
+                            String(selectedCampus?.campusId) === String(c.campusId) ||
+                            (selectedCampus?.code && selectedCampus.code === c.code);
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className={`cms-academic-panel-item ${isSelected ? "is-selected" : ""}`}
+                              onClick={() => {
+                                setSelectedCampus(c);
+                                setCampusOpen(false);
+                              }}
+                            >
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", textAlign: "left" }}>
+                                <span className="cms-academic-item-name" title={c.name}>{c.name}</span>
+                                <span style={{ fontSize: "11px", color: "var(--cms-muted)" }}>{c.code}</span>
+                              </div>
+                              {isSelected && <CheckCircle2 size={16} className="cms-academic-check" />}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                    <div className="cms-academic-panel-footer">
+                      <button
+                        type="button"
+                        className="cms-academic-manage-btn"
+                        onClick={() => {
+                          setCampusOpen(false);
+                          navigate("/dashboard/settings/campus-configuration");
+                        }}
+                      >
+                        <Settings size={14} /> Manage Campuses
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Board Selector */}
+              <div className="cms-academic-dropdown-wrap" ref={boardRef}>
+                {isParent ? (
+                  <div
+                    className="cms-academic-btn"
+                    style={{ cursor: "default", userSelect: "none" }}
+                    aria-label="Board"
+                  >
+                    <div className="cms-academic-btn-icon">
+                      <NavbarIcon src={navbarBoardIcon} />
+                    </div>
+                    <div className="cms-academic-btn-text">
+                      <span className="cms-academic-btn-label">Board</span>
+                      <span
+                        className="cms-academic-btn-value"
+                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                      >
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className={`cms-academic-btn ${boardOpen ? "is-open" : ""}`}
+                    onClick={() => {
+                      setBoardOpen((v) => !v);
+                      setYearOpen(false);
+                      setNotifOpen(false);
+                      setProfileOpen(false);
+                    }}
+                    disabled={boardsLoading || !boards.length}
+                    aria-label="Select Board"
+                    aria-expanded={boardOpen}
+                  >
+                    <div className="cms-academic-btn-icon">
+                      <NavbarIcon src={navbarBoardIcon} />
+                    </div>
+                    <div className="cms-academic-btn-text">
+                      <span className="cms-academic-btn-label">Board</span>
+                      <span className="cms-academic-btn-value" title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code}>
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No active boards available")}
+                      </span>
+                    </div>
+                    <ChevronDown size={12} className="cms-academic-btn-arrow" />
+                  </button>
+                )}
+
+                {!isParent && boardOpen && (
                   <div className="cms-academic-dropdown-panel">
                     <div className="cms-academic-panel-header">Select Board</div>
                     <div className="cms-academic-panel-list">
@@ -714,40 +894,77 @@ export default function DashboardLayout({
                         );
                       })}
                     </div>
-                    <div className="cms-academic-panel-footer">
-                      <button
-                        type="button"
-                        className="cms-academic-manage-btn"
-                        onClick={() => {
-                          setYearOpen(false);
-                          navigate("/dashboard/board-academic-year?tab=academic-years");
-                        }}
-                      >
-                        <Settings size={14} /> Manage Academic Years
-                      </button>
-                    </div>
+                    {!isParent && (
+                      <div className="cms-academic-panel-footer">
+                        <button
+                          type="button"
+                          className="cms-academic-manage-btn"
+                          onClick={() => {
+                            setYearOpen(false);
+                            navigate("/dashboard/board-academic-year?tab=academic-years");
+                          }}
+                        >
+                          <Settings size={14} /> Manage Academic Years
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
             <ThemeToggle variant="dashboard" />
-            <button className="cms-icon-btn" aria-label={`${pendingActionCount} sample notifications`} aria-expanded={notifOpen} onClick={() => { setNotifOpen((open) => !open); setProfileOpen(false); }}>
-              <NavbarIcon src={navbarNotificationsIcon} />{pendingActionCount > 0 ? <span className="cms-notification-badge">{pendingActionCount > 99 ? "99+" : pendingActionCount}</span> : null}
-            </button>
+            {isParent ? (
+              <Link
+                to="/parent-dashboard/notifications"
+                className="cms-icon-btn"
+                style={{ textDecoration: "none" }}
+                aria-label={`${pendingActionCount} notifications`}
+                onClick={() => {
+                  setNotifOpen(false);
+                  setProfileOpen(false);
+                  closeOnMobile();
+                }}
+              >
+                <NavbarIcon src={navbarNotificationsIcon} />
+                {pendingActionCount > 0 ? (
+                  <span className="cms-notification-badge">
+                    {pendingActionCount > 99 ? "99+" : pendingActionCount}
+                  </span>
+                ) : null}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="cms-icon-btn"
+                aria-label={`${pendingActionCount} sample notifications`}
+                aria-expanded={notifOpen}
+                onClick={() => {
+                  setNotifOpen((open) => !open);
+                  setProfileOpen(false);
+                }}
+              >
+                <NavbarIcon src={navbarNotificationsIcon} />
+                {pendingActionCount > 0 ? (
+                  <span className="cms-notification-badge">
+                    {pendingActionCount > 99 ? "99+" : pendingActionCount}
+                  </span>
+                ) : null}
+              </button>
+            )}
             <button className="cms-profile-btn" onClick={() => { setProfileOpen((v) => !v); setNotifOpen(false); }}>
               <span className="cms-avatar">{initials(profileName)}</span>
               <span className="cms-profile-meta"><strong>{profileName}</strong><span>{profileRole}</span></span>
             </button>
 
-            {notifOpen ? (
+            {!isParent && notifOpen ? (
               <div className="cms-dropdown cms-notifications-dropdown">
                 <div className="cms-dropdown-head cms-notifications-head">
                   <div><strong>Notifications</strong><small>Sample activity</small></div>
                 </div>
-                {MOCK_NOTIFICATIONS.map((notification) => (
+                {currentNotifications.map((notification) => (
                   <button key={notification.id} type="button" className="cms-notif-item" onClick={() => { setNotifOpen(false); goTo(notification.to); }}>
                     <span className="cms-notif-count">{notification.count}</span>
-                    <span><p>{notification.title}</p><small>Open {notification.label}s</small></span>
+                    <span><p>{notification.title}</p><small>Open {notification.label}</small></span>
                     <ChevronRight size={15} aria-hidden="true" />
                   </button>
                 ))}
@@ -757,7 +974,7 @@ export default function DashboardLayout({
             {profileOpen ? (
               <div className="cms-dropdown">
                 <div className="cms-dropdown-head"><strong>{profileName}</strong><div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{profileEmail}</div><div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 3 }}>{profileRole}</div></div>
-                <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings"); }}><User size={15} /> My Profile</button>
+                <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings/my-profile"); }}><User size={15} /> My Profile</button>
                 <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings"); }}><Settings size={15} /> Settings</button>
                 <button type="button" className="cms-dropdown-item danger" onClick={logout}><LogOut size={15} /> Logout</button>
               </div>

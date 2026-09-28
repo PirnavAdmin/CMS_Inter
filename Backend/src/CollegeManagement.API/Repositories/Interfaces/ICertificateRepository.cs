@@ -11,6 +11,7 @@ public interface ICertificateRepository
         string? search = null,
         string? status = null,
         string? certificateType = null,
+        int? campusId = null,
         CancellationToken ct = default);
 
     Task<CertificateResponseDto?> GetByIdAsync(
@@ -22,9 +23,11 @@ public interface ICertificateRepository
         CancellationToken ct = default);
 
     Task<CertificateWorkflowStatsDto> GetWorkflowStatsAsync(
+        int? campusId = null,
         CancellationToken ct = default);
 
     Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
+        int? campusId = null,
         CancellationToken ct = default);
 
     Task<CertificateResponseDto?> GenerateAsync(
@@ -83,6 +86,7 @@ public interface ICertificateRepository
         int? groupId,
         int? sectionId,
         string? search,
+        int? campusId = null,
         CancellationToken ct = default);
 
     Task<bool> DeleteAsync(

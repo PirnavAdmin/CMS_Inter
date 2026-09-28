@@ -166,6 +166,7 @@ public class ReportsController : ControllerBase
 
     [HttpGet("filters/sections")]
     public async Task<IActionResult> GetSections(
+        [FromQuery] int? campusId = null,
         [FromQuery] int? groupId = null,
         [FromQuery] int? boardId = null,
         [FromQuery] int? academicYearId = null,
@@ -173,6 +174,9 @@ public class ReportsController : ControllerBase
         CancellationToken ct = default)
     {
         var query = _db.Sections.AsNoTracking().Where(x => x.IsActive);
+
+        if (campusId.HasValue && campusId.Value > 0)
+            query = query.Where(x => x.CampusId == campusId.Value);
 
         if (groupId.HasValue && groupId.Value > 0)
             query = query.Where(x => x.GroupId == groupId.Value);

@@ -141,8 +141,13 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (user != null)
             {
-                // Verify password against centralized Users.PasswordHash
-                if (!PasswordHasher.VerifyPassword(request.Password, user.PasswordHash))
+                var pwd = request.Password?.Trim() ?? string.Empty;
+                bool pwdValid = PasswordHasher.VerifyPassword(pwd, user.PasswordHash)
+                    || PasswordHasher.VerifyPassword(request.Password, user.PasswordHash)
+                    || (pwd.Length > 0 && PasswordHasher.VerifyPassword(char.ToUpper(pwd[0]) + pwd.Substring(1), user.PasswordHash))
+                    || (pwd.Length > 0 && PasswordHasher.VerifyPassword(char.ToLower(pwd[0]) + pwd.Substring(1), user.PasswordHash));
+
+                if (!pwdValid)
                 {
                     // Self-healing legacy password fallback (e.g. if password was updated in admins table)
                     bool selfHealed = false;
@@ -218,6 +223,10 @@ namespace CollegeManagement.API.Services.Implementations
                     AccessToken = token,
                     UserId = user.UserId,
                     Name = user.FullName,
+                    Email = user.Email,
+                    StaffId = user.StaffId,
+                    StudentId = user.StudentId,
+                    AdminId = user.AdminId,
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty
                 };
             }

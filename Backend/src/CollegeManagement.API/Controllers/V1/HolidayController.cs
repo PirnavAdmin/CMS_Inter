@@ -52,11 +52,11 @@ namespace CollegeManagement.API.Controllers.V1
 
         // GET: api/v1/holidays/summary
         [HttpGet("summary")]
-        public async Task<IActionResult> GetSummary([FromQuery] int? academicYearId, [FromQuery] int? boardId)
+        public async Task<IActionResult> GetSummary([FromQuery] int? campusId, [FromQuery] int? academicYearId, [FromQuery] int? boardId)
         {
             try
             {
-                var summary = await _holidayService.GetSummaryAsync(academicYearId, boardId);
+                var summary = await _holidayService.GetSummaryAsync(campusId, academicYearId, boardId);
                 return Ok(new
                 {
                     success = true,

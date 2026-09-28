@@ -39,6 +39,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import totalStudentsIcon from "@/assets/dashboard-3d/total-students.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
 import nonTeachingStaffIcon from "@/assets/dashboard-3d/non-teaching-staff.png";
@@ -347,8 +348,10 @@ function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last yea
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { selectedCampus, selectedCampusId } = useCampusContext();
   const { selectedBoard, selectedAcademicYear } = useAcademicContext();
 
+  const campusId = selectedCampusId || selectedCampus?.id || selectedCampus?.campusId;
   const boardId = selectedBoard?.id || selectedBoard?.code || selectedBoard?.boardId;
   const academicYearId = selectedAcademicYear?.id || selectedAcademicYear?.code || selectedAcademicYear?.academicYearId;
   const todayDate = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -396,6 +399,7 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         date: todayDate,
       };
       const res = await apiClient.get(DASHBOARD_API.summary, { params });
@@ -407,7 +411,7 @@ export default function DashboardPage() {
         setSummaryState({ loading: false, error: getApiErrorMessage(err, "Failed to load summary metrics"), data: null });
       }
     }
-  }, [boardId, academicYearId, todayDate]);
+  }, [campusId, boardId, academicYearId, todayDate]);
 
   // 2. GET /api/v1/dashboard/students-overview & GET /api/v1/dashboard/admission-trend
   const fetchStudentsOverview = useCallback(async () => {
@@ -417,11 +421,13 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         date: todayDate,
       };
       const trendParams = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
       };
 
       const [overviewRes, trendRes] = await Promise.allSettled([
@@ -449,7 +455,7 @@ export default function DashboardPage() {
         setOverviewState({ loading: false, error: getApiErrorMessage(err, "Failed to load students overview"), data: null });
       }
     }
-  }, [boardId, academicYearId, todayDate]);
+  }, [campusId, boardId, academicYearId, todayDate]);
 
   // 3. GET /api/v1/dashboard/group-distribution
   const fetchGroupDistribution = useCallback(async () => {
@@ -459,6 +465,7 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
       };
       const res = await apiClient.get(DASHBOARD_API.groupDistribution, { params });
       if (groupSeq.current === seq) {
@@ -469,7 +476,7 @@ export default function DashboardPage() {
         setGroupState({ loading: false, error: getApiErrorMessage(err, "Failed to load group distribution"), data: null });
       }
     }
-  }, [boardId, academicYearId]);
+  }, [campusId, boardId, academicYearId]);
 
   // 4. GET /api/v1/dashboard/students-attendance-today
   const fetchStudentAttendance = useCallback(async () => {
@@ -490,20 +497,41 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         viewBy: viewByVal,
       };
       const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
       if (studentAttSeq.current === seq) {
         const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated;
-        setStudentAttState({ loading: false, error: null, data: unwrapped, timestamp: serverTime || "Not marked today" });
+        const serverTime = unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime || unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
+        let formattedTime = "Not marked today";
+        if (serverTime && serverTime !== "Not marked today") {
+          if (typeof serverTime === "string") {
+            if (serverTime.includes("T") || (serverTime.includes("-") && serverTime.includes(":"))) {
+              const d = new Date(serverTime);
+              formattedTime = !isNaN(d.getTime())
+                ? d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
+                : serverTime;
+            } else if (serverTime !== "Today") {
+              formattedTime = serverTime;
+            } else if (presentCount > 0) {
+              formattedTime = "Today";
+            }
+          } else {
+            formattedTime = String(serverTime);
+          }
+        } else if (presentCount > 0) {
+          formattedTime = "Today";
+        }
+        setStudentAttState({ loading: false, error: null, data: unwrapped, timestamp: formattedTime });
       }
     } catch (err) {
       if (studentAttSeq.current === seq) {
         setStudentAttState((prev) => ({ ...prev, loading: false, error: getApiErrorMessage(err, "Failed to load student attendance"), data: null }));
       }
     }
-  }, [boardId, academicYearId, studentView]);
+  }, [campusId, boardId, academicYearId, studentView]);
 
   // 5. GET /api/v1/dashboard/staff-attendance-today (Do NOT send academicYearId)
   const fetchStaffAttendance = useCallback(async () => {
@@ -521,21 +549,42 @@ export default function DashboardPage() {
 
       const params = {
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         staffType: staffTypeVal,
         date: todayDate,
       };
       const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
       if (staffAttSeq.current === seq) {
         const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated;
-        setStaffAttState({ loading: false, error: null, data: unwrapped, timestamp: serverTime || "Not marked today" });
+        const serverTime = unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime || unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
+        let formattedTime = "Not marked today";
+        if (serverTime && serverTime !== "Not marked today") {
+          if (typeof serverTime === "string") {
+            if (serverTime.includes("T") || (serverTime.includes("-") && serverTime.includes(":"))) {
+              const d = new Date(serverTime);
+              formattedTime = !isNaN(d.getTime())
+                ? d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
+                : serverTime;
+            } else if (serverTime !== "Today") {
+              formattedTime = serverTime;
+            } else if (presentCount > 0) {
+              formattedTime = "Today";
+            }
+          } else {
+            formattedTime = String(serverTime);
+          }
+        } else if (presentCount > 0) {
+          formattedTime = "Today";
+        }
+        setStaffAttState({ loading: false, error: null, data: unwrapped, timestamp: formattedTime });
       }
     } catch (err) {
       if (staffAttSeq.current === seq) {
         setStaffAttState((prev) => ({ ...prev, loading: false, error: getApiErrorMessage(err, "Failed to load staff attendance"), data: null }));
       }
     }
-  }, [boardId, staffType, todayDate]);
+  }, [campusId, boardId, staffType, todayDate]);
 
   // 6. GET /api/v1/dashboard/upcoming-holidays (with fallback to /api/v1/holidays)
   const fetchUpcomingHolidays = useCallback(async () => {
@@ -545,6 +594,7 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         limit: 20,
       };
       let res;
@@ -561,7 +611,7 @@ export default function DashboardPage() {
         setHolidayState({ loading: false, error: getApiErrorMessage(err, "Failed to load upcoming holidays"), data: null });
       }
     }
-  }, [boardId, academicYearId]);
+  }, [campusId, boardId, academicYearId]);
 
   // 7. GET /api/v1/dashboard/upcoming-examinations
   const fetchUpcomingExaminations = useCallback(async () => {
@@ -571,6 +621,7 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
       };
       const res = await apiClient.get(DASHBOARD_API.upcomingExaminations, { params });
       if (examSeq.current === seq) {
@@ -581,9 +632,9 @@ export default function DashboardPage() {
         setExamState({ loading: false, error: getApiErrorMessage(err, "Failed to load upcoming examinations"), data: null });
       }
     }
-  }, [boardId, academicYearId]);
+  }, [campusId, boardId, academicYearId]);
 
-  // Board & Academic Year Context change effect -> Refresh all applicable cards
+  // Campus, Board & Academic Year Context change effect -> Refresh all applicable cards
   useEffect(() => {
     fetchSummary();
     fetchStudentsOverview();
@@ -976,9 +1027,10 @@ export default function DashboardPage() {
 
       let tone = "violet";
       const lowerType = String(type).toLowerCase();
-      if (lowerType.includes("national")) tone = "orange";
-      else if (lowerType.includes("festival")) tone = "violet";
-      else if (lowerType.includes("special")) tone = "cyan";
+      if (lowerType.includes("national") || lowerType.includes("public") || lowerType.includes("gazetted")) tone = "orange";
+      else if (lowerType.includes("festival") || lowerType.includes("religious") || lowerType.includes("cultural")) tone = "violet";
+      else if (lowerType.includes("special") || lowerType.includes("institutional") || lowerType.includes("state") || lowerType.includes("restricted")) tone = "cyan";
+      else if (lowerType.includes("vacation") || lowerType.includes("break") || lowerType.includes("term") || lowerType.includes("semester")) tone = "green";
       else tone = "blue";
 
       return {
@@ -1067,8 +1119,9 @@ export default function DashboardPage() {
         <div className="dashboard-viewing-banner">
           <Info size={16} className="dashboard-banner-icon" />
           <span>
-            You are viewing data for <strong>{selectedBoard?.name || selectedBoard?.code || "BIEAP"}</strong> •{" "}
-            <strong>Academic Year {selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || "2026–2027"}</strong>. Change Board or Academic Year to view corresponding records.
+            You are viewing data for {selectedCampus?.name ? <><strong>{selectedCampus.name}</strong> • </> : null}
+            <strong>{selectedBoard?.name || selectedBoard?.code || "BIEAP"}</strong> •{" "}
+            <strong>Academic Year {selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || "2026–2027"}</strong>. Change Campus, Board or Academic Year to view corresponding records.
           </span>
         </div>
 

@@ -29,6 +29,8 @@ namespace CollegeManagement.API.Models
         [Required]
         public int BoardId { get; set; }
 
+        public int? CampusId { get; set; } = 1;
+
         [Required]
         public int AcademicYearId { get; set; }
 

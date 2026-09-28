@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -116,6 +116,11 @@ namespace CollegeManagement.API.Models
         public bool IsPublished { get; set; }
 
         /// <summary>
+        /// Gets or sets the campus identifier.
+        /// </summary>
+        public int? CampusId { get; set; }
+
+        /// <summary>
         /// Gets or sets the created date.
         /// </summary>
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -126,6 +131,9 @@ namespace CollegeManagement.API.Models
         public DateTime? UpdatedAt { get; set; }
 
         // Navigation Properties
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
 
         [ForeignKey(nameof(StudentId))]
         public virtual Student Student { get; set; } = null!;

@@ -19,6 +19,7 @@ namespace CollegeManagement.API.DTOs.Staff
         }
 
         public string? SearchTerm { get; set; }
+        public int? CampusId { get; set; }
         public string? Department { get; set; }
         public int? DepartmentId { get; set; }
         public string? Designation { get; set; }

@@ -37,7 +37,9 @@ DELIMITER //
 -- 1. sp_GetAllMarks
 -- Retrieves all active marks with fully joined academic, subject, student, and faculty data
 -- ------------------------------------------------------------------------------------
-CREATE PROCEDURE `sp_GetAllMarks`()
+CREATE PROCEDURE `sp_GetAllMarks`(
+    IN p_CampusId INT
+)
 BEGIN
     SELECT 
         m.MarkId,
@@ -107,7 +109,8 @@ END //
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetMarkById`(
     IN p_MarkId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         m.MarkId,
@@ -177,7 +180,8 @@ END //
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetMarksByStudent`(
     IN p_StudentId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         m.MarkId,
@@ -247,7 +251,8 @@ END //
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetMarksBySubject`(
     IN p_SubjectId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         m.MarkId,
@@ -317,7 +322,8 @@ END //
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetMarksByExam`(
     IN p_ExaminationId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         m.MarkId,
@@ -389,7 +395,8 @@ CREATE PROCEDURE `sp_GetMarkByExamSubjectStudent`(
     IN p_ExaminationId INT,
     IN p_SubjectId INT,
     IN p_StudentId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         m.MarkId,
@@ -472,7 +479,8 @@ CREATE PROCEDURE `sp_AddMark`(
     IN p_IsAbsent TINYINT(1),
     IN p_Remarks VARCHAR(250),
     IN p_Status INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     DECLARE v_TotalMarks INT;
     DECLARE v_MarkId INT;
@@ -492,13 +500,12 @@ BEGIN
         ExaminationId, SubjectId, StudentId, FacultyId, RollNo, StudentName, 
         InternalMarks, PracticalMarks, TheoryMarks, TotalMarks, PassingMarks, 
         IsAbsent, Remarks, IsVerified, IsPublished, Status, IsLocked, IsActive, CreatedAt
-    )
-    VALUES (
+    , CampusId) VALUES (
         p_Board, p_BoardId, p_AcademicYearId, p_AcademicLevel, p_AcademicLevelId, p_GroupId, p_SectionId, 
         p_ExaminationId, p_SubjectId, p_StudentId, p_FacultyId, p_RollNo, p_StudentName, 
         IFNULL(p_InternalMarks, 0), IFNULL(p_PracticalMarks, 0), IFNULL(p_TheoryMarks, 0), 
-        v_TotalMarks, IFNULL(p_PassingMarks, 35), 
-        IFNULL(p_IsAbsent, 0), p_Remarks, 0, 0, IFNULL(p_Status, 1), 0, 1, UTC_TIMESTAMP()
+         v_TotalMarks, IFNULL(p_PassingMarks, 35), 
+         IFNULL(p_IsAbsent, 0), p_Remarks, 0, 0, IFNULL(p_Status, 1), 0, 1, UTC_TIMESTAMP(), p_CampusId
     );
     
     SET v_MarkId = LAST_INSERT_ID();
@@ -520,7 +527,8 @@ CREATE PROCEDURE `sp_UpdateMark`(
     IN p_Remarks VARCHAR(250),
     IN p_FacultyId INT,
     IN p_Status INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     DECLARE v_TotalMarks INT;
 
@@ -534,8 +542,7 @@ BEGIN
         SET v_TotalMarks = 0;
     END IF;
     
-    UPDATE `Marks`
-    SET InternalMarks = IFNULL(p_InternalMarks, InternalMarks), 
+    UPDATE `Marks` SET InternalMarks = IFNULL(p_InternalMarks, InternalMarks), 
         PracticalMarks = IFNULL(p_PracticalMarks, PracticalMarks),
         TheoryMarks = IFNULL(p_TheoryMarks, TheoryMarks), 
         TotalMarks = v_TotalMarks, 
@@ -556,10 +563,10 @@ END //
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_DeleteMark`(
     IN p_MarkId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    UPDATE `Marks` 
-    SET IsActive = 0, 
+    UPDATE `Marks` SET IsActive = 0, 
         UpdatedAt = UTC_TIMESTAMP() 
     WHERE MarkId = p_MarkId AND IsActive = 1;
 
@@ -568,10 +575,10 @@ END //
 
 CREATE PROCEDURE `sp_RestoreMark`(
     IN p_MarkId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    UPDATE `Marks` 
-    SET IsActive = 1, 
+    UPDATE `Marks` SET IsActive = 1, 
         UpdatedAt = UTC_TIMESTAMP() 
     WHERE MarkId = p_MarkId;
 
@@ -589,8 +596,7 @@ CREATE PROCEDURE `sp_VerifyMarks`(
     IN p_VerifiedBy VARCHAR(100)
 )
 BEGIN
-    UPDATE `Marks`
-    SET IsVerified = 1, 
+    UPDATE `Marks` SET IsVerified = 1, 
         Status = 2, -- VERIFIED
         VerifiedBy = TRIM(p_VerifiedBy), 
         VerifiedAt = UTC_TIMESTAMP(), 
@@ -613,8 +619,7 @@ CREATE PROCEDURE `sp_PublishMarks`(
     IN p_SectionId INT
 )
 BEGIN
-    UPDATE `Marks`
-    SET IsPublished = 1, 
+    UPDATE `Marks` SET IsPublished = 1, 
         PublishedAt = UTC_TIMESTAMP(), 
         UpdatedAt = UTC_TIMESTAMP()
     WHERE ExaminationId = p_ExaminationId 
@@ -642,7 +647,8 @@ CREATE PROCEDURE `sp_GetFilteredEvaluations`(
     IN p_Status INT,
     IN p_Offset INT,
     IN p_Limit INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         m.MarkId,
@@ -743,8 +749,7 @@ CREATE PROCEDURE `sp_GetFilteredEvaluationsCount`(
 )
 BEGIN
     SELECT COUNT(*) AS TotalCount
-    FROM `Marks` m
-    WHERE m.IsActive = 1
+    FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.IsActive = 1
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR m.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR m.AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR m.AcademicLevelId = p_AcademicLevelId)
@@ -765,7 +770,8 @@ CREATE PROCEDURE `sp_GetEvaluationMarksList`(
     IN p_SubjectId INT,
     IN p_SectionId INT,
     IN p_ExaminationId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         m.MarkId,
@@ -851,10 +857,10 @@ CREATE PROCEDURE `sp_UpdateEvaluationStatus`(
     IN p_TargetStatus INT,
     IN p_UserId INT,
     IN p_Remarks VARCHAR(250)
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    UPDATE `Marks`
-    SET Status = p_TargetStatus,
+    UPDATE `Marks` SET Status = p_TargetStatus,
         Remarks = COALESCE(p_Remarks, Remarks),
         IsVerified = IF(p_TargetStatus = 2, 1, IsVerified),
         VerifiedBy = IF(p_TargetStatus = 2, CAST(p_UserId AS CHAR), VerifiedBy),
@@ -879,10 +885,10 @@ CREATE PROCEDURE `sp_ToggleEvaluationLock`(
     IN p_SectionId INT,
     IN p_ExaminationId INT,
     IN p_IsLocked TINYINT(1)
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    UPDATE `Marks`
-    SET IsLocked = p_IsLocked,
+    UPDATE `Marks` SET IsLocked = p_IsLocked,
         UpdatedAt = UTC_TIMESTAMP()
     WHERE SubjectId = p_SubjectId
       AND (p_SectionId IS NULL OR p_SectionId = 0 OR SectionId = p_SectionId)
@@ -932,15 +938,15 @@ END //
 CREATE PROCEDURE `sp_GetEvaluationReadiness`(
     IN p_ExaminationId INT,
     IN p_SectionId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         s.SubjectId,
         s.SubjectName,
         (
             SELECT m.FacultyId 
-            FROM `Marks` m 
-            WHERE m.ExaminationId = p_ExaminationId 
+            FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.ExaminationId = p_ExaminationId 
               AND m.SubjectId = s.SubjectId 
               AND (p_SectionId IS NULL OR p_SectionId = 0 OR m.SectionId = p_SectionId)
               AND m.IsActive = 1 
@@ -948,8 +954,7 @@ BEGIN
         ) AS FacultyId,
         (
             SELECT m.MarkId 
-            FROM `Marks` m 
-            WHERE m.ExaminationId = p_ExaminationId 
+            FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.ExaminationId = p_ExaminationId 
               AND m.SubjectId = s.SubjectId 
               AND (p_SectionId IS NULL OR p_SectionId = 0 OR m.SectionId = p_SectionId)
               AND m.IsActive = 1 
@@ -957,42 +962,36 @@ BEGIN
         ) AS EvaluationId,
         CASE 
             WHEN NOT EXISTS (
-                SELECT 1 FROM `Marks` m 
-                WHERE m.ExaminationId = p_ExaminationId 
+                SELECT 1 FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.ExaminationId = p_ExaminationId 
                   AND m.SubjectId = s.SubjectId 
                   AND (p_SectionId IS NULL OR p_SectionId = 0 OR m.SectionId = p_SectionId)
                   AND m.IsActive = 1
             ) THEN 'MISSING'
             WHEN (
-                SELECT COUNT(*) FROM `Marks` m 
-                WHERE m.ExaminationId = p_ExaminationId 
+                SELECT COUNT(*) FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.ExaminationId = p_ExaminationId 
                   AND m.SubjectId = s.SubjectId 
                   AND (p_SectionId IS NULL OR p_SectionId = 0 OR m.SectionId = p_SectionId)
                   AND m.Status = 3 AND m.IsActive = 1
             ) = (
-                SELECT COUNT(*) FROM `Marks` m 
-                WHERE m.ExaminationId = p_ExaminationId 
+                SELECT COUNT(*) FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.ExaminationId = p_ExaminationId 
                   AND m.SubjectId = s.SubjectId 
                   AND (p_SectionId IS NULL OR p_SectionId = 0 OR m.SectionId = p_SectionId)
                   AND m.IsActive = 1
             ) THEN 'APPROVED'
             WHEN EXISTS (
-                SELECT 1 FROM `Marks` m 
-                WHERE m.ExaminationId = p_ExaminationId 
+                SELECT 1 FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.ExaminationId = p_ExaminationId 
                   AND m.SubjectId = s.SubjectId 
                   AND (p_SectionId IS NULL OR p_SectionId = 0 OR m.SectionId = p_SectionId)
                   AND m.Status = 4 AND m.IsActive = 1
             ) THEN 'REJECTED'
             WHEN EXISTS (
-                SELECT 1 FROM `Marks` m 
-                WHERE m.ExaminationId = p_ExaminationId 
+                SELECT 1 FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.ExaminationId = p_ExaminationId 
                   AND m.SubjectId = s.SubjectId 
                   AND (p_SectionId IS NULL OR p_SectionId = 0 OR m.SectionId = p_SectionId)
                   AND m.Status = 1 AND m.IsActive = 1
             ) THEN 'SUBMITTED'
             WHEN EXISTS (
-                SELECT 1 FROM `Marks` m 
-                WHERE m.ExaminationId = p_ExaminationId 
+                SELECT 1 FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.ExaminationId = p_ExaminationId 
                   AND m.SubjectId = s.SubjectId 
                   AND (p_SectionId IS NULL OR p_SectionId = 0 OR m.SectionId = p_SectionId)
                   AND m.Status = 2 AND m.IsActive = 1
@@ -1057,7 +1056,8 @@ CREATE PROCEDURE `sp_GetFacultyEvaluationStudents`(
     IN p_SubjectId INT,
     IN p_SectionId INT,
     IN p_ExaminationId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     -- Result Set 1: Evaluation Header & Subject Maxima
     SELECT 
@@ -1128,8 +1128,7 @@ CREATE PROCEDURE `sp_ExecuteGlobalApproval`(
     IN p_UserId INT
 )
 BEGIN
-    UPDATE `Marks`
-    SET Status = 3, -- APPROVED
+    UPDATE `Marks` SET Status = 3, -- APPROVED
         ApprovedBy = p_UserId,
         ApprovedAt = UTC_TIMESTAMP(),
         UpdatedAt = UTC_TIMESTAMP()

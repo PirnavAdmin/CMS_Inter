@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Result
 {
     public class PublishResultRequestDto
     {
+        public int? CampusId { get; set; }
         [Required]
         public int BoardId { get; set; }
         [Required]

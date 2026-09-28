@@ -151,10 +151,10 @@ export const timetableGrid = {
   days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
   periods: ["09:00 - 09:50", "09:50 - 10:40", "11:00 - 11:50", "11:50 - 12:40", "13:30 - 14:20", "14:20 - 15:10"],
   cells: {
-    Monday: ["Mathematics IA|Dr. Anitha Rao|R-101", "Physics|Mr. Suresh Kumar|Lab-1", "English|Ms. Priya Sharma|R-101", "Chemistry|Mrs. Lakshmi Devi|Lab-2", "Library|-|Library", "Mathematics IB|Dr. Anitha Rao|R-101"],
+    Monday: ["Mathematics IA|Dr. Anitha Rao|R-101", "Physics|Mr. Suresh Kumar|Lab-1", "English|Ms. Priya Sharma|R-101", "Chemistry|Mrs. Lakshmi Devi|Lab-2", "Study Hour|-|Study Hall", "Mathematics IB|Dr. Anitha Rao|R-101"],
     Tuesday: ["Physics|Mr. Suresh Kumar|R-102", "Chemistry|Mrs. Lakshmi Devi|Lab-2", "Mathematics IA|Dr. Anitha Rao|R-101", "English|Ms. Priya Sharma|R-101", "Sports|-|Ground", "Physics Practical|Mr. Suresh Kumar|Lab-1"],
     Wednesday: ["English|Ms. Priya Sharma|R-101", "Mathematics IA|Dr. Anitha Rao|R-101", "Botany|Dr. Karthik Nair|Lab-3", "Physics|Mr. Suresh Kumar|R-102", "Chemistry|Mrs. Lakshmi Devi|Lab-2", "Mentoring|Dr. Anitha Rao|R-101"],
-    Thursday: ["Chemistry|Mrs. Lakshmi Devi|Lab-2", "English|Ms. Priya Sharma|R-101", "Physics|Mr. Suresh Kumar|R-102", "Mathematics IB|Dr. Anitha Rao|R-101", "Computer Science|Mr. Ravi Teja|Lab-4", "Library|-|Library"],
+    Thursday: ["Chemistry|Mrs. Lakshmi Devi|Lab-2", "English|Ms. Priya Sharma|R-101", "Physics|Mr. Suresh Kumar|R-102", "Mathematics IB|Dr. Anitha Rao|R-101", "Computer Science|Mr. Ravi Teja|Lab-4", "Study Hour|-|Study Hall"],
     Friday: ["Mathematics IA|Dr. Anitha Rao|R-101", "Botany|Dr. Karthik Nair|Lab-3", "Chemistry Practical|Mrs. Lakshmi Devi|Lab-2", "English|Ms. Priya Sharma|R-101", "Physics|Mr. Suresh Kumar|R-102", "Sports|-|Ground"],
     Saturday: ["Revision|Dr. Anitha Rao|R-101", "Physics|Mr. Suresh Kumar|R-102", "Mathematics IB|Dr. Anitha Rao|R-101", "Chemistry|Mrs. Lakshmi Devi|Lab-2", "-|-|-", "-|-|-"],
   },

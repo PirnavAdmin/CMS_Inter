@@ -38,6 +38,20 @@ namespace CollegeManagement.API.Controllers.V1
             _logger = logger;
         }
 
+        private int ResolveCampusId(int? explicitlyProvided = null)
+        {
+            if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
+                return explicitlyProvided.Value;
+
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
+                int.TryParse(headerVal, out var campusId) && campusId > 0)
+            {
+                return campusId;
+            }
+
+            return 1;
+        }
+
         #region Lookups & Metadata APIs
 
         /// <summary>
@@ -91,6 +105,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ExaminationResponse>> CreateExamination([FromBody] CreateExaminationRequest request)
         {
+            request.CampusId = ResolveCampusId(request.CampusId);
             _logger.LogInformation("Creating examination: {ExamName}", request.ExamName);
             var result = await _examinationService.CreateExaminationAsync(request);
 
@@ -112,6 +127,11 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<ExaminationResponse>>> GetExaminations([FromQuery] ExaminationSearchRequestDto filter)
         {
+            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+            {
+                filter.CampusId = ResolveCampusId();
+            }
+
             _logger.LogInformation("Fetching examinations with filter: BoardId={BoardId}, YearId={YearId}, LevelId={LevelId}, GroupId={GroupId}, Status={Status}",
                 filter.BoardId, filter.AcademicYearId, filter.AcademicLevelId, filter.GroupId, filter.Status);
             var result = await _examinationService.GetExaminationsAsync(filter);
@@ -188,6 +208,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ExaminationResponse>> UpdateExamination(int examinationId, [FromBody] UpdateExaminationRequest request)
         {
+            request.CampusId = ResolveCampusId(request.CampusId);
             _logger.LogInformation("Updating examination ID: {Id}", examinationId);
             var result = await _examinationService.UpdateExaminationAsync(examinationId, request);
             if (result == null) return NotFound(new { message = "Examination not found." });
@@ -327,6 +348,7 @@ namespace CollegeManagement.API.Controllers.V1
             var createdList = new List<ExamScheduleResponse>();
             foreach (var item in scheduleRequests)
             {
+                item.CampusId = ResolveCampusId(item.CampusId);
                 if (item.ExaminationId <= 0 && effectiveExamId > 0)
                 {
                     item.ExaminationId = effectiveExamId;
@@ -398,6 +420,7 @@ namespace CollegeManagement.API.Controllers.V1
             [FromRoute] int examScheduleId,
             [FromBody] UpdateExamScheduleRequest request)
         {
+            request.CampusId = ResolveCampusId(request.CampusId);
             _logger.LogInformation("Updating schedule ID: {Id} for Examination ID: {ExamId}", examScheduleId, examinationId);
             var result = await _examinationService.UpdateExamScheduleAsync(examScheduleId, request);
             if (result == null) return NotFound(new { message = "Schedule not found." });

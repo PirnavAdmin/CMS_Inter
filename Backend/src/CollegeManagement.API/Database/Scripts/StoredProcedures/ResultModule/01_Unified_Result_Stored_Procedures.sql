@@ -35,14 +35,14 @@ CREATE PROCEDURE `sp_ProcessResults`(
     IN p_GroupId INT,
     IN p_ExamId INT,
     IN p_PublishDate DATETIME
-)
+,
+    IN p_CampusId INT)
 BEGIN
     DECLARE v_PublishDate DATETIME;
     SET v_PublishDate = COALESCE(p_PublishDate, UTC_TIMESTAMP());
 
     -- 1. Delete any existing un-published results for this exam context before re-processing
-    DELETE FROM `Results`
-    WHERE ExamId = p_ExamId
+    DELETE FROM `Results` WHERE (p_CampusId IS NULL OR CampusId = p_CampusId) AND  ExamId = p_ExamId
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR AcademicLevelId = p_AcademicLevelId)
@@ -110,8 +110,7 @@ BEGIN
       AND (p_GroupId IS NULL OR p_GroupId = 0 OR m.GroupId = p_GroupId)
       AND m.IsActive = 1
       AND NOT EXISTS (
-          SELECT 1 FROM `Results` r 
-          WHERE r.StudentId = m.StudentId 
+          SELECT 1 FROM `Results` r WHERE (p_CampusId IS NULL OR r.CampusId = p_CampusId) AND  r.StudentId = m.StudentId 
             AND r.SubjectId = m.SubjectId 
             AND r.ExamId = m.ExaminationId
       );
@@ -126,8 +125,7 @@ BEGIN
             NULLIF(COUNT(DISTINCT r.StudentId), 0), 2
         ), 0.00) AS PassPercentage,
         COALESCE(ROUND(AVG(r.TotalMarks), 2), 0.00) AS AverageMarks
-    FROM `Results` r
-    WHERE r.ExamId = p_ExamId
+    FROM `Results` r WHERE (p_CampusId IS NULL OR r.CampusId = p_CampusId) AND  r.ExamId = p_ExamId
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR r.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR r.AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR r.AcademicLevelId = p_AcademicLevelId)
@@ -145,10 +143,10 @@ CREATE PROCEDURE `sp_PublishResults`(
     IN p_GroupId INT,
     IN p_ExamId INT,
     IN p_PublishDate DATETIME
-)
+,
+    IN p_CampusId INT)
 BEGIN
-    UPDATE `Results`
-    SET IsPublished = 1,
+    UPDATE `Results` SET IsPublished = 1,
         PublishedDate = COALESCE(p_PublishDate, UTC_TIMESTAMP()),
         UpdatedAt = UTC_TIMESTAMP()
     WHERE ExamId = p_ExamId
@@ -173,7 +171,8 @@ CREATE PROCEDURE `sp_GetResults`(
     IN p_Search VARCHAR(150),
     IN p_PageNumber INT,
     IN p_PageSize INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     DECLARE v_Offset INT DEFAULT 0;
 
@@ -269,7 +268,8 @@ CREATE PROCEDURE `sp_GetStudentResult`(
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     -- Result Set 1: Student Header & Overall Summary
     SELECT 
@@ -297,11 +297,11 @@ BEGIN
             ELSE 'F'
         END AS OverallGrade,
         CASE 
-            WHEN EXISTS (SELECT 1 FROM `Results` rx WHERE rx.StudentId = p_StudentId AND rx.ExamId = p_ExamId AND rx.ResultStatus = 'Fail') THEN 'FAIL'
+            WHEN EXISTS (SELECT 1 FROM `Results` rx WHERE (p_CampusId IS NULL OR rx.CampusId = p_CampusId) AND  rx.StudentId = p_StudentId AND rx.ExamId = p_ExamId AND rx.ResultStatus = 'Fail') THEN 'FAIL'
             ELSE 'PASS'
         END AS FinalResult,
         CASE 
-            WHEN EXISTS (SELECT 1 FROM `Results` rx WHERE rx.StudentId = p_StudentId AND rx.ExamId = p_ExamId AND rx.ResultStatus = 'Fail') THEN 'Fail'
+            WHEN EXISTS (SELECT 1 FROM `Results` rx WHERE (p_CampusId IS NULL OR rx.CampusId = p_CampusId) AND  rx.StudentId = p_StudentId AND rx.ExamId = p_ExamId AND rx.ResultStatus = 'Fail') THEN 'Fail'
             ELSE 'Pass'
         END AS ResultStatus,
         MAX(r.IsPublished) AS IsPublished,
@@ -351,8 +351,7 @@ BEGIN
         SELECT 
             r.StudentId,
             DENSE_RANK() OVER (ORDER BY SUM(r.TotalMarks) DESC) AS ClassRank
-        FROM `Results` r
-        WHERE r.ExamId = p_ExamId
+        FROM `Results` r WHERE (p_CampusId IS NULL OR r.CampusId = p_CampusId) AND  r.ExamId = p_ExamId
           AND (p_BoardId IS NULL OR p_BoardId = 0 OR r.BoardId = p_BoardId)
           AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR r.AcademicYearId = p_AcademicYearId)
           AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR r.AcademicLevelId = p_AcademicLevelId)
@@ -373,7 +372,8 @@ CREATE PROCEDURE `sp_GetRankList`(
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         DENSE_RANK() OVER (ORDER BY SUM(r.TotalMarks) DESC) AS `Rank`,
@@ -399,11 +399,11 @@ BEGIN
             ELSE 'F'
         END AS Grade,
         CASE 
-            WHEN EXISTS (SELECT 1 FROM `Results` rx WHERE rx.StudentId = r.StudentId AND rx.ExamId = p_ExamId AND rx.ResultStatus = 'Fail') THEN 'FAIL'
+            WHEN EXISTS (SELECT 1 FROM `Results` rx WHERE (p_CampusId IS NULL OR rx.CampusId = p_CampusId) AND  rx.StudentId = r.StudentId AND rx.ExamId = p_ExamId AND rx.ResultStatus = 'Fail') THEN 'FAIL'
             ELSE 'PASS'
         END AS Result,
         CASE 
-            WHEN EXISTS (SELECT 1 FROM `Results` rx WHERE rx.StudentId = r.StudentId AND rx.ExamId = p_ExamId AND rx.ResultStatus = 'Fail') THEN 'Fail'
+            WHEN EXISTS (SELECT 1 FROM `Results` rx WHERE (p_CampusId IS NULL OR rx.CampusId = p_CampusId) AND  rx.StudentId = r.StudentId AND rx.ExamId = p_ExamId AND rx.ResultStatus = 'Fail') THEN 'Fail'
             ELSE 'Pass'
         END AS ResultStatus
     FROM `Results` r
@@ -432,7 +432,8 @@ CREATE PROCEDURE `sp_GetFailedStudents`(
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         r.StudentId,
@@ -472,7 +473,8 @@ CREATE PROCEDURE `sp_GetResultStatistics`(
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         COUNT(DISTINCT r.StudentId) AS TotalStudents,
@@ -489,8 +491,7 @@ BEGIN
         COUNT(DISTINCT CASE WHEN r.TotalMarks >= 60 AND r.TotalMarks < 75 THEN r.StudentId END) AS FirstClassCount,
         COUNT(DISTINCT CASE WHEN r.TotalMarks >= 50 AND r.TotalMarks < 60 THEN r.StudentId END) AS SecondClassCount,
         COUNT(DISTINCT CASE WHEN r.TotalMarks >= 35 AND r.TotalMarks < 50 THEN r.StudentId END) AS ThirdClassCount
-    FROM `Results` r
-    WHERE (p_BoardId IS NULL OR p_BoardId = 0 OR r.BoardId = p_BoardId)
+    FROM `Results` r WHERE (p_CampusId IS NULL OR r.CampusId = p_CampusId) AND  ((p_CampusId IS NULL OR r.CampusId = p_CampusId) AND p_BoardId IS NULL OR p_BoardId = 0 OR r.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR r.AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR r.AcademicLevelId = p_AcademicLevelId)
       AND (p_GroupId IS NULL OR p_GroupId = 0 OR r.GroupId = p_GroupId)
@@ -507,7 +508,8 @@ CREATE PROCEDURE `sp_GetResultAnalysis`(
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     -- Result Set 1: Overall Analysis
     SELECT 
@@ -521,8 +523,7 @@ BEGIN
         COALESCE(ROUND(AVG(r.TotalMarks), 2), 0.00) AS AverageMarks,
         COALESCE(MAX(r.TotalMarks), 0.00) AS HighestMarks,
         COALESCE(MIN(r.TotalMarks), 0.00) AS LowestMarks
-    FROM `Results` r
-    WHERE (p_BoardId IS NULL OR p_BoardId = 0 OR r.BoardId = p_BoardId)
+    FROM `Results` r WHERE (p_CampusId IS NULL OR r.CampusId = p_CampusId) AND  ((p_CampusId IS NULL OR r.CampusId = p_CampusId) AND p_BoardId IS NULL OR p_BoardId = 0 OR r.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR r.AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR r.AcademicLevelId = p_AcademicLevelId)
       AND (p_GroupId IS NULL OR p_GroupId = 0 OR r.GroupId = p_GroupId)
@@ -565,7 +566,8 @@ CREATE PROCEDURE `sp_DownloadMemo`(
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         r.ResultId,
@@ -624,7 +626,8 @@ CREATE PROCEDURE `sp_RequestRevaluation`(
     IN p_StudentId INT,
     IN p_SubjectId INT,
     IN p_Reason VARCHAR(500)
-)
+,
+    IN p_CampusId INT)
 BEGIN
     DECLARE v_OldMarks DECIMAL(5,2);
 
@@ -673,7 +676,8 @@ END //
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetRevaluationStatus`(
     IN p_RevaluationId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         rev.RevaluationId,
@@ -713,7 +717,8 @@ CREATE PROCEDURE `sp_GetResultDashboard`(
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         COUNT(DISTINCT m.StudentId) AS TotalResults,
@@ -760,7 +765,8 @@ CREATE PROCEDURE `sp_UpdateResult`(
     IN p_PracticalMarks DECIMAL(5,2),
     IN p_ExternalMarks DECIMAL(5,2),
     IN p_UpdatedAt DATETIME
-)
+,
+    IN p_CampusId INT)
 BEGIN
     DECLARE v_TotalMarks DECIMAL(5,2);
     DECLARE v_PassingMarks INT;
@@ -776,8 +782,7 @@ BEGIN
     LEFT JOIN `Subjects` s ON s.SubjectId = r.SubjectId
     WHERE r.ResultId = p_ResultId;
 
-    UPDATE `Results`
-    SET InternalMarks = IFNULL(p_InternalMarks, InternalMarks),
+    UPDATE `Results` SET InternalMarks = IFNULL(p_InternalMarks, InternalMarks),
         PracticalMarks = IFNULL(p_PracticalMarks, PracticalMarks),
         ExternalMarks = IFNULL(p_ExternalMarks, ExternalMarks),
         TotalMarks = v_TotalMarks,
@@ -810,7 +815,8 @@ CREATE PROCEDURE `sp_DownloadResultsPdf`(
     IN p_AcademicLevelId INT,
     IN p_GroupId INT,
     IN p_ExamId INT
-)
+,
+    IN p_CampusId INT)
 BEGIN
     SELECT 
         r.ResultId,

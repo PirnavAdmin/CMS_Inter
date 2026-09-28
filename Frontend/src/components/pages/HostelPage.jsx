@@ -6834,9 +6834,81 @@ export default function HostelPage() {
     }, [allocations, modal.mode, modal.data?.id]);
 
     // Student candidate suggestions from candidateStudents API (real Students table)
+    // Filtered strictly by Residential === "Hostel"
     const allCandidates = useMemo(() => {
       const list = [];
       const seen = new Set();
+
+      // Admissions lookup map for cross-referencing candidate student details
+      const admissionsMap = new Map();
+      if (Array.isArray(candidateAdmissions)) {
+        candidateAdmissions.forEach((ca) => {
+          const sId = ca.studentId || ca.studentAdmissionId || ca.admissionId || ca.id;
+          if (sId) admissionsMap.set(String(sId), ca);
+          const admNo = ca.admissionNumber || ca.admissionNo || ca.regNumber || ca.regNo;
+          if (admNo) admissionsMap.set(String(admNo).trim().toLowerCase(), ca);
+        });
+      }
+
+      let localAdmissionsMap = null;
+      let localAssignments = null;
+      try {
+        const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
+        if (Array.isArray(localAdms) && localAdms.length > 0) {
+          localAdmissionsMap = new Map();
+          localAdms.forEach((entry) => {
+            const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+            const sId = x.studentId || x.admissionId || x.id;
+            if (sId) localAdmissionsMap.set(String(sId), x);
+            const admNo = x.admissionNo || x.admissionNumber;
+            if (admNo) localAdmissionsMap.set(String(admNo).trim().toLowerCase(), x);
+          });
+        }
+        localAssignments = JSON.parse(localStorage.getItem("studentAcademicAssignments") || "{}");
+      } catch {
+        // ignore storage errors
+      }
+
+      const isHostelStudent = (student, admission) => {
+        const sId = student?.studentId || student?.id;
+        const admNo = String(student?.admissionNo || student?.admissionNumber || admission?.admissionNo || admission?.admissionNumber || "").trim().toLowerCase();
+        const adm = admission || (sId ? admissionsMap.get(String(sId)) : null) || (admNo ? admissionsMap.get(admNo) : null) || (sId && localAdmissionsMap ? localAdmissionsMap.get(String(sId)) : null) || (admNo && localAdmissionsMap ? localAdmissionsMap.get(admNo) : null);
+        const assign = (sId && localAssignments ? localAssignments[sId] : null) || (student?.id && localAssignments ? localAssignments[student.id] : null);
+
+        const raw =
+          student?.residential ??
+          student?.Residential ??
+          student?.studentCategory ??
+          student?.StudentCategory ??
+          student?.studentType ??
+          student?.StudentType ??
+          student?.residentialType ??
+          student?.ResidentialType ??
+          student?.residentialStatus ??
+          student?.ResidentialStatus ??
+          student?.residence ??
+          student?.Residence ??
+          assign?.residential ??
+          assign?.Residential ??
+          assign?.studentCategory ??
+          assign?.StudentCategory ??
+          assign?.studentType ??
+          assign?.StudentType ??
+          adm?.residential ??
+          adm?.Residential ??
+          adm?.studentCategory ??
+          adm?.StudentCategory ??
+          adm?.studentType ??
+          adm?.StudentType ??
+          adm?.residentialType ??
+          adm?.ResidentialType ??
+          adm?.residence ??
+          adm?.Residence ??
+          "";
+
+        const val = String(raw).trim().toLowerCase();
+        return val === "hostel" || val === "residential";
+      };
 
       // 1. Primary: candidateStudents fetched from /api/v1/students
       if (Array.isArray(candidateStudents) && candidateStudents.length > 0) {
@@ -6844,11 +6916,11 @@ export default function HostelPage() {
           const sId = st.studentId || st.id;
           if (!sId) return;
           const admNo = st.admissionNo || `ADM-${sId}`;
-          const fullName = st.studentName || [st.firstName, st.middleName, st.lastName].filter(Boolean).join(" ") || `Student #${admNo}`;
           const isAllocated = activeStudentIds.has(String(sId)) || activeStudentIds.has(String(admNo));
 
-          if (!isAllocated && !seen.has(String(sId))) {
+          if (!isAllocated && !seen.has(String(sId)) && isHostelStudent(st, null)) {
             seen.add(String(sId));
+            const fullName = st.studentName || [st.firstName, st.middleName, st.lastName].filter(Boolean).join(" ") || `Student #${admNo}`;
             list.push({
               id: sId,
               studentId: sId,
@@ -6865,14 +6937,14 @@ export default function HostelPage() {
       // 2. Secondary: candidateAdmissions if available
       if (Array.isArray(candidateAdmissions) && candidateAdmissions.length > 0) {
         candidateAdmissions.forEach((ca, idx) => {
-          const sId = ca.studentId;
+          const sId = ca.studentId || ca.studentAdmissionId || ca.admissionId || ca.id;
           if (!sId) return;
-          const admNo = ca.admissionNumber || ca.admissionNo || `ADM-${sId}`;
-          const fullName = [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.studentName || `Student #${admNo}`;
+          const admNo = ca.admissionNumber || ca.admissionNo || ca.regNumber || ca.regNo || `ADM-${sId}`;
           const isAllocated = activeStudentIds.has(String(sId)) || activeStudentIds.has(String(admNo));
 
-          if (!isAllocated && !seen.has(String(sId))) {
+          if (!isAllocated && !seen.has(String(sId)) && isHostelStudent(null, ca)) {
             seen.add(String(sId));
+            const fullName = [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.studentName || ca.name || `Student #${admNo}`;
             list.push({
               key: `cand-${sId}-${admNo}-${idx}`,
               id: sId,
@@ -6887,6 +6959,23 @@ export default function HostelPage() {
         });
       }
 
+      // Fallback only if no candidates were loaded at all (and filter allocations)
+      if (list.length === 0 && (!candidateStudents || candidateStudents.length === 0) && (!candidateAdmissions || candidateAdmissions.length === 0)) {
+        allocations.forEach((a, idx) => {
+          const admNo = a.admissionNo || `ADM-${a.studentId || a.id || idx}`;
+          if (admNo && !seen.has(String(admNo)) && isHostelStudent(a, null)) {
+            seen.add(String(admNo));
+            list.push({
+              key: `alloc-cand-${a.id || a.studentId || idx}-${admNo}`,
+              id: a.studentId || a.id || admNo,
+              studentId: a.studentId || a.id,
+              name: a.studentName || a.name || `Student #${admNo}`,
+              admissionNo: admNo,
+              className: "Resident Hosteller",
+            });
+          }
+        });
+      }
       // 3. Fallback for edit mode: keep currently selected student
       if (modal.mode === "edit" && modal.data?.studentId && !seen.has(String(modal.data.studentId))) {
         list.push({
@@ -6900,7 +6989,7 @@ export default function HostelPage() {
       }
 
       return list;
-    }, [candidateStudents, candidateAdmissions, activeStudentIds, modal.mode, modal.data]);
+    }, [candidateStudents, candidateAdmissions, allocations, activeStudentIds, modal.mode, modal.data]);
 
     const filteredCandidates = useMemo(() => {
       if (!studentSearch) return allCandidates;

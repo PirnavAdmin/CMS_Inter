@@ -73,4 +73,6 @@ public class CertificateResponseDto
     public string? Signature { get; set; }
 
     public bool IsActive { get; set; } = true;
+    public int? CampusId { get; set; }
+    public string? CampusName { get; set; }
 }

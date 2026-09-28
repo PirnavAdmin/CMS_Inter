@@ -62,6 +62,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_ProgramId", programId, DbType.Int32);
             parameters.Add("p_SearchTerm", searchTerm, DbType.String);
             parameters.Add("p_IsActive", filter?.IsActive, DbType.Boolean);
+            parameters.Add("p_CampusId", filter?.CampusId, DbType.Int32);
 
             return await Connection.QueryAsync<SectionResponse>(
                 "sp_GetAllSections",
@@ -93,7 +94,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_RoomId = section.RoomId,
                     p_InchargeId = section.InchargeId,
                     p_MaximumStrength = section.MaximumStrength,
-                    p_IsActive = section.IsActive
+                    p_IsActive = section.IsActive,
+                    p_CampusId = section.CampusId > 0 ? section.CampusId : 1
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -115,7 +117,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_RoomId = section.RoomId,
                     p_InchargeId = section.InchargeId,
                     p_MaximumStrength = section.MaximumStrength,
-                    p_IsActive = section.IsActive
+                    p_IsActive = section.IsActive,
+                    p_CampusId = section.CampusId > 0 ? section.CampusId : 1
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -136,7 +139,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             return await Connection.QueryAsync<SectionResponse>(
                 "sp_GetSectionsByGroupId",
-                new { p_GroupId = groupId },
+                new { p_GroupId = groupId, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -144,7 +147,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             return await Connection.QueryAsync<SectionResponse>(
                 "sp_GetSectionsByGroupProgramId",
-                new { p_GroupProgramId = groupProgramId },
+                new { p_GroupProgramId = groupProgramId, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
         }
 

@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Interfaces;
 using CollegeManagement.API.Models;
 using MailKit.Net.Smtp;
@@ -25,10 +25,12 @@ namespace CollegeManagement.API.Services.Implementations
             email.To.Add(MailboxAddress.Parse(toEmail));
             email.Subject = subject;
 
-            email.Body = new TextPart("html")
+            var bodyPart = new TextPart("html")
             {
                 Text = body
             };
+            bodyPart.ContentType.Charset = "utf-8";
+            email.Body = bodyPart;
 
             using var smtp = new SmtpClient();
 

@@ -29,6 +29,11 @@ namespace CollegeManagement.API.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? UpdatedAt { get; set; }
+
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
     }
 }
 

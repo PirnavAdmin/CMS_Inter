@@ -169,7 +169,8 @@ CREATE PROCEDURE `sp_CreateSection`(
     IN p_RoomId INT,
     IN p_InchargeId INT,
     IN p_MaximumStrength INT,
-    IN p_IsActive TINYINT(1)
+    IN p_IsActive TINYINT(1),
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_GroupId INT;
@@ -195,6 +196,7 @@ BEGIN
     END IF;
 
     INSERT INTO `Sections` (
+        CampusId,
         BoardId,
         AcademicYearId,
         AcademicLevelId,
@@ -208,6 +210,7 @@ BEGIN
         IsActive,
         CreatedAt
     ) VALUES (
+        IFNULL(p_CampusId, 1),
         p_BoardId,
         p_AcademicYearId,
         p_AcademicLevelId,
@@ -241,7 +244,8 @@ CREATE PROCEDURE `sp_UpdateSection`(
     IN p_RoomId INT,
     IN p_InchargeId INT,
     IN p_MaximumStrength INT,
-    IN p_IsActive TINYINT(1)
+    IN p_IsActive TINYINT(1),
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_GroupId INT;
@@ -267,6 +271,7 @@ BEGIN
     END IF;
 
     UPDATE `Sections` SET
+        CampusId = IFNULL(p_CampusId, CampusId),
         BoardId = p_BoardId,
         AcademicYearId = p_AcademicYearId,
         AcademicLevelId = p_AcademicLevelId,
@@ -301,10 +306,11 @@ END //
 -- Retrieves all active sections for a specific Group ID
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetSectionsByGroupId`(
-    IN p_GroupId INT
+    IN p_GroupId INT,
+    IN p_CampusId INT
 )
 BEGIN
-    CALL sp_GetAllSections(NULL, NULL, NULL, p_GroupId, NULL, NULL, NULL, 1);
+    CALL sp_GetAllSections(NULL, NULL, NULL, p_GroupId, NULL, NULL, NULL, 1, p_CampusId);
 END //
 
 -- ------------------------------------------------------------------------------------
@@ -312,10 +318,11 @@ END //
 -- Retrieves all active sections for a specific GroupProgram ID
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetSectionsByGroupProgramId`(
-    IN p_GroupProgramId INT
+    IN p_GroupProgramId INT,
+    IN p_CampusId INT
 )
 BEGIN
-    CALL sp_GetAllSections(NULL, NULL, NULL, NULL, p_GroupProgramId, NULL, NULL, 1);
+    CALL sp_GetAllSections(NULL, NULL, NULL, NULL, p_GroupProgramId, NULL, NULL, 1, p_CampusId);
 END //
 
 -- ------------------------------------------------------------------------------------

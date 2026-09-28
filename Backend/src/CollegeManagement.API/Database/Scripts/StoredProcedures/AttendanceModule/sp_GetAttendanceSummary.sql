@@ -28,10 +28,10 @@ CREATE PROCEDURE sp_GetAttendanceSummary(
 BEGIN
     SELECT 
         COUNT(a.AttendanceId) AS TotalStudents,
-        SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END) AS PresentCount,
-        SUM(CASE WHEN a.Status = 2 THEN 1 ELSE 0 END) AS AbsentCount,
-        SUM(CASE WHEN a.Status = 3 THEN 1 ELSE 0 END) AS LateCount,
-        SUM(CASE WHEN a.Status = 4 THEN 1 ELSE 0 END) AS LeaveCount,
+        COALESCE(SUM(CASE WHEN a.Status = 1 THEN 1 ELSE 0 END), 0) AS PresentCount,
+        COALESCE(SUM(CASE WHEN a.Status = 2 THEN 1 ELSE 0 END), 0) AS AbsentCount,
+        COALESCE(SUM(CASE WHEN a.Status = 3 THEN 1 ELSE 0 END), 0) AS LateCount,
+        COALESCE(SUM(CASE WHEN a.Status = 4 THEN 1 ELSE 0 END), 0) AS LeaveCount,
         ROUND(
             IFNULL(
                 (SUM(CASE WHEN a.Status = 1 OR a.Status = 3 THEN 1 ELSE 0 END) / NULLIF(COUNT(a.AttendanceId), 0)) * 100, 
@@ -39,30 +39,26 @@ BEGIN
             ), 
             2
         ) AS AttendancePercentage,
-        COALESCE(MAX(ses.AttendanceDate), p_FromDate, UTC_TIMESTAMP()) AS AttendanceDate
-    FROM attendances a
-    INNER JOIN attendance_sessions ses ON a.AttendanceSessionId = ses.AttendanceSessionId
-    INNER JOIN students s ON a.StudentId = s.StudentId
-    LEFT JOIN faculties f ON ses.FacultyId = f.Id
-    WHERE a.IsActive = 1
-      AND ses.IsActive = 1
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR ses.BoardId = p_BoardId)
-      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR ses.AcademicYearId = p_AcademicYearId)
-      AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR ses.AcademicLevelId = p_AcademicLevelId)
-      AND (p_GroupId IS NULL OR p_GroupId = 0 OR ses.GroupId = p_GroupId)
-      AND (p_SectionId IS NULL OR p_SectionId = 0 OR ses.SectionId = p_SectionId)
-      AND (p_SubjectId IS NULL OR p_SubjectId = 0 OR ses.SubjectId = p_SubjectId)
-      AND (p_FacultyId IS NULL OR p_FacultyId = 0 OR ses.FacultyId = p_FacultyId)
+        COALESCE(MAX(a.AttendanceDate), p_FromDate, UTC_TIMESTAMP()) AS AttendanceDate
+    FROM Attendances a
+    INNER JOIN Students s ON a.StudentId = s.StudentId
+    LEFT JOIN Staff st ON a.FacultyId = st.Id
+    WHERE (a.IsActive = 1 OR a.IsActive IS NULL)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR a.BoardId = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR a.AcademicYearId = p_AcademicYearId)
+      AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR a.AcademicLevelId = p_AcademicLevelId)
+      AND (p_GroupId IS NULL OR p_GroupId = 0 OR a.GroupId = p_GroupId)
+      AND (p_SectionId IS NULL OR p_SectionId = 0 OR a.SectionId = p_SectionId)
+      AND (p_SubjectId IS NULL OR p_SubjectId = 0 OR a.SubjectId = p_SubjectId)
+      AND (p_FacultyId IS NULL OR p_FacultyId = 0 OR a.FacultyId = p_FacultyId)
       AND (p_StudentId IS NULL OR p_StudentId = 0 OR a.StudentId = p_StudentId)
       AND (p_Status IS NULL OR a.Status = p_Status)
-      AND (p_FromDate IS NULL OR DATE(ses.AttendanceDate) >= DATE(p_FromDate))
-      AND (p_ToDate IS NULL OR DATE(ses.AttendanceDate) <= DATE(p_ToDate))
-      AND (p_PeriodId IS NULL OR p_PeriodId = 0 OR ses.PeriodId = p_PeriodId)
-      AND (p_TimetableId IS NULL OR p_TimetableId = 0 OR ses.TimetableId = p_TimetableId)
+      AND (p_FromDate IS NULL OR DATE(a.AttendanceDate) >= DATE(p_FromDate))
+      AND (p_ToDate IS NULL OR DATE(a.AttendanceDate) <= DATE(p_ToDate))
       AND (p_SearchText IS NULL OR p_SearchText = '' OR 
            s.StudentName LIKE CONCAT('%', p_SearchText, '%') OR 
            s.RollNo LIKE CONCAT('%', p_SearchText, '%') OR 
-           CONCAT(f.FirstName,' ',f.LastName) LIKE CONCAT('%', p_SearchText, '%'));
+           CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, '')) LIKE CONCAT('%', p_SearchText, '%'));
 END$$
 
 DELIMITER ;

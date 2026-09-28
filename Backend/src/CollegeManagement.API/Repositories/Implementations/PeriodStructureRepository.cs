@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Data;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
@@ -21,10 +21,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        public async Task<IEnumerable<PeriodStructureListItemDto>> GetAllAsync()
+        public async Task<IEnumerable<PeriodStructureListItemDto>> GetAllAsync(int? campusId = null)
         {
             return await Connection.QueryAsync<PeriodStructureListItemDto>(
                 "sp_GetPeriodStructures",
+                new { p_CampusId = campusId },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -42,6 +43,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_CreatePeriodStructure",
                 new
                 {
+                    p_CampusId = structure.CampusId,
                     p_Name = structure.Name,
                     p_DayStartTime = structure.DayStartTime,
                     p_PeriodDurationMinutes = structure.PeriodDurationMinutes,
@@ -61,6 +63,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 new
                 {
                     p_Id = structure.Id,
+                    p_CampusId = structure.CampusId,
                     p_Name = structure.Name,
                     p_DayStartTime = structure.DayStartTime,
                     p_PeriodDurationMinutes = structure.PeriodDurationMinutes,
@@ -98,22 +101,27 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task AddItemsAsync(int structureId, IEnumerable<PeriodStructureItem> items)
         {
-            foreach (var item in items)
+            var itemList = items?.ToList();
+            if (itemList == null || itemList.Count == 0) return;
+
+            var sb = new System.Text.StringBuilder();
+            var p = new DynamicParameters();
+            sb.Append("INSERT INTO `PeriodStructureItems` (`PeriodStructureId`, `SequenceOrder`, `ItemType`, `PeriodNumber`, `BreakTypeId`, `DurationMinutes`, `Name`) VALUES ");
+            for (int i = 0; i < itemList.Count; i++)
             {
-                await Connection.ExecuteAsync(
-                    "sp_CreatePeriodStructureItem",
-                    new
-                    {
-                        p_PeriodStructureId = structureId,
-                        p_SequenceOrder = item.SequenceOrder,
-                        p_ItemType = item.ItemType,
-                        p_PeriodNumber = item.PeriodNumber,
-                        p_BreakTypeId = item.BreakTypeId,
-                        p_DurationMinutes = item.DurationMinutes,
-                        p_Name = item.Name
-                    },
-                    commandType: CommandType.StoredProcedure);
+                if (i > 0) sb.Append(", ");
+                sb.Append($"(@strId{i}, @seq{i}, @type{i}, @pNum{i}, @btId{i}, @dur{i}, @name{i})");
+                var it = itemList[i];
+                p.Add($"strId{i}", structureId);
+                p.Add($"seq{i}", it.SequenceOrder);
+                p.Add($"type{i}", it.ItemType);
+                p.Add($"pNum{i}", it.PeriodNumber);
+                p.Add($"btId{i}", it.BreakTypeId);
+                p.Add($"dur{i}", it.DurationMinutes);
+                p.Add($"name{i}", it.Name);
             }
+            sb.Append(";");
+            await Connection.ExecuteAsync(sb.ToString(), p);
         }
 
         public async Task DeleteItemsByStructureIdAsync(int structureId)
@@ -130,6 +138,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_AssignPeriodStructure",
                 new
                 {
+                    p_CampusId = assignment.CampusId,
                     p_PeriodStructureId = assignment.PeriodStructureId,
                     p_BoardId = assignment.BoardId,
                     p_AcademicLevelId = assignment.AcademicLevelId,
@@ -148,7 +157,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<PeriodStructure?> GetActiveByContextAsync(int boardId, int academicLevelId, int academicYearId, int? groupId)
+        public async Task<PeriodStructure?> GetActiveByContextAsync(int boardId, int academicLevelId, int academicYearId, int? groupId, int? campusId = null)
         {
             return await Connection.QueryFirstOrDefaultAsync<PeriodStructure>(
                 "sp_GetActivePeriodStructureByContext",
@@ -157,7 +166,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_BoardId = boardId,
                     p_AcademicLevelId = academicLevelId,
                     p_AcademicYearId = academicYearId,
-                    p_GroupId = groupId
+                    p_GroupId = groupId,
+                    p_CampusId = campusId
                 },
                 commandType: CommandType.StoredProcedure);
         }

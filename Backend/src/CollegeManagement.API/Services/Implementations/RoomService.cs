@@ -157,6 +157,7 @@ namespace CollegeManagement.API.Services.Implementations
                     Building = block,
                     Floor = floor,
                     Capacity = capacity,
+                    CampusId = request.CampusId > 0 ? request.CampusId : 1,
                     RoomType = roomType,
                     IsActive = request.IsActive
                 };

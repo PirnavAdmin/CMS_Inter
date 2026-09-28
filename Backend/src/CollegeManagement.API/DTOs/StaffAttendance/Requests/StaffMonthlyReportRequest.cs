@@ -20,5 +20,6 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Requests
         public StaffType? StaffType { get; set; }
 
         public int? FacultyId { get; set; }
+        public int? CampusId { get; set; }
     }
 }

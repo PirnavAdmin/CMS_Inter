@@ -9,7 +9,13 @@ namespace CollegeManagement.API.DTOs.Staff
         public int DesignationId => Id;
         public string Name { get; set; } = string.Empty;
         public string DesignationName => Name;
-        public string DesignationCode => $"DES_{Name.ToUpper().Replace(" ", "_")}";
+        private string? _code;
+        public string DesignationCode
+        {
+            get => !string.IsNullOrWhiteSpace(_code) ? _code : (!string.IsNullOrWhiteSpace(Name) ? $"DES_{Name.ToUpper().Replace(" ", "_")}" : string.Empty);
+            set => _code = value;
+        }
+        public string Code => DesignationCode;
         public int? DepartmentId { get; set; }
         public string DepartmentName { get; set; } = string.Empty;
         public string DepartmentCode { get; set; } = string.Empty;
@@ -27,6 +33,15 @@ namespace CollegeManagement.API.DTOs.Staff
         [StringLength(100, ErrorMessage = "Designation name cannot exceed 100 characters.")]
         public string Name { get; set; } = string.Empty;
 
+        [StringLength(50, ErrorMessage = "Designation code cannot exceed 50 characters.")]
+        public string? DesignationCode { get; set; }
+
+        public string? Code
+        {
+            get => DesignationCode;
+            set => DesignationCode = value;
+        }
+
         public int? DepartmentId { get; set; }
 
         [StringLength(20)]
@@ -40,6 +55,15 @@ namespace CollegeManagement.API.DTOs.Staff
         [Required(ErrorMessage = "Designation name is required.")]
         [StringLength(100, ErrorMessage = "Designation name cannot exceed 100 characters.")]
         public string Name { get; set; } = string.Empty;
+
+        [StringLength(50, ErrorMessage = "Designation code cannot exceed 50 characters.")]
+        public string? DesignationCode { get; set; }
+
+        public string? Code
+        {
+            get => DesignationCode;
+            set => DesignationCode = value;
+        }
 
         public int? DepartmentId { get; set; }
 

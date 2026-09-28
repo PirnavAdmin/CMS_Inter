@@ -14,11 +14,15 @@ using CollegeManagement.API.Repositories.Implementations.Hostel;
 using CollegeManagement.API.Repositories.Implementations.Transport;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
+using CollegeManagement.API.Repositories.Interfaces.Payroll;
+using CollegeManagement.API.Repositories.Implementations.Payroll;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Implementations;
 using CollegeManagement.API.Services.Implementations.Hostel;
+using CollegeManagement.API.Services.Implementations.Payroll;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
+using CollegeManagement.API.Services.Interfaces.Payroll;
 using CollegeManagement.API.Services.Location;
 using CollegeManagement.API.Validators.StaffValidators;
 using FluentValidation;
@@ -111,10 +115,12 @@ builder.Services.AddValidatorsFromAssemblyContaining<CreateStaffDtoValidator>();
 #region Repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<IPermissionRepository, PermissionRepository>();
 builder.Services.AddScoped<IOtpRepository, OtpRepository>();
 builder.Services.AddScoped<IAdminRepository, AdminRepository>();
 builder.Services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
 builder.Services.AddScoped<IBoardRepository, BoardRepository>();
+builder.Services.AddScoped<ICampusRepository, CampusRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IDesignationRepository, DesignationRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
@@ -178,6 +184,9 @@ builder.Services.AddScoped<IVehicleMaintenanceRepository, VehicleMaintenanceRepo
 builder.Services.AddScoped<ITransportDashboardRepository, TransportDashboardRepository>();
 builder.Services.AddScoped<ITransportReportRepository, TransportReportRepository>();
 builder.Services.AddScoped<ITransportRepository, TransportRepository>();
+
+// Payroll Repositories
+builder.Services.AddScoped<IPayrollRepository, PayrollRepository>();
 #endregion
 
 #region Services
@@ -196,6 +205,7 @@ builder.Services.AddScoped<IAttendanceTimingConfigService, AttendanceTimingConfi
 builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
+builder.Services.AddScoped<ICampusService, CampusService>();
 builder.Services.AddScoped<ILookupCacheService, LookupCacheService>();
 builder.Services.AddScoped<IBoardExportService, BoardExportService>();
 builder.Services.AddScoped<IDesignationService, DesignationService>();
@@ -240,6 +250,10 @@ builder.Services.AddScoped<IRoomTypeConfigService, RoomTypeConfigService>();
 builder.Services.AddScoped<IRoomMasterService, RoomMasterService>();
 builder.Services.AddScoped<IHostelBedService, HostelBedService>();
 builder.Services.AddScoped<IHostelWardenAssignmentService, HostelWardenAssignmentService>();
+builder.Services.AddScoped<IHostelFeeConfigRepository, HostelFeeConfigRepository>();
+builder.Services.AddScoped<IHostelFeeConfigService, HostelFeeConfigService>();
+builder.Services.AddScoped<IFineRuleRepository, FineRuleRepository>();
+builder.Services.AddScoped<IFineRuleService, FineRuleService>();
 builder.Services.AddScoped<IHostelStudentAllocationService, HostelStudentAllocationService>();
 builder.Services.AddScoped<IHostelAttendanceService, HostelAttendanceService>();
 builder.Services.AddScoped<IHostelOutpassLeaveService, HostelOutpassLeaveService>();
@@ -260,6 +274,9 @@ builder.Services.AddScoped<ITransportDashboardService, TransportDashboardService
 builder.Services.AddScoped<ITransportReportService, TransportReportService>();
 builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
 builder.Services.AddScoped<ITransportService, TransportService>();
+
+// Payroll Service
+builder.Services.AddScoped<IPayrollService, PayrollService>();
 
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
@@ -366,6 +383,15 @@ builder.Services.AddSwaggerGen(c =>
 #endregion
 
 var app = builder.Build();
+
+if (args.Contains("--test-timetable"))
+{
+    var connStr = app.Configuration.GetConnectionString("DefaultConnection")!;
+    var tester = new CollegeManagement.API.Tests.TimetableOptimizationTester(connStr);
+    await tester.RunAsync();
+    return;
+}
+
 
 #region Pipeline Middleware
 var forwardedHeadersOptions = new ForwardedHeadersOptions
