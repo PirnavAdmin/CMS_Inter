@@ -78,12 +78,16 @@ export default function StudentProfilePage({ id }) {
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
       const admissionNo = String(read(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim();
       const studentId = String(read(record, "studentId", "StudentId", "id", "Id") ?? id);
-      const [admissionsResult, sectionsResult] = await Promise.allSettled([
+      const [studentsResult, admissionsResult, sectionsResult] = await Promise.allSettled([
+        apiClient.get(apiEndpoints.students.getAll),
         apiClient.get(apiEndpoints.admissions.getAll),
         apiClient.get(apiEndpoints.sections.list),
       ]);
+      const studentRows = studentsResult.status === "fulfilled" ? rows(studentsResult.value.data) : [];
       const admissionRows = admissionsResult.status === "fulfilled" ? rows(admissionsResult.value.data) : [];
       const sectionRows = sectionsResult.status === "fulfilled" ? rows(sectionsResult.value.data) : [];
+      const studentSummary = studentRows.find((item) => String(read(item, "studentId", "StudentId", "id", "Id") ?? "") === studentId
+        || String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === admissionNo);
       const admissionSummary = admissionRows.find((item) => String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === admissionNo || String(read(item, "studentId", "StudentId") ?? "") === studentId);
       const admissionId = read(admissionSummary, "admissionId", "AdmissionId", "studentAdmissionId", "StudentAdmissionId", "id", "Id");
       let admission = admissionSummary;
@@ -96,6 +100,9 @@ export default function StudentProfilePage({ id }) {
       // Do not let null/empty values in one API response erase populated
       // values returned by the other (notably sectionId and admissionType).
       const source = { ...record };
+      Object.entries(studentSummary || {}).forEach(([key, value]) => {
+        if ((source[key] == null || source[key] === "") && value != null && value !== "") source[key] = value;
+      });
       Object.entries(admission || {}).forEach(([key, value]) => {
         if (value != null && value !== "") source[key] = value;
       });
