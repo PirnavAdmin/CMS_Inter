@@ -155,12 +155,15 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-<<<<<<< HEAD
-    if (import.meta.env.DEV) {
-      if (!originalRequest?.skipAuthRedirect && !originalRequest?.silentAuth && !originalRequest?.optionalAuth) {
-        const errDetail = error.response?.data?.message || error.response?.data?.Message || error.response?.data?.error || error.response?.data?.title;
-=======
-    if (import.meta.env.DEV && !originalRequest?.silent && !originalRequest?.skipErrorLog) {
+    const shouldLogDevError =
+      import.meta.env.DEV &&
+      !originalRequest?.silent &&
+      !originalRequest?.skipErrorLog &&
+      !originalRequest?.skipAuthRedirect &&
+      !originalRequest?.silentAuth &&
+      !originalRequest?.optionalAuth;
+
+    if (shouldLogDevError) {
       if (!error.response) {
         console.warn("API network warning (server unreachable or proxy empty response):", {
           url: originalRequest?.url,
@@ -168,15 +171,16 @@ apiClient.interceptors.response.use(
           message: error?.message,
         });
       } else {
->>>>>>> f62c8e137d6a5409619e0d8d5e9c85bb37e6b788
+        const errDetail =
+          error.response?.data?.message ||
+          error.response?.data?.Message ||
+          error.response?.data?.error ||
+          error.response?.data?.title;
         console.error("API response error:", {
           url: originalRequest?.url,
           method: originalRequest?.method,
           status: error.response?.status,
-<<<<<<< HEAD
           message: errDetail,
-=======
->>>>>>> f62c8e137d6a5409619e0d8d5e9c85bb37e6b788
           data: error.response?.data,
         });
       }
