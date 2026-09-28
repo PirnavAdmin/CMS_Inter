@@ -235,7 +235,7 @@ public class CertificateRepository : ICertificateRepository
             string bloodGroup = dict.ContainsKey("Hydrated_BloodGroup") && dict["Hydrated_BloodGroup"] != null ? dict["Hydrated_BloodGroup"].ToString()!.Trim() : "O+";
             string mobile = dict.ContainsKey("Hydrated_Mobile") && dict["Hydrated_Mobile"] != null ? dict["Hydrated_Mobile"].ToString()!.Trim() : "";
 
-
+            int? resolvedCampusId = dict.ContainsKey("CampusId") && dict["CampusId"] != null ? Convert.ToInt32(dict["CampusId"]) : campusId;
 
             // 2. Fetch template settings using stored procedure
             string canonicalType = "Bonafide Certificate";
@@ -302,7 +302,7 @@ public class CertificateRepository : ICertificateRepository
             tParams.Add("p_CodeGuess", codeGuess, DbType.String);
             tParams.Add("p_CanonicalType", canonicalType, DbType.String);
             tParams.Add("p_RawType", certType.Trim(), DbType.String);
-            tParams.Add("p_CampusId", campusId, DbType.Int32);
+            tParams.Add("p_CampusId", resolvedCampusId, DbType.Int32);
 
             var dbTemplate = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
                 "sp_GetTemplateForCertificate",
