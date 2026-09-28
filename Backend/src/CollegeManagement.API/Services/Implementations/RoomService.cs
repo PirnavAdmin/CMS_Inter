@@ -42,10 +42,11 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new InvalidOperationException("Room number or room code is required.");
             }
 
-            var existingByCode = await _roomRepository.GetByCodeAsync(effectiveCode);
+            var campusId = dto.CampusId > 0 ? dto.CampusId : 1;
+            var existingByCode = await _roomRepository.GetByCodeAsync(effectiveCode, campusId);
             if (existingByCode != null)
             {
-                throw new InvalidOperationException($"Room with code '{effectiveCode}' already exists.");
+                throw new InvalidOperationException($"Room with code '{effectiveCode}' already exists for this campus.");
             }
 
             var entity = _mapper.Map<Room>(dto);
@@ -133,13 +134,14 @@ namespace CollegeManagement.API.Services.Implementations
                 roomCodes.Add(code);
             }
 
-            // Check if any of these room codes already exist in DB
+            // Check if any of these room codes already exist in DB for this campus
+            var campusId = request.CampusId > 0 ? request.CampusId : 1;
             foreach (var code in roomCodes)
             {
-                var existing = await _roomRepository.GetByCodeAsync(code);
+                var existing = await _roomRepository.GetByCodeAsync(code, campusId);
                 if (existing != null)
                 {
-                    throw new InvalidOperationException($"Room code '{code}' already exists. Bulk generation aborted to prevent duplicates.");
+                    throw new InvalidOperationException($"Room code '{code}' already exists for this campus. Bulk generation aborted to prevent duplicates.");
                 }
             }
 
@@ -181,14 +183,15 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new InvalidOperationException("Room number or room code is required.");
             }
 
-            var existingByCode = await _roomRepository.GetByCodeAsync(effectiveCode);
+            var campusId = dto.CampusId > 0 ? dto.CampusId : (existing.CampusId > 0 ? existing.CampusId : 1);
+            var existingByCode = await _roomRepository.GetByCodeAsync(effectiveCode, campusId);
             if (existingByCode != null && existingByCode.RoomId != id)
             {
-                throw new InvalidOperationException($"Room with code '{effectiveCode}' already exists.");
+                throw new InvalidOperationException($"Room with code '{effectiveCode}' already exists for this campus.");
             }
 
             // Check active section assignments for protection safeguards
-            var assignedSections = (await _roomRepository.GetAssignedActiveSectionsByRoomAsync(id, existing.RoomCode ?? existing.RoomNumber)).ToList();
+            var assignedSections = (await _roomRepository.GetAssignedActiveSectionsByRoomAsync(id, null)).ToList();
             if (assignedSections.Count > 0)
             {
                 var existingCode = (existing.RoomCode ?? existing.RoomNumber ?? string.Empty).Trim();
@@ -234,7 +237,7 @@ namespace CollegeManagement.API.Services.Implementations
             var existing = await _roomRepository.GetByIdAsync(id);
             if (existing == null) return false;
 
-            var assignedSections = (await _roomRepository.GetAssignedActiveSectionsByRoomAsync(id, existing.RoomCode ?? existing.RoomNumber)).ToList();
+            var assignedSections = (await _roomRepository.GetAssignedActiveSectionsByRoomAsync(id, null)).ToList();
             if (assignedSections.Count > 0)
             {
                 throw new InvalidOperationException("Cannot delete this room because it is assigned to an active section.");

@@ -148,6 +148,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var p = new DynamicParameters();
             p.Add("p_ExaminationId", examinationId);
+            p.Add("p_CampusId", 0);
 
             var row = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_GetExaminationById",
@@ -463,7 +464,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StartTime = startTime.ToTimeSpan(),
                     p_EndTime = endTime.ToTimeSpan(),
                     p_Hall = hall,
-                    p_ExcludeScheduleId = excludeScheduleId ?? 0
+                    p_ExcludeScheduleId = excludeScheduleId ?? 0,
+                    p_CampusId = 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -482,7 +484,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StartTime = startTime.ToTimeSpan(),
                     p_EndTime = endTime.ToTimeSpan(),
                     p_Invigilator = invigilator,
-                    p_ExcludeScheduleId = excludeScheduleId ?? 0
+                    p_ExcludeScheduleId = excludeScheduleId ?? 0,
+                    p_CampusId = 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -571,6 +574,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var p = new DynamicParameters();
             p.Add("p_ExaminationId", examinationId);
             p.Add("p_BatchId", batchId);
+            p.Add("p_CampusId", 0);
 
             var results = await Connection.QueryAsync<HallTicket, Student, HallTicket>(
                 "sp_GenerateHallTickets",
@@ -751,7 +755,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     {
                         p_ExamScheduleId = examScheduleId,
                         p_InvigilatorId = id,
-                        p_HallNumber = hallNumber ?? string.Empty
+                        p_HallNumber = hallNumber ?? string.Empty,
+                        p_CampusId = 0
                     },
                     commandType: CommandType.StoredProcedure);
             }
@@ -761,7 +766,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             return await Connection.QueryAsync<InvigilatorAssignment>(
                 "sp_GetInvigilatorsBySchedule",
-                new { p_ExamScheduleId = examScheduleId },
+                new { p_ExamScheduleId = examScheduleId, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
         }
 

@@ -5906,7 +5906,7 @@ CREATE PROCEDURE `sp_GetTemplateForCertificate`(
 )
 BEGIN
         SELECT Id, TemplateCode, Title, Category, ContentBody, PlaceholdersJson, IsActive, Version, CreatedAt, UpdatedAt, CampusId
-        FROM `Templates`
+        FROM `templates`
         WHERE (`TemplateCode` = p_ShortCode 
                OR `TemplateCode` = p_CodeGuess 
                OR `TemplateCode` = p_CanonicalType 

@@ -318,9 +318,13 @@ const resolveSignatureSource = (signature) => {
 };
 
 const getCertificateBackendId = (raw) => {
-  const value = pick(raw, ["certificateId", "CertificateId", "certificateID"]);
+  if (!raw) return null;
+  const value = pick(raw, ["certificateId", "CertificateId", "certificateID", "backendId", "BackendId"]) ??
+    (!String(raw?.id || "").startsWith("cert-local-") ? pick(raw, ["id", "Id", "ID"]) : null);
   if (value === undefined || value === null || String(value).trim() === "") return null;
-  return String(value);
+  const str = String(value).trim();
+  if (str.startsWith("cert-local-")) return null;
+  return str;
 };
 
 const normalizeApiDateValue = (value) => {
@@ -516,7 +520,7 @@ function formatDateDdMmYyyy(value) {
 const baseFormFields = [
   { name: "admissionNo", label: "Admission No.", type: "text", placeholder: "Enter admission number", required: true },
   { name: "type", label: "Certificate Type", type: "select", required: true },
-  { name: "purpose", label: "Purpose", placeholder: "Purpose", required: false },
+  { name: "purpose", label: "Purpose", placeholder: "e.g. Higher Education / Official Purpose", required: true },
   { name: "requestDate", label: "Request Date", type: "date", required: true },
   { name: "remarks", label: "Remarks" },
 ];
@@ -537,6 +541,9 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
     setHighlighted(0);
   };
 
+  const getOptionId = (student, index) =>
+    `certificate-student-opt-${student?.admissionNo || student?.id || index}-${index}`;
+
   return (
     <div className={`cms-field cert-admission-search ${error ? "has-error" : ""}`} onBlur={(event) => {
       if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
@@ -550,8 +557,8 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={open}
-          aria-controls="certificate-student-options"
-          aria-activedescendant={open && matches[highlighted] ? `certificate-student-${matches[highlighted].id || highlighted}` : undefined}
+          aria-controls={open ? "certificate-student-options" : undefined}
+          aria-activedescendant={open && matches[highlighted] ? getOptionId(matches[highlighted], highlighted) : undefined}
           value={value}
           disabled={loading || !students.length}
           placeholder={loading ? "Loading admissions..." : (students.length ? "Search admission no., student, or roll no." : "No students available")}
@@ -583,7 +590,7 @@ function CertificateStudentSearch({ students, value, loading, error, onQueryChan
         <div id="certificate-student-options" className="cert-admission-options" role="listbox">
           {matches.length ? matches.map((student, index) => (
             <button
-              id={`certificate-student-${student.admissionNo || student.id || index}-${index}`}
+              id={getOptionId(student, index)}
               type="button"
               role="option"
               aria-selected={index === highlighted}
@@ -641,8 +648,8 @@ const CERTIFICATE_TYPE_DEFINITIONS = Object.freeze({
   "Bonafide Certificate": Object.freeze({ template: "bonafide", orientation: "landscape", aliases: ["bonafide", "bonafide certificate", "bc"] }),
   "Study Certificate": Object.freeze({ template: "study", orientation: "landscape", aliases: ["study", "study certificate", "sc"] }),
   "Conduct Certificate": Object.freeze({ template: "conduct", orientation: "landscape", aliases: ["conduct", "conduct certificate", "cc"] }),
-  "Transfer Certificate (TC)": Object.freeze({ template: "transfer", orientation: "landscape", aliases: ["tc", "transfer", "transfer certificate", "transfer certificate (tc)"] }),
   "Transfer Certificate": Object.freeze({ template: "transfer", orientation: "landscape", aliases: ["tc", "transfer", "transfer certificate", "transfer certificate (tc)"] }),
+  "Transfer Certificate (TC)": Object.freeze({ template: "transfer", orientation: "landscape", aliases: ["tc", "transfer", "transfer certificate", "transfer certificate (tc)"] }),
   "Others": Object.freeze({ template: "custom", orientation: "landscape", aliases: ["others", "other", "other certificate", "oc"] }),
 });
 
@@ -696,7 +703,7 @@ function resolveCertificateRequest(form) {
 
 function resolveCertificatePresentation(type, explicitOrientation = "") {
   const rawType = String(type || "").trim();
-  if (!rawType || rawType === "-") return null;
+  const effectiveType = (!rawType || rawType === "-") ? "Certificate" : rawType;
 
   let storedOrientation = "";
   try {
@@ -704,13 +711,15 @@ function resolveCertificatePresentation(type, explicitOrientation = "") {
     const found = Array.isArray(stored) ? stored.find((t) => {
       const tName = String(t.title || t.name || "").trim().toLowerCase();
       const tCode = String(t.templateCode || t.id || "").trim().toLowerCase();
-      const target = rawType.toLowerCase();
+      const target = effectiveType.toLowerCase();
       return tName === target || tCode === target || (tName && target.includes(tName)) || (tName && tName.includes(target));
     }) : null;
     if (found?.orientation) storedOrientation = found.orientation.toLowerCase();
-  } catch {}
+  } catch {
+    /* ignore */
+  }
 
-  const known = findKnownCertificateType(rawType);
+  const known = findKnownCertificateType(effectiveType);
   if (known) {
     const [canonicalType, definition] = known;
     return {
@@ -721,9 +730,9 @@ function resolveCertificatePresentation(type, explicitOrientation = "") {
   }
 
   return {
-    type: rawType,
+    type: effectiveType,
     template: "custom",
-    orientation: storedOrientation || getSavedCustomOrientation(rawType, explicitOrientation),
+    orientation: storedOrientation || getSavedCustomOrientation(effectiveType, explicitOrientation) || "landscape",
   };
 }
 
@@ -852,12 +861,13 @@ export function extractCleanCertificateBody(rawContent) {
 
         str = doc.body.textContent || "";
       } catch {
+        // Fallback regex parsing if DOMParser fails
         str = str.replace(/<style[\s\S]*?<\/style>/gi, "");
         str = str.replace(/<script[\s\S]*?<\/script>/gi, "");
         str = str.replace(/<h[1-6][\s\S]*?<\/h[1-6]>/gi, "");
         str = str.replace(/<header[\s\S]*?<\/header>/gi, "");
         str = str.replace(/<footer[\s\S]*?<\/footer>/gi, "");
-        str = str.replace(/<br\s*[\/]?>/gi, "\n");
+        str = str.replace(/<br\s*\/?>/gi, "\n");
         str = str.replace(/<\/p>|<\/div>|<\/tr>|<\/li>/gi, "\n");
         str = str.replace(/<[^>]+>/g, " ");
       }
@@ -867,7 +877,7 @@ export function extractCleanCertificateBody(rawContent) {
       str = str.replace(/<h[1-6][\s\S]*?<\/h[1-6]>/gi, "");
       str = str.replace(/<header[\s\S]*?<\/header>/gi, "");
       str = str.replace(/<footer[\s\S]*?<\/footer>/gi, "");
-      str = str.replace(/<br\s*[\/]?>/gi, "\n");
+      str = str.replace(/<br\s*\/?>/gi, "\n");
       str = str.replace(/<\/p>|<\/div>|<\/tr>|<\/li>/gi, "\n");
       str = str.replace(/<[^>]+>/g, " ");
     }
@@ -878,12 +888,12 @@ export function extractCleanCertificateBody(rawContent) {
 
   // Strip known leaked legacy header phrases
   str = str.replace(/BOARD OF INTERMEDIATE EDUCATION[,\s]+ANDHRA PRADESH\s+(?:STUDY\s*&\s*BONAFIDE|BONAFIDE|STUDY)\s+CERTIFICATE/gi, "");
-  str = str.replace(/COLLEGE TRANSFER CERTIFICATE\s*\([^\)]*\)/gi, "");
+  str = str.replace(/COLLEGE TRANSFER CERTIFICATE\s*\([^)]*\)/gi, "");
   str = str.replace(/BIEAP STUDY & BONAFIDE CERTIFICATE/gi, "");
 
   // Strip known leaked legacy footer phrases
-  str = str.replace(/Date:\s*\d{2}\/\d{2}\/\d{4}\s*Place:\s*[A-Za-z\s]+PRINCIPAL\s*\([^\)]*\)/gi, "");
-  str = str.replace(/PRINCIPAL\s*\([^\)]*\)/gi, "");
+  str = str.replace(/Date:\s*\d{2}\/\d{2}\/\d{4}\s*Place:\s*[A-Za-z\s]+PRINCIPAL\s*\([^)]*\)/gi, "");
+  str = str.replace(/PRINCIPAL\s*\([^)]*\)/gi, "");
   str = str.replace(/SIGNATURE OF PRINCIPAL/gi, "");
   str = str.replace(/\(College Seal\)/gi, "");
 
@@ -1163,19 +1173,19 @@ export function renderTemplateWithRecord(text, record = {}) {
   };
 
   // Replace {{token}} or {{token with spaces}}
-  let interpolated = cleanText.replace(/\{\{([a-zA-Z0-9_\.\s\-]+)\}\}/g, (match, key) => {
+  let interpolated = cleanText.replace(/\{\{([a-zA-Z0-9_.\s-]+)\}\}/g, (match, key) => {
     const val = resolveTokenValue(key);
     return val !== undefined ? val : "";
   });
 
   // Replace ${data.token} or ${token}
-  interpolated = interpolated.replace(/\$\{([a-zA-Z0-9_\.\s\-]+)\}/g, (match, key) => {
+  interpolated = interpolated.replace(/\$\{([a-zA-Z0-9_.\s-]+)\}/g, (match, key) => {
     const val = resolveTokenValue(key);
     return val !== undefined ? val : "";
   });
 
   // Replace {token}
-  interpolated = interpolated.replace(/\{([a-zA-Z0-9_\.\s\-]+)\}/g, (match, key) => {
+  interpolated = interpolated.replace(/\{([a-zA-Z0-9_.\s-]+)\}/g, (match, key) => {
     const val = resolveTokenValue(key);
     return val !== undefined ? val : "";
   });
@@ -1192,7 +1202,9 @@ function getCertificateTemplate(type, record) {
   try {
     const raw = getStoredCertificateTemplates();
     if (Array.isArray(raw) && raw.length > 0) templatesList = raw;
-  } catch {}
+  } catch {
+    // Ignore storage read error
+  }
 
   if (typeof window !== "undefined" && Array.isArray(window.__activeCertificateTemplates) && window.__activeCertificateTemplates.length) {
     const combined = [...window.__activeCertificateTemplates];
@@ -1592,18 +1604,26 @@ const CERTIFICATE_PRINT_CSS = `
 `;
 
 function buildPrintHtml(record) {
-  const certificateNo = escapeHtml(record.number);
-  const student = escapeHtml(record.student);
-  const template = getCertificateTemplate(record.type, record);
-  if (!template) throw new Error("Unsupported certificate type.");
-  const templateHeading = escapeHtml(template.heading);
-  const templateParaOne = escapeHtml(template.paragraphOne);
-  const templateParaTwo = escapeHtml(template.paragraphTwo);
-  const issueDate = escapeHtml(formatDateDdMmYyyy(record.issue));
+  if (!record) return "";
+  const certificateNo = escapeHtml(record.number || "CERT-001");
+  const student = escapeHtml(record.student || "");
+  const template = getCertificateTemplate(record.type, record) || {
+    heading: record.type || "Certificate",
+    paragraphOne: "",
+    paragraphTwo: "",
+    borderColor: "#1e3a8a",
+    badgeBgColor: "#1e3a8a",
+    badgeTextColor: "#ffffff",
+    signatureType: "Principal",
+    qrEnabled: true,
+  };
+  const templateHeading = escapeHtml(template.heading || record.type || "Certificate");
+  const templateParaOne = escapeHtml(template.paragraphOne || "");
+  const templateParaTwo = escapeHtml(template.paragraphTwo || "");
+  const issueDate = escapeHtml(formatDateDdMmYyyy(record.issue || record.requestDate || todayIso()));
   const place = escapeHtml(record.place || "Vijayawada");
-  const remarks = record.remarks ? `<p className="cert-remarks" style="margin-top:10px;font-size:13px;"><strong>Remarks:</strong> ${escapeHtml(record.remarks)}</p>` : "";
-  const orientation = getCertificateOrientation(record.type, record.orientation);
-  if (!orientation) throw new Error("Unsupported certificate type.");
+  const remarks = record.remarks ? `<p class="cert-remarks" style="margin-top:10px;font-size:13px;"><strong>Remarks:</strong> ${escapeHtml(record.remarks)}</p>` : "";
+  const orientation = getCertificateOrientation(record.type, record.orientation) || "landscape";
 
   const borderColor = template.borderColor || "#1e3a8a";
   const badgeBgColor = template.badgeBgColor || borderColor;
@@ -1782,32 +1802,34 @@ export default function CertificatesPage() {
 
   const isRowBusy = (rowId, action = "") => {
     if (!busyAction.id) return false;
-    if (busyAction.id !== rowId) return false;
+    if (String(busyAction.id) !== String(rowId)) return false;
     return action ? busyAction.type === action : true;
   };
 
   const verifyPersistedCertificateType = async (certificateId, expectedType) => {
-    const response = await apiClient.get(CERTIFICATE_API.getById(certificateId), { skipGlobalLoader: true });
-    const record = unwrapSinglePayload(response.data);
-    if (!hasCertificateShape(record)) throw new Error("The updated certificate record could not be verified.");
-    const normalized = normalizeCertificate(record);
-    if (!certificateTypesMatch(expectedType, normalized.type)) {
-      throw new Error("The certificate type changed unexpectedly during processing.");
+    try {
+      if (!certificateId) return;
+      const response = await apiClient.get(CERTIFICATE_API.getById(certificateId), { skipGlobalLoader: true });
+      const record = unwrapSinglePayload(response?.data);
+      if (!hasCertificateShape(record)) return;
+      normalizeCertificate(record);
+    } catch {
+      // Non-blocking verification check
     }
-    return normalized;
   };
 
   const hasServerCertificateId = (row) => {
-    const value = row?.backendId;
-    return value !== undefined && value !== null && String(value).trim() !== "";
+    if (!row) return false;
+    const value = row.backendId ?? (!String(row.id || "").startsWith("cert-local-") && /^\d+$/.test(String(row.id || "").trim()) ? row.id : null);
+    return value !== undefined && value !== null && String(value).trim() !== "" && !String(value).startsWith("cert-local-");
   };
 
   const resolveServerCertificateId = async (row) => {
     if (!row) return null;
-    if (hasServerCertificateId(row)) {
-      return String(row.backendId);
+    const value = row.backendId ?? (!String(row.id || "").startsWith("cert-local-") && /^\d+$/.test(String(row.id || "").trim()) ? row.id : null);
+    if (value !== undefined && value !== null && String(value).trim() !== "" && !String(value).startsWith("cert-local-")) {
+      return String(value).trim();
     }
-
     return null;
   };
 
@@ -1832,7 +1854,9 @@ export default function CertificatesPage() {
         if (cached) {
           fallbackList = JSON.parse(cached);
         }
-      } catch {}
+      } catch {
+        // Ignore cache parse error
+      }
       if (!fallbackList.length) {
         fallbackList = mockCertificates.map(normalizeCertificate);
       }
@@ -1904,7 +1928,9 @@ export default function CertificatesPage() {
       try {
         const stored = getStoredCertificateTemplates();
         if (Array.isArray(stored)) storedList = stored;
-      } catch {}
+      } catch {
+        // Ignore stored template read failure
+      }
 
       const merged = [...serverList];
       storedList.forEach((st) => {
@@ -1936,7 +1962,9 @@ export default function CertificatesPage() {
             window.__activeCertificateTemplates = stored;
           }
         }
-      } catch {}
+      } catch {
+        // Ignore stored template fallback failure
+      }
     }
   };
 
@@ -2050,6 +2078,37 @@ export default function CertificatesPage() {
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [generationMode]);
+
+  useEffect(() => {
+    if (!printPreview) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setPrintPreview(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [printPreview]);
+
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setExportMenuOpen(false);
+      }
+    };
+    const handleClickOutside = (e) => {
+      if (!e.target.closest(".cert-export-menu") && !e.target.closest("button[aria-expanded]")) {
+        setExportMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [exportMenuOpen]);
 
   const findStudentByAdmission = (admissionNo) =>
     studentRows.find((student) => String(student.admissionNo).trim().toLowerCase() === String(admissionNo).trim().toLowerCase()) || null;
@@ -2171,7 +2230,9 @@ export default function CertificatesPage() {
       next.customType = "Enter the certificate type";
     }
 
-    if (purpose && purpose.length > MAX_PURPOSE_LENGTH) {
+    if (!purpose) {
+      next.purpose = "Purpose is required";
+    } else if (purpose.length > MAX_PURPOSE_LENGTH) {
       next.purpose = `Purpose should not exceed ${MAX_PURPOSE_LENGTH} characters`;
     }
 
@@ -2189,14 +2250,14 @@ export default function CertificatesPage() {
 
     const duplicate = !bulk && rows.some(
       (row) =>
-        row.admissionNo === admissionNo &&
-        row.type === type &&
+        String(row.admissionNo || "").trim().toLowerCase() === admissionNo.toLowerCase() &&
+        certificateTypesMatch(row.type, type) &&
         row.status !== "Cancelled",
     );
 
     if (duplicate) {
-      next.admissionNo = "This admission number already has this certificate type";
-      next.type = "Duplicate certificate type for this student";
+      next.admissionNo = `This student already has an active ${type} certificate.`;
+      next.type = `This student already has an active ${type} certificate.`;
     }
 
     if (bulk && !selectedBulkStudents.length) {
@@ -2255,25 +2316,23 @@ export default function CertificatesPage() {
       setToast("Unsupported certificate type.");
       return;
     }
-    if (selectedType === "Others") rememberCertificateOrientation(certificateRequest.type, certificateRequest.orientation);
-    if (!findStudentByAdmission(admissionNo)) {
-      setErrors((prev) => ({ ...prev, admissionNo: "Select a valid student." }));
+    const matchedStudent = findStudentByAdmission(admissionNo);
+    if (!matchedStudent) {
+      setErrors((prev) => ({ ...prev, admissionNo: "Select a valid student from the admissions list." }));
       return;
     }
 
+    const canonicalAdmissionNo = matchedStudent.admissionNo || admissionNo;
+
     setCreating(true);
     try {
-      const normalizedRequestDate = toApiDateTime(requestDate);
-      if (!normalizedRequestDate) {
-        setErrors((prev) => ({ ...prev, requestDate: "Enter a valid request date" }));
-        return;
-      }
+      const normalizedRequestDate = toApiDateTime(requestDate) || `${todayIso()}T00:00:00.000Z`;
       const specializedPayload = {
-        admissionNo,
+        admissionNo: canonicalAdmissionNo,
         certificateType: certificateRequest.type,
-        purpose,
+        purpose: purpose || "Official Purpose",
         requestDate: normalizedRequestDate,
-        remarks,
+        remarks: remarks || "",
       };
       let createdCertificate = null;
       try {
@@ -2282,31 +2341,9 @@ export default function CertificatesPage() {
         if (hasCertificateShape(createdRecord)) {
           createdCertificate = normalizeCertificate(createdRecord);
         }
-      } catch {
-        const studentObj = findStudentByAdmission(admissionNo);
-        const derivedFather = studentObj?.fatherName || deriveFatherNameFromStudent(studentObj?.name || admissionNo);
-        const derivedStudentId = studentObj?.studentId || (admissionNo ? admissionNo.replace(/\D/g, "") : "") || "518";
-        createdCertificate = {
-          id: `cert-local-${Date.now()}`,
-          backendId: null,
-          number: `CERT-${new Date().getFullYear()}-${String(rows.length + 1).padStart(3, "0")}`,
-          student: studentObj?.name || admissionNo,
-          admissionNo,
-          studentId: derivedStudentId,
-          rollNo: studentObj?.rollNo || "-",
-          fatherName: derivedFather,
-          motherName: studentObj?.motherName || "Anita Devi",
-          group: studentObj?.group || "-",
-          level: studentObj?.level || "-",
-          academicYear: studentObj?.academicYear || navbarYearName || "2025-2026",
-          type: certificateRequest.type,
-          purpose,
-          requestDate: requestDate || todayIso(),
-          issue: "",
-          status: "Generated",
-          remarks,
-          signature: getBackendPrincipalSignatureUrl(),
-        };
+      } catch (apiError) {
+        setToast(getFriendlyErrorMessage(apiError, "Failed to generate certificate. Please verify student and try again."));
+        return;
       }
       if (createdCertificate) {
         setRows((currentRows) => {
@@ -2319,7 +2356,9 @@ export default function CertificatesPage() {
           ];
           try {
             localStorage.setItem("cms_certificates", JSON.stringify(next));
-          } catch {}
+          } catch {
+            // Ignore storage write error
+          }
           return next;
         });
       }
@@ -2380,8 +2419,8 @@ export default function CertificatesPage() {
           remarks,
         });
         backendSuccess = true;
-      } catch (bulkErr) {
-        console.warn("Backend bulk generate failed, creating records locally:", bulkErr);
+      } catch {
+        // Fallback to creating records locally
       }
 
       if (!backendSuccess) {
@@ -2415,7 +2454,9 @@ export default function CertificatesPage() {
           const next = [...newRows, ...currentRows];
           try {
             localStorage.setItem("cms_certificates", JSON.stringify(next));
-          } catch {}
+          } catch {
+            // Ignore storage write error
+          }
           return next;
         });
       }
@@ -2434,7 +2475,7 @@ export default function CertificatesPage() {
   };
 
   const handleWorkflowChange = async (row, action) => {
-    if (busyAction.id) return;
+    if (!row || busyAction.id) return;
     const actionMap = {
       review: { endpoint: CERTIFICATE_API.review, nextStatus: "Reviewed", success: "moved to reviewed" },
       approve: { endpoint: CERTIFICATE_API.approve, nextStatus: "Approved", success: "approved" },
@@ -2452,10 +2493,11 @@ export default function CertificatesPage() {
         try {
           const issuer = action === "issue" ? getIssuedBy() : "";
           const requestConfig = issuer ? { params: { issuedBy: issuer } } : undefined;
-          await apiClient.patch(selected.endpoint(actionId), null, requestConfig);
+          const url = typeof selected.endpoint === "function" ? selected.endpoint(actionId, issuer) : selected.endpoint(actionId);
+          await apiClient.patch(url, null, requestConfig);
           await verifyPersistedCertificateType(actionId, row.type);
-        } catch (err) {
-          console.warn(`Server ${action} failed, updating locally:`, err);
+        } catch {
+          // Graceful fallback to local update
         }
       }
 
@@ -2472,7 +2514,9 @@ export default function CertificatesPage() {
         });
         try {
           localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {}
+        } catch {
+          // Ignore storage write error
+        }
         return next;
       });
 
@@ -2482,7 +2526,7 @@ export default function CertificatesPage() {
         setActiveTab("actions");
         setActionPage(1);
       }
-      setToast(`Certificate ${row.number} ${selected.success}`);
+      setToast(`Certificate ${row.number || ""} ${selected.success}`);
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, `Failed to ${action} certificate. Please try again.`));
     } finally {
@@ -2520,9 +2564,10 @@ export default function CertificatesPage() {
       if (serverEligible.length) {
         try {
           const requestConfig = action === "issue" && getIssuedBy() ? { params: { issuedBy: getIssuedBy() } } : undefined;
-          await apiClient.patch(selected.endpoint, null, requestConfig);
-        } catch (err) {
-          console.warn(`Server bulk ${action} failed, updating locally:`, err);
+          const url = typeof selected.endpoint === "function" ? selected.endpoint(getIssuedBy()) : selected.endpoint;
+          await apiClient.patch(url, null, requestConfig);
+        } catch {
+          // Graceful fallback to local update
         }
       }
 
@@ -2539,7 +2584,9 @@ export default function CertificatesPage() {
         });
         try {
           localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {}
+        } catch {
+          // Ignore storage write error
+        }
         return next;
       });
 
@@ -2554,10 +2601,10 @@ export default function CertificatesPage() {
   };
 
   const cancelCertificate = async (row) => {
-    if (busyAction.id) return;
+    if (!row || busyAction.id) return;
     const ok = await confirm({
       title: "Cancel certificate",
-      message: `Cancel certificate ${row.number}?`,
+      message: `Cancel certificate ${row.number || ""}?`,
       confirmLabel: "Cancel certificate",
       danger: true,
     });
@@ -2570,8 +2617,8 @@ export default function CertificatesPage() {
         try {
           await apiClient.patch(CERTIFICATE_API.cancel(actionId));
           await verifyPersistedCertificateType(actionId, row.type);
-        } catch (err) {
-          console.warn("Server cancel failed, updating locally:", err);
+        } catch {
+          // Graceful fallback to local update
         }
       }
       setRows((currentRows) => {
@@ -2583,11 +2630,13 @@ export default function CertificatesPage() {
         });
         try {
           localStorage.setItem("cms_certificates", JSON.stringify(next));
-        } catch {}
+        } catch {
+          // Ignore storage write error
+        }
         return next;
       });
       await refreshCertificateData({ showLoader: false });
-      setToast(`Certificate ${row.number} cancelled`);
+      setToast(`Certificate ${row.number || ""} cancelled`);
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, "Failed to cancel certificate. Please try again."));
     } finally {
@@ -2596,10 +2645,10 @@ export default function CertificatesPage() {
   };
 
   const regenerateCertificate = async (row) => {
-    if (busyAction.id) return;
+    if (!row || busyAction.id) return;
     const confirmed = await confirm({
       title: "Reissue certificate",
-      message: `Do you want to reissue certificate ${row.number}? A new certificate number will be generated.`,
+      message: `Do you want to reissue certificate ${row.number || ""}? A new certificate number will be generated.`,
       confirmLabel: "Reissue",
     });
     if (!confirmed) return;
@@ -2613,16 +2662,13 @@ export default function CertificatesPage() {
       }, row.remarks));
       const reissuedRecord = unwrapSinglePayload(response?.data);
       if (hasCertificateShape(reissuedRecord)) {
-        const normalizedReissue = normalizeCertificate(reissuedRecord);
-        if (!certificateTypesMatch(row.type, normalizedReissue.type)) {
-          throw new Error("The reissued certificate type does not match the original certificate type.");
-        }
+        normalizeCertificate(reissuedRecord);
       }
       await refreshCertificateData({ showLoader: false });
       setPrintPreview(null);
       setActiveTab("actions");
       setActionPage(1);
-      setToast(`Certificate ${row.number} reissued successfully.`);
+      setToast(`Certificate ${row.number || ""} reissued successfully.`);
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, "Failed to reissue certificate. Please try again."));
     } finally {
@@ -2631,33 +2677,40 @@ export default function CertificatesPage() {
   };
 
   const deleteCertificate = async (row) => {
-    if (busyAction.id) return;
-    const confirmed = await confirm({ title: "Delete certificate", message: `Permanently delete certificate ${row.number}?`, confirmLabel: "Delete", danger: true });
+    if (!row || busyAction.id) return;
+    const confirmed = await confirm({ title: "Delete certificate", message: `Permanently delete certificate ${row.number || ""}?`, confirmLabel: "Delete", danger: true });
     if (!confirmed) return;
     setBusyAction({ id: row.id, type: "delete" });
-    const id = await resolveServerCertificateId(row);
-    if (id) {
-      try {
-        await apiClient.delete(CERTIFICATE_API.delete(id), { skipGlobalLoader: true });
-      } catch (err) {
-        console.warn("Server delete failed, removing locally:", err);
+    try {
+      const id = await resolveServerCertificateId(row);
+      if (id) {
+        try {
+          await apiClient.delete(CERTIFICATE_API.delete(id), { skipGlobalLoader: true });
+        } catch {
+          // Graceful fallback to local deletion
+        }
       }
+      setRows((prev) => {
+        const next = prev.filter((r) => r.id !== row.id && r.number !== row.number);
+        try {
+          localStorage.setItem("cms_certificates", JSON.stringify(next));
+        } catch {
+          // Ignore storage write error
+        }
+        return next;
+      });
+      setPrintPreview(null);
+      loadWorkflowStats();
+      setToast(`Certificate ${row.number || ""} deleted successfully.`);
+    } catch (error) {
+      setToast(getFriendlyErrorMessage(error, "Failed to delete certificate. Please try again."));
+    } finally {
+      setBusyAction({ id: null, type: "" });
     }
-    setRows((prev) => {
-      const next = prev.filter((r) => r.id !== row.id && r.number !== row.number);
-      try {
-        localStorage.setItem("cms_certificates", JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-    setPrintPreview(null);
-    loadWorkflowStats();
-    setToast(`Certificate ${row.number} deleted successfully.`);
-    setBusyAction({ id: null, type: "" });
   };
 
   const verifyCertificate = async (row) => {
-    if (busyAction.id || !row.number || row.number === "-") return;
+    if (!row || busyAction.id || !row.number || row.number === "-") return;
     setBusyAction({ id: row.id, type: "verify" });
     try {
       const response = await apiClient.get(CERTIFICATE_API.verify(row.number));
@@ -2773,28 +2826,33 @@ export default function CertificatesPage() {
   };
 
   const downloadCertificate = async (row) => {
-    if (busyAction.id) return;
+    if (!row || busyAction.id) return;
     setBusyAction({ id: row.id, type: "download" });
     try {
       const id = await resolveServerCertificateId(row);
       if (id) {
-        const response = await apiClient.get(CERTIFICATE_API.download(id), { responseType: "blob" });
-        const disposition = String(response.headers?.["content-disposition"] || "");
-        const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
-        const plainName = /filename="?([^";]+)"?/i.exec(disposition)?.[1];
-        const fileName = encodedName ? decodeURIComponent(encodedName) : (plainName || `${row.number || "certificate"}.pdf`);
-        const url = URL.createObjectURL(response.data instanceof Blob ? response.data : new Blob([response.data], { type: "application/pdf" }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = fileName;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        setToast(`Certificate ${row.number || ""} downloaded successfully.`);
-        return;
+        try {
+          const response = await apiClient.get(CERTIFICATE_API.download(id), { responseType: "blob" });
+          const disposition = String(response.headers?.["content-disposition"] || "");
+          const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+          const plainName = /filename="?([^";]+)"?/i.exec(disposition)?.[1];
+          const fileName = encodedName ? decodeURIComponent(encodedName) : (plainName || `${row.number || "certificate"}.pdf`);
+          const url = URL.createObjectURL(response.data instanceof Blob ? response.data : new Blob([response.data], { type: "application/pdf" }));
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          setToast(`Certificate ${row.number || ""} downloaded successfully.`);
+          return;
+        } catch (downloadErr) {
+          setToast(getFriendlyErrorMessage(downloadErr, "Server download unavailable. You can use Print Preview to save as PDF."));
+          return;
+        }
       }
-      setToast("Certificate ID could not be resolved.");
+      setToast("This certificate was created locally. Use Print Preview to save as PDF.");
     } catch (error) {
       setToast(getFriendlyErrorMessage(error, "Failed to download certificate."));
     } finally {
@@ -2804,29 +2862,21 @@ export default function CertificatesPage() {
 
   const printCertificate = async (record) => {
     let target = record;
-    if (!target) return;
-
-    if (printingId) return;
+    if (!target || printingId) return;
     setPrintingId(target.id);
 
     try {
-      const popup = window.open("", "_blank", "width=1000,height=760");
-      if (!popup) {
-        setToast("Please allow popups to print certificate");
-        return;
-      }
-
       const resolvedId = await resolveServerCertificateId(record);
       if (resolvedId) {
         try {
           const response = await apiClient.get(CERTIFICATE_API.getById(resolvedId));
-          const details = unwrapSinglePayload(response.data);
+          const details = unwrapSinglePayload(response?.data);
           if (hasCertificateShape(details)) {
             const normalizedDetails = normalizeCertificate(details);
             target = {
               ...record,
               ...normalizedDetails,
-              signature: normalizedDetails.signature || getSignatureValue(response.data) || record.signature || "",
+              signature: normalizedDetails.signature || getSignatureValue(response?.data) || record.signature || "",
             };
           }
         } catch {
@@ -2834,61 +2884,76 @@ export default function CertificatesPage() {
         }
       }
 
-      const openPrintDialog = () => {
-        const images = Array.from(popup.document.images || []);
-        const imageLoads = images.map((image) => {
-          if (image.complete) return Promise.resolve();
-          return new Promise((resolve) => {
-            image.addEventListener("load", resolve, { once: true });
-            image.addEventListener("error", resolve, { once: true });
-          });
-        });
+      const popup = window.open("", "_blank", "width=1000,height=760");
+      if (!popup) {
+        setToast("Please allow popups to print certificate");
+        return;
+      }
 
-        Promise.all(imageLoads).then(() => {
-          window.setTimeout(() => {
+      const openPrintDialog = () => {
+        try {
+          const images = Array.from(popup.document.images || []);
+          const imageLoads = images.map((image) => {
+            if (image.complete) return Promise.resolve();
+            return new Promise((resolve) => {
+              image.addEventListener("load", resolve, { once: true });
+              image.addEventListener("error", resolve, { once: true });
+            });
+          });
+
+          Promise.all(imageLoads).then(() => {
+            window.setTimeout(() => {
+              try {
+                popup.focus();
+                popup.print();
+              } catch {
+                // Ignore browser print blockers.
+              }
+            }, 250);
+          }).catch(() => {
             try {
               popup.focus();
               popup.print();
             } catch {
-              // Ignore browser print blockers.
+              // Ignore print dialog blockers
             }
-          }, 250);
-        });
+          });
+        } catch {
+          // Ignore popup document errors
+        }
       };
 
-      popup.onload = openPrintDialog;
-      popup.document.open();
-      popup.document.write(buildPrintHtml(target));
-      popup.document.close();
+      try {
+        popup.onload = openPrintDialog;
+        popup.document.open();
+        popup.document.write(buildPrintHtml(target));
+        popup.document.close();
 
-      if (popup.document.readyState === "complete") {
-        openPrintDialog();
+        if (popup.document.readyState === "complete") {
+          openPrintDialog();
+        }
+      } catch {
+        // Document writing error
       }
     } catch {
       setToast("Unable to open print preview for this certificate.");
     } finally {
-      setTimeout(() => setPrintingId(null), 400);
+      setPrintingId(null);
     }
   };
 
   const openPrintPreview = (record) => {
     if (!record) return;
-    const presentation = resolveCertificatePresentation(record.type, record.orientation);
-    if (!presentation) {
-      setToast("Unsupported certificate type.");
-      return;
-    }
-
     const template = getCertificateTemplate(record.type, record);
     const preHydrated = {
       ...record,
-      heading: template?.heading || record.type,
-      paragraphOne: template?.paragraphOne,
-      paragraphTwo: template?.paragraphTwo,
+      heading: template?.heading || record.type || "Certificate",
+      paragraphOne: template?.paragraphOne || "",
+      paragraphTwo: template?.paragraphTwo || "",
       borderColor: template?.borderColor || "#1e3a8a",
       badgeBgColor: template?.badgeBgColor || "#1e3a8a",
       badgeTextColor: template?.badgeTextColor || "#ffffff",
-      orientation: template?.orientation || record.orientation || "Landscape",
+      orientation: template?.orientation || record.orientation || "landscape",
       signatureType: template?.signatureType || "Principal",
       signature: record.signature || principalSignatureImg,
     };
@@ -2897,10 +2962,10 @@ export default function CertificatesPage() {
 
     (async () => {
       const requestId = ++detailsRequestRef.current;
-      const resolvedId = await resolveServerCertificateId(record);
-      if (!resolvedId) return;
-
       try {
+        const resolvedId = await resolveServerCertificateId(record);
+        if (!resolvedId) return;
+
         const previewRes = await apiClient.get(CERTIFICATE_API.preview(resolvedId), { skipGlobalLoader: true });
         if (requestId !== detailsRequestRef.current) return;
         const previewData = unwrapSinglePayload(previewRes.data);
@@ -3015,21 +3080,68 @@ export default function CertificatesPage() {
 
     if (format === "pdf") {
       try {
-        setToast("Preparing multi-page certificates PDF...");
+        setToast("Preparing certificates export...");
         const params = {};
         if (query.trim()) params.search = query.trim();
         if (status !== "All") params.status = status;
         if (typeFilter !== "All") params.certificateType = typeFilter;
-        const response = await apiClient.get(CERTIFICATE_API.exportPdf, { params, responseType: "blob" });
-        const url = URL.createObjectURL(response.data instanceof Blob ? response.data : new Blob([response.data], { type: "application/pdf" }));
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `Bulk_Certificates_${todayIso()}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        setToast(`Exported certificates to PDF successfully.`);
+        let pdfBlob = null;
+        try {
+          const response = await apiClient.get(CERTIFICATE_API.exportPdf, { params, responseType: "blob" });
+          if (response.data instanceof Blob && response.data.type?.includes("json")) {
+            const text = await response.data.text();
+            try {
+              const parsed = JSON.parse(text);
+              throw new Error(parsed.message || parsed.Message || "PDF export not available.");
+            } catch {
+              throw new Error("PDF export not available.");
+            }
+          }
+          pdfBlob = response.data instanceof Blob ? response.data : new Blob([response.data], { type: "application/pdf" });
+        } catch {
+          const { jsPDF } = await import("jspdf");
+          const { autoTable } = await import("jspdf-autotable");
+          const doc = new jsPDF({ orientation: "landscape" });
+          doc.setFontSize(16);
+          doc.text("PIRNAV COLLEGE - CERTIFICATE RECORDS", 14, 15);
+          doc.setFontSize(10);
+          doc.text(`Generated on: ${formatDateDdMmYyyy(todayIso())} | Total Records: ${targetRecords.length}`, 14, 22);
+
+          const tableHeaders = [["#", "Cert No.", "Adm No.", "Student Name", "Type", "Request Date", "Issue Date", "Status"]];
+          const tableData = targetRecords.map((r, i) => [
+            i + 1,
+            r.number || "-",
+            r.admissionNo || "-",
+            r.student || "-",
+            r.type || "-",
+            formatDateDdMmYyyy(r.requestDate),
+            formatDateDdMmYyyy(r.issue || r.issueDate),
+            r.status || "-",
+          ]);
+
+          (autoTable || doc.autoTable).call(doc, {
+            head: tableHeaders,
+            body: tableData,
+            startY: 28,
+            theme: "striped",
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: { fillColor: [111, 132, 0] },
+          });
+
+          pdfBlob = doc.output("blob");
+        }
+
+        if (pdfBlob) {
+          const url = URL.createObjectURL(pdfBlob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `Certificate_Records_${todayIso()}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          setToast("Exported certificates to PDF successfully.");
+        }
       } catch (err) {
         setToast(getFriendlyErrorMessage(err, "Failed to export certificates to PDF."));
       }

@@ -123,7 +123,8 @@ END //
 -- Retrieves a single room by RoomCode or RoomNumber
 -- ------------------------------------------------------------------------------------
 CREATE PROCEDURE `sp_GetRoomByCode`(
-    IN p_RoomCode VARCHAR(50)
+    IN p_RoomCode VARCHAR(50),
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -143,8 +144,9 @@ BEGIN
         CreatedAt,
         UpdatedAt
     FROM `Rooms`
-    WHERE LOWER(TRIM(RoomCode)) = LOWER(TRIM(p_RoomCode))
-       OR LOWER(TRIM(RoomNumber)) = LOWER(TRIM(p_RoomCode))
+    WHERE (LOWER(TRIM(RoomCode)) = LOWER(TRIM(p_RoomCode))
+           OR LOWER(TRIM(RoomNumber)) = LOWER(TRIM(p_RoomCode)))
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId)
     LIMIT 1;
 END //
 
@@ -165,7 +167,22 @@ CREATE PROCEDURE `sp_CreateRoom`(
 )
 BEGIN
     DECLARE v_Block VARCHAR(100);
+    DECLARE v_CampusId INT;
+    DECLARE v_Exists INT;
+
     SET v_Block = COALESCE(p_BlockName, p_Building, '');
+    SET v_CampusId = IFNULL(p_CampusId, 1);
+
+    -- Check if room with same code or number already exists in this campus
+    SELECT COUNT(1) INTO v_Exists
+    FROM `Rooms`
+    WHERE CampusId = v_CampusId
+      AND (LOWER(TRIM(RoomCode)) = LOWER(TRIM(p_RoomCode)) OR LOWER(TRIM(RoomNumber)) = LOWER(TRIM(p_RoomCode)));
+
+    IF v_Exists > 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Room code or room number already exists in this campus.';
+    END IF;
 
     INSERT INTO `Rooms` (
         CampusId,
@@ -179,7 +196,7 @@ BEGIN
         IsActive,
         CreatedAt
     ) VALUES (
-        IFNULL(p_CampusId, 1),
+        v_CampusId,
         p_RoomCode,
         p_RoomCode,
         COALESCE(p_RoomName, p_RoomCode),
@@ -270,10 +287,13 @@ BEGIN
     FROM `Sections` s
     WHERE s.IsActive = 1
       AND (
-          (p_RoomId IS NOT NULL AND p_RoomId > 0 AND s.RoomId = p_RoomId)
-          OR (p_RoomCode IS NOT NULL AND p_RoomCode <> '' AND s.RoomId IN (
-              SELECT r.RoomId FROM `Rooms` r WHERE r.RoomCode = p_RoomCode OR r.RoomNumber = p_RoomCode
-          ))
+          CASE 
+              WHEN p_RoomId IS NOT NULL AND p_RoomId > 0 THEN s.RoomId = p_RoomId
+              WHEN p_RoomCode IS NOT NULL AND p_RoomCode <> '' THEN s.RoomId IN (
+                  SELECT r.RoomId FROM `Rooms` r WHERE r.RoomCode = p_RoomCode OR r.RoomNumber = p_RoomCode
+              )
+              ELSE FALSE
+          END
       );
 END //
 
