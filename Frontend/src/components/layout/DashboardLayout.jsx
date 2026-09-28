@@ -17,6 +17,7 @@ import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import boardAcademicYearIcon from "@/assets/sidebar-3d/board-academic-year.png";
 import subjectsIcon from "@/assets/sidebar-3d/subjects.png";
 import timetableIcon from "@/assets/sidebar-3d/timetable.png";
+import transportBusIcon from "@/assets/sidebar-3d/transport-bus.png";
 import marksEvaluationIcon from "@/assets/sidebar-3d/marks-evaluation.png";
 import resultsIcon from "@/assets/sidebar-3d/results.png";
 import promotionIcon from "@/assets/sidebar-3d/promotion.png";
@@ -138,7 +139,7 @@ export const menu = [
       { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon },
       { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon },
       { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon },
-      { to: "/dashboard/transport", label: "Transport", icon: timetableIcon },
+      { to: "/dashboard/transport", label: "Transport", icon: transportBusIcon },
     ],
   },
   {

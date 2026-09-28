@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -84,12 +84,20 @@ export default function StudentManagementPage() {
   const [groupOptions, setGroupOptions] = useState([]);
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
+  const [page, setPage] = useState(restoredState?.page ?? 1);
   useEffect(() => {
     const timer = window.setTimeout(() => { restoringFilters.current = false; }, 0);
     return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
     let active = true;
+    setStudents([]);
+    setLoading(true);
+    setError("");
+    if (!selectedCampusId || !selectedBoardId || !selectedAcademicYearId) {
+      setLoading(false);
+      return () => { active = false; };
+    }
     apiClient
       .get(apiEndpoints.students.getAll)
       .then(({ data }) => {
@@ -166,7 +174,9 @@ export default function StudentManagementPage() {
             };
           });
           const visibleStudents = enriched.filter((student) => student.isEligibleForStudentManagement
-            && (!selectedCampusId || student.campusId == null || String(student.campusId) === String(selectedCampusId)));
+            && String(student.campusId ?? "") === String(selectedCampusId)
+            && String(student.boardId ?? "") === String(selectedBoardId)
+            && String(student.academicYearId ?? "") === String(selectedAcademicYearId));
           if (active) setStudents(visibleStudents);
         });
       })
@@ -175,9 +185,13 @@ export default function StudentManagementPage() {
     return () => {
       active = false;
     };
-  }, [reloadKey, selectedCampusId]);
+  }, [reloadKey, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
-    if (!restoringFilters.current) setFilters({ level: "", group: "", programme: "", section: "", status: "" });
+    if (!restoringFilters.current) {
+      setQuery("");
+      setFilters({ level: "", group: "", programme: "", section: "", status: "" });
+      setPage(1);
+    }
     setLevelOptions([]); setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
     if (!selectedBoardId) return undefined;
     let active = true;
@@ -276,7 +290,7 @@ export default function StudentManagementPage() {
             .includes(query.toLowerCase()) &&
           (!selectedBoardId || String(student.boardId ?? "") === String(selectedBoardId)) &&
           (!selectedAcademicYearId || String(student.academicYearId ?? "") === String(selectedAcademicYearId)) &&
-          (!selectedCampusId || student.campusId == null || String(student.campusId) === String(selectedCampusId)) &&
+          (!selectedCampusId || String(student.campusId ?? "") === String(selectedCampusId)) &&
           (!filters.level || String(student.academicLevelId ?? "") === String(filters.level)) &&
           (!filters.group || String(student.groupId ?? "") === String(filters.group)) &&
           (!filters.programme || String(student.programId ?? "") === String(filters.programme)) &&
@@ -285,13 +299,11 @@ export default function StudentManagementPage() {
       ),
     [students, query, filters, selectedCampusId, selectedBoardId, selectedAcademicYearId],
   );
-  const [page, setPage] = useState(restoredState?.page ?? 1);
   const pageSize = 5;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   useEffect(() => { if (!restoringFilters.current) setPage(1); }, [query, filters.level, filters.group, filters.programme, filters.section, filters.status, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
-  const values = (key) => [...new Set(students.map((student) => student[key]).filter(Boolean))];
   const updateFilter = (key, selectedValue) => {
     setFilters((current) => ({
       ...current,
@@ -445,7 +457,6 @@ export default function StudentManagementPage() {
             ["Group", "group", groupOptions, !filters.level],
             ["Programme", "programme", programmeOptions, !filters.group],
             ["Section", "section", sectionOptions, !filters.programme],
-            ["Status", "status", values("status").map((item) => ({ value: item, label: item })), false],
           ].map(([label, key, options, disabled]) => (
             <label className="cms-field" key={key}>
               <span>{label}</span>
@@ -508,7 +519,7 @@ export default function StudentManagementPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10"><div className="cms-empty">Loading approved students...</div></td></tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={10} />)
               ) : pageRows.length ? (
                 pageRows.map((s) => (
                   <tr key={s.id} onClick={() => setSelectedStudentId(String(s.id))}>

@@ -23,7 +23,7 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonCard, SkeletonPage, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import "./DepartmentManagementPage.css";
 import departmentsIcon from "@/assets/dashboard-3d/total-sections.png";
 import designationsIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -1665,7 +1665,7 @@ export function DepartmentDetailsPage() {
             </div>
           </header>
           {loading ? (
-            <p className="master-details-state">Loading department details...</p>
+            <SkeletonPage variant="form" rows={6} />
           ) : error ? (
             <p className="master-details-state">{error}</p>
           ) : department ? (
@@ -1717,7 +1717,9 @@ export function DepartmentDetailsPage() {
                 </div>
 
                 {desigLoading ? (
-                  <p className="master-details-state" style={{ padding: "12px 0" }}>Loading assigned designations...</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" }}>
+                    {Array.from({ length: 3 }, (_, index) => <SkeletonCard key={index} lines={2} />)}
+                  </div>
                 ) : assignedDesignations.length > 0 ? (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" }}>
                     {assignedDesignations.map((desig) => (
@@ -1819,7 +1821,7 @@ export function DesignationDetailsPage() {
             </div>
           </header>
           {loading ? (
-            <p className="master-details-state">Loading designation details...</p>
+            <SkeletonPage variant="form" rows={5} />
           ) : error ? (
             <p className="master-details-state">{error}</p>
           ) : designation ? (
@@ -2064,7 +2066,7 @@ export function MasterFormPage({ kind }) {
           <ArrowLeft /> Back to Department & Designation
         </button>
         {loading ? (
-          <p className="master-details-state">Loading form details...</p>
+          <SkeletonPage variant="form" rows={6} />
         ) : (
           <form className="master-form" onSubmit={submit} noValidate>
             <header>

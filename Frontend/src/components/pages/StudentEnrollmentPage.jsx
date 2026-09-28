@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { env } from "@/config/env.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./StudentManagementPage.css";
 
-const emptyForm = () => ({ admissionId: "", admissionNo: "", admissionNumber: "", admissionDate: "", admissionType: "", admissionQuota: "", medium: "", secondLanguage: "", studentName: "", photo: "", gender: "", dateOfBirth: "", bloodGroup: "", email: "", mobileNumber: "", aadhaarNumber: "", nationality: "", religion: "", category: "", address: "", city: "", district: "", state: "", pincode: "", boardId: "", academicYearId: "", academicLevelId: "", groupId: "", programId: "", sectionId: "", rollNo: "", rollNumber: "", feeStructureId: "", paymentPlan: "", studentType: "", transportRequired: "", busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", hostelBlock: "", hostelBlockName: "", hostelRoom: "", hostelRoomName: "", previousSchool: "", previousHallTicketNumber: "", previousBoard: "", previousYearOfPassing: "", previousPercentage: "", studentCategory: "", scholarshipStatus: "", scholarshipAmount: "", fatherName: "", fatherOccupation: "", fatherMobile: "", fatherEmail: "", motherName: "", motherOccupation: "", motherMobile: "", motherEmail: "", guardianName: "", guardianMobile: "", guardianEmail: "", annualIncome: "", remarks: "" });
+const emptyForm = () => ({ admissionId: "", admissionNo: "", admissionNumber: "", admissionDate: "", admissionType: "", admissionQuota: "", campusId: "", medium: "", secondLanguage: "", studentName: "", photo: "", gender: "", dateOfBirth: "", bloodGroup: "", email: "", mobileNumber: "", aadhaarNumber: "", nationality: "", religion: "", category: "", address: "", city: "", district: "", state: "", pincode: "", boardId: "", academicYearId: "", academicLevelId: "", groupId: "", programId: "", sectionId: "", rollNo: "", rollNumber: "", feeStructureId: "", paymentPlan: "", studentType: "", transportRequired: "", busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", hostelBlock: "", hostelBlockName: "", hostelRoom: "", hostelRoomName: "", previousSchool: "", previousHallTicketNumber: "", previousBoard: "", previousYearOfPassing: "", previousPercentage: "", studentCategory: "", scholarshipStatus: "", scholarshipAmount: "", fatherName: "", fatherOccupation: "", fatherMobile: "", fatherEmail: "", motherName: "", motherOccupation: "", motherMobile: "", motherEmail: "", guardianName: "", guardianMobile: "", guardianEmail: "", annualIncome: "", remarks: "" });
 const valueOf = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value !== undefined && value !== null) ?? "";
 const asList = (value) => {
   const data = value?.data ?? value?.Data ?? value;
@@ -32,7 +33,7 @@ const imageUrl = (value) => {
   return `${env.apiBaseUrl.replace(/\/$/, "")}/${path.replace(/^\/+/, "")}`;
 };
 const initialsOf = (name) => String(name ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "ST";
-const fieldKeys = ["admissionNo", "admissionNumber", "admissionDate", "studentName", "gender", "dateOfBirth", "email", "mobileNumber", "aadhaarNumber", "nationality", "address", "city", "district", "state", "pincode", "studentType", "transportRequired", "busType", "busRoute", "pickupPoint", "hostelBlock", "hostelRoom", "previousYearOfPassing", "previousPercentage", "fatherName", "fatherOccupation", "fatherMobile", "fatherEmail", "motherName", "motherOccupation", "motherMobile", "motherEmail", "guardianName", "guardianMobile", "guardianEmail"];
+const fieldKeys = ["admissionNo", "admissionNumber", "admissionDate", "campusId", "studentName", "gender", "dateOfBirth", "email", "mobileNumber", "aadhaarNumber", "nationality", "address", "city", "district", "state", "pincode", "studentType", "transportRequired", "busType", "busRoute", "pickupPoint", "hostelBlock", "hostelRoom", "previousYearOfPassing", "previousPercentage", "fatherName", "fatherOccupation", "fatherMobile", "fatherEmail", "motherName", "motherOccupation", "motherMobile", "motherEmail", "guardianName", "guardianMobile", "guardianEmail"];
 const studentUpdateError = (error) => {
   const response = error?.response?.data ?? error?.data ?? {};
   const details = String(response?.details ?? response?.Details ?? "");
@@ -167,7 +168,7 @@ const formFromStudent = (record) => {
   const text = (...keys) => stringValue(valueOf(source, ...keys));
   const allocation = allocationFrom(source);
   return {
-    admissionId: text("admissionId", "AdmissionId"), admissionNo: text("admissionNo", "AdmissionNo"), admissionNumber: text("admissionNumber", "AdmissionNumber"), admissionDate: asDateInput(valueOf(source, "admissionDate", "AdmissionDate")), admissionType: text("admissionType", "AdmissionType"), admissionQuota: text("admissionQuota", "AdmissionQuota"), medium: text("medium", "Medium"), secondLanguage: text("secondLanguage", "SecondLanguage"),
+    admissionId: text("admissionId", "AdmissionId"), admissionNo: text("admissionNo", "AdmissionNo"), admissionNumber: text("admissionNumber", "AdmissionNumber"), admissionDate: asDateInput(valueOf(source, "admissionDate", "AdmissionDate")), admissionType: text("admissionType", "AdmissionType"), admissionQuota: text("admissionQuota", "AdmissionQuota"), campusId: text("campusId", "CampusId"), medium: text("medium", "Medium"), secondLanguage: text("secondLanguage", "SecondLanguage"),
     studentName: text("studentName", "StudentName", "fullName", "name"), photo: text("photo", "Photo", "photoPath", "PhotoPath"), gender: text("gender", "Gender"), dateOfBirth: asDateInput(valueOf(source, "dateOfBirth", "DateOfBirth", "dob", "DOB")), bloodGroup: text("bloodGroup", "BloodGroup"), email: text("email", "Email", "studentEmail", "StudentEmail"), mobileNumber: text("mobileNumber", "MobileNumber", "mobile", "Mobile"), aadhaarNumber: text("aadhaarNumber", "AadhaarNumber", "aadhaar", "Aadhaar"), nationality: text("nationality", "Nationality"), religion: text("religion", "Religion"), category: text("category", "Category"), address: text("address", "Address", "addressLine1", "AddressLine1"), city: text("city", "City"), district: text("district", "District"), state: text("state", "State"), pincode: text("pincode", "Pincode", "pinCode", "PinCode"),
     boardId: text("boardId", "BoardId"), academicYearId: text("academicYearId", "AcademicYearId"), academicLevelId: text("academicLevelId", "AcademicLevelId"), groupId: text("groupId", "GroupId"), programId: text("programId", "ProgramId"), sectionId: text("sectionId", "SectionId"), rollNo: text("rollNo", "RollNo"), rollNumber: text("rollNumber", "RollNumber"), feeStructureId: text("feeStructureId", "FeeStructureId"), paymentPlan: text("paymentPlan", "PaymentPlan"), ...allocation,
     previousSchool: text("previousSchool", "PreviousSchool"), previousHallTicketNumber: text("previousHallTicketNumber", "PreviousHallTicketNumber"), previousBoard: text("previousBoard", "PreviousBoard"), previousYearOfPassing: text("previousYearOfPassing", "PreviousYearOfPassing"), previousPercentage: text("previousPercentage", "PreviousPercentage"), studentCategory: text("studentCategory", "StudentCategory"), scholarshipStatus: text("scholarshipStatus", "ScholarshipStatus"), scholarshipAmount: text("scholarshipAmount", "ScholarshipAmount"),
@@ -195,6 +196,7 @@ const validate = (form) => {
   if (form.address.trim().length > 250) errors.address = "Address cannot exceed 250 characters.";
   [["city", "city"], ["district", "district"], ["state", "state"]].forEach(([key, label]) => { const value = form[key].trim(); if (value && (value.length > 100 || !placePattern.test(value))) errors[key] = `Enter a valid ${label}.`; });
   if (form.pincode.trim() && !/^\d{6}$/.test(form.pincode.trim())) errors.pincode = "Pincode must be exactly 6 digits.";
+  if (!form.campusId) errors.campusId = "Campus is required.";
   if (!form.studentType) errors.studentType = "Student Type is required.";
   if (form.studentType === "Non-Residential" && !form.transportRequired) errors.transportRequired = "School Transport Facility Required is required.";
   if (form.studentType === "Non-Residential" && form.transportRequired === "Yes") {
@@ -219,6 +221,7 @@ const validate = (form) => {
 
 export default function StudentEnrollmentPage({ id, embedded = false, onCancel, onSaved }) {
   const navigate = useNavigate();
+  const { campuses } = useCampusContext();
   const redirectTimer = useRef(null);
   const photoInputRef = useRef(null);
   const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] }), [allocationLookups, setAllocationLookups] = useState({ routes: [], pickupPoints: [], vehicles: [], vehicleAssignments: [], hostelBlocks: [], hostelRoomTypes: [], hostelRooms: [], hostelFees: [] }), [allocationLookupError, setAllocationLookupError] = useState("");
@@ -226,19 +229,37 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     setLoading(true); setLoadError("");
     try {
       if (!/^\d+$/.test(String(id))) throw new Error("Invalid student ID.");
-      const { data } = await apiClient.get(apiEndpoints.students.getById(id));
+      const [{ data }, summaryResponse] = await Promise.all([
+        apiClient.get(apiEndpoints.students.getById(id)),
+        apiClient.get(apiEndpoints.students.getAll).catch(() => null),
+      ]);
       const record = unwrapStudent(data);
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
-      const nested = record.student ?? record.Student ?? record.profile ?? record.Profile ?? {};
-      const admission = record.admission ?? record.Admission ?? {};
-      const academic = record.academicDetails ?? record.AcademicDetails ?? record.academic ?? record.Academic ?? {};
-      const source = { ...record, ...admission, ...academic, ...nested };
+      const summary = asList(summaryResponse?.data).find((item) => String(valueOf(item, "studentId", "StudentId", "id", "Id")) === String(id)
+        || String(valueOf(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")) === String(valueOf(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")));
+      const enrichedRecord = { ...record };
+      Object.entries(summary || {}).forEach(([key, value]) => {
+        if ((enrichedRecord[key] == null || enrichedRecord[key] === "") && value != null && value !== "") enrichedRecord[key] = value;
+      });
+      const nested = enrichedRecord.student ?? enrichedRecord.Student ?? enrichedRecord.profile ?? enrichedRecord.Profile ?? {};
+      const admission = enrichedRecord.admission ?? enrichedRecord.Admission ?? {};
+      const academic = enrichedRecord.academicDetails ?? enrichedRecord.AcademicDetails ?? enrichedRecord.academic ?? enrichedRecord.Academic ?? {};
+      const source = { ...enrichedRecord, ...admission, ...academic, ...nested };
       setStudent({ name: stringValue(valueOf(source, "studentName", "StudentName", "fullName", "name")) || "Student", rollNo: stringValue(valueOf(source, "rollNo", "RollNo", "rollNumber", "RollNumber")) || "—", admissionNo: stringValue(valueOf(source, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")) || "-" });
-      setForm(formFromStudent(record)); setErrors({}); setTouched({}); setPhotoFile(null); setPhotoPreview(""); setPhotoError("");
+      setForm(formFromStudent(enrichedRecord)); setErrors({}); setTouched({}); setPhotoFile(null); setPhotoPreview(""); setPhotoError("");
     } catch (error) { setLoadError(getApiErrorMessage(error) || "Unable to load the student profile."); }
     finally { setLoading(false); }
   }, [id]);
   useEffect(() => { loadStudent(); }, [loadStudent]);
+  const campusOptions = useMemo(() => (campuses || [])
+    .filter((campus) => campus?.isActive !== false && campus?.status !== "Inactive")
+    .map((campus) => {
+      const value = campus?.campusId ?? campus?.id;
+      const name = campus?.name || campus?.campusName || "";
+      const code = campus?.code || campus?.campusCode || "";
+      return value == null || value === "" ? null : { value: String(value), label: code ? `${name || code} (${code})` : name || String(value) };
+    })
+    .filter(Boolean), [campuses]);
   useEffect(() => {
     let active = true;
     const loadLookups = async () => {
@@ -395,7 +416,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     }
     const optionalEmail = (value) => value.trim() || null;
     const payload = {
-      admissionId: numberOrZero(form.admissionId), admissionNo: form.admissionNo.trim(), admissionNumber: form.admissionNumber.trim(), admissionDate: form.admissionDate || null, admissionType: form.admissionType.trim(), admissionQuota: form.admissionQuota.trim(), medium: form.medium.trim(), secondLanguage: form.secondLanguage.trim(),
+      admissionId: numberOrZero(form.admissionId), admissionNo: form.admissionNo.trim(), admissionNumber: form.admissionNumber.trim(), admissionDate: form.admissionDate || null, admissionType: form.admissionType.trim(), admissionQuota: form.admissionQuota.trim(), campusId: numberOrZero(form.campusId), medium: form.medium.trim(), secondLanguage: form.secondLanguage.trim(),
       studentName: form.studentName.trim(), photo: form.photo.trim(), gender: form.gender, dateOfBirth: form.dateOfBirth || null, bloodGroup: form.bloodGroup, email: optionalEmail(form.email), mobileNumber: form.mobileNumber.trim(), aadhaarNumber: form.aadhaarNumber.trim(), nationality: form.nationality.trim(), religion: form.religion.trim(), category: form.category.trim(), address: form.address.trim(), city: form.city.trim(), district: form.district.trim(), state: form.state.trim(), pincode: form.pincode.trim(),
       boardId: numberOrZero(form.boardId), academicYearId: numberOrZero(form.academicYearId), academicLevelId: numberOrZero(form.academicLevelId), groupId: numberOrZero(form.groupId), programId: numberOrZero(form.programId), sectionId: numberOrZero(form.sectionId), rollNo: form.rollNo.trim(), rollNumber: form.rollNumber.trim(), feeStructureId: numberOrZero(form.feeStructureId), paymentPlan: form.paymentPlan.trim(),
       studentType: form.studentType,
@@ -424,12 +445,12 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     finally { if (!saved) setSaving(false); }
   };
   const field = (key, props = {}) => ({ ...props, error: errors[key], onBlur: blur(key) });
-  if (loading) return embedded ? <div className="cms-card"><div className="cms-empty">Loading student profile...</div></div> : <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">Loading student profile...</div></div></DashboardLayout>;
+  if (loading) return embedded ? <div className="cms-card"><SkeletonPage variant="form" rows={8} /></div> : <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><SkeletonPage variant="form" rows={8} /></div></DashboardLayout>;
   if (!student) return embedded ? <div className="cms-card"><div className="cms-empty">{loadError || "Student record was not found."}</div></div> : <DashboardLayout title="EDIT STUDENT PROFILE" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{loadError || "Student record was not found."}</div></div></DashboardLayout>;
   const editor = <form onSubmit={submit} className="cms-card student-profile-edit" noValidate>
     {!embedded ? <div className="student-profile-edit-summary"><span><small>Student Name</small><b>{student.name}</b></span><span><small>Roll No.</small><b>{student.rollNo}</b></span><span><small>Admission No.</small><b>{student.admissionNo}</b></span></div> : null}
     <ProfileSection title="Admission Details">
-      <Field label="Admission No." {...field("admissionNo")}><input value={form.admissionNo} onChange={change("admissionNo")} /></Field><Field label="Admission Number" {...field("admissionNumber")}><input value={form.admissionNumber} onChange={change("admissionNumber")} /></Field><Field label="Admission Date" {...field("admissionDate")}><input type="date" value={form.admissionDate} onChange={change("admissionDate")} /></Field><Field label="Medium"><input value={form.medium} onChange={change("medium")} /></Field><Field label="Second Language"><input value={form.secondLanguage} onChange={change("secondLanguage")} /></Field>
+      <Field label="Admission No." {...field("admissionNo")}><input value={form.admissionNo} onChange={change("admissionNo")} /></Field><Field label="Admission Number" {...field("admissionNumber")}><input value={form.admissionNumber} onChange={change("admissionNumber")} /></Field><Field label="Admission Date" {...field("admissionDate")}><input type="date" value={form.admissionDate} onChange={change("admissionDate")} /></Field><SelectField label="Campus" required value={form.campusId} onChange={change("campusId")} onBlur={blur("campusId")} error={errors.campusId} options={campusOptions} placeholder="Select Campus" /><Field label="Medium"><input value={form.medium} onChange={change("medium")} /></Field><Field label="Second Language"><input value={form.secondLanguage} onChange={change("secondLanguage")} /></Field>
     </ProfileSection>
     <ProfileSection title="Personal Information">
       <Field label="Student Name *" {...field("studentName")}><input value={form.studentName} onChange={change("studentName")} maxLength="100" /></Field>
@@ -438,7 +459,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     </ProfileSection>
     <ProfileSection title="Contact Information"><Field label="Email" {...field("email")}><input type="email" value={form.email} onChange={change("email")} maxLength="254" /></Field><Field label="Mobile Number" {...field("mobileNumber")}><input type="tel" inputMode="numeric" maxLength="10" value={form.mobileNumber} onChange={numericChange("mobileNumber", 10)} /></Field><Field label="Aadhaar Number" {...field("aadhaarNumber")}><input type="text" inputMode="numeric" maxLength="12" value={form.aadhaarNumber} onChange={numericChange("aadhaarNumber", 12)} /></Field></ProfileSection>
     <ProfileSection title="Academic Placement">
-      <SelectField label="Board" value={form.boardId} options={lookups.boards} placeholder="Select board" disabled /><SelectField label="Academic Year" value={form.academicYearId} options={lookups.years} placeholder="Select academic year" disabled /><SelectField label="Academic Level" value={form.academicLevelId} options={lookups.levels} placeholder="Select academic level" disabled /><SelectField label="Group" value={form.groupId} options={lookups.groups} placeholder="Select group" disabled /><SelectField label="Program" value={form.programId} options={lookups.programs} placeholder="Select program" disabled /><SelectField label="Section" value={form.sectionId} options={lookups.sections} placeholder="Select section" disabled /><Field label="Roll No."><input value={form.rollNo} disabled /></Field><Field label="Roll Number"><input value={form.rollNumber} disabled /></Field>
+      <SelectField label="Board" value={form.boardId} options={lookups.boards} placeholder="Select board" disabled /><SelectField label="Academic Year" value={form.academicYearId} options={lookups.years} placeholder="Select academic year" disabled /><SelectField label="Academic Level" value={form.academicLevelId} options={lookups.levels} placeholder="Select academic level" disabled /><SelectField label="Group" value={form.groupId} options={lookups.groups} placeholder="Select group" disabled /><SelectField label="Program" value={form.programId} options={lookups.programs} placeholder="Select program" disabled /><SelectField label="Section" value={form.sectionId} options={lookups.sections} placeholder="Select section" disabled /><Field label="Roll No."><input value={form.rollNo || form.rollNumber} disabled /></Field>
     </ProfileSection>
     <ProfileSection title="Student Type & Residential Allocation">
       <AllocationSelectField label="Student Type" value={form.studentType} onChange={changeAllocation("studentType")} onBlur={blur("studentType")} error={errors.studentType} options={["Non-Residential", "Residential"]} placeholder="Select Type" />
@@ -462,10 +483,10 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
 
 function ProfileSection({ title, children }) { return <section className="student-profile-section"><h2>{title}</h2><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
 function Field({ label, error, className = "", children, onBlur }) { return <label className={`cms-field ${className}${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}</span>{children}{error ? <small className="cms-field-error">{error}</small> : null}</label>; }
-function SelectField({ label, value, onChange, options, placeholder, disabled = false }) {
+function SelectField({ label, value, onChange, options, placeholder, disabled = false, required = false, error, onBlur }) {
   const selected = String(value ?? "");
   const hasSelectedOption = options.some((option) => option.value === selected);
-  return <label className="cms-field"><span>{label}</span><select value={selected} onChange={onChange} disabled={disabled}><option value="">{placeholder}</option>{selected && !hasSelectedOption ? <option value={selected}>Loading {label.toLowerCase()}…</option> : null}{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+  return <label className={`cms-field${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span><select value={selected} onChange={onChange} disabled={disabled}><option value="">{placeholder}</option>{selected && !hasSelectedOption ? <option value={selected}>Loading {label.toLowerCase()}…</option> : null}{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{error ? <small className="cms-field-error">{error}</small> : null}</label>;
 }
 function AllocationSelectField({ label, value, onChange, onBlur, error, options, placeholder }) {
   const selected = String(value ?? "");

@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonPage, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -664,6 +664,24 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
 
   // 4. If no specific board is attached to the staff record, they are shared/general across all boards
   return true;
+};
+
+export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
+  if (!selectedCampus) return true;
+  if (!staffRecord) return false;
+
+  const targetId = selectedCampus.campusId ?? selectedCampus.id;
+  const targetName = selectedCampus.campusName ?? selectedCampus.name;
+  const targetCode = selectedCampus.campusCode ?? selectedCampus.code;
+  const recordCampus = staffRecord.campus ?? staffRecord.Campus ?? {};
+  const recordId = staffRecord.campusId ?? staffRecord.CampusId ?? recordCampus.campusId ?? recordCampus.id ?? recordCampus.Id;
+  const recordName = staffRecord.campusName ?? staffRecord.CampusName ?? recordCampus.campusName ?? recordCampus.name ?? recordCampus.Name;
+  const recordCode = staffRecord.campusCode ?? staffRecord.CampusCode ?? recordCampus.campusCode ?? recordCampus.code ?? recordCampus.Code;
+
+  if (recordId != null && targetId != null) return String(recordId) === String(targetId);
+  if (recordCode && targetCode) return String(recordCode).trim().toLowerCase() === String(targetCode).trim().toLowerCase();
+  if (recordName && targetName) return String(recordName).trim().toLowerCase() === String(targetName).trim().toLowerCase();
+  return false;
 };
 
 export const TEACHING_ROLE_NAMES = [
@@ -2372,6 +2390,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
 function Dashboard({ records = [] }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [credModalOpen, setCredModalOpen] = useState(false);
@@ -2385,8 +2404,10 @@ function Dashboard({ records = [] }) {
         const params = {};
         const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         if (activeBoardCode) params.boardCode = activeBoardCode;
         if (activeBoardId) params.boardId = activeBoardId;
+        if (activeCampusId != null && activeCampusId !== "") params.campusId = Number(activeCampusId) || activeCampusId;
 
         const response = await apiClient.get(apiEndpoints.faculty.dashboardStats, { params });
         if (isMounted && response.data) {
@@ -2400,14 +2421,15 @@ function Dashboard({ records = [] }) {
     }
     fetchStats();
     return () => { isMounted = false; };
-  }, [selectedBoard]);
+  }, [selectedBoard, selectedCampus]);
 
   const safeRecords = useMemo(() => {
     const raw = Array.isArray(records) ? records : [];
-    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards));
-  }, [records, selectedBoard, boards]);
+    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards) && isStaffMatchingCampus(r, selectedCampus));
+  }, [records, selectedBoard, boards, selectedCampus]);
 
-  const hasStats = stats !== null && stats !== undefined;
+  // Dashboard stats are global aggregates; use campus-scoped staff records when a campus is selected.
+  const hasStats = !selectedCampus && stats !== null && stats !== undefined;
 
   const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.filter((r) => !r?.status || r?.status === "Active").length || 0));
   const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Teaching").length || 0));
@@ -2730,6 +2752,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
 function StaffList({ records = [], setRecords, forced }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
   const list = Array.isArray(records) ? records : [];
   const importInputRef = useRef(null);
   const [tab, setTab] = useState(forced || "All");
@@ -2770,6 +2793,7 @@ function StaffList({ records = [], setRecords, forced }) {
         const currentTab = forced || tab;
         const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         const params = {
           PageNumber: page,
           PageSize: size,
@@ -2780,6 +2804,7 @@ function StaffList({ records = [], setRecords, forced }) {
           ProfileStatus: currentTab === "Completed" ? "Completed" : (currentTab === "Pending" ? "Pending" : undefined),
           BoardCode: activeBoardCode || undefined,
           BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
         };
 
         const res = await apiClient.get(apiEndpoints.faculty.list, { params });
@@ -2802,7 +2827,7 @@ function StaffList({ records = [], setRecords, forced }) {
     }
     fetchStaffList();
     return () => { isMounted = false; };
-  }, [page, size, q, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard]);
+  }, [page, size, q, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus]);
 
   // Handle Client-side Excel Parsing & Row-by-Row Validation
   const handleBulkImport = async (e) => {
@@ -3144,6 +3169,11 @@ function StaffList({ records = [], setRecords, forced }) {
     } finally {
       setRecords((prev) => prev.filter((r) => r.id !== remove.id));
       setRemove(null);
+      try {
+        window.dispatchEvent(new Event("staff-records-updated"));
+      } catch (error) {
+        console.warn("Unable to notify Roles & Permissions about the staff deletion:", error);
+      }
     }
   };
 
@@ -3202,6 +3232,7 @@ function StaffList({ records = [], setRecords, forced }) {
       (r) =>
         r &&
         isStaffMatchingBoard(r, selectedBoard, boards) &&
+        isStaffMatchingCampus(r, selectedCampus) &&
         (currentTab === "All" ||
           (currentTab === "Pending"
             ? r.staffType === "Teaching" && r.profileStatus !== "Completed"
@@ -3215,7 +3246,7 @@ function StaffList({ records = [], setRecords, forced }) {
           String(v || "").toLowerCase().includes((q || "").toLowerCase()),
         ),
     );
-  }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards]);
+  }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards, selectedCampus]);
 
   const [apiFilterDepts, setApiFilterDepts] = useState([]);
   const [apiFilterDesigs, setApiFilterDesigs] = useState([]);
@@ -3353,7 +3384,7 @@ function StaffList({ records = [], setRecords, forced }) {
   const showStaffType = forced !== "Teaching" && forced !== "Non-Teaching";
   const shown = useMemo(() => {
     if (apiItems !== null && Array.isArray(apiItems)) {
-      return apiItems.map((r) => {
+      return apiItems.filter((r) => isStaffMatchingCampus(r, selectedCampus)).map((r) => {
         let empId = r.employeeId;
         if (!empId || typeof empId === "object" || empId === "[object Object]") {
           empId = r.id ? `PCTCH00${r.id}` : "PCTCH0001";
@@ -3366,9 +3397,9 @@ function StaffList({ records = [], setRecords, forced }) {
       });
     }
     return rows.slice((page - 1) * size, page * size);
-  }, [apiItems, rows, page, size]);
+  }, [apiItems, rows, page, size, selectedCampus]);
 
-  const totalRowsCount = apiItems !== null ? totalApiCount : rows.length;
+  const totalRowsCount = apiItems !== null ? (selectedCampus && shown.length === 0 ? 0 : totalApiCount) : rows.length;
 
   return (
     <DashboardLayout
@@ -3494,11 +3525,9 @@ function StaffList({ records = [], setRecords, forced }) {
               </thead>
               <tbody>
                 {loadingList ? (
-                  <tr>
-                    <td colSpan={showStaffType ? 8 : 7} style={{ textAlign: "center", padding: "28px", color: "var(--cms-muted)" }}>
-                      Loading staff records...
-                    </td>
-                  </tr>
+                  Array.from({ length: 6 }, (_, index) => (
+                    <SkeletonRow key={index} columns={showStaffType ? 8 : 7} />
+                  ))
                 ) : shown.length > 0 ? (
                   shown.map((r, idx) => (
                     <tr key={`staff-item-${r.id || r.employeeId || idx}`}>
@@ -4762,10 +4791,14 @@ function Pending({ records = [], setRecords, activity }) {
                 </tr>
               </thead>
               <tbody>
-                {shown.length === 0 ? (
+                {loading ? (
+                  Array.from({ length: 6 }, (_, index) => (
+                    <SkeletonRow key={index} columns={tab !== "Submitted" ? 9 : 8} />
+                  ))
+                ) : shown.length === 0 ? (
                   <tr>
                     <td colSpan={tab !== "Submitted" ? 9 : 8} style={{ textAlign: "center", padding: "32px", color: "var(--cms-muted)" }}>
-                      {loading ? "Loading submissions..." : `No ${tab.toLowerCase()} teaching staff records found.`}
+                      {`No ${tab.toLowerCase()} teaching staff records found.`}
                     </td>
                   </tr>
                 ) : (
@@ -4920,9 +4953,7 @@ function Details({ record, records, setRecords, id }) {
     return (
       <DashboardLayout title="Staff Details" breadcrumb={["People", "Staff Management"]}>
         <main className="staff-mock-page">
-          <p style={{ margin: "40px 0", textAlign: "center", color: "var(--cms-muted)" }}>
-            Loading staff details...
-          </p>
+          <SkeletonPage variant="form" rows={8} />
         </main>
       </DashboardLayout>
     );
@@ -4952,6 +4983,11 @@ function Details({ record, records, setRecords, id }) {
       console.warn("PUT /api/v1/staff/{id} API error:", err);
     }
     setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? { ...r, ...updatedRecord } : r)));
+    try {
+      window.dispatchEvent(new Event("staff-records-updated"));
+    } catch (error) {
+      console.warn("Unable to notify Roles & Permissions about the staff update:", error);
+    }
     setToast("Staff details updated successfully.");
   };
 
@@ -5526,6 +5562,7 @@ export default function StaffManagementPage() {
   const n = useNavigate();
   const { id } = useParams();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
 
   const [records, setRaw] = useState(() => []);
   const [activities, setActivityRaw] = useState(() => []);
@@ -5535,8 +5572,8 @@ export default function StaffManagementPage() {
 
   const safeRecords = useMemo(() => {
     const raw = Array.isArray(records) ? records : [];
-    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards));
-  }, [records, selectedBoard, boards]);
+    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards) && isStaffMatchingCampus(r, selectedCampus));
+  }, [records, selectedBoard, boards, selectedCampus]);
 
   const setRecords = (next) => {
     const rawList = Array.isArray(next) ? next : [];
@@ -5570,10 +5607,12 @@ export default function StaffManagementPage() {
     async function loadInit() {
       try {
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         const listRes = await staffApi.getStaffPaged({
           PageNumber: 1,
           PageSize: 100,
           BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
         });
         if (isMounted && listRes.data) {
           const listItems = listRes.data.items || listRes.data.data || (Array.isArray(listRes.data) ? listRes.data : []);
@@ -5585,7 +5624,7 @@ export default function StaffManagementPage() {
     }
     loadInit();
     return () => { isMounted = false; };
-  }, [selectedBoard]);
+  }, [selectedBoard, selectedCampus]);
 
   // Fetch staff record from API whenever id changes
   useEffect(() => {
@@ -5660,9 +5699,7 @@ export default function StaffManagementPage() {
     page = (
       <DashboardLayout title="Staff Details" breadcrumb={["People", "Staff Management"]}>
         <main className="staff-mock-page">
-          <p style={{ margin: "40px 0", textAlign: "center", color: "var(--cms-muted)" }}>
-            Loading staff details...
-          </p>
+          <SkeletonPage variant="form" rows={8} />
         </main>
       </DashboardLayout>
     );

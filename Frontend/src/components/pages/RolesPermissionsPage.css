@@ -128,19 +128,39 @@
 
 .rbac-role-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
   align-items: center;
   width: 100%;
   min-height: 56px;
-  padding: 9px;
+  padding: 0;
   border: 1px solid transparent;
   border-bottom-color: var(--cms-border);
   border-radius: 8px;
   background: transparent;
   color: var(--cms-text);
   text-align: left;
+}
+
+.rbac-role-select {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  min-height: 54px;
+  padding: 8px 4px 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+.rbac-role-select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--cms-primary) 55%, transparent);
+  outline-offset: -2px;
 }
 
 .rbac-role-item:hover {
@@ -221,6 +241,19 @@
   color: #16335e;
   font-size: 12px;
   font-weight: 800;
+  margin-right: 9px;
+  padding: 0 7px;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.rbac-user-count:hover,
+.rbac-user-count:focus-visible {
+  outline: none;
+  border-color: var(--cms-primary);
+  background: var(--cms-primary);
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .rbac-modal-layer {
@@ -237,6 +270,7 @@
 
 .rbac-member-dialog {
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
   width: min(560px, 100%);
   max-height: min(680px, calc(100dvh - 36px));
@@ -260,6 +294,30 @@
   margin: 0;
   color: var(--cms-text);
   font-size: 17px;
+}
+
+.rbac-member-dialog-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rbac-member-dialog-count {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--cms-primary-border);
+  border-radius: 999px;
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary-dark);
+  font-size: 11.5px;
+}
+
+.rbac-member-dialog > .rbac-search {
+  width: 100%;
+  max-width: none;
 }
 
 .rbac-member-dialog-head p {
@@ -361,11 +419,24 @@
 .rbac-member-empty {
   display: grid;
   place-items: center;
-  gap: 5px;
+  gap: 6px;
   min-height: 150px;
+  padding: 22px;
   color: var(--cms-muted);
   text-align: center;
-  font-size: 12.5px;
+}
+
+.rbac-member-empty svg {
+  color: var(--cms-primary-dark);
+}
+
+.rbac-member-empty strong {
+  color: var(--cms-text);
+  font-size: 13px;
+}
+
+.rbac-member-empty span {
+  font-size: 12px;
 }
 
 .rbac-detail-header {
@@ -1114,6 +1185,25 @@
 }
 
 @media (max-width: 720px) {
+  .rbac-modal-layer {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .rbac-member-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+  }
+
+  .rbac-member-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rbac-member-item > :last-child {
+    grid-column: 2;
+    justify-self: start;
+  }
+
   .rbac-role-panel,
   .rbac-detail-panel,
   .rbac-assignment-panel {
