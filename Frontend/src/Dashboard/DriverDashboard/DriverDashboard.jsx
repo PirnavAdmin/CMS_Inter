@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import DriverLayout from "./layout/DriverLayout.jsx";
-import DriverLoginPage from "./pages/DriverLoginPage.jsx";
 import DriverHomePage from "./pages/DriverHomePage.jsx";
 import DriverRoutePage from "./pages/DriverRoutePage.jsx";
 import DriverTripsPage from "./pages/DriverTripsPage.jsx";
@@ -9,22 +8,12 @@ import DriverStudentsPage from "./pages/DriverStudentsPage.jsx";
 import DriverGpsPage from "./pages/DriverGpsPage.jsx";
 import DriverReportsPage from "./pages/DriverReportsPage.jsx";
 import DriverProfilePage from "./pages/DriverProfilePage.jsx";
-import { mockStudents } from "./data/driverMockData.js";
 import "./DriverDashboard.css";
+import { getAuthUser } from "../../features/authStorage.js";
 
 export default function DriverDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
-
-  // Authentication State
-  const [session, setSession] = useState(() => {
-    try {
-      const stored = sessionStorage.getItem("pjc-driver-session");
-      return stored ? JSON.parse(stored) : null;
-    } catch {
-      return null;
-    }
-  });
 
   // Active Tab state synced with URL pathname if present
   const getTabFromPath = () => {
@@ -46,20 +35,34 @@ export default function DriverDashboard() {
   }, [location.pathname]);
 
   // Global shared state for students & active trip
-  const [students, setStudents] = useState(mockStudents);
+  const [students, setStudents] = useState([]);
   const [activeTripState, setActiveTripState] = useState({
     morningTripStatus: "In Progress",
     eveningTripStatus: "Pending",
   });
 
-  const handleLoginSuccess = (userSession) => {
-    setSession(userSession);
-    setActiveTab("home");
-  };
+  useEffect(() => {
+    const fetchInitialData = async () => {
+      try {
+        const { getStudents, getTrips } = await import("../../api/transportDriverApi.js");
+        const res = await getStudents();
+        if (res.data?.students) {
+          setStudents(res.data.students);
+        } else if (Array.isArray(res.data)) {
+          setStudents(res.data);
+        }
+        // Optionally fetch active trip state if needed:
+        // const tripsRes = await getTrips();
+        // setActiveTripState(tripsRes.data.activeTripState);
+      } catch (err) {
+        console.error("Failed to load global driver data", err);
+      }
+    };
+    fetchInitialData();
+  }, []);
 
   const handleLogout = () => {
-    sessionStorage.removeItem("pjc-driver-session");
-    setSession(null);
+    navigate("/login");
   };
 
   const handleSelectTab = (tabId) => {
@@ -99,11 +102,6 @@ export default function DriverDashboard() {
       [`${tripType}TripStatus`]: "Completed",
     }));
   };
-
-  // If not logged in, show Driver Login Page
-  if (!session) {
-    return <DriverLoginPage onLoginSuccess={handleLoginSuccess} />;
-  }
 
   return (
     <DriverLayout

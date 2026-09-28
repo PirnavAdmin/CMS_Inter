@@ -1235,6 +1235,18 @@
   text-align: center;
 }
 
+.dashboard-page-skeleton .dashboard-kpi-card { min-height: 118px; display: flex; align-items: flex-start; gap: 13px; }
+.dashboard-page-skeleton .dashboard-quick-actions { display: grid; gap: 14px; }
+.dashboard-page-skeleton .dashboard-quick-actions-list { min-height: 54px; }
+.dashboard-skeleton-chart { height: 166px; width: 100%; margin-bottom: 18px; border-radius: 10px; }
+.dashboard-skeleton-list { min-height: 250px; }
+.dashboard-skeleton-donut { width: 142px; height: 142px; margin: 4px auto 22px; border-radius: 50%; }
+.dashboard-skeleton-chips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.dashboard-skeleton-chips .cms-skeleton { height: 38px; }
+.dashboard-skeleton-list { display: grid; align-content: start; gap: 14px; }
+.dashboard-skeleton-list > div { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 10px; }
+.dashboard-skeleton-list-icon { width: 30px; height: 30px; border-radius: 8px; }
+
 .dashboard-spinner {
   width: 18px;
   height: 18px;

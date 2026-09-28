@@ -22,13 +22,68 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         // GET ALL STUDENT ADMISSIONS
         // =========================================================
-        public async Task<IEnumerable<StudentAdmissionResponseDto>> GetAllAsync()
+        public async Task<IEnumerable<StudentAdmissionResponseDto>> GetAllAsync(int? campusId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
-            return await connection.QueryAsync<StudentAdmissionResponseDto>(
-                "sp_GetAllStudentAdmissions",
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var parameters = new DynamicParameters();
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    parameters.Add("p_CampusId", campusId.Value, DbType.Int32);
+                }
+                else
+                {
+                    parameters.Add("p_CampusId", null, DbType.Int32);
+                }
+
+                var result = (await connection.QueryAsync<StudentAdmissionResponseDto>(
+                    "sp_GetAllStudentAdmissions",
+                    parameters,
+                    commandType: CommandType.StoredProcedure)).ToList();
+
+                if (campusId.HasValue && campusId.Value > 0)
+                {
+                    result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                }
+
+                return result;
+            }
+            catch
+            {
+                try
+                {
+                    var result = (await connection.QueryAsync<StudentAdmissionResponseDto>(
+                        "sp_GetAllStudentAdmissions",
+                        commandType: CommandType.StoredProcedure)).ToList();
+
+                    if (campusId.HasValue && campusId.Value > 0)
+                    {
+                        result = result.Where(x => x.CampusId == campusId.Value).ToList();
+                    }
+
+                    return result;
+                }
+                catch
+                {
+                    const string sql = @"
+                        SELECT sa.*, b.BoardName, ay.AcademicYearName, g.GroupName, c.CampusName, CONCAT(st.FirstName, ' ', st.LastName) AS AdmittedByName
+                        FROM StudentAdmissions sa
+                        LEFT JOIN Boards b ON sa.BoardId = b.BoardId
+                        LEFT JOIN AcademicYears ay ON sa.AcademicYearId = ay.AcademicYearId
+                        LEFT JOIN `Groups` g ON sa.GroupId = g.GroupId
+                        LEFT JOIN Staffs st ON sa.AdmittedById = st.Id
+                        LEFT JOIN Campuses c ON sa.CampusId = c.CampusId
+                        WHERE sa.IsActive = 1
+                          AND (@CampusId IS NULL OR @CampusId = 0 OR sa.CampusId = @CampusId)
+                        ORDER BY sa.AdmissionId DESC";
+
+                    return await connection.QueryAsync<StudentAdmissionResponseDto>(
+                        sql,
+                        new { CampusId = campusId });
+                }
+            }
         }
 
 
@@ -40,13 +95,37 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var connection = _context.Database.GetDbConnection();
 
-            return await connection.QueryFirstOrDefaultAsync<StudentAdmissionResponseDto>(
+            var result = await connection.QueryFirstOrDefaultAsync<StudentAdmissionResponseDto>(
                 "sp_GetStudentAdmissionById",
                 new
                 {
                     p_AdmissionId = admissionId
                 },
                 commandType: CommandType.StoredProcedure);
+
+            if (result != null)
+            {
+                if (result.FeeStructureId.HasValue && string.IsNullOrWhiteSpace(result.FeeStructureName))
+                {
+                    result.FeeStructureName = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT StructureName FROM FeeStructures WHERE FeeStructureId = @FeeStructureId LIMIT 1",
+                        new { FeeStructureId = result.FeeStructureId.Value });
+                }
+
+                var componentIds = await connection.QueryAsync<int>(
+                    "SELECT FeeStructureComponentId FROM AdmissionFeeSelections WHERE AdmissionId = @AdmissionId AND IsSelected = 1",
+                    new { AdmissionId = admissionId });
+
+                result.SelectedFeeStructureComponentIds = componentIds.ToList();
+
+                result.HostelBlock = !string.IsNullOrWhiteSpace(result.HostelBlock) ? result.HostelBlock : result.FetchedHostelBlock;
+                result.HostelRoom = !string.IsNullOrWhiteSpace(result.HostelRoom) ? result.HostelRoom : result.FetchedHostelRoom;
+                result.HostelBed = !string.IsNullOrWhiteSpace(result.HostelBed) ? result.HostelBed : result.FetchedHostelBed;
+                result.BusRoute = !string.IsNullOrWhiteSpace(result.BusRoute) ? result.BusRoute : result.FetchedBusRoute;
+                result.PickupPoint = !string.IsNullOrWhiteSpace(result.PickupPoint) ? result.PickupPoint : result.FetchedPickupPoint;
+            }
+
+            return result;
         }
 
         // =========================================================
@@ -58,11 +137,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             IDbTransaction? transaction = null)
         {
             var conn = connection ?? _context.Database.GetDbConnection();
-            return await conn.QueryFirstOrDefaultAsync<Student>(
-                "sp_GetStudentByAdmissionId",
-                new { p_AdmissionId = admissionId },
-                transaction: transaction,
-                commandType: CommandType.StoredProcedure);
+            const string sql = @"
+                SELECT * FROM Students 
+                WHERE AdmissionId = @AdmissionId 
+                ORDER BY StudentId DESC 
+                LIMIT 1";
+            return await conn.QueryFirstOrDefaultAsync<Student>(sql, new { AdmissionId = admissionId }, transaction: transaction);
         }
 
 
@@ -172,12 +252,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                         // -------------------------------------------------
                         // ADDRESS
                         // -------------------------------------------------
-                        p_HouseDoorNumber = request.HouseDoorNumber,
+                      p_HouseDoorNumber = request.HouseDoorNumber,
                         p_StreetVillage = request.StreetVillage,
+
+        
                         p_City = request.City,
                         p_District = request.District,
                         p_State = request.State,
-                        p_Pincode = request.Pincode,
+                        p_Pincode = request.Pincode, p_AdmittedById = request.AdmittedById,
 
 
                         // -------------------------------------------------
@@ -202,16 +284,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_Medium = request.Medium,
 
                         p_SecondLanguage =
-                            request.SecondLanguage,
-
-                        p_StudentType = request.StudentType,
-                        p_TransportRequired = request.TransportRequired,
-                        p_BusRoute = request.BusRoute,
-                        p_PickupPoint = request.PickupPoint,
-                        p_HostelBlock = request.HostelBlock,
-                        p_HostelRoom = request.HostelRoom,
-                        p_HostelBed = request.HostelBed,
-                        p_HallTicketNumber = request.HallTicketNumber
+                            request.SecondLanguage
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -221,7 +294,112 @@ namespace CollegeManagement.API.Repositories.Implementations
                     "Student admission could not be created.");
             }
 
-            return result;
+            if (result.AdmissionId > 0)
+            {
+                string? hostelBlock = request.HostelBlock;
+                if (string.IsNullOrWhiteSpace(hostelBlock) && request.HostelId.HasValue)
+                {
+                    hostelBlock = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT HostelName FROM hostel_blocks WHERE HostelId = @HostelId LIMIT 1",
+                        new { request.HostelId });
+                }
+
+                string? hostelRoom = request.HostelRoom;
+                if (string.IsNullOrWhiteSpace(hostelRoom) && request.RoomId.HasValue)
+                {
+                    hostelRoom = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT RoomNumber FROM room_masters WHERE RoomId = @RoomId LIMIT 1",
+                        new { request.RoomId });
+                }
+
+                string? hostelBed = request.HostelBed;
+                if (string.IsNullOrWhiteSpace(hostelBed) && request.BedId.HasValue)
+                {
+                    hostelBed = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT BedNumber FROM hostel_beds WHERE BedId = @BedId LIMIT 1",
+                        new { request.BedId });
+                }
+
+                string? busRoute = request.BusRoute;
+                if (string.IsNullOrWhiteSpace(busRoute) && request.RouteId.HasValue)
+                {
+                    busRoute = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT RouteName FROM TransportRoutes WHERE RouteId = @RouteId LIMIT 1",
+                        new { request.RouteId });
+                }
+
+                string? pickupPoint = request.PickupPoint;
+                if (string.IsNullOrWhiteSpace(pickupPoint) && request.PickupPointId.HasValue)
+                {
+                    pickupPoint = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT COALESCE(StopName, PickupPointName) FROM PickupPoints WHERE PickupPointId = @PickupPointId LIMIT 1",
+                        new { request.PickupPointId });
+                }
+
+                const string updateSql = @"
+                    UPDATE StudentAdmissions
+                    SET CampusId = COALESCE(@CampusId, CampusId),
+                        StudentType = COALESCE(@StudentType, StudentType),
+                        TransportRequired = COALESCE(@TransportRequired, TransportRequired),
+                        BusType = COALESCE(@BusType, BusType),
+                        RouteId = COALESCE(@RouteId, RouteId),
+                        BusRoute = COALESCE(@BusRoute, BusRoute),
+                        PickupPointId = COALESCE(@PickupPointId, PickupPointId),
+                        PickupPoint = COALESCE(@PickupPoint, PickupPoint),
+                        HostelId = COALESCE(@HostelId, HostelId),
+                        HostelBlock = COALESCE(@HostelBlock, HostelBlock),
+                        RoomId = COALESCE(@RoomId, RoomId),
+                        HostelRoom = COALESCE(@HostelRoom, HostelRoom),
+                        BedId = COALESCE(@BedId, BedId),
+                        HostelBed = COALESCE(@HostelBed, HostelBed),
+                        HallTicketNumber = COALESCE(@HallTicketNumber, HallTicketNumber)
+                    WHERE AdmissionId = @AdmissionId";
+
+                await connection.ExecuteAsync(updateSql, new
+                {
+                    AdmissionId = result.AdmissionId,
+                    request.CampusId,
+                    request.StudentType,
+                    TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
+                    request.BusType,
+                    request.RouteId,
+                    BusRoute = busRoute,
+                    request.PickupPointId,
+                    PickupPoint = pickupPoint,
+                    request.HostelId,
+                    HostelBlock = hostelBlock,
+                    request.RoomId,
+                    HostelRoom = hostelRoom,
+                    request.BedId,
+                    HostelBed = hostelBed,
+                    request.HallTicketNumber
+                });
+
+                result.CampusId = request.CampusId ?? result.CampusId;
+
+                result.StudentType = request.StudentType ?? result.StudentType;
+                result.TransportRequired = request.TransportRequired ?? result.TransportRequired;
+                result.BusType = request.BusType ?? result.BusType;
+                result.RouteId = request.RouteId ?? result.RouteId;
+                result.BusRoute = busRoute ?? result.BusRoute;
+                result.PickupPointId = request.PickupPointId ?? result.PickupPointId;
+                result.PickupPoint = pickupPoint ?? result.PickupPoint;
+                result.HostelId = request.HostelId ?? result.HostelId;
+                result.HostelBlock = hostelBlock ?? result.HostelBlock;
+                result.RoomId = request.RoomId ?? result.RoomId;
+                result.HostelRoom = hostelRoom ?? result.HostelRoom;
+                result.BedId = request.BedId ?? result.BedId;
+                result.HostelBed = hostelBed ?? result.HostelBed;
+                result.HallTicketNumber = request.HallTicketNumber ?? result.HallTicketNumber;
+            }
+
+            if (result != null)
+            {
+                result.FeeStructureId ??= request.FeeStructureId;
+                result.PaymentPlan ??= request.PaymentPlan;
+            }
+
+            return result!;
         }
 
 
@@ -417,18 +595,114 @@ namespace CollegeManagement.API.Repositories.Implementations
                             request.Medium,
 
                         p_SecondLanguage =
-                            request.SecondLanguage,
-
-                        p_StudentType = request.StudentType,
-                        p_TransportRequired = request.TransportRequired,
-                        p_BusRoute = request.BusRoute,
-                        p_PickupPoint = request.PickupPoint,
-                        p_HostelBlock = request.HostelBlock,
-                        p_HostelRoom = request.HostelRoom,
-                        p_HostelBed = request.HostelBed,
-                        p_HallTicketNumber = request.HallTicketNumber
+                            request.SecondLanguage
                     },
                     commandType: CommandType.StoredProcedure);
+
+            if (result != null)
+            {
+                string? hostelBlock = request.HostelBlock;
+                if (string.IsNullOrWhiteSpace(hostelBlock) && request.HostelId.HasValue)
+                {
+                    hostelBlock = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT HostelName FROM hostel_blocks WHERE HostelId = @HostelId LIMIT 1",
+                        new { request.HostelId });
+                }
+
+                string? hostelRoom = request.HostelRoom;
+                if (string.IsNullOrWhiteSpace(hostelRoom) && request.RoomId.HasValue)
+                {
+                    hostelRoom = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT RoomNumber FROM room_masters WHERE RoomId = @RoomId LIMIT 1",
+                        new { request.RoomId });
+                }
+
+                string? hostelBed = request.HostelBed;
+                if (string.IsNullOrWhiteSpace(hostelBed) && request.BedId.HasValue)
+                {
+                    hostelBed = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT BedNumber FROM hostel_beds WHERE BedId = @BedId LIMIT 1",
+                        new { request.BedId });
+                }
+
+                string? busRoute = request.BusRoute;
+                if (string.IsNullOrWhiteSpace(busRoute) && request.RouteId.HasValue)
+                {
+                    busRoute = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT RouteName FROM TransportRoutes WHERE RouteId = @RouteId LIMIT 1",
+                        new { request.RouteId });
+                }
+
+                string? pickupPoint = request.PickupPoint;
+                if (string.IsNullOrWhiteSpace(pickupPoint) && request.PickupPointId.HasValue)
+                {
+                    pickupPoint = await connection.QueryFirstOrDefaultAsync<string>(
+                        "SELECT COALESCE(StopName, PickupPointName) FROM PickupPoints WHERE PickupPointId = @PickupPointId LIMIT 1",
+                        new { request.PickupPointId });
+                }
+
+                const string updateSql = @"
+                    UPDATE StudentAdmissions
+                    SET CampusId = COALESCE(@CampusId, CampusId),
+                        StudentType = COALESCE(@StudentType, StudentType),
+                        TransportRequired = COALESCE(@TransportRequired, TransportRequired),
+                        BusType = COALESCE(@BusType, BusType),
+                        RouteId = COALESCE(@RouteId, RouteId),
+                        BusRoute = COALESCE(@BusRoute, BusRoute),
+                        PickupPointId = COALESCE(@PickupPointId, PickupPointId),
+                        PickupPoint = COALESCE(@PickupPoint, PickupPoint),
+                        HostelId = COALESCE(@HostelId, HostelId),
+                        HostelBlock = COALESCE(@HostelBlock, HostelBlock),
+                        RoomId = COALESCE(@RoomId, RoomId),
+                        HostelRoom = COALESCE(@HostelRoom, HostelRoom),
+                        BedId = COALESCE(@BedId, BedId),
+                        HostelBed = COALESCE(@HostelBed, HostelBed),
+                        HallTicketNumber = COALESCE(@HallTicketNumber, HallTicketNumber)
+                    WHERE AdmissionId = @AdmissionId";
+
+                await connection.ExecuteAsync(updateSql, new
+                {
+                    AdmissionId = admissionId,
+                    request.CampusId,
+                    request.StudentType,
+                    TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
+                    request.BusType,
+                    request.RouteId,
+                    BusRoute = busRoute,
+                    request.PickupPointId,
+                    PickupPoint = pickupPoint,
+                    request.HostelId,
+                    HostelBlock = hostelBlock,
+                    request.RoomId,
+                    HostelRoom = hostelRoom,
+                    request.BedId,
+                    HostelBed = hostelBed,
+                    request.HallTicketNumber
+                });
+
+                result.CampusId = request.CampusId ?? result.CampusId;
+
+                result.StudentType = request.StudentType ?? result.StudentType;
+                result.TransportRequired = request.TransportRequired ?? result.TransportRequired;
+                result.BusType = request.BusType ?? result.BusType;
+                result.RouteId = request.RouteId ?? result.RouteId;
+                result.BusRoute = busRoute ?? result.BusRoute;
+                result.PickupPointId = request.PickupPointId ?? result.PickupPointId;
+                result.PickupPoint = pickupPoint ?? result.PickupPoint;
+                result.HostelId = request.HostelId ?? result.HostelId;
+                result.HostelBlock = hostelBlock ?? result.HostelBlock;
+                result.RoomId = request.RoomId ?? result.RoomId;
+                result.HostelRoom = hostelRoom ?? result.HostelRoom;
+                result.BedId = request.BedId ?? result.BedId;
+                result.HostelBed = hostelBed ?? result.HostelBed;
+                result.HallTicketNumber = request.HallTicketNumber ?? result.HallTicketNumber;
+            }
+
+            if (result != null)
+            {
+                result.FeeStructureId ??= request.FeeStructureId;
+                result.PaymentPlan ??= request.PaymentPlan;
+            }
 
             return result;
         }
@@ -519,16 +793,26 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var connection = _context.Database.GetDbConnection();
 
-            var result =
-                await connection.QuerySingleOrDefaultAsync<int>(
-                    "sp_DeleteStudentAdmission",
-                    new
-                    {
-                        p_AdmissionId = admissionId
-                    },
-                    commandType: CommandType.StoredProcedure);
+            try
+            {
+                var result =
+                    await connection.QuerySingleOrDefaultAsync<int>(
+                        "sp_DeleteStudentAdmission",
+                        new
+                        {
+                            p_AdmissionId = admissionId
+                        },
+                        commandType: CommandType.StoredProcedure);
 
-            return result > 0;
+                return result > 0;
+            }
+            catch (MySqlConnector.MySqlException ex) when (ex.Message.Contains("does not exist"))
+            {
+                var rows = await connection.ExecuteAsync(
+                    "DELETE FROM StudentAdmissions WHERE AdmissionId = @AdmissionId",
+                    new { AdmissionId = admissionId });
+                return rows > 0;
+            }
         }
 
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Clock, Plus, Pencil, Trash2, ShieldAlert, ArrowLeft, CheckCircle2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Loader, Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import attendanceTimingApi from "@/api/attendanceTimingApi.js";
 import "./AttendanceTimingConfigPage.css";
 
@@ -174,7 +174,7 @@ export default function AttendanceTimingConfigPage() {
           </header>
 
           {loading ? (
-            <div style={{ padding: "40px 0" }}><Loader size="large" /></div>
+            <div style={{ padding: "40px 0" }}><SkeletonPage variant="form" rows={5} /></div>
           ) : configs.length === 0 ? (
             <div className="cms-empty" style={{ padding: "40px" }}>
               No timing configurations found. Click <strong>Add Timing Rule</strong> to set up one.

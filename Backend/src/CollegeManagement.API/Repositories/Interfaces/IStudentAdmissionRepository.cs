@@ -22,7 +22,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
             IDbConnection? connection = null,
             IDbTransaction? transaction = null);
 
-        Task<IEnumerable<StudentAdmissionResponseDto>> GetAllAsync();
+        Task<IEnumerable<StudentAdmissionResponseDto>> GetAllAsync(
+            int? campusId = null);
 
         Task<StudentAdmissionResponseDto?> UpdateAsync(
             int admissionId,

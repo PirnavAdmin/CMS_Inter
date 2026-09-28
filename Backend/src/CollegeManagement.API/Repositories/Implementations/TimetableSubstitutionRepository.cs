@@ -84,6 +84,19 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<TimetableSubstitutionResponseDto?> GetSubstitutionByIdAsync(int id)
         {
+            return await Connection.QueryFirstOrDefaultAsync<TimetableSubstitutionResponseDto>(
+                "sp_GetTimetableSubstitutionById",
+                new { p_Id = id },
+                transaction: CurrentTransaction,
+                commandType: CommandType.StoredProcedure);
+        }
+
+        public async Task<IEnumerable<TimetableSubstitutionResponseDto>> GetSubstitutionsByIdsAsync(IEnumerable<int> ids)
+        {
+            var idList = ids?.Distinct().ToList();
+            if (idList == null || idList.Count == 0)
+                return Enumerable.Empty<TimetableSubstitutionResponseDto>();
+
             const string sql = @"
                 SELECT 
                     ts.Id AS SubstitutionId,
@@ -129,12 +142,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 LEFT JOIN Sections sec ON sec.SectionId = ts.SectionId
                 LEFT JOIN Periods per ON per.PeriodId = ts.PeriodId
                 LEFT JOIN Rooms r ON r.RoomId = t.RoomId
-                WHERE ts.Id = @Id
-                LIMIT 1;";
+                WHERE ts.Id IN @ids;";
 
-            return await Connection.QueryFirstOrDefaultAsync<TimetableSubstitutionResponseDto>(
+            return await Connection.QueryAsync<TimetableSubstitutionResponseDto>(
                 sql,
-                new { Id = id },
+                new { ids = idList },
                 transaction: CurrentTransaction);
         }
 

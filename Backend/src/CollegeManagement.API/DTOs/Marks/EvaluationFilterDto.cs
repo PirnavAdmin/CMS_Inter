@@ -4,6 +4,7 @@ namespace CollegeManagement.API.DTOs.Evaluations
 {
     public class EvaluationFilterDto
     {
+        public int? CampusId { get; set; }
         public int? BoardId { get; set; }
         public int? AcademicYearId { get; set; }
         public int? AcademicLevelId { get; set; }

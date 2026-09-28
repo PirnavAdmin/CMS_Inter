@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Models.Hostel;
+using CollegeManagement.API.Models.Hostel;
 
 namespace CollegeManagement.API.Repositories.Interfaces.Hostel
 {
@@ -6,7 +6,8 @@ namespace CollegeManagement.API.Repositories.Interfaces.Hostel
     {
         Task<IEnumerable<HostelBlock>> GetAllAsync(
             string? search = null,
-            string? status = null);
+            string? status = null,
+            int? campusId = null);
 
         Task<HostelBlock?> GetByIdAsync(int hostelId);
 

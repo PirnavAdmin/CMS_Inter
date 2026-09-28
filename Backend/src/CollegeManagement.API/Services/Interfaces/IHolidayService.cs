@@ -6,7 +6,7 @@ namespace CollegeManagement.API.Services.Interfaces
 {
     public interface IHolidayService
     {
-        Task<HolidaySummaryResponse> GetSummaryAsync(int? academicYearId, int? boardId);
+        Task<HolidaySummaryResponse> GetSummaryAsync(int? campusId, int? academicYearId, int? boardId);
         Task<(IEnumerable<HolidayResponse> Items, int TotalCount, int TotalPages)> GetPagedHolidaysAsync(HolidayFilterRequest filter);
         Task<HolidayResponse?> GetByIdAsync(int id);
         Task<HolidayResponse> CreateAsync(CreateHolidayRequest request);

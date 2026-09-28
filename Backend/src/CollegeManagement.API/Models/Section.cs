@@ -11,6 +11,8 @@ namespace CollegeManagement.API.Models
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int SectionId { get; set; }
 
+        public int CampusId { get; set; } = 1;
+
         public int? BoardId { get; set; }
 
         [Required]

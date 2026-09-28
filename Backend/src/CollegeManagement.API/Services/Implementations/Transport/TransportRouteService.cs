@@ -83,10 +83,11 @@ namespace CollegeManagement.API.Services.Implementations
         }
 
         public async Task<IEnumerable<TransportRouteLookupDto>>
-            GetLookupAsync(string? search, int limit)
+            GetLookupAsync(string? search, string? busType, int limit)
         {
             return await _repository.GetLookupAsync(
                 search,
+                busType,
                 limit);
         }
 

@@ -56,7 +56,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_TargetSection = q.TargetSection,
                     p_TargetMedium = q.TargetMedium,
                     p_Search = q.Search,
-                    p_EligibilityStatus = q.EligibilityStatus
+                    p_EligibilityStatus = q.EligibilityStatus,
+                    p_CampusId = q.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -281,7 +282,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_Search = q.Search,
                     p_PromotionStatus = q.PromotionStatus,
                     p_FromDate = q.FromDate,
-                    p_ToDate = q.ToDate
+                    p_ToDate = q.ToDate,
+                    p_CampusId = q.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -628,7 +630,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 },
                 commandType: CommandType.StoredProcedure);
 
-            var details = historyItems.Select(x => new PromotionReportDetailDto
+            if (q.CampusId.HasValue) { var validStudents = await _context.Students.Where(s => s.CampusId == q.CampusId.Value).Select(s => s.StudentId).ToListAsync(); historyItems = historyItems.Where(x => validStudents.Contains(x.StudentId)).ToList(); } var details = historyItems.Select(x => new PromotionReportDetailDto
             {
                 PromotionId = x.PromotionId,
                 StudentId = x.StudentId,

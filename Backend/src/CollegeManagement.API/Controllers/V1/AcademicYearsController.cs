@@ -235,9 +235,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// Exports academic years list to CSV format.
         /// </summary>
         [HttpGet("export/csv")]
-        public async Task<IActionResult> ExportCsv([FromQuery] string? search, [FromQuery] bool? status)
+        public async Task<IActionResult> ExportCsv([FromQuery] string? search, [FromQuery] bool? status, [FromQuery] int? campusId = null)
         {
-            var bytes = await _service.ExportToCsvAsync(search, status);
+            var bytes = await _service.ExportToCsvAsync(search, status, campusId);
             return File(bytes, "text/csv", $"AcademicYears_{DateTime.UtcNow:yyyyMMdd}.csv");
         }
 
@@ -245,9 +245,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// Exports academic years list to Excel format.
         /// </summary>
         [HttpGet("export/excel")]
-        public async Task<IActionResult> ExportExcel([FromQuery] string? search, [FromQuery] bool? status)
+        public async Task<IActionResult> ExportExcel([FromQuery] string? search, [FromQuery] bool? status, [FromQuery] int? campusId = null)
         {
-            var bytes = await _service.ExportToExcelAsync(search, status);
+            var bytes = await _service.ExportToExcelAsync(search, status, campusId);
             return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"AcademicYears_{DateTime.UtcNow:yyyyMMdd}.xlsx");
         }
     }

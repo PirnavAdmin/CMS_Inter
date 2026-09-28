@@ -168,20 +168,29 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Searches and filters attendance records with pagination metadata.
+        /// Searches and filters attendance records with pagination metadata via GET (Query parameters only).
         /// </summary>
-        /// <param name="requestQuery">Query parameter filters.</param>
-        /// <param name="requestBody">Body filter payload.</param>
-        /// <returns>A paginated response containing matching attendance records and metadata.</returns>
-        [HttpPost("search")]
         [HttpGet("search")]
         [ProducesResponseType(typeof(PagedResponse<AttendanceListResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<IActionResult> GetAttendances([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
+        public async Task<IActionResult> SearchAttendancesGet([FromQuery] AttendanceSearchRequest request)
         {
-            var request = requestBody ?? requestQuery;
+            var results = await _attendanceService.GetAttendancesAsync(request);
+            return Ok(results);
+        }
+
+        /// <summary>
+        /// Searches and filters attendance records with pagination metadata via POST (Body payload).
+        /// </summary>
+        [HttpPost("search")]
+        [ProducesResponseType(typeof(PagedResponse<AttendanceListResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> SearchAttendancesPost([FromBody] AttendanceSearchRequest request)
+        {
             var results = await _attendanceService.GetAttendancesAsync(request);
             return Ok(results);
         }

@@ -16,8 +16,6 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class AttendanceTimingConfigRepository : IAttendanceTimingConfigRepository
     {
         private readonly AppDbContext _context;
-        private static bool _isInitialized = false;
-        private static readonly object _initLock = new();
 
         public AttendanceTimingConfigRepository(AppDbContext context)
         {
@@ -36,195 +34,188 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task EnsureTableAndSeedsAsync()
         {
-            if (_isInitialized) return;
-
-            var conn = await GetOpenConnectionAsync();
-
-            var createTableSql = @"
-                CREATE TABLE IF NOT EXISTS `AttendanceTimingConfigs` (
-                    `Id` INT AUTO_INCREMENT PRIMARY KEY,
-                    `ConfigName` VARCHAR(100) NOT NULL,
-                    `StaffType` TINYINT UNSIGNED NULL,
-                    `DepartmentId` INT NULL,
-                    `WorkStartTime` TIME NOT NULL,
-                    `WorkEndTime` TIME NOT NULL,
-                    `LateThreshold` TIME NOT NULL,
-                    `EarlyCheckoutThreshold` TIME NOT NULL,
-                    `GracePeriodMinutes` INT NOT NULL DEFAULT 5,
-                    `MinWorkingHours` DECIMAL(4, 2) NOT NULL DEFAULT 7.00,
-                    `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
-                    `Description` VARCHAR(500) NULL,
-                    `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    `UpdatedAt` DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
-                    INDEX `idx_timing_staff_type` (`StaffType`),
-                    INDEX `idx_timing_department` (`DepartmentId`),
-                    INDEX `idx_timing_active` (`IsActive`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
-
-            await conn.ExecuteAsync(createTableSql);
-
-            var count = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM `AttendanceTimingConfigs`;");
-            if (count == 0)
-            {
-                var seedSql = @"
-                    INSERT INTO `AttendanceTimingConfigs`
-                    (`ConfigName`, `StaffType`, `DepartmentId`, `WorkStartTime`, `WorkEndTime`, `LateThreshold`, `EarlyCheckoutThreshold`, `GracePeriodMinutes`, `MinWorkingHours`, `IsActive`, `Description`, `CreatedAt`)
-                    VALUES
-                    ('General Staff Shift', NULL, NULL, '09:00:00', '17:00:00', '09:15:00', '16:30:00', 5, 7.00, 1, 'Default working hours for all college staff.', NOW()),
-                    ('Teaching Faculty Shift', 1, NULL, '09:00:00', '16:30:00', '09:10:00', '16:00:00', 5, 6.50, 1, 'Working schedule for teaching faculty.', NOW()),
-                    ('Administrative / Non-Teaching Shift', 2, NULL, '08:30:00', '17:30:00', '08:45:00', '17:00:00', 10, 7.50, 1, 'Working schedule for administrative and support staff.', NOW());
-                ";
-                await conn.ExecuteAsync(seedSql);
-            }
-
-            lock (_initLock)
-            {
-                _isInitialized = true;
-            }
+            // Table structure and initial seeds are fully managed via SQL migrations & stored procedures.
+            await Task.CompletedTask;
         }
 
         public async Task<IEnumerable<AttendanceTimingConfig>> GetAllAsync()
         {
-            await EnsureTableAndSeedsAsync();
-            var conn = await GetOpenConnectionAsync();
-
-            const string sql = "SELECT * FROM `AttendanceTimingConfigs` ORDER BY Id ASC;";
-            return await conn.QueryAsync<AttendanceTimingConfig>(sql);
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                return await conn.QueryAsync<AttendanceTimingConfig>(
+                    "sp_GetAttendanceTimingConfigs",
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                return await _context.Set<AttendanceTimingConfig>().AsNoTracking()
+                    .OrderBy(c => c.Id)
+                    .ToListAsync();
+            }
         }
 
         public async Task<AttendanceTimingConfig?> GetByIdAsync(int id)
         {
-            await EnsureTableAndSeedsAsync();
-            var conn = await GetOpenConnectionAsync();
-
-            const string sql = "SELECT * FROM `AttendanceTimingConfigs` WHERE Id = @Id LIMIT 1;";
-            return await conn.QueryFirstOrDefaultAsync<AttendanceTimingConfig>(sql, new { Id = id });
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                return await conn.QueryFirstOrDefaultAsync<AttendanceTimingConfig>(
+                    "sp_GetAttendanceTimingConfigById",
+                    new { p_Id = id },
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                return await _context.Set<AttendanceTimingConfig>().AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.Id == id);
+            }
         }
 
         public async Task<AttendanceTimingConfig?> GetEffectiveConfigAsync(StaffType? staffType, int? departmentId)
         {
-            await EnsureTableAndSeedsAsync();
-            var conn = await GetOpenConnectionAsync();
-
-            // Priority order:
-            // 1. Exact match on both StaffType and DepartmentId
-            // 2. Match on DepartmentId only (StaffType is null)
-            // 3. Match on StaffType only (DepartmentId is null)
-            // 4. Global default (both StaffType and DepartmentId are null)
-            const string sql = @"
-                SELECT * FROM `AttendanceTimingConfigs`
-                WHERE IsActive = 1
-                  AND (@StaffType IS NULL OR StaffType = @StaffType OR StaffType IS NULL)
-                  AND (@DeptId IS NULL OR DepartmentId = @DeptId OR DepartmentId IS NULL)
-                ORDER BY 
-                  (CASE WHEN StaffType = @StaffType AND DepartmentId = @DeptId THEN 1
-                        WHEN DepartmentId = @DeptId AND StaffType IS NULL THEN 2
-                        WHEN StaffType = @StaffType AND DepartmentId IS NULL THEN 3
-                        WHEN StaffType IS NULL AND DepartmentId IS NULL THEN 4
-                        ELSE 5 END) ASC
-                LIMIT 1;
-            ";
-
             byte? staffTypeValue = staffType.HasValue ? (byte)staffType.Value : null;
-            return await conn.QueryFirstOrDefaultAsync<AttendanceTimingConfig>(sql, new
+
+            try
             {
-                StaffType = staffTypeValue,
-                DeptId = departmentId
-            });
+                var conn = await GetOpenConnectionAsync();
+                return await conn.QueryFirstOrDefaultAsync<AttendanceTimingConfig>(
+                    "sp_GetEffectiveAttendanceTimingConfig",
+                    new
+                    {
+                        p_StaffType = staffTypeValue,
+                        p_DepartmentId = departmentId ?? 0
+                    },
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch
+            {
+                var configs = await _context.Set<AttendanceTimingConfig>().AsNoTracking()
+                    .Where(c => c.IsActive)
+                    .ToListAsync();
+
+                return configs
+                    .OrderBy(c =>
+                    {
+                        if (c.StaffType == staffType && c.DepartmentId == departmentId) return 1;
+                        if (c.DepartmentId == departmentId && c.StaffType == null) return 2;
+                        if (c.StaffType == staffType && c.DepartmentId == null) return 3;
+                        if (c.StaffType == null && c.DepartmentId == null) return 4;
+                        return 5;
+                    })
+                    .FirstOrDefault();
+            }
         }
 
         public async Task<AttendanceTimingConfig> CreateAsync(AttendanceTimingConfig config)
         {
-            await EnsureTableAndSeedsAsync();
-            var conn = await GetOpenConnectionAsync();
-
-            config.CreatedAt = DateTime.UtcNow;
-
-            const string sql = @"
-                INSERT INTO `AttendanceTimingConfigs`
-                (`ConfigName`, `StaffType`, `DepartmentId`, `WorkStartTime`, `WorkEndTime`, `LateThreshold`, `EarlyCheckoutThreshold`, `GracePeriodMinutes`, `MinWorkingHours`, `IsActive`, `Description`, `CreatedAt`)
-                VALUES
-                (@ConfigName, @StaffType, @DepartmentId, @WorkStartTime, @WorkEndTime, @LateThreshold, @EarlyCheckoutThreshold, @GracePeriodMinutes, @MinWorkingHours, @IsActive, @Description, @CreatedAt);
-                SELECT LAST_INSERT_ID();
-            ";
-
             byte? staffTypeValue = config.StaffType.HasValue ? (byte)config.StaffType.Value : null;
 
-            var id = await conn.ExecuteScalarAsync<int>(sql, new
+            try
             {
-                config.ConfigName,
-                StaffType = staffTypeValue,
-                config.DepartmentId,
-                config.WorkStartTime,
-                config.WorkEndTime,
-                config.LateThreshold,
-                config.EarlyCheckoutThreshold,
-                config.GracePeriodMinutes,
-                config.MinWorkingHours,
-                config.IsActive,
-                config.Description,
-                config.CreatedAt
-            });
+                var conn = await GetOpenConnectionAsync();
+                var id = await conn.ExecuteScalarAsync<int>(
+                    "sp_CreateAttendanceTimingConfig",
+                    new
+                    {
+                        p_ConfigName = config.ConfigName.Trim(),
+                        p_StaffType = staffTypeValue,
+                        p_DepartmentId = config.DepartmentId ?? 0,
+                        p_WorkStartTime = config.WorkStartTime,
+                        p_WorkEndTime = config.WorkEndTime,
+                        p_LateThreshold = config.LateThreshold,
+                        p_EarlyCheckoutThreshold = config.EarlyCheckoutThreshold,
+                        p_GracePeriodMinutes = config.GracePeriodMinutes,
+                        p_MinWorkingHours = config.MinWorkingHours,
+                        p_IsActive = config.IsActive ? 1 : 0,
+                        p_Description = config.Description
+                    },
+                    commandType: CommandType.StoredProcedure);
 
-            config.Id = id;
-            return config;
+                config.Id = id;
+                return (await GetByIdAsync(id)) ?? config;
+            }
+            catch
+            {
+                config.CreatedAt = DateTime.UtcNow;
+                await _context.Set<AttendanceTimingConfig>().AddAsync(config);
+                await _context.SaveChangesAsync();
+                return config;
+            }
         }
 
         public async Task<AttendanceTimingConfig?> UpdateAsync(int id, AttendanceTimingConfig config)
         {
-            await EnsureTableAndSeedsAsync();
-            var conn = await GetOpenConnectionAsync();
-
-            config.UpdatedAt = DateTime.UtcNow;
-
-            const string sql = @"
-                UPDATE `AttendanceTimingConfigs`
-                SET `ConfigName` = @ConfigName,
-                    `StaffType` = @StaffType,
-                    `DepartmentId` = @DepartmentId,
-                    `WorkStartTime` = @WorkStartTime,
-                    `WorkEndTime` = @WorkEndTime,
-                    `LateThreshold` = @LateThreshold,
-                    `EarlyCheckoutThreshold` = @EarlyCheckoutThreshold,
-                    `GracePeriodMinutes` = @GracePeriodMinutes,
-                    `MinWorkingHours` = @MinWorkingHours,
-                    `IsActive` = @IsActive,
-                    `Description` = @Description,
-                    `UpdatedAt` = @UpdatedAt
-                WHERE `Id` = @Id;
-            ";
-
             byte? staffTypeValue = config.StaffType.HasValue ? (byte)config.StaffType.Value : null;
 
-            var rows = await conn.ExecuteAsync(sql, new
+            try
             {
-                Id = id,
-                config.ConfigName,
-                StaffType = staffTypeValue,
-                config.DepartmentId,
-                config.WorkStartTime,
-                config.WorkEndTime,
-                config.LateThreshold,
-                config.EarlyCheckoutThreshold,
-                config.GracePeriodMinutes,
-                config.MinWorkingHours,
-                config.IsActive,
-                config.Description,
-                config.UpdatedAt
-            });
+                var conn = await GetOpenConnectionAsync();
+                await conn.ExecuteAsync(
+                    "sp_UpdateAttendanceTimingConfig",
+                    new
+                    {
+                        p_Id = id,
+                        p_ConfigName = config.ConfigName.Trim(),
+                        p_StaffType = staffTypeValue,
+                        p_DepartmentId = config.DepartmentId ?? 0,
+                        p_WorkStartTime = config.WorkStartTime,
+                        p_WorkEndTime = config.WorkEndTime,
+                        p_LateThreshold = config.LateThreshold,
+                        p_EarlyCheckoutThreshold = config.EarlyCheckoutThreshold,
+                        p_GracePeriodMinutes = config.GracePeriodMinutes,
+                        p_MinWorkingHours = config.MinWorkingHours,
+                        p_IsActive = config.IsActive ? 1 : 0,
+                        p_Description = config.Description
+                    },
+                    commandType: CommandType.StoredProcedure);
 
-            if (rows == 0) return null;
-            return await GetByIdAsync(id);
+                return await GetByIdAsync(id);
+            }
+            catch
+            {
+                var existing = await _context.Set<AttendanceTimingConfig>().FindAsync(id);
+                if (existing == null) return null;
+
+                existing.ConfigName = config.ConfigName;
+                existing.StaffType = config.StaffType;
+                existing.DepartmentId = config.DepartmentId;
+                existing.WorkStartTime = config.WorkStartTime;
+                existing.WorkEndTime = config.WorkEndTime;
+                existing.LateThreshold = config.LateThreshold;
+                existing.EarlyCheckoutThreshold = config.EarlyCheckoutThreshold;
+                existing.GracePeriodMinutes = config.GracePeriodMinutes;
+                existing.MinWorkingHours = config.MinWorkingHours;
+                existing.IsActive = config.IsActive;
+                existing.Description = config.Description;
+                existing.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+                return existing;
+            }
         }
 
         public async Task<bool> DeleteAsync(int id)
         {
-            await EnsureTableAndSeedsAsync();
-            var conn = await GetOpenConnectionAsync();
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                var rows = await conn.ExecuteAsync(
+                    "sp_DeleteAttendanceTimingConfig",
+                    new { p_Id = id },
+                    commandType: CommandType.StoredProcedure);
 
-            const string sql = "DELETE FROM `AttendanceTimingConfigs` WHERE `Id` = @Id;";
-            var rows = await conn.ExecuteAsync(sql, new { Id = id });
-            return rows > 0;
+                return rows > 0;
+            }
+            catch
+            {
+                var existing = await _context.Set<AttendanceTimingConfig>().FindAsync(id);
+                if (existing == null) return false;
+
+                _context.Set<AttendanceTimingConfig>().Remove(existing);
+                await _context.SaveChangesAsync();
+                return true;
+            }
         }
     }
 }

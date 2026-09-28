@@ -46,6 +46,7 @@ namespace CollegeManagement.API.DTOs.Result
         public int? SectionId { get; set; }
         public string? SectionName { get; set; }
         public int ExaminationId { get; set; }
+        public int ExamId { get => ExaminationId; set => ExaminationId = value; }
         public List<StudentSubjectMarkItemDto> Subjects { get; set; } = new();
         public decimal Total { get; set; }
         public decimal TotalMarks { get => Total; set => Total = value; }
@@ -58,6 +59,7 @@ namespace CollegeManagement.API.DTOs.Result
         public int? GroupRank { get; set; }
         public int? Rank { get => SectionRank; set => SectionRank = value; }
         public string Status { get; set; } = "GENERATED";
+        public string PublicationStatus { get => Status; set => Status = value; }
         public bool IsPublished { get; set; } = false;
     }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, X, AlertTriangle, Eye, EyeOff, Info } from "lucide-react";
+export { Skeleton, SkeletonText, SkeletonCard, SkeletonTable, SkeletonRow, SkeletonInput, SkeletonButton, SkeletonAvatar, SkeletonDashboard, SkeletonPage } from "./Skeleton.jsx";
 
 export function StatusBadge({ value }) {
   const v = String(value || "").toLowerCase();
@@ -12,14 +13,7 @@ export function StatusBadge({ value }) {
   return <span className={`cms-badge ${cls}`}>{value}</span>;
 }
 
-export function Loader({ label = "Loading data..." }) {
-  return (
-    <div className="cms-loader">
-      <div className="cms-spinner" />
-      <p style={{ margin: 0, color: "var(--cms-muted)", fontSize: 13 }}>{label}</p>
-    </div>
-  );
-}
+/** @deprecated Use a named Skeleton component. Retained as a visual-skeleton compatibility layer. */
 
 export function Toast({ message, onClose, type = "success" }) {
   useEffect(() => {
@@ -321,3 +315,24 @@ export function FilterBar({ fields, values, onChange, onApply }) {
     </div>
   );
 }
+
+
+
+export function Loader({ label = 'Loading...', fullScreen = false }) {
+  const content = (
+    <div className='cms-loader-container' style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+      <div className='cms-spinner' style={{ width: '40px', height: '40px', border: '4px solid rgba(0,0,0,0.1)', borderLeftColor: '#3498db', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+      <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' }}></style>
+      {label && <p style={{ marginTop: '1rem', color: '#666', fontSize: '0.9rem' }}>{label}</p>}
+    </div>
+  );
+  if (fullScreen) {
+    return (
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255,255,255,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {content}
+      </div>
+    );
+  }
+  return content;
+}
+

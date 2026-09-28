@@ -30,12 +30,15 @@ import ReportsAnalyticsPage from "@/components/pages/ReportsAnalyticsPage.jsx";
 import StudentProfilePage from "@/components/pages/StudentProfilePage.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import SettingsPage from "@/components/pages/SettingsPage.jsx";
+import RolesPermissionsPage from "@/components/pages/RolesPermissionsPage.jsx";
 import LeaveTypesPage from "@/components/pages/LeaveTypesPage.jsx";
 import AttendanceTimingConfigPage from "@/components/pages/AttendanceTimingConfigPage.jsx";
 import NumberSeriesPage from "@/components/pages/NumberSeriesPage.jsx";
 import TemplatesPage from "@/components/pages/TemplatesPage.jsx";
 import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPage.jsx";
 import PayrollPage from "@/components/pages/PayrollPage.jsx";
+import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
+import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
@@ -44,6 +47,19 @@ import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
 import FacultyDashboard from "@/Dashboard/Facultydashboard.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
+import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
+import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
+import ParentAttendancePage from "@/Dashboard/Parent Dashboard/pages/ParentAttendancePage.jsx";
+import ParentAcademicsPage from "@/Dashboard/Parent Dashboard/pages/ParentAcademicsPage.jsx";
+import ParentExaminationsPage from "@/Dashboard/Parent Dashboard/pages/ParentExaminationsPage.jsx";
+import ParentFeesPage from "@/Dashboard/Parent Dashboard/pages/ParentFeesPage.jsx";
+import ParentTimetablePage from "@/Dashboard/Parent Dashboard/pages/ParentTimetablePage.jsx";
+import ParentCommunicationPage from "@/Dashboard/Parent Dashboard/pages/ParentCommunicationPage.jsx";
+import ParentAnnouncementsPage from "@/Dashboard/Parent Dashboard/pages/ParentAnnouncementsPage.jsx";
+import ParentDocumentsPage from "@/Dashboard/Parent Dashboard/pages/ParentDocumentsPage.jsx";
+import ParentNotificationsPage from "@/Dashboard/Parent Dashboard/pages/ParentNotificationsPage.jsx";
+import ParentProfilePage from "@/Dashboard/Parent Dashboard/pages/ParentProfilePage.jsx";
+import ParentSettingsPage from "@/Dashboard/Parent Dashboard/pages/ParentSettingsPage.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
 import {
   HostelDashboard,
@@ -173,6 +189,12 @@ export default function AppRoutes() {
         <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
         <Route path="/dashboard/settings" element={<SettingsPage />} />
         <Route path="/dashboard/settings/general" element={<SettingsPage />} />
+        <Route path="/dashboard/settings/my-profile" element={<AdminProfilePage />} />
+        <Route path="/dashboard/settings/profile" element={<AdminProfilePage />} />
+        <Route path="/dashboard/my-profile" element={<AdminProfilePage />} />
+        <Route path="/dashboard/settings/campus-configuration" element={<CampusConfigurationPage />} />
+        <Route path="/dashboard/settings/campus" element={<CampusConfigurationPage />} />
+        <Route path="/dashboard/settings/roles-permissions" element={<RolesPermissionsPage />} />
         <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
         <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
         <Route path="/dashboard/settings/number-series" element={<NumberSeriesPage mode="dashboard" />} />
@@ -284,11 +306,35 @@ export default function AppRoutes() {
       </Route>
 
       <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
+
+      {/* Parent Portal Module Routes */}
+      <Route element={<ProtectedRoute requireParent />}>
+        <Route path="/parent-dashboard" element={<ParentDashboard />} />
+        <Route path="/parent-dashboard/children" element={<ParentChildrenPage />} />
+        <Route path="/parent-dashboard/children/:id" element={<ParentChildDetailsRoute />} />
+        <Route path="/parent-dashboard/attendance" element={<ParentAttendancePage />} />
+        <Route path="/parent-dashboard/academics" element={<ParentAcademicsPage />} />
+        <Route path="/parent-dashboard/examinations" element={<ParentExaminationsPage />} />
+        <Route path="/parent-dashboard/results" element={<Navigate to="/parent-dashboard/academics?tab=results" replace />} />
+        <Route path="/parent-dashboard/fees" element={<ParentFeesPage />} />
+        <Route path="/parent-dashboard/timetable" element={<ParentTimetablePage />} />
+        <Route path="/parent-dashboard/leave" element={<Navigate to="/parent-dashboard" replace />} />
+        <Route path="/parent-dashboard/communication" element={<ParentCommunicationPage />} />
+        <Route path="/parent-dashboard/announcements" element={<ParentAnnouncementsPage />} />
+        <Route path="/parent-dashboard/events" element={<Navigate to="/parent-dashboard/announcements?tab=events" replace />} />
+        <Route path="/parent-dashboard/documents" element={<ParentDocumentsPage />} />
+        <Route path="/parent-dashboard/notifications" element={<ParentNotificationsPage />} />
+        <Route path="/parent-dashboard/profile" element={<ParentProfilePage />} />
+        <Route path="/parent-dashboard/settings" element={<ParentSettingsPage />} />
+      </Route>
+
       <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />
       <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
       <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
+      <Route path="/staff/onboarding/:id" element={<StaffManagementPage />} />
+      <Route path="/staff/onboarding/:id/complete-profile" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id/complete-profile" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id/review" element={<StaffManagementPage />} />

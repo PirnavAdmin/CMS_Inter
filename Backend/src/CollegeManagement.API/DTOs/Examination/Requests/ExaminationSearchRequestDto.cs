@@ -2,6 +2,7 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
 {
     public class ExaminationSearchRequestDto
     {
+        public int? CampusId { get; set; }
         public int? BoardId { get; set; }
         public int? AcademicYearId { get; set; }
         public int? AcademicLevelId { get; set; }

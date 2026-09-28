@@ -18,6 +18,7 @@ public class FeeType
 public class FeeStructure
 {
     [Key] public int FeeStructureId { get; set; }
+    public int? CampusId { get; set; }
     [Required] public int BoardId { get; set; }
     [Required] public int AcademicYearId { get; set; }
     [Required] public int AcademicLevelId { get; set; }
@@ -29,6 +30,8 @@ public class FeeStructure
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 
+    [ForeignKey(nameof(CampusId))]
+    public Campus? Campus { get; set; }
     public Board? Board { get; set; }
     public AcademicYear? AcademicYear { get; set; }
     public AcademicLevel? AcademicLevel { get; set; }

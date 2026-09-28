@@ -305,7 +305,18 @@ public class StudentsAttendanceTodayResponseDto
     public decimal AbsentPercentage { get; set; }
     public decimal HalfDayPercentage { get; set; }
     public decimal LatePercentage { get => HalfDayPercentage; set => HalfDayPercentage = value; }
-    public string LastUpdated { get; set; } = "Today";
+    private string? _lastUpdated;
+    public DateTime? LastUpdatedTime { get; set; }
+    public string LastUpdated
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(_lastUpdated) && _lastUpdated != "Today") return _lastUpdated;
+            if (LastUpdatedTime.HasValue) return LastUpdatedTime.Value.ToString("hh:mm tt");
+            return "Not marked today";
+        }
+        set => _lastUpdated = value;
+    }
     
     // Donut chart data pre-formatted
     public IReadOnlyList<dynamic> ChartData => new List<dynamic>
@@ -342,7 +353,18 @@ public class StaffAttendanceTodayResponseDto
     public decimal AbsentPercentage { get; set; }
     public decimal LatePercentage { get; set; }
     public decimal OnLeavePercentage { get; set; }
-    public string LastUpdated { get; set; } = "Today";
+    private string? _staffLastUpdated;
+    public DateTime? LastUpdatedTime { get; set; }
+    public string LastUpdated
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(_staffLastUpdated) && _staffLastUpdated != "Today") return _staffLastUpdated;
+            if (LastUpdatedTime.HasValue) return LastUpdatedTime.Value.ToString("hh:mm tt");
+            return "Not marked today";
+        }
+        set => _staffLastUpdated = value;
+    }
     public int TeachingCount { get; set; }
     public int TeachingStaffCount => TeachingCount;
     public int NonTeachingCount { get; set; }

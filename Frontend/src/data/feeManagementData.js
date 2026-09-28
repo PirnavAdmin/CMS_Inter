@@ -25,7 +25,6 @@ export const FEE_TYPE_TEMPLATES = [
   { key: "courseFee", type: "Course Fee", required: true },
   { key: "examinationFee", type: "Examination Fee", amount: 2000 },
   { key: "laboratoryFee", type: "Laboratory Fee", amount: 3000 },
-  { key: "libraryFee", type: "Library Fee", amount: 1000 },
   { key: "uniformFee", type: "Uniform Fee", amount: 4000 },
   { key: "idCardFee", type: "ID Card Fee", amount: 300 },
 ];

@@ -8,7 +8,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+<<<<<<< HEAD
   const apiBaseUrl = (env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev").trim();
+=======
+  const apiBaseUrl = env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev";
+>>>>>>> 6fcdb0019c2c8c12ad37f2f15d57462e0f152084
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {

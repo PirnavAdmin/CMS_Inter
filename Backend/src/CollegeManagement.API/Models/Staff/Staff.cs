@@ -132,6 +132,14 @@ namespace CollegeManagement.API.Models.Staff
         [NotMapped]
         public string Department { get; set; } = string.Empty;
 
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
+
+        [NotMapped]
+        public string? CampusName => Campus?.CampusName;
+
         public int? BoardId { get; set; }
 
         [ForeignKey(nameof(BoardId))]
@@ -200,6 +208,15 @@ namespace CollegeManagement.API.Models.Staff
             get => DepartmentSpecificJson;
             set => DepartmentSpecificJson = value;
         }
+
+        public bool IsDriver { get; set; } = false;
+
+        [StringLength(100)]
+        public string? DrivingLicenseNumber { get; set; }
+
+        public DateTime? DrivingLicenseExpiryDate { get; set; }
+
+        public int? DrivingExperienceYears { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Plus } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
@@ -842,6 +842,12 @@ function CourseGroupListPage() {
   const requestId = useRef(0);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingId, setDeletingId] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+
+  const closeDeleteModal = () => {
+    setDeleteTarget(null);
+    setDeleteError("");
+  };
 
   const loadRows = useCallback(async (nextSearch = search) => {
     const currentRequest = requestId.current + 1;
@@ -876,21 +882,28 @@ function CourseGroupListPage() {
 
   const requestDeleteGroup = (row) => {
     if (deletingId) return;
+    setDeleteError("");
     setDeleteTarget(row);
   };
 
   const deleteGroup = async () => {
-    if (!deleteTarget?.id || deletingId) return;
+    if (!deleteTarget?.id || deletingId || deleteError) return;
     setDeletingId(deleteTarget.id);
     try {
       await groupApi.deleteRow(deleteTarget.id);
       setToastType("success");
       setToast("Group deleted successfully");
-      setDeleteTarget(null);
+      closeDeleteModal();
       await loadRows(search);
     } catch (err) {
-      setToastType("error");
-      setToast(getApiErrorMessage(err));
+      const message = getApiErrorMessage(err);
+      const normalizedMessage = message.toLowerCase();
+      if (normalizedMessage.includes("cannot delete") || normalizedMessage.includes("currently in use")) {
+        setDeleteError(message);
+      } else {
+        setToastType("error");
+        setToast(message);
+      }
     } finally {
       setDeletingId("");
     }
@@ -933,17 +946,40 @@ function CourseGroupListPage() {
         <Modal
           title="Delete Group"
           size="sm"
-          onClose={deletingId ? () => {} : () => setDeleteTarget(null)}
+          onClose={deletingId ? () => {} : closeDeleteModal}
           footer={(
             <>
-              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setDeleteTarget(null)} disabled={Boolean(deletingId)}>Cancel</button>
-              <button type="button" className="cms-btn cms-btn-danger" onClick={deleteGroup} disabled={Boolean(deletingId)}>
-                {deletingId ? "Deleting..." : "Delete"}
-              </button>
+              <button type="button" className="cms-btn cms-btn-ghost" onClick={closeDeleteModal} disabled={Boolean(deletingId)}>Cancel</button>
+              {!deleteError ? (
+                <button type="button" className="cms-btn cms-btn-danger" onClick={deleteGroup} disabled={Boolean(deletingId)}>
+                  {deletingId ? "Deleting..." : "Delete"}
+                </button>
+              ) : null}
             </>
           )}
         >
-          <p>Are you sure you want to delete this group?</p>
+          {deleteError ? (
+            <div
+              role="alert"
+              style={{
+                display: "flex",
+                gap: 12,
+                alignItems: "flex-start",
+                padding: "14px 16px",
+                borderRadius: 12,
+                border: "1px solid #fecaca",
+                background: "#fef2f2",
+                color: "#991b1b",
+                lineHeight: 1.55,
+                overflowWrap: "anywhere",
+              }}
+            >
+              <AlertTriangle size={20} style={{ flex: "0 0 auto", marginTop: 2 }} />
+              <span>{deleteError}</span>
+            </div>
+          ) : (
+            <p>Are you sure you want to delete this group?</p>
+          )}
         </Modal>
       ) : null}
       <Toast message={toast} type={toastType} onClose={() => setToast("")} />

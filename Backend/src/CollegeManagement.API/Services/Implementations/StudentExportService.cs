@@ -154,6 +154,17 @@ namespace CollegeManagement.API.Services.Implementations
                 Status = string.IsNullOrWhiteSpace(student.Status) ? (student.IsActive ? "Active" : "Inactive") : student.Status,
                 IsActive = student.IsActive,
                 Remarks = student.Remarks,
+
+                StudentType = student.StudentType,
+                TransportRequired = student.TransportRequired,
+                BusType = student.BusType,
+                BusRoute = student.BusRoute,
+                PickupPoint = student.PickupPoint,
+                HostelBlock = student.HostelBlock,
+                HostelRoom = student.HostelRoom,
+                HostelBed = student.HostelBed,
+                HallTicketNumber = student.HallTicketNumber,
+
                 GeneratedAt = DateTime.UtcNow
             };
 
@@ -440,6 +451,9 @@ namespace CollegeManagement.API.Services.Implementations
                     GroupName = s.GroupNavigation?.GroupName ?? "N/A",
                     ProgramName = s.ProgramNavigation?.ProgramName ?? "N/A",
                     SectionName = s.SectionNavigation?.SectionName ?? "N/A",
+                    StudentType = s.StudentType,
+                    HostelBlock = s.HostelBlock,
+                    BusRoute = s.BusRoute,
                     Status = string.IsNullOrWhiteSpace(s.Status) ? (s.IsActive ? "Active" : "Inactive") : s.Status,
                     IsActive = s.IsActive
                 });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   User,
   ShieldCheck,
@@ -18,14 +18,20 @@ import {
   X,
 } from "lucide-react";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { driverProfile, driverDocuments } from "../data/driverMockData.js";
+import { getProfile, updateProfileContact } from "../../../api/transportDriverApi.js";
 
 export default function DriverProfilePage() {
+  const [driverProfile, setDriverProfile] = useState({});
+  const [driverDocuments, setDriverDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saving, setSaving] = useState(false);
+
   const [profileData, setProfileData] = useState({
-    mobile: driverProfile.mobile,
-    emergencyContactName: driverProfile.emergencyContactName,
-    emergencyContactPhone: driverProfile.emergencyContactPhone,
-    address: driverProfile.address,
+    mobile: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    address: "",
   });
 
   const [toastMessage, setToastMessage] = useState("");
@@ -36,14 +42,50 @@ export default function DriverProfilePage() {
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  const handleSaveProfile = (e) => {
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        setLoading(true);
+        const res = await getProfile();
+        const data = res.data || res;
+        const profile = data.profile || data || {};
+        setDriverProfile(profile);
+        setDriverDocuments(data.documents || data.driverDocuments || []);
+        setProfileData({
+          mobile: profile.mobile || "",
+          emergencyContactName: profile.emergencyContactName || "",
+          emergencyContactPhone: profile.emergencyContactPhone || "",
+          address: profile.address || "",
+        });
+      } catch (err) {
+        setError(err.response?.data?.message || err.message || "Failed to load profile.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    triggerToast("Driver contact details updated successfully!");
+    try {
+      setSaving(true);
+      await updateProfileContact(profileData);
+      triggerToast("Driver contact details updated successfully!");
+      setDriverProfile((prev) => ({ ...prev, ...profileData }));
+    } catch (err) {
+      triggerToast("Failed to update contact details");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDownloadDoc = (doc) => {
     triggerToast(`Downloading ${doc.title}...`);
   };
+
+  if (loading) return <div className="dp-page-container"><p>Loading Profile Data...</p></div>;
+  if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
 
   return (
     <div className="dp-page-container">

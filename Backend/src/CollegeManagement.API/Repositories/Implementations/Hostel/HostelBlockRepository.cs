@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using Dapper;
@@ -16,201 +16,96 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
 
         public async Task<IEnumerable<HostelBlock>> GetAllAsync(
             string? search = null,
-            string? status = null)
+            string? status = null,
+            int? campusId = null)
         {
-            var sql = @"
-                SELECT
-                    HostelId,
-                    HostelName,
-                    HostelCode,
-                    HostelType,
-                    TotalFloors,
-                    WardenName,
-                    PrimaryMobileNumber,
-                    AlternateMobileNumber,
-                    Email,
-                    Status,
-                    Address,
-                    CreatedAt
-                FROM hostel_blocks
-                WHERE 1 = 1
-            ";
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                sql += @"
-                    AND (
-                        HostelName LIKE @Search
-                        OR HostelCode LIKE @Search
-                        OR HostelType LIKE @Search
-                    )
-                ";
-            }
-
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                sql += @"
-                    AND Status = @Status
-                ";
-            }
-
-            sql += @"
-                ORDER BY HostelName;
-            ";
-
             return await _dbConnection.QueryAsync<HostelBlock>(
-                sql,
+                "sp_GetHostelBlocks",
                 new
                 {
-                    Search = $"%{search}%",
-                    Status = status
-                });
+                    p_Search = search,
+                    p_Status = status,
+                    p_CampusId = campusId
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<HostelBlock?> GetByIdAsync(int hostelId)
         {
-            const string sql = @"
-                SELECT
-                    HostelId,
-                    HostelName,
-                    HostelCode,
-                    HostelType,
-                    TotalFloors,
-                    WardenName,
-                    PrimaryMobileNumber,
-                    AlternateMobileNumber,
-                    Email,
-                    Status,
-                    Address,
-                    CreatedAt
-                FROM hostel_blocks
-                WHERE HostelId = @HostelId;
-            ";
-
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<HostelBlock>(
-                    sql,
-                    new { HostelId = hostelId });
+            return await _dbConnection.QueryFirstOrDefaultAsync<HostelBlock>(
+                "sp_GetHostelBlockById",
+                new { p_HostelId = hostelId },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<HostelBlock?> GetByCodeAsync(string hostelCode)
         {
-            const string sql = @"
-                SELECT
-                    HostelId,
-                    HostelName,
-                    HostelCode,
-                    HostelType,
-                    TotalFloors,
-                    WardenName,
-                    PrimaryMobileNumber,
-                    AlternateMobileNumber,
-                    Email,
-                    Status,
-                    Address,
-                    CreatedAt
-                FROM hostel_blocks
-                WHERE LOWER(HostelCode) = LOWER(@HostelCode)
-                LIMIT 1;
-            ";
-
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<HostelBlock>(
-                    sql,
-                    new { HostelCode = hostelCode });
+            return await _dbConnection.QueryFirstOrDefaultAsync<HostelBlock>(
+                "sp_GetHostelBlockByCode",
+                new { p_HostelCode = hostelCode },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<int> CreateAsync(HostelBlock hostelBlock)
         {
-            const string sql = @"
-                INSERT INTO hostel_blocks
-                (
-                    HostelName,
-                    HostelCode,
-                    HostelType,
-                    TotalFloors,
-                    WardenName,
-                    PrimaryMobileNumber,
-                    AlternateMobileNumber,
-                    Email,
-                    Status,
-                    Address
-                )
-                VALUES
-                (
-                    @HostelName,
-                    @HostelCode,
-                    @HostelType,
-                    @TotalFloors,
-                    @WardenName,
-                    @PrimaryMobileNumber,
-                    @AlternateMobileNumber,
-                    @Email,
-                    @Status,
-                    @Address
-                );
-
-                SELECT LAST_INSERT_ID();
-            ";
-
-            return await _dbConnection
-                .ExecuteScalarAsync<int>(
-                    sql,
-                    hostelBlock);
+            return await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_CreateHostelBlock",
+                new
+                {
+                    p_CampusId = hostelBlock.CampusId ?? 1,
+                    p_HostelName = hostelBlock.HostelName,
+                    p_HostelCode = hostelBlock.HostelCode,
+                    p_HostelType = hostelBlock.HostelType,
+                    p_TotalFloors = hostelBlock.TotalFloors,
+                    p_WardenName = hostelBlock.WardenName,
+                    p_PrimaryMobileNumber = hostelBlock.PrimaryMobileNumber,
+                    p_AlternateMobileNumber = hostelBlock.AlternateMobileNumber,
+                    p_Email = hostelBlock.Email,
+                    p_Status = hostelBlock.Status,
+                    p_Address = hostelBlock.Address
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> UpdateAsync(HostelBlock hostelBlock)
         {
-            const string sql = @"
-                UPDATE hostel_blocks
-                SET
-                    HostelName = @HostelName,
-                    HostelCode = @HostelCode,
-                    HostelType = @HostelType,
-                    TotalFloors = @TotalFloors,
-                    PrimaryMobileNumber = @PrimaryMobileNumber,
-                    AlternateMobileNumber = @AlternateMobileNumber,
-                    Email = @Email,
-                    Status = @Status,
-                    Address = @Address
-                WHERE HostelId = @HostelId;
-            ";
-
-            var affectedRows =
-                await _dbConnection.ExecuteAsync(
-                    sql,
-                    hostelBlock);
+            var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_UpdateHostelBlock",
+                new
+                {
+                    p_HostelId = hostelBlock.HostelId,
+                    p_HostelName = hostelBlock.HostelName,
+                    p_HostelCode = hostelBlock.HostelCode,
+                    p_HostelType = hostelBlock.HostelType,
+                    p_TotalFloors = hostelBlock.TotalFloors,
+                    p_WardenName = hostelBlock.WardenName,
+                    p_PrimaryMobileNumber = hostelBlock.PrimaryMobileNumber,
+                    p_AlternateMobileNumber = hostelBlock.AlternateMobileNumber,
+                    p_Email = hostelBlock.Email,
+                    p_Status = hostelBlock.Status,
+                    p_Address = hostelBlock.Address
+                },
+                commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
         }
 
         public async Task<bool> DeleteAsync(int hostelId)
         {
-            const string sql = @"
-                DELETE FROM hostel_blocks
-                WHERE HostelId = @HostelId;
-            ";
-
-            var affectedRows =
-                await _dbConnection.ExecuteAsync(
-                    sql,
-                    new { HostelId = hostelId });
+            var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_DeleteHostelBlock",
+                new { p_HostelId = hostelId },
+                commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
         }
 
         public async Task<bool> ExistsAsync(int hostelId)
         {
-            const string sql = @"
-                SELECT COUNT(1)
-                FROM hostel_blocks
-                WHERE HostelId = @HostelId;
-            ";
-
-            var count =
-                await _dbConnection.ExecuteScalarAsync<int>(
-                    sql,
-                    new { HostelId = hostelId });
+            var count = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_CheckHostelBlockExists",
+                new { p_HostelId = hostelId },
+                commandType: CommandType.StoredProcedure);
 
             return count > 0;
         }

@@ -36,11 +36,14 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet("routes")]
-        public async Task<IActionResult> GetRoutes([FromQuery] string? search, [FromQuery] int limit = 100)
+        public async Task<IActionResult> GetRoutes(
+            [FromQuery] string? search,
+            [FromQuery] string? busType,
+            [FromQuery] int limit = 100)
         {
             try
             {
-                var result = await _routeService.GetLookupAsync(search, limit);
+                var result = await _routeService.GetLookupAsync(search, busType, limit);
                 return Ok(result);
             }
             catch

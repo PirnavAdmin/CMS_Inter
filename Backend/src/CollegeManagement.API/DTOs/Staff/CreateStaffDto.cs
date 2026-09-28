@@ -116,6 +116,11 @@ namespace CollegeManagement.API.DTOs.Staff
         [StringLength(100)]
         public string? Department { get; set; }
 
+        public int? CampusId { get; set; }
+
+        [StringLength(100)]
+        public string? CampusName { get; set; }
+
         public int? BoardId { get; set; }
 
         [StringLength(50)]
@@ -242,11 +247,7 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? Resume { get; set; }
         public string? BankProof { get; set; }
         public string? DrivingLicence { get; set; }
-        public string? DrivingLicenseNumber
-        {
-            get => DrivingLicence;
-            set => DrivingLicence = value;
-        }
+        public string? DrivingLicenseNumber { get; set; }
         public string? DrivingLicenseExpiryDate { get; set; }
         public string? LicenseExpiryDate
         {

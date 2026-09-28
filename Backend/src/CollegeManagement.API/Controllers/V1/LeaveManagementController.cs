@@ -65,9 +65,9 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("leave")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<IActionResult> GetStaffLeaves([FromQuery] int? staffId, [FromQuery] int? departmentId, [FromQuery] CollegeManagement.API.Enums.LeaveStatus? status)
+        public async Task<IActionResult> GetStaffLeaves([FromQuery] int? campusId, [FromQuery] int? staffId, [FromQuery] int? departmentId, [FromQuery] CollegeManagement.API.Enums.LeaveStatus? status)
         {
-            var result = await _service.GetStaffLeaveRequestsAsync(staffId, departmentId, status);
+            var result = await _service.GetStaffLeaveRequestsAsync(campusId, staffId, departmentId, status);
             return Ok(new { Status = true, Message = "Staff leaves retrieved successfully.", Data = result });
         }
 
@@ -84,9 +84,9 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("leave/history")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        public async Task<IActionResult> GetStaffLeaveHistorySummary([FromQuery] int? departmentId, [FromQuery] string? staffType)
+        public async Task<IActionResult> GetStaffLeaveHistorySummary([FromQuery] int? campusId, [FromQuery] int? departmentId, [FromQuery] string? staffType)
         {
-            var result = await _service.GetStaffLeaveHistorySummaryAsync(departmentId, staffType);
+            var result = await _service.GetStaffLeaveHistorySummaryAsync(campusId, departmentId, staffType);
             return Ok(new { Status = true, Message = "Staff leave history summary retrieved successfully.", Data = result });
         }
 

@@ -451,6 +451,26 @@
   padding: 0 18px;
 }
 
+.auth-login-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.auth-login-form.is-busy :is(input, button, label, a) {
+  cursor: wait;
+}
+
+.auth-login-form.is-busy :is(input, .cms-eye-btn, .cms-check, .cms-auth-row a) {
+  opacity: 0.72;
+}
+
+.auth-login-form .cms-auth-row a.is-disabled {
+  pointer-events: none;
+  text-decoration: none;
+}
+
 .auth-field-with-guidance {
   min-width: 0;
   grid-column: 1 / -1;

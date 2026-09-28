@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Route as RouteIcon,
   MapPin,
@@ -15,12 +15,59 @@ import {
   Info,
 } from "lucide-react";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { routeDetails, driverProfile } from "../data/driverMockData.js";
+import { getRoute } from "../../../api/transportDriverApi.js";
 
 export default function DriverRoutePage({ onNavigateTab }) {
-  const [selectedStopId, setSelectedStopId] = useState(3); // Green park default active
+  const [routeDetails, setRouteDetails] = useState(null);
+  const [selectedStopId, setSelectedStopId] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const activeStop = routeDetails.stops.find((s) => s.id === selectedStopId) || routeDetails.stops[0];
+  useEffect(() => {
+    const fetchRoute = async () => {
+      try {
+        setIsLoading(true);
+        const res = await getRoute();
+        const routeData = res.data?.route || {
+          routeName: "Loading...",
+          routeCode: "...",
+          startPoint: "...",
+          morningStartTime: "...",
+          endPoint: "...",
+          morningEndTime: "...",
+          distanceKm: 0,
+          busNumber: "...",
+          vehicleModel: "...",
+          assignedAttendant: "...",
+          attendantPhone: "...",
+          shift: "...",
+          effectiveDate: "...",
+          totalStudents: 0,
+          stops: []
+        };
+        setRouteDetails(routeData);
+        if (routeData.stops && routeData.stops.length > 0) {
+          setSelectedStopId(routeData.stops[0].id);
+        }
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load route details.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchRoute();
+  }, []);
+
+  if (isLoading) {
+    return <div className="dp-page-container"><p>Loading route...</p></div>;
+  }
+
+  if (error) {
+    return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
+  }
+
+  const activeStop = routeDetails?.stops?.find((s) => s.id === selectedStopId) || routeDetails?.stops?.[0];
 
   return (
     <div className="dp-page-container">
@@ -54,8 +101,8 @@ export default function DriverRoutePage({ onNavigateTab }) {
               <Bus size={20} />
             </div>
             <div>
-              <h2 className="dp-card-title">{routeDetails.routeName}</h2>
-              <span className="dp-code-badge">Code: {routeDetails.routeCode}</span>
+              <h2 className="dp-card-title">{routeDetails?.routeName}</h2>
+              <span className="dp-code-badge">Code: {routeDetails?.routeCode}</span>
             </div>
           </div>
           <DriverStatusBadge status="Active Schedule" tone="success" />
@@ -65,43 +112,43 @@ export default function DriverRoutePage({ onNavigateTab }) {
           <div className="dp-route-details-grid">
             <div className="dp-rd-item">
               <span className="dp-rd-label">Start Point</span>
-              <strong className="dp-rd-val">{routeDetails.startPoint}</strong>
-              <small className="dp-rd-sub">Pickup Departs: {routeDetails.morningStartTime}</small>
+              <strong className="dp-rd-val">{routeDetails?.startPoint}</strong>
+              <small className="dp-rd-sub">Pickup Departs: {routeDetails?.morningStartTime}</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">End Point</span>
-              <strong className="dp-rd-val">{routeDetails.endPoint}</strong>
-              <small className="dp-rd-sub">Arrives Campus: {routeDetails.morningEndTime}</small>
+              <strong className="dp-rd-val">{routeDetails?.endPoint}</strong>
+              <small className="dp-rd-sub">Arrives Campus: {routeDetails?.morningEndTime}</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Total Distance</span>
-              <strong className="dp-rd-val">{routeDetails.distanceKm} km</strong>
+              <strong className="dp-rd-val">{routeDetails?.distanceKm} km</strong>
               <small className="dp-rd-sub">Approx. 90 mins loop</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Bus Number</span>
-              <strong className="dp-rd-val">{routeDetails.busNumber}</strong>
-              <small className="dp-rd-sub">{routeDetails.vehicleModel}</small>
+              <strong className="dp-rd-val">{routeDetails?.busNumber}</strong>
+              <small className="dp-rd-sub">{routeDetails?.vehicleModel}</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Assigned Attendant</span>
-              <strong className="dp-rd-val">{routeDetails.assignedAttendant}</strong>
-              <small className="dp-rd-sub">{routeDetails.attendantPhone}</small>
+              <strong className="dp-rd-val">{routeDetails?.assignedAttendant}</strong>
+              <small className="dp-rd-sub">{routeDetails?.attendantPhone}</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Shift</span>
-              <strong className="dp-rd-val">{routeDetails.shift}</strong>
+              <strong className="dp-rd-val">{routeDetails?.shift}</strong>
               <small className="dp-rd-sub">Morning & Evening</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Effective Date</span>
-              <strong className="dp-rd-val">{routeDetails.effectiveDate}</strong>
+              <strong className="dp-rd-val">{routeDetails?.effectiveDate}</strong>
               <small className="dp-rd-sub">Academic Term 2026-27</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Total Assigned Students</span>
-              <strong className="dp-rd-val">{routeDetails.totalStudents} Students</strong>
-              <small className="dp-rd-sub">Across 6 Scheduled Stops</small>
+              <strong className="dp-rd-val">{routeDetails?.totalStudents} Students</strong>
+              <small className="dp-rd-sub">Across {routeDetails?.stops?.length || 0} Scheduled Stops</small>
             </div>
           </div>
         </div>
@@ -121,7 +168,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
 
         <div className="dp-card-body">
           <div className="dp-visual-route-track">
-            {routeDetails.stops.map((stop, index) => {
+            {routeDetails?.stops?.map((stop, index) => {
               const isSelected = selectedStopId === stop.id;
               const isCompleted = stop.status === "Completed";
               const isInProgress = stop.status === "In Progress";
@@ -220,7 +267,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
                 </tr>
               </thead>
               <tbody>
-                {routeDetails.stops.map((stop) => (
+                {routeDetails?.stops?.map((stop) => (
                   <tr
                     key={stop.id}
                     className={selectedStopId === stop.id ? "dp-row-highlight" : ""}
@@ -267,4 +314,3 @@ export default function DriverRoutePage({ onNavigateTab }) {
     </div>
   );
 }
-

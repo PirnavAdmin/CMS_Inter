@@ -24,6 +24,8 @@ namespace CollegeManagement.API.DTOs.Timetable
         [Required]
         public int SectionId { get; set; }
 
+        public int? CampusId { get; set; }
+
         [Required]
         [Range(1, 7)]
         public int DayOfWeek { get; set; }
@@ -58,6 +60,7 @@ namespace CollegeManagement.API.DTOs.Timetable
         public int GroupId { get; set; }
         public int? ProgramId { get; set; }
         public int SectionId { get; set; }
+        public int? CampusId { get; set; }
         public int DayOfWeek { get; set; }
         public int PeriodId { get; set; }
         public int SubjectId { get; set; }
@@ -114,6 +117,8 @@ namespace CollegeManagement.API.DTOs.Timetable
     {
         public int Id { get; set; }
 
+        public int? CampusId { get; set; }
+
         public int BoardId { get; set; }
         public string BoardCode { get; set; } = string.Empty;
         public string BoardName { get; set; } = string.Empty;
@@ -140,6 +145,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
         public int PeriodId { get; set; }
         public string PeriodName { get; set; } = string.Empty;
+        public int PeriodNumber { get; set; }
         public TimeSpan StartTime { get; set; }
         public TimeSpan EndTime { get; set; }
         public bool IsBreak { get; set; }
@@ -184,6 +190,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
     public class TimetableQueryParams
     {
+        public int? CampusId { get; set; }
         public int? BoardId { get; set; }
         public int? AcademicLevelId { get; set; }
         public int? AcademicYearId { get; set; }

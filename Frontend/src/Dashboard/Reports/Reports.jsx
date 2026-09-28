@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./Reports.css";
+import { SkeletonTable } from "@/components/common/Ui.jsx";
 import {
   getReportBoards,
   getReportAcademicYears,
@@ -582,10 +583,7 @@ const Reports = () => {
             </div>
 
             {detailsLoading ? (
-              <div className="reports-loading">
-                <div className="spinner"></div>
-                <p>Loading detailed records...</p>
-              </div>
+              <SkeletonTable columns={6} rows={6} />
             ) : detailData.length === 0 ? (
               <div className="reports-empty">
                 <p>No detail records found for current filters.</p>
@@ -831,10 +829,7 @@ const Reports = () => {
           </div>
 
           {loading ? (
-            <div className="reports-loading">
-              <div className="spinner"></div>
-              <p>Loading audit logs...</p>
-            </div>
+            <SkeletonTable columns={5} rows={6} />
           ) : auditLogs.length === 0 ? (
             <div className="reports-empty">
               <p>No audit log events found for current date range.</p>

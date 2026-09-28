@@ -85,7 +85,6 @@ namespace CollegeManagement.API.Helpers
                 new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
                 new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
-                new Claim(ClaimTypes.Email, user.Email ?? string.Empty),
                 new Claim(ClaimTypes.Name, user.FullName ?? string.Empty),
                 new Claim(ClaimTypes.Role, canonicalRoleName),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())

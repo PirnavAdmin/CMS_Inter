@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   FileBarChart2,
   Download,
@@ -14,30 +14,55 @@ import {
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { tripLogs, driverProfile } from "../data/driverMockData.js";
+import { getReports, getProfile } from "../../../api/transportDriverApi.js";
 
 export default function DriverReportsPage() {
   const [filterType, setFilterType] = useState("All");
   const [searchTerm, setSearchTerm] = useState("");
+  const [tripLogs, setTripLogs] = useState([]);
+  const [driverProfile, setDriverProfile] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [reportsRes, profileRes] = await Promise.all([
+          getReports(),
+          getProfile()
+        ]);
+        const rData = reportsRes.data || reportsRes;
+        const pData = profileRes.data || profileRes;
+        setTripLogs(Array.isArray(rData) ? rData : rData.tripLogs || []);
+        setDriverProfile(pData.profile || pData || {});
+      } catch (err) {
+        setError(err.response?.data?.message || err.message || "Failed to load reports");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const filteredLogs = useMemo(() => {
     return tripLogs.filter((log) => {
-      const matchType = filterType === "All" || log.tripType.toLowerCase().includes(filterType.toLowerCase());
+      const matchType = filterType === "All" || (log.tripType && log.tripType.toLowerCase().includes(filterType.toLowerCase()));
       const matchSearch =
-        log.date.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.driverNotes.toLowerCase().includes(searchTerm.toLowerCase());
+        (log.date && log.date.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (log.id && log.id.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (log.driverNotes && log.driverNotes.toLowerCase().includes(searchTerm.toLowerCase()));
       return matchType && matchSearch;
     });
-  }, [filterType, searchTerm]);
+  }, [filterType, searchTerm, tripLogs]);
 
   const totalDistanceCovered = useMemo(() => {
-    return tripLogs.reduce((sum, item) => sum + item.distanceKm, 0);
-  }, []);
+    return tripLogs.reduce((sum, item) => sum + (item.distanceKm || 0), 0);
+  }, [tripLogs]);
 
   const totalFuelAdded = useMemo(() => {
-    return tripLogs.reduce((sum, item) => sum + item.fuelAddedLiters, 0);
-  }, []);
+    return tripLogs.reduce((sum, item) => sum + (item.fuelAddedLiters || 0), 0);
+  }, [tripLogs]);
 
   const handleExportCSV = () => {
     const headers = [
@@ -58,20 +83,20 @@ export default function DriverReportsPage() {
     ];
 
     const rows = filteredLogs.map((log) => [
-      log.id,
-      `"${log.date}"`,
-      `"${log.tripType}"`,
-      `"${log.route}"`,
-      log.startTime,
-      log.endTime,
-      log.startKm,
-      log.endKm,
-      log.distanceKm,
-      log.fuelAddedLiters,
-      log.studentsTransported,
-      log.attendanceRate,
-      log.status,
-      `"${log.driverNotes}"`,
+      log.id || "",
+      `"${log.date || ""}"`,
+      `"${log.tripType || ""}"`,
+      `"${log.route || ""}"`,
+      log.startTime || "",
+      log.endTime || "",
+      log.startKm || 0,
+      log.endKm || 0,
+      log.distanceKm || 0,
+      log.fuelAddedLiters || 0,
+      log.studentsTransported || 0,
+      log.attendanceRate || "",
+      log.status || "",
+      `"${log.driverNotes || ""}"`,
     ]);
 
     const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
@@ -79,7 +104,7 @@ export default function DriverReportsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `driver_trip_report_${driverProfile.employeeId}_${Date.now()}.csv`);
+    link.setAttribute("download", `driver_trip_report_${driverProfile?.employeeId || "unknown"}_${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -89,6 +114,9 @@ export default function DriverReportsPage() {
   const handlePrint = () => {
     window.print();
   };
+
+  if (loading) return <div className="dp-page-container"><p>Loading Reports Data...</p></div>;
+  if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
 
   return (
     <div className="dp-page-container">
@@ -126,7 +154,7 @@ export default function DriverReportsPage() {
         <DriverStatCard
           icon={FileBarChart2}
           title="Total Logged Trips"
-          value={`${tripLogs.length}`}
+          value={`${tripLogs?.length || 0}`}
           subtitle="This billing period"
           tone="primary"
         />

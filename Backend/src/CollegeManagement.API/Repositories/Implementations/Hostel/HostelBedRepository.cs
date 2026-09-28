@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using Dapper;
@@ -21,281 +21,116 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? status = null,
             string? search = null)
         {
-            var sql = @"
-                SELECT
-                    hb.BedId,
-                    hb.RoomId,
-                    rm.RoomNumber,
-                    rm.HostelId,
-                    h.HostelName,
-                    h.HostelCode,
-                    rm.FloorLevel,
-                    rtc.RoomTypeSpecification,
-                    hb.BedNumber,
-                    hb.BedStatus,
-                    hb.Status,
-                    hb.CreatedAt
-                FROM hostel_beds hb
-                INNER JOIN room_masters rm
-                    ON hb.RoomId = rm.RoomId
-                INNER JOIN hostel_blocks h
-                    ON rm.HostelId = h.HostelId
-                INNER JOIN room_type_configs rtc
-                    ON rm.RoomTypeId = rtc.RoomTypeId
-                WHERE 1 = 1
-            ";
-
-            if (hostelId.HasValue)
-            {
-                sql += @"
-                    AND rm.HostelId = @HostelId
-                ";
-            }
-
-            if (roomId.HasValue)
-            {
-                sql += @"
-                    AND hb.RoomId = @RoomId
-                ";
-            }
-
-            if (!string.IsNullOrWhiteSpace(bedStatus))
-            {
-                sql += @"
-                    AND hb.BedStatus = @BedStatus
-                ";
-            }
-
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                sql += @"
-                    AND hb.Status = @Status
-                ";
-            }
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                sql += @"
-                    AND (
-                        hb.BedNumber LIKE @Search
-                        OR rm.RoomNumber LIKE @Search
-                        OR h.HostelName LIKE @Search
-                        OR h.HostelCode LIKE @Search
-                    )
-                ";
-            }
-
-            sql += @"
-                ORDER BY
-                    h.HostelName,
-                    rm.RoomNumber,
-                    hb.BedNumber;
-            ";
-
             return await _dbConnection.QueryAsync<HostelBed>(
-                sql,
+                "sp_GetHostelBeds",
                 new
                 {
-                    HostelId = hostelId,
-                    RoomId = roomId,
-                    BedStatus = bedStatus,
-                    Status = status,
-                    Search = $"%{search}%"
-                });
+                    p_HostelId = hostelId,
+                    p_RoomId = roomId,
+                    p_BedStatus = bedStatus,
+                    p_Status = status,
+                    p_Search = search
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<HostelBed?> GetByIdAsync(int bedId)
         {
-            const string sql = @"
-                SELECT
-                    hb.BedId,
-                    hb.RoomId,
-                    rm.RoomNumber,
-                    rm.HostelId,
-                    h.HostelName,
-                    h.HostelCode,
-                    rm.FloorLevel,
-                    rtc.RoomTypeSpecification,
-                    hb.BedNumber,
-                    hb.BedStatus,
-                    hb.Status,
-                    hb.CreatedAt
-                FROM hostel_beds hb
-                INNER JOIN room_masters rm
-                    ON hb.RoomId = rm.RoomId
-                INNER JOIN hostel_blocks h
-                    ON rm.HostelId = h.HostelId
-                INNER JOIN room_type_configs rtc
-                    ON rm.RoomTypeId = rtc.RoomTypeId
-                WHERE hb.BedId = @BedId;
-            ";
-
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<HostelBed>(
-                    sql,
-                    new { BedId = bedId });
+            return await _dbConnection.QueryFirstOrDefaultAsync<HostelBed>(
+                "sp_GetHostelBedById",
+                new { p_BedId = bedId },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<HostelBed?> GetByBedNumberAsync(
             int roomId,
             string bedNumber)
         {
-            const string sql = @"
-                SELECT
-                    hb.BedId,
-                    hb.RoomId,
-                    rm.RoomNumber,
-                    rm.HostelId,
-                    h.HostelName,
-                    h.HostelCode,
-                    rm.FloorLevel,
-                    rtc.RoomTypeSpecification,
-                    hb.BedNumber,
-                    hb.BedStatus,
-                    hb.Status,
-                    hb.CreatedAt
-                FROM hostel_beds hb
-                INNER JOIN room_masters rm
-                    ON hb.RoomId = rm.RoomId
-                INNER JOIN hostel_blocks h
-                    ON rm.HostelId = h.HostelId
-                INNER JOIN room_type_configs rtc
-                    ON rm.RoomTypeId = rtc.RoomTypeId
-                WHERE hb.RoomId = @RoomId
-                  AND LOWER(hb.BedNumber) = LOWER(@BedNumber)
-                LIMIT 1;
-            ";
-
-            return await _dbConnection
-                .QueryFirstOrDefaultAsync<HostelBed>(
-                    sql,
-                    new
-                    {
-                        RoomId = roomId,
-                        BedNumber = bedNumber
-                    });
+            return await _dbConnection.QueryFirstOrDefaultAsync<HostelBed>(
+                "sp_GetHostelBedByNumber",
+                new
+                {
+                    p_RoomId = roomId,
+                    p_BedNumber = bedNumber
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<int> CreateAsync(HostelBed bed)
         {
-            const string sql = @"
-                INSERT INTO hostel_beds
-                (
-                    RoomId,
-                    BedNumber,
-                    BedStatus,
-                    Status
-                )
-                VALUES
-                (
-                    @RoomId,
-                    @BedNumber,
-                    @BedStatus,
-                    @Status
-                );
-
-                SELECT LAST_INSERT_ID();
-            ";
-
-            return await _dbConnection
-                .ExecuteScalarAsync<int>(
-                    sql,
-                    bed);
+            return await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_CreateHostelBed",
+                new
+                {
+                    p_RoomId = bed.RoomId,
+                    p_BedNumber = bed.BedNumber,
+                    p_BedStatus = bed.BedStatus,
+                    p_Status = bed.Status
+                },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<bool> UpdateAsync(HostelBed bed)
         {
-            const string sql = @"
-                UPDATE hostel_beds
-                SET
-                    RoomId = @RoomId,
-                    BedNumber = @BedNumber,
-                    BedStatus = @BedStatus,
-                    Status = @Status
-                WHERE BedId = @BedId;
-            ";
-
-            var affectedRows =
-                await _dbConnection.ExecuteAsync(
-                    sql,
-                    bed);
+            var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_UpdateHostelBed",
+                new
+                {
+                    p_BedId = bed.BedId,
+                    p_RoomId = bed.RoomId,
+                    p_BedNumber = bed.BedNumber,
+                    p_BedStatus = bed.BedStatus,
+                    p_Status = bed.Status
+                },
+                commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
         }
 
         public async Task<bool> DeleteAsync(int bedId)
         {
-            const string sql = @"
-                DELETE FROM hostel_beds
-                WHERE BedId = @BedId;
-            ";
-
-            var affectedRows =
-                await _dbConnection.ExecuteAsync(
-                    sql,
-                    new { BedId = bedId });
+            var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_DeleteHostelBed",
+                new { p_BedId = bedId },
+                commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
         }
 
         public async Task<bool> ExistsAsync(int bedId)
         {
-            const string sql = @"
-                SELECT COUNT(1)
-                FROM hostel_beds
-                WHERE BedId = @BedId;
-            ";
-
-            var count =
-                await _dbConnection.ExecuteScalarAsync<int>(
-                    sql,
-                    new { BedId = bedId });
+            var count = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_CheckHostelBedExists",
+                new { p_BedId = bedId },
+                commandType: CommandType.StoredProcedure);
 
             return count > 0;
         }
 
         public async Task<bool> RoomExistsAsync(int roomId)
         {
-            const string sql = @"
-                SELECT COUNT(1)
-                FROM room_masters
-                WHERE RoomId = @RoomId;
-            ";
-
-            var count =
-                await _dbConnection.ExecuteScalarAsync<int>(
-                    sql,
-                    new { RoomId = roomId });
+            var count = await _dbConnection.ExecuteScalarAsync<int>(
+                "sp_CheckRoomMasterExists",
+                new { p_RoomId = roomId },
+                commandType: CommandType.StoredProcedure);
 
             return count > 0;
         }
 
         public async Task<int> GetBedCountByRoomAsync(int roomId)
         {
-            const string sql = @"
-                SELECT COUNT(1)
-                FROM hostel_beds
-                WHERE RoomId = @RoomId;
-            ";
-
             return await _dbConnection.ExecuteScalarAsync<int>(
-                sql,
-                new { RoomId = roomId });
+                "sp_GetHostelBedCountByRoom",
+                new { p_RoomId = roomId },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<int> GetRoomBedCapacityAsync(int roomId)
         {
-            const string sql = @"
-                SELECT rtc.BedCapacity
-                FROM room_masters rm
-                INNER JOIN room_type_configs rtc
-                    ON rm.RoomTypeId = rtc.RoomTypeId
-                WHERE rm.RoomId = @RoomId;
-            ";
-
             return await _dbConnection.ExecuteScalarAsync<int>(
-                sql,
-                new { RoomId = roomId });
+                "sp_GetHostelRoomBedCapacity",
+                new { p_RoomId = roomId },
+                commandType: CommandType.StoredProcedure);
         }
     }
 }

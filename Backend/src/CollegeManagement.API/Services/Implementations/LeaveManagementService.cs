@@ -78,9 +78,8 @@ namespace CollegeManagement.API.Services.Implementations
                 try
                 {
                     var leave = await _context.StaffLeaveRequests
-                        .FromSqlInterpolated($"SELECT * FROM StaffLeaveRequests WHERE StaffLeaveRequestId = {leaveRequestId} FOR UPDATE")
                         .Include(l => l.Staff)
-                        .FirstOrDefaultAsync();
+                        .FirstOrDefaultAsync(l => l.StaffLeaveRequestId == leaveRequestId);
                         
                     if (leave == null) throw new CollegeManagement.API.Exceptions.NotFoundException("Leave request not found");
 
@@ -287,13 +286,14 @@ namespace CollegeManagement.API.Services.Implementations
             });
         }
 
-        public async Task<IEnumerable<StaffLeaveResponse>> GetStaffLeaveRequestsAsync(int? staffId = null, int? departmentId = null, CollegeManagement.API.Enums.LeaveStatus? status = null)
+        public async Task<IEnumerable<StaffLeaveResponse>> GetStaffLeaveRequestsAsync(int? campusId = null, int? staffId = null, int? departmentId = null, CollegeManagement.API.Enums.LeaveStatus? status = null)
         {
             var query = _context.StaffLeaveRequests.Where(l => l.IsActive);
             
             if (staffId.HasValue) query = query.Where(l => l.StaffId == staffId);
             if (departmentId.HasValue) query = query.Where(l => l.DepartmentId == departmentId);
             if (status.HasValue) query = query.Where(l => l.Status == status);
+            if (campusId.HasValue) query = query.Where(l => l.Staff != null && l.Staff.CampusId == campusId.Value);
 
             var list = await query
                 .OrderByDescending(l => l.CreatedAt)
@@ -376,7 +376,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<StaffLeaveHistorySummaryDto>> GetStaffLeaveHistorySummaryAsync(int? departmentId = null, string? staffType = null)
+        public async Task<IEnumerable<StaffLeaveHistorySummaryDto>> GetStaffLeaveHistorySummaryAsync(int? campusId = null, int? departmentId = null, string? staffType = null)
         {
             var query = _context.Staffs
                 .Include(s => s.DepartmentRef)
@@ -384,6 +384,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (departmentId.HasValue) query = query.Where(s => s.DepartmentId == departmentId);
             if (!string.IsNullOrEmpty(staffType)) query = query.Where(s => s.StaffType == staffType);
+            if (campusId.HasValue) query = query.Where(s => s.CampusId == campusId.Value);
 
             var staffs = await query.ToListAsync();
             var summaries = new List<StaffLeaveHistorySummaryDto>();

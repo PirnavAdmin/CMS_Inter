@@ -20,9 +20,9 @@ namespace CollegeManagement.API.Services.Implementations
             _holidayRepository = holidayRepository;
         }
 
-        public async Task<HolidaySummaryResponse> GetSummaryAsync(int? academicYearId, int? boardId)
+        public async Task<HolidaySummaryResponse> GetSummaryAsync(int? campusId, int? academicYearId, int? boardId)
         {
-            return await _holidayRepository.GetSummaryAsync(academicYearId, boardId);
+            return await _holidayRepository.GetSummaryAsync(campusId, academicYearId, boardId);
         }
 
         public async Task<(IEnumerable<HolidayResponse> Items, int TotalCount, int TotalPages)> GetPagedHolidaysAsync(HolidayFilterRequest filter)

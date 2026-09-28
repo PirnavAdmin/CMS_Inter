@@ -11,6 +11,8 @@ namespace CollegeManagement.API.Models.Timetable
         [Key]
         public int Id { get; set; }
 
+        public int? CampusId { get; set; }
+
         [Required]
         [MaxLength(100)]
         public string Name { get; set; } = string.Empty;
@@ -31,6 +33,9 @@ namespace CollegeManagement.API.Models.Timetable
         public DateTime? UpdatedAt { get; set; }
 
         // Navigation
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
+
         public virtual ICollection<PeriodStructureItem> Items { get; set; } = new List<PeriodStructureItem>();
         public virtual ICollection<PeriodStructureAssignment> Assignments { get; set; } = new List<PeriodStructureAssignment>();
         [NotMapped]

@@ -536,6 +536,7 @@ BEGIN
     DECLARE v_AbsentPct DECIMAL(5,1) DEFAULT 0.0;
     DECLARE v_HalfDayPct DECIMAL(5,1) DEFAULT 0.0;
     DECLARE v_View VARCHAR(50);
+    DECLARE v_LatestAttTime DATETIME DEFAULT NULL;
 
     SET v_TargetDate = COALESCE(p_TargetDate, CURDATE());
     SET v_View = COALESCE(p_ViewBy, 'Overall');
@@ -586,6 +587,15 @@ BEGIN
         GROUP BY s.StudentId
     ) AS dailyAtt;
 
+    -- Latest attendance marked time
+    SELECT MAX(COALESCE(a.UpdatedAt, a.CreatedAt)) INTO v_LatestAttTime
+    FROM `Attendances` a
+    INNER JOIN `Students` s ON a.StudentId = s.StudentId
+    WHERE DATE(a.AttendanceDate) = v_TargetDate
+      AND (a.IsActive = 1 OR a.IsActive IS NULL)
+      AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
+      AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
+
     -- Absent: Any active student NOT marked Present/Half-day is automatically counted as Absent
     IF v_TotalStudents > 0 THEN
         SET v_Absent = GREATEST(0, v_TotalStudents - v_Present - v_HalfDay);
@@ -613,7 +623,8 @@ BEGIN
         v_PresentPct AS PresentPercentage,
         v_AbsentPct AS AbsentPercentage,
         v_HalfDayPct AS HalfDayPercentage,
-        v_HalfDayPct AS LatePercentage;
+        v_HalfDayPct AS LatePercentage,
+        v_LatestAttTime AS LastUpdatedTime;
 
     -- Resultset 2: Breakdown by Category (Academic Level, Group, Section)
     IF LOWER(v_View) IN ('academic level', 'level', 'academic-level') THEN
@@ -973,9 +984,9 @@ BEGIN
     SET v_Limit = COALESCE(p_Limit, 6);
 
     SELECT 
-        e.ExaminationId AS ExamId,
+        e.ExamId AS ExamId,
         e.ExamName,
-        COALESCE(NULLIF(e.ExamCode, ''), CONCAT('EXAM-', LPAD(e.ExaminationId, 4, '0'))) AS ExamCode,
+        COALESCE(NULLIF(e.ExamCode, ''), CONCAT('EXAM-', LPAD(e.ExamId, 4, '0'))) AS ExamCode,
         CONCAT(COALESCE(g.GroupName, al.LevelName, 'All Groups'), ' • ', 
                DATE_FORMAT(e.StartDate, '%d %b %Y'), 
                CASE WHEN e.StartDate != e.EndDate THEN CONCAT(' - ', DATE_FORMAT(e.EndDate, '%d %b %Y')) ELSE '' END
@@ -1164,7 +1175,7 @@ BEGIN
     INNER JOIN `StaffSubjectAllocations` sa ON sa.StaffId = s.Id
     WHERE (s.IsDeleted = 0 OR s.IsDeleted IS NULL)
       AND (s.Status = 'Active' OR s.Status IS NULL)
-      AND (s.StaffType = 'Teaching' OR s.FacultyType = 'Teaching')
+      AND (s.StaffType = 'Teaching' OR s.StaffType = 'Both' OR s.StaffType IS NULL)
       AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
     GROUP BY s.Id, s.FirstName, s.LastName, d.DepartmentName
     ORDER BY AssignedSubjects DESC, s.FirstName ASC;
@@ -1214,3 +1225,35 @@ BEGIN
 END //
 
 DELIMITER ;
+
+-- ----------------------------------------------------------------------------------------------------
+-- 13. sp_GetDashboardRecentActivity
+-- ----------------------------------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS sp_GetDashboardRecentActivity;
+
+DELIMITER //
+
+CREATE PROCEDURE sp_GetDashboardRecentActivity(
+    IN p_Limit INT
+)
+BEGIN
+    DECLARE v_Limit INT DEFAULT 15;
+    IF p_Limit IS NOT NULL AND p_Limit > 0 THEN
+        SET v_Limit = p_Limit;
+    END IF;
+
+    SELECT 
+        AuditLogId AS Id,
+        CONCAT(COALESCE(Action, 'Action'), ' on ', COALESCE(EntityName, 'Record')) AS Title,
+        COALESCE(Action, 'System') AS Action,
+        COALESCE(Description, CONCAT(Action, ' on ', EntityName)) AS Description,
+        COALESCE(UserName, 'Admin') AS UserName,
+        COALESCE(EntityName, 'System') AS EntityName,
+        CreatedAt AS Timestamp
+    FROM `AuditLogs`
+    ORDER BY AuditLogId DESC
+    LIMIT v_Limit;
+END //
+
+DELIMITER ;
+

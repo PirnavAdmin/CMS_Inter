@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { CalendarCheck2, CalendarClock, CalendarDays, ChevronDown, Clock3, Coffee, Download, UserCheck, UserRound, UserX } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Loader } from "@/components/common/Ui.jsx";
+import { SkeletonDashboard } from "@/components/common/Ui.jsx";
 import apiClient from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -82,7 +82,7 @@ export default function AttendanceOverviewPage() {
   const subtitle = yearLabel ? `Academic Year: ${yearLabel}` : '';
   
   if (loading) {
-    return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}><main className="attendance-module"><Loader label="Loading overview..." /></main></DashboardLayout>;
+    return <DashboardLayout title={title} subtitle={subtitle} breadcrumb={["Operations", "Attendance", title]}><main className="attendance-module"><SkeletonDashboard cards={4} tableColumns={5} /></main></DashboardLayout>;
   }
 
   if (error) {
