@@ -44,12 +44,18 @@ public class FeeRepository : IFeeRepository
     }
 
 
-    public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync()
+    public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         using var c = Connection();
 
         return await c.QueryAsync<FeeTypeResponse>(
             "sp_GetFeeTypes",
+            new
+            {
+                p_CampusId = campusId,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
+            },
             commandType: CommandType.StoredProcedure);
     }
 
@@ -435,13 +441,18 @@ public class FeeRepository : IFeeRepository
     }
 
 
-    public async Task<IEnumerable<ScholarshipResponse>>
-        GetScholarshipsAsync()
+    public async Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         using var c = Connection();
 
         return await c.QueryAsync<ScholarshipResponse>(
             "sp_GetScholarships",
+            new
+            {
+                p_CampusId = campusId,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
+            },
             commandType: CommandType.StoredProcedure);
     }
 
