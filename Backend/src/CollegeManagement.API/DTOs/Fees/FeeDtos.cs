@@ -7,6 +7,11 @@ public class CreateFeeTypeRequest
 {
     [Required, StringLength(100, MinimumLength = 2)] public string FeeTypeName { get; set; } = string.Empty;
     [Required, StringLength(50)] public string Category { get; set; } = "Academic";
+    
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -14,6 +19,11 @@ public class UpdateFeeTypeRequest
 {
     [Required, StringLength(100, MinimumLength = 2)] public string FeeTypeName { get; set; } = string.Empty;
     [Required, StringLength(50)] public string Category { get; set; } = "Academic";
+    
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -23,6 +33,11 @@ public class FeeTypeResponse
     public string FeeTypeCode { get; set; } = string.Empty;
     public string FeeTypeName { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
+    
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -104,6 +119,11 @@ public class CreateScholarshipRequest
     public string? Description { get; set; }
     [Required, StringLength(20)] public string DiscountType { get; set; } = "Percentage";
     [Range(0.01, double.MaxValue)] public decimal DiscountValue { get; set; }
+
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -113,6 +133,11 @@ public class UpdateScholarshipRequest
     public string? Description { get; set; }
     [Required, StringLength(20)] public string DiscountType { get; set; } = "Percentage";
     [Range(0.01, double.MaxValue)] public decimal DiscountValue { get; set; }
+
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -123,6 +148,11 @@ public class ScholarshipResponse
     public string? Description { get; set; }
     public string DiscountType { get; set; } = string.Empty;
     public decimal DiscountValue { get; set; }
+
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

@@ -547,7 +547,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var session = request.Session;
 
             // Base query for students matching the criteria
-            var studentsQuery = _context.Students.Where(s => s.IsActive);
+            var studentsQuery = _context.Students.AsQueryable();
 
             if (request.CampusId.HasValue && request.CampusId.Value > 0) studentsQuery = studentsQuery.Where(s => s.CampusId == request.CampusId);
             if (request.BoardId.HasValue && request.BoardId.Value > 0) studentsQuery = studentsQuery.Where(s => s.BoardId == request.BoardId);
@@ -641,7 +641,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<AttendanceDefaulterResponse>> GetAttendanceDefaultersAsync(AttendanceDefaultersRequest request)
         {
-            var studentsQuery = _context.Students.Where(s => s.IsActive);
+            var studentsQuery = _context.Students.AsQueryable();
 
             if (request.CampusId.HasValue && request.CampusId.Value > 0) studentsQuery = studentsQuery.Where(s => s.CampusId == request.CampusId);
             if (request.BoardId.HasValue) studentsQuery = studentsQuery.Where(s => s.BoardId == request.BoardId);
@@ -979,7 +979,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var studentQuery = _context.Students
                 .Include(s => s.GroupNavigation)
                 .Include(s => s.SectionNavigation)
-                .Where(s => s.IsActive);
+                .AsQueryable();
 
             if (request.CampusId.HasValue && request.CampusId.Value > 0)
             {
