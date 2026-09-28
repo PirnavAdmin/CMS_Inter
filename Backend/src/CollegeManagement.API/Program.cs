@@ -45,7 +45,10 @@ Dapper.SqlMapper.AddTypeHandler(new NullableTimeOnlyTypeHandler());
 #endregion
 
 #region Controllers & JSON
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<CollegeManagement.API.Filters.GlobalIsolationFilter>();
+    })
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());

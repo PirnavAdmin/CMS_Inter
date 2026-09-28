@@ -294,6 +294,18 @@ namespace CollegeManagement.API.Repositories.Implementations
                     "Student admission could not be created.");
             }
 
+            // Force override the Admission Number with the one generated/provided by the frontend
+            // This ensures context-isolated sequences (Board/AcademicYear) are saved correctly
+            // instead of whatever the legacy SP generated internally.
+            if (result.AdmissionId > 0 && !string.IsNullOrWhiteSpace(request.AdmissionNo))
+            {
+                await connection.ExecuteAsync(
+                    "UPDATE `StudentAdmissions` SET `AdmissionNo` = @AdmNo WHERE `AdmissionId` = @AdmId",
+                    new { AdmNo = request.AdmissionNo.Trim(), AdmId = result.AdmissionId });
+                
+                result.AdmissionNo = request.AdmissionNo.Trim();
+            }
+
             if (result.AdmissionId > 0)
             {
                 string? hostelBlock = request.HostelBlock;
@@ -819,7 +831,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         // GENERATE ADMISSION NUMBER
         // =========================================================
-        public async Task<string> GenerateAdmissionNumberAsync()
+        public async Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
@@ -828,6 +840,44 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
+
+        public async Task<int> GetActualAdmissionCountAsync(int campusId, int boardId, int academicYearId)
+        {
+            var connection = _context.Database.GetDbConnection();
+            return await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM `StudentAdmissions` WHERE `CampusId` = @CampusId AND `BoardId` = @BoardId AND `AcademicYearId` = @AcademicYearId",
+                new { CampusId = campusId, BoardId = boardId, AcademicYearId = academicYearId }
+            );
+        }
+
+        public async Task SyncAdmissionSequenceAsync(int campusId, int boardId, int academicYearId, int correctSequence)
+        {
+            var connection = _context.Database.GetDbConnection();
+            string seriesCode = $"ADMISSION_NO|B:{boardId}_AY:{academicYearId}";
+            
+            var exists = await connection.ExecuteScalarAsync<int>(
+                "SELECT COUNT(*) FROM `NumberSeriesConfigurations` WHERE `SeriesCode` = @code AND `CampusId` = @cId", 
+                new { code = seriesCode, cId = campusId });
+                
+            if (exists == 0)
+            {
+                await connection.ExecuteAsync(@"
+                    INSERT INTO `NumberSeriesConfigurations` 
+                        (`SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, `CampusId`, `CreatedAt`, `UpdatedAt`, `IsActive`)
+                    SELECT 
+                        @code, `SeriesName`, `Prefix`, `FormatPattern`, `NumberLength`, `StartNumber`, @seq, `Description`, @cId, UTC_TIMESTAMP(), UTC_TIMESTAMP(), 1
+                    FROM `NumberSeriesConfigurations`
+                    WHERE `SeriesCode` = 'ADMISSION_NO' AND (`CampusId` = @cId OR `CampusId` IS NULL)
+                    ORDER BY `CampusId` DESC LIMIT 1;
+                ", new { code = seriesCode, cId = campusId, seq = correctSequence });
+            }
+            else
+            {
+                await connection.ExecuteAsync(
+                    "UPDATE `NumberSeriesConfigurations` SET `CurrentSequence` = @seq WHERE `SeriesCode` = @code AND `CampusId` = @cId",
+                    new { code = seriesCode, cId = campusId, seq = correctSequence });
+            }
+        }
 
         // =========================================================
         // SINGLE SECTION ALLOCATION

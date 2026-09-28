@@ -103,7 +103,24 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<GenerateNumberSeriesResponseDto?> GenerateNextNumberAsync(string seriesCodeOrSlug, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GenerateNextSequenceAsync(code, campusId);
+            var actualCode = code;
+
+            var contextParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(context?.Board))
+            {
+                contextParts.Add($"B:{context.Board.Trim().ToUpperInvariant()}");
+            }
+            if (!string.IsNullOrWhiteSpace(context?.AcademicYear))
+            {
+                contextParts.Add($"AY:{context.AcademicYear.Trim().ToUpperInvariant()}");
+            }
+
+            if (contextParts.Count > 0)
+            {
+                actualCode = $"{code}|{string.Join("_", contextParts)}";
+            }
+
+            var entity = await _repository.GenerateNextSequenceAsync(actualCode, campusId, baseSeriesCode: code);
             if (entity == null) return null;
 
             var generatedNumber = NumberSeriesPatternEvaluator.Evaluate(
