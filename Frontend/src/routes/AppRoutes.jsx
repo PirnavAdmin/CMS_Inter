@@ -20,7 +20,7 @@ import AttendancePage from "@/components/pages/AttendancePage.jsx";
 import AttendanceOverviewPage from "@/components/pages/AttendanceOverviewPage.jsx";
 import LeaveManagementPage from "@/components/pages/LeaveManagementPage.jsx";
 import ExaminationPage from "@/components/pages/ExaminationPage.jsx";
-import { pageConfig as examinationConfig } from "@/features/examination/examinationModel.js";
+import { pageConfig as examinationConfig } from "@/components/pages/ExaminationPage.jsx";
 import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
 import ResultProcessingPage from "@/components/pages/ResultProcessingPage.jsx";
 import PromotionPage from "@/components/pages/PromotionPage.jsx";

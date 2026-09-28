@@ -305,8 +305,42 @@
   color: var(--cms-text);
 }
 .ec-dialog .cms-modal-body {
-  max-height: 78vh;
+  max-height: calc(90dvh - 76px);
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+}
+.ec-dialog .cms-modal-head {
+  flex-shrink: 0;
+}
+.ec-dialog .ec-footer {
+  position: sticky;
+  bottom: -1px;
+  padding: 16px 0;
+  background: var(--cms-surface);
+  z-index: 1;
+}
+.ec-dialog fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+  margin: 0;
+}
+.ec-dialog .ec-grid > *,
+.examination-center .ec-grid > * {
+  min-width: 0;
+}
+.ec-dialog .ec-field :is(input, select) {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.ec-choices label {
+  cursor: pointer;
+}
+.ec-choices label:focus-within {
+  outline: 2px solid var(--cms-primary);
+  outline-offset: 2px;
 }
 .ec-print {
   display: none;

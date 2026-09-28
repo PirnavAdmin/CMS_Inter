@@ -430,6 +430,7 @@ export const apiEndpoints = {
     issue: (id) => `/api/certificates/${id}/issue`,
   },
   examinations: {
+    eligibleSubjects: (id) => `/api/v1/examinations/${encodeURIComponent(id)}/eligible-subjects`,
     getAll: "/api/v1/examinations",
     byId: (id) => `/api/v1/examinations/${encodeURIComponent(id)}`,
     patterns: "/api/v1/examinations/patterns",
