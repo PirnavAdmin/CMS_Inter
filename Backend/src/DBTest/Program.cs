@@ -32,6 +32,11 @@ namespace DBTest
                 await DeployRoles.RunAsync();
                 return;
             }
+            if (args.Length > 0 && args[0] == "--deploy-payroll-sp")
+            {
+                await DeployPayrollSPs.RunAsync();
+                return;
+            }
 
             Console.OutputEncoding = Encoding.UTF8;
             Console.WriteLine("================================================================================");
