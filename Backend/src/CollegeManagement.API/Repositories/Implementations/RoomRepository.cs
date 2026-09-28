@@ -75,11 +75,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<Room?> GetByCodeAsync(string roomCode)
+        public async Task<Room?> GetByCodeAsync(string roomCode, int? campusId = null)
         {
             return await Connection.QueryFirstOrDefaultAsync<Room>(
                 "sp_GetRoomByCode",
-                new { p_RoomCode = roomCode?.Trim() },
+                new 
+                { 
+                    p_RoomCode = roomCode?.Trim(),
+                    p_CampusId = campusId ?? 0
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -89,6 +93,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 "sp_CreateRoom",
                 new
                 {
+                    p_CampusId = room.CampusId,
                     p_RoomCode = room.RoomCode ?? room.RoomNumber,
                     p_RoomName = room.RoomName ?? room.RoomCode ?? room.RoomNumber,
                     p_Capacity = room.Capacity,
@@ -111,6 +116,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 new
                 {
                     p_RoomId = room.RoomId,
+                    p_CampusId = room.CampusId,
                     p_RoomCode = room.RoomCode ?? room.RoomNumber,
                     p_RoomName = room.RoomName ?? room.RoomCode ?? room.RoomNumber,
                     p_Capacity = room.Capacity,

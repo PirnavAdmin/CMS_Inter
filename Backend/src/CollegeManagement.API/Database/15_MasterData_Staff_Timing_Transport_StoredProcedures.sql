@@ -1274,7 +1274,8 @@ CREATE PROCEDURE sp_GetTimetablesFull(
     IN p_StaffId INT,
     IN p_RoomId INT,
     IN p_IsPublished TINYINT(1),
-    IN p_ApprovalStatus INT
+    IN p_ApprovalStatus INT,
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -1355,6 +1356,7 @@ BEGIN
       AND (p_RoomId IS NULL OR t.RoomId = p_RoomId)
       AND (p_IsPublished IS NULL OR t.IsPublished = p_IsPublished)
       AND (p_ApprovalStatus IS NULL OR t.ApprovalStatus = p_ApprovalStatus)
+      AND (p_CampusId IS NULL OR s.CampusId = p_CampusId)
     ORDER BY t.DayOfWeek ASC, per.StartTime ASC;
 END //
 DELIMITER ;

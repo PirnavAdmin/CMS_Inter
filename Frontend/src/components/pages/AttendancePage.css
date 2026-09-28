@@ -1775,6 +1775,11 @@
   margin: 0;
   padding: 4px 12px;
 }
+.attendance-module .att-defaulter-threshold { margin: 0 0 10px; padding: 12px 16px; }
+.attendance-module .att-defaulter-threshold .att-field { width: min(260px, 100%); gap: 6px; }
+.attendance-module .att-threshold-input { position: relative; }
+.attendance-module .att-threshold-input input { width: 100%; padding-right: 36px; }
+.attendance-module .att-threshold-input > span { position: absolute; top: 50%; right: 13px; color: var(--cms-muted); font-weight: 700; pointer-events: none; transform: translateY(-50%); }
 
 .att-row-actions { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .att-row-actions .cms-action-btn { display: inline-flex; align-items: center; justify-content: center; }

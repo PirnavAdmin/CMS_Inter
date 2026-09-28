@@ -36,7 +36,8 @@ namespace CollegeManagement.API.Services.Implementations
                 request.Search,
                 request.Status,
                 pageNumber,
-                pageSize);
+                pageSize,
+                request.CampusId);
 
             return new PagedAcademicYearResponseDto
             {
@@ -66,6 +67,7 @@ namespace CollegeManagement.API.Services.Implementations
             var academicYear = new AcademicYear
             {
                 AcademicYearName = dto.AcademicYearName.Trim(),
+                CampusId = dto.CampusId ?? 1,
                 BoardId = dto.BoardId,
                 StartDate = dto.StartDate,
                 EndDate = dto.EndDate,
@@ -91,6 +93,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             academicYear.AcademicYearName = dto.AcademicYearName.Trim();
+            if (dto.CampusId.HasValue) academicYear.CampusId = dto.CampusId.Value;
             academicYear.BoardId = dto.BoardId;
             academicYear.StartDate = dto.StartDate;
             academicYear.EndDate = dto.EndDate;
@@ -147,9 +150,9 @@ namespace CollegeManagement.API.Services.Implementations
             return true;
         }
 
-        public async Task<byte[]> ExportToCsvAsync(string? search, bool? status)
+        public async Task<byte[]> ExportToCsvAsync(string? search, bool? status, int? campusId = null)
         {
-            var years = await _repository.GetForExportAsync(search, status);
+            var years = await _repository.GetForExportAsync(search, status, campusId);
             var sb = new StringBuilder();
             sb.AppendLine("AcademicYearId,AcademicYearName,BoardName,StartDate,EndDate,AdmissionPeriod,Status,Description");
 
@@ -162,9 +165,9 @@ namespace CollegeManagement.API.Services.Implementations
             return Encoding.UTF8.GetBytes(sb.ToString());
         }
 
-        public async Task<byte[]> ExportToExcelAsync(string? search, bool? status)
+        public async Task<byte[]> ExportToExcelAsync(string? search, bool? status, int? campusId = null)
         {
-            var years = await _repository.GetForExportAsync(search, status);
+            var years = await _repository.GetForExportAsync(search, status, campusId);
             var dataList = new List<Dictionary<string, object>>();
 
             foreach (var y in years)
@@ -228,6 +231,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 AcademicYearId = ay.AcademicYearId,
                 AcademicYearName = ay.AcademicYearName,
+                CampusId = ay.CampusId,
                 BoardId = ay.BoardId,
                 BoardName = boardName,
                 BoardCode = boardCode,

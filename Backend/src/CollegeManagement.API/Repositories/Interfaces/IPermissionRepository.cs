@@ -6,12 +6,12 @@ namespace CollegeManagement.API.Repositories.Interfaces
 {
     public interface IPermissionRepository
     {
-        Task<List<RoleCardDto>> GetRoleCardsAsync();
+        Task<List<RoleCardDto>> GetRoleCardsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
         Task<List<ModulePermissionMatrixDto>> GetRolePermissionMatrixAsync(int roleId, int? userId = null);
         Task UpdateRolePermissionsAsync(int roleId, List<ModulePermissionUpdateItem> modules);
         Task<UserRoleAssignmentsResponseDto> GetUserRoleAssignmentsAsync(GetUserRoleAssignmentsRequestDto request);
         Task<UserRoleDetailsDto?> GetUserRoleDetailsAsync(int userId);
-        Task<List<UserRoleAssignmentDto>> GetRoleMembersAsync(int roleId);
+        Task<List<UserRoleAssignmentDto>> GetRoleMembersAsync(int roleId, int? campusId = null, int? boardId = null, int? academicYearId = null);
         Task<List<ModulePermissionMatrixDto>> GetUserPermissionsAsync(int userId);
         Task<bool> AssignUserRoleAsync(int userId, int roleId);
         Task<bool> RemoveUserRoleAsync(int userId);

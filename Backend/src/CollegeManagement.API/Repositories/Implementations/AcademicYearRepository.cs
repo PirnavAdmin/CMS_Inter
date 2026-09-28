@@ -32,12 +32,18 @@ namespace CollegeManagement.API.Repositories.Implementations
             string? search,
             bool? status,
             int pageNumber,
-            int pageSize)
+            int pageSize,
+            int? campusId = null)
         {
             var query = _context.AcademicYears
                 .Include(x => x.Board)
                 .AsNoTracking()
                 .AsQueryable();
+
+            if (campusId.HasValue)
+            {
+                query = query.Where(x => x.CampusId == campusId.Value);
+            }
 
             if (status.HasValue)
             {
@@ -65,12 +71,17 @@ namespace CollegeManagement.API.Repositories.Implementations
             return (items, totalCount);
         }
 
-        public async Task<IEnumerable<AcademicYear>> GetForExportAsync(string? search, bool? status)
+        public async Task<IEnumerable<AcademicYear>> GetForExportAsync(string? search, bool? status, int? campusId = null)
         {
             var query = _context.AcademicYears
                 .Include(x => x.Board)
                 .AsNoTracking()
                 .AsQueryable();
+
+            if (campusId.HasValue)
+            {
+                query = query.Where(x => x.CampusId == campusId.Value);
+            }
 
             if (status.HasValue)
             {

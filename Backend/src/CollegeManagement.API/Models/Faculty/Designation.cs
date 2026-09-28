@@ -29,6 +29,11 @@ namespace CollegeManagement.API.Models.Faculty
 
         public DateTime? UpdatedAt { get; set; }
 
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
+
         [NotMapped]
         public int DesignationId
         {

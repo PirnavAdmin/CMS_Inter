@@ -327,7 +327,11 @@ WHERE `Action` = 'View'
 
 DROP PROCEDURE IF EXISTS `sp_GetRoleCards`;
 DELIMITER //
-CREATE PROCEDURE `sp_GetRoleCards`()
+CREATE PROCEDURE `sp_GetRoleCards`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT
+)
 BEGIN
     SELECT 
         r.RoleId,
@@ -335,14 +339,89 @@ BEGIN
         COALESCE(r.Description, '') AS Description,
         r.IsSystemRole,
         r.IsActive,
-        COUNT(DISTINCT u.UserId) AS UserCount,
-        COUNT(DISTINCT rp.PermissionId) AS PermissionsCount,
+        CASE 
+            WHEN r.RoleId = 1 THEN (SELECT COUNT(*) FROM `Users` WHERE RoleId = 1 AND IsActive = 1)
+            WHEN r.RoleId = 2 THEN (
+                SELECT COUNT(*) FROM `Users` u 
+                LEFT JOIN `Staff` st ON st.Id = u.StaffId
+                WHERE u.RoleId = 2 AND u.IsActive = 1
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+            )
+            WHEN r.RoleId = 3 THEN (
+                SELECT COUNT(*) FROM `Staff` st 
+                WHERE st.IsDeleted = 0 AND st.StaffType = 'Teaching' 
+                  AND (st.Designation LIKE '%HOD%' OR st.Designation LIKE '%Head of Department%')
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+                  AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
+            )
+            WHEN r.RoleId = 4 THEN (
+                SELECT COUNT(*) FROM `Staff` st 
+                WHERE st.IsDeleted = 0 AND st.StaffType = 'Teaching'
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+                  AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
+            )
+            WHEN r.RoleId = 5 THEN (
+                SELECT COUNT(*) FROM `Students` stu 
+                WHERE stu.IsActive = 1
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR stu.CampusId = p_CampusId)
+                  AND (p_BoardId IS NULL OR p_BoardId = 0 OR stu.BoardId = p_BoardId)
+                  AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
+            )
+            WHEN r.RoleId = 6 THEN (
+                SELECT COUNT(*) FROM `Students` stu 
+                WHERE stu.IsActive = 1 AND stu.FatherName IS NOT NULL AND stu.FatherName != ''
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR stu.CampusId = p_CampusId)
+                  AND (p_BoardId IS NULL OR p_BoardId = 0 OR stu.BoardId = p_BoardId)
+                  AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
+            )
+            WHEN r.RoleId = 7 THEN (
+                SELECT COUNT(*) FROM `Staff` st 
+                LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+                WHERE st.IsDeleted = 0 AND st.StaffType = 'Non-Teaching'
+                  AND (st.Designation LIKE '%Account%' OR d.DepartmentName LIKE '%Account%' OR st.Designation LIKE '%Cashier%' OR st.Designation LIKE '%Finance%')
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+            )
+            WHEN r.RoleId = 8 THEN (
+                SELECT COUNT(*) FROM `Staff` st 
+                LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+                WHERE st.IsDeleted = 0 AND st.StaffType = 'Non-Teaching'
+                  AND (st.Designation LIKE '%Exam%' OR d.DepartmentName LIKE '%Exam%' OR st.Designation LIKE '%Controller%')
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+            )
+            WHEN r.RoleId = 9 THEN (
+                SELECT COUNT(*) FROM `Staff` st 
+                LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+                WHERE st.IsDeleted = 0 AND st.StaffType = 'Non-Teaching'
+                  AND (st.Designation LIKE '%Librar%' OR d.DepartmentName LIKE '%Library%')
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+            )
+            WHEN r.RoleId = 10 THEN (
+                SELECT COUNT(*) FROM `Staff` st 
+                LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+                WHERE st.IsDeleted = 0 
+                  AND (st.Designation LIKE '%Warden%' OR d.DepartmentName LIKE '%Hostel%')
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+            )
+            WHEN r.RoleId = 11 THEN (
+                SELECT COUNT(*) FROM `Staff` st 
+                LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+                WHERE st.IsDeleted = 0 
+                  AND (st.Designation LIKE '%Placement%' OR d.DepartmentName LIKE '%Placement%')
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+            )
+            WHEN r.RoleId = 12 THEN (
+                SELECT COUNT(*) FROM `Staff` st 
+                WHERE st.IsDeleted = 0 
+                  AND (st.IsDriver = 1 OR st.Designation LIKE '%Driver%')
+                  AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+            )
+            ELSE (SELECT COUNT(*) FROM `Users` u WHERE u.RoleId = r.RoleId AND u.IsActive = 1)
+        END AS UserCount,
+        (SELECT COUNT(DISTINCT rp.PermissionId) FROM `RolePermissions` rp WHERE rp.RoleId = r.RoleId) AS PermissionsCount,
         r.CreatedAt,
         r.UpdatedAt
     FROM `Roles` r
-    LEFT JOIN `Users` u ON u.RoleId = r.RoleId AND u.IsActive = 1
-    LEFT JOIN `RolePermissions` rp ON rp.RoleId = r.RoleId
-    GROUP BY r.RoleId, r.RoleName, r.Description, r.IsSystemRole, r.IsActive, r.CreatedAt, r.UpdatedAt
+    WHERE r.IsActive = 1
     ORDER BY r.RoleId ASC;
 END //
 DELIMITER ;
@@ -354,6 +433,11 @@ CREATE PROCEDURE `sp_GetRolePermissionMatrix`(
     IN p_UserId INT
 )
 BEGIN
+    DECLARE v_RoleId INT DEFAULT p_RoleId;
+    IF (v_RoleId IS NULL OR v_RoleId = 0) AND p_UserId IS NOT NULL THEN
+        SELECT RoleId INTO v_RoleId FROM `Users` WHERE UserId = p_UserId LIMIT 1;
+    END IF;
+
     -- Returns the permission matrix per sub-module with 4 actions: View, Add, Edit, Delete
     -- If p_UserId is passed, member overrides take precedence over role defaults
     SELECT 
@@ -396,7 +480,7 @@ BEGIN
         -- Member Override Indicator
         MAX(CASE WHEN p_UserId IS NOT NULL AND up.UserPermissionId IS NOT NULL THEN 1 ELSE 0 END) AS HasMemberOverride
     FROM `Permissions` p
-    LEFT JOIN `RolePermissions` rp ON rp.PermissionId = p.PermissionId AND rp.RoleId = p_RoleId
+    LEFT JOIN `RolePermissions` rp ON rp.PermissionId = p.PermissionId AND rp.RoleId = v_RoleId
     LEFT JOIN `UserPermissions` up ON up.PermissionId = p.PermissionId AND up.UserId = p_UserId
     GROUP BY p.Module, p.SubModule, p.CategoryLabel
     ORDER BY MIN(p.DisplayOrder) ASC;
@@ -409,6 +493,9 @@ CREATE PROCEDURE `sp_GetUserRoleAssignments`(
     IN p_Search VARCHAR(100),
     IN p_RoleId INT,
     IN p_UserType VARCHAR(50),
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
     IN p_PageNumber INT,
     IN p_PageSize INT
 )
@@ -422,62 +509,73 @@ BEGIN
     SELECT COUNT(DISTINCT u.UserId) AS TotalCount
     FROM `Users` u
     LEFT JOIN `Roles` r ON r.RoleId = u.RoleId
-    LEFT JOIN `staff` st ON st.id = u.StaffId
-    LEFT JOIN `departments` d ON d.id = st.DepartmentId
-    LEFT JOIN `designations` des ON des.id = st.DesignationId
+    LEFT JOIN `Staff` st ON st.Id = u.StaffId
+    LEFT JOIN `Students` stu ON stu.StudentId = u.StudentId
+    LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+    LEFT JOIN `Designations` des ON des.Id = st.DesignationId
     WHERE (p_RoleId IS NULL OR p_RoleId = 0 OR u.RoleId = p_RoleId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
       AND (p_UserType IS NULL OR p_UserType = '' OR p_UserType = 'all' OR 
            CASE 
-               WHEN st.FacultyType = 'Non-Teaching' THEN 'Operational'
-               WHEN st.id IS NOT NULL THEN 'Faculty'
+               WHEN stu.StudentId IS NOT NULL THEN 'Student'
+               WHEN st.StaffType = 'Non-Teaching' THEN 'Operational'
+               WHEN st.StaffType = 'Teaching' THEN 'Faculty'
                WHEN u.AdminId IS NOT NULL THEN 'Staff'
                ELSE 'Staff'
            END = p_UserType)
       AND (p_Search IS NULL OR p_Search = '' OR 
            u.FullName LIKE CONCAT('%', p_Search, '%') OR
            u.Email LIKE CONCAT('%', p_Search, '%') OR
-           COALESCE(st.EmployeeId, CONCAT('USR-', LPAD(u.UserId, 3, '0'))) LIKE CONCAT('%', p_Search, '%') OR
+           COALESCE(st.EmployeeId, stu.AdmissionNo, CONCAT('USR-', LPAD(u.UserId, 3, '0'))) LIKE CONCAT('%', p_Search, '%') OR
            r.RoleName LIKE CONCAT('%', p_Search, '%') OR
            COALESCE(d.DepartmentName, '') LIKE CONCAT('%', p_Search, '%') OR
-           COALESCE(des.DesignationName, '') LIKE CONCAT('%', p_Search, '%'));
+           COALESCE(st.Designation, des.Name, '') LIKE CONCAT('%', p_Search, '%'));
 
     -- Result Set 2: Paginated User Assignment Rows
     SELECT 
         u.UserId,
-        u.FullName,
-        COALESCE(st.EmployeeId, CONCAT('ADM-', LPAD(u.UserId, 3, '0'))) AS UserCode,
+        u.FullName AS Name,
+        COALESCE(st.EmployeeId, stu.AdmissionNo, CONCAT('ADM-', LPAD(u.UserId, 3, '0'))) AS UserCode,
         CASE 
-            WHEN st.FacultyType = 'Non-Teaching' THEN 'Operational'
-            WHEN st.id IS NOT NULL THEN 'Faculty'
+            WHEN stu.StudentId IS NOT NULL THEN 'Student'
+            WHEN st.StaffType = 'Non-Teaching' THEN 'Operational'
+            WHEN st.StaffType = 'Teaching' THEN 'Faculty'
             WHEN u.AdminId IS NOT NULL THEN 'Staff'
             ELSE 'Staff'
         END AS UserType,
         COALESCE(d.DepartmentName, 'Administration') AS Department,
-        COALESCE(des.DesignationName, 'Administrator') AS Designation,
+        COALESCE(st.Designation, des.Name, IF(stu.StudentId IS NOT NULL, 'Student', 'Administrator')) AS Designation,
         r.RoleId,
         COALESCE(r.RoleName, 'Unassigned') AS RoleName,
         CASE WHEN u.IsActive = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
         (SELECT COUNT(*) FROM `UserPermissions` up WHERE up.UserId = u.UserId) AS OverridesCount
     FROM `Users` u
     LEFT JOIN `Roles` r ON r.RoleId = u.RoleId
-    LEFT JOIN `staff` st ON st.id = u.StaffId
-    LEFT JOIN `departments` d ON d.id = st.DepartmentId
-    LEFT JOIN `designations` des ON des.id = st.DesignationId
+    LEFT JOIN `Staff` st ON st.Id = u.StaffId
+    LEFT JOIN `Students` stu ON stu.StudentId = u.StudentId
+    LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+    LEFT JOIN `Designations` des ON des.Id = st.DesignationId
     WHERE (p_RoleId IS NULL OR p_RoleId = 0 OR u.RoleId = p_RoleId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
       AND (p_UserType IS NULL OR p_UserType = '' OR p_UserType = 'all' OR 
            CASE 
-               WHEN st.FacultyType = 'Non-Teaching' THEN 'Operational'
-               WHEN st.id IS NOT NULL THEN 'Faculty'
+               WHEN stu.StudentId IS NOT NULL THEN 'Student'
+               WHEN st.StaffType = 'Non-Teaching' THEN 'Operational'
+               WHEN st.StaffType = 'Teaching' THEN 'Faculty'
                WHEN u.AdminId IS NOT NULL THEN 'Staff'
                ELSE 'Staff'
            END = p_UserType)
       AND (p_Search IS NULL OR p_Search = '' OR 
            u.FullName LIKE CONCAT('%', p_Search, '%') OR
            u.Email LIKE CONCAT('%', p_Search, '%') OR
-           COALESCE(st.EmployeeId, CONCAT('USR-', LPAD(u.UserId, 3, '0'))) LIKE CONCAT('%', p_Search, '%') OR
+           COALESCE(st.EmployeeId, stu.AdmissionNo, CONCAT('USR-', LPAD(u.UserId, 3, '0'))) LIKE CONCAT('%', p_Search, '%') OR
            r.RoleName LIKE CONCAT('%', p_Search, '%') OR
            COALESCE(d.DepartmentName, '') LIKE CONCAT('%', p_Search, '%') OR
-           COALESCE(des.DesignationName, '') LIKE CONCAT('%', p_Search, '%'))
+           COALESCE(st.Designation, des.Name, '') LIKE CONCAT('%', p_Search, '%'))
     ORDER BY u.UserId ASC
     LIMIT p_PageSize OFFSET v_Offset;
 END //
@@ -495,22 +593,22 @@ BEGIN
         u.FullName,
         COALESCE(st.EmployeeId, CONCAT('ADM-', LPAD(u.UserId, 3, '0'))) AS UserCode,
         CASE 
-            WHEN st.FacultyType = 'Non-Teaching' THEN 'Operational'
-            WHEN st.id IS NOT NULL THEN 'Faculty'
+            WHEN st.StaffType = 'Non-Teaching' THEN 'Operational'
+            WHEN st.Id IS NOT NULL THEN 'Faculty'
             WHEN u.AdminId IS NOT NULL THEN 'Staff'
             ELSE 'Staff'
         END AS UserType,
         COALESCE(d.DepartmentName, 'Administration') AS Department,
-        COALESCE(des.DesignationName, 'Administrator') AS Designation,
+        COALESCE(st.Designation, des.Name, 'Administrator') AS Designation,
         CASE WHEN u.IsActive = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
         r.RoleId,
         COALESCE(r.RoleName, 'Unassigned') AS RoleName,
         CASE WHEN r.IsActive = 1 THEN 'Active' ELSE 'Inactive' END AS RoleStatus
     FROM `Users` u
     LEFT JOIN `Roles` r ON r.RoleId = u.RoleId
-    LEFT JOIN `staff` st ON st.id = u.StaffId
-    LEFT JOIN `departments` d ON d.id = st.DepartmentId
-    LEFT JOIN `designations` des ON des.id = st.DesignationId
+    LEFT JOIN `Staff` st ON st.Id = u.StaffId
+    LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+    LEFT JOIN `Designations` des ON des.Id = st.DesignationId
     WHERE u.UserId = p_UserId;
 
     -- Result Set 2: Permission Matrix with Enabled/Disabled pill status
@@ -554,5 +652,413 @@ BEGIN
     LEFT JOIN `UserPermissions` up ON up.PermissionId = p.PermissionId AND up.UserId = p_UserId
     GROUP BY p.Module, p.SubModule, p.CategoryLabel
     ORDER BY MIN(p.DisplayOrder) ASC;
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS `sp_UpdateRolePermissions`;
+DELIMITER //
+CREATE PROCEDURE `sp_UpdateRolePermissions`(
+    IN p_RoleId INT,
+    IN p_PermissionsJson JSON
+)
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM `Roles` WHERE `RoleId` = p_RoleId) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Role was not found.';
+    END IF;
+
+    START TRANSACTION;
+
+    DROP TEMPORARY TABLE IF EXISTS tmp_module_updates;
+    CREATE TEMPORARY TABLE tmp_module_updates (
+        SubModule VARCHAR(100),
+        CanView TINYINT(1),
+        CanAdd TINYINT(1),
+        CanEdit TINYINT(1),
+        CanDelete TINYINT(1)
+    );
+
+    INSERT INTO tmp_module_updates (SubModule, CanView, CanAdd, CanEdit, CanDelete)
+    SELECT 
+        jt.SubModule,
+        IF(jt.CanView = 1, 1, 0),
+        IF(jt.CanAdd = 1, 1, 0),
+        IF(jt.CanEdit = 1, 1, 0),
+        IF(jt.CanDelete = 1, 1, 0)
+    FROM JSON_TABLE(
+        p_PermissionsJson,
+        '$[*]' COLUMNS(
+            SubModule VARCHAR(100) PATH '$.SubModule',
+            CanView INT PATH '$.CanView',
+            CanAdd INT PATH '$.CanAdd',
+            CanEdit INT PATH '$.CanEdit',
+            CanDelete INT PATH '$.CanDelete'
+        )
+    ) jt;
+
+    -- Delete existing RolePermissions for the updated submodules
+    DELETE rp FROM `RolePermissions` rp
+    INNER JOIN `Permissions` p ON p.PermissionId = rp.PermissionId
+    INNER JOIN tmp_module_updates t ON LOWER(t.SubModule) = LOWER(p.SubModule)
+    WHERE rp.RoleId = p_RoleId;
+
+    -- Insert enabled permissions for View, Add, Edit, Delete
+    INSERT IGNORE INTO `RolePermissions` (`RoleId`, `PermissionId`, `AssignedAt`)
+    SELECT p_RoleId, p.PermissionId, UTC_TIMESTAMP()
+    FROM `Permissions` p
+    INNER JOIN tmp_module_updates t ON LOWER(t.SubModule) = LOWER(p.SubModule)
+    WHERE (p.Action = 'View' AND t.CanView = 1)
+       OR (p.Action = 'Add' AND t.CanAdd = 1)
+       OR (p.Action = 'Edit' AND t.CanEdit = 1)
+       OR (p.Action = 'Delete' AND t.CanDelete = 1);
+
+    -- Update Role timestamp
+    UPDATE `Roles` SET `UpdatedAt` = UTC_TIMESTAMP() WHERE `RoleId` = p_RoleId;
+
+    DROP TEMPORARY TABLE IF EXISTS tmp_module_updates;
+
+    COMMIT;
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS `sp_GetRoleMembers`;
+DELIMITER //
+CREATE PROCEDURE `sp_GetRoleMembers`(
+    IN p_RoleId INT,
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT
+)
+BEGIN
+    -- 1. Auto-create user records for any staff matching this role who do not yet have a record in Users
+    IF p_RoleId IN (3, 4, 7, 8, 9, 10, 11, 12) THEN
+        INSERT INTO `Users` (`FullName`, `Email`, `PasswordHash`, `PhoneNumber`, `RoleId`, `StaffId`, `IsActive`, `CreatedAt`, `UpdatedAt`)
+        SELECT 
+            TRIM(CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, ''))),
+            CASE 
+                WHEN st.Email IS NOT NULL AND st.Email != '' AND NOT EXISTS (SELECT 1 FROM `Users` u2 WHERE u2.Email = st.Email) THEN st.Email
+                ELSE CONCAT('staff_', st.Id, '@cms.local')
+            END AS Email,
+            '',
+            COALESCE(st.Mobile, ''),
+            p_RoleId,
+            st.Id,
+            1,
+            UTC_TIMESTAMP(),
+            UTC_TIMESTAMP()
+        FROM `Staff` st
+        LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+        WHERE st.IsDeleted = 0
+          AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+          AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
+          AND (
+              (p_RoleId = 4 AND st.StaffType = 'Teaching') OR
+              (p_RoleId = 3 AND st.StaffType = 'Teaching' AND (st.Designation LIKE '%HOD%' OR st.Designation LIKE '%Head of Department%')) OR
+              (p_RoleId = 12 AND (st.IsDriver = 1 OR st.Designation LIKE '%Driver%')) OR
+              (p_RoleId = 10 AND (st.Designation LIKE '%Warden%' OR d.DepartmentName LIKE '%Hostel%')) OR
+              (p_RoleId = 9 AND (st.Designation LIKE '%Librar%' OR d.DepartmentName LIKE '%Library%')) OR
+              (p_RoleId = 8 AND (st.Designation LIKE '%Exam%' OR d.DepartmentName LIKE '%Exam%' OR st.Designation LIKE '%Controller%')) OR
+              (p_RoleId = 7 AND (st.Designation LIKE '%Account%' OR d.DepartmentName LIKE '%Account%' OR st.Designation LIKE '%Cashier%' OR st.Designation LIKE '%Finance%')) OR
+              (p_RoleId = 11 AND (st.Designation LIKE '%Placement%' OR d.DepartmentName LIKE '%Placement%'))
+          )
+          AND NOT EXISTS (SELECT 1 FROM `Users` WHERE `StaffId` = st.Id)
+        ON DUPLICATE KEY UPDATE `UpdatedAt` = UTC_TIMESTAMP();
+    END IF;
+
+    -- 2. Auto-create user records for students matching Role 5
+    IF p_RoleId = 5 THEN
+        INSERT INTO `Users` (`FullName`, `Email`, `PasswordHash`, `PhoneNumber`, `RoleId`, `StudentId`, `IsActive`, `CreatedAt`, `UpdatedAt`)
+        SELECT 
+            TRIM(stu.StudentName),
+            CASE 
+                WHEN stu.Email IS NOT NULL AND stu.Email != '' AND NOT EXISTS (SELECT 1 FROM `Users` u2 WHERE u2.Email = stu.Email) THEN stu.Email
+                ELSE CONCAT('student_', stu.StudentId, '@cms.local')
+            END AS Email,
+            '',
+            COALESCE(stu.MobileNumber, ''),
+            5,
+            stu.StudentId,
+            1,
+            UTC_TIMESTAMP(),
+            UTC_TIMESTAMP()
+        FROM `Students` stu
+        WHERE stu.IsActive = 1
+          AND (p_CampusId IS NULL OR p_CampusId = 0 OR stu.CampusId = p_CampusId)
+          AND (p_BoardId IS NULL OR p_BoardId = 0 OR stu.BoardId = p_BoardId)
+          AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
+          AND NOT EXISTS (SELECT 1 FROM `Users` WHERE `StudentId` = stu.StudentId)
+        ON DUPLICATE KEY UPDATE `UpdatedAt` = UTC_TIMESTAMP();
+    END IF;
+
+    -- 3. Return members for the role
+    IF p_RoleId = 5 THEN
+        -- Student Role
+        SELECT 
+            u.UserId,
+            stu.StudentName AS Name,
+            COALESCE(stu.AdmissionNo, CONCAT('STU-', LPAD(stu.StudentId, 4, '0'))) AS UserCode,
+            'Student' AS UserType,
+            COALESCE(g.GroupName, 'General') AS Department,
+            'Student' AS Designation,
+            5 AS RoleId,
+            'Student' AS RoleName,
+            CASE WHEN stu.IsActive = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
+            (SELECT COUNT(*) FROM `UserPermissions` up WHERE up.UserId = u.UserId) AS OverridesCount
+        FROM `Students` stu
+        INNER JOIN `Users` u ON u.StudentId = stu.StudentId
+        LEFT JOIN `Groups` g ON g.GroupId = stu.GroupId
+        WHERE stu.IsActive = 1
+          AND (p_CampusId IS NULL OR p_CampusId = 0 OR stu.CampusId = p_CampusId)
+          AND (p_BoardId IS NULL OR p_BoardId = 0 OR stu.BoardId = p_BoardId)
+          AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
+        ORDER BY stu.StudentName ASC;
+
+    ELSEIF p_RoleId IN (3, 4, 7, 8, 9, 10, 11, 12) THEN
+        -- Staff-based roles
+        SELECT 
+            u.UserId,
+            TRIM(CONCAT(COALESCE(st.FirstName, ''), ' ', COALESCE(st.LastName, ''))) AS Name,
+            COALESCE(st.EmployeeId, CONCAT('EMP-', LPAD(st.Id, 4, '0'))) AS UserCode,
+            CASE 
+                WHEN st.StaffType = 'Teaching' THEN 'Faculty'
+                WHEN st.StaffType = 'Non-Teaching' THEN 'Operational'
+                ELSE 'Staff'
+            END AS UserType,
+            COALESCE(d.DepartmentName, 'Academic') AS Department,
+            COALESCE(st.Designation, des.Name, 'Staff') AS Designation,
+            p_RoleId AS RoleId,
+            (SELECT RoleName FROM `Roles` WHERE RoleId = p_RoleId) AS RoleName,
+            CASE WHEN st.Status = 'Active' AND st.IsDeleted = 0 THEN 'Active' ELSE 'Inactive' END AS Status,
+            (SELECT COUNT(*) FROM `UserPermissions` up WHERE up.UserId = u.UserId) AS OverridesCount
+        FROM `Staff` st
+        INNER JOIN `Users` u ON u.StaffId = st.Id
+        LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+        LEFT JOIN `Designations` des ON des.Id = st.DesignationId
+        WHERE st.IsDeleted = 0
+          AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+          AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
+          AND (
+              (p_RoleId = 4 AND st.StaffType = 'Teaching') OR
+              (p_RoleId = 3 AND st.StaffType = 'Teaching' AND (st.Designation LIKE '%HOD%' OR st.Designation LIKE '%Head of Department%')) OR
+              (p_RoleId = 12 AND (st.IsDriver = 1 OR st.Designation LIKE '%Driver%')) OR
+              (p_RoleId = 10 AND (st.Designation LIKE '%Warden%' OR d.DepartmentName LIKE '%Hostel%')) OR
+              (p_RoleId = 9 AND (st.Designation LIKE '%Librar%' OR d.DepartmentName LIKE '%Library%')) OR
+              (p_RoleId = 8 AND (st.Designation LIKE '%Exam%' OR d.DepartmentName LIKE '%Exam%' OR st.Designation LIKE '%Controller%')) OR
+              (p_RoleId = 7 AND (st.Designation LIKE '%Account%' OR d.DepartmentName LIKE '%Account%' OR st.Designation LIKE '%Cashier%' OR st.Designation LIKE '%Finance%')) OR
+              (p_RoleId = 11 AND (st.Designation LIKE '%Placement%' OR d.DepartmentName LIKE '%Placement%'))
+          )
+        ORDER BY st.FirstName ASC, st.LastName ASC;
+
+    ELSE
+        -- Generic user-role lookup (Super Admin, Admin, Parent, or explicitly assigned users)
+        SELECT 
+            u.UserId,
+            u.FullName AS Name,
+            COALESCE(st.EmployeeId, CONCAT('ADM-', LPAD(u.UserId, 3, '0'))) AS UserCode,
+            CASE 
+                WHEN st.StaffType = 'Non-Teaching' THEN 'Operational'
+                WHEN st.StaffType = 'Teaching' THEN 'Faculty'
+                WHEN u.AdminId IS NOT NULL THEN 'Staff'
+                ELSE 'Staff'
+            END AS UserType,
+            COALESCE(d.DepartmentName, 'Administration') AS Department,
+            COALESCE(st.Designation, des.Name, 'Administrator') AS Designation,
+            r.RoleId,
+            COALESCE(r.RoleName, 'Unassigned') AS RoleName,
+            CASE WHEN u.IsActive = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
+            (SELECT COUNT(*) FROM `UserPermissions` up WHERE up.UserId = u.UserId) AS OverridesCount
+        FROM `Users` u
+        LEFT JOIN `Roles` r ON r.RoleId = u.RoleId
+        LEFT JOIN `Staff` st ON st.Id = u.StaffId
+        LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
+        LEFT JOIN `Designations` des ON des.Id = st.DesignationId
+        WHERE u.RoleId = p_RoleId AND u.IsActive = 1
+        ORDER BY u.FullName ASC;
+    END IF;
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS `sp_AssignUserRole`;
+DELIMITER //
+CREATE PROCEDURE `sp_AssignUserRole`(
+    IN p_UserId INT,
+    IN p_RoleId INT
+)
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM `Users` WHERE `UserId` = p_UserId) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'User was not found.';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM `Roles` WHERE `RoleId` = p_RoleId) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Role was not found.';
+    END IF;
+
+    UPDATE `Users` 
+    SET `RoleId` = p_RoleId, `UpdatedAt` = UTC_TIMESTAMP() 
+    WHERE `UserId` = p_UserId;
+
+    SELECT ROW_COUNT() AS AffectedRows;
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS `sp_RemoveUserRole`;
+DELIMITER //
+CREATE PROCEDURE `sp_RemoveUserRole`(
+    IN p_UserId INT
+)
+BEGIN
+    DECLARE v_DefaultRoleId INT DEFAULT 0;
+
+    SELECT COALESCE(
+        (SELECT `RoleId` FROM `Roles` WHERE `RoleName` = 'Unassigned' LIMIT 1),
+        (SELECT MIN(`RoleId`) FROM `Roles` WHERE `RoleName` = 'Student' LIMIT 1),
+        0
+    ) INTO v_DefaultRoleId;
+
+    UPDATE `Users` 
+    SET `RoleId` = v_DefaultRoleId, `UpdatedAt` = UTC_TIMESTAMP() 
+    WHERE `UserId` = p_UserId;
+
+    SELECT ROW_COUNT() AS AffectedRows;
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS `sp_SaveUserPermissionOverrides`;
+DELIMITER //
+CREATE PROCEDURE `sp_SaveUserPermissionOverrides`(
+    IN p_UserId INT,
+    IN p_OverridesJson JSON,
+    IN p_AdminUserId INT,
+    IN p_Notes VARCHAR(255)
+)
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM `Users` WHERE `UserId` = p_UserId) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'User was not found.';
+    END IF;
+
+    START TRANSACTION;
+
+    DROP TEMPORARY TABLE IF EXISTS tmp_user_overrides;
+    CREATE TEMPORARY TABLE tmp_user_overrides (
+        SubModule VARCHAR(100),
+        CanView TINYINT(1),
+        CanAdd TINYINT(1),
+        CanEdit TINYINT(1),
+        CanDelete TINYINT(1)
+    );
+
+    INSERT INTO tmp_user_overrides (SubModule, CanView, CanAdd, CanEdit, CanDelete)
+    SELECT 
+        jt.SubModule,
+        IF(jt.CanView = 1, 1, 0),
+        IF(jt.CanAdd = 1, 1, 0),
+        IF(jt.CanEdit = 1, 1, 0),
+        IF(jt.CanDelete = 1, 1, 0)
+    FROM JSON_TABLE(
+        p_OverridesJson,
+        '$[*]' COLUMNS(
+            SubModule VARCHAR(100) PATH '$.SubModule',
+            CanView INT PATH '$.CanView',
+            CanAdd INT PATH '$.CanAdd',
+            CanEdit INT PATH '$.CanEdit',
+            CanDelete INT PATH '$.CanDelete'
+        )
+    ) jt;
+
+    -- Upsert View
+    INSERT INTO `UserPermissions` (`UserId`, `PermissionId`, `IsGranted`, `AssignedAt`, `AssignedByUserId`, `Notes`)
+    SELECT p_UserId, p.PermissionId, t.CanView, UTC_TIMESTAMP(), p_AdminUserId, COALESCE(p_Notes, 'Manual override')
+    FROM `Permissions` p
+    INNER JOIN tmp_user_overrides t ON LOWER(t.SubModule) = LOWER(p.SubModule)
+    WHERE p.Action = 'View'
+    ON DUPLICATE KEY UPDATE 
+        `IsGranted` = VALUES(`IsGranted`), 
+        `AssignedAt` = UTC_TIMESTAMP(),
+        `AssignedByUserId` = VALUES(`AssignedByUserId`),
+        `Notes` = VALUES(`Notes`);
+
+    -- Upsert Add
+    INSERT INTO `UserPermissions` (`UserId`, `PermissionId`, `IsGranted`, `AssignedAt`, `AssignedByUserId`, `Notes`)
+    SELECT p_UserId, p.PermissionId, t.CanAdd, UTC_TIMESTAMP(), p_AdminUserId, COALESCE(p_Notes, 'Manual override')
+    FROM `Permissions` p
+    INNER JOIN tmp_user_overrides t ON LOWER(t.SubModule) = LOWER(p.SubModule)
+    WHERE p.Action = 'Add'
+    ON DUPLICATE KEY UPDATE 
+        `IsGranted` = VALUES(`IsGranted`), 
+        `AssignedAt` = UTC_TIMESTAMP(),
+        `AssignedByUserId` = VALUES(`AssignedByUserId`),
+        `Notes` = VALUES(`Notes`);
+
+    -- Upsert Edit
+    INSERT INTO `UserPermissions` (`UserId`, `PermissionId`, `IsGranted`, `AssignedAt`, `AssignedByUserId`, `Notes`)
+    SELECT p_UserId, p.PermissionId, t.CanEdit, UTC_TIMESTAMP(), p_AdminUserId, COALESCE(p_Notes, 'Manual override')
+    FROM `Permissions` p
+    INNER JOIN tmp_user_overrides t ON LOWER(t.SubModule) = LOWER(p.SubModule)
+    WHERE p.Action = 'Edit'
+    ON DUPLICATE KEY UPDATE 
+        `IsGranted` = VALUES(`IsGranted`), 
+        `AssignedAt` = UTC_TIMESTAMP(),
+        `AssignedByUserId` = VALUES(`AssignedByUserId`),
+        `Notes` = VALUES(`Notes`);
+
+    -- Upsert Delete
+    INSERT INTO `UserPermissions` (`UserId`, `PermissionId`, `IsGranted`, `AssignedAt`, `AssignedByUserId`, `Notes`)
+    SELECT p_UserId, p.PermissionId, t.CanDelete, UTC_TIMESTAMP(), p_AdminUserId, COALESCE(p_Notes, 'Manual override')
+    FROM `Permissions` p
+    INNER JOIN tmp_user_overrides t ON LOWER(t.SubModule) = LOWER(p.SubModule)
+    WHERE p.Action = 'Delete'
+    ON DUPLICATE KEY UPDATE 
+        `IsGranted` = VALUES(`IsGranted`), 
+        `AssignedAt` = UTC_TIMESTAMP(),
+        `AssignedByUserId` = VALUES(`AssignedByUserId`),
+        `Notes` = VALUES(`Notes`);
+
+    DROP TEMPORARY TABLE IF EXISTS tmp_user_overrides;
+
+    COMMIT;
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS `sp_ResetUserPermissionOverrides`;
+DELIMITER //
+CREATE PROCEDURE `sp_ResetUserPermissionOverrides`(
+    IN p_UserId INT
+)
+BEGIN
+    DELETE FROM `UserPermissions` WHERE `UserId` = p_UserId;
+    SELECT ROW_COUNT() AS AffectedRows;
+END //
+DELIMITER ;
+
+DROP PROCEDURE IF EXISTS `sp_CheckUserPermission`;
+DELIMITER //
+CREATE PROCEDURE `sp_CheckUserPermission`(
+    IN p_UserId INT,
+    IN p_PermissionCode VARCHAR(100)
+)
+BEGIN
+    SELECT 
+        CASE 
+            WHEN up.IsGranted IS NOT NULL THEN up.IsGranted
+            WHEN rp.PermissionId IS NOT NULL THEN 1
+            ELSE 0
+        END AS HasPermission
+    FROM `Users` u
+    INNER JOIN `Permissions` p ON p.PermissionCode = p_PermissionCode
+    LEFT JOIN `RolePermissions` rp ON rp.PermissionId = p.PermissionId AND rp.RoleId = u.RoleId
+    LEFT JOIN `UserPermissions` up ON up.PermissionId = p.PermissionId AND up.UserId = u.UserId
+    WHERE u.UserId = p_UserId
+    LIMIT 1;
 END //
 DELIMITER ;

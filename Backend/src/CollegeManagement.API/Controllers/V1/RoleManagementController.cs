@@ -26,13 +26,13 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves all roles with optional card statistics (user count, active status).
         /// </summary>
         [HttpGet]
-        public async Task<IActionResult> GetAllRoles([FromQuery] bool includeCards = false)
+        public async Task<IActionResult> GetAllRoles([FromQuery] bool includeCards = false, [FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null)
         {
             try
             {
                 if (includeCards)
                 {
-                    var cards = await _roleManagementService.GetRoleCardsAsync();
+                    var cards = await _roleManagementService.GetRoleCardsAsync(campusId, boardId, academicYearId);
                     return Ok(new { success = true, data = cards });
                 }
 
@@ -49,11 +49,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves role cards for the split-pane left navigation (includes user count and permissions count).
         /// </summary>
         [HttpGet("cards")]
-        public async Task<IActionResult> GetRoleCards()
+        public async Task<IActionResult> GetRoleCards([FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null)
         {
             try
             {
-                var cards = await _roleManagementService.GetRoleCardsAsync();
+                var cards = await _roleManagementService.GetRoleCardsAsync(campusId, boardId, academicYearId);
                 return Ok(new { success = true, data = cards });
             }
             catch (Exception ex)
@@ -195,11 +195,11 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves members assigned to a specific role (for the [Members] dialog).
         /// </summary>
         [HttpGet("{roleId:int}/members")]
-        public async Task<IActionResult> GetRoleMembers(int roleId)
+        public async Task<IActionResult> GetRoleMembers(int roleId, [FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null)
         {
             try
             {
-                var members = await _roleManagementService.GetRoleMembersAsync(roleId);
+                var members = await _roleManagementService.GetRoleMembersAsync(roleId, campusId, boardId, academicYearId);
                 return Ok(new { success = true, data = members });
             }
             catch (Exception ex)

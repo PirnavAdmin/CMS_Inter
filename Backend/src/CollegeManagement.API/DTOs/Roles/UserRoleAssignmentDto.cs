@@ -41,6 +41,9 @@ namespace CollegeManagement.API.DTOs.Roles
         public string? Search { get; set; }
         public int? RoleId { get; set; }
         public string? UserType { get; set; } // "all", "Staff", "Faculty", "Operational"
+        public int? CampusId { get; set; }
+        public int? BoardId { get; set; }
+        public int? AcademicYearId { get; set; }
         public int? Page { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;

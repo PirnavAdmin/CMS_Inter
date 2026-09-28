@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = (env.VITE_API_BASE_URL || "http://localhost:5167").trim();
+  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://prune-abroad-blemish.ngrok-free.dev").trim();
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -33,16 +33,25 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: !isHttpsApi ? true : false,
           agent: isHttpsApi ? new https.Agent({ keepAlive: false, rejectUnauthorized: false }) : undefined,
-          proxyTimeout: 30000,
-          timeout: 30000,
+          proxyTimeout: 10000,
+          timeout: 10000,
           headers: {
             "ngrok-skip-browser-warning": "true",
+          },
+          configure: (proxy) => {
+            proxy.on("error", (err, req, res) => {
+              if (res && !res.headersSent && typeof res.writeHead === "function") {
+                try {
+                  res.writeHead(502, { "Content-Type": "application/json" });
+                  res.end(JSON.stringify({ success: false, message: "Backend proxy unreachable", error: err?.message }));
+                } catch {
+                  // ignore
+                }
+              }
+            });
           },
         },
       },
     },
   };
 });
-
-
-

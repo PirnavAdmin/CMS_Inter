@@ -37,38 +37,39 @@ namespace CollegeManagement.API.Repositories.Implementations
             await Task.CompletedTask;
         }
 
-        public async Task<IEnumerable<NumberSeriesConfiguration>> GetAllAsync()
+        public async Task<IEnumerable<NumberSeriesConfiguration>> GetAllAsync(int? campusId = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
                 return await conn.QueryAsync<NumberSeriesConfiguration>(
                     "sp_GetNumberSeriesConfigurations",
+                    new { p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
             }
             catch
             {
                 return await _context.Set<NumberSeriesConfiguration>().AsNoTracking()
-                    .Where(n => n.IsActive)
+                    .Where(n => n.IsActive && (n.CampusId == campusId || n.CampusId == null))
                     .OrderBy(n => n.Id)
                     .ToListAsync();
             }
         }
 
-        public async Task<NumberSeriesConfiguration?> GetByCodeAsync(string seriesCode)
+        public async Task<NumberSeriesConfiguration?> GetByCodeAsync(string seriesCode, int? campusId = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
                 return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                     "sp_GetNumberSeriesByCode",
-                    new { p_SeriesCode = seriesCode.Trim() },
+                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
             }
             catch
             {
                 return await _context.Set<NumberSeriesConfiguration>().AsNoTracking()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim());
+                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
             }
         }
 
@@ -78,7 +79,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             string formatPattern,
             int numberLength,
             int startNumber,
-            string? description)
+            string? description,
+            int? campusId = null)
         {
             try
             {
@@ -92,16 +94,17 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_FormatPattern = formatPattern,
                         p_NumberLength = numberLength,
                         p_StartNumber = startNumber,
-                        p_Description = description
+                        p_Description = description,
+                        p_CampusId = campusId
                     },
                     commandType: CommandType.StoredProcedure);
 
-                return await GetByCodeAsync(seriesCode);
+                return await GetByCodeAsync(seriesCode, campusId);
             }
             catch
             {
                 var existing = await _context.Set<NumberSeriesConfiguration>()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim());
+                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
 
                 if (existing != null)
                 {
@@ -111,6 +114,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     existing.StartNumber = startNumber;
                     existing.Description = description;
                     existing.UpdatedAt = DateTime.UtcNow;
+                    existing.CampusId = campusId;
                     await _context.SaveChangesAsync();
                 }
 
@@ -118,20 +122,20 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode)
+        public async Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode, int? campusId = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
                 return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                     "sp_GenerateNextNumberSeries",
-                    new { p_SeriesCode = seriesCode.Trim() },
+                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure);
             }
             catch
             {
                 var existing = await _context.Set<NumberSeriesConfiguration>()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim());
+                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
 
                 if (existing != null)
                 {

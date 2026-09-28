@@ -68,10 +68,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("next-employee-id")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetNextEmployeeId([FromQuery] string? staffType = "Teaching", [FromQuery] string? facultyType = null)
+        public async Task<IActionResult> GetNextEmployeeId([FromQuery] string? staffType = "Teaching", [FromQuery] string? facultyType = null, [FromQuery] int campusId = 1)
         {
             var type = !string.IsNullOrWhiteSpace(facultyType) ? facultyType : (staffType ?? "Teaching");
-            var nextId = await _staffService.GetNextEmployeeIdAsync(type);
+            var nextId = await _staffService.GetNextEmployeeIdAsync(type, campusId);
             return Ok(new { nextEmployeeId = nextId, employeeId = nextId, staffType = type });
         }
 

@@ -17,7 +17,9 @@ import {
   Radio, 
   Landmark, 
   ChevronDown,
-  RefreshCw
+  AlertTriangle,
+  AlertCircle,
+  Info
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -72,10 +74,27 @@ export default function CampusConfigurationPage() {
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
-  // Modal State
+  // Form Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCampus, setEditingCampus] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Custom In-App Delete Confirmation Modal State
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Custom In-App Alert Dialog State
+  const [alertInfo, setAlertInfo] = useState(null);
+
+  // Custom In-App Toast State
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast((prev) => (prev?.message === message ? null : prev));
+    }, 4000);
+  };
 
   // Form State
   const [formData, setFormData] = useState({
@@ -242,8 +261,10 @@ export default function CampusConfigurationPage() {
       if (editingCampus) {
         const targetId = editingCampus.campusId ?? editingCampus.id;
         await updateCampus(targetId, payload);
+        showToast(`Campus "${payload.campusName}" updated successfully.`);
       } else {
         await addCampus(payload);
+        showToast(`Campus "${payload.campusName}" added successfully.`);
       }
       setModalOpen(false);
       await loadStats();
@@ -255,33 +276,58 @@ export default function CampusConfigurationPage() {
     }
   };
 
-  // Delete Handler
-  const handleDelete = async (campus) => {
+  // Prompt Custom In-App Delete Dialog
+  const handleDeletePrompt = (campus) => {
     if (campuses.length <= 1) {
-      alert("Cannot delete the only configured campus branch.");
+      setAlertInfo({
+        title: "Cannot Delete Campus",
+        message: "At least one campus branch must remain configured in the system.",
+        type: "warning",
+      });
       return;
     }
-    const targetId = campus.campusId ?? campus.id;
-    if (window.confirm(`Are you sure you want to delete the campus "${campus.name || campus.campusName}"?`)) {
-      try {
-        await deleteCampus(targetId);
-        await loadStats();
-        await fetchCampuses();
-      } catch (err) {
-        alert(err.message || "Failed to delete campus.");
-      }
+    setDeleteTarget(campus);
+  };
+
+  // Confirm In-App Delete Action
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    const targetId = deleteTarget.campusId ?? deleteTarget.id;
+    const campusName = deleteTarget.name || deleteTarget.campusName;
+    try {
+      setDeleteLoading(true);
+      await deleteCampus(targetId);
+      setDeleteTarget(null);
+      showToast(`Campus "${campusName}" deleted successfully.`);
+      await loadStats();
+      await fetchCampuses();
+    } catch (err) {
+      setDeleteTarget(null);
+      setAlertInfo({
+        title: "Deletion Error",
+        message: err.message || "Failed to delete campus branch. Ensure there are no enrolled students or active records assigned to this branch.",
+        type: "danger",
+      });
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
   // Status Toggle Handler
   const handleToggleStatus = async (campus) => {
     const targetId = campus.campusId ?? campus.id;
+    const campusName = campus.name || campus.campusName;
     try {
       await toggleCampusStatus(targetId);
+      showToast(`Status updated for "${campusName}".`);
       await loadStats();
       await fetchCampuses();
     } catch (err) {
-      alert(err.message || "Failed to toggle status.");
+      setAlertInfo({
+        title: "Status Update Error",
+        message: err.message || "Failed to toggle campus active status.",
+        type: "danger",
+      });
     }
   };
 
@@ -520,7 +566,7 @@ export default function CampusConfigurationPage() {
                             <button
                               type="button"
                               className="campus-action-btn delete"
-                              onClick={() => handleDelete(campus)}
+                              onClick={() => handleDeletePrompt(campus)}
                               title="Delete Campus"
                               aria-label="Delete Campus"
                             >
@@ -732,6 +778,95 @@ export default function CampusConfigurationPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Custom In-App Delete Confirmation Modal Matching Image 1 */}
+        {deleteTarget && (
+          <div className="campus-modal-overlay" onClick={() => !deleteLoading && setDeleteTarget(null)}>
+            <div className="campus-delete-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="campus-delete-modal-header">
+                <h3 className="campus-delete-modal-title">Delete campus?</h3>
+                <button
+                  type="button"
+                  className="campus-delete-modal-close"
+                  onClick={() => !deleteLoading && setDeleteTarget(null)}
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="campus-delete-modal-body">
+                Campus {deleteTarget.name || deleteTarget.campusName} will be deleted from the database.
+              </div>
+              <div className="campus-delete-modal-actions">
+                <button
+                  type="button"
+                  className="campus-delete-btn-cancel"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleteLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="campus-delete-btn-confirm"
+                  onClick={handleConfirmDelete}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? "Deleting..." : "Confirm"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom In-App Alert Dialog */}
+        {alertInfo && (
+          <div className="campus-modal-overlay" onClick={() => setAlertInfo(null)}>
+            <div className="campus-confirm-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="campus-confirm-header-row">
+                <div className={`campus-confirm-icon-wrap ${alertInfo.type || "warning"}`}>
+                  {alertInfo.type === "danger" ? (
+                    <AlertCircle size={24} />
+                  ) : alertInfo.type === "info" ? (
+                    <Info size={24} />
+                  ) : (
+                    <AlertTriangle size={24} />
+                  )}
+                </div>
+                <div className="campus-confirm-content">
+                  <h3 className="campus-confirm-title">{alertInfo.title}</h3>
+                  <p className="campus-confirm-desc">{alertInfo.message}</p>
+                </div>
+              </div>
+              <div className="campus-modal-actions" style={{ marginTop: 8 }}>
+                <button
+                  type="button"
+                  className="campus-btn-save"
+                  onClick={() => setAlertInfo(null)}
+                >
+                  Okay
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom In-App Toast Notification */}
+        {toast && (
+          <div className="campus-toast-wrapper">
+            <div className={`campus-toast-item ${toast.type || "success"}`}>
+              <span>{toast.message}</span>
+              <button
+                type="button"
+                className="campus-toast-close"
+                onClick={() => setToast(null)}
+                aria-label="Dismiss notification"
+              >
+                <X size={16} />
+              </button>
             </div>
           </div>
         )}

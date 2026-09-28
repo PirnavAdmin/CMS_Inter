@@ -9,7 +9,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<IEnumerable<Room>> GetAllAsync();
         Task<IEnumerable<Room>> GetAllFilteredAsync(CollegeManagement.API.DTOs.Timetable.RoomFilterDto? filter);
         Task<Room?> GetByIdAsync(int id);
-        Task<Room?> GetByCodeAsync(string roomCode);
+        Task<Room?> GetByCodeAsync(string roomCode, int? campusId = null);
         Task<Room> AddAsync(Room room);
         Task UpdateAsync(Room room);
         Task DeleteAsync(int id);

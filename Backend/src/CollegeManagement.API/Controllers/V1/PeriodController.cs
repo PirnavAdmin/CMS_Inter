@@ -1,4 +1,4 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.Timetable;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -28,9 +28,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? boardId = null,
             [FromQuery] int? academicLevelId = null,
             [FromQuery] int? academicYearId = null,
-            [FromQuery] int? groupId = null)
+            [FromQuery] int? groupId = null,
+            [FromQuery] int? campusId = null)
         {
-            var periods = await _periodService.GetAllAsync(boardId, academicLevelId, academicYearId, groupId);
+            var periods = await _periodService.GetAllAsync(boardId, academicLevelId, academicYearId, groupId, campusId);
             return Ok(periods);
         }
 
