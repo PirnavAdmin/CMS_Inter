@@ -5,7 +5,7 @@ namespace CollegeManagement.API.Repositories.Interfaces;
 public interface IFeeRepository
 {
     Task<FeeTypeResponse?> CreateFeeTypeAsync(CreateFeeTypeRequest request);
-    Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync();
+    Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
     Task<FeeTypeResponse?> GetFeeTypeByIdAsync(int feeTypeId);
     Task<FeeTypeResponse?> UpdateFeeTypeAsync(int feeTypeId, UpdateFeeTypeRequest request);
     Task<bool> DeleteFeeTypeAsync(int feeTypeId);
@@ -21,7 +21,7 @@ public interface IFeeRepository
     Task<bool> DeleteFeeStructureItemAsync(int itemId);
 
     Task<ScholarshipResponse?> CreateScholarshipAsync(CreateScholarshipRequest request);
-    Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync();
+    Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
     Task<ScholarshipResponse?> GetScholarshipByIdAsync(int scholarshipId);
     Task<ScholarshipResponse?> UpdateScholarshipAsync(int scholarshipId, UpdateScholarshipRequest request);
     Task<bool> DeleteScholarshipAsync(int scholarshipId);

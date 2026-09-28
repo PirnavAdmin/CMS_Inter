@@ -5,7 +5,7 @@ namespace CollegeManagement.API.Services.Interfaces;
 public interface IFeeService
 {
     Task<FeeTypeResponse?> CreateFeeTypeAsync(CreateFeeTypeRequest request);
-    Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync();
+    Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
     Task<FeeTypeResponse?> GetFeeTypeByIdAsync(int id);
     Task<FeeTypeResponse?> UpdateFeeTypeAsync(int id, UpdateFeeTypeRequest request);
     Task<bool> DeleteFeeTypeAsync(int id);
@@ -21,7 +21,7 @@ public interface IFeeService
     Task<bool> DeleteFeeStructureItemAsync(int id);
 
     Task<ScholarshipResponse?> CreateScholarshipAsync(CreateScholarshipRequest request);
-    Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync();
+    Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
     Task<ScholarshipResponse?> GetScholarshipByIdAsync(int id);
     Task<ScholarshipResponse?> UpdateScholarshipAsync(int id, UpdateScholarshipRequest request);
     Task<bool> DeleteScholarshipAsync(int id);

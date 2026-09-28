@@ -21,7 +21,7 @@ public class FeeController : ControllerBase
 
     /// <summary>List active and inactive fee types for Fee Setup.</summary>
     [HttpGet("types")]
-    public async Task<IActionResult> GetFeeTypes() => Ok(await _service.GetFeeTypesAsync());
+    public async Task<IActionResult> GetFeeTypes([FromQuery] int? campusId, [FromQuery] int? boardId, [FromQuery] int? academicYearId) => Ok(await _service.GetFeeTypesAsync(campusId, boardId, academicYearId));
 
     /// <summary>Get one fee type by ID.</summary>
     [HttpGet("types/{id:int}")]
@@ -79,7 +79,7 @@ public class FeeController : ControllerBase
 
     /// <summary>List scholarship and concession schemes.</summary>
     [HttpGet("scholarships")]
-    public async Task<IActionResult> GetScholarships() => Ok(await _service.GetScholarshipsAsync());
+    public async Task<IActionResult> GetScholarships([FromQuery] int? campusId, [FromQuery] int? boardId, [FromQuery] int? academicYearId) => Ok(await _service.GetScholarshipsAsync(campusId, boardId, academicYearId));
 
     /// <summary>Get one scholarship scheme.</summary>
     [HttpGet("scholarships/{id:int}")]

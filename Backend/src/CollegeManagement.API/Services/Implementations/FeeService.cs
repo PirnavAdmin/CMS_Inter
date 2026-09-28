@@ -15,7 +15,7 @@ public class FeeService : IFeeService
     private static void Category(string? category) { var v = Text(category, "Category"); var allowed = new[] { "Admission", "Academic", "Examination", "Transport", "Hostel", "Activities", "Activity", "Facility", "Other", "Miscellaneous" }; if (!allowed.Contains(v, StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("Category must be Admission, Academic, Examination, Transport, Hostel, Activities, Activity, Facility, Other or Miscellaneous."); }
 
     public Task<FeeTypeResponse?> CreateFeeTypeAsync(CreateFeeTypeRequest r) { Text(r.FeeTypeName, "FeeTypeName"); Category(r.Category); return _repo.CreateFeeTypeAsync(r); }
-    public Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync() => _repo.GetFeeTypesAsync();
+    public Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null) => _repo.GetFeeTypesAsync(campusId, boardId, academicYearId);
     public Task<FeeTypeResponse?> GetFeeTypeByIdAsync(int id) { Id(id, "FeeTypeId"); return _repo.GetFeeTypeByIdAsync(id); }
     public Task<FeeTypeResponse?> UpdateFeeTypeAsync(int id, UpdateFeeTypeRequest r) { Id(id, "FeeTypeId"); Text(r.FeeTypeName, "FeeTypeName"); Category(r.Category); return _repo.UpdateFeeTypeAsync(id, r); }
     public Task<bool> DeleteFeeTypeAsync(int id) { Id(id, "FeeTypeId"); return _repo.DeleteFeeTypeAsync(id); }
@@ -38,7 +38,7 @@ public class FeeService : IFeeService
     public Task<bool> DeleteFeeStructureItemAsync(int id) { Id(id, "FeeStructureItemId"); return _repo.DeleteFeeStructureItemAsync(id); }
 
     public Task<ScholarshipResponse?> CreateScholarshipAsync(CreateScholarshipRequest r) { Text(r.ScholarshipName, "ScholarshipName"); DiscountType(r.DiscountType); if (r.DiscountValue <= 0 || (r.DiscountType.Equals("Percentage", StringComparison.OrdinalIgnoreCase) && r.DiscountValue > 100)) throw new ArgumentException("Invalid discount value."); return _repo.CreateScholarshipAsync(r); }
-    public Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync() => _repo.GetScholarshipsAsync();
+    public Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null) => _repo.GetScholarshipsAsync(campusId, boardId, academicYearId);
     public Task<ScholarshipResponse?> GetScholarshipByIdAsync(int id) { Id(id, "ScholarshipId"); return _repo.GetScholarshipByIdAsync(id); }
     public Task<ScholarshipResponse?> UpdateScholarshipAsync(int id, UpdateScholarshipRequest r) { Id(id, "ScholarshipId"); Text(r.ScholarshipName, "ScholarshipName"); DiscountType(r.DiscountType); if (r.DiscountValue <= 0 || (r.DiscountType.Equals("Percentage", StringComparison.OrdinalIgnoreCase) && r.DiscountValue > 100)) throw new ArgumentException("Invalid discount value."); return _repo.UpdateScholarshipAsync(id, r); }
     public Task<bool> DeleteScholarshipAsync(int id) { Id(id, "ScholarshipId"); return _repo.DeleteScholarshipAsync(id); }
