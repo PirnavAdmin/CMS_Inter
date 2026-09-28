@@ -10,6 +10,12 @@ export const userLogin = (data) =>
     password: data.password,
   });
 
+export const adminLogin = (data) =>
+  apiClient.post(apiEndpoints.admin.login, {
+    email: data.email,
+    password: data.password,
+  });
+
 export const loginUser = async (credentials) => {
   const emailOrMobile = String(credentials.emailOrMobile || credentials.email || "").trim();
   const password = credentials.password;

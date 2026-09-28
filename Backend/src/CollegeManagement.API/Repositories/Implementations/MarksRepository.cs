@@ -304,6 +304,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_StudentId", filter.StudentId ?? 0);
             parameters.Add("p_FacultyId", filter.FacultyId ?? 0);
             parameters.Add("p_Status", filter.Status.HasValue ? (int)filter.Status.Value : 0);
+            parameters.Add("p_CampusId", filter.CampusId ?? 0);
 
             return await Connection.ExecuteScalarAsync<int>(
                 "sp_GetFilteredEvaluationsCount",

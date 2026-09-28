@@ -34,6 +34,7 @@ const isHtmlResponse = (data) =>
   typeof data === "string" && /^\s*(<!doctype html|<html)/i.test(data);
 
 const isAuthBypassRequest = (config) => {
+  if (config?.skipAuthRedirect || config?.optionalAuth || config?.silentAuth) return true;
   const url = String(config?.url || "");
   return /\/login\/?$/i.test(url) || /\/refresh(-token)?\/?$/i.test(url) || /\/register\/?$/i.test(url);
 };
@@ -44,7 +45,7 @@ const getStoredAccessToken = () => {
   return stored.replace(/^Bearer\s+/i, "").trim();
 };
 
-const getJwtExpiryState = (token) => {
+export const getJwtExpiryState = (token) => {
   try {
     const [, payload] = token.split(".");
     if (!payload) return { isJwt: false };
@@ -154,7 +155,15 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (import.meta.env.DEV && !originalRequest?.silent && !originalRequest?.skipErrorLog) {
+    const shouldLogDevError =
+      import.meta.env.DEV &&
+      !originalRequest?.silent &&
+      !originalRequest?.skipErrorLog &&
+      !originalRequest?.skipAuthRedirect &&
+      !originalRequest?.silentAuth &&
+      !originalRequest?.optionalAuth;
+
+    if (shouldLogDevError) {
       if (!error.response) {
         console.warn("API network warning (server unreachable or proxy empty response):", {
           url: originalRequest?.url,
@@ -162,10 +171,16 @@ apiClient.interceptors.response.use(
           message: error?.message,
         });
       } else {
+        const errDetail =
+          error.response?.data?.message ||
+          error.response?.data?.Message ||
+          error.response?.data?.error ||
+          error.response?.data?.title;
         console.error("API response error:", {
           url: originalRequest?.url,
           method: originalRequest?.method,
           status: error.response?.status,
+          message: errDetail,
           data: error.response?.data,
         });
       }
