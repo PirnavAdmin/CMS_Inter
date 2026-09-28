@@ -46,100 +46,95 @@ namespace CollegeManagement.API.Services.Implementations
             int sectionId)
         {
             // =========================================================================
-            // 1. VALIDATE ACADEMIC HIERARCHY (11 INTEGRITY RULES)
+            // 1. VALIDATE ACADEMIC HIERARCHY (SINGLE CONSOLIDATED ROUNDTRIP)
             // =========================================================================
 
-            var board = await _context.Boards
-                .AsNoTracking()
-                .FirstOrDefaultAsync(b => b.BoardId == boardId);
-            if (board == null || !board.IsActive)
+            var dbConn = _context.Database.GetDbConnection();
+            if (dbConn.State != System.Data.ConnectionState.Open) await dbConn.OpenAsync();
+
+            const string hierarchySql = @"
+                SELECT 
+                    b.BoardId, b.BoardName, b.IsActive AS BoardIsActive,
+                    al.AcademicLevelId, al.LevelName, al.IsActive AS LevelIsActive,
+                    ay.AcademicYearId, ay.AcademicYearName, ay.IsActive AS YearIsActive,
+                    g.GroupId, g.GroupName, g.BoardId AS GroupBoardId, g.AcademicLevelId AS GroupAcademicLevelId, g.IsActive AS GroupIsActive,
+                    p.ProgramId, p.ProgramName, p.IsActive AS ProgramIsActive,
+                    s.SectionId, s.SectionName, s.BoardId AS SectionBoardId, s.AcademicLevelId AS SectionAcademicLevelId,
+                    s.GroupId AS SectionGroupId, s.ProgramId AS SectionProgramId, s.AcademicYearId AS SectionAcademicYearId, s.IsActive AS SectionIsActive
+                FROM (SELECT @boardId AS bId, @academicLevelId AS alId, @academicYearId AS ayId, @groupId AS gId, @programId AS pId, @sectionId AS sId) params
+                LEFT JOIN Boards b ON b.BoardId = params.bId
+                LEFT JOIN AcademicLevels al ON al.AcademicLevelId = params.alId
+                LEFT JOIN AcademicYears ay ON ay.AcademicYearId = params.ayId
+                LEFT JOIN `Groups` g ON g.GroupId = params.gId
+                LEFT JOIN Programs p ON p.ProgramId = params.pId
+                LEFT JOIN Sections s ON s.SectionId = params.sId;";
+
+            var row = await dbConn.QueryFirstOrDefaultAsync(hierarchySql, new
+            {
+                boardId, academicLevelId, academicYearId, groupId, programId, sectionId
+            });
+
+            if (row == null || row.BoardId == null || row.BoardIsActive != 1)
             {
                 throw new ArgumentException($"Board with ID {boardId} not found or inactive.");
             }
 
-            var level = await _context.AcademicLevels
-                .AsNoTracking()
-                .FirstOrDefaultAsync(l => l.AcademicLevelId == academicLevelId);
-            if (level == null || !level.IsActive)
+            if (row.AcademicLevelId == null || row.LevelIsActive != 1)
             {
                 throw new ArgumentException($"AcademicLevel with ID {academicLevelId} not found or inactive.");
             }
 
-            var year = await _context.AcademicYears
-                .AsNoTracking()
-                .FirstOrDefaultAsync(y => y.AcademicYearId == academicYearId);
-            if (year == null || !year.IsActive)
+            if (row.AcademicYearId == null || row.YearIsActive != 1)
             {
                 throw new ArgumentException($"AcademicYear with ID {academicYearId} not found or inactive.");
             }
 
-            var group = await _context.Groups
-                .AsNoTracking()
-                .FirstOrDefaultAsync(g => g.GroupId == groupId);
-            if (group == null || !group.IsActive)
+            if (row.GroupId == null || row.GroupIsActive != 1)
             {
                 throw new ArgumentException($"Group with ID {groupId} not found or inactive.");
             }
 
-            var program = await _context.Programs
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.ProgramId == programId);
-            if (program == null || !program.IsActive)
+            if (row.ProgramId == null || row.ProgramIsActive != 1)
             {
                 throw new ArgumentException($"Program with ID {programId} not found or inactive.");
             }
 
-            var section = await _context.Sections
-                .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.SectionId == sectionId);
-            if (section == null || !section.IsActive)
+            if (row.SectionId == null || row.SectionIsActive != 1)
             {
                 throw new ArgumentException($"Section with ID {sectionId} not found or inactive.");
             }
 
             // Matching checks
-            if (section.BoardId.HasValue && section.BoardId.Value != boardId)
+            if (row.SectionBoardId != null && (int)row.SectionBoardId != boardId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to Board ID {boardId}.");
             }
 
-            if (section.AcademicLevelId.HasValue && section.AcademicLevelId.Value != academicLevelId)
+            if (row.SectionAcademicLevelId != null && (int)row.SectionAcademicLevelId != academicLevelId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to AcademicLevel ID {academicLevelId}.");
             }
 
-            if (section.GroupId.HasValue && section.GroupId.Value != groupId)
+            if (row.SectionGroupId != null && (int)row.SectionGroupId != groupId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to Group ID {groupId}.");
             }
 
-            if (section.ProgramId.HasValue && section.ProgramId.Value != programId)
+            if (row.SectionProgramId != null && (int)row.SectionProgramId != programId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to Program ID {programId}.");
             }
 
-            if (section.AcademicYearId != academicYearId)
+            if ((int)row.SectionAcademicYearId != academicYearId)
             {
                 throw new ArgumentException($"Section with ID {sectionId} does not belong to AcademicYear ID {academicYearId}.");
             }
 
             // =========================================================================
-            // 2. FETCH TIMETABLE SLOTS VIA CANONICAL REPOSITORY
+            // 2. FETCH TIMETABLE SLOTS VIA OPTIMIZED CANONICAL REPOSITORY
             // =========================================================================
 
-            var queryParams = new TimetableQueryParams
-            {
-                BoardId = boardId,
-                AcademicLevelId = academicLevelId,
-                AcademicYearId = academicYearId,
-                GroupId = groupId,
-                ProgramId = programId,
-                SectionId = sectionId,
-                PageNumber = 1,
-                PageSize = 1000
-            };
-
-            var (slots, totalCount) = await _timetableRepository.GetPagedAsync(queryParams);
+            var slots = await _timetableRepository.GetBySectionIdAsync(sectionId, academicYearId);
             var slotsList = slots?.ToList() ?? new List<TimetableResponseDto>();
 
             if (slotsList.Count == 0)
@@ -204,12 +199,12 @@ namespace CollegeManagement.API.Services.Implementations
             var pdfModel = new SectionTimetablePdfModel
             {
                 Title = "CLASS TIMETABLE",
-                BoardName = board.BoardName,
-                AcademicLevelName = level.LevelName,
-                AcademicYearName = year.AcademicYearName,
-                GroupName = group.GroupName,
-                ProgramName = program.ProgramName,
-                SectionName = section.SectionName,
+                BoardName = (string)row.BoardName,
+                AcademicLevelName = (string)row.LevelName,
+                AcademicYearName = (string)row.AcademicYearName,
+                GroupName = (string)row.GroupName,
+                ProgramName = (string)row.ProgramName,
+                SectionName = (string)row.SectionName,
                 Periods = periodColumns,
                 Days = daySchedules
             };
@@ -218,9 +213,9 @@ namespace CollegeManagement.API.Services.Implementations
             var pdfBytes = document.GeneratePdf();
 
             // Filename: Timetable_<Group>_<Program>_<Section>.pdf
-            var safeGroup = SanitizeFileName(group.GroupName);
-            var safeProgram = SanitizeFileName(program.ProgramName);
-            var safeSection = SanitizeFileName(section.SectionName);
+            var safeGroup = SanitizeFileName((string)row.GroupName);
+            var safeProgram = SanitizeFileName((string)row.ProgramName);
+            var safeSection = SanitizeFileName((string)row.SectionName);
             var fileName = $"Timetable_{safeGroup}_{safeProgram}_{safeSection}.pdf";
 
             return (pdfBytes, fileName);
@@ -239,47 +234,55 @@ namespace CollegeManagement.API.Services.Implementations
             int groupId)
         {
             // =========================================================================
-            // 1. VALIDATE ACADEMIC HIERARCHY
+            // 1. VALIDATE ACADEMIC HIERARCHY (SINGLE CONSOLIDATED ROUNDTRIP)
             // =========================================================================
 
-            var board = await _context.Boards
-                .AsNoTracking()
-                .FirstOrDefaultAsync(b => b.BoardId == boardId);
-            if (board == null || !board.IsActive)
+            var dbConn = _context.Database.GetDbConnection();
+            if (dbConn.State != System.Data.ConnectionState.Open) await dbConn.OpenAsync();
+
+            const string hierarchySql = @"
+                SELECT 
+                    b.BoardId, b.BoardName, b.BoardCode, b.IsActive AS BoardIsActive,
+                    al.AcademicLevelId, al.LevelName, al.LevelCode, al.IsActive AS LevelIsActive,
+                    ay.AcademicYearId, ay.AcademicYearName, ay.IsActive AS YearIsActive,
+                    g.GroupId, g.GroupName, g.GroupCode, g.BoardId AS GroupBoardId, g.AcademicLevelId AS GroupAcademicLevelId, g.IsActive AS GroupIsActive
+                FROM (SELECT @boardId AS bId, @academicLevelId AS alId, @academicYearId AS ayId, @groupId AS gId) params
+                LEFT JOIN Boards b ON b.BoardId = params.bId
+                LEFT JOIN AcademicLevels al ON al.AcademicLevelId = params.alId
+                LEFT JOIN AcademicYears ay ON ay.AcademicYearId = params.ayId
+                LEFT JOIN `Groups` g ON g.GroupId = params.gId;";
+
+            var row = await dbConn.QueryFirstOrDefaultAsync(hierarchySql, new
+            {
+                boardId, academicLevelId, academicYearId, groupId
+            });
+
+            if (row == null || row.BoardId == null || row.BoardIsActive != 1)
             {
                 throw new ArgumentException($"Board with ID {boardId} not found or inactive.");
             }
 
-            var level = await _context.AcademicLevels
-                .AsNoTracking()
-                .FirstOrDefaultAsync(l => l.AcademicLevelId == academicLevelId);
-            if (level == null || !level.IsActive)
+            if (row.AcademicLevelId == null || row.LevelIsActive != 1)
             {
                 throw new ArgumentException($"AcademicLevel with ID {academicLevelId} not found or inactive.");
             }
 
-            var year = await _context.AcademicYears
-                .AsNoTracking()
-                .FirstOrDefaultAsync(y => y.AcademicYearId == academicYearId);
-            if (year == null || !year.IsActive)
+            if (row.AcademicYearId == null || row.YearIsActive != 1)
             {
                 throw new ArgumentException($"AcademicYear with ID {academicYearId} not found or inactive.");
             }
 
-            var group = await _context.Groups
-                .AsNoTracking()
-                .FirstOrDefaultAsync(g => g.GroupId == groupId);
-            if (group == null || !group.IsActive)
+            if (row.GroupId == null || row.GroupIsActive != 1)
             {
                 throw new ArgumentException($"Group with ID {groupId} not found or inactive.");
             }
 
-            if (group.BoardId != boardId)
+            if ((int)row.GroupBoardId != boardId)
             {
                 throw new ArgumentException($"Group with ID {groupId} does not belong to Board ID {boardId}.");
             }
 
-            if (group.AcademicLevelId != academicLevelId)
+            if ((int)row.GroupAcademicLevelId != academicLevelId)
             {
                 throw new ArgumentException($"Group with ID {groupId} does not belong to AcademicLevel ID {academicLevelId}.");
             }
@@ -314,6 +317,14 @@ namespace CollegeManagement.API.Services.Implementations
                 .OrderBy(s => s.ProgramId)
                 .ThenBy(s => s.SectionName)
                 .ToListAsync();
+
+            // Resolve scoped periods ONCE upfront for the group
+            var groupPeriodColumns = await ResolvePeriodColumnsForSlotsAsync(slotsList);
+
+            // Index slots by SectionId in memory
+            var slotsBySection = slotsList
+                .GroupBy(s => s.SectionId)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
             // =========================================================================
             // 3. GROUP DATA BY PROGRAM -> SECTION -> DAY -> PERIOD
@@ -391,11 +402,9 @@ namespace CollegeManagement.API.Services.Implementations
 
                 foreach (var sec in programSections)
                 {
-                    var secSlots = slotsList.Where(s => s.SectionId == sec.SectionId).ToList();
+                    slotsBySection.TryGetValue(sec.SectionId, out var secSlots);
+                    secSlots ??= new List<TimetableResponseDto>();
                     progSlotCount += secSlots.Count;
-
-                    // Resolve scoped periods for this section
-                    var secPeriodColumns = await ResolvePeriodColumnsForSlotsAsync(secSlots.Any() ? secSlots : slotsList);
 
                     var daySchedules = new List<DayScheduleModel>();
                     if (secSlots.Count > 0)
@@ -434,7 +443,7 @@ namespace CollegeManagement.API.Services.Implementations
                         SectionId = sec.SectionId,
                         SectionName = sec.SectionName,
                         HasTimetable = secSlots.Count > 0,
-                        Periods = secPeriodColumns,
+                        Periods = groupPeriodColumns,
                         Days = daySchedules
                     });
                 }
@@ -462,13 +471,13 @@ namespace CollegeManagement.API.Services.Implementations
             var groupExcelModel = new GroupTimetableExcelModel
             {
                 Title = "GROUP TIMETABLE",
-                BoardName = board.BoardName,
-                BoardCode = board.BoardCode ?? string.Empty,
-                AcademicLevelName = level.LevelName,
-                LevelCode = level.LevelCode ?? string.Empty,
-                AcademicYearName = year.AcademicYearName,
-                GroupName = group.GroupName,
-                GroupCode = group.GroupCode ?? string.Empty,
+                BoardName = (string)row.BoardName,
+                BoardCode = (string)(row.BoardCode ?? string.Empty),
+                AcademicLevelName = (string)row.LevelName,
+                LevelCode = (string)(row.LevelCode ?? string.Empty),
+                AcademicYearName = (string)row.AcademicYearName,
+                GroupName = (string)row.GroupName,
+                GroupCode = (string)(row.GroupCode ?? string.Empty),
                 GeneratedAt = DateTime.Now,
                 ProgramSummaries = programSummaries,
                 Programs = programExcelModels
@@ -476,8 +485,9 @@ namespace CollegeManagement.API.Services.Implementations
 
             var excelBytes = GroupTimetableExcelBuilder.BuildWorkbook(groupExcelModel);
 
-            var safeGroup = SanitizeFileName(!string.IsNullOrWhiteSpace(group.GroupCode) ? group.GroupCode : group.GroupName);
-            var safeYear = SanitizeFileName(year.AcademicYearName);
+            string grpCodeOrName = !string.IsNullOrWhiteSpace((string)row.GroupCode) ? (string)row.GroupCode : (string)row.GroupName;
+            var safeGroup = SanitizeFileName(grpCodeOrName);
+            var safeYear = SanitizeFileName((string)row.AcademicYearName);
             var fileName = $"Timetable_{safeGroup}_{safeYear}.xlsx";
 
             return (excelBytes, fileName);
@@ -498,45 +508,35 @@ namespace CollegeManagement.API.Services.Implementations
 
             try
             {
-                var periodsInSlots = await _context.Periods.AsNoTracking()
-                    .Where(p => slotPeriodIds.Contains(p.PeriodId))
-                    .ToListAsync();
+                var dbConn = _context.Database.GetDbConnection();
+                if (dbConn.State != System.Data.ConnectionState.Open) await dbConn.OpenAsync();
 
-                var structureIds = periodsInSlots
-                    .Where(p => p.PeriodStructureId.HasValue)
-                    .Select(p => p.PeriodStructureId!.Value)
-                    .Distinct()
-                    .ToList();
+                const string sql = @"
+                    SELECT p.PeriodId, p.PeriodName, p.StartTime, p.EndTime, p.DisplayOrder, p.IsBreak
+                    FROM Periods p
+                    WHERE p.IsActive = 1 AND p.PeriodStructureId IN (
+                        SELECT DISTINCT PeriodStructureId FROM Periods WHERE PeriodId IN @slotPeriodIds AND PeriodStructureId IS NOT NULL
+                    )
+                    ORDER BY p.DisplayOrder, p.StartTime;
+                ";
 
-                List<CollegeManagement.API.Models.Timetable.Period> relevantPeriods;
-                if (structureIds.Count > 0)
-                {
-                    relevantPeriods = await _context.Periods.AsNoTracking()
-                        .Where(p => p.IsActive && p.PeriodStructureId.HasValue && structureIds.Contains(p.PeriodStructureId.Value))
-                        .OrderBy(p => p.DisplayOrder)
-                        .ThenBy(p => p.StartTime)
-                        .ToListAsync();
-                }
-                else
-                {
-                    relevantPeriods = await _context.Periods.AsNoTracking()
-                        .Where(p => p.IsActive && slotPeriodIds.Contains(p.PeriodId))
-                        .OrderBy(p => p.DisplayOrder)
-                        .ThenBy(p => p.StartTime)
-                        .ToListAsync();
-                }
+                var relevantPeriods = (await dbConn.QueryAsync<PeriodColumnModel>(sql, new { slotPeriodIds })).ToList();
 
                 if (relevantPeriods.Count > 0)
                 {
-                    return relevantPeriods.Select(p => new PeriodColumnModel
-                    {
-                        PeriodId = p.PeriodId,
-                        PeriodName = p.PeriodName,
-                        StartTime = p.StartTime,
-                        EndTime = p.EndTime,
-                        DisplayOrder = p.DisplayOrder,
-                        IsBreak = p.IsBreak
-                    }).ToList();
+                    return relevantPeriods;
+                }
+
+                const string fallbackSql = @"
+                    SELECT p.PeriodId, p.PeriodName, p.StartTime, p.EndTime, p.DisplayOrder, p.IsBreak
+                    FROM Periods p
+                    WHERE p.IsActive = 1 AND p.PeriodId IN @slotPeriodIds
+                    ORDER BY p.DisplayOrder, p.StartTime;
+                ";
+                var directPeriods = (await dbConn.QueryAsync<PeriodColumnModel>(fallbackSql, new { slotPeriodIds })).ToList();
+                if (directPeriods.Count > 0)
+                {
+                    return directPeriods;
                 }
             }
             catch

@@ -132,6 +132,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 p.Add("p_TotalMarks", examination.TotalMarks);
                 p.Add("p_PassPercentage", examination.PassPercentage);
                 p.Add("p_Status", examination.Status);
+                p.Add("p_CampusId", examination.CampusId > 0 ? examination.CampusId : 1);
 
                 var newId = await Connection.ExecuteScalarAsync<int>(
                     "sp_CreateExamination",
@@ -147,6 +148,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var p = new DynamicParameters();
             p.Add("p_ExaminationId", examinationId);
+            p.Add("p_CampusId", 0);
 
             var row = await Connection.QueryFirstOrDefaultAsync<dynamic>(
                 "sp_GetExaminationById",
@@ -184,6 +186,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 AssessmentType = new AssessmentType { AssessmentTypeId = (int)row.AssessmentTypeId, AssessmentTypeName = (string)(row.ExamType ?? string.Empty) }
             };
 
+            var pSchedules = new DynamicParameters();
+            pSchedules.Add("p_ExaminationId", examinationId);
+            pSchedules.Add("p_CampusId", (int?)row.CampusId ?? 0);
+
             var schedules = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
                 "sp_GetExamSchedulesByExamination",
                 (schedule, subject) =>
@@ -191,7 +197,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     schedule.Subject = subject;
                     return schedule;
                 },
-                p,
+                pSchedules,
                 splitOn: "SubjectName",
                 commandType: CommandType.StoredProcedure);
 
@@ -287,6 +293,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_TotalMarks", examination.TotalMarks);
             p.Add("p_PassPercentage", examination.PassPercentage);
             p.Add("p_Status", examination.Status);
+            p.Add("p_CampusId", examination.CampusId > 0 ? examination.CampusId : 1);
 
             await Connection.ExecuteAsync(
                 "sp_UpdateExamination",
@@ -298,7 +305,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var rows = await Connection.ExecuteAsync(
                 "sp_DeleteExamination",
-                new { p_ExamId = examination.ExaminationId },
+                new { p_ExamId = examination.ExaminationId, p_CampusId = examination.CampusId > 0 ? examination.CampusId : 1 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -342,6 +349,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_ExamMode", schedule.ExamMode);
             p.Add("p_MaxMarks", schedule.MaxMarks);
             p.Add("p_PassingMarks", schedule.PassingMarks);
+            p.Add("p_CampusId", schedule.CampusId > 0 ? schedule.CampusId : 1);
 
             var newId = await Connection.ExecuteScalarAsync<int>(
                 "sp_CreateExamSchedule",
@@ -356,6 +364,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var p = new DynamicParameters();
             p.Add("p_ExamScheduleId", examScheduleId);
+            p.Add("p_CampusId", 0);
 
             var results = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
                 "sp_GetExamScheduleById",
@@ -375,6 +384,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var p = new DynamicParameters();
             p.Add("p_ExaminationId", examinationId ?? 0);
+            p.Add("p_CampusId", 0);
 
             var results = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
                 "sp_GetExamSchedulesByExamination",
@@ -407,6 +417,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             p.Add("p_ExamMode", schedule.ExamMode);
             p.Add("p_MaxMarks", schedule.MaxMarks);
             p.Add("p_PassingMarks", schedule.PassingMarks);
+            p.Add("p_CampusId", schedule.CampusId > 0 ? schedule.CampusId : 1);
 
             await Connection.ExecuteAsync(
                 "sp_UpdateExamSchedule",
@@ -418,7 +429,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var rows = await Connection.ExecuteAsync(
                 "sp_DeleteExamSchedule",
-                new { p_ScheduleId = schedule.ExamScheduleId },
+                new { p_ScheduleId = schedule.ExamScheduleId, p_CampusId = schedule.CampusId > 0 ? schedule.CampusId : 1 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -428,7 +439,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var idsStr = string.Join(",", scheduleIds);
             return await Connection.ExecuteAsync(
                 "sp_PublishExamSchedules",
-                new { p_ScheduleIds = idsStr },
+                new { p_ScheduleIds = idsStr, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -436,7 +447,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var subjects = await Connection.QueryAsync<Subject>(
                 "sp_GetEligibleSubjectsForExam",
-                new { p_ExaminationId = examinationId },
+                new { p_ExaminationId = examinationId, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
             return subjects;
         }
@@ -453,7 +464,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StartTime = startTime.ToTimeSpan(),
                     p_EndTime = endTime.ToTimeSpan(),
                     p_Hall = hall,
-                    p_ExcludeScheduleId = excludeScheduleId ?? 0
+                    p_ExcludeScheduleId = excludeScheduleId ?? 0,
+                    p_CampusId = 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -472,7 +484,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StartTime = startTime.ToTimeSpan(),
                     p_EndTime = endTime.ToTimeSpan(),
                     p_Invigilator = invigilator,
-                    p_ExcludeScheduleId = excludeScheduleId ?? 0
+                    p_ExcludeScheduleId = excludeScheduleId ?? 0,
+                    p_CampusId = 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -561,6 +574,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var p = new DynamicParameters();
             p.Add("p_ExaminationId", examinationId);
             p.Add("p_BatchId", batchId);
+            p.Add("p_CampusId", 0);
 
             var results = await Connection.QueryAsync<HallTicket, Student, HallTicket>(
                 "sp_GenerateHallTickets",
@@ -741,7 +755,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     {
                         p_ExamScheduleId = examScheduleId,
                         p_InvigilatorId = id,
-                        p_HallNumber = hallNumber ?? string.Empty
+                        p_HallNumber = hallNumber ?? string.Empty,
+                        p_CampusId = 0
                     },
                     commandType: CommandType.StoredProcedure);
             }
@@ -751,7 +766,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             return await Connection.QueryAsync<InvigilatorAssignment>(
                 "sp_GetInvigilatorsBySchedule",
-                new { p_ExamScheduleId = examScheduleId },
+                new { p_ExamScheduleId = examScheduleId, p_CampusId = 0 },
                 commandType: CommandType.StoredProcedure);
         }
 

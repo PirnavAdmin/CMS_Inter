@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { getAuthItem, getAuthToken, getAuthUser } from "@/features/authStorage.js";
+import { clearAuthSession, getAuthItem, getAuthToken, getAuthUser } from "@/features/authStorage.js";
+import { getJwtExpiryState } from "@/api/apiClient.js";
 
 function isFacultyRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
@@ -13,13 +14,20 @@ function isParentRole(role) {
 
 export default function ProtectedRoute({ children, requireAdmin = false, requireStudent = false, requireParent = false }) {
   const token = getAuthToken();
+  const tokenState = token ? getJwtExpiryState(token) : null;
+  const isTokenExpired = Boolean(tokenState?.isJwt && tokenState?.isExpired);
+
+  if (!token || isTokenExpired) {
+    if (isTokenExpired) clearAuthSession();
+    return <Navigate to="/login" replace />;
+  }
+
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role;
   const isAdmin = user?.isAdmin || isAdminRole(role);
   const isFaculty = isFacultyRole(role);
   const isParent = isParentRole(role);
 
-  if (!token) return <Navigate to="/login" replace />;
   if (requireAdmin && !isAdmin) {
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
     return <Navigate to={isFaculty ? "/faculty-dashboard" : "/student-dashboard"} replace />;
@@ -39,13 +47,16 @@ export default function ProtectedRoute({ children, requireAdmin = false, require
 
 export function PublicOnlyRoute({ children }) {
   const token = getAuthToken();
+  const tokenState = token ? getJwtExpiryState(token) : null;
+  const isTokenValid = Boolean(token && (!tokenState?.isJwt || !tokenState?.isExpired));
+
   const user = getAuthUser();
   const role = getAuthItem("role") || user?.role;
   const isAdmin = user?.isAdmin || isAdminRole(role);
   const isFaculty = isFacultyRole(role);
   const isParent = isParentRole(role);
 
-  if (token) {
+  if (isTokenValid) {
     if (isAdmin) return <Navigate to="/dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;

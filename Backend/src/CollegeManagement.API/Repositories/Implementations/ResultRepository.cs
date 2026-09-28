@@ -66,6 +66,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                 request.PublishDate,
                 DbType.DateTime);
 
+            parameters.Add(
+                "p_CampusId",
+                request.CampusId ?? 0,
+                DbType.Int32);
+
             var result = await Connection.QuerySingleAsync<ProcessResultResponseDto>(
                 "sp_ProcessResults",
                 parameters,
@@ -91,7 +96,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicLevelId = request.AcademicLevelId,
                     p_GroupId = request.GroupId,
                     p_ExamId = request.ExamId,
-                    p_PublishDate = request.PublishDate
+                    p_PublishDate = request.PublishDate,
+                    p_CampusId = request.CampusId ?? 0
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -115,6 +121,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_Search", request.Search);
             parameters.Add("p_PageNumber", request.PageNumber <= 0 ? 1 : request.PageNumber);
             parameters.Add("p_PageSize", request.PageSize <= 0 ? 10 : request.PageSize);
+            parameters.Add("p_CampusId", request.CampusId ?? 0);
 
             using var multi = await Connection.QueryMultipleAsync(
                 "sp_GetResults",
@@ -148,14 +155,14 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// </summary>
 
         public async Task<StudentResultDto> GetStudentResultAsync(
-    int studentId,
-    int boardId,
-    int academicYearId,
-    int academicLevelId,
-    int groupId,
-    int examId)
+            int studentId,
+            int boardId,
+            int academicYearId,
+            int academicLevelId,
+            int groupId,
+            int examId,
+            int? campusId = null)
         {
-            
             var parameters = new DynamicParameters();
 
             parameters.Add(
@@ -188,6 +195,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 examId,
                 DbType.Int32);
 
+            parameters.Add(
+                "p_CampusId",
+                campusId ?? 0,
+                DbType.Int32);
 
             using var multi = await Connection.QueryMultipleAsync(
                 "sp_GetStudentResult",
@@ -336,7 +347,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId)
+            int examId,
+            int? campusId = null)
         {
             var parameters = new DynamicParameters();
 
@@ -363,6 +375,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add(
                 "p_ExamId",
                 examId,
+                DbType.Int32);
+
+            parameters.Add(
+                "p_CampusId",
+                campusId ?? 0,
                 DbType.Int32);
 
             using var multi = await Connection.QueryMultipleAsync(
@@ -406,7 +423,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_AcademicYearId = academicYearId,
                     p_AcademicLevelId = academicLevelId,
                     p_GroupId = groupId,
-                    p_ExamId = examId
+                    p_ExamId = examId,
+                    p_CampusId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -426,7 +444,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_ResultId = request.ResultId,
                     p_StudentId = request.StudentId,
                     p_SubjectId = request.SubjectId ?? 0,
-                    p_Reason = request.Reason
+                    p_Reason = request.Reason,
+                    p_CampusId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -444,7 +463,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     "sp_GetRevaluationStatus",
                     new
                     {
-                        p_RevaluationId = revaluationId
+                        p_RevaluationId = revaluationId,
+                        p_CampusId = (int?)null
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -487,7 +507,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_InternalMarks = request.InternalMarks,
                     p_PracticalMarks = request.PracticalMarks,
                     p_ExternalMarks = request.ExternalMarks,
-                    p_UpdatedAt = DateTime.UtcNow
+                    p_UpdatedAt = DateTime.UtcNow,
+                    p_CampusId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 

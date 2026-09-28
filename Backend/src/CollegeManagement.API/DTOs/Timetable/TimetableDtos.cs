@@ -145,6 +145,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
         public int PeriodId { get; set; }
         public string PeriodName { get; set; } = string.Empty;
+        public int PeriodNumber { get; set; }
         public TimeSpan StartTime { get; set; }
         public TimeSpan EndTime { get; set; }
         public bool IsBreak { get; set; }

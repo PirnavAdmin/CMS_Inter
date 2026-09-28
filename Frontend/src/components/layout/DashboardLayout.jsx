@@ -423,11 +423,12 @@ export default function DashboardLayout({
   const activeMenu = isParent ? parentMenu : menu;
   const currentSearchIndex = isParent ? parentSearchIndex : searchIndex;
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
+
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
   const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
   const profileRole = user?.role || "admin";
-  const pendingActionCount = currentNotifications.reduce((total, item) => total + item.count, 0);
+  const pendingActionCount = MOCK_NOTIFICATIONS.reduce((total, item) => total + item.count, 0);
 
   const rememberSidebarScroll = () => {
     const scrollTop = sidebarNavRef.current?.scrollTop || 0;
@@ -521,6 +522,7 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
+    if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
     if (basePath === "/dashboard/settings") {
       return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
     }
@@ -973,10 +975,40 @@ export default function DashboardLayout({
 
             {profileOpen ? (
               <div className="cms-dropdown">
-                <div className="cms-dropdown-head"><strong>{profileName}</strong><div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{profileEmail}</div><div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 3 }}>{profileRole}</div></div>
-                <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings/my-profile"); }}><User size={15} /> My Profile</button>
-                <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings"); }}><Settings size={15} /> Settings</button>
-                <button type="button" className="cms-dropdown-item danger" onClick={logout}><LogOut size={15} /> Logout</button>
+                <div className="cms-dropdown-head"><strong title={profileName}>{profileName}</strong><div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{profileEmail}</div><div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 3 }}>{profileRole}</div></div>
+                <button
+                  type="button"
+                  className="cms-dropdown-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    closeOnMobile();
+                    navigate(isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
+                  }}
+                >
+                  <User size={15} /> My Profile
+                </button>
+                <button
+                  type="button"
+                  className="cms-dropdown-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    closeOnMobile();
+                    navigate(isParent ? "/parent-dashboard/settings" : "/dashboard/settings");
+                  }}
+                >
+                  <Settings size={15} /> Settings
+                </button>
+                <button
+                  type="button"
+                  className="cms-dropdown-item danger"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    closeOnMobile();
+                    logout();
+                  }}
+                >
+                  <LogOut size={15} /> Logout
+                </button>
               </div>
             ) : null}
           </div>
