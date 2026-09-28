@@ -282,7 +282,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_Search = q.Search,
                     p_PromotionStatus = q.PromotionStatus,
                     p_FromDate = q.FromDate,
-                    p_ToDate = q.ToDate
+                    p_ToDate = q.ToDate,
+                    p_CampusId = q.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
         }

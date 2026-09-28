@@ -255,7 +255,7 @@ public class CreateFeePaymentRequest
 {
     [Range(1, int.MaxValue)] public int StudentId { get; set; }
     [Range(1, int.MaxValue)] public int StudentFeeId { get; set; }
-    public int? FeeInstallmentId { get; set; }
+    public List<int> FeeInstallmentIds { get; set; } = new();
     [Range(0.01, double.MaxValue)] public decimal Amount { get; set; }
     public DateTime? PaymentDate { get; set; }
     [Required, StringLength(30)] public string PaymentMode { get; set; } = "Cash";

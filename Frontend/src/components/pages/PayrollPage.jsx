@@ -81,7 +81,7 @@ export default function PayrollPage({ mode = "payroll" }) {
           payrollApi.getSalaryRevisions(),
           payrollApi.getBonuses(),
           payrollApi.getSalaryAdvances(),
-          payrollApi.getPayrollSummary(),
+          payrollApi.getPayrollSummary({ month: new Date().getMonth() + 1, year: new Date().getFullYear() }),
         ]);
 
         if (!isMounted) return;
@@ -1188,13 +1188,11 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
 
     if (numericStaffIds.length > 0) {
       try {
-        if (selectedStaffIds.length === assignmentsList.length) {
+        if (selectedStaffIds.length > 1) {
           await payrollApi.generatePayslipsBulk({
+            staffIds: numericStaffIds,
             payrollMonth: Number(selectedMonth),
             payrollYear: Number(selectedYear),
-            staffType: categoryFilter === "All" ? null : categoryFilter,
-            departmentId: null,
-            paymentMode: "Bank Transfer",
           });
         } else {
           for (const sId of numericStaffIds) {
@@ -1202,8 +1200,6 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
               staffId: sId,
               payrollMonth: Number(selectedMonth),
               payrollYear: Number(selectedYear),
-              paymentMode: "Bank Transfer",
-              remarks: `Generated for ${periodLabel}`,
             }).catch(() => {});
           }
         }
@@ -2600,18 +2596,30 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
     let createdAsgnId = existingAssignment?.id || `asgn-${Date.now()}`;
     const numericStaffId = parseInt(String(chosenStaff.rawStaffId || chosenStaff.id || "").replace(/\D+/g, ""), 10) || 1;
     const numericStructId = parseInt(String(chosenStruct.numericId || chosenStruct.id || "").replace(/\D+/g, ""), 10) || 1;
+    const existingNumericId = existingAssignment?.numericId || parseInt(String(existingAssignment?.id || "").replace(/\D+/g, ""), 10) || null;
 
     try {
-      const payload = {
-        staffId: numericStaffId,
-        salaryStructureId: numericStructId,
-        effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : new Date().toISOString(),
-        basicPay: Number(chosenStruct.basicPay || 0),
-        status: existingAssignment?.status || "Active",
-      };
-      const res = await payrollApi.createSalaryAssignment(payload);
-      if (res?.assignmentId || res?.AssignmentId || res?.id || res?.Id) {
-        createdAsgnId = `asgn-${res.assignmentId || res.AssignmentId || res.id || res.Id}`;
+      if (existingAssignment && existingNumericId) {
+        await payrollApi.updateSalaryAssignment(existingNumericId, {
+          salaryStructureId: numericStructId,
+          effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : new Date().toISOString(),
+        });
+      } else {
+        const payload = {
+          staffId: numericStaffId,
+          salaryStructureId: numericStructId,
+          effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : new Date().toISOString(),
+          paymentMode: paymentMode || "Bank Transfer",
+          bankName: bankName || "",
+          accountNumber: accountNumber || "",
+          ifscCode: ifscCode || "",
+          panNumber: panNumber || "",
+          uanNumber: uanNumber || "",
+        };
+        const res = await payrollApi.createSalaryAssignment(payload);
+        if (res?.assignmentId || res?.AssignmentId || res?.id || res?.Id) {
+          createdAsgnId = `asgn-${res.assignmentId || res.AssignmentId || res.id || res.Id}`;
+        }
       }
     } catch (err) {
       console.warn("Failed to assign salary structure via API, persisting to local store:", err);

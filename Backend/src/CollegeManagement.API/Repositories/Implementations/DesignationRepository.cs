@@ -105,7 +105,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     IsActive = d.IsActive,
                     CreatedAt = d.CreatedAt,
                     UpdatedAt = d.UpdatedAt,
-                    AssignedStaffCount = _context.Staffs.Count(s => s.DesignationId == d.Id && !s.IsDeleted)
+                    AssignedStaffCount = _context.Staffs.Count(s => s.DesignationId == d.Id && !s.IsDeleted && (!campusId.HasValue || s.CampusId == campusId.Value))
                 }).ToList();
             }
         }

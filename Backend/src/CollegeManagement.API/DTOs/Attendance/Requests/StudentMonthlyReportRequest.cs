@@ -14,6 +14,8 @@ namespace CollegeManagement.API.DTOs.Attendance.Requests
 
         public int? Year { get; set; }
 
+        public int? CampusId { get; set; }
+
         public int? BoardId { get; set; }
 
         public int? AcademicYearId { get; set; }

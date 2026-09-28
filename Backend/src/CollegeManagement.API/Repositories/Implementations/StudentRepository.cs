@@ -175,7 +175,11 @@ namespace CollegeManagement.API.Repositories
                             ProgramId = s.ProgramId ?? 0,
                             IsActive = s.IsActive,
                             Status = s.Status,
-                            CreatedAt = s.CreatedAt
+                            CreatedAt = s.CreatedAt,
+                            StudentType = s.StudentType,
+                            TransportRequired = s.TransportRequired,
+                            HostelBlock = s.HostelBlock,
+                            BusRoute = s.BusRoute
                         })
                         .ToListAsync();
                 }
@@ -216,6 +220,46 @@ namespace CollegeManagement.API.Repositories
             CreateStudentRequest request)
         {
             var connection = _context.Database.GetDbConnection();
+
+            string? hostelBlock = request.HostelBlock;
+            if (string.IsNullOrWhiteSpace(hostelBlock) && request.HostelId.HasValue)
+            {
+                hostelBlock = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT HostelName FROM hostel_blocks WHERE HostelId = @HostelId LIMIT 1",
+                    new { request.HostelId });
+            }
+
+            string? hostelRoom = request.HostelRoom;
+            if (string.IsNullOrWhiteSpace(hostelRoom) && request.RoomId.HasValue)
+            {
+                hostelRoom = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT RoomNumber FROM room_masters WHERE RoomId = @RoomId LIMIT 1",
+                    new { request.RoomId });
+            }
+
+            string? hostelBed = request.HostelBed;
+            if (string.IsNullOrWhiteSpace(hostelBed) && request.BedId.HasValue)
+            {
+                hostelBed = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT BedNumber FROM hostel_beds WHERE BedId = @BedId LIMIT 1",
+                    new { request.BedId });
+            }
+
+            string? busRoute = request.BusRoute;
+            if (string.IsNullOrWhiteSpace(busRoute) && request.RouteId.HasValue)
+            {
+                busRoute = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT RouteName FROM TransportRoutes WHERE RouteId = @RouteId LIMIT 1",
+                    new { request.RouteId });
+            }
+
+            string? pickupPoint = request.PickupPoint;
+            if (string.IsNullOrWhiteSpace(pickupPoint) && request.PickupPointId.HasValue)
+            {
+                pickupPoint = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT COALESCE(StopName, PickupPointName) FROM PickupPoints WHERE PickupPointId = @PickupPointId LIMIT 1",
+                    new { request.PickupPointId });
+            }
 
             var result =
                 await connection.QueryFirstOrDefaultAsync<StudentResponse>(
@@ -323,7 +367,24 @@ namespace CollegeManagement.API.Repositories
                             request.IsFirstLogin,
 
                         // Status
-                        p_IsActive = request.IsActive
+                        p_IsActive = request.IsActive,
+
+                        // Residential & Transport
+                        p_StudentType = request.StudentType,
+                        p_TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
+                        p_BusType = request.BusType,
+                        p_RouteId = request.RouteId,
+                        p_BusRoute = busRoute,
+                        p_PickupPointId = request.PickupPointId,
+                        p_PickupPoint = pickupPoint,
+                        p_HostelId = request.HostelId,
+                        p_HostelBlock = hostelBlock,
+                        p_RoomId = request.RoomId,
+                        p_HostelRoom = hostelRoom,
+                        p_BedId = request.BedId,
+                        p_HostelBed = hostelBed,
+                        p_HallTicketNumber = request.HallTicketNumber ?? request.PreviousHallTicketNumber,
+                        p_CampusId = request.CampusId ?? 1
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -339,6 +400,46 @@ namespace CollegeManagement.API.Repositories
             if (connection.State != ConnectionState.Open)
             {
                 await connection.OpenAsync();
+            }
+
+            string? hostelBlock = request.HostelBlock;
+            if (string.IsNullOrWhiteSpace(hostelBlock) && request.HostelId.HasValue)
+            {
+                hostelBlock = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT HostelName FROM hostel_blocks WHERE HostelId = @HostelId LIMIT 1",
+                    new { request.HostelId });
+            }
+
+            string? hostelRoom = request.HostelRoom;
+            if (string.IsNullOrWhiteSpace(hostelRoom) && request.RoomId.HasValue)
+            {
+                hostelRoom = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT RoomNumber FROM room_masters WHERE RoomId = @RoomId LIMIT 1",
+                    new { request.RoomId });
+            }
+
+            string? hostelBed = request.HostelBed;
+            if (string.IsNullOrWhiteSpace(hostelBed) && request.BedId.HasValue)
+            {
+                hostelBed = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT BedNumber FROM hostel_beds WHERE BedId = @BedId LIMIT 1",
+                    new { request.BedId });
+            }
+
+            string? busRoute = request.BusRoute;
+            if (string.IsNullOrWhiteSpace(busRoute) && request.RouteId.HasValue)
+            {
+                busRoute = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT RouteName FROM TransportRoutes WHERE RouteId = @RouteId LIMIT 1",
+                    new { request.RouteId });
+            }
+
+            string? pickupPoint = request.PickupPoint;
+            if (string.IsNullOrWhiteSpace(pickupPoint) && request.PickupPointId.HasValue)
+            {
+                pickupPoint = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT COALESCE(StopName, PickupPointName) FROM PickupPoints WHERE PickupPointId = @PickupPointId LIMIT 1",
+                    new { request.PickupPointId });
             }
 
             string? normalizedEmail = null;
@@ -415,7 +516,23 @@ namespace CollegeManagement.API.Repositories
 
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile = request.GuardianMobile,
-                        p_GuardianEmail = request.GuardianEmail
+                        p_GuardianEmail = request.GuardianEmail,
+
+                        p_StudentType = request.StudentType,
+                        p_TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
+                        p_BusType = request.BusType,
+                        p_RouteId = request.RouteId,
+                        p_BusRoute = busRoute,
+                        p_PickupPointId = request.PickupPointId,
+                        p_PickupPoint = pickupPoint,
+                        p_HostelId = request.HostelId,
+                        p_HostelBlock = hostelBlock,
+                        p_RoomId = request.RoomId,
+                        p_HostelRoom = hostelRoom,
+                        p_BedId = request.BedId,
+                        p_HostelBed = hostelBed,
+                        p_HallTicketNumber = request.HallTicketNumber ?? request.PreviousHallTicketNumber,
+                        p_CampusId = request.CampusId
                     },
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);

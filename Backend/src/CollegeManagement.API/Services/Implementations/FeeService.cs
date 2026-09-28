@@ -74,7 +74,10 @@ public class FeeService : IFeeService
     public Task<FeePaymentResponse?> CreateFeePaymentAsync(CreateFeePaymentRequest r)
     {
         Id(r.StudentId, "StudentId"); Id(r.StudentFeeId, "StudentFeeId");
-        if (r.FeeInstallmentId.HasValue) Id(r.FeeInstallmentId.Value, "FeeInstallmentId");
+        if (r.FeeInstallmentIds != null && r.FeeInstallmentIds.Any())
+        {
+            foreach (var id in r.FeeInstallmentIds) Id(id, "FeeInstallmentId");
+        }
         if (r.Amount <= 0) throw new ArgumentException("Payment amount must be greater than zero.");
         Text(r.PaymentMode, "PaymentMode");
         if (r.Discount < 0 || r.Fine < 0) throw new ArgumentException("Discount and Fine cannot be negative.");

@@ -620,6 +620,7 @@ export const apiEndpoints = {
     salaryAssignments: "/api/v1/Payroll/salary-assignments",
     createSalaryAssignment: "/api/v1/Payroll/salary-assignments",
     salaryAssignmentById: (id) => `/api/v1/Payroll/salary-assignments/${id}`,
+    updateSalaryAssignment: (id) => `/api/v1/Payroll/salary-assignments/${id}`,
     deleteSalaryAssignment: (id) => `/api/v1/Payroll/salary-assignments/${id}`,
     salaryAssignmentStatus: (id, status) => `/api/v1/Payroll/salary-assignments/${id}/status${status ? `?status=${encodeURIComponent(status)}` : ""}`,
 

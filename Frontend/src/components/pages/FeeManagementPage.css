@@ -830,6 +830,136 @@
 }
 
 .cms-fee-collect { display: grid; gap: 14px; }
+.cms-fee-pay-towards {
+  position: relative;
+  z-index: 20;
+}
+.cms-fee-pay-towards-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  list-style: none;
+}
+.cms-fee-pay-towards-trigger::-webkit-details-marker {
+  display: none;
+}
+.cms-fee-pay-towards-trigger > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cms-fee-pay-towards-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--cms-muted);
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+.cms-fee-pay-towards-arrow svg {
+  display: block;
+}
+.cms-fee-pay-towards-menu {
+  position: absolute;
+  z-index: 120;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 230px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: var(--cms-shadow-lg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  opacity: 1;
+}
+.cms-field .cms-fee-pay-option {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  color: var(--cms-text);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-transform: none;
+}
+.cms-field .cms-fee-pay-option:hover {
+  background: var(--cms-subtle);
+}
+.cms-field .cms-fee-pay-option.is-strong {
+  font-weight: 600;
+}
+.cms-field .cms-fee-pay-option input.cms-fee-pay-checkbox[type="checkbox"] {
+  display: inline-block !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  max-width: 16px !important;
+  max-height: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #fff !important;
+  border: 1px solid var(--cms-border-strong) !important;
+  border-radius: 3px;
+  flex: 0 0 auto !important;
+  align-self: center !important;
+  cursor: pointer;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.cms-fee-pay-option-text {
+  display: inline-block !important;
+  width: auto !important;
+  min-width: 0;
+  max-width: calc(100% - 24px);
+  flex: 1 1 auto !important;
+  overflow: hidden;
+  color: var(--cms-text);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+}
+.cms-fee-pay-divider {
+  height: 1px;
+  margin: 5px 0;
+  background: var(--cms-border);
+}
+[data-theme="dark"] .cms-fee-pay-towards-menu {
+  background: #171d15;
+}
+[data-theme="dark"] .cms-field .cms-fee-pay-option input[type="checkbox"] {
+  background: #171d15 !important;
+}
 
 /* Receipt */
 .cms-fee-receipt {
@@ -1073,6 +1203,16 @@
     max-height: none !important;
     border: 0 !important;
     box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  body.cms-fee-print-receipt .cms-modal-body {
+    display: block !important;
+    visibility: visible !important;
+    flex: none !important;
+    max-height: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
     background: #fff !important;
   }
 

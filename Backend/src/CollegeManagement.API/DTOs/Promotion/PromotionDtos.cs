@@ -295,6 +295,8 @@ namespace CollegeManagement.API.DTOs.Promotion
 
     public class PromotionHistoryQuery
     {
+        public int? CampusId { get; set; }
+
         public int? AcademicYearId { get; set; }
 
         public int? TargetAcademicYearId { get; set; }
