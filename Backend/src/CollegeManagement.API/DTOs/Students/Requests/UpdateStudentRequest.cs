@@ -156,7 +156,7 @@ namespace CollegeManagement.API.DTOs.Students
         public string? GuardianMobile { get; set; }
 
         [MaxLength(150)]
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         // =========================================================
         // RESIDENTIAL & TRANSPORT ALLOCATION
@@ -199,4 +199,5 @@ namespace CollegeManagement.API.DTOs.Students
         public string? HallTicketNumber { get; set; }
     }
 }
+
 

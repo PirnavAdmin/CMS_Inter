@@ -103,7 +103,7 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? GuardianMobile { get; set; }
 
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
 
         // Other
@@ -163,3 +163,4 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public string? HallTicketNumber { get; set; }
     }
 }
+

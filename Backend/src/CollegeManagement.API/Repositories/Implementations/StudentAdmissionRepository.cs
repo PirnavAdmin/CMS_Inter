@@ -233,8 +233,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile =
                             request.GuardianMobile,
-                        p_GuardianEmail =
-                            request.GuardianEmail,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail,
 
 
                         // -------------------------------------------------
@@ -550,8 +550,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_GuardianMobile =
                             request.GuardianMobile,
 
-                        p_GuardianEmail =
-                            request.GuardianEmail,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail,
 
 
                         // -------------------------------------------------
@@ -991,3 +991,4 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
     }
 }
+
