@@ -914,17 +914,16 @@ export default function DashboardPage() {
   }, [overviewChartData]);
 
   // Auto-scroll Students Overview chart to the far right (present month & latest 4 months in view) on data load
-  const chartEndRef = useRef(null);
   useEffect(() => {
     if (overviewChartData.length > 5) {
-      // Use setInterval to ensure scrollIntoView fires after any internal Recharts re-renders
+      // Use setInterval to aggressively push scroll to the right for 2 seconds after data loads
       let attempts = 0;
       const interval = setInterval(() => {
-        if (chartEndRef.current) {
-          chartEndRef.current.scrollIntoView({ behavior: "instant", block: "nearest", inline: "end" });
+        if (chartScrollRef.current) {
+          chartScrollRef.current.scrollLeft = 999999; // Brute force scroll to end
         }
         attempts++;
-        if (attempts > 15) clearInterval(interval); // 15 * 100ms = 1.5s
+        if (attempts > 20) clearInterval(interval); // 20 * 100ms = 2.0s
       }, 100);
       return () => clearInterval(interval);
     }
@@ -1234,7 +1233,6 @@ export default function DashboardPage() {
                           />
                         </AreaChart>
                       </ResponsiveContainer>
-                      <div ref={chartEndRef} style={{ position: "absolute", right: 0, top: 0, width: 1, height: 1, visibility: "hidden" }} />
                     </div>
                   </div>
                 </div>

@@ -155,12 +155,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var conn = await GetOpenConnectionAsync();
-                var sql = @"
-                    SELECT MAX(CurrentSequence) 
-                    FROM `NumberSeriesConfigurations` 
-                    WHERE `SeriesCode` = @BaseCode OR `SeriesCode` LIKE CONCAT(@BaseCode, '|%');";
-                
-                var maxSeq = await conn.ExecuteScalarAsync<int?>(sql, new { BaseCode = baseSeriesCode.Trim() });
+                var maxSeq = await conn.ExecuteScalarAsync<int?>(
+                    "sp_GetMaxSequenceForBaseSeries", 
+                    new { p_BaseCode = baseSeriesCode.Trim() },
+                    commandType: CommandType.StoredProcedure);
                 return maxSeq ?? 0;
             }
             catch
