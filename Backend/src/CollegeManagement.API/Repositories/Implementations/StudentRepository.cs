@@ -1,3 +1,4 @@
+using CollegeManagement.API.Common;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
@@ -20,170 +21,151 @@ namespace CollegeManagement.API.Repositories
 
 
         // =========================================================
-        // GET ALL STUDENTS
+        // GET ALL / PAGED STUDENTS
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync(
+        public async Task<PagedResult<StudentListItemDto>> GetPagedAsync(
+            string? search = null,
             int? boardId = null,
+            int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
             int? programId = null,
             int? sectionId = null,
             string? status = null,
-            int? campusId = null)
+            bool? isActive = null,
+            int? campusId = null,
+            int pageNumber = 1,
+            int pageSize = 10)
         {
-            var connection = _context.Database.GetDbConnection();
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 500) pageSize = 500;
 
-            try
+            var query = _context.Students
+                .Include(s => s.BoardNavigation)
+                .Include(s => s.AcademicYear)
+                .Include(s => s.AcademicLevelNavigation)
+                .Include(s => s.GroupNavigation)
+                .Include(s => s.SectionNavigation)
+                .Include(s => s.CampusNavigation)
+                .Include(s => s.ProgramNavigation)
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (campusId.HasValue && campusId.Value > 0)
+                query = query.Where(s => s.CampusId == campusId.Value);
+
+            if (boardId.HasValue && boardId.Value > 0)
+                query = query.Where(s => s.BoardId == boardId.Value);
+
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+                query = query.Where(s => s.AcademicYearId == academicYearId.Value);
+
+            if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
+
+            if (groupId.HasValue && groupId.Value > 0)
+                query = query.Where(s => s.GroupId == groupId.Value);
+
+            if (programId.HasValue && programId.Value > 0)
+                query = query.Where(s => s.ProgramId == programId.Value);
+
+            if (sectionId.HasValue && sectionId.Value > 0)
+                query = query.Where(s => s.SectionId == sectionId.Value);
+
+            if (!string.IsNullOrWhiteSpace(status))
+                query = query.Where(s => s.Status == status);
+
+            if (isActive.HasValue)
+                query = query.Where(s => s.IsActive == isActive.Value);
+
+            if (!string.IsNullOrWhiteSpace(search))
             {
-                var parameters = new DynamicParameters();
-                if (campusId.HasValue && campusId.Value > 0)
-                {
-                    parameters.Add("p_CampusId", campusId.Value, DbType.Int32);
-                }
-                else
-                {
-                    parameters.Add("p_CampusId", null, DbType.Int32);
-                }
-
-                var result = (await connection.QueryAsync<StudentListItemDto>(
-                    "sp_GetAllStudents",
-                    parameters,
-                    commandType: CommandType.StoredProcedure)).ToList();
-
-                if (campusId.HasValue && campusId.Value > 0)
-                {
-                    result = result.Where(x => x.CampusId == campusId.Value).ToList();
-                }
-                if (boardId.HasValue && boardId.Value > 0)
-                {
-                    result = result.Where(x => x.BoardId == boardId.Value).ToList();
-                }
-                if (academicLevelId.HasValue && academicLevelId.Value > 0)
-                {
-                    result = result.Where(x => x.AcademicLevelId == academicLevelId.Value).ToList();
-                }
-                if (groupId.HasValue && groupId.Value > 0)
-                {
-                    result = result.Where(x => x.GroupId == groupId.Value).ToList();
-                }
-                if (programId.HasValue && programId.Value > 0)
-                {
-                    result = result.Where(x => x.ProgramId == programId.Value).ToList();
-                }
-                if (sectionId.HasValue && sectionId.Value > 0)
-                {
-                    result = result.Where(x => x.SectionId == sectionId.Value).ToList();
-                }
-                if (!string.IsNullOrWhiteSpace(status))
-                {
-                    result = result.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
-                }
-
-                return result;
+                var sTerm = search.Trim();
+                query = query.Where(s =>
+                    s.StudentName.Contains(sTerm) ||
+                    (s.AdmissionNo != null && s.AdmissionNo.Contains(sTerm)) ||
+                    (s.RollNo != null && s.RollNo.Contains(sTerm)) ||
+                    (s.MobileNumber != null && s.MobileNumber.Contains(sTerm)) ||
+                    (s.Email != null && s.Email.Contains(sTerm)));
             }
-            catch
+
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .OrderBy(s => s.StudentName)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(s => new StudentListItemDto
+                {
+                    StudentId = s.StudentId,
+                    AdmissionNo = s.AdmissionNo ?? "",
+                    RollNo = s.RollNo ?? "",
+                    StudentName = s.StudentName,
+                    Photo = s.Photo,
+                    Gender = s.Gender,
+                    Email = s.Email,
+                    MobileNumber = s.MobileNumber,
+                    CampusId = s.CampusId,
+                    CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
+                    BoardId = s.BoardId,
+                    BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
+                    AcademicYearId = s.AcademicYearId,
+                    AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
+                    AcademicLevelId = s.AcademicLevelId ?? 0,
+                    AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
+                    GroupId = s.GroupId ?? 0,
+                    GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                    SectionId = s.SectionId ?? 0,
+                    SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                    ProgramId = s.ProgramId ?? 0,
+                    ProgramName = s.ProgramNavigation != null ? s.ProgramNavigation.ProgramName : null,
+                    IsActive = s.IsActive,
+                    Status = s.Status,
+                    CreatedAt = s.CreatedAt,
+                    StudentType = s.StudentType,
+                    TransportRequired = s.TransportRequired,
+                    HostelBlock = s.HostelBlock,
+                    BusRoute = s.BusRoute
+                })
+                .ToListAsync();
+
+            return new PagedResult<StudentListItemDto>
             {
-                try
-                {
-                    var result = (await connection.QueryAsync<StudentListItemDto>(
-                        "sp_GetAllStudents",
-                        commandType: CommandType.StoredProcedure)).ToList();
+                Items = items,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalCount = totalCount
+            };
+        }
 
-                    if (campusId.HasValue && campusId.Value > 0)
-                    {
-                        result = result.Where(x => x.CampusId == campusId.Value).ToList();
-                    }
-                    if (boardId.HasValue && boardId.Value > 0)
-                    {
-                        result = result.Where(x => x.BoardId == boardId.Value).ToList();
-                    }
-                    if (academicLevelId.HasValue && academicLevelId.Value > 0)
-                    {
-                        result = result.Where(x => x.AcademicLevelId == academicLevelId.Value).ToList();
-                    }
-                    if (groupId.HasValue && groupId.Value > 0)
-                    {
-                        result = result.Where(x => x.GroupId == groupId.Value).ToList();
-                    }
-                    if (programId.HasValue && programId.Value > 0)
-                    {
-                        result = result.Where(x => x.ProgramId == programId.Value).ToList();
-                    }
-                    if (sectionId.HasValue && sectionId.Value > 0)
-                    {
-                        result = result.Where(x => x.SectionId == sectionId.Value).ToList();
-                    }
-                    if (!string.IsNullOrWhiteSpace(status))
-                    {
-                        result = result.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
-                    }
+        public async Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null,
+            string? search = null)
+        {
+            var paged = await GetPagedAsync(
+                search,
+                boardId,
+                academicYearId,
+                academicLevelId,
+                groupId,
+                programId,
+                sectionId,
+                status,
+                null,
+                campusId,
+                1,
+                int.MaxValue);
 
-                    return result;
-                }
-                catch
-                {
-                    var query = _context.Students
-                        .Include(s => s.BoardNavigation)
-                        .Include(s => s.AcademicYear)
-                        .Include(s => s.AcademicLevelNavigation)
-                        .Include(s => s.GroupNavigation)
-                        .Include(s => s.SectionNavigation)
-                        .Include(s => s.CampusNavigation)
-                        .AsNoTracking()
-                        .AsQueryable();
-
-                    if (campusId.HasValue && campusId.Value > 0)
-                        query = query.Where(s => s.CampusId == campusId.Value);
-                    if (boardId.HasValue && boardId.Value > 0)
-                        query = query.Where(s => s.BoardId == boardId.Value);
-                    if (academicLevelId.HasValue && academicLevelId.Value > 0)
-                        query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
-                    if (groupId.HasValue && groupId.Value > 0)
-                        query = query.Where(s => s.GroupId == groupId.Value);
-                    if (programId.HasValue && programId.Value > 0)
-                        query = query.Where(s => s.ProgramId == programId.Value);
-                    if (sectionId.HasValue && sectionId.Value > 0)
-                        query = query.Where(s => s.SectionId == sectionId.Value);
-                    if (!string.IsNullOrWhiteSpace(status))
-                        query = query.Where(s => s.Status == status);
-
-                    return await query
-                        .OrderBy(s => s.StudentName)
-                        .Select(s => new StudentListItemDto
-                        {
-                            StudentId = s.StudentId,
-                            AdmissionNo = s.AdmissionNo ?? "",
-                            RollNo = s.RollNo ?? "",
-                            StudentName = s.StudentName,
-                            Photo = s.Photo,
-                            Gender = s.Gender,
-                            Email = s.Email,
-                            MobileNumber = s.MobileNumber,
-                            CampusId = s.CampusId,
-                            CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
-                            BoardId = s.BoardId,
-                            BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
-                            AcademicYearId = s.AcademicYearId,
-                            AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
-                            AcademicLevelId = s.AcademicLevelId ?? 0,
-                            AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
-                            GroupId = s.GroupId ?? 0,
-                            GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
-                            SectionId = s.SectionId ?? 0,
-                            SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
-                            ProgramId = s.ProgramId ?? 0,
-                            IsActive = s.IsActive,
-                            Status = s.Status,
-                            CreatedAt = s.CreatedAt,
-                            StudentType = s.StudentType,
-                            TransportRequired = s.TransportRequired,
-                            HostelBlock = s.HostelBlock,
-                            BusRoute = s.BusRoute
-                        })
-                        .ToListAsync();
-                }
-            }
+            return paged.Items.ToList();
         }
 
 
