@@ -81,8 +81,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? FatherMobile { get; set; }
 
-        public string? FatherEmail { get; set; }
-
 
         // Mother - Optional
         public string? MotherName { get; set; }
@@ -90,8 +88,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public string? MotherOccupation { get; set; }
 
         public string? MotherMobile { get; set; }
-
-        public string? MotherEmail { get; set; }
 
 
         // Guardian - Optional

@@ -227,9 +227,6 @@ namespace CollegeManagement.API.Models
         [MaxLength(20)]
         public string? FatherMobile { get; set; }
 
-        [MaxLength(150)]
-        public string? FatherEmail { get; set; }
-
 
         [MaxLength(150)]
         public string? MotherName { get; set; }
@@ -239,9 +236,6 @@ namespace CollegeManagement.API.Models
 
         [MaxLength(20)]
         public string? MotherMobile { get; set; }
-
-        [MaxLength(150)]
-        public string? MotherEmail { get; set; }
 
 
         [MaxLength(150)]
