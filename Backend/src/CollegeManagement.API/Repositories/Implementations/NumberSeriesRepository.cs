@@ -149,5 +149,27 @@ namespace CollegeManagement.API.Repositories.Implementations
                 return existing;
             }
         }
+
+        public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode)
+        {
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                var sql = @"
+                    SELECT MAX(CurrentSequence) 
+                    FROM `NumberSeriesConfigurations` 
+                    WHERE `SeriesCode` = @BaseCode OR `SeriesCode` LIKE CONCAT(@BaseCode, '|%');";
+                
+                var maxSeq = await conn.ExecuteScalarAsync<int?>(sql, new { BaseCode = baseSeriesCode.Trim() });
+                return maxSeq ?? 0;
+            }
+            catch
+            {
+                var max = await _context.Set<NumberSeriesConfiguration>()
+                    .Where(n => n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
+                    .MaxAsync(n => (int?)n.CurrentSequence);
+                return max ?? 0;
+            }
+        }
     }
 }
