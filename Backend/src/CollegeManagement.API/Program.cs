@@ -237,6 +237,8 @@ builder.Services.AddScoped<IMarksService, MarksService>();
 builder.Services.AddScoped<IEvaluationService, EvaluationService>();
 builder.Services.AddScoped<IResultService, ResultService>();
 builder.Services.AddScoped<IPromotionService, PromotionService>();
+builder.Services.AddScoped<ICampusTransferRepository, CampusTransferRepository>();
+builder.Services.AddScoped<ICampusTransferService, CampusTransferService>();
 builder.Services.AddScoped<ITimetableService, TimetableService>();
 builder.Services.AddScoped<ITimetableSubstitutionService, TimetableSubstitutionService>();
 builder.Services.AddScoped<ITimetableExportService, TimetableExportService>();
@@ -518,3 +520,4 @@ app.MapControllers();
 #endregion
 
 app.Run();
+
