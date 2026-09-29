@@ -452,6 +452,51 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// Automatically generates and assigns examination schedules with halls and invigilators atomically.
+        /// </summary>
+        [HttpPost("{examinationId:int}/auto-schedule")]
+        [ProducesResponseType(typeof(IEnumerable<ExamScheduleResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<ExamScheduleResponse>>> AutoScheduleExamination(
+            [FromRoute] int examinationId,
+            [FromBody] AutoScheduleExaminationRequest request)
+        {
+            request.ExaminationId = examinationId;
+            request.CampusId = ResolveCampusId(request.CampusId);
+            _logger.LogInformation("Auto-scheduling Examination ID: {ExamId}, Group: {Group}, Mode: {Mode}",
+                examinationId, request.GroupId, request.ScheduleMode);
+
+            try
+            {
+                var result = await _examinationService.AutoScheduleExaminationAsync(examinationId, request);
+                return Ok(result);
+            }
+            catch (ValidationException vex)
+            {
+                _logger.LogWarning("Validation failure in auto-scheduling Examination {ExamId}: {Message}", examinationId, vex.Message);
+                return BadRequest(new
+                {
+                    statusCode = StatusCodes.Status400BadRequest,
+                    success = false,
+                    message = vex.Message,
+                    errors = new[] { vex.Message },
+                    examinationId = examinationId
+                });
+            }
+            catch (KeyNotFoundException knf)
+            {
+                return NotFound(new
+                {
+                    statusCode = StatusCodes.Status404NotFound,
+                    success = false,
+                    message = knf.Message
+                });
+            }
+        }
+
+        /// <summary>
         /// Retrieves exam schedules for an examination.
         /// </summary>
         [HttpGet("{examinationId:int}/schedules")]

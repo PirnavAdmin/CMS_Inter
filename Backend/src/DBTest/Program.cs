@@ -33,6 +33,12 @@ namespace DBTest
                 return;
             }
 
+            if (args.Length > 0 && args[0] == "--test-auto-schedule")
+            {
+                await TestAutoSchedule.RunAsync();
+                return;
+            }
+
             Console.OutputEncoding = Encoding.UTF8;
             Console.WriteLine("================================================================================");
             Console.WriteLine("          LIVE DATABASE INSPECTION & REPORTS CALCULATION VERIFICATION           ");
