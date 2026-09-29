@@ -135,7 +135,7 @@ namespace CollegeManagement.API.DTOs.Students
 
         public string? GuardianMobile { get; set; }
 
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         public decimal? AnnualIncome { get; set; }
 
@@ -219,4 +219,5 @@ namespace CollegeManagement.API.DTOs.Students
         public string? HallTicketNumber { get; set; }
     }
 }
+
 

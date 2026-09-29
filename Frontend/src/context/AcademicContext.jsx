@@ -21,21 +21,6 @@ const BOARD_CODE_TO_NAME = {
   "state board": "State Board of Intermediate Education",
 };
 
-const DEFAULT_BOARDS = [
-  { id: "1", boardId: 1, code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh", boardName: "Board of Intermediate Education, Andhra Pradesh" },
-  { id: "2", boardId: 2, code: "TGBIE", name: "Telangana Board of Intermediate Education", boardName: "Telangana Board of Intermediate Education" },
-  { id: "3", boardId: 3, code: "CBSE", name: "Central Board of Secondary Education", boardName: "Central Board of Secondary Education" },
-  { id: "4", boardId: 4, code: "CISCE", name: "Council for the Indian School Certificate Examinations", boardName: "Council for the Indian School Certificate Examinations" },
-  { id: "5", boardId: 5, code: "PUC-KA", name: "Karnataka Pre-University Education", boardName: "Karnataka Pre-University Education" },
-  { id: "6", boardId: 6, code: "DGE-TN", name: "Tamil Nadu State Board – Higher Secondary", boardName: "Tamil Nadu State Board – Higher Secondary" },
-];
-
-const DEFAULT_ACADEMIC_YEARS = [
-  { id: "1", code: "2026-2027", name: "2026-2027", label: "2026-2027" },
-  { id: "2", code: "2025-2026", name: "2025-2026", label: "2025-2026" },
-  { id: "3", code: "2024-2025", name: "2024-2025", label: "2024-2025" },
-];
-
 // Unwrap API response shapes
 const asList = (response) => {
   const unwrap = (value, depth = 0) => {
@@ -110,14 +95,14 @@ export function AcademicProvider({ children }) {
   const campusContext = useCampusContext();
   const selectedCampus = campusContext?.selectedCampus;
 
-  const [allBoards, setAllBoards] = useState(() => uniqueById(readStored("cms_cached_boards") || DEFAULT_BOARDS));
-  const [academicYears, setAcademicYears] = useState(() => uniqueById(readStored("cms_cached_academic_years") || DEFAULT_ACADEMIC_YEARS));
+  const [allBoards, setAllBoards] = useState(() => uniqueById(readStored("cms_cached_boards") || []));
+  const [academicYears, setAcademicYears] = useState(() => uniqueById(readStored("cms_cached_academic_years") || []));
   const [boardsLoading, setBoardsLoading] = useState(false);
   const [academicYearsLoading, setAcademicYearsLoading] = useState(false);
   const [boardsError, setBoardsError] = useState("");
   const [academicYearsError, setAcademicYearsError] = useState("");
-  const [selectedBoard, setSelectedBoardState] = useState(() => readStored(BOARD_STORAGE_KEY) || DEFAULT_BOARDS[0]);
-  const [selectedAcademicYear, setSelectedAcademicYearState] = useState(() => readStored(YEAR_STORAGE_KEY) || DEFAULT_ACADEMIC_YEARS[0]);
+  const [selectedBoard, setSelectedBoardState] = useState(() => readStored(BOARD_STORAGE_KEY) || null);
+  const [selectedAcademicYear, setSelectedAcademicYearState] = useState(() => readStored(YEAR_STORAGE_KEY) || null);
   const [refreshToken, setRefreshToken] = useState(0);
 
   const selectedBoardId = boardIdOf(selectedBoard);
@@ -173,8 +158,6 @@ export function AcademicProvider({ children }) {
 
     if (boardNames.length > 0) {
       return uniqueById(boardNames.map((name, index) => {
-        const foundFallback = DEFAULT_BOARDS.find((db) => normalize(db.name) === name || normalize(db.code) === name);
-        if (foundFallback) return foundFallback;
         return {
           id: String(index + 1),
           boardId: index + 1,
@@ -234,12 +217,12 @@ export function AcademicProvider({ children }) {
     apiClient.get(apiEndpoints.boards.list, { params: { Status: true, PageNumber: 1, PageSize: 100 } }).then((response) => {
       if (!active) return;
       const fetched = uniqueById(asList(response).filter(isActive).map(mapBoard));
-      const nextBoards = fetched.length ? fetched : DEFAULT_BOARDS;
+      const nextBoards = fetched.length ? fetched : uniqueById(readStored("cms_cached_boards") || []);
       setAllBoards(nextBoards);
       persist("cms_cached_boards", nextBoards);
     }).catch(() => {
       if (!active) return;
-      const fallbackBoards = uniqueById(readStored("cms_cached_boards") || DEFAULT_BOARDS);
+      const fallbackBoards = uniqueById(readStored("cms_cached_boards") || []);
       setAllBoards(fallbackBoards);
       setBoardsError("");
     }).finally(() => active && setBoardsLoading(false));
@@ -275,7 +258,7 @@ export function AcademicProvider({ children }) {
         const name = String(valueOf(year, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "code", "Code") || "");
         return (boardId == null || String(boardId) === String(effectiveBoardId)) && isActive(year) && !name.includes("2028") && !name.includes("2029");
       }).map(mapYear));
-      const nextYears = fetched.length ? fetched : DEFAULT_ACADEMIC_YEARS;
+      const nextYears = fetched.length ? fetched : uniqueById(readStored("cms_cached_academic_years") || []);
       setAcademicYears(nextYears);
       persist("cms_cached_academic_years", nextYears);
       setSelectedAcademicYearState((current) => {
@@ -285,7 +268,7 @@ export function AcademicProvider({ children }) {
       });
     }).catch(() => {
       if (!active) return;
-      const fallbackYears = uniqueById(readStored("cms_cached_academic_years") || DEFAULT_ACADEMIC_YEARS);
+      const fallbackYears = uniqueById(readStored("cms_cached_academic_years") || []);
       setAcademicYears(fallbackYears);
       setAcademicYearsError("");
       setSelectedAcademicYearState((current) => {

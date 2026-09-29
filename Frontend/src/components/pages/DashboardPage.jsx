@@ -503,7 +503,7 @@ export default function DashboardPage() {
       const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
       if (studentAttSeq.current === seq) {
         const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime || unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated || unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime;
         const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
         let formattedTime = "Not marked today";
         if (serverTime && serverTime !== "Not marked today") {
@@ -556,7 +556,7 @@ export default function DashboardPage() {
       const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
       if (staffAttSeq.current === seq) {
         const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime || unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated || unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime;
         const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
         let formattedTime = "Not marked today";
         if (serverTime && serverTime !== "Not marked today") {

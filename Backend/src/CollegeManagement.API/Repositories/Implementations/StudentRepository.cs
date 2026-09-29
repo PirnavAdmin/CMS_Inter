@@ -320,8 +320,8 @@ namespace CollegeManagement.API.Repositories
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile =
                             request.GuardianMobile,
-                        p_GuardianEmail =
-                            request.GuardianEmail,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail,
 
                         p_AnnualIncome =
                             request.AnnualIncome,
@@ -498,7 +498,7 @@ namespace CollegeManagement.API.Repositories
 
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile = request.GuardianMobile,
-                        p_GuardianEmail = request.GuardianEmail,
+                        p_ParentGuardianEmail = request.ParentGuardianEmail,
 
                         p_StudentType = request.StudentType,
                         p_TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
@@ -1207,7 +1207,7 @@ namespace CollegeManagement.API.Repositories
                     p_MotherMobile = request.MotherMobile,
                     p_MotherEmail = request.MotherEmail,
                     p_GuardianMobile = request.GuardianMobile,
-                    p_GuardianEmail = request.GuardianEmail
+                    p_ParentGuardianEmail = request.ParentGuardianEmail
                 },
                 commandType: CommandType.StoredProcedure);
 

@@ -66,7 +66,7 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.DownloadUrl, opt => opt.MapFrom(src => $"api/v1/examinations/halltickets/{src.StudentId}?examinationId={src.ExaminationId}"));
 
             CreateMap<InvigilatorAssignment, InvigilatorAssignmentResponse>()
-                .ForMember(dest => dest.InvigilatorName, opt => opt.MapFrom(src => src.Invigilator != null ? src.Invigilator.Email : string.Empty));
+                .ForMember(dest => dest.InvigilatorName, opt => opt.MapFrom(src => !string.IsNullOrWhiteSpace(src.InvigilatorName) ? src.InvigilatorName : (src.InvigilatorStaff != null ? $"{src.InvigilatorStaff.FirstName} {src.InvigilatorStaff.LastName}".Trim() : string.Empty)));
 
             #endregion
         }
