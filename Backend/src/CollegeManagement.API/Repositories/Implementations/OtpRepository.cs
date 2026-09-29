@@ -50,9 +50,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var conn = connection ?? Connection;
             return await conn.QueryFirstOrDefaultAsync<OTP>(
-                "SELECT * FROM OTPs WHERE OTPId = @OTPId LIMIT 1;",
-                new { OTPId = otpId },
-                transaction: transaction);
+                "sp_GetOtpById",
+                new { p_OtpId = otpId },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task UpdateAsync(OTP otp, IDbConnection? connection = null, IDbTransaction? transaction = null)

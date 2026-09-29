@@ -51,7 +51,7 @@ namespace CollegeManagement.API.DTOs.Students.Responses
         public string? MotherEmail { get; set; }
         public string? GuardianName { get; set; }
         public string? GuardianMobile { get; set; }
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         // Previous Education
         public string? PreviousSchool { get; set; }
@@ -78,5 +78,22 @@ namespace CollegeManagement.API.DTOs.Students.Responses
         public bool IsFirstLogin { get; set; }
         public string Status { get; set; } = string.Empty;
         public bool IsActive { get; set; }
+
+        // Residential & Transport Allocation
+        public string? StudentType { get; set; }
+        public bool? TransportRequired { get; set; }
+        public string? BusType { get; set; }
+        public int? RouteId { get; set; }
+        public string? BusRoute { get; set; }
+        public int? PickupPointId { get; set; }
+        public string? PickupPoint { get; set; }
+        public int? HostelId { get; set; }
+        public string? HostelBlock { get; set; }
+        public int? RoomId { get; set; }
+        public string? HostelRoom { get; set; }
+        public int? BedId { get; set; }
+        public string? HostelBed { get; set; }
+        public string? HallTicketNumber { get; set; }
     }
 }
+

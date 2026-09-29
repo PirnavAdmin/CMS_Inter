@@ -19,7 +19,12 @@ namespace CollegeManagement.API.Models
         [Required]
         public DateTime AttendanceDate { get; set; }
 
+        public int? CampusId { get; set; }
+
         public int? DepartmentId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
 
         [Required]
         public StaffType StaffType { get; set; }

@@ -9,6 +9,9 @@ public class FeeType
     [Required, MaxLength(30)] public string FeeTypeCode { get; set; } = string.Empty;
     [Required, MaxLength(100)] public string FeeTypeName { get; set; } = string.Empty;
     [Required, MaxLength(50)] public string Category { get; set; } = string.Empty;
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
@@ -18,6 +21,7 @@ public class FeeType
 public class FeeStructure
 {
     [Key] public int FeeStructureId { get; set; }
+    public int? CampusId { get; set; }
     [Required] public int BoardId { get; set; }
     [Required] public int AcademicYearId { get; set; }
     [Required] public int AcademicLevelId { get; set; }
@@ -29,6 +33,8 @@ public class FeeStructure
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 
+    [ForeignKey(nameof(CampusId))]
+    public Campus? Campus { get; set; }
     public Board? Board { get; set; }
     public AcademicYear? AcademicYear { get; set; }
     public AcademicLevel? AcademicLevel { get; set; }
@@ -60,6 +66,9 @@ public class Scholarship
     [Required, MaxLength(100)] public string ScholarshipName { get; set; } = string.Empty;
     [Required, MaxLength(20)] public string DiscountType { get; set; } = "Percentage";
     [Column(TypeName = "decimal(18,2)")] public decimal DiscountValue { get; set; }
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }

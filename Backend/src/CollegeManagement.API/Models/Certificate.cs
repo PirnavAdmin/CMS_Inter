@@ -68,9 +68,12 @@ public class Certificate
     [MaxLength(150)]
     public string? IssuedBy { get; set; }
 
-    public bool? IsVerified { get; set; }
-
     public bool IsActive { get; set; } = true;
+
+    public int? CampusId { get; set; }
+
+    [ForeignKey(nameof(CampusId))]
+    public Campus? Campus { get; set; }
 
     [ForeignKey(nameof(StudentId))]
     public Student? Student { get; set; }

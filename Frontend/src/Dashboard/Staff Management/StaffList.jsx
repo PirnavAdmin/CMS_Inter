@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import { SkeletonTable } from "@/components/common/Ui.jsx";
 import {
   FiPlus,
   FiDownload,
@@ -22,6 +23,7 @@ import {
   FiCalendar,
 } from "react-icons/fi";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import {
   getStaffPaged,
   getNextEmployeeId,
@@ -115,7 +117,13 @@ const NON_TEACHING_DESIGNATIONS = [
 ];
 
 const StaffList = () => {
-  const { selectedBoardId } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
+  const { selectedBoard, selectedBoardId } = useAcademicContext();
+
+  const activeCampusName = selectedCampus?.name || selectedCampus?.campusName || selectedCampus?.code || "";
+  const activeCampusId = selectedCampus?.id ?? selectedCampus?.campusId ?? null;
+  const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "";
+  const activeBoardId = selectedBoard?.id ?? selectedBoard?.boardId ?? selectedBoardId ?? null;
 
   // Active Tab: "Teaching" or "Non-Teaching"
   const [activeTab, setActiveTab] = useState("Teaching");
@@ -216,6 +224,8 @@ const StaffList = () => {
         pageNumber: currentPage,
         pageSize: pageSize,
         staffType: activeTab,
+        campusId: activeCampusId ? Number(activeCampusId) : undefined,
+        boardId: activeBoardId ? Number(activeBoardId) : undefined,
         searchTerm: searchTerm.trim() || undefined,
         department: selectedDepartment !== "All Departments" ? selectedDepartment : undefined,
         status: selectedStatus !== "All Status" ? selectedStatus : undefined,
@@ -234,11 +244,11 @@ const StaffList = () => {
     }
   };
 
-  // Refresh data when tab, filters, or page changes
+  // Refresh data when tab, filters, page, or navbar campus/board changes
   useEffect(() => {
     fetchStaffData();
     fetchLookups(activeTab);
-  }, [activeTab, currentPage, selectedDepartment, selectedStatus]);
+  }, [activeTab, currentPage, selectedDepartment, selectedStatus, activeCampusId, activeBoardId]);
 
   // Debounced search
   useEffect(() => {
@@ -415,6 +425,12 @@ const StaffList = () => {
         qualification: formData.qualification.trim(),
         designation: finalDesig,
         department: finalDept,
+        campusId: activeCampusId ? Number(activeCampusId) : undefined,
+        campusName: activeCampusName || undefined,
+        campus: activeCampusName || undefined,
+        boardId: activeBoardId ? Number(activeBoardId) : undefined,
+        boardName: activeBoardName || undefined,
+        board: activeBoardName || undefined,
         joiningDate: formData.joiningDate,
         experience: parseFloat(formData.experience) || 0.0,
         status: formData.status,
@@ -771,12 +787,7 @@ const StaffList = () => {
         {/* Table Content */}
         <div className="staff-table-wrapper">
           {loading ? (
-            <div className="staff-loading-state">
-              <div style={{ display: "inline-block", animation: "spin 1s linear infinite", marginBottom: "12px" }}>
-                <FiRefreshCw size={32} />
-              </div>
-              <p>Loading {activeTab} staff records...</p>
-            </div>
+            <SkeletonTable columns={7} rows={6} />
           ) : staffList.length === 0 ? (
             <div className="staff-empty-state">
               <FiUser className="staff-empty-icon" />
@@ -951,6 +962,30 @@ const StaffList = () => {
                 <FiX size={20} />
               </button>
             </div>
+
+            {/* Auto-mapping banner from navbar */}
+            {(activeCampusName || activeBoardName) && (
+              <div style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "10px",
+                alignItems: "center",
+                padding: "8px 16px",
+                margin: "0 24px 12px 24px",
+                borderRadius: "8px",
+                background: "var(--cms-subtle, #f0fdf4)",
+                border: "1px solid var(--cms-primary-soft, #bbf7d0)",
+                color: "var(--cms-primary, #15803d)",
+                fontSize: "12.5px",
+                fontWeight: "500",
+              }}>
+                {activeCampusName && <span>🏫 Campus: <strong>{activeCampusName}</strong></span>}
+                {activeBoardName && <span>📋 Board: <strong>{activeBoardName}</strong></span>}
+                <small style={{ color: "var(--cms-muted, #4b5563)", marginLeft: "auto" }}>
+                  (Auto-mapped from navbar)
+                </small>
+              </div>
+            )}
 
             {/* Stepper Bar */}
             <div className="staff-stepper-bar">

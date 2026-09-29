@@ -19,11 +19,7 @@ namespace CollegeManagement.API.DTOs.Staff
         }
 
         public string? SearchTerm { get; set; }
-        public string? Search
-        {
-            get => SearchTerm;
-            set => SearchTerm = value;
-        }
+        public int? CampusId { get; set; }
         public string? Department { get; set; }
         public int? DepartmentId { get; set; }
         public string? Designation { get; set; }
@@ -42,7 +38,6 @@ namespace CollegeManagement.API.DTOs.Staff
             set => StaffType = value;
         }
         public string? Status { get; set; }
-        public bool? IsDriver { get; set; }
         public string? ProfileStatus { get; set; }
         public string? PendingSubTab { get; set; } // "LinkSent", "InProgress", "NeedsCorrection", "Submitted"
         public string? SortBy { get; set; } = "Id";

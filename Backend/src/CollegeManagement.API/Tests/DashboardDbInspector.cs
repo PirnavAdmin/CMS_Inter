@@ -79,7 +79,31 @@ public class DashboardDbInspector
         try {
             var saCount = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM StudentAdmissions;");
             Console.WriteLine($"  Total records in StudentAdmissions table: {saCount}");
+
+            var saList = await conn.QueryAsync<dynamic>(@"
+                SELECT AdmissionId, AdmissionNo, FirstName, LastName, Status, IsApproved, IsRejected, BoardId, AcademicYearId, GroupId, IsActive, CreatedAt
+                FROM StudentAdmissions
+                WHERE (IsActive = 1 OR IsActive IS NULL) AND BoardId = 1 AND AcademicYearId = 9
+                ORDER BY AdmissionId;");
+            Console.WriteLine("\n  --- STUDENT ADMISSIONS (Board 1, AY 9) --- Count: " + saList.Count());
+            foreach (var sa in saList)
+            {
+                Console.WriteLine($"    AdmId: {sa.AdmissionId,-4} | No: {sa.AdmissionNo,-15} | Name: {sa.FirstName} {sa.LastName,-15} | Status: {sa.Status,-10} | Appr: {sa.IsApproved} | Rej: {sa.IsRejected} | Group: {sa.GroupId}");
+            }
         } catch (Exception ex) { Console.WriteLine("  StudentAdmissions table query error: " + ex.Message); }
+
+        try {
+            var sList = await conn.QueryAsync<dynamic>(@"
+                SELECT StudentId, AdmissionId, AdmissionNo, StudentName, Status, BoardId, AcademicYearId, GroupId, SectionId, IsActive, CreatedAt
+                FROM Students
+                WHERE (IsActive = 1 OR IsActive IS NULL) AND BoardId = 1 AND AcademicYearId = 9
+                ORDER BY StudentId;");
+            Console.WriteLine("\n  --- ENROLLED STUDENTS (Board 1, AY 9) --- Count: " + sList.Count());
+            foreach (var st in sList)
+            {
+                Console.WriteLine($"    StdId: {st.StudentId,-4} | AdmId: {st.AdmissionId,-4} | No: {st.AdmissionNo,-15} | Name: {st.StudentName,-20} | Status: {st.Status,-8} | Group: {st.GroupId} | Sec: {st.SectionId}");
+            }
+        } catch (Exception ex) { Console.WriteLine("  Students table query error: " + ex.Message); }
 
         // Monthly Admission Date Distribution in Students
         Console.WriteLine("\n--- MONTHLY ADMISSION TREND IN STUDENTS ---");
@@ -169,10 +193,10 @@ public class DashboardDbInspector
         await PrintColumns("Examinations");
         Console.WriteLine("\n--- EXAMINATIONS BREAKDOWN ---");
         var examRows = await conn.QueryAsync<dynamic>(@"
-            SELECT ExaminationId, ExamName, ExamCode, Status, StartDate, EndDate, IsActive, BoardId, AcademicYearId
+            SELECT ExamId, ExamName, ExamCode, Status, StartDate, EndDate, IsActive, BoardId, AcademicYearId
             FROM Examinations
             ORDER BY StartDate DESC;");
-        foreach (var ex in examRows) Console.WriteLine($"    ExamId: {ex.ExaminationId}, Name: '{ex.ExamName}', Code: '{ex.ExamCode}', Status: '{ex.Status}', Start: {ex.StartDate:yyyy-MM-dd}, End: {ex.EndDate:yyyy-MM-dd}, BoardId: {ex.BoardId}, AY: {ex.AcademicYearId}, IsActive: {ex.IsActive}");
+        foreach (var ex in examRows) Console.WriteLine($"    ExamId: {ex.ExamId}, Name: '{ex.ExamName}', Code: '{ex.ExamCode}', Status: '{ex.Status}', Start: {ex.StartDate:yyyy-MM-dd}, End: {ex.EndDate:yyyy-MM-dd}, BoardId: {ex.BoardId}, AY: {ex.AcademicYearId}, IsActive: {ex.IsActive}");
 
         Console.WriteLine("\n================================================================================");
         Console.WriteLine("                 FORENSIC INSPECTION COMPLETE");

@@ -66,6 +66,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public string FacultyType => StaffType;
         public int? DepartmentId { get; set; }
         public string Department { get; set; } = string.Empty;
+        public int? CampusId { get; set; }
+        public string? CampusName { get; set; }
         public int? BoardId { get; set; }
         public string? BoardCode { get; set; }
         public string? BoardName { get; set; }
@@ -117,6 +119,12 @@ namespace CollegeManagement.API.DTOs.Staff
         public Dictionary<string, object>? DepartmentSpecific { get; set; }
         public Dictionary<string, object>? CustomFields => DepartmentSpecific;
         public Dictionary<string, string>? Documents { get; set; }
+
+        // Transport / Driver Specific
+        public bool IsDriver { get; set; }
+        public string? DrivingLicenseNumber { get; set; }
+        public DateTime? DrivingLicenseExpiryDate { get; set; }
+        public int? DrivingExperienceYears { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }

@@ -58,9 +58,9 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync()
+        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync(int? campusId = null)
         {
-            var entities = await _repository.GetAllAsync();
+            var entities = await _repository.GetAllAsync(campusId);
             var dtos = new List<NumberSeriesResponseDto>();
 
             foreach (var entity in entities)
@@ -71,19 +71,19 @@ namespace CollegeManagement.API.Services.Implementations
             return dtos;
         }
 
-        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug)
+        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GetByCodeAsync(code);
+            var entity = await _repository.GetByCodeAsync(code, campusId);
             if (entity == null) return null;
 
             return MapToDto(entity);
         }
 
-        public async Task<NumberSeriesResponseDto?> UpdateSeriesAsync(string seriesCodeOrSlug, UpdateNumberSeriesDto dto)
+        public async Task<NumberSeriesResponseDto?> UpdateSeriesAsync(string seriesCodeOrSlug, UpdateNumberSeriesDto dto, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var existing = await _repository.GetByCodeAsync(code);
+            var existing = await _repository.GetByCodeAsync(code, campusId);
             if (existing == null) return null;
 
             var updated = await _repository.UpdateByCodeAsync(
@@ -92,17 +92,35 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.FormatPattern?.Trim() ?? string.Empty,
                 dto.NumberLength < 1 ? 4 : dto.NumberLength,
                 dto.StartNumber < 1 ? 1 : dto.StartNumber,
-                dto.Description?.Trim());
+                dto.Description?.Trim(),
+                campusId);
 
             if (updated == null) return null;
 
             return MapToDto(updated);
         }
 
-        public async Task<GenerateNumberSeriesResponseDto?> GenerateNextNumberAsync(string seriesCodeOrSlug, GenerateNumberSeriesRequestDto? context = null)
+        public async Task<GenerateNumberSeriesResponseDto?> GenerateNextNumberAsync(string seriesCodeOrSlug, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GenerateNextSequenceAsync(code);
+            var actualCode = code;
+
+            var contextParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(context?.Board))
+            {
+                contextParts.Add($"B:{context.Board.Trim().ToUpperInvariant()}");
+            }
+            if (!string.IsNullOrWhiteSpace(context?.AcademicYear))
+            {
+                contextParts.Add($"AY:{context.AcademicYear.Trim().ToUpperInvariant()}");
+            }
+
+            if (contextParts.Count > 0)
+            {
+                actualCode = $"{code}|{string.Join("_", contextParts)}";
+            }
+
+            var entity = await _repository.GenerateNextSequenceAsync(actualCode, campusId, baseSeriesCode: code);
             if (entity == null) return null;
 
             var generatedNumber = NumberSeriesPatternEvaluator.Evaluate(
@@ -123,25 +141,50 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null)
+        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null, int? campusId = null, string? board = null, string? academicYear = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GetByCodeAsync(code);
+            var actualCode = code;
 
-            var activePattern = pattern ?? entity?.FormatPattern ?? "{PREFIX}{SEQ}";
-            var activeLength = numberLength ?? entity?.NumberLength ?? 4;
-            var activePrefix = prefix ?? entity?.Prefix ?? "";
-            var curSeq = entity?.CurrentSequence ?? 0;
-            var startNum = entity?.StartNumber ?? 1;
+            var contextParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(board))
+            {
+                contextParts.Add($"B:{board.Trim().ToUpperInvariant()}");
+            }
+            if (!string.IsNullOrWhiteSpace(academicYear))
+            {
+                contextParts.Add($"AY:{academicYear.Trim().ToUpperInvariant()}");
+            }
+
+            if (contextParts.Count > 0)
+            {
+                actualCode = $"{code}|{string.Join("_", contextParts)}";
+            }
+
+            // Fallback to base code if specific entity is not found just to get settings, but we primarily want the current sequence of the specific context
+            var specificEntity = await _repository.GetByCodeAsync(actualCode, campusId);
+            var baseEntity = (actualCode == code) ? specificEntity : await _repository.GetByCodeAsync(code, campusId);
+            
+            var activeEntity = specificEntity ?? baseEntity;
+
+            var activePattern = pattern ?? activeEntity?.FormatPattern ?? "{PREFIX}{SEQ}";
+            var activeLength = numberLength ?? activeEntity?.NumberLength ?? 4;
+            var activePrefix = prefix ?? activeEntity?.Prefix ?? "";
+            
+            // If specific entity exists, use its sequence. If not, the sequence is 0.
+            var curSeq = specificEntity?.CurrentSequence ?? 0;
+            var startNum = baseEntity?.StartNumber ?? 1;
 
             var nextSeq = curSeq < startNum ? startNum : curSeq + 1;
+
+            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear };
 
             return NumberSeriesPatternEvaluator.Evaluate(
                 pattern: activePattern,
                 sequenceNumber: nextSeq,
                 numberLength: activeLength,
                 prefix: activePrefix,
-                context: null,
+                context: contextDto,
                 referenceDate: DateTime.Now,
                 isPreview: true);
         }

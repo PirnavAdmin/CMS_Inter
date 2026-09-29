@@ -42,6 +42,20 @@ namespace CollegeManagement.API.Controllers.V1
             _logger = logger;
         }
 
+        private int ResolveCampusId(int? explicitlyProvided = null)
+        {
+            if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
+                return explicitlyProvided.Value;
+
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
+                int.TryParse(headerVal, out var campusId) && campusId > 0)
+            {
+                return campusId;
+            }
+
+            return 1;
+        }
+
         // =========================================================================
         // 1. RESULT GENERATION & SECTION SUMMARIES (TAB 1)
         // =========================================================================
@@ -58,11 +72,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? groupId,
             [FromQuery] string? programId,
             [FromQuery] int examId,
-            [FromQuery] int? examinationId)
+            [FromQuery] int? examinationId,
+            [FromQuery] int? campusId = null)
         {
             int targetExamId = examId > 0 ? examId : (examinationId ?? 0);
             var readiness = await _resultService.GetResultReadinessAsync(
-                boardId, academicYearId, academicLevelId, groupId, programId, targetExamId);
+                boardId, academicYearId, academicLevelId, groupId, programId, targetExamId, campusId);
             return Ok(readiness);
         }
 
@@ -78,6 +93,11 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> GenerateResults([FromBody] ProcessResultRequestDto request)
         {
+            if (request == null || (request.ExamId <= 0 && request.ExaminationId <= 0))
+            {
+                return BadRequest(new { success = false, message = "Valid Examination ID is required." });
+            }
+            request.CampusId = ResolveCampusId(request.CampusId);
             _logger.LogInformation("Generating results for Exam: {ExamId}, Group: {GroupId}", request.ExamId, request.GroupId);
             try
             {
@@ -101,14 +121,20 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="sectionId">The Section ID to retrieve results for.</param>
         /// <param name="examId">The Examination ID.</param>
         /// <response code="200">Returns student marks, total marks, percentages, grades, PASS/FAIL results, and section ranks.</response>
+        /// <response code="400">Returned when sectionId or examId is invalid.</response>
         /// <response code="404">Returned when no results are found for the section.</response>
         [HttpGet("sections/{sectionId:int}")]
         [ProducesResponseType(typeof(SectionResultDetailDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GetSectionResultDetail(
             [FromRoute] int sectionId,
             [FromQuery] int examId)
         {
+            if (sectionId <= 0 || examId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Valid Section ID and Exam ID are required." });
+            }
             _logger.LogInformation("Retrieving section result detail for Section: {SectionId}, Exam: {ExamId}", sectionId, examId);
             var detail = await _resultService.GetSectionResultDetailAsync(sectionId, examId);
             if (detail == null)
@@ -166,6 +192,10 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         public async Task<IActionResult> PublishGroupResults([FromBody] ProcessResultRequestDto request)
         {
+            if (request != null)
+            {
+                request.CampusId = ResolveCampusId(request.CampusId);
+            }
             var effectiveExamId = request?.ExamId ?? request?.ExaminationId ?? 0;
             var effectiveGroupId = request?.GroupId ?? 0;
             var effectiveSectionId = request?.SectionId ?? 0;
@@ -194,6 +224,28 @@ namespace CollegeManagement.API.Controllers.V1
             return BadRequest(new { success = false, message = "Failed to publish results." });
         }
 
+        /// <summary>
+        /// Retrieves all previously published examination results grouped by exam and group with section breakdown.
+        /// </summary>
+        /// <param name="boardId">Optional Board ID filter.</param>
+        /// <param name="academicYearId">Optional Academic Year ID filter.</param>
+        /// <param name="groupId">Optional Group ID filter.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
+        /// <response code="200">Returns the list of published examination result groups.</response>
+        [HttpGet("published")]
+        [ProducesResponseType(typeof(IEnumerable<PublishedExamResultGroupDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetPublishedResults(
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null,
+            [FromQuery] int? groupId = null,
+            [FromQuery] int? campusId = null)
+        {
+            var targetCampusId = ResolveCampusId(campusId);
+            _logger.LogInformation("Retrieving published results. BoardId: {BoardId}, AcademicYearId: {AcademicYearId}, GroupId: {GroupId}, CampusId: {CampusId}", boardId, academicYearId, groupId, targetCampusId);
+            var results = await _resultService.GetPublishedResultsAsync(boardId, academicYearId, groupId, targetCampusId);
+            return Ok(results);
+        }
+
         // =========================================================================
         // 3. STUDENT MARKS MEMO (INDIVIDUAL VIEW)
         // =========================================================================
@@ -212,6 +264,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromRoute] int studentId,
             [FromQuery] int? examId = null)
         {
+            if (studentId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Valid Student ID is required." });
+            }
             _logger.LogInformation("Retrieving student marks memo for StudentId: {StudentId}, ExamId: {ExamId}", studentId, examId);
             var memo = await _resultService.GetStudentMemoAsync(studentId, examId);
             if (memo == null)
@@ -243,6 +299,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? groupId = null,
             [FromQuery] int? examId = null)
         {
+            if (studentId <= 0)
+            {
+                return BadRequest(new { success = false, message = "Valid Student ID is required." });
+            }
             _logger.LogInformation("Retrieving student result. StudentId: {StudentId}, ExamId: {ExamId}", studentId, examId);
             var result = await _resultService.GetStudentMemoAsync(studentId, examId);
             if (result != null) return Ok(result);
@@ -272,6 +332,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="sectionId">Optional Section ID filter.</param>
         /// <param name="examId">Optional Examination ID filter.</param>
         /// <param name="search">Optional student name or roll number search string.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns list of ranked students ordered by total score descending.</response>
         [HttpGet("rank-list")]
         [ProducesResponseType(typeof(List<RankListDto>), StatusCodes.Status200OK)]
@@ -283,11 +344,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? programId = null,
             [FromQuery] int? sectionId = null,
             [FromQuery] int? examId = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Retrieving competition rank list for Exam: {ExamId}, Group: {GroupId}, Section: {SectionId}", examId, groupId, sectionId);
+            _logger.LogInformation("Retrieving competition rank list for Exam: {ExamId}, Group: {GroupId}, Section: {SectionId}, CampusId: {CampusId}", examId, groupId, sectionId, campusId);
             var ranks = await _resultService.GetCompetitionRankListAsync(
-                boardId, academicYearId, academicLevelId, groupId, programId, sectionId, examId, search);
+                boardId, academicYearId, academicLevelId, groupId, programId, sectionId, examId, search, campusId);
 
             return Ok(ranks);
         }
@@ -305,6 +367,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="groupId">Optional Group ID filter.</param>
         /// <param name="programId">Optional Program ID filter.</param>
         /// <param name="examId">Optional Examination ID filter.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns KPI metrics, failed student details, and subject statistics.</response>
         [HttpGet("analytics")]
         [ProducesResponseType(typeof(ResultAnalyticsDto), StatusCodes.Status200OK)]
@@ -314,11 +377,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicLevelId = null,
             [FromQuery] int? groupId = null,
             [FromQuery] string? programId = null,
-            [FromQuery] int? examId = null)
+            [FromQuery] int? examId = null,
+            [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Retrieving results analytics for Exam: {ExamId}, Group: {GroupId}", examId, groupId);
+            _logger.LogInformation("Retrieving results analytics for Exam: {ExamId}, Group: {GroupId}, CampusId: {CampusId}", examId, groupId, campusId);
             var analytics = await _resultService.GetResultAnalyticsAsync(
-                boardId, academicYearId, academicLevelId, groupId, programId, examId);
+                boardId, academicYearId, academicLevelId, groupId, programId, examId, campusId);
 
             return Ok(analytics);
         }
@@ -336,16 +400,18 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? groupId = null,
             [FromQuery] string? programId = null,
             [FromQuery] int? examId = null,
-            [FromQuery] int? examinationId = null)
+            [FromQuery] int? examinationId = null,
+            [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Retrieving failed students. BoardId: {BoardId}, ExamId: {ExamId}", boardId, examId ?? examinationId);
+            _logger.LogInformation("Retrieving failed students. BoardId: {BoardId}, ExamId: {ExamId}, CampusId: {CampusId}", boardId, examId ?? examinationId, campusId);
             var result = await _resultService.GetFailedStudentsAsync(
                 boardId,
                 academicYearId,
                 academicLevelId,
                 groupId,
                 programId,
-                examId ?? examinationId);
+                examId ?? examinationId,
+                campusId);
             return Ok(result);
         }
 
@@ -361,15 +427,17 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicLevelId = null,
             [FromQuery] int? groupId = null,
             [FromQuery] int? examId = null,
-            [FromQuery] int? examinationId = null)
+            [FromQuery] int? examinationId = null,
+            [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Retrieving result statistics. BoardId: {BoardId}, AcademicYearId: {AcademicYearId}", boardId, academicYearId);
+            _logger.LogInformation("Retrieving result statistics. BoardId: {BoardId}, AcademicYearId: {AcademicYearId}, CampusId: {CampusId}", boardId, academicYearId, campusId);
             var statistics = await _resultService.GetResultStatisticsAsync(
                 boardId,
                 academicYearId,
                 academicLevelId,
                 groupId,
-                examId ?? examinationId);
+                examId ?? examinationId,
+                campusId);
             return Ok(statistics);
         }
 
@@ -389,11 +457,13 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int academicYearId,
             [FromQuery] int academicLevelId,
             [FromQuery] int groupId,
-            [FromQuery] int examId)
+            [FromQuery] int examId,
+            [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Retrieving result analysis for ExamId: {ExamId}", examId);
+            var targetCampusId = ResolveCampusId(campusId);
+            _logger.LogInformation("Retrieving result analysis for ExamId: {ExamId}, CampusId: {CampusId}", examId, targetCampusId);
             var analysis = await _resultService.GetResultAnalysisAsync(
-                boardId, academicYearId, academicLevelId, groupId, examId);
+                boardId, academicYearId, academicLevelId, groupId, examId, targetCampusId);
             return Ok(analysis);
         }
 
@@ -409,14 +479,16 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicLevelId = null,
             [FromQuery] int? groupId = null,
             [FromQuery] int? examId = null,
-            [FromQuery] int? examinationId = null)
+            [FromQuery] int? examinationId = null,
+            [FromQuery] int? campusId = null)
         {
             var dashboard = await _resultService.GetResultDashboardAsync(
                 boardId,
                 academicYearId,
                 academicLevelId,
                 groupId,
-                examId ?? examinationId);
+                examId ?? examinationId,
+                campusId);
             return Ok(dashboard);
         }
 
@@ -434,6 +506,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="programId">Optional Program ID.</param>
         /// <param name="sectionId">Optional Section ID.</param>
         /// <param name="examId">Optional Examination ID.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns the generated Excel file byte stream.</response>
         [HttpGet("export-excel")]
         [Produces("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
@@ -445,11 +518,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? groupId = null,
             [FromQuery] string? programId = null,
             [FromQuery] int? sectionId = null,
-            [FromQuery] int? examId = null)
+            [FromQuery] int? examId = null,
+            [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Exporting results to Excel. ExamId: {ExamId}, GroupId: {GroupId}", examId, groupId);
+            _logger.LogInformation("Exporting results to Excel. ExamId: {ExamId}, GroupId: {GroupId}, CampusId: {CampusId}", examId, groupId, campusId);
             var ranks = await _resultService.GetCompetitionRankListAsync(
-                boardId, academicYearId, academicLevelId, groupId, programId, sectionId, examId);
+                boardId, academicYearId, academicLevelId, groupId, programId, sectionId, examId, null, campusId);
 
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Results");
@@ -502,6 +576,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="programId">Optional Program ID.</param>
         /// <param name="sectionId">Optional Section ID.</param>
         /// <param name="examId">Optional Examination ID.</param>
+        /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns the generated PDF file stream.</response>
         [HttpGet("download-pdf")]
         [Produces("application/pdf")]
@@ -513,11 +588,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? groupId = null,
             [FromQuery] string? programId = null,
             [FromQuery] int? sectionId = null,
-            [FromQuery] int? examId = null)
+            [FromQuery] int? examId = null,
+            [FromQuery] int? campusId = null)
         {
-            _logger.LogInformation("Downloading results PDF for ExamId: {ExamId}", examId);
+            _logger.LogInformation("Downloading results PDF for ExamId: {ExamId}, CampusId: {CampusId}", examId, campusId);
             var ranks = await _resultService.GetCompetitionRankListAsync(
-                boardId, academicYearId, academicLevelId, groupId, programId, sectionId, examId);
+                boardId, academicYearId, academicLevelId, groupId, programId, sectionId, examId, null, campusId);
 
             var document = Document.Create(container =>
             {
@@ -710,6 +786,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(GetResultsResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetResults([FromQuery] GetResultsRequestDto request)
         {
+            request.CampusId = ResolveCampusId(request.CampusId);
             var result = await _resultService.GetResultsAsync(request);
             return Ok(result);
         }

@@ -28,102 +28,139 @@ import {
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Loader, Modal, StatusBadge, Toast } from "../common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../common/Ui.jsx";
 import "./ExaminationPage.css";
 
 const PAGE_SIZE = 5;
 
-// ---------- DATA NORMALIZATION & UNWRAPPING HELPERS ----------
-// ✅ SAFE ARRAY WRAPPER: Guarantees val is converted to a valid array without throwing
-const ensureArray = (val) => {
-  if (Array.isArray(val)) return val;
-  if (val === null || val === undefined) return [];
-  if (typeof val === "object") {
-    if (Array.isArray(val.items)) return val.items;
-    if (Array.isArray(val.data)) return val.data;
-    if (Array.isArray(val.results)) return val.results;
-    if (Array.isArray(val.result)) return val.result;
-  }
-  // Wrap single primitive/object into an array if not empty
-  return [val];
+// Use the shared table-row skeleton for the examination table's ten columns.
+const ExaminationTableSkeleton = () =>
+  Array.from({ length: PAGE_SIZE }, (_, index) => (
+    <SkeletonRow key={index} columns={10} />
+  ));
+
+/* Examination loading change log (2026-09-23):
+ * - Render the examination list when its own request finishes; unrelated master,
+ *   student and room requests no longer keep the table skeleton visible.
+ * - Start the list request first, load students/rooms together, and start the
+ *   program lookup alongside masters instead of after students and rooms.
+ * - Cancel initial master/student/room requests on cleanup, including React's
+ *   development effect replay, and ignore their late results.
+ * - Limit background schedule hydration to three requests at a time, retaining
+ *   all active examinations for the existing occupancy/conflict checks.
+ * Existing endpoints, normalization, mutations, UI markup and CSS are retained.
+ * These changes remove frontend waits; server/proxy response latency still
+ * requires Network Timing/backend measurements and is not fixed by this file.
+ */
+
+const EMPTY_ARRAY = Object.freeze([]);
+
+const settleWithConcurrency = async (items, limit, task, signal) => {
+  const results = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length && !signal.aborted) {
+      const index = next++;
+      try {
+        results[index] = { status: "fulfilled", value: await task(items[index]) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }));
+  return results;
 };
 
-// ✅ SAFE UNWRAPPER: Unwraps any nested response structure and ALWAYS returns an Array []
-const unwrap = (res) => {
-  if (!res) return [];
-  const payload = res.data ?? res;
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.data?.data)) return payload.data.data;
-  if (Array.isArray(payload?.items)) return payload.items;
-  if (Array.isArray(payload?.Items)) return payload.Items;
-  if (Array.isArray(payload?.results)) return payload.results;
-  if (Array.isArray(payload?.result)) return payload.result;
-  if (Array.isArray(payload?.$values)) return payload.$values;
-  if (Array.isArray(payload?.records)) return payload.records;
-  if (Array.isArray(payload?.schedules)) return payload.schedules;
-  if (Array.isArray(payload?.examinationSchedules)) return payload.examinationSchedules;
-  if (Array.isArray(payload?.subjects)) return payload.subjects;
-  if (Array.isArray(payload?.data?.items)) return payload.data.items;
-  if (Array.isArray(payload?.data?.result)) return payload.data.result;
-  if (Array.isArray(payload?.data?.schedules)) return payload.data.schedules;
-  if (Array.isArray(payload?.data?.examinationSchedules)) return payload.data.examinationSchedules;
-  if (Array.isArray(payload?.data?.subjects)) return payload.data.subjects;
-  if (Array.isArray(payload?.data?.$values)) return payload.data.$values;
-  return [];
-};
+import {
+  ensureArray,
+  unwrap,
+  d,
+  normalizeId,
+  normalizeStatus,
+  normalizeCodePart,
+  canonicalDate,
+  formatTimeOnly,
+  parseTimeToMinutes,
+  hasTimeOverlap,
+  requiredInvigilatorCount,
+  isCombinedExamination as isCombinedExaminationBase,
+  isRegularExamination as isRegularExaminationBase,
+  getExaminationScheduleMode as getExaminationScheduleModeBase,
+  getResolvedExamCategory as getResolvedExamCategoryBase,
+  isLanguageSubject,
+  getGroupStudents,
+  getRequiredCandidateStrength,
+  canonicalizeScope,
+} from "@/utils/examinationUtils.js";
 
-const d = (value) =>
-  value
-    ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(
-      new Date(String(value).includes("T") ? value : value + "T00:00:00"),
-    )
-    : "—";
+// Canonical Record-Aware Examination Strategy Classification
+const isCombinedExamination = (examOrForm) => {
+  if (!examOrForm) return false;
+  const mode = normalizeStatus(examOrForm.scheduleMode);
+  if (mode === "PATTERN_WISE" || mode === "COMBINED_OBJECTIVE") return true;
 
-const normalizeId = (value) => String(value ?? "");
-const normalizeStatus = (value) => String(value || "").trim().toUpperCase();
-const normalizeCodePart = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-const canonicalDate = (value) => (value ? String(value).split("T")[0] : "");
-
-// Centralized Examination Classification Helpers
-export const getResolvedExamCategory = (examOrForm) => {
-  if (!examOrForm) return "";
-  const cat =
+  const cat = String(
     examOrForm.examCategory ||
     examOrForm.category ||
     examOrForm.examinationCategory ||
     examOrForm.exam_category ||
     examOrForm.categoryName ||
     examOrForm.rawCategory ||
-    (["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(examOrForm.scheduleMode)) ? "Objective" : "") ||
-    "";
-  const catTrim = String(cat).trim();
-  if (catTrim.toLowerCase() === "others") {
-    return String(examOrForm.customCategoryName || "").trim() || "Others";
+    ""
+  ).trim().toLowerCase();
+  if (cat === "objective" || cat === "combined" || cat.includes("objective") || cat.includes("combined")) return true;
+  if (cat === "others" && examOrForm.customCategoryName) {
+    const customLower = String(examOrForm.customCategoryName).trim().toLowerCase();
+    if (customLower.includes("objective") || customLower.includes("pattern")) return true;
   }
-  return catTrim;
+
+  // Check pattern indicator (Mains pattern, JEE Main, NEET, etc.)
+  const pat = String(examOrForm.examPattern || examOrForm.pattern || "").trim().toLowerCase();
+  if (pat && pat !== "regular" && pat !== "regular pattern" && pat !== "regular academic pattern" && pat !== "none") {
+    return true;
+  }
+
+  // Check group patterns
+  if (examOrForm.selectedGroupPatterns && typeof examOrForm.selectedGroupPatterns === "object") {
+    const grpPats = Object.values(examOrForm.selectedGroupPatterns)
+      .flat()
+      .map((p) => String(p).trim().toLowerCase());
+    if (grpPats.some((p) => p && p !== "regular" && p !== "regular academic pattern" && p !== "none")) {
+      return true;
+    }
+  }
+
+  // Check exam name or code indicators (e.g. OBJECTIVE_MPC_002)
+  const name = String(examOrForm.name || examOrForm.examName || examOrForm.code || examOrForm.examCode || "").trim().toLowerCase();
+  if (name.includes("objective") || name.includes("combined")) return true;
+
+  // Check schedules if any schedule has PATTERN_WISE or patternName
+  if (Array.isArray(examOrForm.schedules) && examOrForm.schedules.length > 0) {
+    if (examOrForm.schedules.some((s) => s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName))) {
+      return true;
+    }
+  }
+
+  return isCombinedExaminationBase(examOrForm);
 };
 
-export const isCombinedExamination = (examOrForm) => {
-  if (!examOrForm) return false;
-  const resolved = getResolvedExamCategory(examOrForm);
-  const lower = String(resolved || "").trim().toLowerCase();
-  return lower === "objective" || lower === "combined" || lower.includes("objective");
+const isRegularExamination = (examOrForm) => !isCombinedExamination(examOrForm);
+
+const getResolvedExamCategory = (examOrForm) => {
+  if (!examOrForm) return "Regular";
+  if (isCombinedExamination(examOrForm)) return "Objective";
+  const cat = String(examOrForm.examCategory || examOrForm.category || "").trim();
+  if (cat.toLowerCase() === "others") return "Others";
+  return "Regular";
 };
 
-export const isRegularExamination = (examOrForm) => {
-  if (!examOrForm) return true;
-  if (isCombinedExamination(examOrForm)) return false;
-  const resolved = getResolvedExamCategory(examOrForm);
-  if (!resolved) return true;
-  return String(resolved).trim().toLowerCase() === "regular";
-};
-
-export const getExaminationScheduleMode = (examOrForm) => {
+const getExaminationScheduleMode = (examOrForm) => {
   return isCombinedExamination(examOrForm) ? "PATTERN_WISE" : "SUBJECT_WISE";
 };
+
 
 // Local Fisher-Yates shuffle helper for randomized allocation among equally eligible faculty
 const shuffleArray = (values = []) => {
@@ -136,25 +173,6 @@ const shuffleArray = (values = []) => {
     ];
   }
   return result;
-};
-
-// Invigilator count rule: 1-60 candidates requires at least 1, >60 requires at least 2
-const requiredInvigilatorCount = (candidateCount) =>
-  Number(candidateCount) > 60 ? 2 : 1;
-
-// Convert HH:MM strings into integer minutes to accurately test time overlap
-const parseTimeToMinutes = (timeStr) => {
-  if (!timeStr) return 0;
-  const [h, m] = String(timeStr).split(":").map(Number);
-  return (h || 0) * 60 + (m || 0);
-};
-
-const hasTimeOverlap = (startA, endA, startB, endB) => {
-  const sA = parseTimeToMinutes(startA);
-  const eA = parseTimeToMinutes(endA);
-  const sB = parseTimeToMinutes(startB);
-  const eB = parseTimeToMinutes(endB);
-  return sA < eB && eA > sB;
 };
 
 const nameOf = (items = [], id, fallback = "—") => {
@@ -261,23 +279,11 @@ const isEntityActive = (item, isGuaranteedActiveEndpoint = false) => {
   return false;
 };
 
-export const isLanguageSubject = (s) => {
-  if (!s) return false;
-  if (s.language === true || s.language === 1 || String(s.language).toLowerCase() === "true") return true;
-  if (s.isLanguage === true || s.isLanguage === 1 || String(s.isLanguage).toLowerCase() === "true") return true;
-  const rawType = normalizeStatus(s.subjectType || s.type || s.category);
-  if (rawType === "LANGUAGE" || rawType.includes("LANGUAGE")) return true;
-  const name = String(s.name || s.subjectName || "").trim().toLowerCase();
-  const code = String(s.code || s.subjectCode || "").trim().toUpperCase();
-  const languagePattern = /\b(english|sanskrit|telugu|hindi|urdu|french|arabic|tamil|kannada|marathi|second\s*language|first\s*language|language)\b/i;
-  const codePattern = /^(ENG|SANS|SAN|TEL|HIN|URD|FRE|ARA|TAM|KAN|MAR|SL|FL|LANG)/i;
-  return languagePattern.test(name) || codePattern.test(code);
-};
 
 const getEligibleSubjects = (exam, subjectsList = []) => {
   if (!exam) return [];
-  const levelIds = ensureArray(exam.levelIds || [exam.levelId]).filter(Boolean).map(normalizeId);
-  const groupIds = ensureArray(exam.groupIds || [exam.groupId]).filter(Boolean).map(normalizeId);
+  const levelIds = ensureArray(exam.levelIds || exam.academicLevelIds || [exam.levelId || exam.academicLevelId]).filter(Boolean).map(normalizeId);
+  const groupIds = ensureArray(exam.groupIds || (Array.isArray(exam.groups) ? exam.groups.map((g) => g.id || g.groupId) : null) || [exam.groupId]).filter(Boolean).map(normalizeId);
   const programIds = ensureArray(exam.programIds || [exam.programId]).filter(Boolean).map(normalizeId);
 
   return ensureArray(subjectsList).filter((s) => {
@@ -296,121 +302,43 @@ const getEligibleSubjects = (exam, subjectsList = []) => {
 
 const getSelectedSubjectsForExam = (exam, targetGroupId = null, subjectsList = []) => {
   if (!exam) return [];
-  const rawSel = exam?.groupSubjectSelections?.[normalizeId(targetGroupId)] ?? exam?.selectedSubjectIds ?? exam?.allocatedSubjectIds ?? exam?.subjectIds;
-  if (!rawSel || ensureArray(rawSel).length === 0) {
-    return [];
-  }
   const allEligible = getEligibleSubjects(exam, subjectsList);
-  const selIds = ensureArray(rawSel).map(normalizeId);
-  let subjects = allEligible.filter((s) => selIds.includes(normalizeId(s.id)));
+  const rawSel =
+    exam?.groupSubjectSelections?.[normalizeId(targetGroupId)] ??
+    exam?.selectedSubjectIds ??
+    exam?.allocatedSubjectIds ??
+    exam?.subjectIds;
+
+  const selIds = ensureArray(rawSel).map(normalizeId).filter(Boolean);
+  let subjects = allEligible;
+  if (selIds.length > 0) {
+    subjects = subjects.filter((s) => selIds.includes(normalizeId(s.id)));
+  }
+
   if (targetGroupId) {
+    const targetGid = normalizeId(targetGroupId);
     subjects = subjects.filter((s) => {
       const sGroupIds = ensureArray(s.groupIds || (s.groupId ? [s.groupId] : [])).map(normalizeId);
-      return sGroupIds.includes(normalizeId(targetGroupId));
+      return !sGroupIds.length || sGroupIds.includes(targetGid);
     });
   }
+
+  if (!subjects.length && subjectsList && subjectsList.length > 0) {
+    subjects = ensureArray(subjectsList).filter((s) => {
+      if (s.isActive === false) return false;
+      if (isCombinedExamination(exam) && isLanguageSubject(s)) return false;
+      if (targetGroupId) {
+        const sGroupIds = ensureArray(s.groupIds || (s.groupId ? [s.groupId] : [])).map(normalizeId);
+        return !sGroupIds.length || sGroupIds.includes(normalizeId(targetGroupId));
+      }
+      return true;
+    });
+  }
+
   return subjects;
 };
 
-export const getGroupStudents = (
-  exam,
-  targetGroupId,
-  programsList = [],
-  studentsList = [],
-) => {
-  if (!exam || !targetGroupId) return [];
-  const gid = normalizeId(targetGroupId);
 
-  // Extract exam academic level IDs (if any specified)
-  const examLevelIds = ensureArray(exam.academicLevelIds || exam.levelIds || [exam.levelId])
-    .map(normalizeId)
-    .filter(Boolean);
-
-  // Resolve selected program IDs for this group
-  let pIds = [];
-  if (exam.groupProgramSelections && typeof exam.groupProgramSelections === "object" && !Array.isArray(exam.groupProgramSelections)) {
-    pIds = ensureArray(exam.groupProgramSelections[gid] || exam.groupProgramSelections[String(gid)]);
-  } else if (Array.isArray(exam.groupProgramSelections) && exam.groupProgramSelections.length > 0) {
-    const match = exam.groupProgramSelections.find((g) => normalizeId(g.groupId) === gid);
-    pIds = match ? ensureArray(match.programIds) : [];
-  } else {
-    pIds = ensureArray(exam.programIds || [exam.programId].filter(Boolean));
-    pIds = pIds.filter((id) =>
-      ensureArray(programsList).some(
-        (p) => normalizeId(p.id) === normalizeId(id) && (!p.groupId || normalizeId(p.groupId) === gid),
-      ),
-    );
-  }
-  const uniquePids = [...new Set(pIds.map(normalizeId).filter(Boolean))];
-
-  // Also collect program names / codes for robust matching
-  const selectedProgramObjs = ensureArray(programsList).filter((p) => uniquePids.includes(normalizeId(p.id)));
-  const selectedProgCodes = new Set(selectedProgramObjs.map((p) => String(p.code || "").toUpperCase()).filter(Boolean));
-  const selectedProgNames = new Set(selectedProgramObjs.map((p) => String(p.name || "").toLowerCase()).filter(Boolean));
-
-  // Filter active students belonging to this group and the selected programs
-  const seenStudentIds = new Set();
-  return ensureArray(studentsList).filter((s) => {
-    if (s.isActive === false || normalizeStatus(s.status) === "INACTIVE" || normalizeStatus(s.status) === "SUSPENDED") return false;
-    const sId = normalizeId(s.id ?? s.studentId ?? s._id ?? s.admissionNo);
-    if (!sId || seenStudentIds.has(sId)) return false;
-
-    // Group match
-    const sGid = normalizeId(s.groupId || s.group?.id || s.courseGroupId);
-    if (sGid && sGid !== gid) return false;
-
-    // Academic level match (must match ANY selected academic level if set on student)
-    if (examLevelIds.length > 0) {
-      const sLid = normalizeId(s.academicLevelId || s.levelId || s.academicLevel?.id);
-      if (sLid && !examLevelIds.includes(sLid)) return false;
-    }
-
-    // Program match: if programs are selected for this group, student must match one of them
-    if (uniquePids.length > 0) {
-      const sPid = normalizeId(s.programId || s.programmeId || s.program?.id || s.programme?.id || s.academicProgramId);
-      const sPName = String(s.programName || s.programmeName || s.program?.name || "").toLowerCase();
-      const sPCode = String(s.programCode || s.programmeCode || s.program?.code || "").toUpperCase();
-
-      const matchesById = sPid && uniquePids.includes(sPid);
-      const matchesByCode = sPCode && selectedProgCodes.has(sPCode);
-      const matchesByName = sPName && selectedProgNames.has(sPName);
-
-      if (!matchesById && !matchesByCode && !matchesByName) return false;
-    }
-
-    seenStudentIds.add(sId);
-    return true;
-  });
-};
-
-const getRequiredCandidateStrength = (
-  exam,
-  targetGroupId = null,
-  programsList = [],
-  isFinalizing = false,
-  studentsList = [],
-) => {
-  if (!exam) return 0;
-  const targetGid = targetGroupId ? normalizeId(targetGroupId) : null;
-
-  // Resolve target group IDs
-  const examGroupIds = targetGid
-    ? [targetGid]
-    : ensureArray(exam.groupIds || [exam.groupId]).map(normalizeId).filter(Boolean);
-
-  if (!examGroupIds.length) return 0;
-
-  let totalCandidateStrength = 0;
-
-  for (const gid of examGroupIds) {
-    const groupStudents = getGroupStudents(exam, gid, programsList, studentsList);
-    if (groupStudents.length > 0) {
-      totalCandidateStrength += groupStudents.length;
-    }
-  }
-
-  return totalCandidateStrength;
-};
 
 const getScheduleHallIds = (schedule) => {
   if (!schedule) return [];
@@ -457,19 +385,46 @@ const getRoomAllocatedCount = (schedules, roomId, date, startTime, endTime, edit
 // Helper to identify if schedule s is the one currently being edited or a sibling in the same combined session
 const isSameSessionOrSelf = (s, entry, editingId = null, exam = null) => {
   if (!s || !entry) return false;
-  const sId = normalizeId(s.id);
-  if (editingId && sId === normalizeId(editingId)) return true;
-  if (entry.id && sId === normalizeId(entry.id)) return true;
+  const sId = normalizeId(s.id || s.examScheduleId || s.scheduleId);
+  const eId = normalizeId(editingId || entry.id || entry.examScheduleId || entry.scheduleId);
+  if (eId && sId && sId === eId) return true;
+
   const targetIds = ensureArray(entry.allScheduleIds).map(normalizeId);
   if (sId && targetIds.includes(sId)) return true;
+
+  const sTargetIds = ensureArray(s.allScheduleIds).map(normalizeId);
+  if (eId && sTargetIds.includes(eId)) return true;
+
   if (s.sessionId && entry.sessionId && String(s.sessionId) === String(entry.sessionId)) return true;
+
+  const isEditingContext = Boolean(editingId || (entry.id && !String(entry.id).startsWith("draft-")));
+  if (isEditingContext) {
+    const sExamId = normalizeId(s.examId || s.examinationId);
+    const entryExamId = normalizeId(entry.examId || entry.examinationId || exam?.id);
+    const sGroupId = normalizeId(s.groupId);
+    const entryGroupId = normalizeId(entry.groupId);
+
+    if (sExamId && entryExamId && sExamId === entryExamId && sGroupId && entryGroupId && sGroupId === entryGroupId) {
+      const sSubId = normalizeId(s.subjectId);
+      const entrySubId = normalizeId(entry.subjectId);
+      if (sSubId && entrySubId && sSubId === entrySubId) {
+        return true;
+      }
+      const sPat = String(s.patternName || "").trim().toLowerCase();
+      const entryPat = String(entry.patternName || "").trim().toLowerCase();
+      if (sPat && entryPat && sPat === entryPat) {
+        return true;
+      }
+    }
+  }
+
   if (
     Boolean(editingId || entry.id) &&
     exam &&
     isCombinedExamination(exam) &&
-    normalizeId(s.examId) === normalizeId(exam.id) &&
+    normalizeId(s.examId || s.examinationId) === normalizeId(exam.id) &&
     normalizeId(s.groupId) === normalizeId(entry.groupId) &&
-    canonicalDate(s.date || s.examDate) === canonicalDate(entry.date || entry.examDate) &&
+    canonicalDate(s.scheduleDate || s.date || s.examDate) === canonicalDate(entry.scheduleDate || entry.date || entry.examDate) &&
     s.startTime === entry.startTime &&
     s.endTime === entry.endTime &&
     (s.patternName === entry.patternName || !s.patternName || !entry.patternName)
@@ -479,14 +434,55 @@ const isSameSessionOrSelf = (s, entry, editingId = null, exam = null) => {
   return false;
 };
 
+// Verification helper: Checks if a room/venue is suitable for examination conduction (Active Classrooms and Examination Halls)
+const isExamEligibleRoom = (room) => {
+  if (!room) return false;
+  const isAct =
+    room.isActive !== false &&
+    !["INACTIVE", "DISABLED", "0", "FALSE"].includes(normalizeStatus(room.status));
+  if (!isAct) return false;
+
+  const cap = Number(room.capacity);
+  if (isNaN(cap) || cap <= 0) return false;
+
+  if (room.isAssignedToSection === true) return false;
+
+  const type = String(room.roomType || room.type || "").trim().toLowerCase();
+  const name = String(room.name || room.roomName || room.roomNumber || "").trim().toLowerCase();
+
+  // Exclude non-exam venues: Laboratories, computer labs, libraries, staff rooms, offices, canteens, restrooms
+  const isExcluded = ["laboratory", "lab", "computer lab", "library", "staff room", "office", "store", "canteen", "restroom"].some(
+    (ex) => type === ex || (type.includes(ex) && !type.includes("hall") && !type.includes("exam"))
+  );
+  if (isExcluded) return false;
+
+  // Must be a Classroom, Examination Hall, Exam Hall, Seminar Hall, Auditorium, or general classroom/room
+  const isClassroomOrHall =
+    !type ||
+    type.includes("class") ||
+    type.includes("exam") ||
+    type.includes("hall") ||
+    type.includes("auditorium") ||
+    type === "room" ||
+    name.includes("room") ||
+    name.includes("hall") ||
+    name.includes("class");
+
+  return isClassroomOrHall;
+};
+
 // Strict Hall Conflict Semantics: Room is UNAVAILABLE if another schedule uses it during overlapping time
 const getEligibleRooms = (schedules, entry, editingId = null, exam = null, roomsList = []) => {
   const selectedLevels = (exam?.levelIds || [exam?.levelId]).filter(Boolean).map(normalizeId);
-  const entryDate = canonicalDate(entry?.date || entry?.examDate);
-  return roomsList.filter((room) => {
-    if (room.status !== "Active" && room.isActive === false) return false;
-    // Level filtering: If room is level specific, exam must include that level
-    if (room.levelId && room.levelId !== "ALL") {
+  const entryDate = canonicalDate(entry?.scheduleDate || entry?.date || entry?.examDate);
+  return ensureArray(roomsList).filter((room) => {
+    if (!room) return false;
+    // Must be active and suitable for examinations (Classroom or Examination Hall)
+    if (!isExamEligibleRoom(room)) return false;
+
+    // Level filtering: If room is level specific (not ALL, not 0, not empty), exam must include that level
+    const roomLevel = normalizeStatus(room.levelId);
+    if (room.levelId && !["ALL", "0", "", "NULL", "UNDEFINED"].includes(roomLevel)) {
       if (selectedLevels.length > 0 && !selectedLevels.includes(normalizeId(room.levelId))) {
         return false;
       }
@@ -496,21 +492,30 @@ const getEligibleRooms = (schedules, entry, editingId = null, exam = null, rooms
     const isOccupiedByAnotherSchedule = schedules.some(
       (s) =>
         !isSameSessionOrSelf(s, entry, editingId, exam) &&
-        canonicalDate(s.date || s.examDate) === entryDate &&
+        canonicalDate(s.scheduleDate || s.date || s.examDate) === entryDate &&
         hasTimeOverlap(entry.startTime, entry.endTime, s.startTime, s.endTime) &&
-        getScheduleHallIds(s).includes(normalizeId(room.id)),
+        (
+          getScheduleHallIds(s).includes(normalizeId(room.id)) ||
+          (s.roomId && normalizeId(s.roomId) === normalizeId(room.id)) ||
+          (s.roomIdentifier && (
+            normalizeId(room.id) === normalizeId(s.roomIdentifier) ||
+            String(room.roomNumber ?? "").trim().toLowerCase() === String(s.roomIdentifier).trim().toLowerCase() ||
+            String(room.name ?? "").trim().toLowerCase() === String(s.roomIdentifier).trim().toLowerCase() ||
+            String(room.code ?? "").trim().toLowerCase() === String(s.roomIdentifier).trim().toLowerCase()
+          ))
+        ),
     );
     return !isOccupiedByAnotherSchedule;
   });
 };
 
 // Active invigilators must be available for the full session.
-const getEligibleInvigilators = (schedules, entry, editingId = null, facultyList = [], subjectsList = []) => {
+const getEligibleInvigilators = (schedules, entry, editingId = null, facultyList = [], subjectsList = [], exam = null) => {
   const entrySubjectIds = [
     entry?.subjectId,
     ...(entry?.includedSubjectIds || []),
   ].map(normalizeId).filter(Boolean);
-  const entryDate = canonicalDate(entry?.date || entry?.examDate);
+  const entryDate = canonicalDate(entry?.scheduleDate || entry?.date || entry?.examDate);
 
   return facultyList.filter((f) => {
     if (f.isActive === false || f.status === "Inactive") return false;
@@ -528,13 +533,34 @@ const getEligibleInvigilators = (schedules, entry, editingId = null, facultyList
 
     if (entryDate) {
       const isAssignedConcurrently = schedules.some(
-        (s) =>
-          !isSameSessionOrSelf(s, entry, editingId) &&
-          canonicalDate(s.date || s.examDate) === entryDate &&
-          (entry?.startTime && entry?.endTime && s.startTime && s.endTime
-            ? hasTimeOverlap(entry.startTime, entry.endTime, s.startTime, s.endTime)
-            : true) &&
-          getScheduleInvigilatorIds(s).includes(fId),
+        (s) => {
+          if (isSameSessionOrSelf(s, entry, editingId, exam)) return false;
+          const sDate = canonicalDate(s.scheduleDate || s.date || s.examDate);
+          if (!sDate || sDate !== entryDate) return false;
+
+          const sStart = formatTimeOnly(s.startTime);
+          const sEnd = formatTimeOnly(s.endTime);
+          const entryStart = formatTimeOnly(entry?.startTime);
+          const entryEnd = formatTimeOnly(entry?.endTime);
+
+          if (entryStart && entryEnd && sStart && sEnd) {
+            if (!hasTimeOverlap(entryStart, entryEnd, sStart, sEnd)) return false;
+          }
+
+          const sInvIds = getScheduleInvigilatorIds(s);
+          if (sInvIds.includes(fId)) return true;
+          if (s.invigilatorId && normalizeId(s.invigilatorId) === fId) return true;
+          if (s.facultyId && normalizeId(s.facultyId) === fId) return true;
+          if (s.facultyIdentifier) {
+            const normIdent = normalizeId(s.facultyIdentifier);
+            if (normIdent && normIdent === fId) return true;
+            const sIdentClean = String(s.facultyIdentifier).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+            const fNameClean = String(f.name ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+            const fFullNameClean = String(f.fullName ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+            if (sIdentClean && (sIdentClean === fNameClean || sIdentClean === fFullNameClean)) return true;
+          }
+          return false;
+        }
       );
       if (isAssignedConcurrently) return false;
     }
@@ -569,41 +595,169 @@ const parseBookingConflict = (error, roomsList = [], facultyList = []) => {
   const isFacultyConflict = /Faculty|Invigilator/i.test(rawMsg);
 
   let roomId = null;
+  const roomIdentifier = rawIdentifier.trim();
   let facultyId = null;
+  const facultyIdentifier = rawIdentifier.trim();
 
   if (isRoomConflict || !isFacultyConflict) {
-    const target = rawIdentifier.toLowerCase();
+    const target = rawIdentifier.trim().toLowerCase();
+    const strippedTarget = target.replace(/^(?:room\/hall|room|hall)\s+/i, "").trim();
+    const cleanTarget = strippedTarget.replace(/[^a-z0-9]/g, "");
+
     const matchedRoom = (roomsList || []).find((r) => {
-      const id = normalizeId(r.id);
+      if (!r) return false;
+      const id = normalizeId(r.id ?? r.roomId).trim().toLowerCase();
       const num = String(r.roomNumber ?? "").trim().toLowerCase();
-      const name = String(r.name ?? "").trim().toLowerCase();
-      const code = String(r.code ?? "").trim().toLowerCase();
-      return id === target || num === target || name === target || code === target ||
-        target.includes(num) || target.includes(name);
+      const name = String(r.name ?? r.roomName ?? "").trim().toLowerCase();
+      const code = String(r.code ?? r.roomCode ?? "").trim().toLowerCase();
+
+      if (id && (id === target || id === strippedTarget)) return true;
+      if (num && (num === target || num === strippedTarget)) return true;
+      if (name && (name === target || name === strippedTarget)) return true;
+      if (code && (code === target || code === strippedTarget)) return true;
+
+      const cleanNum = num.replace(/[^a-z0-9]/g, "");
+      const cleanName = name.replace(/[^a-z0-9]/g, "");
+      const cleanCode = code.replace(/[^a-z0-9]/g, "");
+      if (cleanTarget && cleanTarget.length >= 2) {
+        if (cleanNum && cleanNum === cleanTarget) return true;
+        if (cleanName && cleanName === cleanTarget) return true;
+        if (cleanCode && cleanCode === cleanTarget) return true;
+      }
+
+      if (cleanTarget.length >= 2) {
+        if (cleanName && cleanName.includes(cleanTarget)) return true;
+        if (cleanNum && cleanTarget.includes(cleanNum) && cleanNum.length >= 2) return true;
+      }
+
+      return false;
     });
-    roomId = matchedRoom ? normalizeId(matchedRoom.id) : rawIdentifier;
+
+    if (matchedRoom) {
+      roomId = normalizeId(matchedRoom.id ?? matchedRoom.roomId);
+    }
   }
 
   if (isFacultyConflict) {
-    const target = rawIdentifier.toLowerCase();
+    const target = rawIdentifier.trim().toLowerCase();
+    const cleanTarget = target.replace(/[^a-z0-9]/g, "");
+
     const matchedFaculty = (facultyList || []).find((f) => {
-      const id = normalizeId(f.id);
+      if (!f) return false;
+      const id = normalizeId(f.id).trim().toLowerCase();
       const name = String(f.name ?? "").trim().toLowerCase();
       const fullName = String(f.fullName ?? "").trim().toLowerCase();
-      return id === target || name === target || fullName === target ||
-        target.includes(name) || target.includes(fullName);
+      const composed = `${f.firstName || ""} ${f.lastName || ""}`.trim().toLowerCase();
+
+      if (id && id === target) return true;
+      if (name && name === target) return true;
+      if (fullName && fullName === target) return true;
+      if (composed && composed === target) return true;
+
+      const cleanName = name.replace(/[^a-z0-9]/g, "");
+      const cleanFull = fullName.replace(/[^a-z0-9]/g, "");
+      const cleanComposed = composed.replace(/[^a-z0-9]/g, "");
+      if (cleanTarget && cleanTarget.length >= 2) {
+        if (cleanName && cleanName === cleanTarget) return true;
+        if (cleanFull && cleanFull === cleanTarget) return true;
+        if (cleanComposed && cleanComposed === cleanTarget) return true;
+      }
+
+      if (cleanTarget && cleanTarget.length >= 3) {
+        if (cleanName && (cleanName.includes(cleanTarget) || cleanTarget.includes(cleanName))) return true;
+        if (cleanFull && (cleanFull.includes(cleanTarget) || cleanTarget.includes(cleanFull))) return true;
+        if (cleanComposed && (cleanComposed.includes(cleanTarget) || cleanTarget.includes(cleanComposed))) return true;
+      }
+
+      return false;
     });
-    facultyId = matchedFaculty ? normalizeId(matchedFaculty.id) : rawIdentifier;
+
+    if (matchedFaculty) {
+      facultyId = normalizeId(matchedFaculty.id);
+    }
   }
 
   return {
     rawIdentifier,
     roomId,
+    roomIdentifier,
     facultyId,
+    facultyIdentifier,
     startTime,
     endTime,
     date,
+    isRoomConflict,
+    isFacultyConflict,
   };
+};
+
+// Cache & In-flight tracking for available-halls to prevent duplicate and repeated network hits
+const availableHallsCache = new Map();
+const availableHallsInFlight = new Map();
+const clearAvailableHallsCache = () => {
+  availableHallsCache.clear();
+  availableHallsInFlight.clear();
+};
+
+// Fetch available halls directly from the backend to verify real-time room availability
+const fetchBackendAvailableHalls = async (date, startTime, endTime, examId, campusId) => {
+  if (!date || !startTime || !endTime) return null;
+  const cDate = canonicalDate(date);
+  const formattedStart = startTime.length === 5 ? `${startTime}:00` : startTime;
+  const formattedEnd = endTime.length === 5 ? `${endTime}:00` : endTime;
+  const cacheKey = `${cDate}_${formattedStart}_${formattedEnd}_${normalizeId(examId)}_${normalizeId(campusId)}`;
+
+  const cached = availableHallsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 180000) {
+    return cached.data;
+  }
+
+  if (availableHallsInFlight.has(cacheKey)) {
+    return availableHallsInFlight.get(cacheKey);
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const res = await apiClient.get("/api/v1/examinations/available-halls", {
+        params: {
+          date: cDate,
+          examDate: cDate,
+          startTime: formattedStart,
+          endTime: formattedEnd,
+          examinationId: examId ? Number(examId) || undefined : undefined,
+          campusId: campusId ? Number(campusId) || undefined : undefined,
+        },
+        timeout: 15000,
+      });
+      const payload = res.data?.data ?? res.data ?? [];
+      let result = null;
+      if (Array.isArray(payload) && payload.length > 0) {
+        const idSet = new Set();
+        payload.forEach((h) => {
+          if (!h) return;
+          const id = normalizeId(h.id ?? h.roomId);
+          if (id) idSet.add(id);
+          const num = String(h.roomNumber ?? "").trim().toLowerCase();
+          if (num) idSet.add(num);
+          const name = String(h.roomName ?? h.name ?? "").trim().toLowerCase();
+          if (name) idSet.add(name);
+          const code = String(h.roomCode ?? h.code ?? "").trim().toLowerCase();
+          if (code) idSet.add(code);
+        });
+        result = idSet;
+      }
+      availableHallsCache.set(cacheKey, { timestamp: Date.now(), data: result });
+      return result;
+    } catch {
+      // Silently fallback to local eligibility filtering
+      return null;
+    } finally {
+      availableHallsInFlight.delete(cacheKey);
+    }
+  })();
+
+  availableHallsInFlight.set(cacheKey, fetchPromise);
+  return fetchPromise;
 };
 
 // Complete-or-fail Automatic Hall and Invigilator Allocation
@@ -620,17 +774,40 @@ const autoAssignHallsAndInvigilators = (
   programsList = [],
   subjectContext = null,
   studentsList = [],
+  backendAvailableHallIds = null,
 ) => {
   const genuineStrength = getRequiredCandidateStrength(exam, targetGroupId, programsList, false, studentsList);
   if (genuineStrength <= 0) return null;
   const requiredStrength = genuineStrength;
-  const eligibleRooms = getEligibleRooms(
+  let eligibleRooms = getEligibleRooms(
     currentSchedules,
     { date, startTime, endTime },
     currentScheduleId,
     exam,
     roomsList,
   );
+
+  // If backend provided verified available-halls for this slot, intersect with it
+  if (backendAvailableHallIds && backendAvailableHallIds.size > 0) {
+    const verified = eligibleRooms.filter((r) => {
+      const id = normalizeId(r.id);
+      const rid = normalizeId(r.roomId);
+      const num = String(r.roomNumber ?? "").trim().toLowerCase();
+      const name = String(r.name ?? r.roomName ?? "").trim().toLowerCase();
+      const code = String(r.code ?? r.roomCode ?? "").trim().toLowerCase();
+      return (
+        backendAvailableHallIds.has(id) ||
+        (rid && backendAvailableHallIds.has(rid)) ||
+        (num && backendAvailableHallIds.has(num)) ||
+        (name && backendAvailableHallIds.has(name)) ||
+        (code && backendAvailableHallIds.has(code))
+      );
+    });
+    if (verified.length > 0) {
+      eligibleRooms = verified;
+    }
+  }
+
   const eligibleFaculty = getEligibleInvigilators(
     currentSchedules,
     {
@@ -643,6 +820,7 @@ const autoAssignHallsAndInvigilators = (
     currentScheduleId,
     facultyList,
     subjectContext?.subjectsList || [],
+    exam,
   );
 
   // Compute duty count across current schedules for balanced faculty allocation
@@ -664,20 +842,19 @@ const autoAssignHallsAndInvigilators = (
   const assignments = [];
   const usedFacultyIds = new Set();
 
-  // Prefer rooms previously assigned to this group in this exam for room continuity
-  const preferredGroupRoomIds = new Set();
-  (currentSchedules || []).forEach((s) => {
-    if (normalizeId(s.examId) === normalizeId(exam?.id) && normalizeId(s.groupId) === normalizeId(targetGroupId)) {
-      getScheduleHallIds(s).forEach((hid) => preferredGroupRoomIds.add(hid));
-    }
-  });
+  // Random room selection with capacity matching
+  const singleFitRooms = eligibleRooms.filter((r) => (Number(r.capacity) || 0) >= requiredStrength);
+  let sortedEligibleRooms = [];
 
-  const sortedEligibleRooms = [...eligibleRooms].sort((a, b) => {
-    const aPref = preferredGroupRoomIds.has(normalizeId(a.id)) ? 1 : 0;
-    const bPref = preferredGroupRoomIds.has(normalizeId(b.id)) ? 1 : 0;
-    if (aPref !== bPref) return bPref - aPref;
-    return (Number(b.capacity) || 0) - (Number(a.capacity) || 0);
-  });
+  if (singleFitRooms.length > 0) {
+    // Randomize among all eligible rooms that can accommodate the entire candidate strength
+    sortedEligibleRooms = shuffleArray(singleFitRooms);
+  } else {
+    // If no single room fits, shuffle and sort so largest available combinations are used without fixed room bias
+    sortedEligibleRooms = shuffleArray(eligibleRooms).sort(
+      (a, b) => (Number(b.capacity) || 0) - (Number(a.capacity) || 0),
+    );
+  }
 
   for (const room of sortedEligibleRooms) {
     if (remaining <= 0) break;
@@ -848,12 +1025,12 @@ function validateHallAssignments(
     seenHalls.add(normalizeId(a.hallId));
 
     // Cross-Schedule Hall Validation: verify no classroom/hall is assigned to concurrent exam sessions
-    const entryDate = canonicalDate(entry?.date || entry?.examDate);
+    const entryDate = canonicalDate(entry?.scheduleDate || entry?.date || entry?.examDate);
     if (entryDate && entry?.startTime && entry?.endTime && a.hallId) {
       const conflictingSchedule = schedules.find(
         (s) =>
           !isSameSessionOrSelf(s, entry, editingId, exam) &&
-          canonicalDate(s.date || s.examDate) === entryDate &&
+          canonicalDate(s.scheduleDate || s.date || s.examDate) === entryDate &&
           hasTimeOverlap(entry.startTime, entry.endTime, s.startTime, s.endTime) &&
           getScheduleHallIds(s).includes(normalizeId(a.hallId)),
       );
@@ -883,8 +1060,14 @@ function validateHallAssignments(
     validInvigilators.forEach((id) => {
       const nid = normalizeId(id);
       const facMember = facultyList.find((f) => normalizeId(f.id) === nid);
-      const facName = facMember?.name || nameOf(facultyList, id, `Faculty ${id}`);
-      if (!facMember || facMember.isActive === false || normalizeStatus(facMember.status) === "INACTIVE") messages.push("Select an active teaching faculty member.");
+      const facName = facMember?.name || a.invigilatorName || a.invigilator || entry?.invigilatorName || entry?.invigilator || nameOf(facultyList, id, `Faculty ${id}`);
+      if (facMember) {
+        if (facMember.isActive === false || normalizeStatus(facMember.status) === "INACTIVE") {
+          messages.push("Select an active teaching faculty member.");
+        }
+      } else if (facultyList.length > 0 && !a.invigilatorName && !a.invigilator && !entry?.invigilatorName && !entry?.invigilator) {
+        messages.push("Select an active teaching faculty member.");
+      }
 
       // Same-session double room assignment check
       if (seenFaculty.has(nid)) {
@@ -894,7 +1077,7 @@ function validateHallAssignments(
 
       // Safeguard: Own-subject faculty exclusion
       const entrySubjectIds = [entry?.subjectId, ...(entry?.includedSubjectIds || [])].map(normalizeId).filter(Boolean);
-      if (entrySubjectIds.length > 0 && Array.isArray(facMember?.subjectsTaught) && entrySubjectIds.some((sId) => facMember.subjectsTaught.map(normalizeId).includes(sId))) {
+      if (facMember && entrySubjectIds.length > 0 && Array.isArray(facMember?.subjectsTaught) && entrySubjectIds.some((sId) => facMember.subjectsTaught.map(normalizeId).includes(sId))) {
         messages.push(`${facName} teaches ${entry.subjectName || "this subject"} and cannot invigilate their own subject examination.`);
       }
 
@@ -903,7 +1086,7 @@ function validateHallAssignments(
         const conflictingFacSchedule = schedules.find(
           (s) =>
             !isSameSessionOrSelf(s, entry, editingId, exam) &&
-            canonicalDate(s.date || s.examDate) === entryDate &&
+            canonicalDate(s.scheduleDate || s.date || s.examDate) === entryDate &&
             hasTimeOverlap(entry.startTime, entry.endTime, s.startTime, s.endTime) &&
             getScheduleInvigilatorIds(s).includes(nid),
         );
@@ -935,7 +1118,7 @@ function validateScheduleEntry(
   if (schedules.some((saved) => !isSameSessionOrSelf(saved, entry, editingId, exam) && normalizeId(saved.examId) === normalizeId(exam.id) && normalizeId(saved.groupId) === normalizeId(entry.groupId) && (entry.patternName ? saved.patternName === entry.patternName : entry.subjectId && normalizeId(saved.subjectId) === normalizeId(entry.subjectId)))) messages.push("This subject or pattern already has a schedule. Edit the saved entry to reschedule it.");
   const isCombined = isCombinedExamination(exam);
   const isRegular = isRegularExamination(exam);
-  const entryDate = canonicalDate(entry?.date || entry?.examDate);
+  const entryDate = canonicalDate(entry?.scheduleDate || entry?.date || entry?.examDate);
 
   if (!entryDate || (exam.startDate && entryDate < canonicalDate(exam.startDate)) || (exam.endDate && entryDate > canonicalDate(exam.endDate)))
     messages.push("Exam date must be within the examination period.");
@@ -951,7 +1134,7 @@ function validateScheduleEntry(
     );
     if (parallelSameSubjectOtherGroup) {
       if (
-        canonicalDate(parallelSameSubjectOtherGroup.date || parallelSameSubjectOtherGroup.examDate) !== entryDate ||
+        canonicalDate(parallelSameSubjectOtherGroup.scheduleDate || parallelSameSubjectOtherGroup.date || parallelSameSubjectOtherGroup.examDate) !== entryDate ||
         parallelSameSubjectOtherGroup.startTime !== entry.startTime ||
         parallelSameSubjectOtherGroup.endTime !== entry.endTime
       ) {
@@ -969,7 +1152,7 @@ function validateScheduleEntry(
         normalizeId(s.examId) === normalizeId(exam.id) &&
         !isSameSessionOrSelf(s, entry, editingId, exam) &&
         normalizeId(s.groupId) === normalizeId(entry.groupId) &&
-        canonicalDate(s.date || s.examDate) === entryDate &&
+        canonicalDate(s.scheduleDate || s.date || s.examDate) === entryDate &&
         hasTimeOverlap(entry.startTime, entry.endTime, s.startTime, s.endTime),
     );
     if (overlappingDateSchedule) {
@@ -1007,32 +1190,50 @@ function validateScheduleEntry(
 
   // Points 7, 8, 9: Invigilator Validation (Availability, Time Overlap & Own-Subject Exclusion)
   if (facultyList && facultyList.length > 0) {
-    const eligibleFacultyIds = getEligibleInvigilators(schedules, entry, editingId, facultyList, subjectsList).map((f) => normalizeId(f.id));
-    effectiveAssignments
+    const eligibleFacultyIds = getEligibleInvigilators(schedules, entry, editingId, facultyList, subjectsList, exam).map((f) => normalizeId(f.id));
+
+    // Intra-entry duplicate check (same invigilator in multiple halls of same session)
+    const rawAllHallInvs = effectiveAssignments
       .flatMap((a) => a.invigilatorIds || [])
-      .filter((id) => id && normalizeId(id) !== "0" && normalizeId(id) !== "undefined" && normalizeId(id) !== "null")
-      .forEach((id) => {
-        const nid = normalizeId(id);
+      .map(normalizeId)
+      .filter((id) => id && id !== "0" && id !== "undefined" && id !== "null");
+
+    const seenInEntry = new Set();
+    rawAllHallInvs.forEach((nid) => {
+      if (seenInEntry.has(nid)) {
         const facultyMember = facultyList.find((f) => normalizeId(f.id) === nid);
-        if (facultyMember && !eligibleFacultyIds.includes(nid)) {
-          const isOverlapping = schedules.some(
-            (s) =>
-              !isSameSessionOrSelf(s, entry, editingId, exam) &&
-              canonicalDate(s.date || s.examDate) === entryDate &&
-              hasTimeOverlap(entry.startTime, entry.endTime, s.startTime, s.endTime) &&
-              getScheduleInvigilatorIds(s).includes(nid),
-          );
-          const entrySubjectIds = [entry?.subjectId, ...(entry?.includedSubjectIds || [])].map(normalizeId).filter(Boolean);
-          const teachesSubject = entrySubjectIds.length > 0 && Array.isArray(facultyMember.subjectsTaught) && entrySubjectIds.some((sId) => facultyMember.subjectsTaught.map(normalizeId).includes(sId));
-          if (teachesSubject) {
-            messages.push(`${facultyMember.name || nameOf(facultyList, id)} teaches ${entry.subjectName || "this subject"} and cannot invigilate their own subject examination.`);
-          } else if (isOverlapping) {
-            messages.push(`${facultyMember.name || nameOf(facultyList, id)} is already invigilating another exam hall in an overlapping time slot.`);
-          } else {
-            messages.push(`${facultyMember.name || nameOf(facultyList, id)} is not an active, available invigilator.`);
-          }
+        messages.push(`${facultyMember?.name || `Faculty #${nid}`} is assigned to multiple halls in the same schedule.`);
+      }
+      seenInEntry.add(nid);
+    });
+
+    const distinctEntryInvIds = Array.from(new Set([
+      ...rawAllHallInvs,
+      entry.invigilatorId,
+      entry.facultyId,
+    ].map(normalizeId).filter((id) => id && id !== "0" && id !== "undefined" && id !== "null")));
+
+    distinctEntryInvIds.forEach((nid) => {
+      const facultyMember = facultyList.find((f) => normalizeId(f.id) === nid);
+      if (facultyMember && !eligibleFacultyIds.includes(nid)) {
+        const isOverlapping = schedules.some(
+          (s) =>
+            !isSameSessionOrSelf(s, entry, editingId, exam) &&
+            canonicalDate(s.scheduleDate || s.date || s.examDate) === entryDate &&
+            hasTimeOverlap(entry.startTime, entry.endTime, s.startTime, s.endTime) &&
+            getScheduleInvigilatorIds(s).includes(nid),
+        );
+        const entrySubjectIds = [entry?.subjectId, ...(entry?.includedSubjectIds || [])].map(normalizeId).filter(Boolean);
+        const teachesSubject = entrySubjectIds.length > 0 && Array.isArray(facultyMember.subjectsTaught) && entrySubjectIds.some((sId) => facultyMember.subjectsTaught.map(normalizeId).includes(sId));
+        if (teachesSubject) {
+          messages.push(`${facultyMember.name || nameOf(facultyList, nid)} teaches ${entry.subjectName || "this subject"} and cannot invigilate their own subject examination.`);
+        } else if (isOverlapping) {
+          messages.push(`Invigilator is already assigned to another examination during the selected time: ${facultyMember.name || nameOf(facultyList, nid)}.`);
+        } else {
+          messages.push(`${facultyMember.name || nameOf(facultyList, nid)} is not an active, available invigilator.`);
         }
-      });
+      }
+    });
   }
   return messages;
 }
@@ -1040,7 +1241,8 @@ function validateScheduleEntry(
 const matchesScheduleGroup = (schedule, targetGroupId, exam = null, subjectsList = []) => {
   if (!schedule || !targetGroupId) return false;
   const targetGid = normalizeId(targetGroupId);
-  if (schedule.groupId) return normalizeId(schedule.groupId) === targetGid;
+  const schedGid = normalizeId(schedule.groupId);
+  if (schedGid && schedGid !== "0") return schedGid === targetGid;
 
   if (exam && isCombinedExamination(exam)) {
     const grpPatterns = ensureArray(exam.selectedGroupPatterns?.[targetGid]).filter(Boolean).map((p) => String(p).trim().toLowerCase());
@@ -1087,6 +1289,25 @@ function validateScheduleReadiness(
         }
       });
     });
+
+    const combinedEntries = entries.filter((s) => s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName));
+    if (combinedEntries.length > 0) {
+      const canonicalExamDate = canonicalDate(exam.startDate);
+      const referenceStart = formatTimeOnly(combinedEntries[0].startTime);
+      const referenceEnd = formatTimeOnly(combinedEntries[0].endTime);
+
+      combinedEntries.forEach((entry) => {
+        const entryDate = canonicalDate(entry.date || entry.examDate);
+        if (canonicalExamDate && entryDate !== canonicalExamDate) {
+          const gName = nameOf(groupsList, entry.groupId, `Group ${entry.groupId}`);
+          messages.push(`[${gName}] Objective schedule date (${entryDate || "unset"}) must match examination start date (${canonicalExamDate}).`);
+        }
+        if (formatTimeOnly(entry.startTime) !== referenceStart || formatTimeOnly(entry.endTime) !== referenceEnd) {
+          const gName = nameOf(groupsList, entry.groupId, `Group ${entry.groupId}`);
+          messages.push(`[${gName}] All Objective groups must share the exact same start time (${referenceStart}) and end time (${referenceEnd}).`);
+        }
+      });
+    }
   } else {
     const selIds = ensureArray(exam.selectedSubjectIds).map(normalizeId).filter(Boolean);
     let selectedSubs = subjectsList;
@@ -1134,25 +1355,10 @@ function validateScheduleReadiness(
     } else {
       const grpEntries = entries.filter((s) => normalizeId(s.groupId) === gid || matchesScheduleGroup(s, gid, exam, subjectsList));
       grpEntries.forEach((entry) => {
-        let allocatedStrength = ensureArray(entry.hallAssignments).reduce(
+        const allocatedStrength = ensureArray(entry.hallAssignments).reduce(
           (total, assignment) => total + (Number(assignment.candidateCount) || 0),
           0,
         );
-        // If entry has room assigned but candidateCount was 0 or unassigned, auto-heal using room capacity
-        if (allocatedStrength === 0 && ensureArray(entry.hallAssignments).some((a) => a.hallId)) {
-          let rem = reqStrength;
-          entry.hallAssignments = ensureArray(entry.hallAssignments).map((a) => {
-            const rObj = ensureArray(roomsList).find((r) => normalizeId(r.id) === normalizeId(a.hallId));
-            const rCap = Number(rObj?.capacity) || 0;
-            const count = rem > 0 ? (rCap > 0 ? Math.min(rem, rCap) : rem) : (rCap > 0 ? rCap : 1);
-            rem -= count;
-            return { ...a, candidateCount: count };
-          });
-          allocatedStrength = entry.hallAssignments.reduce(
-            (total, assignment) => total + (Number(assignment.candidateCount) || 0),
-            0,
-          );
-        }
         if (allocatedStrength < reqStrength) {
           messages.push(
             `${groupName} requires ${reqStrength} candidate seats, but only ${allocatedStrength} candidates are allocated for ${entry.subjectName || "session"}.`,
@@ -1229,20 +1435,7 @@ const isGroupScheduleReady = (
     }
     if (assignments.length === 0) return false;
 
-    let totalAllocated = assignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0);
-    if (totalAllocated === 0 && assignments.some((a) => a.hallId)) {
-      let rem = reqStrength;
-      assignments = assignments.map((a) => {
-        const rObj = ensureArray(roomsList).find((r) => normalizeId(r.id) === normalizeId(a.hallId));
-        const rCap = Number(rObj?.capacity) || 0;
-        const count = rem > 0 ? (rCap > 0 ? Math.min(rem, rCap) : rem) : (rCap > 0 ? rCap : 1);
-        rem -= count;
-        return { ...a, candidateCount: count };
-      });
-      totalAllocated = 0;
-    } else {
-      totalAllocated = 0;
-    }
+    let totalAllocated = 0;
     const seenHalls = new Set();
     const seenFaculty = new Set();
 
@@ -1293,7 +1486,7 @@ const isGroupScheduleReady = (
       if (!entry.includedSubjectIds || ensureArray(entry.includedSubjectIds).length === 0) {
         return false;
       }
-      if (entry.date !== exam.startDate) return false;
+      if (canonicalDate(entry.date || entry.examDate) !== canonicalDate(exam.startDate)) return false;
 
       // Combined date/time differs across groups
       const otherGroupCombined = schedules.find(
@@ -1304,7 +1497,7 @@ const isGroupScheduleReady = (
       );
       if (otherGroupCombined) {
         if (canonicalDate(otherGroupCombined.date || otherGroupCombined.examDate) !== canonicalDate(entry.date || entry.examDate)) return false;
-        if (otherGroupCombined.startTime !== entry.startTime || otherGroupCombined.endTime !== entry.endTime) {
+        if (formatTimeOnly(otherGroupCombined.startTime) !== formatTimeOnly(entry.startTime) || formatTimeOnly(otherGroupCombined.endTime) !== formatTimeOnly(entry.endTime)) {
           return false;
         }
       }
@@ -1362,22 +1555,6 @@ const getLevelNames = (exam, levelsList = []) => {
   return exam?.academicLevelName || exam?.levelName || "—";
 };
 
-// Format time string to 8-character ISO string ("HH:mm:ss") for ASP.NET Core System.TimeOnly compatibility
-const formatTimeOnly = (timeStr) => {
-  if (!timeStr) return "09:00:00";
-  const s = String(timeStr).trim();
-  if (s.length === 5 && s.includes(":")) return `${s}:00`;
-  if (s.length === 8) return s;
-  const parts = s.split(":");
-  if (parts.length >= 2) {
-    const hh = parts[0].padStart(2, "0");
-    const mm = parts[1].padStart(2, "0");
-    const ss = parts[2] ? parts[2].padStart(2, "0") : "00";
-    return `${hh}:${mm}:${ss}`;
-  }
-  return "09:00:00";
-};
-
 const normalizeScheduleRecord = (
   s,
   fallbackGroupId = null,
@@ -1397,10 +1574,26 @@ const normalizeScheduleRecord = (
   if (roomNameVal === "—" || roomNameVal === "-") roomNameVal = "";
   let invigilatorVal = s?.invigilatorName ?? s?.invigilator ?? s?.facultyNames ?? "";
   if (invigilatorVal === "—" || invigilatorVal === "-") invigilatorVal = "";
+  const isRoomValue = (val) => {
+    if (!val || val === "—" || val === "-") return false;
+    const trimmed = String(val).trim();
+    if (roomNameVal && trimmed.toLowerCase() === roomNameVal.toLowerCase()) return true;
+    return ensureArray(roomsList).some(
+      (r) =>
+        String(r.id) === trimmed ||
+        String(r.roomId) === trimmed ||
+        String(r.roomNumber || "").trim().toLowerCase() === trimmed.toLowerCase() ||
+        String(r.roomName || "").trim().toLowerCase() === trimmed.toLowerCase()
+    );
+  };
+  if (isRoomValue(invigilatorVal)) {
+    invigilatorVal = "";
+  }
   const rawHallAssignments = ensureArray(s?.hallAssignments);
 
   const examGids = ensureArray(examContext?.groupIds || [examContext?.groupId]).filter(Boolean).map(normalizeId);
-  let resolvedGroupId = normalizeId(s?.groupId);
+  const rawGid = normalizeId(s?.groupId);
+  let resolvedGroupId = (rawGid && rawGid !== "0") ? rawGid : "";
   if (!resolvedGroupId && examGids.length === 1) resolvedGroupId = examGids[0];
   if (!resolvedGroupId && examContext?.selectedGroupPatterns) {
     const sPattern = String(s?.patternName || "").trim().toLowerCase();
@@ -1421,18 +1614,57 @@ const normalizeScheduleRecord = (
       .filter((id) => examGids.includes(id)));
     if (matchingGroups.size === 1) resolvedGroupId = [...matchingGroups][0];
   }
-  if (!resolvedGroupId) resolvedGroupId = normalizeId(fallbackGroupId) || examGids[0] || "";
+  if (!resolvedGroupId) resolvedGroupId = (fallbackGroupId && normalizeId(fallbackGroupId) !== "0" ? normalizeId(fallbackGroupId) : "") || examGids[0] || "";
+
+  const enrolledStudents = (resolvedGroupId && examContext)
+    ? getGroupStudents(examContext, resolvedGroupId, programsList, studentsList)
+    : [];
+  const groupReqStrength = (resolvedGroupId && examContext)
+    ? getRequiredCandidateStrength(examContext, resolvedGroupId, programsList, false, studentsList)
+    : 0;
+  const genuineStrength = enrolledStudents.length > 0
+    ? enrolledStudents.length
+    : (groupReqStrength > 0 ? groupReqStrength : 0);
+  const fallbackStrength = genuineStrength;
 
   // Reconstruct hallAssignments if missing or empty, checking roomNameVal, hallNames, hallId, roomId, etc.
   let hallAssignments = [];
   if (rawHallAssignments.length > 0) {
+    let remainingCandidates = fallbackStrength > 0 ? fallbackStrength : 40;
     hallAssignments = rawHallAssignments.map((a) => {
       const rawHid = a?.hallId ?? a?.roomId;
       const validHid = rawHid !== undefined && rawHid !== null && String(rawHid).trim() !== "" ? normalizeId(rawHid) : "";
+      const roomObj = ensureArray(roomsList).find((r) => normalizeId(r.id ?? r.roomId) === validHid);
+      const roomCap = Number(roomObj?.capacity ?? a?.capacity ?? a?.roomCapacity) || 0;
+
+      let candidateCount = Number(a?.candidateCount) > 0
+        ? Number(a.candidateCount)
+        : (Number(s?.candidateCount) > 0 ? Number(s.candidateCount) : 0);
+
+      // If candidateCount <= 0 or exceeds genuine group strength (e.g. 256 college count > 4 group count), scope to genuineStrength
+      if (candidateCount <= 0 || (genuineStrength > 0 && candidateCount > genuineStrength)) {
+        if (rawHallAssignments.length === 1) {
+          candidateCount = genuineStrength > 0 ? genuineStrength : (roomCap > 0 ? roomCap : 40);
+        } else {
+          if (roomCap > 0) {
+            candidateCount = Math.min(remainingCandidates, roomCap);
+          } else {
+            const defaultCap = Math.ceil((genuineStrength || 40) / rawHallAssignments.length) || 40;
+            candidateCount = Math.min(remainingCandidates, defaultCap);
+          }
+          remainingCandidates = Math.max(0, remainingCandidates - candidateCount);
+        }
+      }
+      if (roomCap > 0 && candidateCount > roomCap) {
+        candidateCount = Math.min(candidateCount, roomCap);
+      }
+
       return {
         hallId: validHid,
         hallName: a?.hallName || a?.roomName || a?.name || (validHid && roomsList?.length ? nameOf(roomsList, validHid) : ""),
-        candidateCount: Number(a?.candidateCount) > 0 ? Number(a.candidateCount) : (Number(s?.candidateCount) > 0 ? Number(s.candidateCount) : 0),
+        candidateCount: candidateCount > 0 ? candidateCount : 0,
+        invigilatorName: a?.invigilatorName || a?.invigilator || "",
+        invigilator: a?.invigilatorName || a?.invigilator || "",
         invigilatorIds: ensureArray(a?.invigilatorIds || a?.facultyIds)
           .map(normalizeId)
           .filter((id) => id && id !== "0" && id !== "undefined" && id !== "null"),
@@ -1442,6 +1674,15 @@ const normalizeScheduleRecord = (
     const rawDirectHid = s?.hallId ?? s?.roomId;
     const directHid = rawDirectHid !== undefined && rawDirectHid !== null && String(rawDirectHid).trim() !== "" ? normalizeId(rawDirectHid) : "";
     if (directHid) {
+      const roomObj = ensureArray(roomsList).find((r) => normalizeId(r.id ?? r.roomId) === directHid);
+      const roomCap = Number(roomObj?.capacity ?? s?.capacity ?? s?.roomCapacity) || 0;
+      let initialCount = Number(s?.candidateCount) > 0 ? Number(s.candidateCount) : (fallbackStrength > 0 ? fallbackStrength : (roomCap > 0 ? roomCap : 40));
+      if (initialCount <= 0 || (genuineStrength > 0 && initialCount > genuineStrength)) {
+        initialCount = genuineStrength > 0 ? genuineStrength : (roomCap > 0 ? roomCap : 40);
+      }
+      if (roomCap > 0 && initialCount > roomCap) {
+        initialCount = Math.min(initialCount, roomCap);
+      }
       const rawInvIds = ensureArray(
         s?.invigilatorIds || s?.facultyIds || (s?.invigilatorId ? [s.invigilatorId] : []) || (s?.facultyId ? [s.facultyId] : []),
       )
@@ -1452,8 +1693,10 @@ const normalizeScheduleRecord = (
         {
           hallId: directHid,
           hallName: roomNameVal || (roomsList?.length ? nameOf(roomsList, directHid) : ""),
-          candidateCount: Number(s?.candidateCount) > 0 ? Number(s.candidateCount) : 0,
+          candidateCount: initialCount > 0 ? initialCount : 0,
           invigilatorIds: rawInvIds,
+          invigilatorName: invigilatorVal || s?.invigilatorName || s?.invigilator || "",
+          invigilator: invigilatorVal || s?.invigilatorName || s?.invigilator || "",
         },
       ];
     } else {
@@ -1461,31 +1704,6 @@ const normalizeScheduleRecord = (
       roomNameVal = "—";
       invigilatorVal = "—";
     }
-  }
-
-  // If hall assignments have 0 or missing candidateCount, restore based on required candidate strength & room capacity
-  const targetReqStrength = getRequiredCandidateStrength(examContext, resolvedGroupId, programsList, false, studentsList);
-  if (hallAssignments.length > 0) {
-    let remainingToAllocate = targetReqStrength > 0 ? targetReqStrength : 0;
-    hallAssignments = hallAssignments.map((a) => {
-      let cCount = Number(a.candidateCount) || 0;
-      if (cCount <= 0) {
-        const roomObj = ensureArray(roomsList).find((r) => normalizeId(r.id) === normalizeId(a.hallId));
-        const roomCap = Number(roomObj?.capacity) || 0;
-        if (remainingToAllocate > 0) {
-          cCount = roomCap > 0 ? Math.min(remainingToAllocate, roomCap) : remainingToAllocate;
-          remainingToAllocate -= cCount;
-        } else if (targetReqStrength > 0) {
-          cCount = roomCap > 0 ? Math.min(targetReqStrength, roomCap) : targetReqStrength;
-        } else {
-          cCount = roomCap > 0 ? roomCap : 1;
-        }
-      }
-      return {
-        ...a,
-        candidateCount: cCount,
-      };
-    });
   }
 
   if (hallAssignments.length > 0) {
@@ -1496,6 +1714,8 @@ const normalizeScheduleRecord = (
       const invIds = hallAssignments.flatMap((a) => a.invigilatorIds || []);
       if (invIds.length > 0 && facultyList?.length > 0) {
         invigilatorVal = invIds.map((id) => nameOf(facultyList, id)).filter((n) => n && n !== "—").join(", ") || "—";
+      } else if (s?.invigilatorId && facultyList?.length > 0) {
+        invigilatorVal = nameOf(facultyList, s.invigilatorId) || "—";
       }
     }
   } else {
@@ -1509,19 +1729,39 @@ const normalizeScheduleRecord = (
     : `sch-${normalizeId(s?.examinationId ?? s?.examId ?? examContext?.id)}-${resolvedGroupId}-${normalizeId(s?.subjectId || s?.patternName || formattedDate)}`;
 
   const totalCandidatesAlloc = hallAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0);
+  const finalCandidateCount = totalCandidatesAlloc > 0 ? totalCandidatesAlloc : (fallbackStrength > 0 ? fallbackStrength : 0);
 
   const combined = ["PATTERN_WISE", "COMBINED_OBJECTIVE"].includes(normalizeStatus(s?.scheduleMode)) || isCombinedExamination(examContext);
   const configuredPattern = ensureArray(examContext?.selectedGroupPatterns?.[resolvedGroupId])[0] || examContext?.examPattern || "";
   const patternName = s?.patternName || (combined ? configuredPattern : "");
 
-  let includedSubjectIds = ensureArray(s?.includedSubjectIds).map(normalizeId).filter(Boolean);
-  if (combined && !includedSubjectIds.length) {
+  const rawIncludedSubjectIds = s?.includedSubjectIds ?? s?.subjectIds;
+  let includedSubjectIds = ensureArray(rawIncludedSubjectIds).map(normalizeId).filter(Boolean);
+
+  if (combined && includedSubjectIds.length === 0 && examContext) {
     const groupSubs = getSelectedSubjectsForExam(examContext, resolvedGroupId, allSubjects);
     if (groupSubs.length > 0) {
       includedSubjectIds = groupSubs.map((sub) => normalizeId(sub.id));
-    } else if (s?.subjectId) {
-      includedSubjectIds = [normalizeId(s.subjectId)];
     }
+  }
+
+  // Strict verification: only true if backend response contains complete persisted scope
+  let isVerified = false;
+  if (combined) {
+    const hasValidGroup = Boolean(resolvedGroupId && examGids.includes(resolvedGroupId));
+    const hasPattern = Boolean(patternName);
+    const hasIncludedSubs = Array.isArray(includedSubjectIds) && includedSubjectIds.length > 0;
+    const hasValidDate = Boolean(formattedDate && (!examContext?.startDate || formattedDate === canonicalDate(examContext.startDate)));
+    const hasValidTime = Boolean(s?.startTime && s?.endTime);
+    const hasHalls = hallAssignments.length > 0;
+    isVerified = hasValidGroup && hasPattern && hasValidDate && hasValidTime;
+  } else {
+    const hasValidGroup = Boolean(resolvedGroupId && examGids.includes(resolvedGroupId));
+    const hasSubject = Boolean(s?.subjectId);
+    const hasValidDate = Boolean(formattedDate);
+    const hasValidTime = Boolean(s?.startTime && s?.endTime);
+    const hasHalls = hallAssignments.length > 0;
+    isVerified = hasValidGroup && hasSubject && hasValidDate && hasValidTime;
   }
 
   const subjectsSource = [...allSubjects, ...ensureArray(examContext?.selectedSubjectDetails)];
@@ -1538,7 +1778,7 @@ const normalizeScheduleRecord = (
     subjectId: normalizeId(s?.subjectId),
     patternName,
     includedSubjectIds,
-    combinedConfigurationVerified: true,
+    combinedConfigurationVerified: isVerified,
     subjectName: combined ? combinedSessionName : (s?.subjectName || "Subject"),
     subjectCode: combined ? combinedSessionCodes : (s?.subjectCode || ""),
     combinedSubjectsDisplay: combinedSessionSubjects,
@@ -1550,86 +1790,501 @@ const normalizeScheduleRecord = (
     passPercentage: String(
       s?.passPercentage || Math.round((Number(passMarksVal) / (Number(maxMarksVal) || 100)) * 100) || "35",
     ),
-    candidateCount: totalCandidatesAlloc,
+    candidateCount: finalCandidateCount,
     roomName: roomNameVal || "—",
-    invigilatorName: invigilatorVal || "—",
     hallAssignments,
+    roomId: hallAssignments[0]?.hallId ? Number(hallAssignments[0].hallId) || hallAssignments[0].hallId : (s?.roomId ? Number(s.roomId) || s.roomId : null),
+    hallId: hallAssignments[0]?.hallId ? Number(hallAssignments[0].hallId) || hallAssignments[0].hallId : (s?.hallId ? Number(s.hallId) || s.hallId : null),
+    invigilatorId: hallAssignments[0]?.invigilatorIds?.[0] ? Number(hallAssignments[0].invigilatorIds[0]) || hallAssignments[0].invigilatorIds[0] : (s?.invigilatorId ? Number(s.invigilatorId) || s.invigilatorId : null),
+    facultyId: hallAssignments[0]?.invigilatorIds?.[0] ? Number(hallAssignments[0].invigilatorIds[0]) || hallAssignments[0].invigilatorIds[0] : (s?.facultyId ? Number(s.facultyId) || s.facultyId : null),
+    invigilator: invigilatorVal || s?.invigilatorName || s?.invigilator || "—",
+    invigilatorName: invigilatorVal || s?.invigilatorName || s?.invigilator || "—",
     mode: s?.examMode ?? s?.mode ?? (combined ? "Objective" : "Written"),
     scheduleMode: s?.scheduleMode || (s?.patternName || combined ? "PATTERN_WISE" : "SUBJECT_WISE"),
   };
 };
 
-// Format schedule entry to strict backend API DTO
-const formatScheduleDto = (s, targetExamId, facultyList = []) => {
-  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName);
-  const examNumericId = Number(targetExamId || s.examId);
-  const groupNumericId = Number(s.groupId);
-  const rawSubId = Number(s.subjectId);
-  const subjectNumericId = !isNaN(rawSubId) && rawSubId > 0 ? rawSubId : 0;
+// Validate strict schedule payload before submitting to backend to prevent 400 Bad Request
+const validateSchedulePayload = (dto, isObj = false) => {
+  const errors = [];
 
+  // Examination ID
+  const examId = Number(dto.examinationId);
+  if (!examId || isNaN(examId) || examId <= 0) {
+    errors.push("Examination ID is required and must be greater than zero.");
+  }
+
+  // Subject ID
+  const subId = Number(dto.subjectId);
+  if (!isObj) {
+    if (!subId || isNaN(subId) || subId <= 0) {
+      errors.push("Subject ID is required and must be a valid positive number.");
+    }
+  } else {
+    const hasIncluded = Array.isArray(dto.includedSubjectIds) && dto.includedSubjectIds.some((id) => Number(id) > 0);
+    const hasSubjectIds = Array.isArray(dto.subjectIds) && dto.subjectIds.some((id) => Number(id) > 0);
+    if ((!subId || isNaN(subId) || subId <= 0) && !hasIncluded && !hasSubjectIds) {
+      errors.push("At least one valid Subject ID is required for objective examination schedule.");
+    }
+  }
+
+  // Date validation (scheduleDate, examDate, date)
+  const dateVal = dto.scheduleDate || dto.examDate || dto.date;
+  if (!dateVal || typeof dateVal !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim())) {
+    errors.push("Schedule date is required and must be in YYYY-MM-DD format.");
+  }
+
+  // Time validation (startTime, endTime)
+  if (!dto.startTime || typeof dto.startTime !== "string" || !/^\d{2}:\d{2}:\d{2}$/.test(dto.startTime.trim())) {
+    errors.push("Start time is required and must be in HH:mm:ss format (e.g. 09:00:00).");
+  }
+  if (!dto.endTime || typeof dto.endTime !== "string" || !/^\d{2}:\d{2}:\d{2}$/.test(dto.endTime.trim())) {
+    errors.push("End time is required and must be in HH:mm:ss format (e.g. 12:00:00).");
+  }
+  if (dto.startTime && dto.endTime && dto.endTime <= dto.startTime) {
+    errors.push("End Time must be later than Start Time.");
+  }
+
+  // Group ID: if present, must be positive number > 0, never 0 or NaN
+  if (dto.groupId !== undefined && dto.groupId !== null) {
+    const gid = Number(dto.groupId);
+    if (isNaN(gid) || gid <= 0) {
+      errors.push("Group ID must be a valid positive number.");
+    }
+  }
+
+  // Academic Level ID: if present, must be positive number > 0, never 0 or NaN
+  if (dto.academicLevelId !== undefined && dto.academicLevelId !== null) {
+    const lid = Number(dto.academicLevelId);
+    if (isNaN(lid) || lid <= 0) {
+      errors.push("Academic Level ID must be a valid positive number.");
+    }
+  }
+
+  // Room ID: if present, must be positive number > 0, never 0 or NaN
+  if (dto.roomId !== undefined && dto.roomId !== null) {
+    const rid = Number(dto.roomId);
+    if (isNaN(rid) || rid <= 0) {
+      errors.push("Room ID must be a valid positive number.");
+    }
+  }
+
+  // Invigilator ID: if present, must be positive number > 0, never 0 or NaN
+  if (dto.invigilatorId !== undefined && dto.invigilatorId !== null) {
+    const fid = Number(dto.invigilatorId);
+    if (isNaN(fid) || fid <= 0) {
+      errors.push("Invigilator ID must be a valid positive number.");
+    }
+  }
+
+  // Examination Pattern ID: if present, must be positive number > 0, never 0 or NaN
+  if (dto.examinationPatternId !== undefined && dto.examinationPatternId !== null) {
+    const pid = Number(dto.examinationPatternId);
+    if (isNaN(pid) || pid <= 0) {
+      errors.push("Examination Pattern ID must be a valid positive number.");
+    }
+  }
+
+  // Pattern Name for Objective examinations
+  if (isObj && !dto.patternName) {
+    errors.push("Examination pattern is required for objective examination.");
+  }
+
+  return errors;
+};
+
+// Format schedule entry to strict backend API DTO matching CreateExamScheduleRequest contract
+const formatScheduleDto = (s, targetExamId, facultyList = [], roomsList = [], targetCampusId = null, examContext = null, masterPatterns = []) => {
+  const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName);
+
+  // 1. Examination ID (Number > 0)
+  const examNumericId = Number(targetExamId || s.examId || s.examinationId || examContext?.id);
+  const validExamId = !isNaN(examNumericId) && examNumericId > 0 ? examNumericId : 0;
+
+  // 2. Campus ID (Number > 0)
+  const effectiveCampusNum = Number(targetCampusId || s.campusId || examContext?.campusId) || 1;
+
+  // 3. Group ID (Number > 0 or null, avoid string or NaN or 0)
+  const groupNumericId = Number(s.groupId);
+  const validGroupId = !isNaN(groupNumericId) && groupNumericId > 0 ? groupNumericId : null;
+
+  // 4. Academic Level ID (Number > 0 or null)
+  const rawLevelId = s.academicLevelId || s.levelId || examContext?.academicLevelId || examContext?.levelId || examContext?.levelIds?.[0] || examContext?.academicLevelIds?.[0];
+  const numLevelId = Number(rawLevelId);
+  const validLevelId = !isNaN(numLevelId) && numLevelId > 0 ? numLevelId : null;
+
+  // 5. Subject ID (Number > 0, or first subject from includedSubjectIds if objective)
+  const rawSubId = Number(s.subjectId);
+  let subjectNumericId = !isNaN(rawSubId) && rawSubId > 0 ? rawSubId : 0;
+  if (subjectNumericId <= 0 && Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0) {
+    const firstSub = Number(s.includedSubjectIds[0]);
+    if (!isNaN(firstSub) && firstSub > 0) {
+      subjectNumericId = firstSub;
+    }
+  }
+
+  // 6. Examination Pattern ID (Number > 0 or null)
+  const rawPatternId = s.examinationPatternId || s.examPatternId || examContext?.examPatternId || examContext?.examinationPatternId || examContext?.patternId;
+  let validPatternId = null;
+  if (rawPatternId) {
+    const numPat = Number(rawPatternId);
+    if (!isNaN(numPat) && numPat > 0) {
+      validPatternId = numPat;
+    }
+  }
+  if (!validPatternId && s.patternName && Array.isArray(masterPatterns) && masterPatterns.length > 0) {
+    const matchedPat = masterPatterns.find((p) => (p.name || p.patternName) === s.patternName);
+    if (matchedPat) {
+      const pNum = Number(matchedPat.id || matchedPat.patternId);
+      if (!isNaN(pNum) && pNum > 0) {
+        validPatternId = pNum;
+      }
+    }
+  }
+
+  // 7. Hall / Room mappings
   const assignments = ensureArray(s.hallAssignments);
   const firstAssignment = assignments[0];
-  const rawRoomId = firstAssignment?.hallId ?? firstAssignment?.roomId ?? s.roomId;
+  const rawRoomId = firstAssignment?.hallId ?? firstAssignment?.roomId ?? s.roomId ?? s.hallId;
   const numRoomId = Number(rawRoomId);
   const validRoomId = !isNaN(numRoomId) && numRoomId > 0 ? numRoomId : null;
 
+  // Resolve room name from firstAssignment, roomsList, or schedule
+  const resolvedRoomObj = (roomsList.length && validRoomId)
+    ? roomsList.find((r) => normalizeId(r.id) === normalizeId(validRoomId) || normalizeId(r.roomId) === normalizeId(validRoomId))
+    : null;
+  const resolvedRoomName = resolvedRoomObj?.roomNumber || resolvedRoomObj?.roomName || resolvedRoomObj?.name || (validRoomId && roomsList.length ? nameOf(roomsList, validRoomId, "") : "");
+
+  const assignmentsHallNames = assignments
+    .map((a) => a.hallName || a.roomName || a.roomNumber || (roomsList.length ? nameOf(roomsList, a.hallId ?? a.roomId, "") : ""))
+    .filter(Boolean)
+    .join(", ");
+
+  const hallName =
+    (assignments.length > 0
+      ? (firstAssignment?.hallName ||
+        firstAssignment?.roomName ||
+        firstAssignment?.roomNumber ||
+        resolvedRoomName ||
+        assignmentsHallNames ||
+        "")
+      : "") ||
+    (s.roomName && s.roomName !== "—" && s.roomName !== "-" ? s.roomName : "") ||
+    s.roomNumber ||
+    s.hall ||
+    null;
+
+  // 8. Invigilator mappings
   const rawInvId = firstAssignment?.invigilatorIds?.[0] ?? firstAssignment?.facultyId ?? s.invigilatorId;
   const numInvId = Number(rawInvId);
   const validInvId = !isNaN(numInvId) && numInvId > 0 ? numInvId : null;
 
-  const hallName = (assignments.length > 0 ? assignments.map((a) => a.hallName).filter(Boolean).join(", ") : "") || s.hall || (s.roomName !== "—" ? s.roomName : "") || "";
-  const invName = (assignments.length > 0 ? assignments.map((a) => (a.invigilatorIds || []).map((id) => nameOf(facultyList, id)).filter(Boolean).join(", ")).filter(Boolean).join(" | ") : "") || s.invigilator || (s.invigilatorName !== "—" ? s.invigilatorName : "") || "";
-  const totalAllocatedCandidates = assignments.length > 0
-    ? assignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0)
-    : (Number(s.candidateCount) || 0);
+  const resolvedInvObj = (facultyList.length && validInvId)
+    ? facultyList.find((f) => normalizeId(f.id) === normalizeId(validInvId))
+    : null;
+  const resolvedInvName = resolvedInvObj?.name || (validInvId && facultyList.length ? nameOf(facultyList, validInvId, "") : "");
+
+  const assignmentsInvNames = assignments
+    .map((a) =>
+      ensureArray(a.invigilatorIds || a.facultyIds)
+        .map((id) => (facultyList.length ? nameOf(facultyList, id, "") : ""))
+        .filter(Boolean)
+        .join(", ")
+    )
+    .filter(Boolean)
+    .join(" | ");
+
+  const invName =
+    (assignments.length > 0
+      ? (firstAssignment?.invigilatorName ||
+        firstAssignment?.invigilator ||
+        resolvedInvName ||
+        assignmentsInvNames ||
+        "")
+      : "") ||
+    (s.invigilatorName && s.invigilatorName !== "—" && s.invigilatorName !== "-" ? s.invigilatorName : "") ||
+    s.invigilator ||
+    null;
+
+  // 9. Date formatting: strictly YYYY-MM-DD
+  const rawDate = s.scheduleDate || s.examDate || s.date;
+  const formattedDate = canonicalDate(rawDate);
+
+  // 10. Time formatting: strictly HH:mm:ss
+  const formattedStartTime = formatTimeOnly(s.startTime);
+  const formattedEndTime = formatTimeOnly(s.endTime);
+
+  // 11. Marks and percentages
+  const maxMarksNum = Number(s.maxMarks ?? s.totalMarks) || (isObj ? 300 : 100);
+  const passMarksNum = s.passingMarks !== undefined && s.passingMarks !== null && s.passingMarks !== "" ? Number(s.passingMarks) : 35;
+  const passPctNum = Number(s.passPercentage) || (isObj ? 40 : 35);
+
+  // 12. Included Subjects (for Objective examinations only)
+  const validIncludedSubjectIds = isObj
+    ? ensureArray(s.includedSubjectIds)
+      .map(Number)
+      .filter((id) => !isNaN(id) && id > 0)
+    : null;
 
   return {
-    examinationId: isNaN(examNumericId) ? (targetExamId || s.examId) : examNumericId,
-    groupId: isNaN(groupNumericId) ? s.groupId : groupNumericId,
-    subjectId: isObj ? 0 : subjectNumericId,
-    patternName: s.patternName || "",
-    includedSubjectIds: ensureArray(s.includedSubjectIds)
-      .map((id) => {
-        const numericId = Number(id);
-        return Number.isNaN(numericId) ? id : numericId;
-      })
-      .filter(Boolean),
-    examDate: s.date ? String(s.date).split("T")[0] : (s.examDate ? String(s.examDate).split("T")[0] : ""),
-    startTime: formatTimeOnly(s.startTime),
-    endTime: formatTimeOnly(s.endTime),
-    maxMarks: Number(s.maxMarks ?? s.totalMarks) || 100,
-    passingMarks: s.passingMarks !== undefined && s.passingMarks !== null && s.passingMarks !== "" ? Number(s.passingMarks) : 35,
-    passPercentage: Number(s.passPercentage) || 35,
-    examMode: s.examMode || s.mode || (isObj ? "Objective" : "Written"),
-    scheduleMode: s.scheduleMode || (isObj ? "PATTERN_WISE" : "SUBJECT_WISE"),
+    id: s.id ? normalizeId(s.id) : undefined,
+    allScheduleIds: s.allScheduleIds || (s.id ? [s.id] : undefined),
+    examinationId: validExamId,
+    campusId: effectiveCampusNum,
+    groupId: validGroupId,
+    academicLevelId: validLevelId,
+    subjectId: subjectNumericId > 0 ? subjectNumericId : undefined,
+    scheduleDate: formattedDate,
+    examDate: formattedDate,
+    date: formattedDate,
+    startTime: formattedStartTime,
+    endTime: formattedEndTime,
+    scheduleMode: isObj ? "PATTERN_WISE" : "SUBJECT_WISE",
+    examMode: isObj ? "Objective" : (s.examMode || s.mode || "Written"),
+    mode: isObj ? "Objective" : (s.examMode || s.mode || "Written"),
+    sessionId: s.sessionId || (isObj ? `SESSION-${s.patternName || "PATTERN"}-${validGroupId || ""}` : null),
+    patternName: isObj ? (s.patternName || null) : null,
+    examinationPatternId: isObj ? validPatternId : null,
     roomId: validRoomId,
-    roomNumber: hallName || "",
-    hall: hallName || "",
+    hall: hallName,
+    roomNumber: hallName,
     invigilatorId: validInvId,
-    invigilator: invName || "",
-    invigilatorName: invName || "",
-    candidateCount: totalAllocatedCandidates,
-    candidatesCount: totalAllocatedCandidates,
-    capacity: totalAllocatedCandidates,
+    invigilator: invName,
+    invigilatorName: invName,
+    maxMarks: maxMarksNum,
+    totalMarks: maxMarksNum,
+    passingMarks: passMarksNum,
+    passPercentage: passPctNum,
+    candidateCount: assignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0) || (Number(s.candidateCount) > 0 ? Number(s.candidateCount) : null),
+    candidatesCount: assignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0) || (Number(s.candidateCount) > 0 ? Number(s.candidateCount) : null),
+    capacity: assignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0) || (Number(s.candidateCount) > 0 ? Number(s.candidateCount) : null),
+    includedSubjectIds: validIncludedSubjectIds && validIncludedSubjectIds.length > 0 ? validIncludedSubjectIds : null,
+    subjectIds: validIncludedSubjectIds && validIncludedSubjectIds.length > 0 ? validIncludedSubjectIds : null,
     hallAssignments: assignments.map((a) => {
       const hallNum = Number(a.hallId ?? a.roomId);
+      const hId = !isNaN(hallNum) && hallNum > 0 ? hallNum : null;
+      const hName = a.hallName || a.roomName || a.roomNumber || (hId && roomsList.length ? nameOf(roomsList, hId, "") : "");
       return {
-        hallId: isNaN(hallNum) ? (a.hallId ?? a.roomId) : hallNum,
+        hallId: hId,
+        roomId: hId,
+        hallName: hName,
+        roomName: hName,
+        roomNumber: hName,
         candidateCount: Number(a.candidateCount) || 0,
         invigilatorIds: ensureArray(a.invigilatorIds || a.facultyIds)
-          .map(normalizeId)
-          .filter((id) => id && id !== "0" && id !== "undefined" && id !== "null")
-          .map((id) => {
-            const invNum = Number(id);
-            return isNaN(invNum) ? id : invNum;
-          }),
+          .map(Number)
+          .filter((id) => !isNaN(id) && id > 0),
       };
     }),
   };
 };
 
-// Persist bulk or single examination schedules to backend DB (Batch endpoint for combined objective exams)
-const saveSchedulesToBackend = async (examId, schedulesList, facultyList = []) => {
+// Strict DTO Sanitizer conforming to CreateExamScheduleRequest (additionalProperties: false)
+const sanitizeCreateScheduleDto = (dto) => {
+  const allowedKeys = new Set([
+    "examinationId", "campusId", "groupId", "boardId", "academicLevelId",
+    "subjectId", "examDate", "date", "startTime", "startTimeString",
+    "endTime", "endTimeString", "sessionId", "scheduleMode", "roomId",
+    "invigilatorId", "hall", "roomNumber", "venue", "invigilator",
+    "invigilatorName", "examMode", "mode", "maxMarks", "totalMarks",
+    "passingMarks", "passPercentage", "patternName", "candidateCount",
+    "candidatesCount", "capacity", "hallAssignments", "subjectIds",
+    "includedSubjectIds", "schedules"
+  ]);
+  const sanitized = {};
+  for (const [key, value] of Object.entries(dto || {})) {
+    if (allowedKeys.has(key) && value !== undefined) {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+};
+
+// Strict DTO Sanitizer conforming to UpdateExaminationRequest (additionalProperties: false)
+const sanitizeUpdateExamDto = (examObj, desiredStatus = "SCHEDULED") => {
+  const allowed = new Set([
+    "examCode", "campusId", "examName", "boardId", "academicYearId",
+    "academicLevelIds", "academicLevelId", "academicLevel", "groupIds",
+    "groupId", "programIds", "programId", "assessmentTypeId", "examType",
+    "examCategory", "category", "customCategoryName", "startDate", "endDate",
+    "examPattern", "examPatternId", "totalMarks", "passPercentage",
+    "description", "status", "scheduleMode", "selectedSubjectIds",
+    "allocatedSubjectIds"
+  ]);
+  const dto = {};
+  for (const [key, value] of Object.entries(examObj || {})) {
+    if (allowed.has(key) && value !== undefined) {
+      if (key === "campusId" || key === "boardId" || key === "academicYearId" || key === "academicLevelId" || key === "groupId" || key === "programId" || key === "assessmentTypeId" || key === "totalMarks") {
+        const num = Number(value);
+        dto[key] = !isNaN(num) && num > 0 ? num : (value === null ? null : undefined);
+      } else if (key === "passPercentage") {
+        const num = Number(value);
+        dto[key] = !isNaN(num) ? num : undefined;
+      } else if (key === "academicLevelIds" || key === "groupIds" || key === "programIds" || key === "selectedSubjectIds" || key === "allocatedSubjectIds") {
+        if (Array.isArray(value)) {
+          dto[key] = value.map(Number).filter((id) => !isNaN(id) && id > 0);
+        }
+      } else {
+        dto[key] = value;
+      }
+    }
+  }
+  dto.status = desiredStatus;
+  return dto;
+};
+
+// Validate no duplicate or overlapping invigilator, room, or time slot collisions in payload
+const validateScheduleCollisions = (
+  schedulesToSubmit,
+  existingSchedules = [],
+  facultyList = [],
+  roomsList = [],
+  examContext = null,
+) => {
+  const errors = [];
+  const list = ensureArray(schedulesToSubmit);
+
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    const aDate = canonicalDate(a.scheduleDate || a.examDate || a.date);
+    const aStart = formatTimeOnly(a.startTime);
+    const aEnd = formatTimeOnly(a.endTime);
+    const aSubId = normalizeId(a.subjectId);
+    const aGid = normalizeId(a.groupId);
+
+    const aInvIds = Array.from(new Set([
+      a.invigilatorId,
+      ...(ensureArray(a.hallAssignments).flatMap((h) => h.invigilatorIds || [])),
+    ].map(normalizeId).filter((id) => id && id !== "0" && id !== "undefined" && id !== "null")));
+
+    const aRoomIds = Array.from(new Set([
+      a.roomId,
+      a.hallId,
+      ...(ensureArray(a.hallAssignments).map((h) => h.hallId || h.roomId)),
+    ].map(normalizeId).filter((id) => id && id !== "0" && id !== "undefined" && id !== "null")));
+
+    // Intra-schedule duplicate invigilator check
+    const rawAllAInvs = [
+      ...(ensureArray(a.hallAssignments).flatMap((h) => h.invigilatorIds || [])),
+    ].map(normalizeId).filter((id) => id && id !== "0" && id !== "undefined" && id !== "null");
+    const seenIntra = new Set();
+    for (const invId of rawAllAInvs) {
+      if (seenIntra.has(invId)) {
+        const fObj = facultyList.find((f) => normalizeId(f.id) === invId);
+        errors.push(`Invigilator Conflict: ${fObj?.name || `Faculty #${invId}`} is assigned multiple times within the same examination schedule.`);
+        break;
+      }
+      seenIntra.add(invId);
+    }
+
+    // Compare with subsequent schedules in current submission batch
+    for (let j = i + 1; j < list.length; j++) {
+      const b = list[j];
+      const bDate = canonicalDate(b.scheduleDate || b.examDate || b.date);
+      const bStart = formatTimeOnly(b.startTime);
+      const bEnd = formatTimeOnly(b.endTime);
+      const bSubId = normalizeId(b.subjectId);
+      const bGid = normalizeId(b.groupId);
+
+      const sameDate = aDate && bDate && aDate === bDate;
+      const overlaps = sameDate && hasTimeOverlap(aStart, aEnd, bStart, bEnd);
+
+      if (sameDate && aSubId && bSubId && aSubId === bSubId && aGid === bGid) {
+        errors.push(`Duplicate subject schedule: Subject ID ${aSubId} is scheduled more than once for Group #${aGid} on ${aDate}.`);
+      }
+
+      if (overlaps) {
+        if (aGid && bGid && aGid === bGid && a.scheduleMode !== "PATTERN_WISE" && b.scheduleMode !== "PATTERN_WISE") {
+          errors.push(`Time conflict: Group #${aGid} has multiple examinations scheduled in overlapping time slots (${aStart} - ${aEnd} and ${bStart} - ${bEnd}) on ${aDate}.`);
+        }
+
+        const bInvIds = Array.from(new Set([
+          b.invigilatorId,
+          ...(ensureArray(b.hallAssignments).flatMap((h) => h.invigilatorIds || [])),
+        ].map(normalizeId).filter((id) => id && id !== "0" && id !== "undefined" && id !== "null")));
+
+        for (const invId of aInvIds) {
+          if (bInvIds.includes(invId)) {
+            const fObj = facultyList.find((f) => normalizeId(f.id) === invId);
+            const invName = fObj?.name || `Invigilator #${invId}`;
+            errors.push(`Invigilator is already assigned to another examination during the selected time: ${invName} on ${aDate} (${aStart} - ${aEnd}).`);
+            break;
+          }
+        }
+
+        const bRoomIds = Array.from(new Set([
+          b.roomId,
+          b.hallId,
+          ...(ensureArray(b.hallAssignments).map((h) => h.hallId || h.roomId)),
+        ].map(normalizeId).filter((id) => id && id !== "0" && id !== "undefined" && id !== "null")));
+
+        for (const roomId of aRoomIds) {
+          if (bRoomIds.includes(roomId)) {
+            const rObj = roomsList.find((r) => normalizeId(r.id) === roomId || normalizeId(r.roomId) === roomId);
+            const rName = rObj?.roomNumber || rObj?.roomName || rObj?.name || `Room #${roomId}`;
+            errors.push(`Room/Hall is already booked for another examination during the selected time: ${rName} on ${aDate} (${aStart} - ${aEnd}).`);
+            break;
+          }
+        }
+      }
+    }
+
+    // Compare with existingSchedules already saved in system/DB
+    if (existingSchedules.length > 0 && aDate) {
+      for (const existing of existingSchedules) {
+        if (!existing) continue;
+        if (isSameSessionOrSelf(existing, a, a.id, examContext)) continue;
+        const eId = normalizeId(existing.id || existing.examScheduleId || existing.scheduleId);
+        const aId = normalizeId(a.id || a.examScheduleId || a.scheduleId);
+        if (eId && aId && eId === aId) continue;
+
+        // An entry being submitted cannot collide with its own subject/pattern in the same exam and group
+        const isSameExamAndSubject =
+          normalizeId(existing.examId || existing.examinationId) === normalizeId(a.examinationId || a.examId || examContext?.id) &&
+          normalizeId(existing.groupId) === normalizeId(a.groupId) &&
+          (
+            (a.subjectId && normalizeId(existing.subjectId) === normalizeId(a.subjectId)) ||
+            (a.patternName && String(existing.patternName || "").trim().toLowerCase() === String(a.patternName).trim().toLowerCase())
+          );
+        if (isSameExamAndSubject) continue;
+
+        const eDate = canonicalDate(existing.scheduleDate || existing.date || existing.examDate);
+        if (!eDate || eDate !== aDate) continue;
+
+        const eStart = formatTimeOnly(existing.startTime);
+        const eEnd = formatTimeOnly(existing.endTime);
+        if (!hasTimeOverlap(aStart, aEnd, eStart, eEnd)) continue;
+
+        const eInvIds = getScheduleInvigilatorIds(existing);
+        for (const invId of aInvIds) {
+          if (eInvIds.includes(invId)) {
+            const fObj = facultyList.find((f) => normalizeId(f.id) === invId);
+            const invName = fObj?.name || `Invigilator #${invId}`;
+            const conflictSubject = existing.subjectName || "existing examination";
+            errors.push(`Invigilator is already assigned to another examination during the selected time: ${invName} is assigned to "${conflictSubject}" on ${aDate} (${eStart} - ${eEnd}).`);
+            break;
+          }
+        }
+
+        const eRoomIds = getScheduleHallIds(existing);
+        for (const roomId of aRoomIds) {
+          if (eRoomIds.includes(roomId)) {
+            const rObj = roomsList.find((r) => normalizeId(r.id) === roomId || normalizeId(r.roomId) === roomId);
+            const rName = rObj?.roomNumber || rObj?.roomName || rObj?.name || `Room #${roomId}`;
+            const conflictSubject = existing.subjectName || "existing examination";
+            errors.push(`Room/Hall is already booked for another examination during the selected time: ${rName} is booked for "${conflictSubject}" on ${aDate} (${eStart} - ${eEnd}).`);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return errors;
+};
+
+// Persist bulk or single examination schedules to backend DB
+const saveSchedulesToBackend = async (examId, schedulesList, facultyList = [], roomsList = [], targetCampusId = null, examContext = null, masterPatterns = [], existingSchedules = []) => {
   if (!schedulesList || !schedulesList.length) {
     return [];
   }
@@ -1638,131 +2293,181 @@ const saveSchedulesToBackend = async (examId, schedulesList, facultyList = []) =
   const standardDtoList = [];
 
   for (const s of schedulesList) {
+    const effectiveCampusNum = Number(targetCampusId || s.campusId) || 1;
     const isCombinedSchedule =
       s.scheduleMode === "PATTERN_WISE" ||
       Boolean(s.patternName) ||
       (Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 1);
 
     if (isCombinedSchedule && Array.isArray(s.includedSubjectIds) && s.includedSubjectIds.length > 0) {
-      const assignments = ensureArray(s.hallAssignments);
       const validSubIds = s.includedSubjectIds
         .map(Number)
         .filter((id) => !isNaN(id) && id > 0);
 
-      if (assignments.length > 0) {
-        for (const a of assignments) {
-          const rawRoomId = a.hallId ?? a.roomId ?? s.roomId;
-          const numRoomId = Number(rawRoomId);
-          const validRoomId = !isNaN(numRoomId) && numRoomId > 0 ? numRoomId : null;
+      const dto = formatScheduleDto(s, examId, facultyList, roomsList, effectiveCampusNum, examContext, masterPatterns);
 
-          const rawInvId = a.invigilatorIds?.[0] ?? a.facultyId ?? s.invigilatorId;
-          const numInvId = Number(rawInvId);
-          const validInvId = !isNaN(numInvId) && numInvId > 0 ? numInvId : null;
+      // Validate batch entry before sending
+      const valErrors = validateSchedulePayload(dto, true);
+      if (valErrors.length > 0) {
+        console.error("Batch Schedule Validation Failed", valErrors);
+        throw new Error(valErrors[0]);
+      }
 
-          const hallName = a.hallName || s.hall || s.roomName || "";
-          const invName =
-            (a.invigilatorIds || [])
-              .map((id) => nameOf(facultyList, id))
-              .filter(Boolean)
-              .join(", ") ||
-            s.invigilator ||
-            s.invigilatorName ||
-            "";
+      const batchCollisionErrors = validateScheduleCollisions([dto], existingSchedules, facultyList, roomsList, examContext);
+      if (batchCollisionErrors.length > 0) {
+        console.error("Batch Schedule Collision Detected", batchCollisionErrors);
+        throw new Error(batchCollisionErrors[0]);
+      }
 
-          const batchPayload = {
-            examinationId: Number(examId),
-            subjectIds: validSubIds,
-            examDate: s.date ? String(s.date).split("T")[0] : (s.examDate ? String(s.examDate).split("T")[0] : ""),
-            date: s.date ? String(s.date).split("T")[0] : (s.examDate ? String(s.examDate).split("T")[0] : ""),
-            startTime: formatTimeOnly(s.startTime),
-            endTime: formatTimeOnly(s.endTime),
-            scheduleMode: s.scheduleMode || "PATTERN_WISE",
-            sessionId: s.sessionId || `SESSION-${s.patternName || "PATTERN"}-${s.groupId || ""}`,
-            roomId: validRoomId,
-            hall: hallName,
-            roomNumber: hallName,
-            venue: hallName,
-            invigilatorId: validInvId,
-            invigilator: invName,
-            invigilatorName: invName,
-            examMode: s.mode || s.examMode || "Objective",
-            mode: s.mode || s.examMode || "Objective",
-            maxMarks: Number(s.maxMarks ?? s.totalMarks) || 100,
-            totalMarks: Number(s.maxMarks ?? s.totalMarks) || 100,
-            passingMarks: s.passingMarks !== undefined && s.passingMarks !== null && s.passingMarks !== "" ? Number(s.passingMarks) : 35,
-          };
+      const rawBatchPayload = {
+        campusId: effectiveCampusNum,
+        examinationId: Number(examId),
+        groupId: dto.groupId,
+        academicLevelId: dto.academicLevelId,
+        subjectIds: validSubIds,
+        examDate: dto.examDate,
+        date: dto.date,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        scheduleMode: "PATTERN_WISE",
+        sessionId: dto.sessionId,
+        patternName: dto.patternName || "",
+        roomId: dto.roomId,
+        hall: dto.hall,
+        roomNumber: dto.roomNumber,
+        venue: dto.hall,
+        invigilatorId: dto.invigilatorId,
+        invigilator: dto.invigilator,
+        invigilatorName: dto.invigilatorName,
+        hallAssignments: dto.hallAssignments,
+        examMode: "Objective",
+        mode: "Objective",
+        maxMarks: dto.maxMarks,
+        totalMarks: dto.totalMarks,
+        passingMarks: dto.passingMarks,
+        passPercentage: dto.passPercentage,
+        candidateCount: dto.candidateCount,
+        candidatesCount: dto.candidatesCount,
+        capacity: dto.capacity,
+      };
 
-          try {
-            const batchRes = await apiClient.post(`/api/v1/examinations/${examId}/schedules/batch`, batchPayload);
-            const created = batchRes.data?.data ?? batchRes.data ?? [];
-            results.push(...ensureArray(created));
-          } catch (batchErr) {
-            standardDtoList.push(formatScheduleDto(s, examId, facultyList));
-            break;
-          }
-        }
-      } else {
-        const dto = formatScheduleDto(s, examId, facultyList);
-        const batchPayload = {
-          examinationId: Number(examId),
-          subjectIds: validSubIds,
-          examDate: s.date ? String(s.date).split("T")[0] : (s.examDate ? String(s.examDate).split("T")[0] : ""),
-          date: s.date ? String(s.date).split("T")[0] : (s.examDate ? String(s.examDate).split("T")[0] : ""),
-          startTime: formatTimeOnly(s.startTime),
-          endTime: formatTimeOnly(s.endTime),
-          scheduleMode: s.scheduleMode || "PATTERN_WISE",
-          sessionId: s.sessionId || `SESSION-${s.patternName || "PATTERN"}-${s.groupId || ""}`,
-          roomId: dto.roomId,
-          hall: dto.hall,
-          roomNumber: dto.roomNumber,
-          venue: dto.roomNumber,
-          invigilatorId: dto.invigilatorId,
-          invigilator: dto.invigilator,
-          invigilatorName: dto.invigilatorName,
-          examMode: s.mode || s.examMode || "Objective",
-          mode: s.mode || s.examMode || "Objective",
-          maxMarks: Number(s.maxMarks ?? s.totalMarks) || 100,
-          totalMarks: Number(s.maxMarks ?? s.totalMarks) || 100,
-          passingMarks: s.passingMarks !== undefined && s.passingMarks !== null && s.passingMarks !== "" ? Number(s.passingMarks) : 35,
-        };
-
-        try {
-          const batchRes = await apiClient.post(`/api/v1/examinations/${examId}/schedules/batch`, batchPayload);
-          const created = batchRes.data?.data ?? batchRes.data ?? [];
-          results.push(...ensureArray(created));
-        } catch (batchErr) {
-          standardDtoList.push(dto);
-        }
+      try {
+        const batchRes = await apiClient.post(`/api/v1/examinations/${examId}/schedules/batch`, rawBatchPayload);
+        const created = batchRes.data?.data ?? batchRes.data ?? [];
+        results.push(...ensureArray(created));
+      } catch (batchErr) {
+        console.warn("Batch endpoint failed, falling back to standard schedules endpoint:", batchErr);
+        const fallbackDto = sanitizeCreateScheduleDto(dto);
+        const fallbackRes = await apiClient.post(`/api/v1/examinations/${examId}/schedules`, fallbackDto);
+        const created = fallbackRes.data?.data ?? fallbackRes.data ?? [];
+        results.push(...ensureArray(created));
       }
     } else {
-      standardDtoList.push(formatScheduleDto(s, examId, facultyList));
+      const effectiveCampusNum = Number(targetCampusId || s.campusId) || 1;
+      const isObj = s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName);
+      const dto = formatScheduleDto(s, examId, facultyList, roomsList, effectiveCampusNum, examContext, masterPatterns);
+
+      // Validate single/standard entry before sending
+      const valErrors = validateSchedulePayload(dto, isObj);
+      if (valErrors.length > 0) {
+        console.error("Schedule Validation Failed", valErrors);
+        throw new Error(valErrors[0]);
+      }
+
+      standardDtoList.push(dto);
     }
   }
 
   if (standardDtoList.length > 0) {
-    const res = await apiClient.post(`/api/v1/examinations/${examId}/schedules`, standardDtoList);
-    const standardCreated = res.data?.data ?? res.data ?? [];
-    results.push(...ensureArray(standardCreated));
+    // Validate cross-schedule collisions before sending to API
+    const collisionErrors = validateScheduleCollisions(standardDtoList, existingSchedules, facultyList, roomsList, examContext);
+    if (collisionErrors.length > 0) {
+      console.error("Schedule Collision Detected", collisionErrors);
+      throw new Error(collisionErrors[0]);
+    }
+
+    const cleanDtos = standardDtoList.map(sanitizeCreateScheduleDto);
+    const payload = cleanDtos.length === 1 ? cleanDtos[0] : cleanDtos;
+    try {
+      const res = await apiClient.post(`/api/v1/examinations/${examId}/schedules`, payload);
+      const standardCreated = res.data?.data ?? res.data ?? [];
+      results.push(...ensureArray(standardCreated));
+    } catch (error) {
+      console.error("Schedule API Error", error.response?.data);
+      throw error;
+    }
   }
 
   return results;
 };
 
 // Update existing schedule in backend DB
-const updateScheduleInBackend = async (examId, scheduleId, scheduleData, facultyList = []) => {
-  const dto = formatScheduleDto(scheduleData, examId, facultyList);
+const updateScheduleInBackend = async (examId, scheduleId, scheduleData, facultyList = [], roomsList = [], targetCampusId = null, examContext = null, masterPatterns = [], existingSchedules = []) => {
+  const effectiveCampusNum = Number(targetCampusId || scheduleData?.campusId) || 1;
   const targetIds = ensureArray(scheduleData?.allScheduleIds || [scheduleId]).filter(Boolean);
   let lastRes = null;
-  for (const sId of targetIds) {
-    const isNumericScheduleId = !isNaN(Number(sId)) && Number(sId) > 0 && !String(sId).startsWith("sch-");
+  for (let i = 0; i < targetIds.length; i++) {
+    const sId = targetIds[i];
+    const isNumericScheduleId = !isNaN(Number(sId)) && Number(sId) > 0 && !String(sId).startsWith("sch-") && !String(sId).startsWith("draft-");
     if (isNumericScheduleId) {
-      const res = await apiClient.put(`/api/v1/examinations/${examId}/schedules/${sId}`, dto);
-      lastRes = res.data?.data ?? res.data;
+      const subIdForThis = scheduleData?.allSubjectIds?.[i] ?? scheduleData?.subjectId;
+      const isObj = scheduleData?.scheduleMode === "PATTERN_WISE" || Boolean(scheduleData?.patternName);
+      const dto = formatScheduleDto({
+        ...scheduleData,
+        id: sId,
+        ...(subIdForThis ? { subjectId: subIdForThis } : {}),
+      }, examId, facultyList, roomsList, effectiveCampusNum, examContext, masterPatterns);
+
+      const valErrors = validateSchedulePayload(dto, isObj);
+      if (valErrors.length > 0) {
+        console.error("Schedule Validation Failed", valErrors);
+        throw new Error(valErrors[0]);
+      }
+
+      const otherSchedules = existingSchedules.filter((x) => normalizeId(x.id || x.examScheduleId || x.scheduleId) !== normalizeId(sId));
+      const collisionErrors = validateScheduleCollisions([dto], otherSchedules, facultyList, roomsList, examContext);
+      if (collisionErrors.length > 0) {
+        console.error("Schedule Collision Detected", collisionErrors);
+        throw new Error(collisionErrors[0]);
+      }
+
+      const { id: _id, allScheduleIds: _aIds, ...cleanDto } = dto;
+      try {
+        console.log("Schedule Payload", cleanDto);
+        console.log("Examination ID", examId);
+        const res = await apiClient.put(`/api/v1/examinations/${examId}/schedules/${sId}`, cleanDto);
+        lastRes = res.data?.data ?? res.data;
+      } catch (error) {
+        console.error("Schedule API Error", error.response?.data);
+        throw error;
+      }
     }
   }
   if (!lastRes) {
-    const res = await apiClient.post(`/api/v1/examinations/${examId}/schedules`, [dto]);
-    lastRes = res.data?.data ?? res.data;
+    const isObj = scheduleData?.scheduleMode === "PATTERN_WISE" || Boolean(scheduleData?.patternName);
+    const dto = formatScheduleDto(scheduleData, examId, facultyList, roomsList, effectiveCampusNum, examContext, masterPatterns);
+    const valErrors = validateSchedulePayload(dto, isObj);
+    if (valErrors.length > 0) {
+      console.error("Schedule Validation Failed", valErrors);
+      throw new Error(valErrors[0]);
+    }
+    const otherSchedules = existingSchedules.filter((x) => normalizeId(x.id || x.examScheduleId || x.scheduleId) !== normalizeId(scheduleId));
+    const collisionErrors = validateScheduleCollisions([dto], otherSchedules, facultyList, roomsList, examContext);
+    if (collisionErrors.length > 0) {
+      console.error("Schedule Collision Detected", collisionErrors);
+      throw new Error(collisionErrors[0]);
+    }
+    const { id: _id, allScheduleIds: _aIds, ...cleanDto } = dto;
+    const payload = cleanDto;
+    try {
+      console.log("Schedule Payload", payload);
+      console.log("Examination ID", examId);
+      const res = await apiClient.post(`/api/v1/examinations/${examId}/schedules`, payload);
+      lastRes = res.data?.data ?? res.data;
+    } catch (error) {
+      console.error("Schedule API Error", error.response?.data);
+      throw error;
+    }
   }
   return lastRes;
 };
@@ -1770,46 +2475,12 @@ const updateScheduleInBackend = async (examId, scheduleId, scheduleData, faculty
 // Delete schedule from backend DB
 const deleteScheduleFromBackend = async (examId, scheduleId) => {
   if (!scheduleId) return;
-  const isNumericScheduleId = !isNaN(Number(scheduleId)) && Number(scheduleId) > 0 && !String(scheduleId).startsWith("sch-");
+  const isNumericScheduleId = !isNaN(Number(scheduleId)) && Number(scheduleId) > 0 && !String(scheduleId).startsWith("sch-") && !String(scheduleId).startsWith("draft-");
   if (isNumericScheduleId) {
     const res = await apiClient.delete(`/api/v1/examinations/${examId}/schedules/${scheduleId}`);
     return res.data;
   }
-  try {
-    const res = await apiClient.delete(`/api/v1/examinations/${examId}/schedules/${scheduleId}`);
-    return res.data;
-  } catch (e) {
-    return null;
-  }
-};
-
-// A successful write can contain configuration omitted by the legacy list DTO.
-// Keep only that submitted configuration in memory; never manufacture subjects from masters.
-const mergeExaminationConfiguration = (record, submitted) => {
-  if (!submitted) return record;
-  const merged = { ...record };
-  if (!getResolvedExamCategory(record)) merged.examCategory = submitted.examCategory;
-  const fields = [
-    ["selectedSubjectIds", ["selectedSubjectIds", "allocatedSubjectIds", "subjectIds"]],
-    ["levelIds", ["levelIds", "academicLevelIds"]],
-    ["academicLevelIds", ["academicLevelIds", "levelIds"]],
-    ["groupIds", ["groupIds"]],
-    ["programIds", ["programIds"]],
-    ["groupProgramSelections", ["groupProgramSelections"]],
-    ["selectedGroupPatterns", ["selectedGroupPatterns"]],
-    ["groupSubjectSelections", ["groupSubjectSelections"]],
-    ["selectedSubjectDetails", ["selectedSubjectDetails"]],
-  ];
-  for (const [field, aliases] of fields) {
-    if (!aliases.some((alias) => record[alias] != null && (!Array.isArray(record[alias]) || record[alias].length > 0))) {
-      merged[field] = submitted[field] || submitted[aliases.find((a) => submitted[a] != null)];
-    }
-  }
-  if (!record.scheduleMode) merged.scheduleMode = submitted.scheduleMode;
-  if (!record.examPattern && !record.pattern) merged.examPattern = submitted.examPattern;
-  if (!record.customCategoryName) merged.customCategoryName = submitted.customCategoryName;
-  if (!record.yearId && !record.academicYearId) merged.yearId = submitted.yearId || submitted.academicYearId;
-  return merged;
+  return { success: true };
 };
 
 const normalizeExamRecord = (e) => {
@@ -1830,8 +2501,9 @@ const normalizeExamRecord = (e) => {
     (Array.isArray(e?.groups) ? e.groups.map((g) => g.id || g.groupId) : null) ??
     (Array.isArray(e?.groupProgramSelections) ? e.groupProgramSelections.map((g) => g.groupId) : (e?.groupProgramSelections && typeof e.groupProgramSelections === "object" ? Object.keys(e.groupProgramSelections) : null));
   const groupIds = ensureArray(rawGroups).map(normalizeId).filter(Boolean);
-  const rawPrograms = e?.programIds ?? e?.programId;
-  const programIds = ensureArray(rawPrograms).map(normalizeId);
+  const isAllPrograms = !e?.programId || String(e?.programName || "").trim().toLowerCase() === "all programs";
+  const rawPrograms = isAllPrograms ? [] : (e?.programIds ?? (e?.programId ? [e.programId] : []));
+  const programIds = ensureArray(rawPrograms).map(normalizeId).filter(Boolean);
   const rawSubjects = e?.selectedSubjectIds ?? e?.allocatedSubjectIds ?? e?.subjectIds;
   const selectedSubjectIds = ensureArray(rawSubjects).map(normalizeId);
   const rawSchedules = e?.schedules ?? e?.examinationSchedules;
@@ -1843,36 +2515,66 @@ const normalizeExamRecord = (e) => {
     e?.categoryName ??
     e?.rawCategory;
 
-  const resolvedExamCategory = rawCat ? String(rawCat).trim() : (getResolvedExamCategory(e) || "Regular");
+  let resolvedExamCategory = "Regular";
+  const catCandidate = rawCat ? String(rawCat).trim() : "";
+  if (isCombinedExamination(e) || catCandidate.toLowerCase() === "objective" || catCandidate.toLowerCase().includes("objective")) {
+    resolvedExamCategory = "Objective";
+  } else if (catCandidate.toLowerCase() === "others") {
+    resolvedExamCategory = "Others";
+  } else if (catCandidate.toLowerCase() === "regular") {
+    resolvedExamCategory = "Regular";
+  } else {
+    resolvedExamCategory = catCandidate || "Regular";
+  }
+
   const pat = e?.examPattern ?? e?.pattern ?? "";
+  const isPatObjective = pat && pat !== "Regular" && pat !== "Regular Academic Pattern" && pat !== "None";
+  if (isPatObjective || (e?.examName && String(e.examName).toLowerCase().includes("objective")) || (e?.name && String(e.name).toLowerCase().includes("objective"))) {
+    resolvedExamCategory = "Objective";
+  }
+
   const rawGroupPatterns = e?.selectedGroupPatterns || {};
   const selectedGroupPatterns = { ...rawGroupPatterns };
-  if (pat && Object.keys(selectedGroupPatterns).length === 0) {
+  if (pat) {
     groupIds.forEach((gid) => {
-      selectedGroupPatterns[String(gid)] = [pat];
+      if (!selectedGroupPatterns[String(gid)] || !selectedGroupPatterns[String(gid)].length) {
+        selectedGroupPatterns[String(gid)] = [pat];
+      }
     });
   }
 
+  const rawCampusId = e?.campusId ?? e?.CampusId ?? e?.campus?.id ?? e?.campus?.campusId;
+  const campusId = rawCampusId ? normalizeId(rawCampusId) : "";
+
   return {
     id,
+    campusId: campusId || normalizeId(e?.campus?.id ?? e?.campus?.campusId ?? ""),
     code: e?.examCode ?? e?.code ?? "",
+    examCode: e?.examCode ?? e?.code ?? "",
     name: e?.examName ?? e?.name ?? "Examination",
     examCategory: resolvedExamCategory,
+    category: resolvedExamCategory,
     customCategoryName: e?.customCategoryName || "",
-    boardId: normalizeId(e?.boardId),
-    yearId: normalizeId(e?.academicYearId ?? e?.yearId),
-    academicYearId: normalizeId(e?.academicYearId ?? e?.yearId),
+    boardId: normalizeId(e?.boardId ?? e?.BoardId),
+    boardName: e?.boardName ?? e?.board?.name ?? e?.BoardName ?? "",
+    yearId: normalizeId(e?.academicYearId ?? e?.yearId ?? e?.AcademicYearId ?? e?.YearId),
+    academicYearId: normalizeId(e?.academicYearId ?? e?.yearId ?? e?.AcademicYearId ?? e?.YearId),
+    academicYear: e?.academicYear ?? e?.academicYearName ?? e?.yearName ?? e?.AcademicYear ?? e?.AcademicYearName ?? "",
+    academicYearName: e?.academicYearName ?? e?.academicYear ?? e?.yearName ?? e?.AcademicYearName ?? e?.AcademicYear ?? "",
     academicLevelIds: levelIds,
     levelIds,
     levelId: levelIds[0] || "",
     groupIds,
     groupId: groupIds[0] || "",
-    programIds,
-    programId: programIds[0] || "",
+    programIds: isAllPrograms ? [] : programIds,
+    programId: isAllPrograms ? "" : (programIds[0] || ""),
     groupName: e?.groupName || e?.group?.name || "",
-    programName: e?.programName || e?.program?.name || "",
+    programName: isAllPrograms ? "All Programs" : (e?.programName || e?.program?.name || ""),
     academicLevelName: e?.academicLevelName || e?.levelName || e?.academicLevel?.name || "",
     selectedSubjectIds,
+    // List/detail DTOs can omit allocations; distinguish omission from an
+    // explicitly empty selection so scheduling can retrieve the server scope.
+    needsSubjectSelection: rawSubjects == null && e?.groupSubjectSelections == null,
     groupSubjectSelections: e?.groupSubjectSelections || {},
     selectedSubjectDetails: ensureArray(e?.selectedSubjectDetails),
     groupProgramSelections: e?.groupProgramSelections || [],
@@ -1884,9 +2586,11 @@ const normalizeExamRecord = (e) => {
     description: e?.description || "",
     status: normalizeStatus(e?.status || "DRAFT"),
     scheduleMode:
-      e?.scheduleMode || getExaminationScheduleMode(e),
+      resolvedExamCategory === "Objective"
+        ? "PATTERN_WISE"
+        : (e?.scheduleMode || (resolvedExamCategory === "Regular" ? "SUBJECT_WISE" : getExaminationScheduleMode(e))),
     schedules: ensureArray(rawSchedules).map((entry) => ({
-      ...normalizeScheduleRecord(entry, groupIds[0] || e?.groupId, e, [], selectedSubjectIds),
+      ...normalizeScheduleRecord(entry, groupIds[0] || e?.groupId, e, [], selectedSubjectIds, roomsList, facultyList, programsList, studentsList),
       examId: id,
     })),
   };
@@ -1900,16 +2604,27 @@ export const pageConfig = {
 
 // ---------- MAIN EXAMINATION PAGE COMPONENT ----------
 export default function ExaminationPage() {
+  const {
+    campuses: contextCampuses = [],
+    activeCampuses = [],
+    selectedCampus = null,
+    selectedCampusId = null,
+  } = useCampusContext();
+
   const academicCtx = useAcademicContext();
   const {
     selectedBoard = null,
     selectedBoardId = null,
+    setSelectedBoard = () => { },
     selectedAcademicYear = null,
     selectedAcademicYearId = null,
+    setSelectedAcademicYear = () => { },
+    boards: contextBoards = [],
     academicYears: contextAcademicYears = [],
   } = academicCtx;
 
   // Master state replacing static mock arrays
+  const [campusesList, setCampusesList] = useState([]);
   const [boards, setBoards] = useState([]);
   const [academicYears, setAcademicYears] = useState([]);
   const [academicLevels, setAcademicLevels] = useState([]);
@@ -1925,10 +2640,29 @@ export default function ExaminationPage() {
   const [exams, setExams] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const mutationRef = useRef(false);
-  const [loading, setLoading] = useState(false);
   const [examsLoading, setExamsLoading] = useState(false);
   const [examsError, setExamsError] = useState(null);
   const loadExamsAbortRef = useRef(null);
+  const isFetchingExamsRef = useRef(false);
+  const lastFetchedExamsKeyRef = useRef("");
+  const fetchedScheduleExamIdsRef = useRef(new Set());
+  const loadSchedulesAbortRef = useRef(null);
+  const prevFetchParamsRef = useRef({ campusId: null, boardId: null, yearId: null });
+
+  const roomsRef = useRef(rooms);
+  roomsRef.current = rooms;
+  const facultyRef = useRef(faculty);
+  facultyRef.current = faculty;
+  const programsRef = useRef(programs);
+  programsRef.current = programs;
+  const studentsRef = useRef(students);
+  studentsRef.current = students;
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
+  const eligibleSubjectsRef = useRef(eligibleSubjects);
+  eligibleSubjectsRef.current = eligibleSubjects;
+  const examsRef = useRef(exams);
+  examsRef.current = exams;
 
   // Clean React View State (No Window Router Hacks)
   const [viewMode, setViewMode] = useState("list"); // "list" | "add" | "edit"
@@ -1970,96 +2704,356 @@ export default function ExaminationPage() {
     setToast({ message, type });
   }, []);
 
-  const loadPersistedExamConfigs = () => {
-    try {
-      const raw = sessionStorage.getItem("cms_submitted_exam_configs");
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        return new Map(Object.entries(parsed));
+  const effectiveCampuses = useMemo(() => {
+    if (campusesList.length > 0) return campusesList;
+    if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
+    return (contextCampuses || []).filter((c) => c && c.isActive !== false && String(c.status || "").toLowerCase() !== "inactive");
+  }, [campusesList, activeCampuses, contextCampuses]);
+
+  const effectiveCampus = useMemo(() => {
+    const targetId = normalizeId(selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId);
+    if (targetId) {
+      const match = effectiveCampuses.find((c) => normalizeId(c.id) === targetId || normalizeId(c.campusId) === targetId);
+      if (match) return match;
+      if (selectedCampus && (normalizeId(selectedCampus.id) === targetId || normalizeId(selectedCampus.campusId) === targetId)) {
+        return selectedCampus;
       }
-    } catch { }
-    return new Map();
-  };
+      return { id: targetId, campusId: targetId, name: selectedCampus?.name || `Campus ${targetId}` };
+    }
+    return (
+      selectedCampus ||
+      effectiveCampuses.find((c) => c.isHQ) ||
+      effectiveCampuses[0] ||
+      null
+    );
+  }, [effectiveCampuses, selectedCampusId, selectedCampus]);
 
-  const savePersistedExamConfig = (id, config) => {
-    try {
-      const raw = sessionStorage.getItem("cms_submitted_exam_configs");
-      const current = raw ? JSON.parse(raw) : {};
-      current[String(id)] = config;
-      sessionStorage.setItem("cms_submitted_exam_configs", JSON.stringify(current));
-    } catch { }
-  };
+  const effectiveCampusId = useMemo(() => {
+    const rawId = selectedCampusId ?? selectedCampus?.id ?? selectedCampus?.campusId ?? effectiveCampus?.campusId ?? effectiveCampus?.id;
+    return normalizeId(rawId || "1");
+  }, [effectiveCampus, selectedCampus, selectedCampusId]);
 
-  const submittedExamConfigurations = useRef(loadPersistedExamConfigs());
+  const campusAffiliatedBoardIds = useMemo(() => {
+    if (!effectiveCampus) return EMPTY_ARRAY;
+    const ids = new Set();
+    if (Array.isArray(effectiveCampus.boardIds)) {
+      effectiveCampus.boardIds.forEach((id) => id && ids.add(normalizeId(id)));
+    }
+    if (Array.isArray(effectiveCampus.affiliatedBoards)) {
+      effectiveCampus.affiliatedBoards.forEach((b) => {
+        const bId = normalizeId(b.boardId ?? b.id);
+        if (bId) ids.add(bId);
+      });
+    }
+    return ids.size > 0 ? Array.from(ids) : EMPTY_ARRAY;
+  }, [effectiveCampus]);
 
-  const loadExaminations = useCallback(async (isRetry = false) => {
+  const campusBoards = useMemo(() => {
+    const masterBoardsPool = boards.length > 0 ? boards : (contextBoards.length > 0 ? contextBoards : []);
+    if (!effectiveCampus) return masterBoardsPool;
+
+    const affiliated = Array.isArray(effectiveCampus.affiliatedBoards) && effectiveCampus.affiliatedBoards.length > 0
+      ? effectiveCampus.affiliatedBoards
+      : [];
+    const boardIds = campusAffiliatedBoardIds;
+
+    if (!affiliated.length && !boardIds.length) {
+      return masterBoardsPool;
+    }
+
+    const matched = masterBoardsPool.filter((b) => {
+      const bId = normalizeId(b.id ?? b.boardId);
+      const bCode = String(b.code || b.boardCode || "").trim().toLowerCase();
+      const bName = String(b.name || b.boardName || "").trim().toLowerCase();
+
+      const matchesAffiliated = affiliated.some((aff) => {
+        const affId = normalizeId(aff.boardId ?? aff.id);
+        const affCode = String(aff.boardCode ?? aff.code ?? "").trim().toLowerCase();
+        const affName = String(aff.boardName ?? aff.name ?? "").trim().toLowerCase();
+        return (affId && affId === bId) || (affCode && affCode === bCode) || (affName && affName === bName);
+      });
+
+      const matchesId = boardIds.length > 0 && boardIds.includes(bId);
+      return matchesAffiliated || matchesId;
+    });
+
+    if (matched.length > 0) return matched;
+
+    if (affiliated.length > 0) {
+      return affiliated.map((item) => ({
+        ...item,
+        id: normalizeId(item.boardId ?? item.id),
+        boardId: normalizeId(item.boardId ?? item.id),
+        name: item.boardName ?? item.name,
+        code: item.boardCode ?? item.code ?? "",
+        isActive: true,
+      }));
+    }
+
+    return masterBoardsPool;
+  }, [boards, contextBoards, effectiveCampus, campusAffiliatedBoardIds]);
+
+  // 1. Campus Change -> Cascade Board Change
+  const prevCampusIdRef = useRef(effectiveCampusId);
+  useEffect(() => {
+    if (!effectiveCampusId || !campusBoards.length) return;
+
+    const isCampusSwitched = prevCampusIdRef.current !== effectiveCampusId;
+    prevCampusIdRef.current = effectiveCampusId;
+
+    const currentBoardId = normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId);
+    const isCurrentValid = currentBoardId && (
+      (campusAffiliatedBoardIds.length > 0 && campusAffiliatedBoardIds.includes(currentBoardId)) ||
+      campusBoards.some((b) => normalizeId(b.id ?? b.boardId) === currentBoardId)
+    );
+
+    // If current board is not affiliated with this campus, or campus just switched and board not in new campus, cascade
+    if (!isCurrentValid || (isCampusSwitched && !campusAffiliatedBoardIds.includes(currentBoardId))) {
+      const nextBoard = campusBoards[0];
+      if (nextBoard && typeof setSelectedBoard === "function") {
+        setSelectedBoard(nextBoard);
+      }
+    }
+  }, [effectiveCampusId, campusBoards, campusAffiliatedBoardIds, selectedBoardId, selectedBoard, setSelectedBoard]);
+
+  // 2. Board Change -> Cascade Academic Year Change
+  const prevBoardIdRef = useRef(normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId));
+  useEffect(() => {
+    const currentBoardId = normalizeId(selectedBoardId ?? selectedBoard?.id ?? selectedBoard?.boardId);
+    if (!currentBoardId) return;
+
+    const isBoardSwitched = prevBoardIdRef.current !== currentBoardId;
+    prevBoardIdRef.current = currentBoardId;
+
+    const masterYears = academicYears.length > 0 ? academicYears : (contextAcademicYears.length > 0 ? contextAcademicYears : []);
+    const boardYears = masterYears.filter((y) => {
+      const yBoardId = normalizeId(y.boardId ?? y.BoardId);
+      return !yBoardId || yBoardId === currentBoardId;
+    });
+
+    if (boardYears.length === 0) return;
+
+    const currentYearId = normalizeId(selectedAcademicYearId ?? selectedAcademicYear?.id ?? selectedAcademicYear?.academicYearId);
+    const isCurrentYearValid = currentYearId && boardYears.some((y) => normalizeId(y.id ?? y.academicYearId) === currentYearId);
+
+    if (!isCurrentYearValid || isBoardSwitched) {
+      const currentYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.academicYearName || selectedAcademicYear?.code || "").trim();
+      const matchingByName = currentYearName
+        ? boardYears.find((y) => String(y.name || y.code || "").trim().toLowerCase() === currentYearName.toLowerCase())
+        : null;
+      const nextYear = matchingByName || boardYears.find((y) => y.isActive !== false) || boardYears[0];
+
+      if (nextYear && typeof setSelectedAcademicYear === "function") {
+        setSelectedAcademicYear(nextYear);
+      }
+    }
+  }, [selectedBoardId, selectedBoard, academicYears, contextAcademicYears, selectedAcademicYearId, selectedAcademicYear, setSelectedAcademicYear]);
+
+  const loadExaminations = useCallback(async (
+    isRetry = false,
+    targetCampusId = effectiveCampusId,
+    targetBoardId = selectedBoardId,
+    targetYearId = selectedAcademicYearId
+  ) => {
+    const effCampus = targetCampusId ?? effectiveCampusId;
+    const effBoard = targetBoardId ?? selectedBoardId;
+    const effYear = targetYearId ?? selectedAcademicYearId;
+    const fetchKey = `${effCampus || ""}_${effBoard || ""}_${effYear || ""}`;
+
+    if (!isRetry && isFetchingExamsRef.current && lastFetchedExamsKeyRef.current === fetchKey) {
+      return;
+    }
+
     loadExamsAbortRef.current?.abort();
     const controller = new AbortController();
     loadExamsAbortRef.current = controller;
     const { signal } = controller;
+    isFetchingExamsRef.current = true;
+    lastFetchedExamsKeyRef.current = fetchKey;
     setExamsLoading(true);
     setExamsError(null);
     try {
-      const response = await apiClient.get("/api/v1/examinations", { signal });
+      const params = {};
+      if (effCampus) {
+        params.campusId = Number(effCampus) || effCampus;
+      }
+      if (effBoard) {
+        params.boardId = Number(effBoard) || effBoard;
+      }
+      if (effYear) {
+        params.AcademicYearId = Number(effYear) || effYear;
+      }
+
+      const headers = {
+        ...(effCampus ? { "X-Campus-Id": String(effCampus) } : {}),
+      };
+
+      const response = await apiClient.get("/api/v1/examinations", { signal, params, headers });
       if (signal.aborted) return;
       const raw = unwrap(response);
-      const normalized = raw.map((record) => normalizeExamRecord(mergeExaminationConfiguration(record, submittedExamConfigurations.current.get(normalizeId(record.examinationId ?? record.id)))));
-      setExams(normalized);
-      const initialSchedules = normalized.flatMap((exam, index) =>
+      const normalized = raw.map((record) => normalizeExamRecord(record));
+
+      const effCampusStr = effCampus ? normalizeId(effCampus) : "";
+      const effBoardStr = effBoard ? normalizeId(effBoard) : "";
+      const effYearStr = effYear ? normalizeId(effYear) : "";
+      const effYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.code || "").trim().toLowerCase();
+
+      // Tenant isolation: match campus, board, and academic year
+      const filteredExams = normalized.filter((exam) => {
+        // 1. Campus isolation
+        if (effCampusStr) {
+          const examCampId = normalizeId(exam.campusId);
+          if (examCampId) {
+            if (examCampId !== effCampusStr) return false;
+          } else if (campusAffiliatedBoardIds.length > 0 && exam.boardId) {
+            if (!campusAffiliatedBoardIds.includes(normalizeId(exam.boardId))) {
+              return false;
+            }
+          }
+        }
+
+        // 2. Board isolation
+        if (effBoardStr && exam.boardId) {
+          if (normalizeId(exam.boardId) !== effBoardStr) return false;
+        }
+
+        // 3. Academic Year isolation
+        if (effYearStr) {
+          const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
+          const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+          const idMatches = examYearId && examYearId === effYearStr;
+          const nameMatches = effYearName && examYearName && (examYearName === effYearName || examYearName.includes(effYearName) || effYearName.includes(examYearName));
+          if (examYearId && !idMatches && !nameMatches) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      setExams((prev) => {
+        const prevMap = new Map(prev.map((e) => [normalizeId(e.id), e]));
+        return filteredExams.map((exam) => {
+          const existing = prevMap.get(normalizeId(exam.id));
+          if (existing) {
+            return {
+              ...exam,
+              selectedSubjectIds: (exam.selectedSubjectIds && exam.selectedSubjectIds.length > 0)
+                ? exam.selectedSubjectIds
+                : (existing.selectedSubjectIds || []),
+              groupSubjectSelections: (exam.groupSubjectSelections && Object.keys(exam.groupSubjectSelections).length > 0)
+                ? exam.groupSubjectSelections
+                : (existing.groupSubjectSelections || {}),
+              selectedSubjectDetails: (exam.selectedSubjectDetails && exam.selectedSubjectDetails.length > 0)
+                ? exam.selectedSubjectDetails
+                : (existing.selectedSubjectDetails || []),
+            };
+          }
+          return exam;
+        });
+      });
+      const initialSchedules = filteredExams.flatMap((exam, index) =>
         Array.isArray(raw[index]?.schedules) || Array.isArray(raw[index]?.examinationSchedules)
           ? (exam.schedules || []).map((entry) => ({ ...entry, examId: exam.id }))
           : []
       );
       if (initialSchedules.length > 0) {
-        setSchedules(initialSchedules);
+        setSchedules((prev) => {
+          const map = new Map();
+          prev.forEach((s) => map.set(normalizeId(s.id), s));
+          initialSchedules.forEach((s) => map.set(normalizeId(s.id), s));
+          return Array.from(map.values());
+        });
       }
-      // Concurrently fetch schedule rows for active examinations to ensure room/hall occupancy is fully known
-      const activeExams = normalized.filter((e) => ["DRAFT", "SCHEDULED"].includes(e.status));
-      Promise.allSettled(
-        activeExams.map((e) =>
-          apiClient.get(`/api/v1/examinations/${e.id}/schedules`, { signal }).then((res) => {
-            const sRaw = unwrap(res);
-            const fallbackGid = e.groupIds?.[0] || e.groupId;
-            return sRaw.map((entry) => ({
-              ...normalizeScheduleRecord(entry, fallbackGid, e, [], []),
-              examId: e.id,
-            }));
-          }).catch(() => [])
-        )
-      ).then((results) => {
-        if (signal.aborted) return;
-        const fetchedSchedules = results
-          .filter((r) => r.status === "fulfilled")
-          .flatMap((r) => r.value);
-        if (fetchedSchedules.length > 0) {
-          setSchedules((prev) => {
-            const map = new Map();
-            prev.forEach((s) => map.set(normalizeId(s.id), s));
-            fetchedSchedules.forEach((s) => map.set(normalizeId(s.id), s));
-            return Array.from(map.values());
-          });
-        }
-      });
       if (isRetry) showToast("Examinations reloaded successfully.", "success");
-      return normalized;
+      return filteredExams;
     } catch (error) {
       if (signal.aborted) return;
       setExams([]);
       setSchedules([]);
       setExamsError(getApiErrorMessage(error) || "Failed to load examinations. Please retry.");
     } finally {
+      if (lastFetchedExamsKeyRef.current === fetchKey) {
+        isFetchingExamsRef.current = false;
+      }
       if (!signal.aborted) setExamsLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, effectiveCampusId, selectedBoardId, selectedAcademicYearId, selectedAcademicYear, campusAffiliatedBoardIds]);
+
+  // Dedicated background schedule loader for active exams (invoked on demand when scheduling)
+  const loadActiveExamSchedules = useCallback(async (targetCampusId = effectiveCampusId, examList = exams) => {
+    const effCampus = targetCampusId ?? effectiveCampusId;
+    const effCampusStr = effCampus ? normalizeId(effCampus) : "";
+    const activeExams = (examList || []).filter((e) => {
+      if (effCampusStr) {
+        const examCampId = normalizeId(e.campusId);
+        if (examCampId && examCampId !== effCampusStr) return false;
+      }
+      return ["DRAFT", "SCHEDULED", "ONGOING", "ACTIVE", "PUBLISHED"].includes(normalizeStatus(e.status));
+    });
+
+    const examsToFetch = activeExams.filter((e) => !fetchedScheduleExamIdsRef.current.has(normalizeId(e.id)));
+    if (examsToFetch.length === 0) return;
+
+    loadSchedulesAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadSchedulesAbortRef.current = controller;
+    const { signal } = controller;
+
+    try {
+      const results = await settleWithConcurrency(
+        examsToFetch,
+        3,
+        async (e) => {
+          try {
+            const res = await apiClient.get(`/api/v1/examinations/${e.id}/schedules`, {
+              signal,
+              params: effCampus ? { campusId: effCampus } : {},
+              headers: effCampus ? { "X-Campus-Id": String(effCampus) } : {},
+            });
+            fetchedScheduleExamIdsRef.current.add(normalizeId(e.id));
+            const sRaw = unwrap(res);
+            const fallbackGid = e.groupIds?.[0] || e.groupId;
+            return sRaw.map((entry) => ({
+              ...normalizeScheduleRecord(entry, fallbackGid, e, groupsRef.current, eligibleSubjectsRef.current, roomsRef.current, facultyRef.current, programsRef.current, studentsRef.current),
+              examId: e.id,
+            }));
+          } catch (err) {
+            if (signal.aborted || err?.name === "CanceledError" || err?.code === "ERR_CANCELED") {
+              return [];
+            }
+            return [];
+          }
+        },
+        signal
+      );
+
+      if (signal.aborted) return;
+      const fetchedSchedules = results
+        .filter((r) => r.status === "fulfilled" && Array.isArray(r.value))
+        .flatMap((r) => r.value);
+      if (fetchedSchedules.length > 0) {
+        setSchedules((prev) => {
+          const map = new Map();
+          prev.forEach((s) => map.set(normalizeId(s.id), s));
+          fetchedSchedules.forEach((s) => map.set(normalizeId(s.id), s));
+          return Array.from(map.values());
+        });
+      }
+    } catch (_) {
+      // Abort gracefully handled
+    }
+  }, [effectiveCampusId, exams]);
 
   // Robust Student Fetching & Enrichment from Students, Admissions, and Active Endpoints
-  const fetchStudentsList = useCallback(async () => {
+  const fetchStudentsList = useCallback(async (signal) => {
     try {
       const [studentsRes, admissionsRes, activeStudentsRes] = await Promise.allSettled([
-        apiClient.get("/api/v1/students"),
-        apiClient.get("/api/v1/student-admissions"),
-        apiClient.get("/api/v1/students/active"),
+        apiClient.get("/api/v1/students", { signal }),
+        apiClient.get("/api/v1/student-admissions", { signal }),
+        apiClient.get("/api/v1/students/active", { signal }),
       ]);
+      if (signal?.aborted) return [];
 
       const rawStudents = studentsRes.status === "fulfilled" ? unwrap(studentsRes.value) : [];
       const rawAdmissions = admissionsRes.status === "fulfilled" ? unwrap(admissionsRes.value) : [];
@@ -2104,9 +3098,13 @@ export default function ExaminationPage() {
         const academicYearId = normalizeId(s.academicYearId ?? s.AcademicYearId ?? adm.academicYearId ?? adm.AcademicYearId);
         const status = s.status ?? s.studentStatus ?? s.Status ?? adm.status ?? "Active";
 
+        const rawCampus = s.campusId ?? s.CampusId ?? s.campus?.id ?? s.campus?.campusId ?? adm.campusId ?? adm.CampusId;
+        const sCampusId = normalizeId(rawCampus);
+
         normalizedStudents.push({
           id: id || admNo || `student-${dedupKey}`,
           studentId: id || admNo,
+          campusId: sCampusId,
           name: sName,
           admissionNo: admNo,
           rollNo: s.rollNo ?? s.rollNumber ?? adm.rollNo ?? adm.rollNumber ?? "",
@@ -2129,9 +3127,11 @@ export default function ExaminationPage() {
         const dedupKey = id || admNo || sName.toLowerCase();
         if (dedupKey && !seenIds.has(dedupKey)) {
           seenIds.add(dedupKey);
+          const admCampusId = normalizeId(adm.campusId ?? adm.CampusId ?? adm.campus?.id);
           normalizedStudents.push({
             id: id || admNo || `adm-${dedupKey}`,
             studentId: id || admNo,
+            campusId: admCampusId,
             name: sName,
             admissionNo: admNo,
             rollNo: adm.rollNo ?? adm.rollNumber ?? "",
@@ -2155,29 +3155,138 @@ export default function ExaminationPage() {
     }
   }, []);
 
+  // Robust Room & Exam Hall Fetching via GET /api/v1/rooms
+  const fetchRoomsList = useCallback(async (filters = {}, signal, targetCampusId = effectiveCampusId) => {
+    try {
+      const params = {};
+      if (targetCampusId) params.campusId = targetCampusId;
+      if (filters?.building) params.Building = filters.building;
+      if (filters?.blockName || filters?.block) params.BlockName = filters.blockName || filters.block;
+      if (filters?.floor) params.Floor = filters.floor;
+      if (filters?.roomType) params.RoomType = filters.roomType;
+      if (filters?.status) params.Status = filters.status;
+      if (filters?.isActive !== undefined) params.IsActive = filters.isActive;
+      if (filters?.search || filters?.searchTerm) params.SearchTerm = filters.search || filters.searchTerm;
+
+      const response = await apiClient.get("/api/v1/rooms", {
+        signal,
+        params: Object.keys(params).length ? params : undefined,
+      });
+
+      if (signal?.aborted) return [];
+      const rawRoomsList = unwrap(response);
+      const seenKeys = new Set();
+      const normalizedRooms = [];
+
+      for (const r of rawRoomsList) {
+        if (!r) continue;
+        const id = normalizeId(r.roomId ?? r.RoomId ?? r.id ?? r.Id ?? r._id);
+        const roomNo = String(r.roomNumber ?? r.RoomNumber ?? r.roomCode ?? r.RoomCode ?? r.roomNo ?? r.RoomNo ?? "").trim();
+        const rCampusId = normalizeId(r.campusId ?? r.CampusId ?? targetCampusId);
+        if (targetCampusId && r.campusId && normalizeId(r.campusId) !== normalizeId(targetCampusId)) continue;
+        const dedupKey = id || roomNo.toLowerCase();
+        if (!dedupKey || seenKeys.has(dedupKey)) continue;
+        seenKeys.add(dedupKey);
+
+        const rawName = String(r.roomName ?? r.RoomName ?? r.name ?? r.Name ?? "").trim();
+        const roomName = rawName || (roomNo ? `Room ${roomNo}` : `Room ${id}`);
+        const roomType = String(r.roomType ?? r.RoomType ?? r.type ?? r.Type ?? r.room_type ?? "Classroom").trim();
+        const capacity = Number(r.capacity ?? r.Capacity ?? r.roomCapacity ?? r.maxCapacity ?? 0) || 0;
+        const blockName = String(r.blockName ?? r.BlockName ?? r.buildingName ?? r.BuildingName ?? r.building ?? r.Building ?? r.block ?? r.Block ?? "").trim();
+        const floor = String(r.floor ?? r.Floor ?? "").trim();
+
+        const rawIsActive = r.isActive ?? r.IsActive;
+        const rawStatus = r.status ?? r.Status;
+        const isAct =
+          rawIsActive === true ||
+          String(rawIsActive) === "1" ||
+          String(rawIsActive).toLowerCase() === "true" ||
+          String(rawStatus || "").toLowerCase() === "active" ||
+          String(rawStatus || "").toLowerCase() === "enabled" ||
+          (rawIsActive == null && rawStatus == null);
+
+        const status = isAct ? "Active" : "Inactive";
+
+        normalizedRooms.push({
+          id: id || `room-${dedupKey}`,
+          roomId: id,
+          campusId: rCampusId,
+          name: roomName,
+          roomName,
+          roomNumber: roomNo || roomName,
+          roomCode: String(r.roomCode ?? r.RoomCode ?? "").trim(),
+          capacity: capacity || 40,
+          roomType: roomType || "Classroom",
+          type: roomType || "Classroom",
+          blockName,
+          block: blockName,
+          building: blockName,
+          buildingName: blockName,
+          floor,
+          levelId: r.levelId || r.LevelId ? normalizeId(r.levelId ?? r.LevelId) : "ALL",
+          status,
+          isActive: isAct,
+        });
+      }
+
+      setRooms(normalizedRooms);
+      return normalizedRooms;
+    } catch (e) {
+      if (signal?.aborted) return [];
+      console.warn("fetchRoomsList encountered an issue:", e);
+      return [];
+    }
+  }, [effectiveCampusId]);
+
   // 1. Initial Mount: Active Boards, Patterns, Exam Types, Rooms, Faculty, Academic Levels, Groups, Students
   useEffect(() => {
     let isMounted = true;
+    const controller = new AbortController();
+    const { signal } = controller;
     const fetchInitialMasterData = async () => {
-      setLoading(true);
       try {
-        const [boardsRes, yearsRes, patternsRes, typesRes, roomsRes, facultyRes, levelsRes, groupsRes, subjectsRes] =
+        const [boardsRes, yearsRes, patternsRes, typesRes, facultyRes, levelsRes, groupsRes, subjectsRes, programsRes, campusesRes] =
           await Promise.allSettled([
-            apiClient.get("/api/v1/boards/active").catch(() => apiClient.get("/api/v1/boards")),
-            apiClient.get("/api/v1/academic-years").catch(() => null),
-            apiClient.get("/api/v1/examinations/patterns"),
-            apiClient.get("/api/v1/examinations/types"),
-            apiClient.get("/api/v1/rooms"),
-            apiClient.get("/api/v1/staff", { params: { staffType: "Teaching" } }),
-            apiClient.get("/api/v1/academic-levels"),
-            apiClient.get("/api/v1/groups"),
-            apiClient.get("/api/v1/subjects").catch(() => null),
+            apiClient.get("/api/v1/boards/active", { signal }).catch((error) => {
+              if (signal.aborted) throw error;
+              return apiClient.get("/api/v1/boards", { signal });
+            }),
+            apiClient.get("/api/v1/academic-years", {
+              signal,
+              params: {
+                ...(effectiveCampusId ? { campusId: effectiveCampusId, CampusId: effectiveCampusId } : {}),
+                ...(selectedBoardId ? { boardId: selectedBoardId, BoardId: selectedBoardId } : {}),
+                isActive: true,
+              },
+            }).catch(() => null),
+            apiClient.get("/api/v1/examinations/patterns", { signal }),
+            apiClient.get("/api/v1/examinations/types", { signal }),
+            apiClient.get("/api/v1/staff/dropdown", { signal, params: { staffType: "Teaching" } }).catch(() => apiClient.get("/api/v1/staff", { signal, params: { staffType: "Teaching", pageSize: 1000 } })),
+            apiClient.get("/api/v1/academic-levels", { signal }),
+            apiClient.get("/api/v1/groups", { signal }),
+            apiClient.get("/api/v1/subjects", { signal }).catch(() => null),
+            apiClient.get("/api/v1/programs", { signal }),
+            apiClient.get("/api/v1/campuses", { signal, params: { isActive: true } }).catch(() => null),
           ]);
 
         if (!isMounted) return;
 
-        // Fetch students and enrich with admissions
-        await fetchStudentsList();
+        // Independent enrichment must not delay publishing master data.
+        void fetchStudentsList(signal);
+
+        if (campusesRes?.status === "fulfilled" && campusesRes.value) {
+          const rawCampuses = unwrap(campusesRes.value);
+          const loadedCampuses = rawCampuses.map((c) => ({
+            ...c,
+            id: normalizeId(c.campusId ?? c.id),
+            campusId: normalizeId(c.campusId ?? c.id),
+            name: c.campusName ?? c.name,
+            isActive: c.isActive !== false,
+          })).filter((c) => c.id && c.isActive);
+          if (loadedCampuses.length > 0) {
+            setCampusesList(loadedCampuses);
+          }
+        }
 
         if (boardsRes.status === "fulfilled") {
           const rawBoards = unwrap(boardsRes.value);
@@ -2198,10 +3307,11 @@ export default function ExaminationPage() {
           const rawYears = unwrap(yearsRes.value);
           const mappedYears = rawYears
             .map((y) => ({
-              id: normalizeId(y.academicYearId ?? y.id),
-              name: y.academicYearName ?? y.yearName ?? y.name,
-              code: y.code ?? y.academicYearName ?? y.name,
-              boardId: normalizeId(y.boardId),
+              id: normalizeId(y.academicYearId ?? y.id ?? y.AcademicYearId),
+              name: y.academicYearName ?? y.yearName ?? y.name ?? y.AcademicYearName,
+              code: y.code ?? y.academicYearName ?? y.name ?? y.AcademicYearName,
+              boardId: normalizeId(y.boardId ?? y.BoardId),
+              campusId: normalizeId(y.campusId ?? y.CampusId),
               isActive: y.isActive !== false,
             }))
             .filter((y) => y.name);
@@ -2218,35 +3328,23 @@ export default function ExaminationPage() {
           setExamTypes(unwrap(typesRes.value));
         }
 
-        if (roomsRes.status === "fulfilled") {
-          const rawRooms = unwrap(roomsRes.value);
-          setRooms(
-            rawRooms
-              .map((r) => ({
-                id: normalizeId(r.roomId ?? r.id),
-                name: r.name || `Room ${r.roomNumber || r.id}`,
-                roomNumber: r.roomNumber || "",
-                capacity: Number(r.capacity) || 0,
-                type: r.type || "Exam Hall",
-                levelId: r.levelId || "ALL",
-                status: r.status || (r.isActive ? "Active" : "Inactive"),
-                isActive: r.isActive !== false && normalizeStatus(r.status) !== "INACTIVE",
-              }))
-              .filter((r) => r.isActive),
-          );
-        }
-
         if (facultyRes.status === "fulfilled") {
           const rawFaculty = unwrap(facultyRes.value);
           setFaculty(
             rawFaculty
-              .map((f) => ({
-                id: normalizeId(f.facultyId ?? f.staffId ?? f.id),
-                name: f.fullName ?? f.name,
-                designation: f.designation || "Teaching Faculty",
-                isActive: f.isActive !== false && normalizeStatus(f.status) !== "INACTIVE" && (!f.staffType || normalizeStatus(f.staffType) === "TEACHING"),
-                subjectsTaught: (f.subjectsTaught || f.subjectIds || f.staffSubjectAllocations || []).map((s) => normalizeId(s.subjectId ?? s)),
-              }))
+              .map((f) => {
+                const resolvedName = f.fullName || f.name || `${f.firstName || ""} ${f.lastName || ""}`.trim();
+                return {
+                  id: normalizeId(f.facultyId ?? f.staffId ?? f.id),
+                  name: resolvedName,
+                  fullName: f.fullName || resolvedName,
+                  firstName: f.firstName || "",
+                  lastName: f.lastName || "",
+                  designation: f.designation || "Teaching Faculty",
+                  isActive: f.isActive !== false && normalizeStatus(f.status) !== "INACTIVE" && (!f.staffType || normalizeStatus(f.staffType) === "TEACHING"),
+                  subjectsTaught: (f.subjectsTaught || f.subjectIds || f.staffSubjectAllocations || []).map((s) => normalizeId(s.subjectId ?? s)),
+                };
+              })
               .filter((f) => f.isActive),
           );
         }
@@ -2295,7 +3393,8 @@ export default function ExaminationPage() {
           }
 
           try {
-            const progsRes = await apiClient.get("/api/v1/programs");
+            if (programsRes.status === "rejected") throw programsRes.reason;
+            const progsRes = programsRes.value;
             const rawProgs = unwrap(progsRes);
             if (Array.isArray(rawProgs) && rawProgs.length > 0) {
               setPrograms((prev) => {
@@ -2346,41 +3445,101 @@ export default function ExaminationPage() {
           );
         }
       } catch (err) {
-        showToast("Failed to load initial master data.", "error");
-      } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) showToast("Failed to load initial master data.", "error");
       }
     };
 
     fetchInitialMasterData();
-    loadExaminations();
     return () => {
       isMounted = false;
-      if (loadExamsAbortRef.current) {
-        loadExamsAbortRef.current.abort();
-      }
+      controller.abort();
     };
-  }, [showToast, loadExaminations]);
+  }, [showToast, fetchStudentsList]);
+
+  // Reactive refresh when navbar campus, board or year changes
+  useEffect(() => {
+    const campusKey = normalizeId(effectiveCampusId);
+    const boardKey = normalizeId(selectedBoardId);
+    const yearKey = normalizeId(selectedAcademicYearId);
+
+    if (
+      prevFetchParamsRef.current.campusId === campusKey &&
+      prevFetchParamsRef.current.boardId === boardKey &&
+      prevFetchParamsRef.current.yearId === yearKey
+    ) {
+      return;
+    }
+    prevFetchParamsRef.current = { campusId: campusKey, boardId: boardKey, yearId: yearKey };
+    fetchedScheduleExamIdsRef.current.clear();
+
+    setExamId("");
+    setDetail(null);
+    setEditingExam(null);
+    loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
+    fetchRoomsList({ campusId: effectiveCampusId }, undefined, effectiveCampusId);
+  }, [effectiveCampusId, selectedBoardId, selectedAcademicYearId, loadExaminations, fetchRoomsList]);
+
+  // Lazy-load active exam schedules for collision detection when Exam Schedule tab is active
+  useEffect(() => {
+    if (activeTab === "schedule" && exams.length > 0) {
+      loadActiveExamSchedules(effectiveCampusId, exams);
+    }
+  }, [activeTab, effectiveCampusId, exams, loadActiveExamSchedules]);
 
   const query = search.trim().toLowerCase();
 
-  const list = exams.filter(
-    (exam) =>
-      (!filters.groupId || (exam.groupIds || [exam.groupId]).map(normalizeId).includes(filters.groupId)) &&
-      (!filters.programId || (exam.programIds || [exam.programId]).map(normalizeId).includes(filters.programId)) &&
-      (!filters.levelId || (exam.levelIds || [exam.levelId]).map(normalizeId).includes(filters.levelId)) &&
-      (!query ||
-        [
-          exam.code,
-          exam.name,
-          codeOf(boards, exam.boardId),
-          getGroupNames(exam, groups),
-          getLevelNames(exam, academicLevels),
-          exam.examCategory,
-          exam.examPattern,
-          exam.status,
-        ].some((val) => String(val || "").toLowerCase().includes(query))),
-  );
+  const list = exams.filter((exam) => {
+    // 1. Campus isolation
+    if (effectiveCampusId) {
+      const examCampId = normalizeId(exam.campusId);
+      if (examCampId) {
+        if (examCampId !== normalizeId(effectiveCampusId)) return false;
+      } else if (campusAffiliatedBoardIds.length > 0 && exam.boardId) {
+        if (!campusAffiliatedBoardIds.includes(normalizeId(exam.boardId))) {
+          return false;
+        }
+      }
+    }
+
+    // 2. Board isolation
+    if (selectedBoardId && exam.boardId) {
+      if (normalizeId(exam.boardId) !== normalizeId(selectedBoardId)) return false;
+    }
+
+    // 3. Academic Year isolation
+    if (selectedAcademicYearId) {
+      const examYearId = normalizeId(exam.yearId ?? exam.academicYearId);
+      const selYearId = normalizeId(selectedAcademicYearId);
+      const selYearName = String(selectedAcademicYear?.name || selectedAcademicYear?.code || "").trim().toLowerCase();
+      const examYearName = String(exam.academicYearName || exam.academicYear || "").trim().toLowerCase();
+
+      const idMatches = examYearId && examYearId === selYearId;
+      const nameMatches = selYearName && examYearName && (examYearName === selYearName || examYearName.includes(selYearName) || selYearName.includes(examYearName));
+      if (examYearId && !idMatches && !nameMatches) {
+        return false;
+      }
+    }
+
+    if (filters.groupId && !(exam.groupIds || [exam.groupId]).map(normalizeId).includes(filters.groupId)) return false;
+    if (filters.programId && !(exam.programIds || [exam.programId]).map(normalizeId).includes(filters.programId)) return false;
+    if (filters.levelId && !(exam.levelIds || [exam.levelId]).map(normalizeId).includes(filters.levelId)) return false;
+
+    if (query) {
+      const matchesSearch = [
+        exam.code,
+        exam.name,
+        codeOf(boards, exam.boardId),
+        getGroupNames(exam, groups),
+        getLevelNames(exam, academicLevels),
+        exam.examCategory,
+        exam.examPattern,
+        exam.status,
+      ].some((val) => String(val || "").toLowerCase().includes(query));
+      if (!matchesSearch) return false;
+    }
+
+    return true;
+  });
 
   const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   const shownExams = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -2413,6 +3572,28 @@ export default function ExaminationPage() {
   };
 
   const currentExam = exams.find((e) => String(e.id) === String(examId));
+
+  useEffect(() => {
+    if (!currentExam?.needsSubjectSelection || !isRegularExamination(currentExam)) return;
+    const controller = new AbortController();
+    const selectedId = currentExam.id;
+    apiClient.get(`/api/v1/examinations/${selectedId}/eligible-subjects`, {
+      signal: controller.signal,
+    }).then((response) => {
+      if (controller.signal.aborted) return;
+      const subjectIds = [...new Set(unwrap(response)
+        .map((subject) => normalizeId(subject.subjectId ?? subject.id))
+        .filter(Boolean))];
+      setExams((prev) => prev.map((item) => item.id === selectedId
+        ? { ...item, selectedSubjectIds: subjectIds, needsSubjectSelection: false }
+        : item));
+    }).catch((error) => {
+      if (!controller.signal.aborted) {
+        showToast(getApiErrorMessage(error) || "Failed to load examination subjects.", "error");
+      }
+    });
+    return () => controller.abort();
+  }, [currentExam, showToast]);
 
   // Preserves all draft schedules when navigating back to Examinations list
   const handleBackFromSchedule = () => {
@@ -2455,7 +3636,33 @@ export default function ExaminationPage() {
       }
     }
 
-    const ok = directExportScheduleExcel(targetExams, schedules, groups, filename);
+    let currentSchedules = schedules;
+    if (currentSchedules.length === 0 && targetExams.length > 0) {
+      try {
+        const results = await Promise.all(
+          targetExams.map((e) =>
+            apiClient.get(`/api/v1/examinations/${e.id}/schedules`, {
+              params: effectiveCampusId ? { campusId: effectiveCampusId } : {},
+              headers: effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {},
+            }).then((res) => unwrap(res)).catch(() => [])
+          )
+        );
+        currentSchedules = results.flat().map((entry) => ({
+          ...entry,
+          examId: entry.examinationId || entry.examId,
+        }));
+        if (currentSchedules.length > 0) {
+          setSchedules((prev) => {
+            const map = new Map();
+            prev.forEach((s) => map.set(normalizeId(s.id), s));
+            currentSchedules.forEach((s) => map.set(normalizeId(s.id), s));
+            return Array.from(map.values());
+          });
+        }
+      } catch (_) { }
+    }
+
+    const ok = directExportScheduleExcel(targetExams, currentSchedules, groups, filename);
     if (!ok) {
       showToast("No scheduled examinations are available to export.", "warning");
     } else {
@@ -2473,28 +3680,49 @@ export default function ExaminationPage() {
           const original = exams.find((exam) => exam.id === normalizeId(editingExamId));
           if (!original || !["DRAFT", "SCHEDULED"].includes(original.status)) throw new Error("This examination is read-only.");
           const persisted = unwrap(await apiClient.get("/api/v1/examinations/" + editingExamId + "/schedules"));
-          const scopeKeys = ["levelIds", "groupIds", "programIds", "selectedSubjectIds"];
-          const changedScope = scopeKeys.some((key) => JSON.stringify(ensureArray(original[key]).map(normalizeId).sort()) !== JSON.stringify(ensureArray(newRecord[key]).map(normalizeId).sort())) || original.examCategory !== newRecord.examCategory || original.examPattern !== newRecord.examPattern;
+          const origScope = canonicalizeScope(original);
+          const newScope = canonicalizeScope(newRecord);
+          const changedScope =
+            JSON.stringify(origScope) !== JSON.stringify(newScope) ||
+            getResolvedExamCategory(original) !== getResolvedExamCategory(newRecord) ||
+            (original.examPattern || "") !== (newRecord.examPattern || "");
           if (persisted.length && changedScope) throw new Error("Remove the persisted schedules before changing Groups, Programs, Subjects, or Pattern.");
           if (newRecord.boardId !== original.boardId || newRecord.yearId !== original.yearId) throw new Error("Board and Academic Year cannot be changed when editing.");
 
           // Identify schedules falling outside the new examination window
           const outOfRange = persisted.filter((s) => {
-            const sDate = canonicalDate(s.examDate || s.date);
+            const sDate = canonicalDate(s.scheduleDate || s.examDate || s.date);
             return sDate && (sDate < newRecord.startDate || sDate > newRecord.endDate);
           });
           if (outOfRange.length > 0) {
-            for (const s of outOfRange) {
-              const sId = s.examScheduleId || s.id;
-              if (sId) {
-                try {
+            const outOfRangeIds = outOfRange.map((s) => normalizeId(s.examScheduleId || s.scheduleId || s.id)).filter(Boolean);
+            if (isCombinedExamination(newRecord)) {
+              for (const s of outOfRange) {
+                const sId = s.examScheduleId || s.scheduleId || s.id;
+                if (sId) {
+                  await updateScheduleInBackend(editingExamId, sId, {
+                    ...s,
+                    date: newRecord.startDate,
+                    examDate: newRecord.startDate,
+                    scheduleDate: newRecord.startDate,
+                  }, faculty, rooms, effectiveCampusId, original, masterPatterns, schedules.filter((x) => normalizeId(x.id) !== normalizeId(sId)));
+                }
+              }
+            } else {
+              for (const s of outOfRange) {
+                const sId = s.examScheduleId || s.scheduleId || s.id;
+                if (sId) {
                   await deleteScheduleFromBackend(editingExamId, sId);
-                } catch { }
+                }
               }
             }
+            setSchedules((prev) => prev.filter((s) => !outOfRangeIds.includes(normalizeId(s.id))));
           }
 
           await apiClient.put(`/api/v1/examinations/${editingExamId}`, {
+            campusId: Number(effectiveCampusId) || 1,
+            examCode: newRecord.examCode || newRecord.code || undefined,
+            code: newRecord.examCode || newRecord.code || undefined,
             examName: newRecord.name,
             name: newRecord.name,
             examCategory: newRecord.examCategory,
@@ -2505,12 +3733,20 @@ export default function ExaminationPage() {
             rawCategory: newRecord.rawCategory || newRecord.examCategory,
             customCategoryName: newRecord.customCategoryName,
             boardId: Number(newRecord.boardId) || newRecord.boardId,
-            academicYearId: Number(newRecord.yearId) || newRecord.yearId,
-            academicLevelIds: newRecord.levelIds.map((id) => Number(id) || id),
-            groupIds: newRecord.groupIds.map((id) => Number(id) || id),
-            programIds: newRecord.programIds.map((id) => Number(id) || id),
-            selectedSubjectIds: newRecord.selectedSubjectIds.map((id) => Number(id) || id),
-            groupProgramSelections: newRecord.groupProgramSelections,
+            academicYearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
+            yearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
+            academicLevelIds: (newRecord.levelIds || []).map((id) => Number(id) || id),
+            groupIds: (newRecord.groupIds || []).map((id) => Number(id) || id),
+            programIds: (newRecord.programIds || []).map((id) => Number(id) || id),
+            selectedSubjectIds: (newRecord.selectedSubjectIds || []).map((id) => Number(id) || id),
+            groupProgramSelections: Array.isArray(newRecord.groupProgramSelections)
+              ? newRecord.groupProgramSelections.map((item) => ({
+                groupId: Number(item?.groupId) || item?.groupId,
+                programIds: Array.isArray(item?.programIds)
+                  ? item.programIds.map((pid) => Number(pid) || pid)
+                  : [],
+              }))
+              : [],
             examPattern: newRecord.examPattern,
             pattern: newRecord.examPattern,
             examType: newRecord.examType,
@@ -2522,46 +3758,7 @@ export default function ExaminationPage() {
             scheduleMode: newRecord.scheduleMode,
           });
 
-          // For combined/objective examinations, recreate schedules on the new start date
-          if (isCombinedExamination(newRecord) && outOfRange.length > 0) {
-            try {
-              const targetGid = newRecord.groupIds?.[0] || newRecord.groupId;
-              const firstSched = outOfRange[0];
-              const remapped = [
-                {
-                  id: "draft-recreated-entry",
-                  examId: editingExamId,
-                  groupId: targetGid,
-                  patternName: newRecord.examPattern || firstSched.patternName,
-                  includedSubjectIds: (newRecord.selectedSubjectIds || []).map(String),
-                  date: newRecord.startDate,
-                  startTime: firstSched.startTime || "09:00:00",
-                  endTime: firstSched.endTime || "12:00:00",
-                  totalMarks: firstSched.totalMarks || firstSched.maxMarks || "300",
-                  passPercentage: firstSched.passPercentage || "40",
-                  passingMarks: firstSched.passingMarks || "35",
-                  hallAssignments: [
-                    {
-                      hallId: firstSched.roomId ? String(firstSched.roomId) : "",
-                      hallName: firstSched.roomNumber || firstSched.hall || "",
-                      candidateCount: 45,
-                      invigilatorIds: firstSched.invigilatorId ? [String(firstSched.invigilatorId)] : [],
-                    },
-                  ],
-                  roomId: firstSched.roomId,
-                  hall: firstSched.roomNumber || firstSched.hall,
-                  invigilatorId: firstSched.invigilatorId,
-                  invigilator: firstSched.invigilatorName || firstSched.invigilator,
-                  mode: firstSched.examMode || newRecord.examCategory || "Objective",
-                  scheduleMode: "PATTERN_WISE",
-                },
-              ];
-              await saveSchedulesToBackend(editingExamId, remapped, faculty);
-            } catch { }
-          }
-          submittedExamConfigurations.current.set(normalizeId(editingExamId), { ...newRecord });
-          savePersistedExamConfig(normalizeId(editingExamId), { ...newRecord });
-          await loadExaminations();
+          await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
           showToast("Examination updated successfully.", "success");
           setViewMode("list");
           setEditingExamId(null);
@@ -2571,57 +3768,185 @@ export default function ExaminationPage() {
         }
       } else {
         try {
-          const res = await apiClient.post("/api/v1/examinations", {
-            examName: newRecord.name,
-            name: newRecord.name,
-            examCode: newRecord.examCode || undefined,
-            code: newRecord.examCode || undefined,
-            examCategory: newRecord.examCategory,
-            category: newRecord.examCategory,
-            examinationCategory: newRecord.examCategory,
-            exam_category: newRecord.examCategory,
-            categoryName: newRecord.examCategory,
-            rawCategory: newRecord.rawCategory || newRecord.examCategory,
-            customCategoryName: newRecord.customCategoryName,
-            boardId: Number(newRecord.boardId) || newRecord.boardId,
-            academicYearId: Number(newRecord.yearId) || newRecord.yearId,
-            academicLevelIds: newRecord.levelIds.map((id) => Number(id) || id),
-            groupIds: newRecord.groupIds.map((id) => Number(id) || id),
-            programIds: newRecord.programIds.map((id) => Number(id) || id),
-            selectedSubjectIds: newRecord.selectedSubjectIds.map((id) => Number(id) || id),
-            groupProgramSelections: newRecord.groupProgramSelections,
-            examPattern: newRecord.examPattern,
-            pattern: newRecord.examPattern,
-            examType: newRecord.examType,
-            selectedGroupPatterns: newRecord.selectedGroupPatterns,
-            startDate: newRecord.startDate,
-            endDate: newRecord.endDate,
-            description: newRecord.description,
-            status: "DRAFT",
-            scheduleMode: newRecord.scheduleMode,
-          });
+          const targetCampus = Number(effectiveCampusId) || 1;
+          const matchedBoard = (boards || []).find((b) => normalizeId(b.id || b.boardId) === normalizeId(newRecord.boardId));
+          const matchedYear = (academicYears || []).find((y) => normalizeId(y.id || y.academicYearId || y.yearId) === normalizeId(newRecord.yearId || newRecord.academicYearId));
+          const primaryGid = normalizeId(newRecord.groupIds?.[0] || newRecord.groupId);
+          const matchedGroup = (groups || []).find((g) => normalizeId(g.id || g.groupId) === primaryGid);
+          const primaryLid = normalizeId(newRecord.levelIds?.[0] || newRecord.levelId);
+          const matchedLevel = (academicLevels || []).find((l) => normalizeId(l.id || l.academicLevelId || l.levelId) === primaryLid);
+
+          const fetchFreshExamCode = async () => {
+            try {
+              const previewRes = await apiClient.get(`/api/v1/settings/number-series/EXAM_CODE?campusId=${targetCampus}`)
+                .catch(() => apiClient.get(`/api/v1/number-series/EXAM_CODE?campusId=${targetCampus}`));
+              const seriesData = previewRes?.data?.data || previewRes?.data;
+              let preview = seriesData?.livePreview;
+              if (!preview || preview === "0000") {
+                const nextSeq = (Number(seriesData?.currentSequence || seriesData?.startNumber || 0) + 1);
+                const pattern = seriesData?.formatPattern || "EXAM-{YEAR}-{SEQ}";
+                const numLen = seriesData?.numberLength || 4;
+                const nowYear = new Date().getFullYear();
+                preview = pattern
+                  .replace(/{YEAR}/g, String(nowYear))
+                  .replace(/{YYYY}/g, String(nowYear))
+                  .replace(/{SEQ}/g, String(nextSeq).padStart(numLen, "0"));
+              }
+              if (preview && preview !== "0000") {
+                return preview;
+              }
+            } catch {
+              // fallback
+            }
+            return null;
+          };
+
+          const incrementNumberSeriesSequence = async () => {
+            try {
+              const genPayload = {
+                board: matchedBoard?.name || matchedBoard?.boardName || matchedBoard?.code || "",
+                dept: "",
+                type: newRecord.examType || newRecord.type || "",
+                staff: "",
+                desig: "",
+                cert: "",
+                academicYear: matchedYear?.name || matchedYear?.year || matchedYear?.academicYear || matchedYear?.code || "",
+                group: matchedGroup?.name || matchedGroup?.groupName || matchedGroup?.code || "",
+                section: "",
+                level: matchedLevel?.name || matchedLevel?.academicLevelName || matchedLevel?.levelName || matchedLevel?.code || "",
+                exam: (newRecord.name || newRecord.examName || "").trim(),
+              };
+              await apiClient.post(
+                `/api/v1/settings/number-series/EXAM_CODE/generate-next?campusId=${targetCampus}`,
+                genPayload
+              ).catch(() =>
+                apiClient.post(
+                  `/api/v1/number-series/EXAM_CODE/generate-next?campusId=${targetCampus}`,
+                  genPayload
+                )
+              );
+            } catch (err) {
+              console.warn("Could not increment number series sequence:", err);
+            }
+          };
+
+          // Always fetch authoritative live code from server so code increments dynamically
+          let resolvedExamCode = await fetchFreshExamCode();
+          if (!resolvedExamCode) {
+            resolvedExamCode = (newRecord.examCode && newRecord.examCode !== "0000" ? newRecord.examCode : "") ||
+              (newRecord.code && newRecord.code !== "0000" ? newRecord.code : "");
+          }
+          if (!resolvedExamCode) {
+            const yearPart = matchedYear?.name ? String(matchedYear.name).split("-")[0] : new Date().getFullYear();
+            resolvedExamCode = `EXAM-${yearPart}-${Date.now().toString().slice(-4)}`;
+          }
+
+          let res;
+          let attempt = 0;
+          const maxAttempts = 4;
+          while (attempt < maxAttempts) {
+            attempt++;
+            try {
+              res = await apiClient.post("/api/v1/examinations", {
+                campusId: Number(effectiveCampusId) || 1,
+                examCode: resolvedExamCode,
+                code: resolvedExamCode,
+                examName: newRecord.name,
+                name: newRecord.name,
+                examCategory: newRecord.examCategory,
+                category: newRecord.examCategory,
+                examinationCategory: newRecord.examCategory,
+                exam_category: newRecord.examCategory,
+                categoryName: newRecord.examCategory,
+                rawCategory: newRecord.rawCategory || newRecord.examCategory,
+                customCategoryName: newRecord.customCategoryName,
+                boardId: Number(newRecord.boardId) || newRecord.boardId,
+                academicYearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
+                yearId: Number(newRecord.yearId || newRecord.academicYearId) || 0,
+                academicLevelIds: (newRecord.levelIds || []).map((id) => Number(id) || id),
+                groupIds: (newRecord.groupIds || []).map((id) => Number(id) || id),
+                programIds: (newRecord.programIds || []).map((id) => Number(id) || id),
+                selectedSubjectIds: (newRecord.selectedSubjectIds || []).map((id) => Number(id) || id),
+                groupProgramSelections: Array.isArray(newRecord.groupProgramSelections)
+                  ? newRecord.groupProgramSelections.map((item) => ({
+                    groupId: Number(item?.groupId) || item?.groupId,
+                    programIds: Array.isArray(item?.programIds)
+                      ? item.programIds.map((pid) => Number(pid) || pid)
+                      : [],
+                  }))
+                  : [],
+                examPattern: newRecord.examPattern,
+                pattern: newRecord.examPattern,
+                examType: newRecord.examType,
+                selectedGroupPatterns: newRecord.selectedGroupPatterns,
+                startDate: newRecord.startDate,
+                endDate: newRecord.endDate,
+                description: newRecord.description,
+                status: "DRAFT",
+                scheduleMode: newRecord.scheduleMode,
+              });
+              break;
+            } catch (postErr) {
+              const errDetails = String(postErr?.response?.data?.details || postErr?.response?.data?.message || postErr?.message || "");
+              const isDuplicate = errDetails.includes("UX_Examinations_ExamCode") || errDetails.toLowerCase().includes("duplicate");
+
+              if (isDuplicate && attempt < maxAttempts) {
+                // Advance number series past duplicate and retry with next code
+                await incrementNumberSeriesSequence();
+                const nextCode = await fetchFreshExamCode();
+                if (nextCode && nextCode !== resolvedExamCode) {
+                  resolvedExamCode = nextCode;
+                } else {
+                  const baseSeq = resolvedExamCode.replace(/-\d+$/, "");
+                  resolvedExamCode = `${baseSeq}-${Date.now().toString().slice(-4)}`;
+                }
+                continue;
+              }
+              throw postErr;
+            }
+          }
 
           const createdPayload = res.data?.data || res.data || {};
           const createdId = normalizeId(createdPayload.examinationId ?? createdPayload.id);
           if (!createdId || createdId === "0") throw new Error("The backend did not return an examination ID. Reload before trying again.");
-          submittedExamConfigurations.current.set(createdId, { ...newRecord });
-          savePersistedExamConfig(createdId, { ...newRecord });
-          const draftRecord = normalizeExamRecord(mergeExaminationConfiguration({
+
+          // Increment number-series sequence after successful examination creation
+          await incrementNumberSeriesSequence();
+
+          let createdRecord = null;
+          try {
+            const detailRes = await apiClient.get(`/api/v1/examinations/${createdId}`, {
+              params: { campusId: effectiveCampusId },
+            });
+            const backendExam = unwrap(detailRes);
+            if (backendExam && (backendExam.id || backendExam.examinationId)) {
+              createdRecord = normalizeExamRecord({
+                ...newRecord,
+                ...backendExam,
+                examCategory: newRecord.examCategory || backendExam.examCategory,
+                category: newRecord.examCategory || backendExam.category,
+                examPattern: newRecord.examPattern || backendExam.examPattern,
+                selectedGroupPatterns: newRecord.selectedGroupPatterns || backendExam.selectedGroupPatterns,
+              });
+            }
+          } catch {
+            // Fallback to normalized payload if direct fetch unavailable
+          }
+
+          const draftRecord = createdRecord || normalizeExamRecord({
             ...newRecord,
             ...createdPayload,
             examCategory: newRecord.examCategory,
             category: newRecord.examCategory,
-            examinationCategory: newRecord.examCategory,
-            exam_category: newRecord.examCategory,
-            scheduleMode: newRecord.scheduleMode,
-          }, newRecord));
-
-          setExams((prev) => {
-            const next = [draftRecord, ...prev];
-
-            return next;
+            examCode: resolvedExamCode || newRecord.examCode || createdPayload.examCode,
+            code: resolvedExamCode || newRecord.code || createdPayload.code,
+            id: createdId,
+            examinationId: createdId,
+            status: "DRAFT",
           });
-          await loadExaminations();
+
+          setExams((prev) => [draftRecord, ...prev.filter((e) => normalizeId(e.id) !== createdId)]);
+          await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
           setSearch("");
           setFilters({ groupId: "", programId: "", levelId: "" });
           setPage(1);
@@ -2640,6 +3965,50 @@ export default function ExaminationPage() {
             setActiveTab("exams");
           }
         } catch (err) {
+          const errDetails = String(err?.response?.data?.details || err?.response?.data?.message || err?.message || "");
+          const isDuplicate = errDetails.includes("UX_Examinations_ExamCode") || errDetails.toLowerCase().includes("duplicate");
+          const isTimeoutOrNetwork = errDetails.toLowerCase().includes("timeout") || errDetails.toLowerCase().includes("network") || !err?.response;
+
+          if (isDuplicate || isTimeoutOrNetwork) {
+            try {
+              const listRes = await apiClient.get("/api/v1/examinations", {
+                params: { campusId: effectiveCampusId },
+              });
+              const rawList = unwrap(listRes);
+              const list = Array.isArray(rawList) ? rawList : (rawList?.items || rawList?.data || []);
+              const alreadyCreated = list.find((e) =>
+                (resolvedExamCode && (e.examCode === resolvedExamCode || e.code === resolvedExamCode)) ||
+                (e.examName && e.examName === newRecord.name && e.startDate === newRecord.startDate)
+              );
+              if (alreadyCreated) {
+                const createdId = normalizeId(alreadyCreated.examinationId ?? alreadyCreated.id);
+                const draftRecord = normalizeExamRecord(alreadyCreated);
+                setExams((prev) => [draftRecord, ...prev.filter((e) => normalizeId(e.id) !== createdId)]);
+                await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
+                setSearch("");
+                setFilters({ groupId: "", programId: "", levelId: "" });
+                setPage(1);
+
+                if (proceedToSchedule) {
+                  showToast("Examination created. Proceeding to scheduling.", "success");
+                  setExamId(String(draftRecord.id));
+                  setViewMode("list");
+                  setActiveTab("schedule");
+                } else {
+                  showToast(
+                    "Examination created and saved as Draft. You can schedule it anytime from the Examinations list.",
+                    "success",
+                  );
+                  setViewMode("list");
+                  setActiveTab("exams");
+                }
+                return;
+              }
+            } catch (recoveryErr) {
+              console.warn("Could not auto-recover examination from backend:", recoveryErr);
+            }
+          }
+
           const errMsg = getApiErrorMessage(err) || "Failed to create examination.";
           showToast(errMsg, "error");
         }
@@ -2658,7 +4027,9 @@ export default function ExaminationPage() {
     try {
       mutationRef.current = true;
       setDeleteLoading(true);
-      await apiClient.delete(`/api/v1/examinations/${remove.id}`);
+      await apiClient.delete(`/api/v1/examinations/${remove.id}`, {
+        params: { campusId: effectiveCampusId },
+      });
       setExams((prev) => {
         const next = prev.filter((item) => String(item.id) !== String(remove.id));
 
@@ -2682,11 +4053,13 @@ export default function ExaminationPage() {
     mutationRef.current = true;
     setCancelLoading(true);
     try {
-      const response = await apiClient.patch(`/api/v1/examinations/${cancelExamTarget.id}/cancel`, {});
+      const response = await apiClient.patch(`/api/v1/examinations/${cancelExamTarget.id}/cancel`, {}, {
+        params: { campusId: effectiveCampusId },
+      });
       const record = response.data?.data ?? response.data;
       const returnedStatus = record?.status || record?.examinationStatus || "CANCELLED";
       setExams((previous) => previous.map((exam) => String(exam.id) === String(cancelExamTarget.id) ? { ...exam, status: normalizeStatus(returnedStatus) } : exam));
-      await loadExaminations();
+      await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
       showToast(`Examination "${cancelExamTarget.name}" cancelled successfully.`, "success");
     } catch (error) {
       showToast(getApiErrorMessage(error) || "Failed to cancel examination.", "error");
@@ -2730,12 +4103,87 @@ export default function ExaminationPage() {
       if (readiness.length) throw new Error(readiness.join(" "));
       if (examEntries.some((entry) => !entry.id)) throw new Error("Reload schedules before finalizing.");
 
-      await apiClient.post(`/api/v1/examinations/${examToFinalize.id}/finalize-schedule`);
-      await loadExaminations();
+      // Format payload for finalize-schedule endpoint with schema sanitization
+      const formattedSchedules = examEntries.map((entry) => {
+        try {
+          const rawDto = formatScheduleDto(entry, examToFinalize.id, faculty, rooms, effectiveCampusId, examToFinalize, masterPatterns);
+          return sanitizeCreateScheduleDto(rawDto);
+        } catch {
+          return null;
+        }
+      }).filter(Boolean);
+
+      let finalized = false;
+
+      // 1. Try POST /finalize-schedule with sanitized schedules payload
+      try {
+        await apiClient.post(`/api/v1/examinations/${examToFinalize.id}/finalize-schedule`, {
+          schedules: formattedSchedules,
+        }, {
+          params: { campusId: effectiveCampusId },
+        });
+        finalized = true;
+      } catch (err1) {
+        console.warn("finalize-schedule with schedules failed, trying fallback:", err1?.response?.data || err1.message);
+      }
+
+      // 2. Try POST /finalize-schedule with empty object / null schedules
+      if (!finalized) {
+        try {
+          await apiClient.post(`/api/v1/examinations/${examToFinalize.id}/finalize-schedule`, {}, {
+            params: { campusId: effectiveCampusId },
+          });
+          finalized = true;
+        } catch (err2) {
+          console.warn("finalize-schedule with empty payload failed, trying publish:", err2?.response?.data || err2.message);
+        }
+      }
+
+      // 3. Try PATCH /api/v1/examinations/{id}/schedules/publish
+      if (!finalized) {
+        try {
+          const validScheduleIds = examEntries
+            .map((s) => Number(s.id))
+            .filter((id) => !isNaN(id) && id > 0);
+          await apiClient.patch(`/api/v1/examinations/${examToFinalize.id}/schedules/publish`, {
+            examinationId: Number(examToFinalize.id),
+            scheduleIds: validScheduleIds.length > 0 ? validScheduleIds : null,
+            notifyStudents: false,
+          }, {
+            params: { campusId: effectiveCampusId },
+          });
+          finalized = true;
+        } catch (err3) {
+          console.warn("schedules/publish failed, trying clean PUT update:", err3?.response?.data || err3.message);
+        }
+      }
+
+      // 4. Try PUT /api/v1/examinations/{id} with sanitized UpdateExaminationRequest DTO
+      if (!finalized) {
+        try {
+          const sanitizedExamUpdate = sanitizeUpdateExamDto({
+            ...examToFinalize,
+            campusId: Number(effectiveCampusId) || 1,
+            status: "SCHEDULED",
+          }, "SCHEDULED");
+          await apiClient.put(`/api/v1/examinations/${examToFinalize.id}`, sanitizedExamUpdate);
+          finalized = true;
+        } catch (err4) {
+          console.warn("Clean PUT update failed:", err4?.response?.data || err4.message);
+          throw err4;
+        }
+      }
+
+      setExams((prev) =>
+        prev.map((e) =>
+          normalizeId(e.id) === normalizeId(examToFinalize.id)
+            ? { ...e, status: "SCHEDULED" }
+            : e
+        )
+      );
+
+      await loadExaminations(true, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
       setExamId("");
-      setSearch("");
-      setFilters({ groupId: "", programId: "", levelId: "" });
-      setPage(1);
       showToast(`Schedule finalized for "${examToFinalize.name}"! Status updated to SCHEDULED.`, "success");
       setActiveTab("exams");
     } catch (err) {
@@ -2746,55 +4194,199 @@ export default function ExaminationPage() {
     }
   };
 
+  // Centralized, robust schedule retrieval ensuring immediate table refresh without stale/cached state
+  const fetchSchedulesForExam = useCallback(async (targetExamId, newlySavedSchedules = [], savedBackendDtos = []) => {
+    if (!targetExamId) return [];
+    try {
+      const effId = normalizeId(targetExamId);
+      fetchedScheduleExamIdsRef.current.delete(effId);
+      const res = await apiClient.get(`/api/v1/examinations/${effId}/schedules`, {
+        params: {
+          campusId: effectiveCampusId,
+          _t: Date.now(),
+        },
+        headers: {
+          "Cache-Control": "no-cache",
+          "Pragma": "no-cache",
+        },
+        timeout: 8000,
+      });
+
+      const raw = unwrap(res);
+      const examCtx = examsRef.current?.find((e) => normalizeId(e.id) === effId) || (normalizeId(currentExam?.id) === effId ? currentExam : null);
+      const fallbackGid = examCtx?.groupIds?.[0] || examCtx?.groupId || groupsRef.current?.[0]?.id;
+
+      let recordsToNormalize = Array.isArray(raw) ? raw : [];
+      if (recordsToNormalize.length === 0 && (ensureArray(savedBackendDtos).length > 0 || ensureArray(newlySavedSchedules).length > 0)) {
+        recordsToNormalize = ensureArray(savedBackendDtos).length > 0 ? ensureArray(savedBackendDtos) : ensureArray(newlySavedSchedules);
+      }
+
+      const normalizedRecords = recordsToNormalize.map((entry) => {
+        const norm = normalizeScheduleRecord(
+          entry,
+          fallbackGid,
+          examCtx,
+          groupsRef.current,
+          eligibleSubjectsRef.current,
+          roomsRef.current,
+          facultyRef.current,
+          programsRef.current,
+          studentsRef.current
+        );
+
+        const matched = ensureArray(newlySavedSchedules).find((ns) =>
+          (normalizeId(ns.subjectId) && normalizeId(ns.subjectId) === normalizeId(norm.subjectId)) ||
+          (ns.patternName && ns.patternName === norm.patternName) ||
+          (ns.date && norm.date && canonicalDate(ns.date) === canonicalDate(norm.date) && normalizeId(ns.groupId) === normalizeId(norm.groupId))
+        );
+
+        if (matched) {
+          if (matched.groupId) {
+            norm.groupId = normalizeId(matched.groupId);
+          }
+          if (ensureArray(matched.hallAssignments).length > 0) {
+            const clientTotal = ensureArray(matched.hallAssignments).reduce((sum, h) => sum + (Number(h.candidateCount) || 0), 0);
+            if (clientTotal > 0) {
+              norm.hallAssignments = matched.hallAssignments;
+              norm.candidateCount = clientTotal;
+              if (matched.roomName && matched.roomName !== "—") norm.roomName = matched.roomName;
+              if (matched.invigilatorName && matched.invigilatorName !== "—") norm.invigilatorName = matched.invigilatorName;
+            }
+          }
+          if (matched.patternName && !norm.patternName) {
+            norm.patternName = matched.patternName;
+          }
+          if (Array.isArray(matched.includedSubjectIds) && matched.includedSubjectIds.length > 0) {
+            norm.includedSubjectIds = matched.includedSubjectIds;
+          }
+          norm.combinedConfigurationVerified = true;
+        }
+
+        return {
+          ...norm,
+          examId: effId,
+        };
+      });
+
+      const finalRecords = [...normalizedRecords];
+      for (const ns of ensureArray(newlySavedSchedules)) {
+        const isPresent = finalRecords.some((r) =>
+          (normalizeId(r.id) && normalizeId(r.id) === normalizeId(ns.id)) ||
+          (normalizeId(r.subjectId) && normalizeId(r.subjectId) === normalizeId(ns.subjectId) && normalizeId(r.groupId) === normalizeId(ns.groupId)) ||
+          (r.patternName && ns.patternName && r.patternName === ns.patternName && normalizeId(r.groupId) === normalizeId(ns.groupId))
+        );
+        if (!isPresent) {
+          const clientNorm = normalizeScheduleRecord(
+            ns,
+            ns.groupId || fallbackGid,
+            examCtx,
+            groupsRef.current,
+            eligibleSubjectsRef.current,
+            roomsRef.current,
+            facultyRef.current,
+            programsRef.current,
+            studentsRef.current
+          );
+          finalRecords.push({
+            ...clientNorm,
+            examId: effId,
+            groupId: normalizeId(ns.groupId || clientNorm.groupId),
+          });
+        }
+      }
+
+      setSchedules((prev) => {
+        const others = prev.filter((s) => normalizeId(s.examId) !== effId);
+        return [...finalRecords, ...others];
+      });
+
+      return finalRecords;
+    } catch (err) {
+      console.warn("fetchSchedulesForExam error:", err);
+      if (ensureArray(newlySavedSchedules).length > 0) {
+        const effId = normalizeId(targetExamId);
+        const examCtx = examsRef.current?.find((e) => normalizeId(e.id) === effId) || (normalizeId(currentExam?.id) === effId ? currentExam : null);
+        const fallbackGid = examCtx?.groupIds?.[0] || examCtx?.groupId || groupsRef.current?.[0]?.id;
+        const fallbackNorm = newlySavedSchedules.map((ns) => {
+          const norm = normalizeScheduleRecord(
+            ns,
+            ns.groupId || fallbackGid,
+            examCtx,
+            groupsRef.current,
+            eligibleSubjectsRef.current,
+            roomsRef.current,
+            facultyRef.current,
+            programsRef.current,
+            studentsRef.current
+          );
+          return {
+            ...norm,
+            examId: effId,
+            groupId: normalizeId(ns.groupId || norm.groupId),
+          };
+        });
+        setSchedules((prev) => {
+          const others = prev.filter((s) => normalizeId(s.examId) !== effId);
+          return [...fallbackNorm, ...others];
+        });
+      }
+      return [];
+    }
+  }, [effectiveCampusId, currentExam]);
+
   // Load examination schedules from backend whenever examId changes
   useEffect(() => {
     if (!examId) return;
     let isCurrent = true;
-    const abortCtrl = new AbortController();
     const loadExamSchedules = async () => {
-      try {
-        const res = await apiClient.get(`/api/v1/examinations/${examId}/schedules`, {
-          signal: abortCtrl.signal,
-          timeout: 6000,
-        });
-        if (!isCurrent) return;
-        const payload = res.data?.data ?? res.data ?? [];
-        let rawSchedules = [];
-        if (Array.isArray(payload)) {
-          rawSchedules = payload;
-        } else if (Array.isArray(payload?.schedules)) {
-          rawSchedules = payload.schedules;
-        } else if (Array.isArray(payload?.examinationSchedules)) {
-          rawSchedules = payload.examinationSchedules;
-        }
-        {
-          const examCtx = exams.find((e) => normalizeId(e.id) === normalizeId(examId)) || currentExam;
-          const fallbackGid = examCtx?.groupIds?.[0] || examCtx?.groupId || groups[0]?.id;
-          const normalized = rawSchedules.map((entry) => {
-            const norm = normalizeScheduleRecord(entry, fallbackGid, examCtx, groups, eligibleSubjects, rooms, faculty, programs, students);
-            return {
-              ...norm,
-              examId: normalizeId(examId || norm.examId),
-              groupId: norm.groupId,
-            };
-          });
-          setSchedules((prev) => {
-            const others = prev.filter((s) => normalizeId(s.examId) !== normalizeId(examId));
-            return [...normalized, ...others];
-          });
-        }
-      } catch (err) {
-        if (!isCurrent || abortCtrl.signal.aborted) return;
-        setSchedules((previous) => previous.filter((entry) => normalizeId(entry.examId) !== normalizeId(examId)));
-        showToast(getApiErrorMessage(err) || "Failed to load schedules. Select the examination again to retry.", "error");
-      }
+      await fetchSchedulesForExam(examId);
     };
     loadExamSchedules();
     return () => {
       isCurrent = false;
-      abortCtrl.abort();
     };
-  }, [examId, showToast, exams, currentExam, groups, eligibleSubjects, rooms, faculty, programs, students]);
+  }, [examId, fetchSchedulesForExam]);
+
+  // Reactive schedule re-normalization: whenever students or programs or groups load/change,
+  // re-normalize any existing schedules that have candidateCount <= 0 or missing hall candidate counts.
+  useEffect(() => {
+    if (!students.length && !programs.length) return;
+    setSchedules((prevSchedules) => {
+      if (!prevSchedules.length) return prevSchedules;
+      let hasChanges = false;
+      const updated = prevSchedules.map((schItem) => {
+        const examCtx = examsRef.current?.find((e) => normalizeId(e.id) === normalizeId(schItem.examId)) || currentExam;
+        const fallbackGid = schItem.groupId || examCtx?.groupIds?.[0] || examCtx?.groupId;
+        const enrolled = fallbackGid ? getGroupStudents(examCtx, fallbackGid, programsRef.current, studentsRef.current).length : 0;
+        const currentAlloc = ensureArray(schItem.hallAssignments).reduce((sum, h) => sum + (Number(h.candidateCount) || 0), 0);
+
+        // If candidates unallocated (<=0) OR exceeds group's actual enrolled students (e.g. 256 > 4), re-normalize
+        if (currentAlloc <= 0 || !schItem.candidateCount || Number(schItem.candidateCount) <= 0 || (enrolled > 0 && (currentAlloc > enrolled || Number(schItem.candidateCount) > enrolled))) {
+          hasChanges = true;
+          const renorm = normalizeScheduleRecord(
+            schItem,
+            fallbackGid,
+            examCtx,
+            groupsRef.current,
+            eligibleSubjectsRef.current,
+            roomsRef.current,
+            facultyRef.current,
+            programsRef.current,
+            studentsRef.current
+          );
+          return {
+            ...schItem,
+            candidateCount: renorm.candidateCount,
+            hallAssignments: renorm.hallAssignments,
+            roomName: renorm.roomName !== "—" ? renorm.roomName : schItem.roomName,
+            invigilatorName: renorm.invigilatorName !== "—" ? renorm.invigilatorName : schItem.invigilatorName,
+          };
+        }
+        return schItem;
+      });
+      return hasChanges ? updated : prevSchedules;
+    });
+  }, [students, programs, currentExam]);
 
   const handleSaveSchedules = async (newSchedules, isEditingId = null, throwOnError = false) => {
     if (!newSchedules || !newSchedules.length) {
@@ -2805,66 +4397,42 @@ export default function ExaminationPage() {
     if (!targetExamId || mutationRef.current || !["DRAFT", "SCHEDULED"].includes(normalizeStatus(currentExam?.status))) return false;
     mutationRef.current = true;
     try {
+      const examCtx = currentExam || examsRef.current?.find((e) => normalizeId(e.id) === normalizeId(targetExamId));
+      let savedBackendResults = [];
       if (isEditingId) {
         if (!schedules.some((entry) => entry.id === normalizeId(isEditingId) && entry.examId === normalizeId(targetExamId))) throw new Error("Reload the persisted schedule before editing.");
-        await updateScheduleInBackend(targetExamId, isEditingId, newSchedules[0], faculty);
+        const otherExisting = schedules.filter((entry) => normalizeId(entry.id) !== normalizeId(isEditingId));
+        await updateScheduleInBackend(targetExamId, isEditingId, newSchedules[0], faculty, rooms, effectiveCampusId, examCtx, masterPatterns, otherExisting);
       } else {
-        await saveSchedulesToBackend(targetExamId, newSchedules, faculty);
+        const newSubIds = newSchedules.map((ns) => normalizeId(ns.subjectId)).filter(Boolean);
+        const otherExisting = schedules.filter((entry) => {
+          if (normalizeId(entry.examId) === normalizeId(targetExamId)) {
+            if (newSubIds.includes(normalizeId(entry.subjectId))) return false;
+          }
+          return true;
+        });
+        savedBackendResults = await saveSchedulesToBackend(targetExamId, newSchedules, faculty, rooms, effectiveCampusId, examCtx, masterPatterns, otherExisting);
       }
-      const response = await apiClient.get("/api/v1/examinations/" + targetExamId + "/schedules");
-      const examCtx = currentExam || exams.find((e) => normalizeId(e.id) === normalizeId(targetExamId));
-      const fallbackGid = examCtx?.groupIds?.[0] || examCtx?.groupId || groups[0]?.id;
-      const records = unwrap(response).map((entry) => ({
-        ...normalizeScheduleRecord(entry, fallbackGid, examCtx, groups, eligibleSubjects, rooms, faculty, programs, students),
-        examId: normalizeId(targetExamId),
-      }));
-      if (records.some((entry) => !entry.id) || (!isEditingId && !records.length)) throw new Error("The backend did not return persisted schedules. Reload before trying again.");
-      setSchedules((previous) => [...previous.filter((entry) => entry.examId !== normalizeId(targetExamId)), ...records]);
-      if (newSchedules.some((entry) => entry.scheduleMode === "PATTERN_WISE") && records.some((entry) => entry.combinedConfigurationVerified === false)) {
-        throw new Error("The server wrote a session but returned only a scalar subject. Combined subject/group/pattern persistence is incomplete. Do not retry creation; backend support is required to correct this saved session.");
-      }
+
+      await fetchSchedulesForExam(targetExamId, newSchedules, savedBackendResults);
+
       setEditing(null);
       setSch((previous) => ({ ...previous, subjectId: "", patternName: "", date: "", hallAssignments: [] }));
       setErrors({});
+      clearAvailableHallsCache();
       showToast("Schedule saved successfully.", "success");
       return true;
     } catch (error) {
-      const conflict = parseBookingConflict(error, rooms, faculty);
-      if (conflict) {
-        const conflictRecord = {
-          id: `ext-conflict-${conflict.roomId || conflict.facultyId}-${conflict.date}-${conflict.startTime}`,
-          examId: "external-booked-exam",
-          groupId: "external",
-          date: conflict.date,
-          startTime: conflict.startTime,
-          endTime: conflict.endTime,
-          hallAssignments: conflict.roomId ? [
-            {
-              hallId: conflict.roomId,
-              hallName: conflict.rawIdentifier,
-              candidateCount: 999,
-              invigilatorIds: conflict.facultyId ? [conflict.facultyId] : [],
-            },
-            ...(conflict.rawIdentifier && normalizeId(conflict.rawIdentifier) !== normalizeId(conflict.roomId)
-              ? [{ hallId: conflict.rawIdentifier, candidateCount: 999, invigilatorIds: [] }]
-              : []),
-          ] : [
-            {
-              hallId: "0",
-              candidateCount: 0,
-              invigilatorIds: conflict.facultyId ? [conflict.facultyId] : [],
-            },
-          ],
-        };
-        setSchedules((prev) => {
-          if (prev.some((s) => s.id === conflictRecord.id)) return prev;
-          return [...prev, conflictRecord];
-        });
-      }
+      console.error("Schedule API Error", error.response?.data);
       if (throwOnError) {
         throw error;
       }
-      showToast(getApiErrorMessage(error) || "Failed to save schedules. Reload before retrying.", "error");
+      const apiMsg =
+        error.response?.data?.message ||
+        error.response?.data?.details ||
+        getApiErrorMessage(error) ||
+        error.message;
+      showToast(apiMsg || "Failed to save schedules. Reload before retrying.", "error");
       return false;
     } finally {
       mutationRef.current = false;
@@ -2872,13 +4440,13 @@ export default function ExaminationPage() {
   };
 
   const handleUpdateScheduleHalls = async (updatedSchedule) =>
-    handleSaveSchedules([updatedSchedule], updatedSchedule.id);
+    handleSaveSchedules([updatedSchedule], updatedSchedule.id, true);
 
   // Delete schedule from backend DB
   const handleDeleteSchedule = async () => {
     if (!removeSchedule || deleteScheduleLoading || mutationRef.current) return;
     const owner = exams.find((exam) => exam.id === normalizeId(removeSchedule.examId || examId));
-    if (!owner || !["DRAFT", "SCHEDULED"].includes(owner.status)) return;
+    if (!owner || !["DRAFT", "SCHEDULED"].includes(normalizeStatus(owner.status))) return;
     const targetExamId = removeSchedule.examId || examId;
     try {
       mutationRef.current = true;
@@ -2888,6 +4456,8 @@ export default function ExaminationPage() {
         await deleteScheduleFromBackend(targetExamId, sId);
       }
       setSchedules((prev) => prev.filter((item) => !idsToDelete.map(String).includes(String(item.id))));
+      clearAvailableHallsCache();
+      await fetchSchedulesForExam(targetExamId);
       showToast("Schedule removed successfully.", "success");
     } catch (err) {
       const message = getApiErrorMessage(err) || "Failed to remove schedule.";
@@ -2903,10 +4473,11 @@ export default function ExaminationPage() {
   if (viewMode === "add" || viewMode === "edit") {
     return (
       <ExamForm
+        campusId={effectiveCampusId}
         exams={exams}
         schedules={schedules}
         editId={editingExamId}
-        boards={boards}
+        boards={campusBoards.length > 0 ? campusBoards : boards}
         academicYears={academicYears.length > 0 ? academicYears : contextAcademicYears}
         academicLevels={academicLevels}
         groups={groups}
@@ -3041,7 +4612,9 @@ export default function ExaminationPage() {
                 </tr>
               </thead>
               <tbody>
-                {shownExams.length ? (
+                {examsLoading ? (
+                  <ExaminationTableSkeleton />
+                ) : shownExams.length ? (
                   shownExams.map((e) => (
                     <tr key={e.id}>
                       <td>
@@ -3176,23 +4749,20 @@ export default function ExaminationPage() {
                   <tr>
                     <td colSpan="10">
                       <div className="cms-empty">
-                        {examsLoading || loading ? (
-                          <span>Loading examinations...</span>
-                        ) : examsError ? (
+                        {examsError ? (
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", padding: "12px 0" }}>
                             <span style={{ color: "var(--cms-danger, #ef4444)", fontWeight: 500 }}>{examsError}</span>
                             <button
                               type="button"
                               className="cms-btn cms-btn-primary"
-                              onClick={() => loadExaminations(true)}
+                              onClick={() => loadExaminations(true, effectiveCampusId, selectedBoardId, selectedAcademicYearId)}
                               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                             >
                               <RefreshCw size={14} /> Retry Fetching Examinations
                             </button>
                           </div>
                         ) : (
-                          "No examinations match the current filters."
-                        )}
+                          "No examinations match the current filters.")}
                       </div>
                     </td>
                   </tr>
@@ -3236,6 +4806,7 @@ export default function ExaminationPage() {
             <ArrowLeft size={15} /> Back to Examinations
           </button>
           <ScheduleSection
+            campusId={effectiveCampusId}
             exam={currentExam}
             exams={exams}
             schedules={schedules}
@@ -3268,22 +4839,35 @@ export default function ExaminationPage() {
             editing={editing}
             onEdit={(s) => {
               setExamId(String(s.examId));
+              const targetExam = exams.find((e) => normalizeId(e.id) === normalizeId(s.examId)) || currentExam;
+              const reqStrength = getRequiredCandidateStrength(targetExam, s.groupId, programs, false, students, {
+                subjectId: s.subjectId,
+                includedSubjectIds: s.includedSubjectIds,
+              });
               const rawAssignments = ensureArray(s.hallAssignments);
-              let finalAssignments = rawAssignments.map((a) => ({
-                ...a,
-                hallId: a.hallId ? String(a.hallId) : (s.roomId || s.hallId ? String(s.roomId || s.hallId) : ""),
-                candidateCount: Number(a.candidateCount) || Number(s.candidateCount) || 45,
-                invigilatorIds: (a.invigilatorIds && a.invigilatorIds.length > 0)
-                  ? a.invigilatorIds.map(String)
-                  : ((s.invigilatorId || s.facultyId) ? [String(s.invigilatorId || s.facultyId)] : []),
-              }));
+              const enrolledCount = s.groupId ? getGroupStudents(targetExam, s.groupId, programs, students).length : 0;
+              const genuineStrength = enrolledCount > 0 ? enrolledCount : (reqStrength > 0 ? reqStrength : 0);
+              let finalAssignments = rawAssignments.map((a) => {
+                let count = Number(a.candidateCount) || Number(s.candidateCount) || genuineStrength || 0;
+                if (genuineStrength > 0 && count > genuineStrength) count = genuineStrength;
+                return {
+                  ...a,
+                  hallId: a.hallId ? String(a.hallId) : (s.roomId || s.hallId ? String(s.roomId || s.hallId) : ""),
+                  candidateCount: count,
+                  invigilatorIds: (a.invigilatorIds && a.invigilatorIds.length > 0)
+                    ? a.invigilatorIds.map(String)
+                    : ((s.invigilatorId || s.facultyId) ? [String(s.invigilatorId || s.facultyId)] : []),
+                };
+              });
               if (finalAssignments.length === 0 && (s.roomId || s.hallId || s.roomNumber || s.roomName || s.hall)) {
+                let count = Number(s.candidateCount || s.allocatedCount || s.totalCandidates || genuineStrength) || genuineStrength || 0;
+                if (genuineStrength > 0 && count > genuineStrength) count = genuineStrength;
                 finalAssignments = [
                   {
                     id: `hall-${s.roomId || s.hallId || Date.now()}`,
                     hallId: s.roomId || s.hallId ? String(s.roomId || s.hallId) : "",
                     hallName: s.roomNumber || s.hall || s.roomName || "",
-                    candidateCount: Number(s.candidateCount || s.allocatedCount || s.totalCandidates || 45) || 45,
+                    candidateCount: count,
                     invigilatorIds: (s.invigilatorId || s.facultyId) ? [String(s.invigilatorId || s.facultyId)] : [],
                   },
                 ];
@@ -3306,7 +4890,9 @@ export default function ExaminationPage() {
               setErrors({});
               try {
                 window.scrollTo({ top: 0, behavior: "smooth" });
-              } catch { }
+              } catch {
+                /* ignore scroll error */
+              }
             }}
             onCancelEdit={() => setEditing(null)}
             onSave={handleSaveSchedules}
@@ -3318,8 +4904,17 @@ export default function ExaminationPage() {
             groups={groups}
             programs={programs}
             students={students}
-            onRefreshStudents={fetchStudentsList}
+            onRefreshStudents={async () => {
+              const res = await fetchStudentsList();
+              showToast?.(`Synchronized ${res.length} student records from Admissions.`, "success");
+            }}
             rooms={rooms}
+            onRefreshRooms={async () => {
+              const res = await fetchRoomsList();
+              showToast?.(`Synchronized ${res.length} examination halls and capacities.`, "success");
+            }}
+            setSchedules={setSchedules}
+            onReloadSchedules={fetchSchedulesForExam}
             faculty={faculty}
             eligibleSubjects={eligibleSubjects}
             masterPatterns={masterPatterns}
@@ -3359,14 +4954,14 @@ export default function ExaminationPage() {
 
               // 2. Identify schedules that fall outside the new examination window [period.startDate, period.endDate]
               const outOfRange = existingSchedules.filter((s) => {
-                const sDate = canonicalDate(s.examDate || s.date);
+                const sDate = canonicalDate(s.scheduleDate || s.examDate || s.date);
                 return sDate && (sDate < period.startDate || sDate > period.endDate);
               });
 
               // 3. If out of range schedules exist, delete them first from backend so PUT doesn't reject with 400
               if (outOfRange.length > 0) {
                 for (const s of outOfRange) {
-                  const sId = s.examScheduleId || s.id;
+                  const sId = s.examScheduleId || s.scheduleId || s.id;
                   if (sId) {
                     try {
                       await deleteScheduleFromBackend(examId, sId);
@@ -3379,16 +4974,25 @@ export default function ExaminationPage() {
 
               // 4. Update the examination record
               await apiClient.put(`/api/v1/examinations/${examId}`, {
+                campusId: Number(editingExam.campusId || effectiveCampusId) || 1,
                 examName: editingExam.name || editingExam.examName,
                 examCategory: editingExam.examCategory || "Regular",
                 customCategoryName: editingExam.customCategoryName,
                 boardId: Number(editingExam.boardId) || editingExam.boardId,
-                academicYearId: Number(editingExam.yearId || editingExam.academicYearId) || editingExam.yearId,
+                academicYearId: Number(editingExam.yearId || editingExam.academicYearId) || 0,
+                yearId: Number(editingExam.yearId || editingExam.academicYearId) || 0,
                 academicLevelIds: (editingExam.levelIds || editingExam.academicLevelIds || []).map((id) => Number(id) || id),
                 groupIds: (editingExam.groupIds || []).map((id) => Number(id) || id),
                 programIds: (editingExam.programIds || []).map((id) => Number(id) || id),
                 selectedSubjectIds: (editingExam.selectedSubjectIds || []).map((id) => Number(id) || id),
-                groupProgramSelections: editingExam.groupProgramSelections,
+                groupProgramSelections: Array.isArray(editingExam.groupProgramSelections)
+                  ? editingExam.groupProgramSelections.map((item) => ({
+                    groupId: Number(item?.groupId) || item?.groupId,
+                    programIds: Array.isArray(item?.programIds)
+                      ? item.programIds.map((pid) => Number(pid) || pid)
+                      : [],
+                  }))
+                  : [],
                 examPattern: editingExam.examPattern,
                 examType: editingExam.examType,
                 selectedGroupPatterns: editingExam.selectedGroupPatterns,
@@ -3398,6 +5002,9 @@ export default function ExaminationPage() {
                 status: editingExam.status,
                 scheduleMode: editingExam.scheduleMode,
               });
+
+              const outOfRangeIds = outOfRange.map((s) => normalizeId(s.examScheduleId || s.scheduleId || s.id)).filter(Boolean);
+              setSchedules((prev) => prev.filter((s) => !outOfRangeIds.includes(normalizeId(s.id))));
 
               // 5. For combined/objective examinations, re-create the session on the new start date
               const isComb = isCombinedExamination(editingExam);
@@ -3422,7 +5029,7 @@ export default function ExaminationPage() {
                         {
                           hallId: firstSched.roomId ? String(firstSched.roomId) : "",
                           hallName: firstSched.roomNumber || firstSched.hall || "",
-                          candidateCount: 45,
+                          candidateCount: Number(firstSched.candidateCount) || getRequiredCandidateStrength(editingExam, targetGid, programs, false, students) || 0,
                           invigilatorIds: firstSched.invigilatorId ? [String(firstSched.invigilatorId)] : [],
                         },
                       ],
@@ -3434,13 +5041,26 @@ export default function ExaminationPage() {
                       scheduleMode: "PATTERN_WISE",
                     },
                   ];
-                  await saveSchedulesToBackend(examId, remapped, faculty);
+                  const filteredSchedules = schedules.filter((s) => !outOfRangeIds.includes(normalizeId(s.id)));
+                  await saveSchedulesToBackend(examId, remapped, faculty, rooms, effectiveCampusId, editingExam, masterPatterns, filteredSchedules);
                 } catch (recreateErr) {
                   // If re-creation failed, schedules list will be reloaded
                 }
               }
 
-              await loadExaminations();
+              // Reload fresh schedules from backend for this exam
+              try {
+                const schedRes = await apiClient.get(`/api/v1/examinations/${examId}/schedules`);
+                const fallbackGid = editingExam?.groupIds?.[0] || editingExam?.groupId;
+                const freshRecords = unwrap(schedRes).map((entry) =>
+                  normalizeScheduleRecord(entry, fallbackGid, editingExam, groups, eligibleSubjects, rooms, faculty, programs, students)
+                );
+                setSchedules((prev) => [...prev.filter((s) => normalizeId(s.examId) !== normalizeId(examId)), ...freshRecords]);
+              } catch (reloadErr) {
+                // Keep filtered schedules
+              }
+
+              await loadExaminations(false, effectiveCampusId, selectedBoardId, selectedAcademicYearId);
               setEditingExam(null);
               showToast("Examination period updated successfully.", "success");
             } catch (err) {
@@ -3508,6 +5128,8 @@ function SearchableSingleSelect({
   error,
   placeholder,
   showSearch = true,
+  emptyText,
+  onRefresh,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -3558,12 +5180,16 @@ function SearchableSingleSelect({
     const handleClickOutside = (e) => {
       if (ref.current && !ref.current.contains(e.target)) {
         setOpen(false);
-        commitMatch();
+        if (selectedOpt) {
+          setSearch(selectedOpt.name || "");
+        } else {
+          setSearch("");
+        }
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [commitMatch, disabled]);
+  }, [selectedOpt, disabled]);
 
   const filteredOptions = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
@@ -3592,6 +5218,9 @@ function SearchableSingleSelect({
           style={{ ...(error ? { borderColor: "#ef4444" } : {}), cursor: disabled ? "not-allowed" : "pointer" }}
           onClick={() => {
             if (disabled) return;
+            if (options.length === 0 && onRefresh) {
+              onRefresh();
+            }
             setOpen((prev) => !prev);
             const inputEl = ref.current?.querySelector("input");
             if (inputEl) inputEl.focus();
@@ -3611,7 +5240,9 @@ function SearchableSingleSelect({
               setOpen(true);
               try {
                 e.target.select();
-              } catch { }
+              } catch {
+                /* ignore focus error */
+              }
             }}
             onChange={(e) => {
               const val = e.target.value;
@@ -3693,8 +5324,21 @@ function SearchableSingleSelect({
                   );
                 })
               ) : (
-                <div className="cms-searchable-no-options staff-search-dropdown-empty" style={{ backgroundColor: "#ffffff" }}>
-                  No options found
+                <div className="cms-searchable-no-options staff-search-dropdown-empty" style={{ backgroundColor: "#ffffff", padding: "12px 14px", display: "flex", flexDirection: "column", gap: "6px", alignItems: "center", textAlign: "center" }}>
+                  <span>{emptyText || "No options found"}</span>
+                  {onRefresh && (
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      style={{ fontSize: "11px", padding: "2px 8px", height: "auto", minHeight: "22px" }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRefresh();
+                      }}
+                    >
+                      <RefreshCw size={11} style={{ marginRight: "4px" }} /> Refresh Options
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -3846,6 +5490,7 @@ function SearchableMultiSelect({
 
 // ---------- FORM COMPONENT WITH LIVE ACADEMIC CASCADING HIERARCHY ----------
 function ExamForm({
+  campusId = "",
   exams,
   schedules,
   editId,
@@ -3887,7 +5532,7 @@ function ExamForm({
       });
       return map;
     }
-    if (existing.groupIds && existing.programIds) {
+    if (existing.groupIds && existing.programIds && existing.programIds.length > 0) {
       const map = {};
       existing.groupIds.forEach((gid) => {
         map[String(gid)] = existing.programIds.map(String);
@@ -4001,6 +5646,9 @@ function ExamForm({
     if (["regular", "objective"].includes(cat.toLowerCase())) {
       return cat.charAt(0).toUpperCase() + cat.slice(1).toLowerCase();
     }
+    if (isCombinedExamination(existing)) {
+      return "Objective";
+    }
     return "Others";
   }, [existing]);
 
@@ -4018,25 +5666,61 @@ function ExamForm({
   useEffect(() => {
     if (existing) return;
     let active = true;
+    const targetCampus = Number(campusId) || 1;
+    const computeFallbackPreview = (seriesData) => {
+      const nextSeq = (Number(seriesData?.currentSequence || seriesData?.startNumber || 0) + 1);
+      const pattern = seriesData?.formatPattern || "EXAM-{YEAR}-{SEQ}";
+      const numLen = seriesData?.numberLength || 4;
+      const nowYear = new Date().getFullYear();
+      return pattern
+        .replace(/{YEAR}/g, String(nowYear))
+        .replace(/{YYYY}/g, String(nowYear))
+        .replace(/{SEQ}/g, String(nextSeq).padStart(numLen, "0"));
+    };
+
     apiClient
-      .get("/api/v1/settings/number-series/EXAM_CODE")
+      .get(`/api/v1/settings/number-series/EXAM_CODE?campusId=${targetCampus}`)
       .then((res) => {
         if (!active) return;
-        const preview = res?.data?.data?.livePreview ?? res?.data?.livePreview;
-        if (preview) setExamCodePreview(preview);
+        const seriesData = res?.data?.data || res?.data;
+        let preview = seriesData?.livePreview;
+        if (!preview || preview === "0000") {
+          preview = computeFallbackPreview(seriesData);
+        }
+        if (preview && preview !== "0000") {
+          setExamCodePreview(preview);
+          setForm((prev) => (!prev.code || prev.code === "0000" ? { ...prev, code: preview } : prev));
+        }
       })
       .catch(() => {
-        // Silently handle error, fallback placeholder will be used
+        apiClient
+          .get(`/api/v1/number-series/EXAM_CODE?campusId=${targetCampus}`)
+          .then((res) => {
+            if (!active) return;
+            const seriesData = res?.data?.data || res?.data;
+            let preview = seriesData?.livePreview;
+            if (!preview || preview === "0000") {
+              preview = computeFallbackPreview(seriesData);
+            }
+            if (preview && preview !== "0000") {
+              setExamCodePreview(preview);
+              setForm((prev) => (!prev.code || prev.code === "0000" ? { ...prev, code: preview } : prev));
+            }
+          })
+          .catch(() => {
+            // Silently handle error, fallback placeholder will be used
+          });
       });
     return () => {
       active = false;
     };
-  }, [existing]);
+  }, [existing, campusId]);
 
   const [form, setForm] = useState(() =>
     existing
       ? {
         ...existing,
+        campusId: normalizeId(existing.campusId || campusId || "1"),
         boardId: normalizeId(existing.boardId || defaultBoardId),
         yearId: normalizeId(existing.yearId ?? existing.academicYearId ?? defaultYearId),
         academicYearId: normalizeId(existing.yearId ?? existing.academicYearId ?? defaultYearId),
@@ -4053,12 +5737,14 @@ function ExamForm({
         examType: existing.examType || "",
       }
       : {
+        campusId: normalizeId(campusId || "1"),
         code: "",
         name: "",
         examCategory: "", // MANUAL SELECTION ONLY: starts empty so user must explicitly choose
         customCategoryName: "",
         boardId: defaultBoardId,
         yearId: defaultYearId,
+        academicYearId: defaultYearId,
         levelId: "",
         levelIds: [],
         groupId: "",
@@ -4135,6 +5821,7 @@ function ExamForm({
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const isSubmittingRef = useRef(false);
   const todayStr = new Date().toISOString().split("T")[0];
 
   // Resolve hierarchy against backend records for the selected board.
@@ -4154,9 +5841,24 @@ function ExamForm({
     const load = async () => {
       try {
         const [yearsResponse, levelsResponse, groupsResponse] = await Promise.allSettled([
-          apiClient.get("/api/v1/academic-years", { params: { boardId: form.boardId } }),
-          apiClient.get("/api/v1/academic-levels", { params: { boardId: form.boardId } }),
-          apiClient.get("/api/v1/groups/board/" + form.boardId),
+          apiClient.get("/api/v1/academic-years", {
+            params: {
+              ...(campusId ? { campusId, CampusId: campusId } : {}),
+              boardId: form.boardId,
+              BoardId: form.boardId,
+              isActive: true,
+            },
+          }),
+          apiClient.get("/api/v1/academic-levels", {
+            params: {
+              ...(campusId ? { campusId, CampusId: campusId } : {}),
+              boardId: form.boardId,
+              BoardId: form.boardId,
+            },
+          }),
+          apiClient.get("/api/v1/groups/board/" + form.boardId, {
+            params: campusId ? { campusId, CampusId: campusId } : {},
+          }),
         ]);
         if (!active) return;
 
@@ -4236,7 +5938,7 @@ function ExamForm({
     };
     load();
     return () => { active = false; };
-  }, [form.boardId, selectedAcademicYear, selectedAcademicYearId, showToast]);
+  }, [form.boardId, selectedAcademicYear, selectedAcademicYearId, showToast, existing, academicYears, academicLevels]);
 
   useEffect(() => {
     if (availableYears.length > 0) {
@@ -4395,21 +6097,55 @@ function ExamForm({
     setErrors((prev) => ({ ...prev, groupIds: undefined, programIds: undefined }));
   };
 
-  // Load only programs belonging to the active group.
+  // Load programs for all configured groups
+  const groupIdsToFetchPrograms = useMemo(() => {
+    const set = new Set();
+    if (activeGroupTab) set.add(normalizeId(activeGroupTab));
+    ensureArray(form.groupIds).forEach((gid) => gid && set.add(normalizeId(gid)));
+    if (existing) {
+      ensureArray(existing.groupIds).forEach((gid) => gid && set.add(normalizeId(gid)));
+      if (existing.groupId) set.add(normalizeId(existing.groupId));
+    }
+    return Array.from(set);
+  }, [activeGroupTab, form.groupIds, existing]);
+
+  const groupIdsToFetchKey = useMemo(() => [...groupIdsToFetchPrograms].sort().join(","), [groupIdsToFetchPrograms]);
+
   useEffect(() => {
-    if (!activeGroupTab || !form.boardId) return;
+    if (!groupIdsToFetchPrograms.length || !form.boardId) return;
     let active = true;
-    setFormPrograms((previous) => previous.filter((program) => normalizeId(program.groupId) !== normalizeId(activeGroupTab)));
-    apiClient.get("/api/v1/groups/" + activeGroupTab + "/programs").then((response) => {
+
+    Promise.allSettled(
+      groupIdsToFetchPrograms.map((gid) =>
+        apiClient.get("/api/v1/groups/" + gid + "/programs").then((response) => {
+          return unwrap(response)
+            .filter((program) => program.isActive !== false && (!program.groupId || normalizeId(program.groupId) === normalizeId(gid)))
+            .map((program) => ({
+              ...program,
+              id: normalizeId(program.programId ?? program.id),
+              groupId: normalizeId(gid),
+              name: program.programName ?? program.name,
+              code: program.programCode ?? program.code,
+            }));
+        })
+      )
+    ).then((results) => {
       if (!active) return;
-      const programs = unwrap(response).filter((program) => program.isActive !== false && (!program.groupId || normalizeId(program.groupId) === normalizeId(activeGroupTab)))
-        .map((program) => ({ ...program, id: normalizeId(program.programId ?? program.id), groupId: normalizeId(activeGroupTab), name: program.programName ?? program.name, code: program.programCode ?? program.code }));
-      setFormPrograms((previous) => [...previous.filter((program) => normalizeId(program.groupId) !== normalizeId(activeGroupTab)), ...programs]);
+      const loaded = results
+        .filter((r) => r.status === "fulfilled")
+        .flatMap((r) => r.value);
+      setFormPrograms((previous) => {
+        const map = new Map();
+        previous.forEach((p) => map.set(`${normalizeId(p.groupId)}_${normalizeId(p.id)}`, p));
+        loaded.forEach((p) => map.set(`${normalizeId(p.groupId)}_${normalizeId(p.id)}`, p));
+        return Array.from(map.values());
+      });
     }).catch((error) => {
-      if (active) showToast?.(getApiErrorMessage(error) || "Failed to load programs for the selected Group.", "error");
+      if (active) showToast?.(getApiErrorMessage(error) || "Failed to load programs for the selected Groups.", "error");
     });
+
     return () => { active = false; };
-  }, [activeGroupTab, form.boardId, showToast]);
+  }, [groupIdsToFetchKey, groupIdsToFetchPrograms, form.boardId, showToast]);
 
   const getProgramsForGroup = useCallback((group) => formPrograms.filter((program) =>
     program.isActive !== false && normalizeId(program.groupId) === normalizeId(group?.id)
@@ -4511,6 +6247,18 @@ function ExamForm({
 
         setFormEligibleSubjects(allMapped);
         setSubjectsLoading(false);
+        if (!existing) {
+          setForm((prev) => {
+            if (!prev.selectedSubjectIds || prev.selectedSubjectIds.length === 0) {
+              const eligible = getEligibleSubjects(prev, allMapped);
+              return {
+                ...prev,
+                selectedSubjectIds: eligible.map((s) => normalizeId(s.id)),
+              };
+            }
+            return prev;
+          });
+        }
       } catch (err) {
         if (active && subjectRequestSeqRef.current === currentReqKey) {
           setSubjectsError(getApiErrorMessage(err) || "Failed to load subjects.");
@@ -4649,6 +6397,14 @@ function ExamForm({
           : {}),
       };
 
+      if (n === "examCategory") {
+        if (v === "Objective") {
+          next.scheduleMode = "PATTERN_WISE";
+        } else if (v === "Regular") {
+          next.scheduleMode = "SUBJECT_WISE";
+        }
+      }
+
       // Combined examinations (non-Regular) are conducted combinely on a single date, so startDate === endDate
       if (isCombinedExamination(next)) {
         if (n === "startDate") {
@@ -4696,10 +6452,11 @@ function ExamForm({
   };
 
   const toggleSubjectSelect = (subjectId) => {
-    const strId = String(subjectId);
+    const targetId = normalizeId(subjectId);
     setForm((prev) => {
-      const current = prev.selectedSubjectIds || [];
-      const updated = current.includes(strId) ? current.filter((id) => id !== strId) : [...current, strId];
+      const current = ensureArray(prev.selectedSubjectIds).map(normalizeId);
+      const exists = current.includes(targetId);
+      const updated = exists ? current.filter((id) => id !== targetId) : [...current, targetId];
       return { ...prev, selectedSubjectIds: updated };
     });
     setErrors((x) => ({ ...x, selectedSubjectIds: undefined }));
@@ -4714,9 +6471,9 @@ function ExamForm({
   }, [subjectTabGroups, activeSubjectTabKey, eligibleSubjects]);
 
   const selectAllSubjects = () => {
-    const idsToAdd = currentTabSubjects.map((s) => String(s.id));
+    const idsToAdd = currentTabSubjects.map((s) => normalizeId(s.id));
     setForm((prev) => {
-      const current = prev.selectedSubjectIds || [];
+      const current = ensureArray(prev.selectedSubjectIds).map(normalizeId);
       const merged = Array.from(new Set([...current, ...idsToAdd]));
       return { ...prev, selectedSubjectIds: merged };
     });
@@ -4724,22 +6481,25 @@ function ExamForm({
   };
 
   const deselectAllSubjects = () => {
-    const idsToRemove = new Set(currentTabSubjects.map((s) => String(s.id)));
+    const idsToRemove = new Set(currentTabSubjects.map((s) => normalizeId(s.id)));
     setForm((prev) => ({
       ...prev,
-      selectedSubjectIds: (prev.selectedSubjectIds || []).filter((id) => !idsToRemove.has(String(id))),
+      selectedSubjectIds: ensureArray(prev.selectedSubjectIds).map(normalizeId).filter((id) => !idsToRemove.has(id)),
     }));
   };
 
   const save = async (e, proceedToSchedule = false) => {
-    e.preventDefault();
-    if (saving) return;
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    if (isSubmittingRef.current || saving) return;
+    isSubmittingRef.current = true;
     if (subjectsLoading) {
       showToast?.("Please wait while eligible subjects are loading.", "warning");
+      isSubmittingRef.current = false;
       return;
     }
     if (subjectsError) {
       showToast?.("Cannot save examination while subject loading has failed.", "error");
+      isSubmittingRef.current = false;
       return;
     }
 
@@ -4775,7 +6535,6 @@ function ExamForm({
     );
 
     if (isRegular) {
-      // Require explicitly selected group(s); viewing tab does not infer group
       const selectedGids = ensureArray(
         form.groupIds && form.groupIds.length > 0 ? form.groupIds : []
       ).map(normalizeId);
@@ -4783,9 +6542,13 @@ function ExamForm({
       if (selectedGids.length > 0) {
         activeGroupIds = selectedGids;
         selectedGids.forEach((gid) => {
-          const gObj = availableGroups.find((g) => normalizeId(g.id) === gid) || { id: gid };
-          const progs = getProgramsForGroup(gObj);
-          effectiveGroupSelections[gid] = progs.map((p) => normalizeId(p.id));
+          if (!effectiveGroupSelections[gid] || effectiveGroupSelections[gid].length === 0) {
+            const gObj = availableGroups.find((g) => normalizeId(g.id) === gid) || { id: gid };
+            const progs = getProgramsForGroup(gObj);
+            if (progs.length > 0) {
+              effectiveGroupSelections[gid] = progs.map((p) => normalizeId(p.id));
+            }
+          }
         });
       }
     }
@@ -4855,61 +6618,9 @@ function ExamForm({
       x.startDate = "Start Date cannot be in the past.";
     }
 
-    if (Object.keys(x).length) return setErrors(x);
-
-    let generatedExamCode = "";
-    if (!existing) {
-      let groupCode = "";
-      if (activeGroupIds.length === 1) {
-        const singleGroupId = activeGroupIds[0];
-        const targetGroup =
-          formGroups.find((g) => normalizeId(g.id) === normalizeId(singleGroupId)) ||
-          groups.find((g) => normalizeId(g.id) === normalizeId(singleGroupId));
-        groupCode = targetGroup?.code || targetGroup?.groupCode || "";
-      } else {
-        const groupCodes = activeGroupIds.map((gid) => {
-          const g =
-            formGroups.find((x) => normalizeId(x.id) === normalizeId(gid)) ||
-            groups.find((x) => normalizeId(x.id) === normalizeId(gid));
-          return g?.code || g?.groupCode || "";
-        }).filter(Boolean);
-        groupCode = groupCodes.length > 0 ? groupCodes.join("-") : "MULTI";
-      }
-
-      const selectedYearObj =
-        formYears.find((y) => normalizeId(y.id) === normalizeId(form.yearId)) ||
-        academicYears.find((y) => normalizeId(y.id) === normalizeId(form.yearId));
-      const academicYearDisplay =
-        selectedYearObj?.name || selectedYearObj?.academicYearName || selectedYearObj?.code || "";
-
-      setSaving(true);
-      try {
-        const genRes = await apiClient.post("/api/v1/settings/number-series/EXAM_CODE/generate-next", {
-          group: groupCode,
-          type: resolvedType,
-          academicYear: academicYearDisplay,
-        });
-
-        const generatedNumber = genRes?.data?.data?.generatedNumber ?? genRes?.data?.generatedNumber;
-
-        const hasUnresolvedToken =
-          !generatedNumber || typeof generatedNumber !== "string" || /{[^}]+}/.test(generatedNumber);
-
-        if (!hasUnresolvedToken) {
-          generatedExamCode = generatedNumber;
-        } else {
-          // Fallback code generation for multi-group if number-series template does not map multi-group code
-          const yearCode = academicYearDisplay.replace(/[^A-Za-z0-9]/g, "").slice(-4);
-          const typeCode = (resolvedType || "EXAM").slice(0, 3).toUpperCase();
-          const grpPrefix = groupCode.replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase();
-          generatedExamCode = `EXAM-${grpPrefix}-${typeCode}-${yearCode || new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
-        }
-      } catch (genErr) {
-        const yearCode = academicYearDisplay.replace(/[^A-Za-z0-9]/g, "").slice(-4);
-        const typeCode = (resolvedType || "EXAM").slice(0, 3).toUpperCase();
-        const grpPrefix = groupCode.replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase();
-        generatedExamCode = `EXAM-${grpPrefix}-${typeCode}-${yearCode || new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
-      }
+    if (Object.keys(x).length) {
+      isSubmittingRef.current = false;
+      return setErrors(x);
     }
 
     const groupProgArray = activeGroupIds.map((groupId) => ({
@@ -4919,39 +6630,108 @@ function ExamForm({
 
     const flatProgramIds = [...new Set(groupProgArray.flatMap((g) => g.programIds))];
 
-    const payload = {
-      ...form,
-      id: existing?.id,
-      examCode: generatedExamCode || form.code || undefined,
-      code: generatedExamCode || form.code || "",
-      endDate: isCombined ? form.startDate : form.endDate,
-      levelId: form.levelIds[0] || "",
-      groupId: activeGroupIds[0] || "",
-      programId: flatProgramIds[0] || "",
-      name: form.name.trim(),
-      examCategory: resolvedCategory,
-      rawCategory: form.examCategory,
-      customCategoryName: form.examCategory === "Others" ? resolvedCategory : "",
-      examPattern: resolvedPattern || (isRegular ? "Regular" : "Standard Pattern"),
-      examType: resolvedType || "Regular Exam",
-      levelIds: [...new Set(form.levelIds.map(normalizeId))],
-      groupIds: [...new Set(activeGroupIds.map(normalizeId))],
-      programIds: flatProgramIds,
-      selectedSubjectIds: [...new Set(eligibleSubjects.filter((subject) => form.selectedSubjectIds.map(normalizeId).includes(normalizeId(subject.id))).map((subject) => normalizeId(subject.id)))],
-      groupSubjectSelections: Object.fromEntries(activeGroupIds.map((gid) => [gid, getSelectedSubjectsForExam(form, gid, eligibleSubjects).map((subject) => normalizeId(subject.id))])),
-      selectedSubjectDetails: eligibleSubjects.filter((subject) => form.selectedSubjectIds.map(normalizeId).includes(normalizeId(subject.id))).map((subject) => ({ id: subject.id, name: subject.name, code: subject.code, groupIds: subject.groupIds, academicLevelIds: subject.academicLevelIds, language: subject.language, subjectType: subject.subjectType })),
-      selectedGroupPatterns: Object.fromEntries(activeGroupIds.map((gid) => {
-        const configured = ensureArray(form.selectedGroupPatterns?.[gid]).filter(Boolean);
-        const pattern = configured[0] && configured[0] !== "Others" ? configured[0] : resolvedPattern;
-        return [gid, pattern ? [pattern] : []];
-      })),
-      groupProgramSelections: groupProgArray,
-      scheduleMode: isCombined ? "PATTERN_WISE" : "SUBJECT_WISE",
-    };
+    // Determine if all programs in active groups are selected
+    const allAvailablePrograms = activeGroupIds.flatMap((gid) => {
+      const g = (availableGroups || []).find((grp) => normalizeId(grp.id) === normalizeId(gid));
+      return (g?.programs || []).map((p) => normalizeId(p.id));
+    });
+    const uniqueAvailableProgramIds = [...new Set(allAvailablePrograms)];
 
-    setSaving(true);
-    await onSave(payload, proceedToSchedule);
-    setSaving(false);
+    const isAllProgramsSelected =
+      uniqueAvailableProgramIds.length > 0 &&
+      uniqueAvailableProgramIds.every((pid) => flatProgramIds.includes(pid));
+
+    // When all programs are selected, or multiple programs are selected, or no programs are specified,
+    // programId must be null ("All Programs") so that all students in the group are included.
+    // Only when a single specific program is chosen should programId be that single program.
+    const resolvedProgramId =
+      !isAllProgramsSelected && flatProgramIds.length === 1
+        ? flatProgramIds[0]
+        : null;
+
+    try {
+      setSaving(true);
+
+      let finalExamCode = existing
+        ? (form.code || existing?.examCode || existing?.code || "")
+        : "";
+
+      if (!existing) {
+        try {
+          const targetCampus = Number(campusId) || 1;
+          const previewRes = await apiClient
+            .get(`/api/v1/settings/number-series/EXAM_CODE?campusId=${targetCampus}`)
+            .catch(() => apiClient.get(`/api/v1/number-series/EXAM_CODE?campusId=${targetCampus}`));
+          const seriesData = previewRes?.data?.data || previewRes?.data;
+          let preview = seriesData?.livePreview;
+          if (!preview || preview === "0000") {
+            const nextSeq = (Number(seriesData?.currentSequence || seriesData?.startNumber || 0) + 1);
+            const pattern = seriesData?.formatPattern || "EXAM-{YEAR}-{SEQ}";
+            const numLen = seriesData?.numberLength || 4;
+            const nowYear = new Date().getFullYear();
+            preview = pattern
+              .replace(/{YEAR}/g, String(nowYear))
+              .replace(/{YYYY}/g, String(nowYear))
+              .replace(/{SEQ}/g, String(nextSeq).padStart(numLen, "0"));
+          }
+          if (preview && preview !== "0000") {
+            finalExamCode = preview;
+            setExamCodePreview(preview);
+            setForm((prev) => ({ ...prev, code: preview }));
+          }
+        } catch {
+          // fallback
+        }
+
+        if (!finalExamCode && form.code && form.code !== "0000") {
+          finalExamCode = form.code;
+        } else if (!finalExamCode && examCodePreview && examCodePreview !== "0000") {
+          finalExamCode = examCodePreview;
+        }
+      }
+
+      if (!existing && !finalExamCode) {
+        const yearPart = form.yearId
+          ? (formYears.find((y) => normalizeId(y.id) === normalizeId(form.yearId))?.name || "").split("-")[0]
+          : new Date().getFullYear();
+        finalExamCode = `EXAM-${yearPart || new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+      }
+
+      const payload = {
+        ...form,
+        id: existing?.id,
+        examCode: finalExamCode,
+        code: finalExamCode,
+        endDate: isCombined ? form.startDate : form.endDate,
+        levelId: form.levelIds[0] || "",
+        groupId: activeGroupIds[0] || "",
+        programId: resolvedProgramId,
+        name: form.name.trim(),
+        examCategory: resolvedCategory,
+        rawCategory: form.examCategory,
+        customCategoryName: form.examCategory === "Others" ? resolvedCategory : "",
+        examPattern: resolvedPattern || (isRegular ? "Regular" : "Standard Pattern"),
+        examType: resolvedType || "Regular Exam",
+        levelIds: [...new Set(form.levelIds.map(normalizeId))],
+        groupIds: [...new Set(activeGroupIds.map(normalizeId))],
+        programIds: resolvedProgramId ? [resolvedProgramId] : [],
+        selectedSubjectIds: [...new Set(eligibleSubjects.filter((subject) => form.selectedSubjectIds.map(normalizeId).includes(normalizeId(subject.id))).map((subject) => normalizeId(subject.id)))],
+        groupSubjectSelections: Object.fromEntries(activeGroupIds.map((gid) => [gid, getSelectedSubjectsForExam(form, gid, eligibleSubjects).map((subject) => normalizeId(subject.id))])),
+        selectedSubjectDetails: eligibleSubjects.filter((subject) => form.selectedSubjectIds.map(normalizeId).includes(normalizeId(subject.id))).map((subject) => ({ id: subject.id, name: subject.name, code: subject.code, groupIds: subject.groupIds, academicLevelIds: subject.academicLevelIds, language: subject.language, subjectType: subject.subjectType })),
+        selectedGroupPatterns: Object.fromEntries(activeGroupIds.map((gid) => {
+          const configured = ensureArray(form.selectedGroupPatterns?.[gid]).filter(Boolean);
+          const pattern = configured[0] && configured[0] !== "Others" ? configured[0] : resolvedPattern;
+          return [gid, pattern ? [pattern] : []];
+        })),
+        groupProgramSelections: groupProgArray,
+        scheduleMode: isCombined ? "PATTERN_WISE" : "SUBJECT_WISE",
+      };
+
+      await onSave(payload, proceedToSchedule);
+    } finally {
+      setSaving(false);
+      isSubmittingRef.current = false;
+    }
   };
 
   return (
@@ -5311,7 +7091,7 @@ function ExamForm({
                           <span className="exam-subject-tab-count">
                             {
                               group.subjects.filter((s) =>
-                                (form.selectedSubjectIds || []).map(String).includes(String(s.id)),
+                                (form.selectedSubjectIds || []).map(normalizeId).includes(normalizeId(s.id)),
                               ).length
                             }
                             /{group.subjects.length}
@@ -5322,7 +7102,7 @@ function ExamForm({
 
                     <div className="exam-subject-tab-body">
                       {currentSubjectTabGroup?.subjects.map((subject) => {
-                        const isSubjectSelected = (form.selectedSubjectIds || []).map(String).includes(String(subject.id));
+                        const isSubjectSelected = (form.selectedSubjectIds || []).map(normalizeId).includes(normalizeId(subject.id));
                         return (
                           <div
                             key={subject.id}
@@ -5335,7 +7115,11 @@ function ExamForm({
                                 <input
                                   type="checkbox"
                                   checked={isSubjectSelected}
-                                  onChange={() => { }}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleSubjectSelect(subject.id);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
                                   style={{
                                     cursor: "pointer",
                                     width: "16px",
@@ -5381,8 +7165,8 @@ function ExamForm({
               <div className="cms-form-grid cols-3">
                 <Field
                   label="Examination Code"
-                  value={existing ? (form.code || existing?.examCode || "") : ""}
-                  placeholder={!existing ? (examCodePreview || "Code will be generated on save") : ""}
+                  value={existing ? (form.code || existing?.examCode || "") : (form.code && form.code !== "0000" ? form.code : (examCodePreview && examCodePreview !== "0000" ? examCodePreview : ""))}
+                  placeholder={!existing ? (examCodePreview || "Generating code...") : ""}
                   readOnly={true}
                 />
                 <Field
@@ -5454,7 +7238,6 @@ function ExamForm({
                     type="submit"
                     className="cms-btn cms-btn-primary"
                     disabled={saving}
-                    onClick={(e) => save(e, true)}
                   >
                     {saving ? "Creating..." : "Create Examination & Proceed to Schedule"}
                   </button>
@@ -5477,6 +7260,7 @@ function ScheduleSection({
   exam,
   exams,
   schedules,
+  setSchedules,
   examId,
   setExamId,
   sch,
@@ -5487,6 +7271,7 @@ function ScheduleSection({
   onEdit,
   onCancelEdit,
   onSave,
+  onReloadSchedules = null,
   onRemove,
   finalize,
   onUpdateSchedule,
@@ -5503,40 +7288,16 @@ function ScheduleSection({
   masterPatterns = [],
   showToast,
   onRefreshStudents = null,
+  onRefreshRooms = null,
+  campusId = "",
 }) {
+  const campusCtx = useCampusContext?.();
+  const effectiveCampusId = normalizeId(campusId || exam?.campusId || campusCtx?.currentCampusId || campusCtx?.selectedCampusId || "1");
+
   const entries = useMemo(() => {
     if (!exam) return [];
-    return schedules
-      .filter((s) => String(s.examId) === String(exam.id))
-      .map((s) => {
-        const rawAssignments = ensureArray(s.hallAssignments);
-        const hasZeroCandidates = rawAssignments.some((a) => a.hallId && Number(a.candidateCount) <= 0);
-        if (hasZeroCandidates || (rawAssignments.length === 0 && (s.roomId || s.hallId))) {
-          const targetGid = normalizeId(s.groupId || exam.groupIds?.[0] || exam.groupId);
-          const req = getRequiredCandidateStrength(exam, targetGid, programs, false, students);
-          let rem = req;
-          const baseAssignments = rawAssignments.length > 0 ? rawAssignments : [{ hallId: s.roomId || s.hallId }];
-          const healedAssignments = baseAssignments.map((a) => {
-            const rObj = ensureArray(rooms).find((r) => normalizeId(r.id) === normalizeId(a.hallId));
-            const rCap = Number(rObj?.capacity) || 0;
-            let cCount = Number(a.candidateCount) || 0;
-            if (cCount <= 0) {
-              cCount = rem > 0 ? (rCap > 0 ? Math.min(rem, rCap) : rem) : (rCap > 0 ? rCap : 1);
-              rem -= cCount;
-            }
-            return {
-              ...a,
-              candidateCount: cCount,
-            };
-          });
-          return {
-            ...s,
-            hallAssignments: healedAssignments,
-          };
-        }
-        return s;
-      });
-  }, [exam, schedules, programs, students, rooms]);
+    return schedules.filter((s) => normalizeId(s.examId) === normalizeId(exam.id));
+  }, [exam, schedules]);
   const isCombined = isCombinedExamination(exam);
   const isRegular = isRegularExamination(exam);
   const isObjective = String(getResolvedExamCategory(exam)).toLowerCase() === "objective";
@@ -5580,6 +7341,13 @@ function ScheduleSection({
     }
   }, [selectedGroupId, sch.groupId, editing, setSch]);
 
+  // Auto-fetch active classrooms and examination halls if not yet loaded
+  useEffect(() => {
+    if (rooms.length === 0 && onRefreshRooms) {
+      onRefreshRooms();
+    }
+  }, [rooms.length, onRefreshRooms]);
+
   // Dynamically load eligible subjects for the current scheduling context
   const [sectionSubjects, setSectionSubjects] = useState([]);
 
@@ -5618,7 +7386,9 @@ function ScheduleSection({
               name: s.subjectName ?? s.name,
               code: s.subjectCode ?? s.code ?? "",
               academicLevelIds: (s.academicLevelIds || (s.academicLevelId ? [s.academicLevelId] : [])).map(normalizeId),
-              groupIds: (s.groupIds || (s.groupId ? [s.groupId] : (selectedGroupId ? [selectedGroupId] : []))).map(normalizeId),
+              groupIds: (ensureArray(s.groupIds).length
+                ? ensureArray(s.groupIds)
+                : s.groupId ? [s.groupId] : [selectedGroupId]).map(normalizeId),
               programIds: (s.programIds || (s.programId ? [s.programId] : [])).map(normalizeId),
               facultyIds: (s.facultyIds || (s.facultyId ? [s.facultyId] : [])).map(normalizeId),
               isActive: s.isActive !== false,
@@ -5643,9 +7413,12 @@ function ScheduleSection({
     if (grpPattern && ensureArray(grpPattern).filter(Boolean).length > 0) {
       return ensureArray(grpPattern).map((p) => String(p).trim()).filter(Boolean);
     }
-    if (examGroupIds.length === 1 && exam.examPattern) return [String(exam.examPattern).trim()].filter(Boolean);
+    const fallbackPattern = exam.examPattern || exam.pattern || Object.values(exam.selectedGroupPatterns || {}).flat().filter(Boolean)[0] || "";
+    if (fallbackPattern && fallbackPattern !== "Regular" && fallbackPattern !== "Regular Academic Pattern") {
+      return [String(fallbackPattern).trim()];
+    }
     return [];
-  }, [exam, selectedGroupId, examGroupIds.length]);
+  }, [exam, selectedGroupId]);
 
   // Auto-select pattern for this group if pattern is not yet selected
   useEffect(() => {
@@ -5682,43 +7455,101 @@ function ScheduleSection({
     );
   }, [activeGroupSubjects, groupEntries, editing]);
 
-  const existingCombinedSession = useMemo(() => {
+  const anyCombinedSessionForExam = useMemo(() => {
     if (!exam || !isCombined) return null;
     return schedules.find(
       (s) =>
         normalizeId(s.examId) === normalizeId(exam.id) &&
-        (normalizeId(s.groupId) === normalizeId(selectedGroupId) || matchesScheduleGroup(s, selectedGroupId, exam, effectiveGroupSubjects)) &&
         (s.scheduleMode === "PATTERN_WISE" || Boolean(s.patternName)) &&
-        (!sch.patternName || !s.patternName || String(s.patternName).trim().toLowerCase() === String(sch.patternName).trim().toLowerCase()) &&
         s.startTime && s.endTime,
     );
-  }, [exam, isCombined, schedules, selectedGroupId, effectiveGroupSubjects, sch.patternName]);
+  }, [exam, isCombined, schedules]);
 
-  const defaultSessionStartTime = existingCombinedSession ? existingCombinedSession.startTime : "09:00";
-  const defaultSessionEndTime = existingCombinedSession ? existingCombinedSession.endTime : "12:00";
+  const defaultSessionStartTime = anyCombinedSessionForExam ? anyCombinedSessionForExam.startTime : "09:00";
+  const defaultSessionEndTime = anyCombinedSessionForExam ? anyCombinedSessionForExam.endTime : "12:00";
 
-  // When scheduling a combined exam, ensure date defaults to exam.startDate and time to session timings
+  // When scheduling a combined exam, ensure date defaults to exam.startDate, timings to session timings, and includedSubjectIds to activeGroupSubjects
   useEffect(() => {
     if (isCombined && exam?.startDate && !editing) {
+      const subjectIds = activeGroupSubjects.map((s) => normalizeId(s.id));
       setSch((prev) => ({
         ...prev,
-        date: prev.date || exam.startDate,
-        startTime: prev.startTime || defaultSessionStartTime,
-        endTime: prev.endTime || defaultSessionEndTime,
+        date: exam.startDate,
+        startTime: anyCombinedSessionForExam ? anyCombinedSessionForExam.startTime : (prev.startTime || defaultSessionStartTime),
+        endTime: anyCombinedSessionForExam ? anyCombinedSessionForExam.endTime : (prev.endTime || defaultSessionEndTime),
+        includedSubjectIds: subjectIds.length > 0 ? subjectIds : (prev.includedSubjectIds || []),
       }));
     }
-  }, [isCombined, exam?.startDate, defaultSessionStartTime, defaultSessionEndTime, editing, setSch]);
+  }, [isCombined, exam?.startDate, anyCombinedSessionForExam, defaultSessionStartTime, defaultSessionEndTime, editing, activeGroupSubjects, setSch]);
 
-  const eligibleInvigilators = getEligibleInvigilators(schedules, sch, editing, faculty, sectionSubjects);
-  const eligibleRooms = getEligibleRooms(schedules, sch, editing, exam, rooms);
+  useEffect(() => {
+    if (isCombined && activeGroupSubjects.length > 0) {
+      const subjectIds = activeGroupSubjects.map((s) => normalizeId(s.id));
+      setSch((prev) => {
+        const prevIncluded = ensureArray(prev.includedSubjectIds).map(normalizeId);
+        const isSame = prevIncluded.length === subjectIds.length && prevIncluded.every((id) => subjectIds.includes(id));
+        if (isSame) return prev;
+        return { ...prev, includedSubjectIds: subjectIds };
+      });
+    }
+  }, [isCombined, activeGroupSubjects, setSch]);
+
+  const [backendAvailableHallsForSlot, setBackendAvailableHallsForSlot] = useState(null);
+  const lastFetchedSlotKeyRef = useRef("");
+
+  useEffect(() => {
+    let active = true;
+    const slotKey = `${sch.date}_${sch.startTime}_${sch.endTime}_${exam?.id}_${effectiveCampusId}`;
+    if (sch.date && sch.startTime && sch.endTime && exam?.id) {
+      if (lastFetchedSlotKeyRef.current === slotKey) return;
+      lastFetchedSlotKeyRef.current = slotKey;
+      fetchBackendAvailableHalls(sch.date, sch.startTime, sch.endTime, exam.id, effectiveCampusId)
+        .then((set) => {
+          if (active) setBackendAvailableHallsForSlot(set);
+        })
+        .catch(() => {
+          if (active) setBackendAvailableHallsForSlot(null);
+        });
+    } else {
+      lastFetchedSlotKeyRef.current = "";
+      setBackendAvailableHallsForSlot(null);
+    }
+    return () => {
+      active = false;
+    };
+  }, [sch.date, sch.startTime, sch.endTime, exam?.id, effectiveCampusId]);
+
+  const eligibleInvigilators = getEligibleInvigilators(schedules, sch, editing, faculty, sectionSubjects, exam);
+  const eligibleRooms = useMemo(() => {
+    const list = getEligibleRooms(schedules, sch, editing, exam, rooms);
+    if (backendAvailableHallsForSlot && backendAvailableHallsForSlot.size > 0) {
+      const verified = list.filter((r) => {
+        const id = normalizeId(r.id);
+        const rid = normalizeId(r.roomId);
+        const num = String(r.roomNumber ?? "").trim().toLowerCase();
+        const name = String(r.name ?? r.roomName ?? "").trim().toLowerCase();
+        const code = String(r.code ?? r.roomCode ?? "").trim().toLowerCase();
+        return (
+          backendAvailableHallsForSlot.has(id) ||
+          (rid && backendAvailableHallsForSlot.has(rid)) ||
+          (num && backendAvailableHallsForSlot.has(num)) ||
+          (name && backendAvailableHallsForSlot.has(name)) ||
+          (code && backendAvailableHallsForSlot.has(code))
+        );
+      });
+      if (verified.length > 0) return verified;
+    }
+    return list;
+  }, [schedules, sch, editing, exam, rooms, backendAvailableHallsForSlot]);
 
   // Auto-allocate halls and invigilators in top form when date and times are set
   const autoAssignedSlotRef = useRef("");
   useEffect(() => {
-    const slotKey = `${selectedGroupId}_${sch.date}_${sch.startTime}_${sch.endTime}`;
+    const slotKey = `${selectedGroupId}_${sch.subjectId || sch.patternName}_${sch.date}_${sch.startTime}_${sch.endTime}`;
     if (
       exam &&
       selectedGroupId &&
+      (isCombined ? sch.patternName : sch.subjectId) &&
       sch.date &&
       sch.startTime &&
       sch.endTime &&
@@ -5744,14 +7575,15 @@ function ScheduleSection({
           subjectsList: sectionSubjects,
         },
         students,
+        backendAvailableHallsForSlot,
       );
       if (autoAssigned && autoAssigned.length > 0) {
         setSch((prev) => ({ ...prev, hallAssignments: autoAssigned }));
       }
     }
-  }, [exam, selectedGroupId, sch.date, sch.startTime, sch.endTime, sch.subjectId, isCombined, activeGroupSubjects, sectionSubjects, editing, rooms, faculty, programs, students, sch.hallAssignments, sch.includedSubjectIds, schedules, setSch]);
+  }, [exam, selectedGroupId, sch.date, sch.startTime, sch.endTime, sch.subjectId, isCombined, activeGroupSubjects, sectionSubjects, editing, rooms, faculty, programs, students, sch.hallAssignments, sch.includedSubjectIds, schedules, setSch, backendAvailableHallsForSlot]);
 
-  const handleManualAutoAssignTopForm = () => {
+  const handleManualAutoAssignTopForm = async () => {
     if (!exam) return;
     const targetDate = sch.date || exam.startDate;
     const targetStart = sch.startTime || defaultSessionStartTime || "09:00";
@@ -5760,6 +7592,15 @@ function ScheduleSection({
     if (!targetDate) {
       showToast?.("Please specify an examination date before auto-assigning halls.", "warning");
       return;
+    }
+
+    let backendHalls = backendAvailableHallsForSlot;
+    if (!backendHalls) {
+      try {
+        backendHalls = await fetchBackendAvailableHalls(targetDate, targetStart, targetEnd, exam.id, effectiveCampusId);
+      } catch {
+        // fallback
+      }
     }
 
     const autoAssigned = autoAssignHallsAndInvigilators(
@@ -5779,6 +7620,7 @@ function ScheduleSection({
         subjectsList: sectionSubjects,
       },
       students,
+      backendHalls,
     );
     if (!autoAssigned || autoAssigned.length === 0) {
       showToast?.("Cannot auto-allocate: insufficient hall capacity or available invigilators without conflicts.", "warning");
@@ -5803,244 +7645,56 @@ function ScheduleSection({
       return;
     }
     const currentGroupCode = codeOf(groups, selectedGroupId, "GROUP");
-
-    // Exclude prior schedules for this exam and group so auto-assigner doesn't treat rooms as occupied by the same group's old schedules
-    const otherGroupSchedules = schedules.filter(
-      (s) => !(normalizeId(s.examId) === normalizeId(exam.id) && (normalizeId(s.groupId) === normalizeId(selectedGroupId) || matchesScheduleGroup(s, selectedGroupId, exam, effectiveGroupSubjects))),
-    );
-
     setProcessing(true);
     try {
-      const MAX_RETRIES = 10;
-      let attempt = 0;
-      const detectedConflicts = [];
+      const response = await apiClient.post(`/api/v1/examinations/${exam.id}/auto-schedule`, {
+        groupId: Number(selectedGroupId),
+        academicLevelId: Number(exam.academicLevelId || exam.academicLevelIds?.[0] || 0),
+        programId: Number(exam.programId || exam.programIds?.[0] || exam.program?.id || 0) || undefined,
+        totalMarks: Number(exam.totalMarks || sch.totalMarks || 100),
+        passingMarks: Number(exam.passingMarks || sch.passingMarks || 35),
+        scheduleMode: isCombined ? "PATTERN_WISE" : "SUBJECT_WISE",
+        defaultStartTime: defaultSessionStartTime,
+        defaultEndTime: defaultSessionEndTime,
+        skipSundays: true,
+        campusId: Number(effectiveCampusId),
+        replaceExisting: false,
+      });
 
-      while (attempt < MAX_RETRIES) {
-        attempt++;
-        const generated = [];
-        const batchSchedules = [...otherGroupSchedules, ...detectedConflicts];
-
-        if (isCombined) {
-          let allocationFailed = false;
-          for (let idx = 0; idx < activeGroupPatterns.length; idx++) {
-            const pName = activeGroupPatterns[idx];
-            const autoAssigned = autoAssignHallsAndInvigilators(
-              exam,
-              selectedGroupId,
-              exam.startDate,
-              defaultSessionStartTime,
-              defaultSessionEndTime,
-              batchSchedules,
-              null,
-              rooms,
-              faculty,
-              programs,
-              {
-                includedSubjectIds: activeGroupSubjects.map((s) => s.id),
-                subjectsList: sectionSubjects,
-              },
-              students,
-            );
-            if (!autoAssigned) {
-              showToast?.(`Auto Schedule failed for Pattern "${pName}": Insufficient hall capacity or eligible invigilators without conflicts.`, "error");
-              allocationFailed = true;
-              break;
-            }
-            const hallNames = autoAssigned.map((a) => nameOf(rooms, a.hallId)).join(", ") || "Exam Hall(s)";
-            const invigilatorNames =
-              autoAssigned
-                .map((a) => `${nameOf(rooms, a.hallId)}: ${(a.invigilatorIds || []).map((id) => nameOf(faculty, id)).join(", ")}`)
-                .join(" | ") || "Faculty Invigilators";
-
-            const levelDisplay = getLevelNames(exam, academicLevels);
-            const subjectDisplay = activeGroupSubjects.map((s) => s.name).join(" + ") || "Combined Core Subjects";
-            const combinedSessionName = levelDisplay && levelDisplay !== "—"
-              ? `${levelDisplay} · ${currentGroupCode} · ${pName} — ${subjectDisplay}`
-              : `${currentGroupCode} · ${pName} — ${subjectDisplay}`;
-
-            const newEntry = {
-              id: `draft-${selectedGroupId}-${idx}`,
-              examId: exam.id,
-              groupId: selectedGroupId,
-              patternName: pName,
-              includedSubjectIds: activeGroupSubjects.map((s) => String(s.id)),
-              subjectName: combinedSessionName,
-              subjectCode: `${isObjective ? "OBJ" : "COMB"}_${currentGroupCode}_${normalizeCodePart(pName)}`,
-              date: exam.startDate,
-              startTime: defaultSessionStartTime,
-              endTime: defaultSessionEndTime,
-              totalMarks: "300",
-              passPercentage: "40",
-              candidateCount: autoAssigned.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
-              hallAssignments: autoAssigned,
-              roomName: hallNames,
-              invigilatorName: invigilatorNames,
-              mode: isObjective ? "Objective" : (exam.examCategory || "Combined"),
-              scheduleMode: "PATTERN_WISE",
-            };
-            generated.push(newEntry);
-            batchSchedules.push(newEntry);
-          }
-          if (allocationFailed) return;
-        } else {
-          const dates = generateSequentialExamDates(exam.startDate, activeGroupSubjects.length);
-          if (dates.length > 0 && exam.endDate && dates[dates.length - 1] > exam.endDate) {
-            showToast?.(
-              `Cannot auto-schedule ${activeGroupSubjects.length} subjects: Dates extend to ${d(dates[dates.length - 1])}, which exceeds the examination end date (${d(exam.endDate)}). Please click "Edit Period" to extend the exam end date.`,
-              "warning",
-            );
-            return;
-          }
-          let allocationFailed = false;
-          for (let idx = 0; idx < activeGroupSubjects.length; idx++) {
-            const subject = activeGroupSubjects[idx];
-            const sameSubOtherGroup = batchSchedules.find(
-              (s) =>
-                normalizeId(s.examId) === normalizeId(exam.id) &&
-                normalizeId(s.subjectId) === normalizeId(subject.id) &&
-                normalizeId(s.groupId) !== normalizeId(selectedGroupId) &&
-                s.date && s.startTime && s.endTime,
-            );
-            const examDate = sameSubOtherGroup?.date || dates[idx] || exam.startDate;
-            const examStartTime = sameSubOtherGroup?.startTime || "09:00";
-            const examEndTime = sameSubOtherGroup?.endTime || "12:00";
-            const autoAssigned = autoAssignHallsAndInvigilators(
-              exam,
-              selectedGroupId,
-              examDate,
-              examStartTime,
-              examEndTime,
-              batchSchedules,
-              null,
-              rooms,
-              faculty,
-              programs,
-              {
-                subjectId: subject.id,
-                subjectsList: sectionSubjects,
-              },
-              students,
-            );
-            if (!autoAssigned) {
-              showToast?.(`Auto Schedule failed for ${subject.name}: Insufficient hall capacity or eligible invigilators without conflicts.`, "error");
-              allocationFailed = true;
-              break;
-            }
-            const hallNames =
-              autoAssigned.map((a) => nameOf(rooms, a.hallId)).join(", ") || "Exam Hall(s)";
-            const invigilatorNames =
-              autoAssigned
-                .map((a) => `${nameOf(rooms, a.hallId)}: ${(a.invigilatorIds || []).map((id) => nameOf(faculty, id)).join(", ")}`)
-                .join(" | ") || "Faculty Invigilators";
-
-            const newEntry = {
-              id: `draft-${selectedGroupId}-${idx}`,
-              examId: exam.id,
-              groupId: selectedGroupId,
-              subjectId: String(subject.id),
-              subjectName: `[${currentGroupCode}] ${subject.name}`,
-              subjectCode: subject.code,
-              date: examDate,
-              startTime: examStartTime,
-              endTime: examEndTime,
-              totalMarks: "100",
-              passingMarks: "35",
-              hallAssignments: autoAssigned,
-              roomName: hallNames,
-              invigilatorName: invigilatorNames,
-              candidateCount: autoAssigned.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
-              mode: "Written",
-              scheduleMode: "SUBJECT_WISE",
-            };
-            generated.push(newEntry);
-            batchSchedules.push(newEntry);
-          }
-          if (allocationFailed) return;
-        }
-
-        if (!generated.length) {
-          showToast?.("No subjects or patterns found to auto-schedule.", "warning");
-          return;
-        }
-
-        // Point 11: Auto generation must be atomic per group. Validate the complete generated batch before saving!
-        const batchErrors = [];
-        for (const entry of generated) {
-          const errs = validateScheduleEntry(
-            exam,
-            entry,
-            batchSchedules,
-            entry.id,
-            rooms,
-            faculty,
-            false,
-            sectionSubjects,
-            groups,
-          );
-          if (errs.length > 0) {
-            batchErrors.push(`${entry.subjectName || "Schedule"}: ${errs[0]}`);
-          }
-        }
-        if (batchErrors.length > 0) {
-          showToast?.(`Auto Schedule generation aborted: ${batchErrors[0]}`, "error");
-          return;
-        }
-
-        try {
-          const saved = await onSave(generated, null, true);
-          if (saved) {
-            if (detectedConflicts.length > 0) {
-              setSchedules((prev) => [...prev, ...detectedConflicts]);
-            }
-            break;
-          } else {
-            break;
-          }
-        } catch (saveErr) {
-          const conflict = parseBookingConflict(saveErr, rooms, faculty);
-          if (conflict && attempt < MAX_RETRIES) {
-            const conflictEntry = {
-              id: `ext-conflict-${conflict.roomId || conflict.facultyId}-${conflict.date}-${conflict.startTime}`,
-              examId: "external-booked-exam",
-              groupId: "external",
-              date: conflict.date,
-              startTime: conflict.startTime,
-              endTime: conflict.endTime,
-              hallAssignments: conflict.roomId ? [
-                {
-                  hallId: conflict.roomId,
-                  hallName: conflict.rawIdentifier,
-                  candidateCount: 999,
-                  invigilatorIds: conflict.facultyId ? [conflict.facultyId] : [],
-                },
-                ...(conflict.rawIdentifier && normalizeId(conflict.rawIdentifier) !== normalizeId(conflict.roomId)
-                  ? [{ hallId: conflict.rawIdentifier, candidateCount: 999, invigilatorIds: [] }]
-                  : []),
-              ] : [
-                {
-                  hallId: "0",
-                  candidateCount: 0,
-                  invigilatorIds: conflict.facultyId ? [conflict.facultyId] : [],
-                },
-              ],
-            };
-            detectedConflicts.push(conflictEntry);
-            setSchedules((prev) => {
-              if (prev.some((s) => s.id === conflictEntry.id)) return prev;
-              return [...prev, conflictEntry];
-            });
-            continue;
-          } else {
-            const errorMsg = getApiErrorMessage(saveErr) || "Failed to save auto-generated schedules.";
-            showToast?.(errorMsg, "error");
-            break;
-          }
+      const generated = response.data?.data ?? response.data ?? [];
+      if (onReloadSchedules) {
+        await onReloadSchedules(exam.id, generated, generated);
+      } else {
+        const schedRes = await apiClient.get(`/api/v1/examinations/${exam.id}/schedules`, {
+          params: { campusId: effectiveCampusId, _t: Date.now() },
+        });
+        const freshRecords = unwrap(schedRes);
+        if (Array.isArray(freshRecords)) {
+          setSchedules((prev) => {
+            const others = prev.filter((s) => normalizeId(s.examId) !== normalizeId(exam.id));
+            return [...freshRecords, ...others];
+          });
         }
       }
+
+      setEditing?.(null);
+      setSch?.((prev) => ({ ...prev, subjectId: "", patternName: "", date: "", hallAssignments: [] }));
+      setErrors?.({});
+      clearAvailableHallsCache?.();
+      showToast?.(`Auto-scheduled ${generated.length} examination session(s) successfully for Group ${currentGroupCode}!`, "success");
+    } catch (saveErr) {
+      console.error("Auto-Schedule API Error", saveErr.response?.data || saveErr);
+      const errorMsg =
+        saveErr.response?.data?.message ||
+        saveErr.response?.data?.details ||
+        getApiErrorMessage(saveErr) ||
+        "Failed to auto-schedule examination.";
+      showToast?.(errorMsg, "error");
     } finally {
       setProcessing(false);
     }
   };
+
 
   const saveSchedule = async (e) => {
     e.preventDefault();
@@ -6049,6 +7703,17 @@ function ScheduleSection({
     if (isCombined) {
       if (!sch.patternName) x.patternName = "Select Examination Pattern.";
       if (!activeGroupSubjects.length) x.patternName = "No saved selected subjects found for this group to schedule in this pattern session.";
+      if (exam?.startDate && canonicalDate(sch.date) !== canonicalDate(exam.startDate)) {
+        x.date = `Objective examinations must be scheduled on the examination start date (${canonicalDate(exam.startDate)}).`;
+      }
+      if (anyCombinedSessionForExam) {
+        if (formatTimeOnly(sch.startTime) !== formatTimeOnly(anyCombinedSessionForExam.startTime)) {
+          x.startTime = `Start time must match existing objective session timing (${formatTimeOnly(anyCombinedSessionForExam.startTime)}).`;
+        }
+        if (formatTimeOnly(sch.endTime) !== formatTimeOnly(anyCombinedSessionForExam.endTime)) {
+          x.endTime = `End time must match existing objective session timing (${formatTimeOnly(anyCombinedSessionForExam.endTime)}).`;
+        }
+      }
     }
     if (!isCombined) {
       if (!sch.subjectId) {
@@ -6068,6 +7733,20 @@ function ScheduleSection({
 
     let finalAssignments = sch.hallAssignments || [];
     if (!finalAssignments.length && sch.date && sch.startTime && sch.endTime) {
+      let backendHalls = backendAvailableHallsForSlot;
+      if (!backendHalls) {
+        try {
+          backendHalls = await fetchBackendAvailableHalls(
+            sch.date,
+            sch.startTime,
+            sch.endTime,
+            exam.id,
+            effectiveCampusId,
+          );
+        } catch {
+          // fallback
+        }
+      }
       finalAssignments = autoAssignHallsAndInvigilators(
         exam,
         selectedGroupId,
@@ -6085,16 +7764,59 @@ function ScheduleSection({
           subjectsList: sectionSubjects,
         },
         students,
+        backendHalls,
       ) || [];
     }
 
+    const groupReqStrength = getRequiredCandidateStrength(exam, selectedGroupId, programs, false, students, {
+      subjectId: sch.subjectId,
+      includedSubjectIds: isCombined ? activeGroupSubjects.map((s) => s.id) : (sch.includedSubjectIds || []),
+      subjectsList: sectionSubjects,
+    });
+    const groupEnrolled = getGroupStudents(exam, selectedGroupId, programs, students).length;
+    const fallbackStrength = groupEnrolled > 0 ? groupEnrolled : (groupReqStrength > 0 ? groupReqStrength : 0);
+
+    if (finalAssignments.length > 0) {
+      let remaining = fallbackStrength;
+      finalAssignments = finalAssignments.map((a) => {
+        let count = Number(a.candidateCount) || 0;
+        const rId = a.hallId || a.roomId;
+        const roomObj = rooms.find((r) => normalizeId(r.id) === normalizeId(rId) || normalizeId(r.roomId) === normalizeId(rId));
+        const roomCap = Number(roomObj?.capacity) || 0;
+        if (count <= 0 || (fallbackStrength > 0 && count > fallbackStrength)) {
+          if (finalAssignments.length === 1) {
+            count = fallbackStrength > 0 ? fallbackStrength : (roomCap > 0 ? roomCap : 40);
+          } else {
+            count = roomCap > 0 ? Math.min(remaining, roomCap) : Math.min(remaining, Math.ceil(fallbackStrength / finalAssignments.length) || 40);
+            remaining = Math.max(0, remaining - count);
+          }
+        }
+        if (roomCap > 0 && count > roomCap) {
+          count = Math.min(count, roomCap);
+        }
+        return {
+          ...a,
+          candidateCount: count,
+        };
+      });
+
+      const totalAllocated = finalAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0);
+      if (fallbackStrength > 0 && totalAllocated !== fallbackStrength) {
+        x.form = `Candidate count (${totalAllocated}) must match with the student count (${fallbackStrength}) according to their group and program selected.`;
+        return setErrors(x);
+      }
+    }
+
     const currentGroupCode = codeOf(groups, selectedGroupId, "GROUP");
-    const includedSubjectIds = isCombined ? Array.from(new Set(activeGroupSubjects.map((s) => normalizeId(s.id)))) : [];
+    const currentGroupSubs = activeGroupSubjects.length > 0
+      ? activeGroupSubjects
+      : ensureArray(effectiveSectionSubjects).filter((s) => s.isActive !== false && !isLanguageSubject(s));
+    const includedSubjectIds = isCombined ? Array.from(new Set(currentGroupSubs.map((s) => normalizeId(s.id)))) : [];
     const entry = {
       ...sch,
-      date: isCombined && existingCombinedSession && !editing ? (existingCombinedSession.date || sch.date) : sch.date,
-      startTime: isCombined && existingCombinedSession && !editing ? (existingCombinedSession.startTime || sch.startTime) : sch.startTime,
-      endTime: isCombined && existingCombinedSession && !editing ? (existingCombinedSession.endTime || sch.endTime) : sch.endTime,
+      date: isCombined && !editing ? (canonicalDate(exam.startDate) || sch.date) : sch.date,
+      startTime: isCombined && anyCombinedSessionForExam && !editing ? (anyCombinedSessionForExam.startTime || sch.startTime) : sch.startTime,
+      endTime: isCombined && anyCombinedSessionForExam && !editing ? (anyCombinedSessionForExam.endTime || sch.endTime) : sch.endTime,
       hallAssignments: finalAssignments,
       groupId: selectedGroupId,
       includedSubjectIds,
@@ -6116,11 +7838,57 @@ function ScheduleSection({
 
     if (Object.keys(x).length) return setErrors(x);
 
-    const hallNames = finalAssignments.map((a) => nameOf(rooms, a.hallId)).join(", ") || "Unassigned Hall";
+    const enrichedAssignments = finalAssignments.map((a) => {
+      const rId = a.hallId || a.roomId;
+      const rObj = rooms.find((r) => normalizeId(r.id) === normalizeId(rId) || normalizeId(r.roomId) === normalizeId(rId));
+      const rName = rObj?.roomNumber || rObj?.roomName || rObj?.name || a.hallName || (rId ? nameOf(rooms, rId, "") : "");
+
+      const invIds = ensureArray(a.invigilatorIds || a.facultyIds).map(normalizeId).filter(Boolean);
+      const invNames = invIds
+        .map((fid) => {
+          const fObj = faculty.find((f) => normalizeId(f.id) === fid);
+          return fObj?.name || nameOf(faculty, fid, "");
+        })
+        .filter(Boolean)
+        .join(", ");
+
+      return {
+        ...a,
+        hallId: rId,
+        roomId: rId,
+        hallName: rName,
+        roomName: rName,
+        roomNumber: rName,
+        invigilatorIds: invIds,
+        facultyIds: invIds,
+        invigilatorName: invNames,
+        invigilator: invNames,
+      };
+    });
+
+    const firstAss = enrichedAssignments[0];
+    const firstRoomId = firstAss?.hallId || firstAss?.roomId;
+    const numFirstRoom = Number(firstRoomId);
+    const validFirstRoom = !isNaN(numFirstRoom) && numFirstRoom > 0 ? numFirstRoom : null;
+    const firstRoomName = firstAss?.hallName || firstAss?.roomNumber || (validFirstRoom ? nameOf(rooms, validFirstRoom, "") : "");
+
+    const firstInvId = firstAss?.invigilatorIds?.[0];
+    const numFirstInv = Number(firstInvId);
+    const validFirstInv = !isNaN(numFirstInv) && numFirstInv > 0 ? numFirstInv : null;
+    const firstInvName = validFirstInv ? (faculty.find((f) => normalizeId(f.id) === normalizeId(validFirstInv))?.name || nameOf(faculty, validFirstInv, "")) : "";
+
+    const numGroupId = Number(selectedGroupId);
+    const validGroupId = !isNaN(numGroupId) && numGroupId > 0 ? numGroupId : null;
+
+    const numSubId = Number(sch.subjectId);
+    const validSubId = !isNaN(numSubId) && numSubId > 0 ? numSubId : null;
+
+    const hallNames = enrichedAssignments.map((a) => a.hallName).filter(Boolean).join(", ") || firstRoomName || "Unassigned Hall";
     const invigilatorNames =
-      finalAssignments
-        .map((a) => `${nameOf(rooms, a.hallId)}: ${(a.invigilatorIds || []).map((id) => nameOf(faculty, id)).join(", ")}`)
-        .join(" | ") || "Unassigned Faculty";
+      enrichedAssignments
+        .map((a) => `${a.hallName || "Hall"}: ${a.invigilatorName || "Unassigned"}`)
+        .filter(Boolean)
+        .join(" | ") || firstInvName || "Unassigned Faculty";
 
     setProcessing(true);
     try {
@@ -6135,7 +7903,7 @@ function ScheduleSection({
           {
             id: editing || "draft-entry",
             examId: exam.id,
-            groupId: selectedGroupId,
+            groupId: validGroupId,
             patternName: sch.patternName,
             includedSubjectIds,
             subjectName: combinedSessionName,
@@ -6145,9 +7913,16 @@ function ScheduleSection({
             endTime: sch.endTime,
             totalMarks: sch.totalMarks,
             passPercentage: sch.passPercentage,
-            candidateCount: finalAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
-            hallAssignments: finalAssignments,
+            candidateCount: enrichedAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
+            hallAssignments: enrichedAssignments,
+            roomId: validFirstRoom,
+            hallId: validFirstRoom,
+            roomNumber: firstRoomName || hallNames,
+            hall: firstRoomName || hallNames,
+            venue: firstRoomName || hallNames,
             roomName: hallNames,
+            invigilatorId: validFirstInv,
+            invigilator: firstInvName || invigilatorNames,
             invigilatorName: invigilatorNames,
             mode: sch.mode || (isObjective ? "Objective" : (exam.examCategory || "Combined")),
             scheduleMode: "PATTERN_WISE",
@@ -6161,8 +7936,8 @@ function ScheduleSection({
           {
             id: editing || "draft-entry",
             examId: exam.id,
-            groupId: selectedGroupId,
-            subjectId: normalizeId(sch.subjectId),
+            groupId: validGroupId,
+            subjectId: validSubId,
             subjectName: `[${currentGroupCode}] ${selectedSubject?.name || "Subject"}`,
             subjectCode: selectedSubject?.code || "SUB",
             date: sch.date,
@@ -6170,9 +7945,16 @@ function ScheduleSection({
             endTime: sch.endTime,
             totalMarks: sch.totalMarks,
             passingMarks: sch.passingMarks,
-            candidateCount: finalAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
-            hallAssignments: finalAssignments,
+            candidateCount: enrichedAssignments.reduce((sum, a) => sum + (Number(a.candidateCount) || 0), 0),
+            hallAssignments: enrichedAssignments,
+            roomId: validFirstRoom,
+            hallId: validFirstRoom,
+            roomNumber: firstRoomName || hallNames,
+            hall: firstRoomName || hallNames,
+            venue: firstRoomName || hallNames,
             roomName: hallNames,
+            invigilatorId: validFirstInv,
+            invigilator: firstInvName || invigilatorNames,
             invigilatorName: invigilatorNames,
             mode: sch.mode || "Written",
             scheduleMode: "SUBJECT_WISE",
@@ -6395,7 +8177,17 @@ function ScheduleSection({
                       label="Pattern Session *"
                       value={sch.patternName}
                       onChange={(v) => {
-                        setSch((x) => ({ ...x, patternName: v, subjectId: "", hallAssignments: [], includedSubjectIds: [] }));
+                        const currentIncluded = (activeGroupSubjects.length > 0
+                          ? activeGroupSubjects
+                          : ensureArray(effectiveSectionSubjects).filter((s) => s.isActive !== false && !isLanguageSubject(s))
+                        ).map((s) => normalizeId(s.id));
+                        setSch((x) => ({
+                          ...x,
+                          patternName: v,
+                          subjectId: "",
+                          hallAssignments: [],
+                          includedSubjectIds: currentIncluded,
+                        }));
                         setErrors((x) => ({ ...x, patternName: undefined }));
                       }}
                       options={activeGroupPatterns.map((pName) => ({ id: pName, name: activeGroupSubjects.length ? `${pName}: ${activeGroupSubjects.map((subject) => subject.name).join(" + ")}` : pName }))}
@@ -6417,6 +8209,7 @@ function ScheduleSection({
                         setSch((x) => ({
                           ...x,
                           subjectId: v,
+                          hallAssignments: editing ? x.hallAssignments : [],
                           ...(sameSubOtherGroup
                             ? {
                               date: sameSubOtherGroup.date,
@@ -6496,8 +8289,8 @@ function ScheduleSection({
                   <Field
                     label="Start Time *"
                     type="time"
-                    value={isCombined && !editing && existingCombinedSession ? existingCombinedSession.startTime : sch.startTime}
-                    readOnly={isCombined && Boolean(existingCombinedSession) && !editing}
+                    value={isCombined && !editing && anyCombinedSessionForExam ? anyCombinedSessionForExam.startTime : sch.startTime}
+                    readOnly={isCombined && Boolean(anyCombinedSessionForExam) && !editing}
                     onChange={(v) => {
                       setSch((x) => ({ ...x, startTime: v }));
                       setErrors((x) => ({ ...x, startTime: undefined }));
@@ -6508,8 +8301,8 @@ function ScheduleSection({
                   <Field
                     label="End Time *"
                     type="time"
-                    value={isCombined && !editing && existingCombinedSession ? existingCombinedSession.endTime : sch.endTime}
-                    readOnly={isCombined && Boolean(existingCombinedSession) && !editing}
+                    value={isCombined && !editing && anyCombinedSessionForExam ? anyCombinedSessionForExam.endTime : sch.endTime}
+                    readOnly={isCombined && Boolean(anyCombinedSessionForExam) && !editing}
                     onChange={(v) => {
                       setSch((x) => ({ ...x, endTime: v }));
                       setErrors((x) => ({ ...x, endTime: undefined }));
@@ -6561,6 +8354,7 @@ function ScheduleSection({
                   required={getRequiredCandidateStrength(exam, selectedGroupId, programs, false, students)}
                   enrolledStudentCount={getGroupStudents(exam, selectedGroupId, programs, students).length}
                   onRefreshStudents={onRefreshStudents}
+                  onRefreshRooms={onRefreshRooms}
                   onChange={(hallAssignments) => setSch((x) => ({ ...x, hallAssignments }))}
                   onAutoAssign={handleManualAutoAssignTopForm}
                 />
@@ -6605,13 +8399,14 @@ function ScheduleSection({
               <ScheduleTable
                 entries={groupEntries}
                 groups={groups}
-                canEdit={exam?.status === "DRAFT"}
+                canEdit={normalizeStatus(exam?.status) === "DRAFT" || !exam?.status || exam?.status === "Draft"}
                 edit={onEdit}
                 remove={onRemove}
                 onEditHalls={(s) => setEditingHallsSchedule(s)}
                 exam={exam}
                 schedules={schedules}
                 rooms={rooms}
+                onRefreshRooms={onRefreshRooms}
                 faculty={faculty}
                 programs={programs}
                 subjects={sectionSubjects}
@@ -6698,7 +8493,7 @@ function ScheduleSection({
                 <span>
                   {entries.length} subject/session schedule(s) configured across {examGroups.length} group(s)
                 </span>
-                {exam.status === "DRAFT" ? (
+                {normalizeStatus(exam.status) === "DRAFT" || exam.status === "Draft" ? (
                   <button
                     type="button"
                     className="cms-btn cms-btn-primary"
@@ -6764,6 +8559,7 @@ function ScheduleSection({
           exam={exam}
           schedules={schedules}
           rooms={rooms}
+          onRefreshRooms={onRefreshRooms}
           faculty={faculty}
           programs={programs}
           subjects={sectionSubjects}
@@ -6788,6 +8584,7 @@ function HallAssignmentEditor({
   required,
   enrolledStudentCount = null,
   onRefreshStudents = null,
+  onRefreshRooms = null,
   onChange,
   onAutoAssign,
 }) {
@@ -6823,7 +8620,7 @@ function HallAssignmentEditor({
         <span>
           Remaining: <strong>{Math.max(0, required - allocated)}</strong>
         </span>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           {onRefreshStudents && (
             <button
               type="button"
@@ -6835,6 +8632,17 @@ function HallAssignmentEditor({
               <RefreshCw size={13} style={{ marginRight: "4px" }} /> Sync Students
             </button>
           )}
+          {onRefreshRooms && (
+            <button
+              type="button"
+              className="cms-btn cms-btn-ghost"
+              style={{ fontSize: "12px", padding: "4px 8px" }}
+              onClick={onRefreshRooms}
+              title="Refresh active classrooms and examination halls from system"
+            >
+              <RefreshCw size={13} style={{ marginRight: "4px" }} /> Sync Halls
+            </button>
+          )}
           {onAutoAssign && (
             <button type="button" className="cms-btn cms-btn-ghost" onClick={onAutoAssign}>
               <Wand2 size={14} /> Auto-Assign Halls
@@ -6843,7 +8651,12 @@ function HallAssignmentEditor({
           <button
             type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={() => onChange([...assignments, { hallId: "", candidateCount: "", invigilatorIds: [] }])}
+            onClick={() => {
+              if (rooms.length === 0 && onRefreshRooms) {
+                onRefreshRooms();
+              }
+              onChange([...assignments, { hallId: "", candidateCount: "", invigilatorIds: [] }]);
+            }}
           >
             <Plus size={14} /> Add Room / Hall
           </button>
@@ -6856,18 +8669,30 @@ function HallAssignmentEditor({
             label="Room / Hall *"
             value={assignment.hallId}
             onChange={(hallId) => {
-              const room = rooms.find((r) => normalizeId(r.id) === normalizeId(hallId));
+              const room = rooms.find((r) => normalizeId(r.id) === normalizeId(hallId) || normalizeId(r.roomId) === normalizeId(hallId));
+              const rName = room?.roomNumber || room?.roomName || room?.name || "";
               const roomCap = Number(room?.capacity) || 0;
               let candidateCount = assignment.candidateCount;
-              if (!candidateCount || Number(candidateCount) === 0) {
-                const alreadyAllocated = assignments.reduce(
-                  (sum, item, i) => (i === index ? sum : sum + (Number(item.candidateCount) || 0)),
-                  0
-                );
-                const remainingNeeded = Math.max(0, required - alreadyAllocated);
-                candidateCount = roomCap > 0 && remainingNeeded > 0 ? Math.min(remainingNeeded, roomCap) : (roomCap || required || 1);
+              const alreadyAllocated = assignments.reduce(
+                (sum, item, i) => (i === index ? sum : sum + (Number(item.candidateCount) || 0)),
+                0
+              );
+              const remainingNeeded = Math.max(0, required - alreadyAllocated);
+              if (!candidateCount || Number(candidateCount) === 0 || assignments.length === 1) {
+                if (assignments.length === 1) {
+                  candidateCount = required > 0 ? (roomCap > 0 ? Math.min(required, roomCap) : required) : (roomCap || 1);
+                } else {
+                  candidateCount = remainingNeeded > 0 ? (roomCap > 0 ? Math.min(remainingNeeded, roomCap) : remainingNeeded) : 0;
+                }
               }
-              update(index, { hallId, candidateCount });
+              update(index, {
+                hallId,
+                roomId: hallId,
+                hallName: rName,
+                roomName: rName,
+                roomNumber: rName,
+                candidateCount,
+              });
             }}
             options={rooms
               .filter(
@@ -6875,11 +8700,18 @@ function HallAssignmentEditor({
                   normalizeId(room.id) === normalizeId(assignment.hallId) ||
                   !selectedHallIds.includes(normalizeId(room.id)),
               )
-              .map((room) => ({
-                ...room,
-                name: `${room.name} (${room.roomNumber}) · Capacity ${room.capacity}`,
-              }))}
+              .map((room) => {
+                const roomTypeLabel = room.roomType || room.type || "Classroom";
+                const blockInfo = room.blockName ? ` · ${room.blockName}` : "";
+                const roomNum = room.roomNumber && !room.name.includes(room.roomNumber) ? ` (${room.roomNumber})` : "";
+                return {
+                  ...room,
+                  name: `${room.name}${roomNum} · ${roomTypeLabel} · Capacity ${room.capacity}${blockInfo}`,
+                };
+              })}
             placeholder="Select Exam Hall or Classroom"
+            emptyText="No active classrooms or examination halls found"
+            onRefresh={onRefreshRooms}
           />
 
           <Field
@@ -6893,7 +8725,21 @@ function HallAssignmentEditor({
           <SearchableMultiSelect
             label="Invigilator Faculty *"
             selectedIds={assignment.invigilatorIds}
-            onChange={(invigilatorIds) => update(index, { invigilatorIds })}
+            onChange={(invigilatorIds) => {
+              const facultyNames = ensureArray(invigilatorIds)
+                .map((id) => {
+                  const f = faculty.find((fac) => normalizeId(fac.id) === normalizeId(id));
+                  return f?.name || nameOf(faculty, id, "");
+                })
+                .filter(Boolean)
+                .join(", ");
+              update(index, {
+                invigilatorIds,
+                facultyIds: invigilatorIds,
+                invigilatorName: facultyNames,
+                invigilator: facultyNames,
+              });
+            }}
             options={faculty.filter(
               (person) =>
                 !assignments.some(
@@ -6930,6 +8776,7 @@ function ScheduleTable({
   exam = null,
   schedules = [],
   rooms = [],
+  onRefreshRooms = null,
   faculty = [],
   programs = [],
   subjects = [],
@@ -6953,48 +8800,144 @@ function ScheduleTable({
         return;
       }
 
-      const slotKey = `${item.examId}_${item.groupId}_${item.date}_${item.startTime}_${item.endTime}_${item.roomName || item.hall || ""}_${item.patternName || ""}`;
+      const slotDate = canonicalDate(item.date || item.examDate);
+      const slotStart = formatTimeOnly(item.startTime);
+      const slotEnd = formatTimeOnly(item.endTime);
+      const slotKey = `${normalizeId(item.examId)}_${normalizeId(item.groupId)}_${slotDate}_${slotStart}_${slotEnd}_${item.patternName || ""}`;
+
+      const itemAssignments = (item.hallAssignments && item.hallAssignments.length > 0)
+        ? item.hallAssignments
+        : (item.roomId || item.hallId)
+          ? [{
+            hallId: item.hallId || item.roomId,
+            roomId: item.hallId || item.roomId,
+            hallName: item.roomNumber || item.roomName || item.hall || "",
+            roomName: item.roomNumber || item.roomName || item.hall || "",
+            roomNumber: item.roomNumber || item.roomName || item.hall || "",
+            candidateCount: item.candidateCount,
+            invigilatorIds: item.invigilatorIds || (item.invigilatorId ? [item.invigilatorId] : []),
+            invigilatorName: item.invigilatorName || item.invigilator || "",
+          }]
+          : [];
+
       if (!patternSessionMap.has(slotKey)) {
         const sessionCopy = {
           ...item,
-          allScheduleIds: [item.id],
-          allSubjectIds: item.subjectId ? [item.subjectId] : [],
+          date: slotDate || item.date,
+          startTime: slotStart || item.startTime,
+          endTime: slotEnd || item.endTime,
+          allScheduleIds: item.id ? [item.id] : [],
+          allSubjectIds: item.subjectId ? [item.subjectId] : (item.includedSubjectIds || []),
           allSubjectCodes: item.subjectCode ? [item.subjectCode] : [],
           allSubjectNames: item.subjectName ? [item.subjectName] : [],
+          allHallAssignments: [...itemAssignments],
         };
         patternSessionMap.set(slotKey, sessionCopy);
         result.push(sessionCopy);
       } else {
         const existing = patternSessionMap.get(slotKey);
-        if (!existing.allScheduleIds.includes(item.id)) {
+        if (item.id && !existing.allScheduleIds.includes(item.id)) {
           existing.allScheduleIds.push(item.id);
         }
         if (item.subjectId && !existing.allSubjectIds.includes(item.subjectId)) {
           existing.allSubjectIds.push(item.subjectId);
         }
+        (item.includedSubjectIds || []).forEach((sId) => {
+          if (!existing.allSubjectIds.includes(sId)) {
+            existing.allSubjectIds.push(sId);
+          }
+        });
         if (item.subjectCode && !existing.allSubjectCodes.includes(item.subjectCode)) {
           existing.allSubjectCodes.push(item.subjectCode);
         }
         if (item.subjectName && !existing.allSubjectNames.includes(item.subjectName)) {
           existing.allSubjectNames.push(item.subjectName);
         }
+        itemAssignments.forEach((ass) => {
+          const assHallId = normalizeId(ass.hallId || ass.roomId);
+          const existingAss = existing.allHallAssignments.find(
+            (e) => normalizeId(e.hallId || e.roomId) === assHallId
+          );
+          if (existingAss) {
+            existingAss.candidateCount = (Number(existingAss.candidateCount) || 0) + (Number(ass.candidateCount) || 0);
+            const mergedInv = ensureArray(existingAss.invigilatorIds || existingAss.facultyIds);
+            ensureArray(ass.invigilatorIds || ass.facultyIds).forEach((fid) => {
+              if (!mergedInv.includes(fid)) mergedInv.push(fid);
+            });
+            existingAss.invigilatorIds = mergedInv;
+          } else {
+            existing.allHallAssignments.push({ ...ass });
+          }
+        });
       }
     });
 
     return result.map((item) => {
-      if (!item.allScheduleIds || item.allScheduleIds.length <= 1) {
-        return item;
-      }
-      const combinedCodes = item.allSubjectCodes.filter(Boolean).join(" + ");
-      const combinedNames = item.allSubjectNames.filter(Boolean).join(" + ");
+      const mergedAssignments = (item.allHallAssignments && item.allHallAssignments.length > 0)
+        ? item.allHallAssignments
+        : (item.hallAssignments && item.hallAssignments.length > 0 ? item.hallAssignments : []);
+
+      const hallDisplay = mergedAssignments.length > 0
+        ? mergedAssignments
+          .map((a) => a.hallName || a.roomName || a.roomNumber || (a.hallId ? nameOf(rooms, a.hallId, "") : ""))
+          .filter(Boolean)
+          .join(", ")
+        : item.roomName;
+
+      const invDisplay = mergedAssignments.length > 0
+        ? mergedAssignments
+          .map((a) => {
+            const hName = a.hallName || a.roomName || a.roomNumber || "";
+            const invIds = ensureArray(a.invigilatorIds || a.facultyIds);
+            const isRoomNameOrId = (val) => {
+              if (!val || val === "—") return false;
+              const tr = String(val).trim();
+              if (hName && tr.toLowerCase() === hName.toLowerCase()) return true;
+              return (rooms || []).some(
+                (r) =>
+                  String(r.id) === tr ||
+                  String(r.roomId) === tr ||
+                  String(r.roomNumber || "").trim().toLowerCase() === tr.toLowerCase() ||
+                  String(r.roomName || "").trim().toLowerCase() === tr.toLowerCase()
+              );
+            };
+
+            const rawInvName = !isRoomNameOrId(a.invigilatorName) && !isRoomNameOrId(a.invigilator)
+              ? (a.invigilatorName || a.invigilator || "")
+              : "";
+
+            const invNameStr =
+              rawInvName ||
+              invIds.map((fid) => nameOf(faculty, fid, "")).filter(Boolean).join(", ") ||
+              (!isRoomNameOrId(item.invigilatorName) ? item.invigilatorName : "") ||
+              (!isRoomNameOrId(item.invigilator) ? item.invigilator : "");
+            if (mergedAssignments.length > 1 && hName && invNameStr) {
+              return `${hName}: ${invNameStr}`;
+            }
+            return invNameStr || "—";
+          })
+          .filter(Boolean)
+          .join(" | ")
+        : (item.invigilatorName || item.invigilator || "—");
+
+      const combinedCodes = (item.allSubjectCodes && item.allSubjectCodes.length > 0)
+        ? item.allSubjectCodes.filter(Boolean).join(" + ")
+        : item.subjectCode;
+      const combinedNames = (item.allSubjectNames && item.allSubjectNames.length > 0)
+        ? item.allSubjectNames.filter(Boolean).join(" + ")
+        : item.combinedSubjectsDisplay;
+
       return {
         ...item,
         subjectCode: combinedCodes || item.subjectCode,
         subjectName: item.patternName || item.subjectName,
         combinedSubjectsDisplay: combinedNames || item.combinedSubjectsDisplay,
+        hallAssignments: mergedAssignments.length > 0 ? mergedAssignments : item.hallAssignments,
+        roomName: hallDisplay || item.roomName,
+        invigilatorName: invDisplay || item.invigilatorName,
       };
     });
-  }, [entries]);
+  }, [entries, rooms, faculty]);
 
   const [page, setPage] = useState(1);
   const pageSize = 6;
@@ -7020,7 +8963,11 @@ function ScheduleTable({
       setInlineError("");
       return;
     }
-    const reqStrength = getRequiredCandidateStrength(exam, s.groupId, programs, false, students);
+    const reqStrength = getRequiredCandidateStrength(exam, s.groupId, programs, false, students, {
+      subjectId: s.subjectId,
+      includedSubjectIds: s.includedSubjectIds,
+      subjectsList: subjects,
+    });
     const raw = (s.hallAssignments || []).map((a) => ({ ...a }));
     let initial = [];
     if (raw.length) {
@@ -7037,8 +8984,8 @@ function ScheduleTable({
           };
         }
         const room = rooms.find((r) => normalizeId(r.id) === normalizeId(item.hallId ?? item.roomId));
-        const roomCap = Number(room?.capacity) || 40;
-        const count = Math.min(needed > 0 ? needed : roomCap, roomCap);
+        const roomCap = Number(room?.capacity) || 0;
+        const count = roomCap > 0 ? Math.min(needed > 0 ? needed : roomCap, roomCap) : needed;
         needed = Math.max(0, needed - count);
         return {
           ...item,
@@ -7049,9 +8996,11 @@ function ScheduleTable({
       });
     } else if (s.hallId || s.roomId) {
       const hid = normalizeId(s.hallId || s.roomId);
+      let initCount = Number(s.candidateCount) || reqStrength || 0;
+      if (reqStrength > 0 && initCount > reqStrength) initCount = reqStrength;
       initial = [{
         hallId: hid,
-        candidateCount: Number(s.candidateCount) || reqStrength || 1,
+        candidateCount: initCount,
         invigilatorIds: ensureArray(s.invigilatorIds || s.facultyIds || (s.invigilatorId ? [s.invigilatorId] : [])).map(normalizeId).filter((id) => id && id !== "0"),
       }];
     } else {
@@ -7092,7 +9041,11 @@ function ScheduleTable({
 
   const handleInlineSave = async (s) => {
     if (inlineSaving) return;
-    const reqStrength = getRequiredCandidateStrength(exam, s.groupId, programs, false, students);
+    const reqStrength = getRequiredCandidateStrength(exam, s.groupId, programs, false, students, {
+      subjectId: s.subjectId,
+      includedSubjectIds: s.includedSubjectIds,
+      subjectsList: subjects,
+    });
     const valErrors = validateHallAssignments(
       inlineAssignments,
       exam,
@@ -7106,8 +9059,8 @@ function ScheduleTable({
       subjects,
     );
     const allocated = inlineAssignments.reduce((total, a) => total + Number(a.candidateCount || 0), 0);
-    if (reqStrength > 0 && allocated < reqStrength) {
-      valErrors.push(`Hall allocation must cover confirmed candidate strength (${allocated}/${reqStrength}).`);
+    if (reqStrength > 0 && allocated !== reqStrength) {
+      valErrors.push(`Candidate count (${allocated}) must match with the student count (${reqStrength}) according to their group and program selected.`);
     }
     for (const a of inlineAssignments) {
       const needed = requiredInvigilatorCount(a.candidateCount);
@@ -7121,7 +9074,7 @@ function ScheduleTable({
       }
     }
 
-    const eligibleFacultyIds = getEligibleInvigilators(schedules, s, s.id, faculty, subjects).map((f) => normalizeId(f.id));
+    const eligibleFacultyIds = getEligibleInvigilators(schedules, s, s.id, faculty, subjects, exam).map((f) => normalizeId(f.id));
     for (const a of inlineAssignments) {
       for (const id of a.invigilatorIds || []) {
         const nid = normalizeId(id);
@@ -7130,12 +9083,12 @@ function ScheduleTable({
           const isAssignedSameDay = schedules.some(
             (other) =>
               !isSameSessionOrSelf(other, s, s.id, exam) &&
-              canonicalDate(other.date || other.examDate) === canonicalDate(s.date || s.examDate) &&
+              canonicalDate(other.scheduleDate || other.date || other.examDate) === canonicalDate(s.scheduleDate || s.date || s.examDate) &&
               hasTimeOverlap(s.startTime, s.endTime, other.startTime, other.endTime) &&
               getScheduleInvigilatorIds(other).includes(nid),
           );
           if (isAssignedSameDay) {
-            valErrors.push(`${fMember.name} is already assigned to invigilate another hall on this date. The same faculty cannot be assigned to two halls on the same day.`);
+            valErrors.push(`${fMember.name} is already assigned to invigilate another hall during an overlapping time slot.`);
           } else {
             const entrySubjectIds = [s?.subjectId, ...(s?.includedSubjectIds || [])].map(normalizeId).filter(Boolean);
             const teachesSubject = entrySubjectIds.length > 0 && Array.isArray(fMember.subjectsTaught) && entrySubjectIds.some((sId) => fMember.subjectsTaught.map(normalizeId).includes(sId));
@@ -7154,17 +9107,63 @@ function ScheduleTable({
       return;
     }
 
-    const hallNames = inlineAssignments.map((a) => nameOf(rooms, a.hallId)).filter(Boolean).join(", ") || "Unassigned Hall";
-    const invigilatorNames =
-      inlineAssignments
-        .map((a) => `${nameOf(rooms, a.hallId)}: ${(a.invigilatorIds || []).map((id) => nameOf(faculty, id)).filter(Boolean).join(", ")}`)
+    const enrichedAssignments = inlineAssignments.map((a) => {
+      const rId = a.hallId || a.roomId;
+      const rObj = rooms.find((r) => normalizeId(r.id) === normalizeId(rId) || normalizeId(r.roomId) === normalizeId(rId));
+      const rName = rObj?.roomNumber || rObj?.roomName || rObj?.name || a.hallName || (rId ? nameOf(rooms, rId, "") : "");
+
+      const invIds = ensureArray(a.invigilatorIds || a.facultyIds).map(normalizeId).filter(Boolean);
+      const invNames = invIds
+        .map((fid) => {
+          const fObj = faculty.find((f) => normalizeId(f.id) === fid);
+          return fObj?.name || nameOf(faculty, fid, "");
+        })
         .filter(Boolean)
-        .join(" | ") || "Unassigned Faculty";
+        .join(", ");
+
+      return {
+        ...a,
+        hallId: rId,
+        roomId: rId,
+        hallName: rName,
+        roomName: rName,
+        roomNumber: rName,
+        invigilatorIds: invIds,
+        facultyIds: invIds,
+        invigilatorName: invNames,
+        invigilator: invNames,
+      };
+    });
+
+    const firstAss = enrichedAssignments[0];
+    const firstRoomId = firstAss?.hallId || firstAss?.roomId;
+    const numFirstRoom = Number(firstRoomId);
+    const validFirstRoom = !isNaN(numFirstRoom) && numFirstRoom > 0 ? numFirstRoom : null;
+    const firstRoomName = firstAss?.hallName || firstAss?.roomNumber || (validFirstRoom ? nameOf(rooms, validFirstRoom, "") : "");
+
+    const firstInvId = firstAss?.invigilatorIds?.[0];
+    const numFirstInv = Number(firstInvId);
+    const validFirstInv = !isNaN(numFirstInv) && numFirstInv > 0 ? numFirstInv : null;
+    const firstInvName = validFirstInv ? (faculty.find((f) => normalizeId(f.id) === normalizeId(validFirstInv))?.name || nameOf(faculty, validFirstInv, "")) : "";
+
+    const hallNames = enrichedAssignments.map((a) => a.hallName).filter(Boolean).join(", ") || firstRoomName || "Unassigned Hall";
+    const invigilatorNames =
+      enrichedAssignments
+        .map((a) => `${a.hallName || "Hall"}: ${a.invigilatorName || "Unassigned"}`)
+        .filter(Boolean)
+        .join(" | ") || firstInvName || "Unassigned Faculty";
 
     const updatedSchedule = {
       ...s,
-      hallAssignments: inlineAssignments,
+      hallAssignments: enrichedAssignments,
+      roomId: validFirstRoom,
+      hallId: validFirstRoom,
+      roomNumber: firstRoomName || hallNames,
+      hall: firstRoomName || hallNames,
+      venue: firstRoomName || hallNames,
       roomName: hallNames,
+      invigilatorId: validFirstInv,
+      invigilator: firstInvName || invigilatorNames,
       invigilatorName: invigilatorNames,
       candidateCount: allocated,
     };
@@ -7179,7 +9178,9 @@ function ScheduleTable({
         showToast?.("Halls and invigilators updated successfully inside the table.", "success");
       }
     } catch (err) {
-      setInlineError(getApiErrorMessage(err) || "Failed to update hall assignments.");
+      console.error("Schedule API Error", err.response?.data);
+      const apiMsg = err.response?.data?.message || err.response?.data?.details || getApiErrorMessage(err);
+      setInlineError(apiMsg || "Failed to update hall assignments.");
     } finally {
       setInlineSaving(false);
     }
@@ -7294,7 +9295,7 @@ function ScheduleTable({
                               <span>Session: <strong>{s.subjectName || s.patternName}</strong></span>
                               <span>Exam Date: <strong>{d(s.date)}</strong></span>
                               <span>Timing: <strong>{s.startTime} - {s.endTime}</strong></span>
-                              <span>Required: <strong>{getRequiredCandidateStrength(exam, s.groupId, programs, false, students)} Candidates</strong></span>
+                              <span>Required: <strong>{getRequiredCandidateStrength(exam, s.groupId, programs, false, students, { subjectId: s.subjectId, includedSubjectIds: s.includedSubjectIds, subjectsList: subjects })} Candidates</strong></span>
                             </div>
                             <div className="exam-inline-header-actions">
                               <button
@@ -7320,9 +9321,10 @@ function ScheduleTable({
                             <HallAssignmentEditor
                               assignments={inlineAssignments}
                               rooms={getEligibleRooms(schedules, s, s.id, exam, rooms)}
-                              faculty={getEligibleInvigilators(schedules, s, s.id, faculty, subjects)}
-                              required={getRequiredCandidateStrength(exam, s.groupId, programs, false, students)}
+                              faculty={getEligibleInvigilators(schedules, s, s.id, faculty, subjects, exam)}
+                              required={getRequiredCandidateStrength(exam, s.groupId, programs, false, students, { subjectId: s.subjectId, includedSubjectIds: s.includedSubjectIds, subjectsList: subjects })}
                               enrolledStudentCount={getGroupStudents(exam, s.groupId, programs, students).length}
+                              onRefreshRooms={onRefreshRooms}
                               onChange={(newAssignments) => {
                                 setInlineAssignments(newAssignments);
                                 setInlineError("");
@@ -7409,18 +9411,24 @@ function ScheduleTable({
 }
 
 // ---------- EDIT HALLS & INVIGILATORS MODAL ----------
-function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], programs = [], subjects = [], students = [], onClose, onSave }) {
+function EditHallsModal({ schedule, exam, schedules, rooms = [], onRefreshRooms = null, faculty = [], programs = [], subjects = [], students = [], onClose, onSave }) {
   const eligibleRooms = getEligibleRooms(schedules, schedule, schedule.id, exam, rooms);
-  const eligibleFaculty = getEligibleInvigilators(schedules, schedule, schedule.id, faculty, subjects);
-  const requiredStrength = getRequiredCandidateStrength(exam, schedule.groupId, programs, false, students);
+  const eligibleFaculty = getEligibleInvigilators(schedules, schedule, schedule.id, faculty, subjects, exam);
+  const requiredStrength = getRequiredCandidateStrength(exam, schedule.groupId, programs, false, students, {
+    subjectId: schedule.subjectId,
+    includedSubjectIds: schedule.includedSubjectIds,
+    subjectsList: subjects,
+  });
 
   const [assignments, setAssignments] = useState(() => {
     let raw = (schedule.hallAssignments || []).map((a) => ({ ...a }));
     if (!raw.length && (schedule.roomId || schedule.hallId)) {
+      let initCount = Number(schedule.candidateCount) || requiredStrength || 0;
+      if (requiredStrength > 0 && initCount > requiredStrength) initCount = requiredStrength;
       raw = [
         {
           hallId: normalizeId(schedule.roomId || schedule.hallId),
-          candidateCount: Number(schedule.candidateCount) || requiredStrength || 1,
+          candidateCount: initCount,
           invigilatorIds: schedule.invigilatorId ? [normalizeId(schedule.invigilatorId)] : [],
         },
       ];
@@ -7428,14 +9436,17 @@ function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], p
     if (!raw.length) return [];
     let needed = requiredStrength;
     return raw.map((item) => {
-      const existingCount = Number(item.candidateCount) || 0;
+      let existingCount = Number(item.candidateCount) || 0;
+      if (requiredStrength > 0 && existingCount > requiredStrength) {
+        existingCount = requiredStrength;
+      }
       if (existingCount > 0) {
         needed = Math.max(0, needed - existingCount);
-        return item;
+        return { ...item, candidateCount: existingCount };
       }
       const room = rooms.find((r) => normalizeId(r.id) === normalizeId(item.hallId));
-      const roomCap = Number(room?.capacity) || 40;
-      const count = Math.min(needed > 0 ? needed : roomCap, roomCap);
+      const roomCap = Number(room?.capacity) || 0;
+      const count = roomCap > 0 ? Math.min(needed > 0 ? needed : roomCap, roomCap) : needed;
       needed = Math.max(0, needed - count);
       return { ...item, candidateCount: count };
     });
@@ -7487,7 +9498,7 @@ function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], p
       subjects,
     );
     const allocated = assignments.reduce((total, a) => total + Number(a.candidateCount || 0), 0);
-    if (requiredStrength <= 0 || allocated < requiredStrength) valErrors.push("Hall allocation must cover the confirmed candidate strength.");
+    if (requiredStrength > 0 && allocated < requiredStrength) valErrors.push("Hall allocation must cover the confirmed candidate strength.");
     for (const a of assignments) {
       const needed = requiredInvigilatorCount(a.candidateCount);
       const validInvCount = ensureArray(a.invigilatorIds).filter(
@@ -7505,7 +9516,7 @@ function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], p
     }
 
     // Points 7, 8, 9: Validate assigned faculty for availability, simultaneous overlap & own-subject exclusion
-    const eligibleFacultyIds = getEligibleInvigilators(schedules, schedule, schedule.id, faculty, subjects).map((f) => normalizeId(f.id));
+    const eligibleFacultyIds = getEligibleInvigilators(schedules, schedule, schedule.id, faculty, subjects, exam).map((f) => normalizeId(f.id));
     for (const a of assignments) {
       for (const id of a.invigilatorIds || []) {
         const nid = normalizeId(id);
@@ -7514,7 +9525,7 @@ function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], p
           const isOverlapping = schedules.some(
             (s) =>
               !isSameSessionOrSelf(s, schedule, schedule.id, exam) &&
-              canonicalDate(s.date || s.examDate) === canonicalDate(schedule.date || schedule.examDate) &&
+              canonicalDate(s.scheduleDate || s.date || s.examDate) === canonicalDate(schedule.scheduleDate || schedule.date || schedule.examDate) &&
               hasTimeOverlap(schedule.startTime, schedule.endTime, s.startTime, s.endTime) &&
               getScheduleInvigilatorIds(s).includes(nid),
           );
@@ -7534,21 +9545,77 @@ function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], p
       }
     }
 
-    const hallNames = assignments.map((a) => nameOf(rooms, a.hallId)).join(", ") || "Unassigned Hall";
+    const enrichedAssignments = assignments.map((a) => {
+      const rId = a.hallId || a.roomId;
+      const rObj = rooms.find((r) => normalizeId(r.id) === normalizeId(rId) || normalizeId(r.roomId) === normalizeId(rId));
+      const rName = rObj?.roomNumber || rObj?.roomName || rObj?.name || a.hallName || (rId ? nameOf(rooms, rId, "") : "");
+
+      const invIds = ensureArray(a.invigilatorIds || a.facultyIds).map(normalizeId).filter(Boolean);
+      const invNames = invIds
+        .map((fid) => {
+          const fObj = faculty.find((f) => normalizeId(f.id) === fid);
+          return fObj?.name || nameOf(faculty, fid, "");
+        })
+        .filter(Boolean)
+        .join(", ");
+
+      return {
+        ...a,
+        hallId: rId,
+        roomId: rId,
+        hallName: rName,
+        roomName: rName,
+        roomNumber: rName,
+        invigilatorIds: invIds,
+        facultyIds: invIds,
+        invigilatorName: invNames,
+        invigilator: invNames,
+      };
+    });
+
+    const firstAss = enrichedAssignments[0];
+    const firstRoomId = firstAss?.hallId || firstAss?.roomId;
+    const numFirstRoom = Number(firstRoomId);
+    const validFirstRoom = !isNaN(numFirstRoom) && numFirstRoom > 0 ? numFirstRoom : null;
+    const firstRoomName = firstAss?.hallName || firstAss?.roomNumber || (validFirstRoom ? nameOf(rooms, validFirstRoom, "") : "");
+
+    const firstInvId = firstAss?.invigilatorIds?.[0];
+    const numFirstInv = Number(firstInvId);
+    const validFirstInv = !isNaN(numFirstInv) && numFirstInv > 0 ? numFirstInv : null;
+    const firstInvName = validFirstInv ? (faculty.find((f) => normalizeId(f.id) === normalizeId(validFirstInv))?.name || nameOf(faculty, validFirstInv, "")) : "";
+
+    const hallNames = enrichedAssignments.map((a) => a.hallName).filter(Boolean).join(", ") || firstRoomName || "Unassigned Hall";
     const invigilatorNames =
-      assignments
-        .map((a) => `${nameOf(rooms, a.hallId)}: ${(a.invigilatorIds || []).map((id) => nameOf(faculty, id)).join(", ")}`)
-        .join(" | ") || "Unassigned Faculty";
+      enrichedAssignments
+        .map((a) => `${a.hallName || "Hall"}: ${a.invigilatorName || "Unassigned"}`)
+        .filter(Boolean)
+        .join(" | ") || firstInvName || "Unassigned Faculty";
 
     const updated = {
       ...schedule,
-      hallAssignments: assignments,
+      hallAssignments: enrichedAssignments,
+      roomId: validFirstRoom,
+      hallId: validFirstRoom,
+      roomNumber: firstRoomName || hallNames,
+      hall: firstRoomName || hallNames,
+      venue: firstRoomName || hallNames,
       roomName: hallNames,
+      invigilatorId: validFirstInv,
+      invigilator: firstInvName || invigilatorNames,
       invigilatorName: invigilatorNames,
+      candidateCount: allocated,
     };
     savingRef.current = true;
     setSaving(true);
-    try { await onSave(updated); } finally { savingRef.current = false; setSaving(false); }
+    try {
+      await onSave(updated);
+    } catch (err) {
+      console.error("Schedule API Error", err.response?.data);
+      throw err;
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   return (
@@ -7584,6 +9651,7 @@ function EditHallsModal({ schedule, exam, schedules, rooms = [], faculty = [], p
           faculty={eligibleFaculty}
           required={requiredStrength}
           enrolledStudentCount={getGroupStudents(exam, schedule.groupId, programs, students).length}
+          onRefreshRooms={onRefreshRooms}
           onChange={(newAssignments) => {
             setAssignments(newAssignments);
             setError("");

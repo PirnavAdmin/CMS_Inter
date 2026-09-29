@@ -205,6 +205,9 @@ namespace CollegeManagement.API.Services.Exports
                 "Group",
                 "Program",
                 "Section",
+                "Student Type",
+                "Hostel",
+                "Bus Route",
                 "Status",
                 "Active"
             };
@@ -220,7 +223,7 @@ namespace CollegeManagement.API.Services.Exports
                 cell.Style.Font.FontColor = XLColor.White;
                 cell.Style.Fill.BackgroundColor = PrimaryNavy;
                 cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-                cell.Style.Alignment.Horizontal = (col == 0 || col == 4 || col == 6 || col == 15 || col == 16)
+                cell.Style.Alignment.Horizontal = (col == 0 || col == 4 || col == 6 || col == 15 || col == 18 || col == 19)
                     ? XLAlignmentHorizontalValues.Center
                     : XLAlignmentHorizontalValues.Left;
             }
@@ -289,11 +292,17 @@ namespace CollegeManagement.API.Services.Exports
                     ws.Cell(currentRow, 14).Value = s.ProgramName;
                     ws.Cell(currentRow, 15).Value = s.SectionName;
 
-                    ws.Cell(currentRow, 16).Value = s.Status;
+                    ws.Cell(currentRow, 16).Value = string.IsNullOrWhiteSpace(s.StudentType) ? "Day Scholar" : s.StudentType;
                     ws.Cell(currentRow, 16).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-                    ws.Cell(currentRow, 17).Value = s.IsActive ? "Yes" : "No";
-                    ws.Cell(currentRow, 17).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    ws.Cell(currentRow, 17).Value = s.HostelBlock ?? "N/A";
+                    ws.Cell(currentRow, 18).Value = s.BusRoute ?? "N/A";
+
+                    ws.Cell(currentRow, 19).Value = s.Status;
+                    ws.Cell(currentRow, 19).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                    ws.Cell(currentRow, 20).Value = s.IsActive ? "Yes" : "No";
+                    ws.Cell(currentRow, 20).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
                     var rowRange = ws.Range(currentRow, 1, currentRow, headers.Length);
                     rowRange.Style.Font.FontSize = 9;

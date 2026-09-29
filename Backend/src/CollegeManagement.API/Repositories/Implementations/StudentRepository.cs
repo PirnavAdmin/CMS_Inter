@@ -1,3 +1,4 @@
+using CollegeManagement.API.Common;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
@@ -20,18 +21,151 @@ namespace CollegeManagement.API.Repositories
 
 
         // =========================================================
-        // GET ALL STUDENTS
+        // GET ALL / PAGED STUDENTS
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync()
+        public async Task<PagedResult<StudentListItemDto>> GetPagedAsync(
+            string? search = null,
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            bool? isActive = null,
+            int? campusId = null,
+            int pageNumber = 1,
+            int pageSize = 10)
         {
-            var connection = _context.Database.GetDbConnection();
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 500) pageSize = 500;
 
-            var result = await connection.QueryAsync<StudentListItemDto>(
-                "sp_GetAllStudents",
-                commandType: CommandType.StoredProcedure);
+            var query = _context.Students
+                .Include(s => s.BoardNavigation)
+                .Include(s => s.AcademicYear)
+                .Include(s => s.AcademicLevelNavigation)
+                .Include(s => s.GroupNavigation)
+                .Include(s => s.SectionNavigation)
+                .Include(s => s.CampusNavigation)
+                .Include(s => s.ProgramNavigation)
+                .AsNoTracking()
+                .AsQueryable();
 
-            return result.ToList();
+            if (campusId.HasValue && campusId.Value > 0)
+                query = query.Where(s => s.CampusId == campusId.Value);
+
+            if (boardId.HasValue && boardId.Value > 0)
+                query = query.Where(s => s.BoardId == boardId.Value);
+
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+                query = query.Where(s => s.AcademicYearId == academicYearId.Value);
+
+            if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
+
+            if (groupId.HasValue && groupId.Value > 0)
+                query = query.Where(s => s.GroupId == groupId.Value);
+
+            if (programId.HasValue && programId.Value > 0)
+                query = query.Where(s => s.ProgramId == programId.Value);
+
+            if (sectionId.HasValue && sectionId.Value > 0)
+                query = query.Where(s => s.SectionId == sectionId.Value);
+
+            if (!string.IsNullOrWhiteSpace(status))
+                query = query.Where(s => s.Status == status);
+
+            if (isActive.HasValue)
+                query = query.Where(s => s.IsActive == isActive.Value);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var sTerm = search.Trim();
+                query = query.Where(s =>
+                    s.StudentName.Contains(sTerm) ||
+                    (s.AdmissionNo != null && s.AdmissionNo.Contains(sTerm)) ||
+                    (s.RollNo != null && s.RollNo.Contains(sTerm)) ||
+                    (s.MobileNumber != null && s.MobileNumber.Contains(sTerm)) ||
+                    (s.Email != null && s.Email.Contains(sTerm)));
+            }
+
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .OrderBy(s => s.StudentName)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(s => new StudentListItemDto
+                {
+                    StudentId = s.StudentId,
+                    AdmissionNo = s.AdmissionNo ?? "",
+                    RollNo = s.RollNo ?? "",
+                    StudentName = s.StudentName,
+                    Photo = s.Photo,
+                    Gender = s.Gender,
+                    Email = s.Email,
+                    MobileNumber = s.MobileNumber,
+                    CampusId = s.CampusId,
+                    CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
+                    BoardId = s.BoardId,
+                    BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
+                    AcademicYearId = s.AcademicYearId,
+                    AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
+                    AcademicLevelId = s.AcademicLevelId ?? 0,
+                    AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
+                    GroupId = s.GroupId ?? 0,
+                    GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                    SectionId = s.SectionId ?? 0,
+                    SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                    ProgramId = s.ProgramId ?? 0,
+                    ProgramName = s.ProgramNavigation != null ? s.ProgramNavigation.ProgramName : null,
+                    IsActive = s.IsActive,
+                    Status = s.Status,
+                    CreatedAt = s.CreatedAt,
+                    StudentType = s.StudentType,
+                    TransportRequired = s.TransportRequired,
+                    HostelBlock = s.HostelBlock,
+                    BusRoute = s.BusRoute
+                })
+                .ToListAsync();
+
+            return new PagedResult<StudentListItemDto>
+            {
+                Items = items,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalCount = totalCount
+            };
+        }
+
+        public async Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null,
+            string? search = null)
+        {
+            var paged = await GetPagedAsync(
+                search,
+                boardId,
+                academicYearId,
+                academicLevelId,
+                groupId,
+                programId,
+                sectionId,
+                status,
+                null,
+                campusId,
+                1,
+                int.MaxValue);
+
+            return paged.Items.ToList();
         }
 
 
@@ -68,6 +202,46 @@ namespace CollegeManagement.API.Repositories
             CreateStudentRequest request)
         {
             var connection = _context.Database.GetDbConnection();
+
+            string? hostelBlock = request.HostelBlock;
+            if (string.IsNullOrWhiteSpace(hostelBlock) && request.HostelId.HasValue)
+            {
+                hostelBlock = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT HostelName FROM hostel_blocks WHERE HostelId = @HostelId LIMIT 1",
+                    new { request.HostelId });
+            }
+
+            string? hostelRoom = request.HostelRoom;
+            if (string.IsNullOrWhiteSpace(hostelRoom) && request.RoomId.HasValue)
+            {
+                hostelRoom = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT RoomNumber FROM room_masters WHERE RoomId = @RoomId LIMIT 1",
+                    new { request.RoomId });
+            }
+
+            string? hostelBed = request.HostelBed;
+            if (string.IsNullOrWhiteSpace(hostelBed) && request.BedId.HasValue)
+            {
+                hostelBed = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT BedNumber FROM hostel_beds WHERE BedId = @BedId LIMIT 1",
+                    new { request.BedId });
+            }
+
+            string? busRoute = request.BusRoute;
+            if (string.IsNullOrWhiteSpace(busRoute) && request.RouteId.HasValue)
+            {
+                busRoute = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT RouteName FROM TransportRoutes WHERE RouteId = @RouteId LIMIT 1",
+                    new { request.RouteId });
+            }
+
+            string? pickupPoint = request.PickupPoint;
+            if (string.IsNullOrWhiteSpace(pickupPoint) && request.PickupPointId.HasValue)
+            {
+                pickupPoint = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT COALESCE(StopName, PickupPointName) FROM PickupPoints WHERE PickupPointId = @PickupPointId LIMIT 1",
+                    new { request.PickupPointId });
+            }
 
             var result =
                 await connection.QueryFirstOrDefaultAsync<StudentResponse>(
@@ -146,8 +320,8 @@ namespace CollegeManagement.API.Repositories
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile =
                             request.GuardianMobile,
-                        p_GuardianEmail =
-                            request.GuardianEmail,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail,
 
                         p_AnnualIncome =
                             request.AnnualIncome,
@@ -175,7 +349,24 @@ namespace CollegeManagement.API.Repositories
                             request.IsFirstLogin,
 
                         // Status
-                        p_IsActive = request.IsActive
+                        p_IsActive = request.IsActive,
+
+                        // Residential & Transport
+                        p_StudentType = request.StudentType,
+                        p_TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
+                        p_BusType = request.BusType,
+                        p_RouteId = request.RouteId,
+                        p_BusRoute = busRoute,
+                        p_PickupPointId = request.PickupPointId,
+                        p_PickupPoint = pickupPoint,
+                        p_HostelId = request.HostelId,
+                        p_HostelBlock = hostelBlock,
+                        p_RoomId = request.RoomId,
+                        p_HostelRoom = hostelRoom,
+                        p_BedId = request.BedId,
+                        p_HostelBed = hostelBed,
+                        p_HallTicketNumber = request.HallTicketNumber ?? request.PreviousHallTicketNumber,
+                        p_CampusId = request.CampusId ?? 1
                     },
                     commandType: CommandType.StoredProcedure);
 
@@ -193,13 +384,54 @@ namespace CollegeManagement.API.Repositories
                 await connection.OpenAsync();
             }
 
+            string? hostelBlock = request.HostelBlock;
+            if (string.IsNullOrWhiteSpace(hostelBlock) && request.HostelId.HasValue)
+            {
+                hostelBlock = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT HostelName FROM hostel_blocks WHERE HostelId = @HostelId LIMIT 1",
+                    new { request.HostelId });
+            }
+
+            string? hostelRoom = request.HostelRoom;
+            if (string.IsNullOrWhiteSpace(hostelRoom) && request.RoomId.HasValue)
+            {
+                hostelRoom = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT RoomNumber FROM room_masters WHERE RoomId = @RoomId LIMIT 1",
+                    new { request.RoomId });
+            }
+
+            string? hostelBed = request.HostelBed;
+            if (string.IsNullOrWhiteSpace(hostelBed) && request.BedId.HasValue)
+            {
+                hostelBed = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT BedNumber FROM hostel_beds WHERE BedId = @BedId LIMIT 1",
+                    new { request.BedId });
+            }
+
+            string? busRoute = request.BusRoute;
+            if (string.IsNullOrWhiteSpace(busRoute) && request.RouteId.HasValue)
+            {
+                busRoute = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT RouteName FROM TransportRoutes WHERE RouteId = @RouteId LIMIT 1",
+                    new { request.RouteId });
+            }
+
+            string? pickupPoint = request.PickupPoint;
+            if (string.IsNullOrWhiteSpace(pickupPoint) && request.PickupPointId.HasValue)
+            {
+                pickupPoint = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT COALESCE(StopName, PickupPointName) FROM PickupPoints WHERE PickupPointId = @PickupPointId LIMIT 1",
+                    new { request.PickupPointId });
+            }
+
             string? normalizedEmail = null;
             if (!string.IsNullOrWhiteSpace(request.Email))
             {
                 normalizedEmail = request.Email.Trim().ToUpperInvariant();
                 var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
+                    "sp_CheckUserEmailExists",
+                    new { p_Email = normalizedEmail },
+                    commandType: CommandType.StoredProcedure);
 
                 if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
                 {
@@ -266,19 +498,34 @@ namespace CollegeManagement.API.Repositories
 
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile = request.GuardianMobile,
-                        p_GuardianEmail = request.GuardianEmail
+                        p_ParentGuardianEmail = request.ParentGuardianEmail,
+
+                        p_StudentType = request.StudentType,
+                        p_TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
+                        p_BusType = request.BusType,
+                        p_RouteId = request.RouteId,
+                        p_BusRoute = busRoute,
+                        p_PickupPointId = request.PickupPointId,
+                        p_PickupPoint = pickupPoint,
+                        p_HostelId = request.HostelId,
+                        p_HostelBlock = hostelBlock,
+                        p_RoomId = request.RoomId,
+                        p_HostelRoom = hostelRoom,
+                        p_BedId = request.BedId,
+                        p_HostelBed = hostelBed,
+                        p_HallTicketNumber = request.HallTicketNumber ?? request.PreviousHallTicketNumber,
+                        p_CampusId = request.CampusId
                     },
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
                 if (!string.IsNullOrWhiteSpace(normalizedEmail))
                 {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                    await connection.ExecuteAsync(
+                        "sp_UpdateUserEmailByLinkedEntity",
+                        new { p_StaffId = (int?)null, p_StudentId = studentId, p_Email = normalizedEmail },
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
@@ -318,12 +565,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 0, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 0 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result == 1;
@@ -378,8 +624,9 @@ namespace CollegeManagement.API.Repositories
             {
                 normalizedEmail = request.Email.Trim().ToUpperInvariant();
                 var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
+                    "sp_CheckUserEmailExists",
+                    new { p_Email = normalizedEmail },
+                    commandType: CommandType.StoredProcedure);
 
                 if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
                 {
@@ -427,12 +674,11 @@ namespace CollegeManagement.API.Repositories
 
                 if (!string.IsNullOrWhiteSpace(normalizedEmail))
                 {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                    await connection.ExecuteAsync(
+                        "sp_UpdateUserEmailByLinkedEntity",
+                        new { p_StaffId = (int?)null, p_StudentId = studentId, p_Email = normalizedEmail },
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
 
                 transaction.Commit();
@@ -548,12 +794,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 0, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 0 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result >= 0;
@@ -591,12 +836,11 @@ namespace CollegeManagement.API.Repositories
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
 
-                const string sql = @"
-                    UPDATE `Users` 
-                    SET `IsActive` = 1, 
-                        `UpdatedAt` = @UpdatedAt 
-                    WHERE `StudentId` = @StudentId;";
-                await connection.ExecuteAsync(sql, new { UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
+                await connection.ExecuteAsync(
+                    "sp_UpdateUserStatusByLinkedEntity",
+                    new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 1 },
+                    transaction,
+                    commandType: CommandType.StoredProcedure);
 
                 transaction.Commit();
                 return result >= 0;
@@ -661,27 +905,108 @@ namespace CollegeManagement.API.Repositories
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive)
+            bool? isActive,
+            int? campusId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
-            var result = await connection.QueryAsync<StudentListItemDto>(
-                "sp_SearchStudents",
-                new
+            try
+            {
+                var result = await connection.QueryAsync<StudentListItemDto>(
+                    "sp_SearchStudents",
+                    new
+                    {
+                        p_Search = string.IsNullOrWhiteSpace(search)
+                            ? null
+                            : search.Trim(),
+
+                        p_BoardId = boardId,
+                        p_AcademicYearId = academicYearId,
+                        p_AcademicLevelId = academicLevelId,
+                        p_GroupId = groupId,
+                        p_SectionId = sectionId,
+                        p_IsActive = isActive,
+                        p_CampusId = campusId
+                    },
+                    commandType: CommandType.StoredProcedure);
+
+                return result.ToList();
+            }
+            catch
+            {
+                // Resilient EF Core Fallback
+                var query = _context.Students
+                    .Include(s => s.BoardNavigation)
+                    .Include(s => s.AcademicYear)
+                    .Include(s => s.AcademicLevelNavigation)
+                    .Include(s => s.GroupNavigation)
+                    .Include(s => s.SectionNavigation)
+                    .Include(s => s.CampusNavigation)
+                    .AsNoTracking()
+                    .AsQueryable();
+
+                if (campusId.HasValue && campusId.Value > 0)
+                    query = query.Where(s => s.CampusId == campusId.Value);
+
+                if (boardId.HasValue && boardId.Value > 0)
+                    query = query.Where(s => s.BoardId == boardId.Value);
+
+                if (academicYearId.HasValue && academicYearId.Value > 0)
+                    query = query.Where(s => s.AcademicYearId == academicYearId.Value);
+
+                if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                    query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
+
+                if (groupId.HasValue && groupId.Value > 0)
+                    query = query.Where(s => s.GroupId == groupId.Value);
+
+                if (sectionId.HasValue && sectionId.Value > 0)
+                    query = query.Where(s => s.SectionId == sectionId.Value);
+
+                if (isActive.HasValue)
+                    query = query.Where(s => s.IsActive == isActive.Value);
+
+                if (!string.IsNullOrWhiteSpace(search))
                 {
-                    p_Search = string.IsNullOrWhiteSpace(search)
-                        ? null
-                        : search.Trim(),
+                    var sTerm = search.Trim();
+                    query = query.Where(s =>
+                        s.StudentName.Contains(sTerm) ||
+                        s.AdmissionNo.Contains(sTerm) ||
+                        (s.RollNo != null && s.RollNo.Contains(sTerm)) ||
+                        (s.MobileNumber != null && s.MobileNumber.Contains(sTerm)) ||
+                        (s.Email != null && s.Email.Contains(sTerm)));
+                }
 
-                    p_BoardId = boardId,
-                    p_AcademicYearId = academicYearId,
-                    p_GroupId = groupId,
-                    p_SectionId = sectionId,
-                    p_IsActive = isActive
-                },
-                commandType: CommandType.StoredProcedure);
-
-            return result.ToList();
+                return await query
+                    .OrderBy(s => s.StudentName)
+                    .Select(s => new StudentListItemDto
+                    {
+                        StudentId = s.StudentId,
+                        AdmissionNo = s.AdmissionNo,
+                        RollNo = s.RollNo ?? string.Empty,
+                        StudentName = s.StudentName,
+                        Photo = s.Photo,
+                        Gender = s.Gender,
+                        Email = s.Email,
+                        MobileNumber = s.MobileNumber,
+                        CampusId = s.CampusId,
+                        CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
+                        BoardId = s.BoardId,
+                        BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
+                        AcademicYearId = s.AcademicYearId,
+                        AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
+                        AcademicLevelId = s.AcademicLevelId ?? 0,
+                        AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
+                        GroupId = s.GroupId ?? 0,
+                        GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                        SectionId = s.SectionId ?? 0,
+                        SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                        IsActive = s.IsActive,
+                        Status = s.Status,
+                        CreatedAt = s.CreatedAt
+                    })
+                    .ToListAsync();
+            }
         }
 
 
@@ -796,8 +1121,13 @@ namespace CollegeManagement.API.Repositories
         {
             var connection = _context.Database.GetDbConnection();
             var rows = await connection.ExecuteAsync(
-                "UPDATE Students SET Photo = @Photo, UpdatedAt = CURRENT_TIMESTAMP WHERE StudentId = @StudentId",
-                new { Photo = photoPath, StudentId = studentId });
+                "sp_UpdateStudentPhotoPath",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_PhotoPath = photoPath
+                },
+                commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
@@ -813,8 +1143,15 @@ namespace CollegeManagement.API.Repositories
                 throw new ArgumentException($"Invalid document column: {documentColumn}");
 
             var connection = _context.Database.GetDbConnection();
-            var sql = $"UPDATE Students SET `{safeColumn}` = @DocumentPath, UpdatedAt = CURRENT_TIMESTAMP WHERE StudentId = @StudentId";
-            var rows = await connection.ExecuteAsync(sql, new { DocumentPath = documentPath, StudentId = studentId });
+            var rows = await connection.ExecuteAsync(
+                "sp_UpdateStudentDocumentPath",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_DocumentColumn = safeColumn,
+                    p_DocumentPath = documentPath
+                },
+                commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 
@@ -844,72 +1181,37 @@ namespace CollegeManagement.API.Repositories
                 await connection.OpenAsync();
             }
 
-            string? normalizedEmail = null;
-            if (!string.IsNullOrWhiteSpace(request.Email))
-            {
-                normalizedEmail = request.Email.Trim().ToUpperInvariant();
-                var existingUserWithEmail = await connection.QueryFirstOrDefaultAsync<User>(
-                    "SELECT UserId, StudentId, Email FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;",
-                    new { Email = normalizedEmail });
-
-                if (existingUserWithEmail != null && existingUserWithEmail.StudentId != studentId)
+            var rows = await connection.ExecuteAsync(
+                "sp_UpdateStudentSelfProfile",
+                new
                 {
-                    throw new InvalidOperationException($"Email address '{request.Email}' is already registered to another user account.");
-                }
-            }
+                    p_StudentId = studentId,
+                    p_MobileNumber = request.MobileNumber,
+                    p_Email = request.Email,
+                    p_Address = request.Address,
+                    p_City = request.City,
+                    p_District = request.District,
+                    p_State = request.State,
+                    p_Pincode = request.Pincode,
+                    p_BloodGroup = request.BloodGroup,
+                    p_AadhaarNumber = request.AadhaarNumber,
+                    p_Nationality = request.Nationality,
+                    p_Religion = request.Religion,
+                    p_PreviousSchool = request.PreviousSchool,
+                    p_PreviousHallTicketNumber = request.PreviousHallTicketNumber,
+                    p_PreviousBoard = request.PreviousBoard,
+                    p_PreviousYearOfPassing = request.PreviousYearOfPassing,
+                    p_PreviousPercentage = request.PreviousPercentage,
+                    p_FatherMobile = request.FatherMobile,
+                    p_FatherEmail = request.FatherEmail,
+                    p_MotherMobile = request.MotherMobile,
+                    p_MotherEmail = request.MotherEmail,
+                    p_GuardianMobile = request.GuardianMobile,
+                    p_ParentGuardianEmail = request.ParentGuardianEmail
+                },
+                commandType: CommandType.StoredProcedure);
 
-            using var transaction = connection.BeginTransaction();
-            try
-            {
-                var rows = await connection.ExecuteAsync(
-                    "sp_UpdateStudentSelfProfile",
-                    new
-                    {
-                        p_StudentId = studentId,
-                        p_MobileNumber = request.MobileNumber,
-                        p_Email = request.Email,
-                        p_Address = request.Address,
-                        p_City = request.City,
-                        p_District = request.District,
-                        p_State = request.State,
-                        p_Pincode = request.Pincode,
-                        p_BloodGroup = request.BloodGroup,
-                        p_AadhaarNumber = request.AadhaarNumber,
-                        p_Nationality = request.Nationality,
-                        p_Religion = request.Religion,
-                        p_PreviousSchool = request.PreviousSchool,
-                        p_PreviousHallTicketNumber = request.PreviousHallTicketNumber,
-                        p_PreviousBoard = request.PreviousBoard,
-                        p_PreviousYearOfPassing = request.PreviousYearOfPassing,
-                        p_PreviousPercentage = request.PreviousPercentage,
-                        p_FatherMobile = request.FatherMobile,
-                        p_FatherEmail = request.FatherEmail,
-                        p_MotherMobile = request.MotherMobile,
-                        p_MotherEmail = request.MotherEmail,
-                        p_GuardianMobile = request.GuardianMobile,
-                        p_GuardianEmail = request.GuardianEmail
-                    },
-                    transaction: transaction,
-                    commandType: CommandType.StoredProcedure);
-
-                if (!string.IsNullOrWhiteSpace(normalizedEmail))
-                {
-                    const string sql = @"
-                        UPDATE `Users` 
-                        SET `Email` = @Email, 
-                            `UpdatedAt` = @UpdatedAt 
-                        WHERE `StudentId` = @StudentId;";
-                    await connection.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
-                }
-
-                transaction.Commit();
-                return rows > 0;
-            }
-            catch
-            {
-                try { transaction.Rollback(); } catch { }
-                throw;
-            }
+            return rows > 0;
         }
     }
 }

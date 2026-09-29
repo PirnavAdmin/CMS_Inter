@@ -59,7 +59,7 @@ namespace CollegeManagement.API.Services.Exports
 
         public string? GuardianName { get; set; }
         public string? GuardianMobile { get; set; }
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
         public decimal? AnnualIncome { get; set; }
 
         // Previous Education
@@ -73,6 +73,17 @@ namespace CollegeManagement.API.Services.Exports
         public string Status { get; set; } = "Active";
         public bool IsActive { get; set; } = true;
         public string? Remarks { get; set; }
+
+        // Residential & Transport Allocation
+        public string? StudentType { get; set; }
+        public bool? TransportRequired { get; set; }
+        public string? BusType { get; set; }
+        public string? BusRoute { get; set; }
+        public string? PickupPoint { get; set; }
+        public string? HostelBlock { get; set; }
+        public string? HostelRoom { get; set; }
+        public string? HostelBed { get; set; }
+        public string? HallTicketNumber { get; set; }
 
         public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
     }

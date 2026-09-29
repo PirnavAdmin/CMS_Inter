@@ -4,6 +4,7 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
 {
     public class UpdateExamScheduleRequest
     {
+        public int? CampusId { get; set; }
         public int? SubjectId { get; set; }
         public DateOnly? ExamDate { get; set; }
         public TimeOnly? StartTime { get; set; }
@@ -32,5 +33,6 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
         public string? ExamMode { get; set; }
         public decimal? MaxMarks { get; set; }
         public decimal? PassingMarks { get; set; }
+        public object? HallAssignments { get; set; }
     }
 }

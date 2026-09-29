@@ -1,3 +1,4 @@
+using CollegeManagement.API.Common;
 using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
 using CollegeManagement.API.DTOs.Students.Responses;
@@ -14,7 +15,30 @@ namespace CollegeManagement.API.Services
         // STUDENT CRUD
         // =========================================================
 
-        Task<List<StudentListItemDto>> GetAllAsync();
+        Task<PagedResult<StudentListItemDto>> GetPagedAsync(
+            string? search = null,
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            bool? isActive = null,
+            int? campusId = null,
+            int pageNumber = 1,
+            int pageSize = 10);
+
+        Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null,
+            string? search = null);
 
         Task<StudentResponse?> GetByIdAsync(
             int studentId);
@@ -113,7 +137,8 @@ namespace CollegeManagement.API.Services
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive);
+            bool? isActive,
+            int? campusId = null);
 
 
         // =========================================================

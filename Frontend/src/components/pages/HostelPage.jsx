@@ -87,10 +87,10 @@ const academicMonthOptions = [
   { value: "2027-05", label: "May 2027", rangeText: "May 1, 2027 – May 31, 2027" },
 ];
 
-
-
-
-
+// Unenrolled admission applicant IDs returned in the certificate students dropdown UNION
+// that do NOT exist in the Students master table (sp_CheckStudentExists returns 0).
+// Hostel room allocations require an enrolled student record in the Students master table.
+const UNENROLLED_ADMISSION_IDS = new Set([1, 506, 509, 516, 591, 592, 593, 595, 598]);
 
 const hostelReportCategories = [
   { id: "Block Report", label: "Block Report" },
@@ -114,12 +114,17 @@ const reportOptions = [
 ];
 
 // ── CSV Export Utility ────────────────────────────────────────────────
-function exportCsv(filename, rows, columns) {
-  const header = columns.map((col) => `"${col.label}"`).join(",");
-  const body = rows.map((row) =>
+function exportCsv(filename, rows = [], columns = []) {
+  if (!Array.isArray(columns) || columns.length === 0) return;
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const header = columns.map((col) => `"${String(col.label ?? "").replace(/"/g, '""')}"`).join(",");
+  const body = safeRows.map((row) =>
     columns
       .map((col) => {
-        const val = typeof col.value === "function" ? col.value(row) : row[col.key];
+        let val;
+        if (typeof col.value === "function") val = col.value(row);
+        else if (typeof col.getter === "function") val = col.getter(row);
+        else val = row ? row[col.key] : "";
         return `"${String(val ?? "").replace(/"/g, '""')}"`;
       })
       .join(",")
@@ -130,12 +135,38 @@ function exportCsv(filename, rows, columns) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename;
+  link.download = filename || "export.csv";
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore
+    }
+  }, 1000);
 }
+
+const extractCollection = (payload) => {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  const d = payload.data ?? payload.Data ?? payload;
+  if (Array.isArray(d)) return d;
+  if (Array.isArray(d?.items ?? d?.Items)) return d.items ?? d.Items;
+  if (Array.isArray(d?.data ?? d?.Data)) return d.data ?? d.Data;
+  if (Array.isArray(d?.$values)) return d.$values;
+  if (Array.isArray(payload.items ?? payload.Items)) return payload.items ?? payload.Items;
+  return [];
+};
+
+const getVal = (obj, ...keys) => {
+  if (!obj || typeof obj !== "object") return undefined;
+  for (const k of keys) {
+    if (obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim() !== "") return obj[k];
+  }
+  return undefined;
+};
 
 // ── Component Definition ──────────────────────────────────────────────
 export default function HostelPage() {
@@ -164,169 +195,195 @@ export default function HostelPage() {
   const [beds, setBeds] = useState([]);
   const [candidateStaff, setCandidateStaff] = useState([]);
   const [candidateAdmissions, setCandidateAdmissions] = useState([]);
+  const [candidateStudents, setCandidateStudents] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
 
   // ── API Response Mappers ────────────────────────────────────────────
-  const mapBlock = useCallback((b) => ({
-    id: b.hostelId ?? b.id,
-    name: b.hostelName ?? b.name ?? "",
-    code: b.hostelCode ?? b.code ?? "",
-    type: b.hostelType ?? b.type ?? "Boys",
-    floors: b.totalFloors ?? b.floors ?? 1,
-    totalRooms: b.totalRooms ?? 0,
-    totalBeds: b.totalBeds ?? 0,
-    occupiedBeds: b.occupiedBeds ?? 0,
-    vacantBeds: b.availableBeds ?? b.vacantBeds ?? 0,
-    warden: b.wardenName ?? b.warden ?? "Unassigned",
-    wardenPhone: b.primaryMobileNumber ?? b.wardenPhone ?? "-",
-    email: b.email ?? "",
-    address: b.address ?? "",
-    status: b.status ?? "Active",
-  }), []);
+  const mapBlock = useCallback((b) => {
+    if (!b) return {};
+    return {
+      id: b.hostelId ?? b.id ?? "",
+      name: b.hostelName ?? b.name ?? "",
+      code: b.hostelCode ?? b.code ?? "",
+      type: b.hostelType ?? b.type ?? "Boys",
+      floors: b.totalFloors ?? b.floors ?? 1,
+      totalRooms: b.totalRooms ?? 0,
+      totalBeds: b.totalBeds ?? 0,
+      occupiedBeds: b.occupiedBeds ?? 0,
+      vacantBeds: b.availableBeds ?? b.vacantBeds ?? 0,
+      warden: b.wardenName ?? b.warden ?? "Unassigned",
+      wardenPhone: b.primaryMobileNumber ?? b.wardenPhone ?? "-",
+      email: b.email ?? "",
+      address: b.address ?? "",
+      status: b.status ?? "Active",
+    };
+  }, []);
 
-  const mapCategory = useCallback((c) => ({
-    id: c.roomTypeId ?? c.id,
-    name: c.roomTypeSpecification ?? c.name ?? "",
-    specification: c.roomTypeSpecification ?? c.specification ?? "",
-    type: c.acType === "AC" ? "AC Accommodation" : c.acType === "Non-AC" ? "Non-AC Standard" : (c.type ?? ""),
-    capacity: c.bedCapacity ?? c.capacity ?? 1,
-    acType: c.acType ?? "Non-AC",
-    fee: c.fee ?? "",
-    totalRooms: c.totalRooms ?? 0,
-    totalBeds: c.totalBeds ?? 0,
-    blocks: c.blocks ?? "",
-    description: c.description ?? "",
-    status: c.status ?? "Active",
-  }), []);
+  const mapCategory = useCallback((c) => {
+    if (!c) return {};
+    return {
+      id: c.roomTypeId ?? c.id ?? "",
+      name: c.roomTypeSpecification ?? c.name ?? "",
+      specification: c.roomTypeSpecification ?? c.specification ?? "",
+      type: c.acType === "AC" ? "AC Accommodation" : c.acType === "Non-AC" ? "Non-AC Standard" : (c.type ?? ""),
+      capacity: c.bedCapacity ?? c.capacity ?? 1,
+      acType: c.acType ?? "Non-AC",
+      fee: c.fee ?? "",
+      totalRooms: c.totalRooms ?? 0,
+      totalBeds: c.totalBeds ?? 0,
+      blocks: c.blocks ?? "",
+      description: c.description ?? "",
+      status: c.status ?? "Active",
+    };
+  }, []);
 
-  const mapRoom = useCallback((r) => ({
-    id: r.roomId ?? r.id,
-    roomNo: r.roomNumber ?? r.roomNo ?? "",
-    block: r.hostelCode ?? r.block ?? "",
-    blockName: r.hostelName ?? r.blockName ?? "",
-    floor: r.floorLevel ?? r.floor ?? "",
-    type: r.roomTypeSpecification ?? r.type ?? "",
-    capacity: r.bedCapacity ?? r.capacity ?? 1,
-    acType: r.acType ?? "",
-    occupied: r.occupied ?? 0,
-    fee: r.fee ?? "",
-    beds: r.beds ?? [],
-    status: r.status ?? "Active",
-    hostelId: r.hostelId,
-    roomTypeId: r.roomTypeId,
-  }), []);
+  const mapRoom = useCallback((r) => {
+    if (!r) return {};
+    return {
+      id: r.roomId ?? r.id ?? "",
+      roomNo: r.roomNumber ?? r.roomNo ?? "",
+      block: r.hostelCode ?? r.block ?? "",
+      blockName: r.hostelName ?? r.blockName ?? "",
+      floor: r.floorLevel ?? r.floor ?? "",
+      type: r.roomTypeSpecification ?? r.type ?? "",
+      capacity: r.bedCapacity ?? r.capacity ?? 1,
+      acType: r.acType ?? "",
+      occupied: r.occupied ?? 0,
+      fee: r.fee ?? "",
+      beds: Array.isArray(r.beds) ? r.beds : [],
+      status: r.status ?? "Active",
+      hostelId: r.hostelId,
+      roomTypeId: r.roomTypeId,
+    };
+  }, []);
 
-  const mapBed = useCallback((bd) => ({
-    id: bd.bedId ?? bd.id,
-    roomId: bd.roomId,
-    roomNumber: bd.roomNumber ?? "",
-    hostelId: bd.hostelId,
-    bedNumber: bd.bedNumber ?? "",
-    bedStatus: bd.bedStatus ?? "Available",
-    status: bd.status ?? "Active",
-  }), []);
+  const mapBed = useCallback((bd) => {
+    if (!bd) return {};
+    return {
+      id: bd.bedId ?? bd.id ?? "",
+      roomId: bd.roomId,
+      roomNumber: bd.roomNumber ?? "",
+      hostelId: bd.hostelId,
+      bedNumber: bd.bedNumber ?? "",
+      bedStatus: bd.bedStatus ?? "Available",
+      status: bd.status ?? "Active",
+    };
+  }, []);
 
-  const mapWarden = useCallback((w) => ({
-    id: w.wardenAssignmentId ?? w.id,
-    empId: w.employeeId ?? w.empId ?? "",
-    name: w.wardenName ?? [w.firstName, w.middleName, w.lastName].filter(Boolean).join(" ") ?? w.name ?? "",
-    designation: w.designation ?? "Resident Warden",
-    phone: w.phone ?? "",
-    email: w.email ?? "",
-    assignedHostels: w.hostelName ?? w.assignedHostels ?? "",
-    hostelId: w.hostelId,
-    staffId: w.staffId,
-    assignmentDate: w.assignmentDate ?? "",
-    gender: w.gender ?? "",
-    status: w.status ?? "Active",
-  }), []);
+  const mapWarden = useCallback((w) => {
+    if (!w) return {};
+    const wardenFullName = [w.firstName, w.middleName, w.lastName].filter(Boolean).join(" ");
+    return {
+      id: w.wardenAssignmentId ?? w.id ?? "",
+      empId: w.employeeId ?? w.empId ?? "",
+      name: w.wardenName || (wardenFullName ? wardenFullName : (w.name ?? "")),
+      designation: w.designation ?? "Resident Warden",
+      phone: w.phone ?? w.mobileNumber ?? "",
+      email: w.email ?? "",
+      assignedHostels: w.hostelName ?? w.assignedHostels ?? "",
+      hostelId: w.hostelId,
+      staffId: w.staffId,
+      assignmentDate: w.assignmentDate ? (typeof w.assignmentDate === "string" ? w.assignmentDate.split("T")[0] : String(w.assignmentDate)) : "",
+      gender: w.gender ?? "",
+      status: w.status ?? "Active",
+    };
+  }, []);
 
-  const mapAllocation = useCallback((a) => ({
-    id: a.allocationId ?? a.id,
-    admissionNo: a.admissionNo ?? "",
-    studentName: a.studentName ?? a.name ?? "",
-    gender: a.gender ?? "",
-    blockName: a.hostelName ?? a.blockName ?? "",
-    blockCode: a.hostelCode ?? a.blockCode ?? "",
-    floor: a.floorLevel ?? a.floor ?? "",
-    room: a.roomNumber ? `Room #${a.roomNumber}` : (a.room ?? ""),
-    bed: a.bedNumber ?? a.bed ?? "",
-    roomBadge: a.roomNumber && a.bedNumber ? `Room #${a.roomNumber} (${a.bedNumber})` : (a.roomBadge ?? ""),
-    joinDate: a.joiningDate ? a.joiningDate.split("T")[0] : (a.joinDate ?? ""),
-    status: a.status ?? "Active",
-    monthlyFee: a.monthlyFee ?? "",
-    contact: a.contact ?? "",
-    remarks: a.remarks ?? "",
-    hostelId: a.hostelId,
-    roomId: a.roomId,
-    bedId: a.bedId,
-    studentId: a.studentId,
-    wardenAssignmentId: a.wardenAssignmentId,
-  }), []);
+  const mapAllocation = useCallback((a) => {
+    if (!a) return {};
+    return {
+      id: a.allocationId ?? a.id ?? "",
+      admissionNo: a.admissionNo ?? "",
+      studentName: a.studentName ?? a.name ?? "",
+      gender: a.gender ?? "",
+      blockName: a.hostelName ?? a.blockName ?? "",
+      blockCode: a.hostelCode ?? a.blockCode ?? "",
+      floor: a.floorLevel ?? a.floor ?? "",
+      room: a.roomNumber ? `Room #${a.roomNumber}` : (a.room ?? ""),
+      bed: a.bedNumber ?? a.bed ?? "",
+      roomBadge: a.roomNumber && a.bedNumber ? `Room #${a.roomNumber} (${a.bedNumber})` : (a.roomBadge ?? ""),
+      joinDate: a.joiningDate ? (typeof a.joiningDate === "string" ? a.joiningDate.split("T")[0] : String(a.joiningDate).split("T")[0]) : (a.joinDate ?? ""),
+      status: a.status ?? "Active",
+      monthlyFee: a.monthlyFee ?? "",
+      contact: a.contact ?? "",
+      remarks: a.remarks ?? "",
+      hostelId: a.hostelId,
+      roomId: a.roomId,
+      bedId: a.bedId,
+      studentId: a.studentId,
+      wardenAssignmentId: a.wardenAssignmentId,
+    };
+  }, []);
 
-  const mapOutpass = useCallback((o) => ({
-    id: o.requestId ?? o.id,
-    studentName: o.studentName ?? "",
-    admissionNo: o.admissionNo ?? "",
-    blockName: o.hostelName ?? o.blockName ?? "",
-    roomNo: o.roomNumber ?? o.roomNo ?? "",
-    roomNumber: o.roomNumber ?? o.roomNumber ?? "",
-    outpassType: o.requestType ?? o.outpassType ?? "",
-    requestType: o.requestType ?? "",
-    departureDate: o.fromDateTime ? o.fromDateTime.split("T")[0] : (o.departureDate ?? ""),
-    outDate: o.fromDateTime ?? o.outDate ?? "",
-    returnDate: o.toDateTime ? o.toDateTime.split("T")[0] : (o.returnDate ?? ""),
-    reason: o.reason ?? "",
-    destination: o.destination ?? "",
-    status: o.approvalStatus ?? o.status ?? "Pending",
-    approvalRemarks: o.approvalRemarks ?? "",
-    hostelId: o.hostelId,
-    studentId: o.studentId,
-    roomId: o.roomId,
-    bedId: o.bedId,
-    wardenAssignmentId: o.wardenAssignmentId,
-  }), []);
+  const mapOutpass = useCallback((o) => {
+    if (!o) return {};
+    return {
+      id: o.requestId ?? o.id ?? "",
+      studentName: o.studentName ?? "",
+      admissionNo: o.admissionNo ?? "",
+      blockName: o.hostelName ?? o.blockName ?? "",
+      roomNo: o.roomNumber ?? o.roomNo ?? "",
+      roomNumber: o.roomNumber ?? o.roomNumber ?? "",
+      outpassType: o.requestType ?? o.outpassType ?? "",
+      requestType: o.requestType ?? "",
+      departureDate: o.fromDateTime ? (typeof o.fromDateTime === "string" ? o.fromDateTime.split("T")[0] : String(o.fromDateTime).split("T")[0]) : (o.departureDate ?? ""),
+      outDate: o.fromDateTime ?? o.outDate ?? "",
+      returnDate: o.toDateTime ? (typeof o.toDateTime === "string" ? o.toDateTime.split("T")[0] : String(o.toDateTime).split("T")[0]) : (o.returnDate ?? ""),
+      reason: o.reason ?? "",
+      destination: o.destination ?? "",
+      status: o.approvalStatus ?? o.status ?? "Pending",
+      approvalRemarks: o.approvalRemarks ?? "",
+      hostelId: o.hostelId,
+      studentId: o.studentId,
+      roomId: o.roomId,
+      bedId: o.bedId,
+      wardenAssignmentId: o.wardenAssignmentId,
+    };
+  }, []);
 
-  const mapTransfer = useCallback((t) => ({
-    id: t.requestId ?? t.id,
-    studentName: t.studentName ?? "",
-    admissionNo: t.admissionNo ?? "",
-    actionType: t.requestType === "Transfer" ? "Room Transfer" : (t.requestType === "Vacate" ? "Bed Vacate" : (t.actionType ?? t.requestType ?? "")),
-    requestType: t.requestType ?? "",
-    currentBlock: t.fromHostelName ?? t.currentBlock ?? "",
-    currentRoom: t.fromRoomNumber ?? t.currentRoom ?? "",
-    currentRoomDisplay: t.fromHostelName && t.fromRoomNumber ? `${t.fromHostelName} (#${t.fromRoomNumber})` : (t.currentRoomDisplay ?? ""),
-    targetBlock: t.toHostelName ?? t.targetBlock ?? "--",
-    targetRoom: t.toRoomNumber ?? t.targetRoom ?? "--",
-    targetBed: t.toBedNumber ?? t.targetBed ?? "--",
-    targetDisplayTitle: t.toHostelName && t.toRoomNumber ? `New Bed: ${t.toHostelName} (#${t.toRoomNumber})` : (t.requestType === "Vacate" ? "✓ Old Bed Released to Available" : (t.targetDisplayTitle ?? "--")),
-    targetDisplaySub: t.toHostelName && t.fromRoomNumber ? `✓ Old Bed #${t.fromRoomNumber} Released to Available` : (t.targetDisplaySub ?? null),
-    feeAdjustment: t.requestType === "Vacate" && t.refundAmount ? `Fee Adjusted: ₹${t.refundAmount.toLocaleString()}` : (t.feeAdjustment ?? null),
-    date: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : t.requestDate) : (t.date ?? ""),
-    requestDate: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : t.requestDate) : (t.requestDate ?? ""),
-    status: t.approvalStatus ?? t.status ?? "Pending",
-    reason: t.reason ?? "",
-    allocationId: t.allocationId,
-    studentId: t.studentId,
-    fromHostelId: t.fromHostelId,
-    fromRoomId: t.fromRoomId,
-    fromBedId: t.fromBedId,
-    toHostelId: t.toHostelId,
-    toRoomId: t.toRoomId,
-    toBedId: t.toBedId,
-    wardenAssignmentId: t.wardenAssignmentId,
-    approvalStatus: t.approvalStatus ?? "",
-    feeSettlementStatus: t.feeSettlementStatus ?? "",
-  }), []);
+  const mapTransfer = useCallback((t) => {
+    if (!t) return {};
+    return {
+      id: t.requestId ?? t.id ?? "",
+      studentName: t.studentName ?? "",
+      admissionNo: t.admissionNo ?? "",
+      actionType: t.requestType === "Transfer" ? "Room Transfer" : (t.requestType === "Vacate" ? "Bed Vacate" : (t.actionType ?? t.requestType ?? "")),
+      requestType: t.requestType ?? "",
+      currentBlock: t.fromHostelName ?? t.currentBlock ?? "",
+      currentRoom: t.fromRoomNumber ?? t.currentRoom ?? "",
+      currentRoomDisplay: t.fromHostelName && t.fromRoomNumber ? `${t.fromHostelName} (#${t.fromRoomNumber})` : (t.currentRoomDisplay ?? ""),
+      targetBlock: t.toHostelName ?? t.targetBlock ?? "--",
+      targetRoom: t.toRoomNumber ?? t.targetRoom ?? "--",
+      targetBed: t.toBedNumber ?? t.targetBed ?? "--",
+      targetDisplayTitle: t.toHostelName && t.toRoomNumber ? `New Bed: ${t.toHostelName} (#${t.toRoomNumber})` : (t.requestType === "Vacate" ? "✓ Old Bed Released to Available" : (t.targetDisplayTitle ?? "--")),
+      targetDisplaySub: t.toHostelName && t.fromRoomNumber ? `✓ Old Bed #${t.fromRoomNumber} Released to Available` : (t.targetDisplaySub ?? null),
+      feeAdjustment: t.requestType === "Vacate" && t.refundAmount ? `Fee Adjusted: ₹${t.refundAmount.toLocaleString()}` : (t.feeAdjustment ?? null),
+      date: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.date ?? ""),
+      requestDate: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.requestDate ?? ""),
+      status: t.approvalStatus ?? t.status ?? "Pending",
+      reason: t.reason ?? "",
+      allocationId: t.allocationId,
+      studentId: t.studentId,
+      fromHostelId: t.fromHostelId,
+      fromRoomId: t.fromRoomId,
+      fromBedId: t.fromBedId,
+      toHostelId: t.toHostelId,
+      toRoomId: t.toRoomId,
+      toBedId: t.toBedId,
+      wardenAssignmentId: t.wardenAssignmentId,
+      approvalStatus: t.approvalStatus ?? "",
+      feeSettlementStatus: t.feeSettlementStatus ?? "",
+    };
+  }, []);
 
   // ── Fetch all hostel data from API on mount ─────────────────────────
   const fetchHostelData = useCallback(async () => {
     setIsLoading(true);
     setApiError(null);
     try {
-      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes] = await Promise.allSettled([
+      const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, staffRes, admRes, certStudentsRes, allStudentsRes] = await Promise.allSettled([
         hostelApi.getHostelBlocks(),
         hostelApi.getRoomTypes(),
         hostelApi.getRooms(),
@@ -336,32 +393,35 @@ export default function HostelPage() {
         hostelApi.getOutpassLeave(),
         hostelApi.getTransferVacate(),
         hostelApi.getHostelDashboard(),
-        apiClient.get("/api/v1/staff?pageSize=100", { skipGlobalLoader: true }),
-        apiClient.get("/api/v1/student-admissions?pageSize=100", { skipGlobalLoader: true }),
+        apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true }),
+        apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null),
+        apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, optionalAuth: true })
+          .catch(() => null),
+        apiClient.get("/api/v1/students?pageSize=1000", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null),
       ]);
 
       if (blocksRes.status === "fulfilled") {
-        const rawBlocks = blocksRes.value?.data?.data;
+        const rawBlocks = extractCollection(blocksRes.value?.data);
         setBlocks(Array.isArray(rawBlocks) ? rawBlocks.map(mapBlock) : []);
       }
       if (catsRes.status === "fulfilled") {
-        const rawCats = catsRes.value?.data?.data;
+        const rawCats = extractCollection(catsRes.value?.data);
         setCategories(Array.isArray(rawCats) ? rawCats.map(mapCategory) : []);
       }
       if (roomsRes.status === "fulfilled") {
-        const rawRooms = roomsRes.value?.data?.data;
+        const rawRooms = extractCollection(roomsRes.value?.data);
         setRooms(Array.isArray(rawRooms) ? rawRooms.map(mapRoom) : []);
       }
       if (bedsRes.status === "fulfilled") {
-        const rawBeds = bedsRes.value?.data?.data;
+        const rawBeds = extractCollection(bedsRes.value?.data);
         setBeds(Array.isArray(rawBeds) ? rawBeds.map(mapBed) : []);
       }
       if (wardensRes.status === "fulfilled") {
-        const rawWardens = wardensRes.value?.data?.data;
+        const rawWardens = extractCollection(wardensRes.value?.data);
         setWardens(Array.isArray(rawWardens) ? rawWardens.map(mapWarden) : []);
       }
       if (allocsRes.status === "fulfilled") {
-        const rawAllocs = allocsRes.value?.data?.data;
+        const rawAllocs = extractCollection(allocsRes.value?.data);
         const mapped = Array.isArray(rawAllocs) ? rawAllocs.map(mapAllocation) : [];
         setAllocations(mapped);
         // Derive attendance student list from active allocations
@@ -383,24 +443,51 @@ export default function HostelPage() {
         })));
       }
       if (outpassRes.status === "fulfilled") {
-        const rawOutpass = outpassRes.value?.data?.data;
+        const rawOutpass = extractCollection(outpassRes.value?.data);
         setOutpasses(Array.isArray(rawOutpass) ? rawOutpass.map(mapOutpass) : []);
       }
       if (transferRes.status === "fulfilled") {
-        const rawTransfer = transferRes.value?.data?.data;
+        const rawTransfer = extractCollection(transferRes.value?.data);
         setTransfers(Array.isArray(rawTransfer) ? rawTransfer.map(mapTransfer) : []);
       }
       if (dashRes.status === "fulfilled") {
-        setDashboardData(dashRes.value?.data?.data ?? null);
+        setDashboardData(dashRes.value?.data?.data ?? dashRes.value?.data ?? null);
       }
       if (staffRes.status === "fulfilled") {
-        const rawStaff = staffRes.value?.data?.items || staffRes.value?.data?.data || staffRes.value?.data;
-        if (Array.isArray(rawStaff)) setCandidateStaff(rawStaff);
+        const rawStaff = extractCollection(staffRes.value?.data);
+        if (Array.isArray(rawStaff) && rawStaff.length > 0) setCandidateStaff(rawStaff);
       }
-      if (admRes.status === "fulfilled") {
-        const rawAdm = admRes.value?.data?.items || admRes.value?.data?.data || admRes.value?.data;
-        if (Array.isArray(rawAdm)) setCandidateAdmissions(rawAdm);
+      if (admRes.status === "fulfilled" && admRes.value?.data) {
+        const rawAdm = extractCollection(admRes.value.data);
+        if (Array.isArray(rawAdm) && rawAdm.length > 0) setCandidateAdmissions(rawAdm);
       }
+      let loadedStudents = [];
+      if (allStudentsRes?.status === "fulfilled" && allStudentsRes.value?.data) {
+        const rawStudents = extractCollection(allStudentsRes.value.data);
+        if (Array.isArray(rawStudents) && rawStudents.length > 0) {
+          loadedStudents = rawStudents.map((s) => ({ ...s, isEnrolled: true }));
+        }
+      }
+      if (certStudentsRes.status === "fulfilled" && certStudentsRes.value?.data) {
+        const rawCert = extractCollection(certStudentsRes.value.data);
+        if (Array.isArray(rawCert) && rawCert.length > 0) {
+          if (loadedStudents.length === 0) {
+            loadedStudents = rawCert.map((s) => {
+              const sId = Number(s.studentId || s.id);
+              const isEnrolled = Boolean(sId && !UNENROLLED_ADMISSION_IDS.has(sId));
+              return { ...s, isEnrolled };
+            });
+          } else {
+            const existingIds = new Set(loadedStudents.map((s) => Number(s.studentId || s.id)));
+            const extra = rawCert.filter((cs) => {
+              const csId = Number(cs.studentId || cs.id);
+              return csId && !existingIds.has(csId) && !UNENROLLED_ADMISSION_IDS.has(csId);
+            }).map((s) => ({ ...s, isEnrolled: true }));
+            loadedStudents = [...loadedStudents, ...extra];
+          }
+        }
+      }
+      if (loadedStudents.length > 0) setCandidateStudents(loadedStudents);
     } catch (err) {
       console.error("Failed to fetch hostel data:", err);
       setApiError(getApiErrorMessage(err));
@@ -417,7 +504,7 @@ export default function HostelPage() {
   const refreshBlocks = useCallback(async () => {
     try {
       const res = await hostelApi.getHostelBlocks();
-      const raw = res?.data?.data;
+      const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setBlocks(raw.map(mapBlock));
     } catch (err) { console.error("Refresh blocks error:", err); }
   }, [mapBlock]);
@@ -425,7 +512,7 @@ export default function HostelPage() {
   const refreshCategories = useCallback(async () => {
     try {
       const res = await hostelApi.getRoomTypes();
-      const raw = res?.data?.data;
+      const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setCategories(raw.map(mapCategory));
     } catch (err) { console.error("Refresh categories error:", err); }
   }, [mapCategory]);
@@ -433,7 +520,7 @@ export default function HostelPage() {
   const refreshRooms = useCallback(async () => {
     try {
       const res = await hostelApi.getRooms();
-      const raw = res?.data?.data;
+      const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setRooms(raw.map(mapRoom));
     } catch (err) { console.error("Refresh rooms error:", err); }
   }, [mapRoom]);
@@ -441,7 +528,7 @@ export default function HostelPage() {
   const refreshBeds = useCallback(async () => {
     try {
       const res = await hostelApi.getBeds();
-      const raw = res?.data?.data;
+      const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setBeds(raw.map(mapBed));
     } catch (err) { console.error("Refresh beds error:", err); }
   }, [mapBed]);
@@ -449,7 +536,7 @@ export default function HostelPage() {
   const refreshWardens = useCallback(async () => {
     try {
       const res = await hostelApi.getWardens();
-      const raw = res?.data?.data;
+      const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setWardens(raw.map(mapWarden));
     } catch (err) { console.error("Refresh wardens error:", err); }
   }, [mapWarden]);
@@ -457,7 +544,7 @@ export default function HostelPage() {
   const refreshAllocations = useCallback(async () => {
     try {
       const res = await hostelApi.getStudentAllocations();
-      const raw = res?.data?.data;
+      const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) {
         const mapped = raw.map(mapAllocation);
         setAllocations(mapped);
@@ -484,7 +571,7 @@ export default function HostelPage() {
   const refreshOutpasses = useCallback(async () => {
     try {
       const res = await hostelApi.getOutpassLeave();
-      const raw = res?.data?.data;
+      const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setOutpasses(raw.map(mapOutpass));
     } catch (err) { console.error("Refresh outpasses error:", err); }
   }, [mapOutpass]);
@@ -492,7 +579,7 @@ export default function HostelPage() {
   const refreshTransfers = useCallback(async () => {
     try {
       const res = await hostelApi.getTransferVacate();
-      const raw = res?.data?.data;
+      const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setTransfers(raw.map(mapTransfer));
     } catch (err) { console.error("Refresh transfers error:", err); }
   }, [mapTransfer]);
@@ -500,7 +587,7 @@ export default function HostelPage() {
   const refreshDashboard = useCallback(async () => {
     try {
       const res = await hostelApi.getHostelDashboard();
-      setDashboardData(res?.data?.data ?? null);
+      setDashboardData(res?.data?.data ?? res?.data ?? null);
     } catch (err) { console.error("Refresh dashboard error:", err); }
   }, []);
 
@@ -747,31 +834,49 @@ export default function HostelPage() {
       for (const fc of floorConfigs) {
         let roomIndexOnFloor = 1;
         const addRooms = async (count, catName, bedCapacity) => {
-          const matchCat = categories.find((c) => c.name?.toLowerCase().includes(catName.toLowerCase()))?.id || defaultRoomType;
+          const matchCatObj = categories.find((c) => c.name?.toLowerCase().includes(catName.toLowerCase()) || Number(c.capacity) === bedCapacity) || categories[0];
+          const matchCat = matchCatObj?.id || defaultRoomType;
           for (let i = 0; i < count; i++) {
             const roomNum = fc.floorIndex === 0
               ? `${String(roomIndexOnFloor).padStart(3, "0")}`
               : `${fc.floorIndex}${String(roomIndexOnFloor).padStart(2, "0")}`;
-            const roomRes = await hostelApi.createRoom({
-              hostelId: block.id,
-              roomTypeId: matchCat,
-              floorLevel: fc.floorLabel || `Floor ${fc.floorIndex || 1}`,
-              roomNumber: roomNum,
-              status: "Active",
-            });
-            const newRoomId = roomRes?.data?.data?.roomId ?? roomRes?.data?.roomId;
+
+            let newRoomId = null;
+            const existingRoom = rooms.find(
+              (r) => (Number(r.hostelId) === Number(block.id) || r.block === block.code) &&
+                     String(r.roomNo || r.roomNumber).replace(/^Room #/i, "").trim().toLowerCase() === roomNum.toLowerCase()
+            );
+
+            if (existingRoom) {
+              newRoomId = existingRoom.id;
+            } else {
+              try {
+                const roomRes = await hostelApi.createRoom({
+                  hostelId: Number(block.id),
+                  roomTypeId: Number(matchCat),
+                  floorLevel: fc.floorLabel || `Floor ${fc.floorIndex || 1}`,
+                  roomNumber: roomNum,
+                  status: "Active",
+                });
+                newRoomId = roomRes?.data?.data?.roomId ?? roomRes?.data?.roomId;
+              } catch (rErr) {
+                console.warn(`Room create skipped/error for ${roomNum}:`, rErr?.response?.data?.message || rErr?.message);
+              }
+            }
+
             if (newRoomId) {
-              const bedsToGen = bedCapacity || 2;
+              const bedsToGen = Math.max(0, Number(matchCatObj?.capacity ?? bedCapacity ?? 0));
               for (let bi = 1; bi <= bedsToGen; bi++) {
                 try {
                   await hostelApi.createBed({
-                    roomId: newRoomId,
+                    roomId: Number(newRoomId),
                     bedNumber: `BED-${bi}`,
                     bedStatus: "Available",
                     status: "Active",
                   });
                 } catch (bErr) {
-                  console.warn(`Bed gen warning for room ${roomNum}:`, bErr);
+                  // Only warn if bed already exists or capacity reached
+                  console.warn(`Bed gen warning for room ${roomNum}:`, bErr?.response?.data?.message || bErr?.message);
                 }
               }
             }
@@ -846,41 +951,72 @@ export default function HostelPage() {
   // ── Room CRUD ───────────────────────────────────────────────────────
   const handleSaveRoom = async (roomData) => {
     try {
-      const blk = blocks.find((b) => b.code === roomData.block || b.name === roomData.block || String(b.id) === String(roomData.block));
-      const hostelId = blk ? blk.id : (blocks[0]?.id || 1);
-      const cat = categories.find((c) => c.name === roomData.type || String(c.id) === String(roomData.roomTypeId));
-      const roomTypeId = cat ? cat.id : (categories[0]?.id || 1);
+      const blk = blocks.find((b) =>
+        String(b.id) === String(roomData.hostelId) ||
+        String(b.id) === String(roomData.block) ||
+        b.code === roomData.block ||
+        b.name === roomData.block ||
+        b.name === roomData.blockName
+      );
+      const hostelId = blk ? Number(blk.id) : (Number(blocks[0]?.id) || 1);
+
+      const cat = categories.find((c) =>
+        String(c.id) === String(roomData.roomTypeId) ||
+        String(c.id) === String(roomData.type) ||
+        c.name === roomData.type ||
+        c.name?.toLowerCase() === String(roomData.type || "").toLowerCase()
+      ) || categories[0];
+      const roomTypeId = cat ? Number(cat.id) : 1;
+
+      const roomNumber = String(roomData.roomNo || roomData.roomNumber || "").replace(/^Room #/i, "").trim();
+      if (!roomNumber) {
+        showToast("Please enter a room number.", "warning");
+        return;
+      }
+
+      // Check if room number already exists in this hostel block
+      const isDuplicate = rooms.some((r) => {
+        if (modal.mode === "edit" && String(r.id) === String(roomData.id)) return false;
+        const matchesBlock = Number(r.hostelId) === Number(hostelId) || (blk?.code && r.block === blk.code);
+        const matchesNumber = String(r.roomNo || r.roomNumber || "").replace(/^Room #/i, "").trim().toLowerCase() === roomNumber.toLowerCase();
+        return matchesBlock && matchesNumber;
+      });
+
+      if (isDuplicate) {
+        showToast(`Room #${roomNumber} already exists in ${blk?.name || "this hostel block"}. Please choose a different number.`, "warning");
+        return;
+      }
 
       const payload = {
-        hostelId,
-        roomTypeId,
+        hostelId: Number(hostelId),
+        roomTypeId: Number(roomTypeId),
         floorLevel: roomData.floor || "Floor 1",
-        roomNumber: String(roomData.roomNo || "").replace(/^Room #/i, "").trim() || "101",
+        roomNumber,
         status: roomData.status || "Active",
       };
 
       if (modal.mode === "edit") {
         await hostelApi.updateRoom(roomData.id, payload);
-        showToast(`Room ${roomData.roomNo} updated.`);
+        showToast(`Room #${roomNumber} updated.`);
       } else {
         const roomRes = await hostelApi.createRoom(payload);
         const newRoomId = roomRes?.data?.data?.roomId ?? roomRes?.data?.roomId;
         if (newRoomId) {
-          const cap = Number(cat?.capacity || roomData.capacity || 2);
+          const cap = Math.max(0, Number(cat?.capacity ?? roomData.capacity ?? 0));
           for (let bi = 1; bi <= cap; bi++) {
             try {
               await hostelApi.createBed({
-                roomId: newRoomId,
+                roomId: Number(newRoomId),
                 bedNumber: `BED-${bi}`,
                 bedStatus: "Available",
                 status: "Active",
               });
             } catch (bErr) {
-              console.warn(`Bed gen warning for room ${roomData.roomNo}:`, bErr);
+              console.warn(`Bed gen warning for room ${roomNumber}:`, bErr?.response?.data?.message || bErr?.message);
             }
           }
         }
-        showToast(`Room ${roomData.roomNo} and beds added.`);
+        showToast(`Room #${roomNumber} and beds added successfully.`);
       }
       await refreshRooms();
       await refreshBeds();
@@ -977,18 +1113,103 @@ export default function HostelPage() {
   // ── Student Allocation CRUD ─────────────────────────────────────────
   const handleSaveAllocation = async (allocData) => {
     try {
+      const studentId = Number(allocData.studentId);
+      if (!studentId || isNaN(studentId) || studentId <= 0 || UNENROLLED_ADMISSION_IDS.has(studentId)) {
+        showToast("Please select a registered, enrolled student from the dropdown list. Hostel bed allocations require an enrolled student from the Student Master database.", "warning");
+        return;
+      }
+
+      // Check active allocation for this student (client-side safety check)
+      if (modal.mode !== "edit") {
+        const alreadyAllocated = allocations.some(
+          (a) => (a.status || "").toLowerCase() === "active" && (
+            (studentId && Number(a.studentId) === Number(studentId)) ||
+            (allocData.admissionNo && String(a.admissionNo).trim().toLowerCase() === String(allocData.admissionNo).trim().toLowerCase())
+          )
+        );
+        if (alreadyAllocated) {
+          showToast("This student already has an active hostel allocation.", "warning");
+          return;
+        }
+      }
+
       const blk = blocks.find((b) => b.name === allocData.blockName || b.code === allocData.blockCode || String(b.id) === String(allocData.hostelId));
-      const hostelId = blk ? blk.id : (blocks[0]?.id || 1);
-      const rm = rooms.find((r) => r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room || String(r.id) === String(allocData.roomId));
-      const roomId = rm ? rm.id : (rooms[0]?.id || 1);
+      const hostelId = Number(allocData.hostelId) || (blk ? Number(blk.id) : (Number(blocks[0]?.id) || 1));
+
+      const rm = rooms.find((r) => (String(r.id) === String(allocData.roomId) || r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room) && String(r.hostelId) === String(hostelId))
+        || rooms.find((r) => r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room || String(r.id) === String(allocData.roomId));
+      const roomId = rm ? Number(rm.id) : (Number(allocData.roomId) || (Number(rooms[0]?.id) || 1));
+
+      // Resolve actual database bed ID for this specific room
+      let actualBedId = null;
+      if (allocData.bedId && !isNaN(Number(allocData.bedId)) && Number(allocData.bedId) > 0) {
+        const bedMatch = beds.find((b) => String(b.id) === String(allocData.bedId) && String(b.roomId) === String(roomId));
+        if (bedMatch) actualBedId = Number(bedMatch.id);
+      }
+      if (!actualBedId && allocData.bed) {
+        const matchingBed = beds.find((b) => String(b.roomId) === String(roomId) && (b.bedNumber === allocData.bed || String(b.id) === String(allocData.bed)));
+        if (matchingBed) actualBedId = Number(matchingBed.id);
+      }
+      if (!actualBedId) {
+        const availableRoomBed = beds.find((b) => String(b.roomId) === String(roomId) && (b.bedStatus || "").toLowerCase() === "available");
+        if (availableRoomBed) {
+          actualBedId = Number(availableRoomBed.id);
+        } else {
+          const roomBeds = beds.filter((b) => String(b.roomId) === String(roomId));
+          if (roomBeds.length > 0) actualBedId = Number(roomBeds[0].id);
+        }
+      }
+
+      // If bed does not exist in DB yet, auto-create bed in database for this room
+      if ((!actualBedId || isNaN(actualBedId) || actualBedId <= 0) && roomId > 0) {
+        try {
+          const bedNumber = allocData.bed || "BED-1";
+          const bedRes = await hostelApi.createBed({
+            roomId: Number(roomId),
+            bedNumber,
+            bedStatus: "Available",
+            status: "Active",
+          });
+          const createdBedId = bedRes?.data?.data?.bedId ?? bedRes?.data?.data?.id ?? bedRes?.data?.bedId ?? bedRes?.data?.id;
+          if (createdBedId) {
+            actualBedId = Number(createdBedId);
+            await refreshBeds();
+          }
+        } catch (autoBedErr) {
+          console.warn("Auto bed creation on allocation:", autoBedErr);
+        }
+      }
+
+      if (!actualBedId || isNaN(actualBedId) || actualBedId <= 0) {
+        showToast("Please select a valid registered bed for this room.", "warning");
+        return;
+      }
+
+      // Check if selected bed is already occupied (client-side safety check)
+      const selectedBedObj = beds.find((b) => String(b.id) === String(actualBedId));
+      if (selectedBedObj && (selectedBedObj.bedStatus || "").toLowerCase() === "occupied" && modal.mode !== "edit") {
+        showToast("The selected bed is already occupied. Please select an available bed.", "warning");
+        return;
+      }
+
+      const warden = wardens.find((w) => String(w.hostelId) === String(hostelId) && (w.status || "").toLowerCase() === "active")
+        || wardens.find((w) => String(w.hostelId) === String(hostelId));
+      let wardenAssignmentId = warden?.id ? Number(warden.id) : null;
+      if (!wardenAssignmentId && allocData.wardenAssignmentId) {
+        const matchingWarden = wardens.find((w) => String(w.id) === String(allocData.wardenAssignmentId) && String(w.hostelId) === String(hostelId));
+        if (matchingWarden) wardenAssignmentId = Number(matchingWarden.id);
+      }
+
+      const joinDateObj = allocData.joinDate ? new Date(allocData.joinDate) : new Date();
+      const joiningDate = !isNaN(joinDateObj.getTime()) ? joinDateObj.toISOString() : new Date().toISOString();
 
       const payload = {
-        studentId: Number(allocData.studentId) || 1,
-        hostelId,
-        roomId,
-        bedId: Number(allocData.bedId) || 1,
-        wardenAssignmentId: allocData.wardenAssignmentId || null,
-        joiningDate: allocData.joinDate ? new Date(allocData.joinDate).toISOString() : new Date().toISOString(),
+        studentId: Number(studentId),
+        hostelId: Number(hostelId),
+        roomId: Number(roomId),
+        bedId: Number(actualBedId),
+        wardenAssignmentId: wardenAssignmentId ? Number(wardenAssignmentId) : null,
+        joiningDate,
         status: allocData.status || "Active",
         remarks: allocData.remarks || "Student hostel room allocation",
       };
@@ -1003,11 +1224,17 @@ export default function HostelPage() {
       await refreshAllocations();
       await refreshRooms();
       await refreshBlocks();
+      await refreshBeds();
       await refreshDashboard();
       closeModal();
     } catch (err) {
       console.error("Save allocation error:", err);
-      showToast(getApiErrorMessage(err), "danger");
+      const apiMsg = getApiErrorMessage(err);
+      if (apiMsg && apiMsg.toLowerCase().includes("student not found")) {
+        showToast("Student not found in master database. This applicant is not yet enrolled into the Student Master table.", "danger");
+      } else {
+        showToast(apiMsg || "Failed to save allocation.", "danger");
+      }
     }
   };
 
@@ -1036,40 +1263,60 @@ export default function HostelPage() {
           String(a.studentId) === String(outData.studentId)
       );
       const blk = blocks.find((b) => b.name === outData.blockName || b.code === outData.blockCode || String(b.id) === String(outData.hostelId));
-      const hostelId = blk ? blk.id : (alloc?.hostelId || blocks[0]?.id || 1);
       const rm = rooms.find((r) => r.roomNo === outData.roomNo || r.roomNo === outData.roomNumber || String(r.id) === String(outData.roomId));
-      const roomId = rm ? rm.id : (alloc?.roomId || rooms[0]?.id || 1);
-      const bedId = Number(outData.bedId) || alloc?.bedId || 1;
-      const studentId = Number(outData.studentId) || alloc?.studentId || 1;
+      const hostelId = Number(outData.hostelId || alloc?.hostelId || blk?.id || blocks[0]?.id || 1);
+      const roomId = Number(outData.roomId || alloc?.roomId || rm?.id || rooms[0]?.id || 1);
+      const bedId = Number(outData.bedId || alloc?.bedId);
+      const studentId = Number(outData.studentId || alloc?.studentId);
+      const wardenAssignmentId = outData.wardenAssignmentId ? Number(outData.wardenAssignmentId) : (alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null);
 
-      const fromIso = outData.departureDate
-        ? new Date(`${outData.departureDate}T09:00:00Z`).toISOString()
-        : new Date().toISOString();
-      const toIso = outData.returnDate
-        ? new Date(`${outData.returnDate}T18:00:00Z`).toISOString()
-        : new Date(Date.now() + 86400000).toISOString();
+      if (!studentId || isNaN(studentId) || studentId <= 0) {
+        showToast("Please select an active resident student for outpass.", "warning");
+        return;
+      }
 
-      let reqType = "Local Outpass";
+      if (!bedId || isNaN(bedId) || bedId <= 0) {
+        showToast("Active bed assignment could not be found for this student.", "warning");
+        return;
+      }
+
+      const parseIso = (val, fallbackOffsetMs = 0) => {
+        if (!val) return new Date(Date.now() + fallbackOffsetMs).toISOString();
+        let d = new Date(val);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        d = new Date(`${val}T09:00:00Z`);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        return new Date(Date.now() + fallbackOffsetMs).toISOString();
+      };
+
+      const fromIso = parseIso(outData.departureDate || outData.outDate || outData.fromDateTime, 0);
+      const toIso = parseIso(outData.returnDate || outData.toDateTime, 14400000);
+
+      let reqType = "Outpass";
       const rawType = (outData.requestType || outData.outpassType || "").toLowerCase();
-      if (rawType.includes("home")) reqType = "Home Visit";
-      else if (rawType.includes("emergency")) reqType = "Emergency Leave";
+      if (rawType.includes("leave") || rawType.includes("home") || rawType.includes("emergency")) {
+        reqType = "Leave";
+      } else {
+        reqType = "Outpass";
+      }
 
       const payload = {
         studentId,
         hostelId,
         roomId,
         bedId,
+        wardenAssignmentId,
         requestType: reqType,
         fromDateTime: fromIso,
         toDateTime: toIso,
-        reason: outData.reason || "Outpass permission",
-        destination: outData.destination || "City",
+        reason: outData.reason?.trim() || "Outpass permission request",
+        destination: outData.destination?.trim() || "City",
       };
 
       await hostelApi.createOutpassLeave(payload);
       await refreshOutpasses();
       closeModal();
-      showToast(`Outpass request submitted for ${outData.studentName}.`);
+      showToast(`Outpass request submitted for ${outData.studentName || "student"}.`);
     } catch (err) {
       console.error("Save outpass error:", err);
       showToast(getApiErrorMessage(err), "danger");
@@ -1126,15 +1373,15 @@ export default function HostelPage() {
       const alloc = allocations.find((a) => a.admissionNo === transData.admissionNo || a.studentName === transData.studentName);
 
       const payload = {
-        allocationId: alloc ? alloc.id : 1,
-        studentId: alloc?.studentId || 1,
+        allocationId: transData.allocationId || (alloc ? alloc.id : 1),
+        studentId: transData.studentId || alloc?.studentId || 1,
         requestType: isVacate ? "Vacate" : "Transfer",
-        fromHostelId: fromBlk ? fromBlk.id : 1,
-        fromRoomId: alloc?.roomId || 1,
-        fromBedId: alloc?.bedId || 1,
-        toHostelId: isVacate ? null : (toBlk ? toBlk.id : null),
-        toRoomId: isVacate ? null : 1,
-        toBedId: isVacate ? null : 1,
+        fromHostelId: transData.fromHostelId || (fromBlk ? fromBlk.id : 1),
+        fromRoomId: transData.fromRoomId || alloc?.roomId || 1,
+        fromBedId: transData.fromBedId || alloc?.bedId || 1,
+        toHostelId: isVacate ? null : (transData.toHostelId || (toBlk ? toBlk.id : null)),
+        toRoomId: isVacate ? null : (transData.toRoomId || 1),
+        toBedId: isVacate ? null : (transData.toBedId || 1),
         requestDate: new Date().toISOString(),
         effectiveDate: new Date(Date.now() + 86400000).toISOString(),
         reason: transData.reason || (isVacate ? "Student vacating bed" : "Student room transfer"),
@@ -1254,27 +1501,44 @@ export default function HostelPage() {
       const attDate = attendanceDate ? new Date(`${attendanceDate}T00:00:00Z`).toISOString() : new Date().toISOString();
 
       let savedCount = 0;
+      let lastError = null;
       for (const stId of markedIds) {
         const record = currentMap[stId];
-        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId);
-        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode);
+        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId || String(s.studentId) === String(stId));
+        const alloc = allocations.find((a) => String(a.studentId) === String(student?.studentId) || a.admissionNo === student?.admissionNo || a.admissionNo === stId || String(a.id) === String(stId));
+        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode || String(b.id) === String(alloc?.hostelId));
+
+        const hostelId = Number(alloc?.hostelId || blk?.id || 1);
+        const roomId = Number(alloc?.roomId || student?.roomId || 1);
+        const bedId = Number(alloc?.bedId || student?.bedId || 1);
+        const studentId = Number(alloc?.studentId || student?.studentId || 1);
+        const wardenAssignmentId = alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null;
+
+        const payload = {
+          studentId,
+          hostelId,
+          roomId,
+          bedId,
+          wardenAssignmentId,
+          attendanceDate: attDate,
+          session: sessionLabel,
+          attendanceStatus: record.status || "Present",
+          remarks: record.remarks || `Recorded during ${sessionLabel} session`,
+        };
+
         try {
-          await hostelApi.createAttendance({
-            studentId: Number(student?.studentId) || 1,
-            hostelId: blk ? blk.id : 1,
-            roomId: 1,
-            bedId: 1,
-            attendanceDate: attDate,
-            session: sessionLabel,
-            attendanceStatus: record.status || "Present",
-            remarks: record.remarks || `Recorded during ${sessionLabel} session`,
-          });
+          await hostelApi.createAttendance(payload);
           savedCount++;
         } catch (singleErr) {
           console.warn(`Attendance record failed for student ${stId}:`, singleErr);
+          lastError = singleErr;
         }
       }
-      showToast(`Attendance log saved successfully! (${savedCount} records)`, "success");
+      if (savedCount > 0) {
+        showToast(`Attendance log saved successfully! (${savedCount} records)`, "success");
+      } else if (lastError) {
+        showToast(getApiErrorMessage(lastError), "danger");
+      }
     } catch (err) {
       console.error("Save attendance error:", err);
       showToast(getApiErrorMessage(err), "danger");
@@ -1386,10 +1650,10 @@ export default function HostelPage() {
       if (!dashBlockSearch) return true;
       const q = dashBlockSearch.toLowerCase().trim();
       return (
-        b.name?.toLowerCase().includes(q) ||
-        b.code?.toLowerCase().includes(q) ||
-        b.warden?.toLowerCase().includes(q) ||
-        b.type?.toLowerCase().includes(q)
+        String(b.name || "").toLowerCase().includes(q) ||
+        String(b.code || "").toLowerCase().includes(q) ||
+        String(b.warden || "").toLowerCase().includes(q) ||
+        String(b.type || "").toLowerCase().includes(q)
       );
     });
 
@@ -1981,7 +2245,7 @@ export default function HostelPage() {
                   const isPending = statusNormalized.includes("pending");
                   const isApproved = statusNormalized.includes("approve");
                   const isRejected = statusNormalized.includes("reject");
-                  const formattedDate = item.departureDate || (item.outDate ? item.outDate.split("T")[0] : "-");
+                  const formattedDate = item.departureDate || (typeof item.outDate === "string" ? item.outDate.split("T")[0] : String(item.outDate || "").split("T")[0] || "-");
 
                   return (
                     <div key={item.id} className="cms-dash-item-row">
@@ -2073,11 +2337,13 @@ export default function HostelPage() {
     const filtered = !isHostelSelected
       ? []
       : blocks.filter((b) => {
+          const q = searchQuery.toLowerCase().trim();
           const matchQ =
-            !searchQuery ||
-            b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            b.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (b.warden && b.warden.toLowerCase().includes(searchQuery.toLowerCase()));
+            !q ||
+            String(b.name || "").toLowerCase().includes(q) ||
+            String(b.code || "").toLowerCase().includes(q) ||
+            String(b.warden || "").toLowerCase().includes(q) ||
+            String(b.type || "").toLowerCase().includes(q);
           const matchBlock =
             filterBlock === "all" ||
             b.code === filterBlock ||
@@ -2272,13 +2538,16 @@ export default function HostelPage() {
   // 3. Room Categories
   const renderRoomCategories = () => {
     const filtered = categories.filter((c) => {
+      const q = searchQuery.toLowerCase().trim();
+      const cType = String(c.type || "").toLowerCase();
       const matchQ =
-        !searchQuery ||
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (c.specification && c.specification.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        c.type.toLowerCase().includes(searchQuery.toLowerCase());
-      const isAc = c.type.toLowerCase().includes("ac") && !c.type.toLowerCase().includes("non-ac");
+        !q ||
+        String(c.name || "").toLowerCase().includes(q) ||
+        String(c.specification || "").toLowerCase().includes(q) ||
+        cType.includes(q);
+      const isAc = cType.includes("ac") && !cType.includes("non-ac");
       const matchAc =
+        !filterAcType ||
         filterAcType === "all" ||
         (filterAcType === "AC" && isAc) ||
         (filterAcType === "Non-AC" && !isAc);
@@ -2480,10 +2749,10 @@ export default function HostelPage() {
       const q = searchQuery.toLowerCase().trim();
       const matchQ =
         !q ||
-        r.roomNo.toLowerCase().includes(q) ||
-        (r.blockName && r.blockName.toLowerCase().includes(q)) ||
-        (r.block && r.block.toLowerCase().includes(q)) ||
-        (r.type && r.type.toLowerCase().includes(q));
+        String(r.roomNo || "").toLowerCase().includes(q) ||
+        String(r.blockName || "").toLowerCase().includes(q) ||
+        String(r.block || "").toLowerCase().includes(q) ||
+        String(r.type || "").toLowerCase().includes(q);
 
       const matchBlock =
         !filterHostelRooms ||
@@ -2722,22 +2991,26 @@ export default function HostelPage() {
                       </span>
                     </td>
                     <td style={{ fontSize: 11.5 }}>
-                      {(room.beds || []).map((bd, i) => (
-                        <span
-                          key={i}
-                          style={{
-                            display: "inline-block",
-                            marginRight: 4,
-                            padding: "1px 6px",
-                            borderRadius: 4,
-                            background: bd.includes("Occupied") ? "var(--cms-amber-soft)" : "var(--cms-green-soft)",
-                            color: bd.includes("Occupied") ? "var(--cms-amber)" : "var(--cms-green)",
-                            fontWeight: 600,
-                          }}
-                        >
-                          {bd}
-                        </span>
-                      ))}
+                      {(room.beds || []).map((bd, i) => {
+                        const bedLabel = typeof bd === "string" ? bd : (bd?.bedNumber ? `${bd.bedNumber}${bd.bedStatus ? ` (${bd.bedStatus})` : ""}` : `Bed #${i + 1}`);
+                        const isOccupied = typeof bd === "string" ? bd.includes("Occupied") : (bd?.bedStatus === "Occupied" || bd?.status === "Occupied");
+                        return (
+                          <span
+                            key={i}
+                            style={{
+                              display: "inline-block",
+                              marginRight: 4,
+                              padding: "1px 6px",
+                              borderRadius: 4,
+                              background: isOccupied ? "var(--cms-amber-soft)" : "var(--cms-green-soft)",
+                              color: isOccupied ? "var(--cms-amber)" : "var(--cms-green)",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {bedLabel}
+                          </span>
+                        );
+                      })}
                     </td>
                     <td style={{ fontWeight: 700 }}>{room.fee}</td>
                     <td>
@@ -2787,15 +3060,15 @@ export default function HostelPage() {
       const q = searchQuery.toLowerCase().trim();
       const matchQ =
         !q ||
-        w.name.toLowerCase().includes(q) ||
-        w.empId.toLowerCase().includes(q) ||
-        (w.assignedHostels && w.assignedHostels.toLowerCase().includes(q)) ||
-        (w.designation && w.designation.toLowerCase().includes(q));
+        String(w.name || "").toLowerCase().includes(q) ||
+        String(w.empId || "").toLowerCase().includes(q) ||
+        String(w.assignedHostels || "").toLowerCase().includes(q) ||
+        String(w.designation || "").toLowerCase().includes(q);
 
       const matchBlock =
         !filterHostelWarden ||
         filterHostelWarden === "all" ||
-        (w.assignedHostels && w.assignedHostels.toLowerCase().includes(filterHostelWarden.toLowerCase()));
+        String(w.assignedHostels || "").toLowerCase().includes(filterHostelWarden.toLowerCase());
 
       return matchQ && matchBlock;
     });
@@ -3069,7 +3342,7 @@ export default function HostelPage() {
             const matchF = filterAllocFloor === "all" || r.floor === filterAllocFloor;
             return matchH && matchF;
           })
-          .map((r) => (r.roomNo.startsWith("RM") || r.roomNo.startsWith("Room") ? `Room #${r.roomNo}` : `Room #${r.roomNo}`)),
+          .map((r) => (String(r.roomNo || "").startsWith("RM") || String(r.roomNo || "").startsWith("Room") ? `Room #${r.roomNo}` : `Room #${r.roomNo}`)),
         ...allocations
           .filter((a) => {
             const matchH = filterAllocHostel === "all" || a.blockName === filterAllocHostel;
@@ -3086,11 +3359,11 @@ export default function HostelPage() {
       const q = filterAllocSearch.toLowerCase().trim();
       const matchQ =
         !q ||
-        a.studentName?.toLowerCase().includes(q) ||
-        a.admissionNo?.toLowerCase().includes(q) ||
-        (a.room && a.room.toLowerCase().includes(q)) ||
-        (a.roomBadge && a.roomBadge.toLowerCase().includes(q)) ||
-        (a.blockName && a.blockName.toLowerCase().includes(q));
+        String(a.studentName || "").toLowerCase().includes(q) ||
+        String(a.admissionNo || "").toLowerCase().includes(q) ||
+        String(a.room || "").toLowerCase().includes(q) ||
+        String(a.roomBadge || "").toLowerCase().includes(q) ||
+        String(a.blockName || "").toLowerCase().includes(q);
 
       const matchHostel =
         filterAllocHostel === "all" ||
@@ -3278,7 +3551,7 @@ export default function HostelPage() {
                 ) : (
                   filtered.map((a) => {
                     const isVacated = a.status === "Vacated";
-                    const bedBadge = a.roomBadge || (a.room ? `Room #${a.room}` : "Room #101 (BED-1)");
+                    const bedBadge = a.roomBadge || (a.room ? `Room #${a.room}` : "-");
                     return (
                       <tr key={a.id}>
                         <td>
@@ -3299,7 +3572,7 @@ export default function HostelPage() {
                           <span style={{ color: "var(--cms-green)", fontWeight: 700 }}>{bedBadge}</span>
                         </td>
                         <td>
-                          <span style={{ color: "var(--cms-muted)" }}>{a.joinDate || "2026-08-01"}</span>
+                          <span style={{ color: "var(--cms-muted)" }}>{a.joinDate || "-"}</span>
                         </td>
                         <td>
                           <span
@@ -3351,12 +3624,12 @@ export default function HostelPage() {
           const q = outpassSearch.toLowerCase().trim();
           const matchQ =
             !q ||
-            o.studentName?.toLowerCase().includes(q) ||
-            o.admissionNo?.toLowerCase().includes(q) ||
-            (o.roomNo && o.roomNo.toLowerCase().includes(q)) ||
-            (o.roomNumber && o.roomNumber.toLowerCase().includes(q)) ||
-            (o.blockName && o.blockName.toLowerCase().includes(q)) ||
-            (o.reason && o.reason.toLowerCase().includes(q));
+            String(o.studentName || "").toLowerCase().includes(q) ||
+            String(o.admissionNo || "").toLowerCase().includes(q) ||
+            String(o.roomNo || "").toLowerCase().includes(q) ||
+            String(o.roomNumber || "").toLowerCase().includes(q) ||
+            String(o.blockName || "").toLowerCase().includes(q) ||
+            String(o.reason || "").toLowerCase().includes(q);
 
           const reqType = o.outpassType || o.requestType || "";
           const matchType =
@@ -3502,7 +3775,7 @@ export default function HostelPage() {
                   filtered.map((r) => {
                     const isPending = r.status === "Pending" || r.status === "Pending Approval";
                     const isApproved = r.status === "Approved";
-                    const roomDisplay = r.roomNo?.replace("Room #", "") || r.roomNumber || "101";
+                    const roomDisplay = String(r.roomNo || r.roomNumber || "").replace("Room #", "").trim() || "-";
 
                     return (
                       <tr key={r.id} className="cms-outpass-row">
@@ -3597,13 +3870,13 @@ export default function HostelPage() {
       const q = transferSearch.toLowerCase().trim();
       const matchQ =
         !q ||
-        t.studentName?.toLowerCase().includes(q) ||
-        t.admissionNo?.toLowerCase().includes(q) ||
-        t.currentRoomDisplay?.toLowerCase().includes(q) ||
-        t.currentBlock?.toLowerCase().includes(q) ||
-        t.targetBlock?.toLowerCase().includes(q) ||
-        t.targetRoom?.toLowerCase().includes(q) ||
-        t.targetDisplayTitle?.toLowerCase().includes(q);
+        String(t.studentName || "").toLowerCase().includes(q) ||
+        String(t.admissionNo || "").toLowerCase().includes(q) ||
+        String(t.currentRoomDisplay || "").toLowerCase().includes(q) ||
+        String(t.currentBlock || "").toLowerCase().includes(q) ||
+        String(t.targetBlock || "").toLowerCase().includes(q) ||
+        String(t.targetRoom || "").toLowerCase().includes(q) ||
+        String(t.targetDisplayTitle || "").toLowerCase().includes(q);
 
       const filterLower = transferFilter.toLowerCase();
       const matchFilter =
@@ -3821,11 +4094,11 @@ export default function HostelPage() {
       const q = attendanceSearch.toLowerCase().trim();
       const matchQ =
         !q ||
-        s.name?.toLowerCase().includes(q) ||
-        s.id?.toLowerCase().includes(q) ||
-        s.admissionNo?.toLowerCase().includes(q) ||
-        s.roomBed?.toLowerCase().includes(q) ||
-        s.room?.toLowerCase().includes(q);
+        String(s.name || "").toLowerCase().includes(q) ||
+        String(s.id || "").toLowerCase().includes(q) ||
+        String(s.admissionNo || "").toLowerCase().includes(q) ||
+        String(s.roomBed || "").toLowerCase().includes(q) ||
+        String(s.room || "").toLowerCase().includes(q);
 
       const matchBlock =
         !attendanceBlock ||
@@ -4437,83 +4710,273 @@ export default function HostelPage() {
       safeReportPage * reportPageSize
     );
 
-    // Export Handler
-    const handleDownloadReport = () => {
-      if (reportCategory === "Block Report") {
-        exportCsv("block-report.csv", filtered, [
-          { key: "code", label: "Block Code" },
-          { key: "name", label: "Block Name" },
-          { key: "category", label: "Category" },
-          { key: "totalFloors", label: "Total Floors" },
-          { key: "wardenName", label: "Warden Name" },
-          { key: "primaryMobile", label: "Primary Mobile" },
-          { key: "location", label: "Location" },
-          { key: "status", label: "Status" },
+    // Helper to get structured columns for report export and printing
+    const getReportColumns = (cat) => {
+      switch (cat) {
+        case "Block Report":
+          return [
+            { key: "code", label: "Block Code", getter: (r) => r.code || "-" },
+            { key: "name", label: "Block Name", getter: (r) => r.name || "-" },
+            { key: "type", label: "Category", getter: (r) => r.type || r.category || "Boys" },
+            { key: "floors", label: "Total Floors", getter: (r) => r.floors ?? r.totalFloors ?? 1 },
+            { key: "warden", label: "Warden Name", getter: (r) => r.warden || r.wardenName || "Unassigned" },
+            { key: "wardenPhone", label: "Primary Mobile", getter: (r) => r.wardenPhone || r.primaryMobile || "-" },
+            { key: "address", label: "Location", getter: (r) => r.address || r.location || "Main Campus" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+        case "Room Report":
+          return [
+            { key: "roomNo", label: "Room No", getter: (r) => r.roomNo || r.roomNumber || "-" },
+            { key: "blockName", label: "Block Name", getter: (r) => r.blockName || r.block || "-" },
+            { key: "floor", label: "Floor", getter: (r) => r.floor || "1st Floor" },
+            { key: "type", label: "Category", getter: (r) => r.type || r.category || "Standard" },
+            { key: "capacity", label: "Total Beds", getter: (r) => r.capacity ?? r.totalBeds ?? 1 },
+            { key: "occupied", label: "Occupied Beds", getter: (r) => r.occupied ?? 0 },
+            { key: "vacantBeds", label: "Vacant Beds", getter: (r) => Math.max(0, (r.capacity ?? 1) - (r.occupied ?? 0)) },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+        case "Bed Allocation Report":
+        case "Student Allocation Report":
+          return [
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || "-" },
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || r.name || "-" },
+            { key: "gender", label: "Gender", getter: (r) => r.gender || "-" },
+            { key: "blockName", label: "Hostel Block", getter: (r) => r.blockName || r.blockCode || "-" },
+            { key: "roomBadge", label: "Room & Bed", getter: (r) => r.roomBadge || (r.room && r.bed ? `${r.room} (${r.bed})` : r.room || "-") },
+            { key: "joinDate", label: "Join Date", getter: (r) => r.joinDate ? (typeof r.joinDate === "string" ? r.joinDate.split("T")[0] : r.joinDate) : "-" },
+            { key: "monthlyFee", label: "Monthly Fee", getter: (r) => r.monthlyFee ? `₹${r.monthlyFee}` : "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+        case "Attendance Report":
+          return [
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || r.id || "-" },
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || r.name || "-" },
+            { key: "block", label: "Block", getter: (r) => r.block || r.blockName || "-" },
+            { key: "roomBed", label: "Room & Bed", getter: (r) => r.roomBed || (r.room && r.bed ? `${r.room} (${r.bed})` : "-") },
+            { key: "morning", label: "Morning Shift", getter: (r) => (typeof attendanceMap?.morning?.[r.id || r.admissionNo] === "object" ? attendanceMap?.morning?.[r.id || r.admissionNo]?.status : attendanceMap?.morning?.[r.id || r.admissionNo]) || "Present" },
+            { key: "night", label: "Night Inspection", getter: (r) => (typeof attendanceMap?.night?.[r.id || r.admissionNo] === "object" ? attendanceMap?.night?.[r.id || r.admissionNo]?.status : attendanceMap?.night?.[r.id || r.admissionNo]) || "Present" },
+          ];
+        case "Outpass & Leave Report":
+          return [
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || "-" },
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || "-" },
+            { key: "outpassType", label: "Outpass Type", getter: (r) => r.requestType || r.outpassType || "Outpass" },
+            { key: "blockName", label: "Hostel & Room", getter: (r) => r.blockName ? `${r.blockName} (#${r.roomNo || r.roomNumber || "-"})` : (r.roomNo || "-") },
+            { key: "departureDate", label: "Departure", getter: (r) => r.departureDate || r.outDate || "-" },
+            { key: "returnDate", label: "Expected Return", getter: (r) => r.returnDate || "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Pending" },
+          ];
+        case "Transfer & Vacate Report":
+          return [
+            { key: "studentName", label: "Student Name", getter: (r) => r.studentName || "-" },
+            { key: "admissionNo", label: "Adm No", getter: (r) => r.admissionNo || "-" },
+            { key: "actionType", label: "Action Type", getter: (r) => r.actionType || r.requestType || "-" },
+            { key: "currentRoomDisplay", label: "Current Room", getter: (r) => r.currentRoomDisplay || r.currentRoom || "-" },
+            { key: "targetDisplayTitle", label: "Target Room / Fee Adjustment", getter: (r) => r.targetDisplayTitle || r.feeAdjustment || "-" },
+            { key: "date", label: "Date", getter: (r) => r.date || r.requestDate || "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Pending" },
+          ];
+        case "Warden Report":
+          return [
+            { key: "empId", label: "Emp ID", getter: (r) => r.empId || "-" },
+            { key: "name", label: "Warden Name", getter: (r) => r.name || "-" },
+            { key: "designation", label: "Designation", getter: (r) => r.designation || "Resident Warden" },
+            { key: "assignedHostels", label: "Supervised Facilities", getter: (r) => r.assignedHostels || "-" },
+            { key: "phone", label: "Primary Mobile", getter: (r) => r.phone || "-" },
+            { key: "email", label: "Email", getter: (r) => r.email || "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+        default:
+          return [
+            { key: "code", label: "Code", getter: (r) => r.code || r.id || "-" },
+            { key: "name", label: "Name", getter: (r) => r.name || "-" },
+            { key: "status", label: "Status", getter: (r) => r.status || "Active" },
+          ];
+      }
+    };
+
+    // Print Handler (Isolated window prevents CSS conflicts)
+    const handlePrintReport = () => {
+      const cols = getReportColumns(reportCategory);
+      const rows = filtered;
+      const popup = window.open("", "_blank", "width=1100,height=760");
+      if (!popup) {
+        showToast("Pop-up blocked. Please allow pop-ups to print reports.", "warning");
+        return;
+      }
+      const title = `${reportCategory} - Pirnav College`;
+      const dateStr = new Date().toLocaleString();
+      const filterSummary = [
+        reportBlockFilter && reportBlockFilter !== "all" ? `Block: ${reportBlockFilter}` : null,
+        reportCategoryFilter && reportCategoryFilter !== "all" ? `Filter: ${reportCategoryFilter}` : null,
+        reportSearch.trim() ? `Search: "${reportSearch.trim()}"` : null,
+      ].filter(Boolean).join(" | ") || "All Records";
+
+      popup.document.open();
+      popup.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    html, body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #111827; }
+    .print-container { padding: 16px; }
+    .header { border-bottom: 2px solid #2d6a4f; padding-bottom: 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .header-left h1 { font-size: 20px; margin: 0 0 4px; color: #1b4332; }
+    .header-left h2 { font-size: 14px; margin: 0; color: #40916c; font-weight: 600; }
+    .header-right { text-align: right; font-size: 11px; color: #6b7280; }
+    .meta-bar { background: #f3f4f6; padding: 6px 12px; border-radius: 6px; font-size: 11px; color: #374151; margin-bottom: 14px; display: flex; justify-content: space-between; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th { background: #e5e7eb; color: #1f2937; font-weight: 700; text-align: left; padding: 8px 10px; border: 1px solid #d1d5db; font-size: 10.5px; text-transform: uppercase; }
+    td { padding: 7px 10px; border: 1px solid #e5e7eb; }
+    tr:nth-child(even) td { background: #f9fafb; }
+  </style>
+</head>
+<body>
+  <div class="print-container">
+    <div class="header">
+      <div class="header-left">
+        <h1>Pirnav College</h1>
+        <h2>Hostel Management — ${reportCategory}</h2>
+      </div>
+      <div class="header-right">
+        <div>Generated: ${dateStr}</div>
+        <div>Total Records: ${rows.length}</div>
+      </div>
+    </div>
+    <div class="meta-bar">
+      <span><strong>Scope:</strong> ${filterSummary}</span>
+      <span><strong>Official Hostel Audit Report</strong></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          ${cols.map((c) => `<th>${c.label}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.length === 0 ? `<tr><td colspan="${cols.length}" style="text-align:center;padding:24px;color:#9ca3af;">No records found matching filter criteria.</td></tr>` : rows.map((row) => `<tr>${cols.map((c) => `<td>${c.getter ? c.getter(row) : (row[c.key] ?? "-")}</td>`).join("")}</tr>`).join("")}
+      </tbody>
+    </table>
+  </div>
+  <script>
+    window.addEventListener('load', () => {
+      window.focus();
+      window.print();
+    });
+  </script>
+</body>
+</html>`);
+      popup.document.close();
+    };
+
+    // Export PDF Handler using jsPDF + autotable
+    const handleExportPdf = async () => {
+      try {
+        const cols = getReportColumns(reportCategory);
+        const rows = filtered;
+        if (rows.length === 0) {
+          showToast("No records to export.", "warning");
+          return;
+        }
+
+        const [jspdfModule, autoTableModule] = await Promise.all([
+          import("jspdf"),
+          import("jspdf-autotable"),
         ]);
-      } else if (reportCategory === "Room Report") {
-        exportCsv("room-report.csv", filtered, [
-          { key: "roomNumber", label: "Room No" },
-          { key: "blockName", label: "Block Name" },
-          { key: "floor", label: "Floor" },
-          { key: "category", label: "Category" },
-          { key: "totalBeds", label: "Total Beds" },
-          { key: "occupiedBeds", label: "Occupied Beds" },
-          { key: "vacantBeds", label: "Vacant Beds" },
-          { key: "status", label: "Status" },
-        ]);
-      } else if (reportCategory === "Bed Allocation Report" || reportCategory === "Student Allocation Report") {
-        exportCsv("allocation-report.csv", filtered, [
-          { key: "admissionNo", label: "Adm No" },
-          { key: "studentName", label: "Student Name" },
-          { key: "gender", label: "Gender" },
-          { key: "blockName", label: "Hostel Block" },
-          { key: "roomBadge", label: "Room & Bed" },
-          { key: "joinDate", label: "Join Date" },
-          { key: "monthlyFee", label: "Monthly Fee" },
-          { key: "status", label: "Status" },
-        ]);
-      } else if (reportCategory === "Attendance Report") {
-        exportCsv("attendance-report.csv", filtered, [
-          { key: "id", label: "Adm No" },
-          { key: "name", label: "Student Name" },
-          { key: "block", label: "Block" },
-          { key: "roomBed", label: "Room & Bed" },
-        ]);
-      } else if (reportCategory === "Outpass & Leave Report") {
-        exportCsv("outpass-report.csv", filtered, [
-          { key: "studentName", label: "Student Name" },
-          { key: "admissionNo", label: "Adm No" },
-          { key: "outpassType", label: "Outpass Type" },
-          { key: "blockName", label: "Hostel & Room" },
-          { key: "departureDate", label: "Departure" },
-          { key: "returnDate", label: "Expected Return" },
-          { key: "status", label: "Status" },
-        ]);
-      } else if (reportCategory === "Transfer & Vacate Report") {
-        exportCsv("transfer-vacate-report.csv", filtered, [
-          { key: "studentName", label: "Student Name" },
-          { key: "admissionNo", label: "Adm No" },
-          { key: "actionType", label: "Action Type" },
-          { key: "currentRoomDisplay", label: "Current Room" },
-          { key: "date", label: "Date" },
-          { key: "status", label: "Status" },
-        ]);
-      } else if (reportCategory === "Warden Report") {
-        exportCsv("warden-report.csv", filtered, [
-          { key: "empId", label: "Emp ID" },
-          { key: "name", label: "Warden Name" },
-          { key: "designation", label: "Designation" },
-          { key: "assignedHostels", label: "Supervised Facilities" },
-          { key: "phone", label: "Primary Mobile" },
-          { key: "email", label: "Email" },
-          { key: "status", label: "Status" },
-        ]);
-      } else {
-        exportCsv("hostel-report.csv", filtered, [
-          { key: "code", label: "Block Code" },
-          { key: "name", label: "Block Name" },
-          { key: "status", label: "Status" },
-        ]);
+        const jsPDF = jspdfModule?.default || jspdfModule?.jsPDF || jspdfModule;
+        const autoTable = autoTableModule?.default || autoTableModule?.autoTable || autoTableModule;
+
+        const doc = new jsPDF({
+          orientation: cols.length > 5 ? "landscape" : "portrait",
+          unit: "pt",
+          format: "a4",
+        });
+
+        const dateStr = new Date().toLocaleString();
+        const filterSummary = [
+          reportBlockFilter && reportBlockFilter !== "all" ? `Block: ${reportBlockFilter}` : null,
+          reportCategoryFilter && reportCategoryFilter !== "all" ? `Filter: ${reportCategoryFilter}` : null,
+          reportSearch.trim() ? `Search: "${reportSearch.trim()}"` : null,
+        ].filter(Boolean).join(" | ") || "All Records";
+
+        doc.setFontSize(16);
+        doc.setTextColor(27, 67, 50);
+        doc.text("Pirnav College — Hostel Management", 36, 36);
+
+        doc.setFontSize(12);
+        doc.setTextColor(64, 145, 108);
+        doc.text(reportCategory, 36, 52);
+
+        doc.setFontSize(9);
+        doc.setTextColor(107, 114, 128);
+        doc.text(`Exported: ${dateStr} | Records: ${rows.length} | Filters: ${filterSummary}`, 36, 68);
+
+        const tableOptions = {
+          startY: 80,
+          head: [cols.map((c) => c.label)],
+          body: rows.map((row) =>
+            cols.map((c) => String(c.getter ? c.getter(row) : (row[c.key] ?? "-")))
+          ),
+          styles: { fontSize: 8, cellPadding: 4, textColor: [17, 24, 39] },
+          headStyles: { fillColor: [45, 106, 79], textColor: [255, 255, 255], fontStyle: "bold" },
+          alternateRowStyles: { fillColor: [249, 250, 251] },
+          margin: { left: 36, right: 36 },
+        };
+
+        if (typeof autoTable === "function") {
+          autoTable(doc, tableOptions);
+        } else if (typeof doc.autoTable === "function") {
+          doc.autoTable(tableOptions);
+        }
+
+        const safeName = reportCategory.toLowerCase().replace(/[^a-z0-9]/g, "_");
+        doc.save(`${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+        showToast(`${reportCategory} exported as PDF successfully!`);
+      } catch (err) {
+        console.error("Export PDF error:", err);
+        showToast("Failed to generate PDF export.", "danger");
+      }
+    };
+
+    // Download Handler (.xlsx Excel or .csv)
+    const handleDownloadReport = async () => {
+      try {
+        const cols = getReportColumns(reportCategory);
+        const rows = filtered;
+        if (rows.length === 0) {
+          showToast("No records to download.", "warning");
+          return;
+        }
+
+        const exportData = rows.map((row) => {
+          const obj = {};
+          cols.forEach((c) => {
+            obj[c.label] = c.getter ? c.getter(row) : (row[c.key] ?? "-");
+          });
+          return obj;
+        });
+
+        const safeName = reportCategory.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+        try {
+          const XLSX = await import("xlsx");
+          const worksheet = XLSX.utils.json_to_sheet(exportData);
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, reportCategory.slice(0, 31));
+          XLSX.writeFile(workbook, `${safeName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+          showToast(`${reportCategory} downloaded as Excel spreadsheet!`);
+        } catch {
+          exportCsv(`${safeName}.csv`, rows, cols.map((c) => ({
+            label: c.label,
+            value: (r) => (c.getter ? c.getter(r) : r[c.key]),
+          })));
+          showToast(`${reportCategory} downloaded as CSV!`);
+        }
+      } catch (err) {
+        console.error("Download report error:", err);
+        showToast("Failed to download report.", "danger");
       }
     };
 
@@ -4529,14 +4992,14 @@ export default function HostelPage() {
             <button
               type="button"
               className="cms-report-btn-print"
-              onClick={() => window.print()}
+              onClick={handlePrintReport}
             >
               <Printer size={15} /> Print
             </button>
             <button
               type="button"
               className="cms-report-btn-pdf"
-              onClick={() => window.print()}
+              onClick={handleExportPdf}
             >
               <FileSpreadsheet size={15} /> Export PDF
             </button>
@@ -4838,7 +5301,7 @@ export default function HostelPage() {
                         <td className="cms-report-td" style={{ fontWeight: 700 }}>{item.studentName}</td>
                         <td className="cms-report-td">{item.admissionNo}</td>
                         <td className="cms-report-td">{item.actionType || item.requestType}</td>
-                        <td className="cms-report-td">{item.currentRoomDisplay || `${item.currentBlock} (#${item.currentRoom || "101"})`}</td>
+                        <td className="cms-report-td">{item.currentRoomDisplay || (item.currentBlock ? `${item.currentBlock}${item.currentRoom ? ` (#${item.currentRoom})` : ""}` : "-")}</td>
                         <td className="cms-report-td">
                           {item.targetDisplayTitle || `${item.targetBlock} (${item.targetRoom})`}
                         </td>
@@ -5009,11 +5472,160 @@ export default function HostelPage() {
   const renderReportsSection = () => renderReports();
 
   // ═════════════════════════════════════════════════════════════════════
-  // MODAL FORMS
+  // MAIN RENDER WITH DASHBOARDLAYOUT
   // ═════════════════════════════════════════════════════════════════════
+  return (
+    <DashboardLayout
+      title="Hostel Management"
+      subtitle="Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
+      breadcrumb={["Hostel Management"]}
+    >
+      <div className="cms-hostel-page">
+        {/* Toast Notification */}
+        {toast.message && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast({ message: "", type: "success" })}
+          />
+        )}
 
-  // Block Modal
-  const BlockModal = () => {
+        {/* 4 Major Horizontal Navigation Tabs */}
+        <div className="cms-hostel-tabs">
+          {majorTabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeMajorTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
+                onClick={() => {
+                  setActiveMajorTab(tab.id);
+                  setSearchQuery("");
+                }}
+              >
+                <Icon size={16} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active Tab Screen */}
+        {activeMajorTab === "dashboard" && renderDashboard()}
+        {activeMajorTab === "setup" && renderSetupMasters()}
+        {activeMajorTab === "students" && renderStudentManagement()}
+        {activeMajorTab === "reports" && renderReportsSection()}
+
+        {/* Global Modals */}
+        {modal.isOpen && modal.type === "block" && (
+          <BlockModal
+            modal={modal}
+            closeModal={closeModal}
+            handleSaveBlock={handleSaveBlock}
+          />
+        )}
+        {modal.isOpen && (modal.type === "roomType" || (modal.type === "category" && modal.mode === "add")) && (
+          <RoomSharingConfigModal
+            modal={modal}
+            blocks={blocks}
+            closeModal={closeModal}
+            handleSaveRoomSharingConfig={handleSaveRoomSharingConfig}
+            showToast={showToast}
+          />
+        )}
+        {modal.isOpen && modal.type === "category" && modal.mode !== "add" && (
+          <CategoryModal
+            modal={modal}
+            closeModal={closeModal}
+            handleSaveCategory={handleSaveCategory}
+          />
+        )}
+        {modal.isOpen && modal.type === "room" && (
+          <RoomModal
+            modal={modal}
+            closeModal={closeModal}
+            blocks={blocks}
+            categories={categories}
+            handleSaveRoom={handleSaveRoom}
+          />
+        )}
+        {modal.isOpen && modal.type === "warden" && (
+          <WardenModal
+            modal={modal}
+            closeModal={closeModal}
+            blocks={blocks}
+            wardens={wardens}
+            candidateStaff={candidateStaff}
+            handleSaveWarden={handleSaveWarden}
+          />
+        )}
+        {modal.isOpen && modal.type === "allocation" && (
+          <AllocationModal
+            modal={modal}
+            closeModal={closeModal}
+            blocks={blocks}
+            rooms={rooms}
+            beds={beds}
+            allocations={allocations}
+            candidateAdmissions={candidateAdmissions}
+            candidateStudents={candidateStudents}
+            handleSaveAllocation={handleSaveAllocation}
+            showToast={showToast}
+          />
+        )}
+        {modal.isOpen && modal.type === "vacate" && (
+          <VacateModal
+            modal={modal}
+            closeModal={closeModal}
+            handleVacateAllocation={handleVacateAllocation}
+          />
+        )}
+        {modal.isOpen && modal.type === "outpass" && (
+          <OutpassModal
+            modal={modal}
+            closeModal={closeModal}
+            allocations={allocations}
+            handleSaveOutpass={handleSaveOutpass}
+            showToast={showToast}
+          />
+        )}
+        {modal.isOpen && modal.type === "transfer" && (
+          <TransferModal
+            modal={modal}
+            closeModal={closeModal}
+            blocks={blocks}
+            rooms={rooms}
+            beds={beds}
+            allocations={allocations}
+            handleSaveTransfer={handleSaveTransfer}
+            showToast={showToast}
+          />
+        )}
+
+        {/* Global Confirm Dialog */}
+        {confirmDialog.isOpen && (
+          <ConfirmDialog
+            title={confirmDialog.title}
+            message={confirmDialog.message}
+            danger={confirmDialog.danger}
+            confirmLabel={confirmDialog.confirmLabel}
+            onCancel={closeConfirm}
+            onConfirm={confirmDialog.onConfirm}
+          />
+        )}
+      </div>
+    </DashboardLayout>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════
+// MODAL FORMS (TOP-LEVEL COMPONENTS)
+// ═════════════════════════════════════════════════════════════════════
+
+// Block Modal
+function BlockModal({ modal, closeModal, handleSaveBlock }) {
     const isView = modal.mode === "view";
     const [form, setForm] = useState(
       modal.data || {
@@ -5143,8 +5755,8 @@ export default function HostelPage() {
     );
   };
 
-  // ── Room Sharing Config Modal (3-Step Wizard matching Images 3, 4, 5) ──
-  const RoomSharingConfigModal = () => {
+// ── Room Sharing Config Modal (3-Step Wizard matching Images 3, 4, 5) ──
+function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomSharingConfig, showToast }) {
     const [activeStep, setActiveStep] = useState("sharing"); // default to step 2 if opened from Add Room Type, or 'block'
     const [selectedBlockCode, setSelectedBlockCode] = useState(() => blocks[0]?.code || "");
     const [selectedFloorLevel, setSelectedFloorLevel] = useState("");
@@ -5994,8 +6606,8 @@ export default function HostelPage() {
     );
   };
 
-  // Category Modal
-  const CategoryModal = () => {
+// Category Modal
+function CategoryModal({ modal, closeModal, handleSaveCategory }) {
     const isView = modal.mode === "view";
     const [form, setForm] = useState(
       modal.data || {
@@ -6094,25 +6706,50 @@ export default function HostelPage() {
     );
   };
 
-  // Room Modal (Matching Screenshot 2: exactly 5 fields)
-  const RoomModal = () => {
+// Room Modal (Matching Screenshot 2: exactly 5 fields)
+function RoomModal({ modal, closeModal, blocks, categories, handleSaveRoom }) {
     const isView = modal.mode === "view";
-    const [form, setForm] = useState(
-      modal.data || {
-        roomNo: "",
-        block: "",
-        blockName: "",
-        floor: "",
-        type: "",
-        capacity: 2,
-        fee: "₹6,500/mo",
-        status: "Active",
+    const [form, setForm] = useState(() => {
+      if (modal.data) {
+        const foundBlock = blocks.find(
+          (b) => String(b.id) === String(modal.data.hostelId) || b.code === modal.data.block || b.name === modal.data.block
+        );
+        const foundCat = categories.find(
+          (c) => String(c.id) === String(modal.data.roomTypeId) || c.name === modal.data.type
+        );
+        return {
+          ...modal.data,
+          block: foundBlock ? String(foundBlock.id) : (modal.data.block || (blocks[0]?.id ? String(blocks[0].id) : "")),
+          hostelId: foundBlock ? foundBlock.id : (modal.data.hostelId || blocks[0]?.id),
+          blockName: foundBlock ? foundBlock.name : (modal.data.blockName || modal.data.block || ""),
+          roomTypeId: foundCat ? foundCat.id : (modal.data.roomTypeId || categories[0]?.id || ""),
+          type: foundCat ? foundCat.name : (modal.data.type || categories[0]?.name || ""),
+          capacity: foundCat ? foundCat.capacity : (modal.data.capacity || categories[0]?.capacity || 2),
+          fee: foundCat ? foundCat.fee : (modal.data.fee || "₹6,500/mo"),
+          floor: modal.data.floor || "Ground Floor",
+          roomNo: String(modal.data.roomNo || modal.data.roomNumber || "").replace(/^Room #/i, "").trim(),
+          status: modal.data.status || "Active",
+        };
       }
-    );
+      const firstBlock = blocks[0];
+      const firstCat = categories[0];
+      return {
+        roomNo: "",
+        block: firstBlock ? String(firstBlock.id) : "",
+        hostelId: firstBlock ? firstBlock.id : "",
+        blockName: firstBlock ? firstBlock.name : "",
+        floor: "Ground Floor",
+        roomTypeId: firstCat ? firstCat.id : "",
+        type: firstCat ? firstCat.name : "",
+        capacity: firstCat ? firstCat.capacity : 2,
+        fee: firstCat ? firstCat.fee : "₹6,500/mo",
+        status: "Active",
+      };
+    });
 
     // Selected block to compute floors
     const selectedBlock = blocks.find(
-      (b) => b.code === form.block || b.name === form.block || String(b.id) === String(form.block)
+      (b) => String(b.id) === String(form.block) || b.code === form.block || b.name === form.block
     );
 
     // Compute dynamic floor list for selected block
@@ -6127,31 +6764,23 @@ export default function HostelPage() {
       floorList.unshift(form.floor);
     }
 
-    // Standard room sharing options
-    const sharingOptions = [
-      { label: "Single Sharing (1 Bed)", value: "Single Sharing", capacity: 1, fee: "₹10,000/mo" },
-      { label: "Double Sharing (2 Beds)", value: "Double Sharing", capacity: 2, fee: "₹6,500/mo" },
-      { label: "Triple Sharing (3 Beds)", value: "Triple Sharing", capacity: 3, fee: "₹5,000/mo" },
-      { label: "Four Sharing (4 Beds)", value: "Four Sharing", capacity: 4, fee: "₹4,200/mo" },
-    ];
-    categories.forEach((cat) => {
-      const optLabel = `${cat.name} (${cat.capacity || 2} ${cat.capacity === 1 ? "Bed" : "Beds"})`;
-      if (!sharingOptions.some((opt) => opt.value === cat.name)) {
-        sharingOptions.push({
-          label: optLabel,
-          value: cat.name,
-          capacity: cat.capacity || 2,
-          fee: cat.fee || "₹6,500/mo",
-        });
-      }
-    });
-    if (form.type && !sharingOptions.some((opt) => opt.value === form.type)) {
-      sharingOptions.unshift({
-        label: form.type,
-        value: form.type,
-        capacity: form.capacity || 2,
-        fee: form.fee || "₹6,500/mo",
-      });
+    // Standard room sharing options built from actual database categories
+    const sharingOptions = categories.map((cat) => ({
+      id: cat.id,
+      label: `${cat.name || cat.specification} (${cat.capacity || 1} ${cat.capacity === 1 ? "Bed" : "Beds"}${cat.acType ? " - " + cat.acType : ""})`,
+      value: String(cat.id),
+      name: cat.name || cat.specification,
+      capacity: Number(cat.capacity) || 1,
+      fee: cat.fee || (cat.capacity === 1 ? "₹10,000/mo" : cat.capacity === 2 ? "₹6,500/mo" : "₹5,000/mo"),
+    }));
+
+    if (sharingOptions.length === 0) {
+      sharingOptions.push(
+        { id: 1, label: "Single Sharing (1 Bed)", value: "1", name: "Single Sharing", capacity: 1, fee: "₹10,000/mo" },
+        { id: 2, label: "Double Sharing (2 Beds)", value: "2", name: "Double Sharing", capacity: 2, fee: "₹6,500/mo" },
+        { id: 3, label: "Triple Sharing (3 Beds)", value: "3", name: "Triple Sharing", capacity: 3, fee: "₹5,000/mo" },
+        { id: 4, label: "Four Sharing (4 Beds)", value: "Four Sharing", capacity: 4, fee: "₹4,200/mo" },
+      );
     }
 
     return (
@@ -6182,23 +6811,24 @@ export default function HostelPage() {
                 <select
                   required
                   disabled={isView}
-                  value={form.block}
+                  value={String(form.block || form.hostelId || "")}
                   onChange={(e) => {
-                    const b = blocks.find((blk) => blk.code === e.target.value || blk.name === e.target.value || String(blk.id) === String(e.target.value));
+                    const b = blocks.find((blk) => String(blk.id) === String(e.target.value) || blk.code === e.target.value);
                     setForm({
                       ...form,
                       block: e.target.value,
-                      blockName: b ? b.name : e.target.value,
-                      floor: "",
+                      hostelId: b ? b.id : e.target.value,
+                      blockName: b ? b.name : "",
+                      floor: "Ground Floor",
                     });
                   }}
                   className="cms-alloc-modal-select"
-                  style={{ color: form.block ? "var(--cms-text)" : "var(--cms-muted)" }}
+                  style={{ color: (form.block || form.hostelId) ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="" disabled>Select Hostel Block...</option>
                   {blocks.map((b) => (
-                    <option key={b.id} value={b.code}>
-                      {b.name}
+                    <option key={b.id} value={String(b.id)}>
+                      {b.name || b.code || `Hostel Block #${b.id}`} {b.code ? `(${b.code})` : ""}
                     </option>
                   ))}
                 </select>
@@ -6260,18 +6890,21 @@ export default function HostelPage() {
                   <select
                     required
                     disabled={isView}
-                    value={form.type}
+                    value={String(form.roomTypeId || form.type || "")}
                     onChange={(e) => {
-                      const chosen = sharingOptions.find((opt) => opt.value === e.target.value);
+                      const chosen = sharingOptions.find(
+                        (opt) => String(opt.value) === String(e.target.value) || String(opt.id) === String(e.target.value) || opt.name === e.target.value
+                      );
                       setForm({
                         ...form,
-                        type: e.target.value,
+                        roomTypeId: chosen ? chosen.id : e.target.value,
+                        type: chosen ? chosen.name : e.target.value,
                         capacity: chosen ? chosen.capacity : form.capacity,
                         fee: chosen ? chosen.fee : form.fee,
                       });
                     }}
                     className="cms-alloc-modal-select"
-                    style={{ color: form.type ? "var(--cms-text)" : "var(--cms-muted)" }}
+                    style={{ color: (form.roomTypeId || form.type) ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
                     <option value="" disabled>Select room sharing...</option>
                     {sharingOptions.map((opt) => (
@@ -6333,8 +6966,8 @@ export default function HostelPage() {
     );
   };
 
-  // Warden Modal (Matching Screenshot 2: exactly 3 fields)
-  const WardenModal = () => {
+// Warden Modal (Matching Screenshot 2: exactly 3 fields)
+function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handleSaveWarden }) {
     const isView = modal.mode === "view";
 
     // Filter out staff members who are already active wardens
@@ -6344,7 +6977,7 @@ export default function HostelPage() {
           .filter((w) => w.status === "Active" && (modal.mode !== "edit" || w.id !== modal.data?.id))
           .map((w) => Number(w.staffId))
       );
-    }, []);
+    }, [wardens, modal.mode, modal.data?.id]);
 
     // Warden candidates list from live staff API (candidateStaff)
     const wardenCandidates = useMemo(() => {
@@ -6549,8 +7182,19 @@ export default function HostelPage() {
     );
   };
 
-  // Student Allocation Modal - Matches Screenshot 2 exactly
-  const AllocationModal = () => {
+// Student Allocation Modal - Matches Screenshot 2 exactly
+function AllocationModal({
+  modal,
+  closeModal,
+  blocks,
+  rooms,
+  beds,
+  allocations,
+  candidateAdmissions,
+  candidateStudents,
+  handleSaveAllocation,
+  showToast,
+}) {
     const isView = modal.mode === "view";
     const [form, setForm] = useState(
       modal.data || {
@@ -6574,65 +7218,302 @@ export default function HostelPage() {
       allocations.forEach((a) => {
         if (a.status === "Active" && (modal.mode !== "edit" || a.id !== modal.data?.id)) {
           if (a.studentId) set.add(String(a.studentId));
-          if (a.admissionNo) set.add(String(a.admissionNo));
+          if (a.admissionNo) set.add(String(a.admissionNo).trim().toLowerCase());
         }
       });
       return set;
-    }, [allocations]);
+    }, [allocations, modal.mode, modal.data?.id]);
 
-    // Student candidate suggestions from candidateAdmissions API
+    // Fallback load for admissions & students if not yet loaded in parent state
+    const [modalAdmissions, setModalAdmissions] = useState([]);
+    const [modalStudents, setModalStudents] = useState([]);
+
+    useEffect(() => {
+      let cancelled = false;
+      const needAdm = !candidateAdmissions || candidateAdmissions.length === 0;
+      const needStu = !candidateStudents || candidateStudents.length === 0;
+      if (needAdm || needStu) {
+        Promise.allSettled([
+          needAdm ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null) : Promise.resolve(null),
+          needStu ? (
+            apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, optionalAuth: true })
+              .catch(() => apiClient.get("/api/v1/students", { skipGlobalLoader: true, optionalAuth: true, skipAuthRedirect: true }).catch(() => null))
+          ) : Promise.resolve(null),
+        ]).then(([admR, stuR]) => {
+          if (cancelled) return;
+          if (admR?.status === "fulfilled" && admR.value?.data) {
+            const c = extractCollection(admR.value.data);
+            if (Array.isArray(c) && c.length > 0) setModalAdmissions(c);
+          }
+          if (stuR?.status === "fulfilled" && stuR.value?.data) {
+            const s = extractCollection(stuR.value.data);
+            if (Array.isArray(s) && s.length > 0) setModalStudents(s);
+          }
+        }).catch(() => {});
+      }
+      return () => { cancelled = true; };
+    }, [candidateAdmissions, candidateStudents]);
+
+    const effectiveAdmissions = useMemo(() => {
+      return (candidateAdmissions && candidateAdmissions.length > 0) ? candidateAdmissions : modalAdmissions;
+    }, [candidateAdmissions, modalAdmissions]);
+
+    const effectiveStudents = useMemo(() => {
+      return (candidateStudents && candidateStudents.length > 0) ? candidateStudents : modalStudents;
+    }, [candidateStudents, modalStudents]);
+
+    // Student candidate suggestions: prioritized by Hostel opt-in during admission
     const allCandidates = useMemo(() => {
-      const list = [];
+      const admissionsMap = new Map();
+      const registerAdmission = (ca) => {
+        if (!ca) return;
+        const sId = getVal(ca, "studentId", "StudentId", "id", "Id", "studentAdmissionId", "StudentAdmissionId", "admissionId", "AdmissionId");
+        if (sId) admissionsMap.set(String(sId), ca);
+        const admNo = getVal(ca, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber", "regNo", "RegNo");
+        if (admNo) {
+          const rawStr = String(admNo).trim().toLowerCase();
+          admissionsMap.set(rawStr, ca);
+          admissionsMap.set(rawStr.replace(/[^a-z0-9]/gi, ""), ca);
+        }
+        const sName = getVal(ca, "studentName", "StudentName", "fullName", "FullName") || [getVal(ca, "firstName", "FirstName"), getVal(ca, "lastName", "LastName")].filter(Boolean).join(" ");
+        if (sName) {
+          admissionsMap.set(sName.trim().toLowerCase(), ca);
+        }
+      };
+
+      if (Array.isArray(effectiveAdmissions)) {
+        effectiveAdmissions.forEach(registerAdmission);
+      }
+
+      let localAdmissionsList = [];
+      let localAssignments = null;
+      try {
+        const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
+        if (Array.isArray(localAdms) && localAdms.length > 0) {
+          localAdmissionsList = localAdms;
+          localAdms.forEach((entry) => {
+            const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+            registerAdmission(x);
+          });
+        }
+        localAssignments = JSON.parse(localStorage.getItem("studentAcademicAssignments") || "{}");
+      } catch {
+        // ignore storage errors
+      }
+
+      const checkHostelOpted = (student, admission) => {
+        const sId = getVal(student, "studentId", "StudentId", "id", "Id") || getVal(admission, "studentId", "StudentId", "id", "Id");
+        const rawAdmNo = String(getVal(student, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || getVal(admission, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || "").trim();
+        const sName = String(getVal(student, "studentName", "StudentName", "fullName", "FullName") || getVal(admission, "studentName", "StudentName", "fullName", "FullName") || "").trim().toLowerCase();
+
+        const adm = admission
+          || (sId ? admissionsMap.get(String(sId)) : null)
+          || (rawAdmNo ? admissionsMap.get(rawAdmNo.toLowerCase()) : null)
+          || (rawAdmNo ? admissionsMap.get(rawAdmNo.replace(/[^a-z0-9]/gi, "").toLowerCase()) : null)
+          || (sName ? admissionsMap.get(sName) : null);
+        const assign = (sId && localAssignments ? localAssignments[sId] : null) || (student?.id && localAssignments ? localAssignments[student.id] : null);
+
+        const sources = [admission, adm, student, assign].filter(Boolean);
+
+        let isHostel = false;
+        let prefBlock = "";
+        let prefRoom = "";
+        let prefHostelId = "";
+
+        for (const src of sources) {
+          const hId = getVal(src, "hostelId", "HostelId", "hostelBlockId", "HostelBlockId");
+          if (hId && String(hId) !== "0" && String(hId).trim() !== "") {
+            isHostel = true;
+            prefHostelId = String(hId);
+          }
+
+          const hBlock = getVal(src, "hostelBlock", "HostelBlock", "fetchedHostelBlock", "FetchedHostelBlock", "hostelBlockName", "HostelBlockName", "blockName", "BlockName", "block", "Block");
+          if (hBlock && String(hBlock).trim() !== "" && String(hBlock).toLowerCase() !== "none" && String(hBlock).toLowerCase() !== "null") {
+            isHostel = true;
+            if (!prefBlock) prefBlock = String(hBlock).trim();
+          }
+
+          const hRoom = getVal(src, "hostelRoom", "HostelRoom", "fetchedHostelRoom", "FetchedHostelRoom", "hostelRoomName", "HostelRoomName", "roomTypeName", "RoomTypeName", "roomType", "RoomType");
+          if (hRoom && String(hRoom).trim() !== "" && String(hRoom).toLowerCase() !== "none" && String(hRoom).toLowerCase() !== "null") {
+            isHostel = true;
+            if (!prefRoom) prefRoom = String(hRoom).trim();
+          }
+
+          const typeVal = String(getVal(src, "studentType", "StudentType", "facilityType", "FacilityType", "residential", "Residential", "residentialType", "ResidentialType", "residence", "Residence", "residentialStatus", "ResidentialStatus", "studentCategory", "StudentCategory") || "").trim().toLowerCase();
+          if (["hostel", "residential", "hosteller", "residence"].includes(typeVal)) {
+            isHostel = true;
+          }
+
+          const isRes = src.isResidential ?? src.IsResidential;
+          if (isRes === true || isRes === 1 || String(isRes).toLowerCase() === "true" || String(isRes).toLowerCase() === "yes") {
+            isHostel = true;
+          }
+        }
+
+        if (prefBlock && blocks && blocks.length > 0) {
+          const blkMatch = blocks.find((b) => String(b.id) === String(prefBlock) || b.code?.toLowerCase() === prefBlock.toLowerCase() || b.name?.toLowerCase() === prefBlock.toLowerCase());
+          if (blkMatch) {
+            prefBlock = blkMatch.name;
+            prefHostelId = String(blkMatch.id);
+          }
+        }
+
+        return { isHostel, prefBlock, prefRoom, prefHostelId, adm };
+      };
+
+      const hostelCandidates = [];
+      const otherCandidates = [];
       const seen = new Set();
 
-      if (Array.isArray(candidateAdmissions) && candidateAdmissions.length > 0) {
-        candidateAdmissions.forEach((ca) => {
-          const sId = ca.studentAdmissionId || ca.studentId || ca.id;
-          const admNo = ca.admissionNumber || ca.admissionNo || `ADM-${sId}`;
-          const fullName = [ca.firstName, ca.middleName, ca.lastName].filter(Boolean).join(" ") || ca.fullName || ca.studentName || `Student #${admNo}`;
-          const isAllocated = activeStudentIds.has(String(sId)) || activeStudentIds.has(String(admNo));
+      const processCandidate = (st, admissionObj = null) => {
+        let sId = getVal(st, "studentId", "StudentId");
+        if (!sId && st) {
+          sId = getVal(st, "id", "Id");
+        }
+        let admNo = getVal(st, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || getVal(admissionObj, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || "";
+        const sName = getVal(st, "studentName", "StudentName", "fullName", "FullName")
+          || [getVal(st, "firstName", "FirstName"), getVal(st, "middleName", "MiddleName"), getVal(st, "lastName", "LastName")].filter(Boolean).join(" ")
+          || getVal(admissionObj, "studentName", "StudentName", "fullName", "FullName")
+          || [getVal(admissionObj, "firstName", "FirstName"), getVal(admissionObj, "middleName", "MiddleName"), getVal(admissionObj, "lastName", "LastName")].filter(Boolean).join(" ");
 
-          if (!isAllocated && !seen.has(String(admNo))) {
-            seen.add(String(admNo));
-            list.push({
-              id: sId,
-              studentId: sId,
-              name: fullName,
-              admissionNo: admNo,
-              className: ca.courseName || ca.branchName || "Admitted Student",
-            });
+        let rawNumericId = sId && !isNaN(Number(sId)) && Number(sId) > 0 ? Number(sId) : null;
+        let isEnrolled = false;
+        let numericStudentId = null;
+
+        // Verify if candidate is genuinely enrolled in the Students master table
+        if (st && rawNumericId) {
+          const rawLvl = String(getVal(st, "academicLevel", "AcademicLevel", "academicLevelName", "AcademicLevelName") || "").trim().toLowerCase();
+          const rNo = String(getVal(st, "rollNo", "RollNo") || "").trim();
+          const sSec = String(getVal(st, "section", "Section", "sectionName", "SectionName") || "").trim();
+
+          const isUnenrolledDropdownItem = UNENROLLED_ADMISSION_IDS.has(rawNumericId) || (rawLvl === "1st year" && !rNo && !sSec && UNENROLLED_ADMISSION_IDS.has(rawNumericId));
+
+          if (!isUnenrolledDropdownItem) {
+            isEnrolled = true;
+            numericStudentId = rawNumericId;
           }
+        }
+
+        // If from admissionObj, do NOT use admissionObj.id as studentId! Try to match to an enrolled student
+        if (admissionObj) {
+          if (Array.isArray(effectiveStudents) && effectiveStudents.length > 0) {
+            const matchedEnrolled = effectiveStudents.find((es) => {
+              const esId = Number(getVal(es, "studentId", "StudentId", "id", "Id"));
+              if (!esId || UNENROLLED_ADMISSION_IDS.has(esId)) return false;
+              const esAdm = String(getVal(es, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") || "").trim().toLowerCase();
+              const esName = String(getVal(es, "studentName", "StudentName", "fullName", "FullName") || "").trim().toLowerCase();
+              return (admNo && esAdm && esAdm === String(admNo).trim().toLowerCase()) ||
+                     (sName && esName && esName === String(sName).trim().toLowerCase());
+            });
+            if (matchedEnrolled) {
+              numericStudentId = Number(getVal(matchedEnrolled, "studentId", "StudentId", "id", "Id"));
+              isEnrolled = true;
+              if (!admNo && matchedEnrolled.admissionNo) admNo = matchedEnrolled.admissionNo;
+            }
+          }
+        }
+
+        const dedupeKey = numericStudentId ? `sid-${numericStudentId}` : (admNo ? `adm-${String(admNo).trim().toLowerCase()}` : (sName ? `name-${String(sName).trim().toLowerCase()}` : null));
+        if (!dedupeKey || seen.has(dedupeKey)) return;
+
+        const isAllocated = (numericStudentId && activeStudentIds.has(String(numericStudentId))) || (admNo && activeStudentIds.has(String(admNo).trim().toLowerCase()));
+        if (isAllocated) return;
+
+        seen.add(dedupeKey);
+        if (numericStudentId) seen.add(`sid-${numericStudentId}`);
+        if (admNo) seen.add(`adm-${String(admNo).trim().toLowerCase()}`);
+
+        const optCheck = checkHostelOpted(st, admissionObj);
+        const fullName = sName || (admNo ? `Student #${admNo}` : (numericStudentId ? `Student #${numericStudentId}` : "Student"));
+
+        const cls = getVal(st, "programName", "ProgramName", "courseName", "CourseName", "sectionName", "SectionName", "groupName", "GroupName")
+          || getVal(admissionObj, "programName", "ProgramName", "courseName", "CourseName", "branchName", "BranchName", "className", "ClassName")
+          || (isEnrolled ? "Enrolled Student" : "Admission Applicant (Pending Master Enrollment)");
+
+        const cand = {
+          id: numericStudentId || admNo || dedupeKey,
+          studentId: numericStudentId,
+          name: fullName,
+          admissionNo: admNo,
+          isEnrolled,
+          className: cls,
+          gender: getVal(st, "gender", "Gender") || getVal(admissionObj, "gender", "Gender") || "",
+          contact: getVal(st, "mobileNumber", "MobileNumber", "mobile", "Mobile") || getVal(admissionObj, "contactNumber", "ContactNumber", "mobileNumber", "MobileNumber") || "",
+          isHostelOpted: optCheck.isHostel,
+          preferredBlockName: optCheck.prefBlock,
+          preferredRoomType: optCheck.prefRoom,
+          hostelId: optCheck.prefHostelId,
+        };
+
+        if (optCheck.isHostel) {
+          hostelCandidates.push(cand);
+        } else {
+          otherCandidates.push(cand);
+        }
+      };
+
+      if (Array.isArray(effectiveStudents) && effectiveStudents.length > 0) {
+        effectiveStudents.forEach((st) => processCandidate(st, null));
+      }
+
+      if (Array.isArray(effectiveAdmissions) && effectiveAdmissions.length > 0) {
+        effectiveAdmissions.forEach((ca) => processCandidate(null, ca));
+      }
+
+      if (localAdmissionsList.length > 0) {
+        localAdmissionsList.forEach((entry) => {
+          const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+          processCandidate(null, x);
         });
       }
 
-      // Fallback if candidateAdmissions is empty
-      if (list.length === 0) {
-        allocations.forEach((a) => {
-          if (a.admissionNo && !seen.has(String(a.admissionNo))) {
-            seen.add(String(a.admissionNo));
-            list.push({
-              id: a.studentId || a.admissionNo,
-              studentId: a.studentId,
-              name: a.studentName,
-              admissionNo: a.admissionNo,
-              className: "Resident Hosteller",
-            });
-          }
+      // Combine: hostel opted candidates first!
+      const list = [...hostelCandidates, ...otherCandidates];
+
+      // Fallback for edit mode: keep currently selected student if not present
+      if (modal.mode === "edit" && modal.data?.studentId && !seen.has(String(modal.data.studentId))) {
+        list.unshift({
+          id: modal.data.studentId,
+          studentId: modal.data.studentId,
+          name: modal.data.studentName || `Student #${modal.data.studentId}`,
+          admissionNo: modal.data.admissionNo || "",
+          className: "Resident Hosteller",
+          isHostelOpted: true,
+          isEnrolled: true,
         });
       }
 
       return list;
-    }, [candidateAdmissions, activeStudentIds, allocations]);
+    }, [effectiveStudents, effectiveAdmissions, activeStudentIds, modal.mode, modal.data, blocks]);
 
     const filteredCandidates = useMemo(() => {
-      if (!studentSearch) return allCandidates;
-      const q = studentSearch.toLowerCase().trim();
-      return allCandidates.filter(
-        (s) =>
-          s.name?.toLowerCase().includes(q) ||
-          s.admissionNo?.toLowerCase().includes(q)
-      );
-    }, [studentSearch, allCandidates]);
+      let list = allCandidates;
+      if (studentSearch) {
+        const q = studentSearch.toLowerCase().trim();
+        list = allCandidates.filter(
+          (s) =>
+            s.name?.toLowerCase().includes(q) ||
+            s.admissionNo?.toLowerCase().includes(q) ||
+            s.preferredBlockName?.toLowerCase().includes(q) ||
+            s.className?.toLowerCase().includes(q)
+        );
+      }
+      return [...list].sort((a, b) => {
+        // Enrolled students first, pending applicants at bottom
+        if (a.isEnrolled && !b.isEnrolled) return -1;
+        if (!a.isEnrolled && b.isEnrolled) return 1;
+
+        if (form.blockName) {
+          const aMatch = a.preferredBlockName && (a.preferredBlockName.toLowerCase() === form.blockName.toLowerCase());
+          const bMatch = b.preferredBlockName && (b.preferredBlockName.toLowerCase() === form.blockName.toLowerCase());
+          if (aMatch && !bMatch) return -1;
+          if (!aMatch && bMatch) return 1;
+        }
+        if (a.isHostelOpted && !b.isHostelOpted) return -1;
+        if (!a.isHostelOpted && b.isHostelOpted) return 1;
+        return (a.name || "").localeCompare(b.name || "");
+      });
+    }, [studentSearch, allCandidates, form.blockName]);
 
     // Available rooms for selected block
     const availableRooms = useMemo(() => {
@@ -6642,7 +7523,7 @@ export default function HostelPage() {
       );
     }, [form.blockName, form.hostelId, rooms]);
 
-    // Available beds for selected room
+    // Available beds for selected room (only real registered beds in database, with synthetic fallback if needed)
     const availableBeds = useMemo(() => {
       if (!form.roomId && !form.room) return [];
       const selRoom = rooms.find(
@@ -6651,40 +7532,91 @@ export default function HostelPage() {
       const rId = selRoom ? selRoom.id : form.roomId;
       if (!rId) return [];
 
-      const roomBeds = beds.filter(
-        (b) => String(b.roomId) === String(rId) && (b.bedStatus === "Available" || b.status === "Available")
-      );
+      const roomBeds = beds.filter((b) => {
+        const matchesRoom = String(b.roomId) === String(rId);
+        if (!matchesRoom) return false;
+        const isCurrentBed = modal.mode === "edit" && (String(b.id) === String(modal.data?.bedId) || b.bedNumber === modal.data?.bed);
+        const isAvailable = (b.bedStatus || "").toLowerCase() === "available" || (!b.bedStatus && (b.status || "").toLowerCase() === "active");
+        return isAvailable || isCurrentBed;
+      });
+
       if (roomBeds.length > 0) return roomBeds;
 
-      // Fallback if beds table has not registered individual beds yet
-      const cap = selRoom?.capacity || 2;
-      return Array.from({ length: cap }, (_, i) => ({
-        id: i + 1,
-        bedNumber: `BED-${i + 1}`,
-        bedStatus: "Available",
-      }));
-    }, [beds, form.roomId, form.room, rooms]);
+      // Synthetic fallback beds if DB hasn't populated beds yet
+      const cap = Math.max(1, Number(selRoom?.capacity || 2));
+      const synthetic = [];
+      for (let bi = 1; bi <= cap; bi++) {
+        synthetic.push({
+          id: `syn-${rId}-${bi}`,
+          bedNumber: `BED-${bi}`,
+          bedStatus: "Available",
+          status: "Active",
+          isSynthetic: true,
+        });
+      }
+      return synthetic;
+    }, [beds, form.roomId, form.room, rooms, modal.mode, modal.data?.bedId, modal.data?.bed]);
 
     const handleSubmit = (e) => {
       e.preventDefault();
-      if (!form.studentName) {
-        showToast("Please select a student", "error");
-        return;
+      let studentId = Number(form.studentId);
+      if (!studentId || isNaN(studentId) || studentId <= 0) {
+        const found = allCandidates.find(
+          (s) => s.isEnrolled && s.studentId && !UNENROLLED_ADMISSION_IDS.has(Number(s.studentId)) && (
+            (form.admissionNo && String(s.admissionNo)?.trim().toLowerCase() === String(form.admissionNo)?.trim().toLowerCase()) ||
+            (studentSearch && s.name?.trim().toLowerCase() === studentSearch?.trim().toLowerCase()) ||
+            (form.studentName && s.name?.trim().toLowerCase() === form.studentName?.trim().toLowerCase())
+          )
+        );
+        if (found?.studentId) {
+          studentId = Number(found.studentId);
+        }
       }
-      if (!form.blockName) {
-        showToast("Please select a hostel block", "error");
-        return;
-      }
-      if (!form.room) {
-        showToast("Please select a room", "error");
-        return;
-      }
-      if (!form.bed) {
-        showToast("Please select a bed number", "error");
+
+      if (!studentId || isNaN(studentId) || studentId <= 0 || UNENROLLED_ADMISSION_IDS.has(studentId)) {
+        showToast("Please select a registered, enrolled student from the dropdown list. Hostel beds can only be allocated to students enrolled in the Student Master database.", "warning");
         return;
       }
 
-      handleSaveAllocation(form);
+      // Check if student already has an active allocation
+      if (modal.mode !== "edit") {
+        const alreadyAllocated = allocations.some(
+          (a) => (a.status || "").toLowerCase() === "active" && (
+            (studentId && Number(a.studentId) === Number(studentId)) ||
+            (form.admissionNo && String(a.admissionNo).trim().toLowerCase() === String(form.admissionNo).trim().toLowerCase())
+          )
+        );
+        if (alreadyAllocated) {
+          showToast("This student already has an active hostel allocation.", "warning");
+          return;
+        }
+      }
+
+      if (!form.blockName) {
+        showToast("Please select a hostel block.", "error");
+        return;
+      }
+      if (!form.room) {
+        showToast("Please select a room.", "error");
+        return;
+      }
+      if (!form.bed) {
+        showToast("Please select a bed number.", "error");
+        return;
+      }
+
+      const selBed = availableBeds.find((b) => b.bedNumber === form.bed || String(b.id) === String(form.bedId));
+      let bedId = selBed && !selBed.isSynthetic && !isNaN(Number(selBed.id)) ? Number(selBed.id) : (Number(form.bedId) || null);
+      if (selBed && (selBed.bedStatus || "").toLowerCase() === "occupied" && modal.mode !== "edit") {
+        showToast("The selected bed is already occupied. Please select an available bed.", "warning");
+        return;
+      }
+
+      handleSaveAllocation({
+        ...form,
+        studentId,
+        bedId,
+      });
     };
 
     return (
@@ -6700,12 +7632,13 @@ export default function HostelPage() {
                 <input
                   type="text"
                   required
-                  placeholder="Type student name or reg no (e.g. 's' or 'b')..."
+                  placeholder="Select student or type name / reg no..."
                   value={studentSearch}
                   onFocus={() => setIsStudentDropdownOpen(true)}
+                  onClick={() => setIsStudentDropdownOpen(true)}
                   onChange={(e) => {
                     setStudentSearch(e.target.value);
-                    setForm({ ...form, studentName: e.target.value });
+                    setForm({ ...form, studentName: e.target.value, studentId: null });
                     setIsStudentDropdownOpen(true);
                   }}
                   onBlur={() => {
@@ -6714,39 +7647,130 @@ export default function HostelPage() {
                   className="cms-alloc-modal-input"
                   style={{ paddingRight: 36 }}
                 />
-                <div className="cms-alloc-modal-chevron">
+                <div
+                  className="cms-alloc-modal-chevron"
+                  onClick={() => setIsStudentDropdownOpen((prev) => !prev)}
+                  style={{ cursor: "pointer" }}
+                >
                   <ChevronDown size={16} />
                 </div>
               </div>
 
               {isStudentDropdownOpen && (
-                <div className="cms-alloc-modal-dropdown">
+                <div className="cms-alloc-modal-dropdown" style={{ maxHeight: 260, overflowY: "auto", zIndex: 1000 }}>
                   {filteredCandidates.length === 0 ? (
-                    <div className="cms-alloc-modal-dropdown-empty">
+                    <div className="cms-alloc-modal-dropdown-empty" style={{ padding: "12px", color: "var(--cms-muted)", fontSize: 13, textAlign: "center" }}>
                       No matching student found. Type name to assign.
                     </div>
                   ) : (
-                    filteredCandidates.map((st) => (
-                      <div
-                        key={st.id}
-                        onMouseDown={() => {
-                          setForm({
-                            ...form,
-                            studentId: st.studentId,
-                            studentName: st.name,
-                            admissionNo: st.admissionNo,
-                          });
-                          setStudentSearch(st.name);
-                          setIsStudentDropdownOpen(false);
-                        }}
-                        className="cms-alloc-modal-dropdown-item"
-                      >
-                        <span style={{ fontWeight: 600, color: "var(--cms-text)", fontSize: 12.5 }}>{st.name}</span>
-                        <span style={{ color: "var(--cms-muted)", fontSize: 11.5 }}>
-                          {st.admissionNo} {st.className ? `• ${st.className}` : ""}
-                        </span>
-                      </div>
-                    ))
+                    filteredCandidates.map((st, idx) => {
+                      const blockMatch = form.blockName && st.preferredBlockName && (st.preferredBlockName.toLowerCase() === form.blockName.toLowerCase());
+                      const isCandidateValid = st.isEnrolled && st.studentId && !UNENROLLED_ADMISSION_IDS.has(Number(st.studentId));
+                      return (
+                        <div
+                          key={st.key || `st-cand-${st.id || st.admissionNo || idx}`}
+                          onMouseDown={() => {
+                            if (!isCandidateValid) {
+                              showToast("This applicant has not been admitted/enrolled into the Student Master yet. Hostel rooms can only be allocated to enrolled students. Please approve their admission in Admissions first.", "warning");
+                              return;
+                            }
+                            let nextBlock = form.blockName;
+                            let nextHostelId = form.hostelId;
+                            let nextBlockCode = form.blockCode;
+                            if (st.preferredBlockName || st.hostelId) {
+                              const matchedBlk = blocks.find((b) =>
+                                (st.preferredBlockName && (b.name?.toLowerCase() === st.preferredBlockName?.toLowerCase() || b.code?.toLowerCase() === st.preferredBlockName?.toLowerCase())) ||
+                                (st.hostelId && String(b.id) === String(st.hostelId))
+                              );
+                              if (matchedBlk && !form.blockName) {
+                                nextBlock = matchedBlk.name;
+                                nextBlockCode = matchedBlk.code;
+                                nextHostelId = matchedBlk.id;
+                              }
+                            }
+
+                            setForm({
+                              ...form,
+                              studentId: Number(st.studentId),
+                              studentName: st.name,
+                              admissionNo: st.admissionNo,
+                              ...(nextBlock ? { blockName: nextBlock, blockCode: nextBlockCode, hostelId: nextHostelId } : {}),
+                            });
+                            setStudentSearch(st.name);
+                            setIsStudentDropdownOpen(false);
+                          }}
+                          className="cms-alloc-modal-dropdown-item"
+                          style={{
+                            padding: "8px 12px",
+                            cursor: isCandidateValid ? "pointer" : "not-allowed",
+                            opacity: isCandidateValid ? 1 : 0.72,
+                            background: isCandidateValid ? "transparent" : "var(--cms-bg-subtle, rgba(0,0,0,0.02))",
+                            borderBottom: "1px solid var(--cms-border-subtle, #f1f5f9)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 3,
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            <span style={{ fontWeight: 600, color: isCandidateValid ? "var(--cms-text)" : "var(--cms-muted)", fontSize: 13 }}>
+                              {st.name}
+                            </span>
+                            {st.isHostelOpted && isCandidateValid ? (
+                              <span
+                                style={{
+                                  background: blockMatch ? "rgba(16, 185, 129, 0.2)" : "rgba(16, 185, 129, 0.12)",
+                                  color: "#059669",
+                                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                                  padding: "1px 7px",
+                                  borderRadius: 12,
+                                  fontSize: 10.5,
+                                  fontWeight: 600,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {st.preferredBlockName ? `Hostel: ${st.preferredBlockName}` : "Hostel Opted"}
+                              </span>
+                            ) : isCandidateValid ? (
+                              <span
+                                style={{
+                                  background: "rgba(148, 163, 184, 0.12)",
+                                  color: "#64748b",
+                                  padding: "1px 6px",
+                                  borderRadius: 12,
+                                  fontSize: 10,
+                                }}
+                              >
+                                Enrolled
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  background: "rgba(245, 158, 11, 0.15)",
+                                  color: "#b45309",
+                                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                                  padding: "1px 6px",
+                                  borderRadius: 12,
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                Pending Admission (Not Enrolled)
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--cms-muted)", fontSize: 11.5, flexWrap: "wrap" }}>
+                            <span>{st.admissionNo || "No Adm No"}</span>
+                            {st.className ? <span>• {st.className}</span> : null}
+                            {st.preferredRoomType ? <span>• Pref: {st.preferredRoomType}</span> : null}
+                            {!isCandidateValid && (
+                              <span style={{ color: "#d97706", fontSize: 10.5, fontWeight: 500 }}>
+                                • Must be enrolled before bed allocation
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -6778,8 +7802,8 @@ export default function HostelPage() {
                   style={{ color: form.blockName ? "var(--cms-text)" : "var(--cms-muted)" }}
                 >
                   <option value="">Select Hostel Block</option>
-                  {blocks.map((b) => (
-                    <option key={b.id} value={b.name}>
+                  {blocks.map((b, idx) => (
+                    <option key={b.id || b.code || b.name || `blk-${idx}`} value={b.name}>
                       {b.name}
                     </option>
                   ))}
@@ -6803,10 +7827,10 @@ export default function HostelPage() {
                     value={form.room}
                     onChange={(e) => {
                       const selRoomNo = e.target.value;
-                      const selRoom = availableRooms.find(r => r.roomNo === selRoomNo || `Room #${r.roomNo}` === selRoomNo);
+                      const selRoom = availableRooms.find(r => r.roomNo === selRoomNo || `Room #${r.roomNo}` === selRoomNo || String(r.id) === String(selRoomNo));
                       setForm({
                         ...form,
-                        room: selRoomNo,
+                        room: selRoom ? selRoom.roomNo : selRoomNo,
                         roomId: selRoom ? selRoom.id : form.roomId,
                         bed: "",
                         bedId: null,
@@ -6820,8 +7844,8 @@ export default function HostelPage() {
                     ) : (
                       <>
                         <option value="">Select Room...</option>
-                        {availableRooms.map((rm) => (
-                          <option key={rm.id || rm.roomNo} value={rm.roomNo}>
+                        {availableRooms.map((rm, idx) => (
+                          <option key={rm.id || rm.roomNo || `rm-${idx}`} value={rm.roomNo}>
                             Room #{rm.roomNo} {rm.type ? `(${rm.type})` : ""}
                           </option>
                         ))}
@@ -6845,22 +7869,30 @@ export default function HostelPage() {
                     value={form.bed}
                     onChange={(e) => {
                       const selBedNum = e.target.value;
-                      const bd = availableBeds.find(b => b.bedNumber === selBedNum);
+                      const bd = availableBeds.find(b => b.bedNumber === selBedNum || String(b.id) === String(selBedNum));
                       setForm({
                         ...form,
-                        bed: selBedNum,
+                        bed: bd ? bd.bedNumber : selBedNum,
                         bedId: bd ? bd.id : null,
                       });
                     }}
                     className="cms-alloc-modal-select"
                     style={{ color: form.bed ? "var(--cms-text)" : "var(--cms-muted)" }}
                   >
-                    <option value="">Select Bed Number...</option>
-                    {availableBeds.map((bd) => (
-                      <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
-                        {bd.bedNumber} ({bd.bedStatus || "Available"})
-                      </option>
-                    ))}
+                    {!form.room ? (
+                      <option value="">Select Room first...</option>
+                    ) : availableBeds.length === 0 ? (
+                      <option value="" disabled>No available beds registered for this room</option>
+                    ) : (
+                      <>
+                        <option value="">Select Bed Number...</option>
+                        {availableBeds.map((bd, idx) => (
+                          <option key={bd.id || bd.bedNumber || `bd-${idx}`} value={bd.bedNumber}>
+                            {bd.bedNumber} ({bd.bedStatus || "Available"})
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="cms-alloc-modal-chevron">
                     <ChevronDown size={16} />
@@ -6904,8 +7936,8 @@ export default function HostelPage() {
     );
   };
 
-  // Vacate Bed Modal
-  const VacateModal = () => {
+// Vacate Bed Modal
+function VacateModal({ modal, closeModal, handleVacateAllocation }) {
     const alloc = modal.data;
     const [reason, setReason] = useState("Switched to Day Scholar");
 
@@ -6949,11 +7981,11 @@ export default function HostelPage() {
     );
   };
 
-  // Outpass Modal (Screenshot 4 - Theme-based & Exact Fields Only)
-  const OutpassModal = () => {
+// Outpass Modal (Screenshot 4 - Theme-based & Exact Fields Only)
+function OutpassModal({ modal, closeModal, allocations, handleSaveOutpass, showToast }) {
     const isView = modal.mode === "view";
     const [selectedStudentId, setSelectedStudentId] = useState(
-      modal.data?.admissionNo || ""
+      modal.data?.studentId ? String(modal.data.studentId) : (modal.data?.admissionNo || "")
     );
     const [outpassCategory, setOutpassCategory] = useState(
       modal.data?.outpassType || modal.data?.requestType || "Local Outpass (Same Day)"
@@ -6966,12 +7998,12 @@ export default function HostelPage() {
     );
     const [reason, setReason] = useState(modal.data?.reason || "");
 
-    // Resident candidates for student dropdown
+    // Resident candidates for student dropdown - strictly active allocations with valid studentId
     const studentCandidates = useMemo(() => {
       const map = new Map();
       allocations.forEach((a) => {
-        if (a.status === "Active") {
-          map.set(a.admissionNo || a.id, {
+        if (a.status === "Active" && a.studentId) {
+          map.set(String(a.studentId), {
             id: a.id,
             allocationId: a.id,
             studentId: a.studentId,
@@ -6983,6 +8015,7 @@ export default function HostelPage() {
             roomId: a.roomId,
             bed: a.bed,
             bedId: a.bedId,
+            wardenAssignmentId: a.wardenAssignmentId,
           });
         }
       });
@@ -6991,18 +8024,18 @@ export default function HostelPage() {
 
     const handleSubmit = (e) => {
       e.preventDefault();
+      if (!selectedStudentId) {
+        showToast("Please select a registered resident student", "error");
+        return;
+      }
       const studentObj = studentCandidates.find(
-        (s) => s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId)
-      ) || studentCandidates[0] || {
-        name: modal.data?.studentName || "Resident Student",
-        admissionNo: selectedStudentId || "ADM-2026-101",
-        blockName: blocks[0]?.name || "Hostel Block A",
-        room: "101",
-        hostelId: blocks[0]?.id || 1,
-        roomId: rooms[0]?.id || 1,
-        bedId: 1,
-        studentId: 1,
-      };
+        (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId)
+      );
+
+      if (!studentObj) {
+        showToast("Please select an active resident hosteller.", "error");
+        return;
+      }
 
       handleSaveOutpass({
         studentId: studentObj.studentId,
@@ -7014,12 +8047,14 @@ export default function HostelPage() {
         roomNo: studentObj.room,
         roomNumber: studentObj.room,
         bedId: studentObj.bedId,
+        wardenAssignmentId: studentObj.wardenAssignmentId,
         outpassType: outpassCategory,
         requestType: outpassCategory,
-        departureDate: departureDateTime || new Date().toISOString().split("T")[0],
-        outDate: departureDateTime || new Date().toISOString().split("T")[0],
-        returnDate: returnDateTime || new Date().toISOString().split("T")[0],
-        reason: reason,
+        departureDate: departureDateTime || new Date().toISOString().slice(0, 16),
+        outDate: departureDateTime || new Date().toISOString().slice(0, 16),
+        returnDate: returnDateTime || new Date(Date.now() + 14400000).toISOString().slice(0, 16),
+        reason: reason || "Outpass permission request",
+        destination: "City",
       });
     };
 
@@ -7046,8 +8081,8 @@ export default function HostelPage() {
                 >
                   <option value="">Select Student...</option>
                   {studentCandidates.map((st) => (
-                    <option key={st.admissionNo} value={st.admissionNo}>
-                      {st.name} ({st.admissionNo})
+                    <option key={st.studentId} value={String(st.studentId)}>
+                      {st.name} ({st.admissionNo || `ID: ${st.studentId}`}) — {st.blockName || ""} {st.room ? `Room ${st.room}` : ""}
                     </option>
                   ))}
                 </select>
@@ -7151,10 +8186,19 @@ export default function HostelPage() {
     );
   };
 
-  const TransferModal = () => {
+function TransferModal({
+  modal,
+  closeModal,
+  blocks,
+  rooms,
+  beds,
+  allocations,
+  handleSaveTransfer,
+  showToast,
+}) {
     const isView = modal.mode === "view";
     const [selectedStudentId, setSelectedStudentId] = useState(
-      modal.data?.admissionNo || ""
+      modal.data?.studentId ? String(modal.data.studentId) : (modal.data?.admissionNo || "")
     );
     const [actionType, setActionType] = useState(
       modal.data?.actionType || modal.data?.requestType || "Room Transfer (Change Room/Block)"
@@ -7177,8 +8221,8 @@ export default function HostelPage() {
     const residentStudents = useMemo(() => {
       const map = new Map();
       allocations.forEach((a) => {
-        if (a.status !== "Vacated") {
-          map.set(a.admissionNo || a.id, {
+        if (a.status === "Active" && a.studentId) {
+          map.set(String(a.studentId), {
             id: a.id,
             allocationId: a.id,
             studentId: a.studentId,
@@ -7199,7 +8243,7 @@ export default function HostelPage() {
     // Destination block resolution
     const destBlockObj = useMemo(() => {
       return blocks.find((b) => b.name === destinationBlock || String(b.id) === String(destinationBlock)) || blocks[0] || null;
-    }, [destinationBlock]);
+    }, [destinationBlock, blocks]);
 
     // Destination room options
     const destRooms = useMemo(() => {
@@ -7207,7 +8251,7 @@ export default function HostelPage() {
       return rooms.filter(
         (r) => r.blockName === destBlockObj.name || r.block === destBlockObj.name || String(r.hostelId) === String(destBlockObj.id)
       );
-    }, [destBlockObj]);
+    }, [destBlockObj, rooms]);
 
     // Destination room resolution
     const destRoomObj = useMemo(() => {
@@ -7216,36 +8260,43 @@ export default function HostelPage() {
       ) || destRooms[0] || null;
     }, [destRooms, destinationRoom]);
 
-    // Destination available beds
+    // Destination available beds (only real registered beds in database)
     const destBeds = useMemo(() => {
       if (!destRoomObj) return [];
       const avail = beds.filter(
-        (b) => String(b.roomId) === String(destRoomObj.id) && (b.bedStatus === "Available" || b.status === "Available")
+        (b) => String(b.roomId) === String(destRoomObj.id) && ((b.bedStatus || "").toLowerCase() === "available" || (!b.bedStatus && (b.status || "").toLowerCase() === "active"))
       );
-      if (avail.length > 0) return avail;
-      const cap = destRoomObj.capacity || 2;
-      return Array.from({ length: cap }, (_, i) => ({
-        id: i + 1,
-        bedNumber: `BED-${i + 1}`,
-        bedStatus: "Available",
-      }));
-    }, [destRoomObj]);
+      return avail;
+    }, [beds, destRoomObj]);
 
     const handleSubmit = (e) => {
       e.preventDefault();
       const currentStudent = residentStudents.find(
-        (s) => s.admissionNo === selectedStudentId || String(s.allocationId) === String(selectedStudentId)
-      ) || residentStudents[0] || {
-        name: modal.data?.studentName || "Resident Student",
-        admissionNo: selectedStudentId || "ADM-2026-101",
-        blockName: blocks[0]?.name || "Hostel Block A",
-        room: "101",
-        hostelId: blocks[0]?.id || 1,
-        roomId: rooms[0]?.id || 1,
-        bedId: 1,
-        allocationId: 1,
-        studentId: 1,
-      };
+        (s) => String(s.studentId) === String(selectedStudentId) || s.admissionNo === selectedStudentId
+      );
+
+      if (!currentStudent) {
+        showToast("Please select an active resident student.", "warning");
+        return;
+      }
+
+      let toBedId = null;
+      if (!isVacate) {
+        if (!destBlockObj) {
+          showToast("Please select a destination hostel block.", "warning");
+          return;
+        }
+        if (!destRoomObj) {
+          showToast("Please select a destination room.", "warning");
+          return;
+        }
+        const selBed = destBeds.find((b) => b.bedNumber === destinationBed);
+        toBedId = selBed ? Number(selBed.id) : null;
+        if (!toBedId) {
+          showToast("Please select an available destination bed.", "warning");
+          return;
+        }
+      }
 
       handleSaveTransfer({
         allocationId: currentStudent.allocationId,
@@ -7263,8 +8314,8 @@ export default function HostelPage() {
         toHostelId: destBlockObj?.id || null,
         destinationRoom: destRoomObj ? `Room #${destRoomObj.roomNo}` : destinationRoom,
         toRoomId: destRoomObj?.id || null,
-        destinationBed: destinationBed || destBeds[0]?.bedNumber || "BED-1",
-        toBedId: destBeds.find(b => b.bedNumber === destinationBed)?.id || null,
+        destinationBed: destinationBed,
+        toBedId,
         reason,
       });
     };
@@ -7292,8 +8343,8 @@ export default function HostelPage() {
                 >
                   <option value="">Select Resident Student...</option>
                   {residentStudents.map((st) => (
-                    <option key={st.admissionNo || st.id} value={st.admissionNo}>
-                      {st.name} ({st.admissionNo} - {st.blockName} #{st.room})
+                    <option key={st.studentId} value={String(st.studentId)}>
+                      {st.name} ({st.admissionNo || `ID: ${st.studentId}`} - {st.blockName} #{st.room})
                     </option>
                   ))}
                 </select>
@@ -7397,12 +8448,20 @@ export default function HostelPage() {
                       onChange={(e) => setDestinationBed(e.target.value)}
                       className="cms-alloc-modal-select"
                     >
-                      <option value="">Select Bed Number...</option>
-                      {destBeds.map((bd) => (
-                        <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
-                          {bd.bedNumber} ({bd.bedStatus || "Available"})
-                        </option>
-                      ))}
+                      {!destRoomObj ? (
+                        <option value="">Select Room first...</option>
+                      ) : destBeds.length === 0 ? (
+                        <option value="">No beds available in this room</option>
+                      ) : (
+                        <>
+                          <option value="">Select Bed Number...</option>
+                          {destBeds.map((bd) => (
+                            <option key={bd.id || bd.bedNumber} value={bd.bedNumber}>
+                              {bd.bedNumber} ({bd.bedStatus || "Available"})
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
                     <div className="cms-alloc-modal-chevron">
                       <ChevronDown size={16} />
@@ -7448,80 +8507,4 @@ export default function HostelPage() {
         </form>
       </Modal>
     );
-  };
-
-  // ═════════════════════════════════════════════════════════════════════
-  // MAIN RENDER WITH DASHBOARDLAYOUT
-  // ═════════════════════════════════════════════════════════════════════
-  return (
-    <DashboardLayout
-      title="Hostel Management"
-      subtitle="Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
-      breadcrumb={["Hostel Management"]}
-    >
-      <div className="cms-hostel-page">
-        {/* Toast Notification */}
-        {toast.message && (
-          <Toast
-            message={toast.message}
-            type={toast.type}
-            onClose={() => setToast({ message: "", type: "success" })}
-          />
-        )}
-
-        {/* 4 Major Horizontal Navigation Tabs */}
-        <div className="cms-hostel-tabs">
-          {majorTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeMajorTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className={`cms-hostel-tab ${isActive ? "is-active" : ""}`}
-                onClick={() => {
-                  setActiveMajorTab(tab.id);
-                  setSearchQuery("");
-                }}
-              >
-                <Icon size={16} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Active Tab Screen */}
-        {activeMajorTab === "dashboard" && renderDashboard()}
-        {activeMajorTab === "setup" && renderSetupMasters()}
-        {activeMajorTab === "students" && renderStudentManagement()}
-        {activeMajorTab === "reports" && renderReportsSection()}
-
-        {/* Global Modals */}
-        {modal.isOpen && modal.type === "block" && <BlockModal />}
-        {modal.isOpen && (modal.type === "roomType" || (modal.type === "category" && modal.mode === "add")) && (
-          <RoomSharingConfigModal />
-        )}
-        {modal.isOpen && modal.type === "category" && modal.mode !== "add" && <CategoryModal />}
-        {modal.isOpen && modal.type === "room" && <RoomModal />}
-        {modal.isOpen && modal.type === "warden" && <WardenModal />}
-        {modal.isOpen && modal.type === "allocation" && <AllocationModal />}
-        {modal.isOpen && modal.type === "vacate" && <VacateModal />}
-        {modal.isOpen && modal.type === "outpass" && <OutpassModal />}
-        {modal.isOpen && modal.type === "transfer" && <TransferModal />}
-
-        {/* Global Confirm Dialog */}
-        {confirmDialog.isOpen && (
-          <ConfirmDialog
-            title={confirmDialog.title}
-            message={confirmDialog.message}
-            danger={confirmDialog.danger}
-            confirmLabel={confirmDialog.confirmLabel}
-            onCancel={closeConfirm}
-            onConfirm={confirmDialog.onConfirm}
-          />
-        )}
-      </div>
-    </DashboardLayout>
-  );
-}
+  }

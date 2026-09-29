@@ -21,7 +21,7 @@ public class FeeController : ControllerBase
 
     /// <summary>List active and inactive fee types for Fee Setup.</summary>
     [HttpGet("types")]
-    public async Task<IActionResult> GetFeeTypes() => Ok(await _service.GetFeeTypesAsync());
+    public async Task<IActionResult> GetFeeTypes([FromQuery] int? campusId, [FromQuery] int? boardId, [FromQuery] int? academicYearId) => Ok(await _service.GetFeeTypesAsync(campusId, boardId, academicYearId));
 
     /// <summary>Get one fee type by ID.</summary>
     [HttpGet("types/{id:int}")]
@@ -42,7 +42,7 @@ public class FeeController : ControllerBase
 
     /// <summary>List configured fee structures with configured fee types and total fee.</summary>
     [HttpGet("structures")]
-    public async Task<IActionResult> GetFeeStructures() => Ok(await _service.GetFeeStructuresAsync());
+    public async Task<IActionResult> GetFeeStructures([FromQuery] int? campusId) => Ok(await _service.GetFeeStructuresAsync(campusId));
 
     /// <summary>Get one fee structure and all configured fee types.</summary>
     [HttpGet("structures/{id:int}")]
@@ -79,7 +79,7 @@ public class FeeController : ControllerBase
 
     /// <summary>List scholarship and concession schemes.</summary>
     [HttpGet("scholarships")]
-    public async Task<IActionResult> GetScholarships() => Ok(await _service.GetScholarshipsAsync());
+    public async Task<IActionResult> GetScholarships([FromQuery] int? campusId, [FromQuery] int? boardId, [FromQuery] int? academicYearId) => Ok(await _service.GetScholarshipsAsync(campusId, boardId, academicYearId));
 
     /// <summary>Get one scholarship scheme.</summary>
     [HttpGet("scholarships/{id:int}")]
@@ -116,8 +116,8 @@ public class FeeController : ControllerBase
 
     /// <summary>Student Fee Ledger with search and screen filters.</summary>
     [HttpGet("ledger")]
-    public async Task<IActionResult> GetLedger([FromQuery] int? academicYearId, [FromQuery] int? groupId, [FromQuery] int? sectionId, [FromQuery] string? paymentPlan, [FromQuery] string? status, [FromQuery] string? search)
-        => Ok(await _service.GetStudentFeeLedgerAsync(academicYearId, groupId, sectionId, paymentPlan, status, search));
+    public async Task<IActionResult> GetLedger([FromQuery] int? campusId, [FromQuery] int? academicYearId, [FromQuery] int? groupId, [FromQuery] int? sectionId, [FromQuery] string? paymentPlan, [FromQuery] string? status, [FromQuery] string? search, [FromQuery] int? boardId)
+        => Ok(await _service.GetStudentFeeLedgerAsync(campusId, academicYearId, groupId, sectionId, paymentPlan, status, search, boardId));
 
     /// <summary>Compatibility route for student-specific fee ledger.</summary>
     [HttpGet("students/{studentId:int}/fee-ledger")]
@@ -129,18 +129,18 @@ public class FeeController : ControllerBase
     public async Task<IActionResult> ApplyConcession(ApplyFeeConcessionRequest request) => Ok(await _service.ApplyFeeConcessionAsync(request));
 
     // ---------------- Payment Plan / Schedules ----------------
-    // <summary>Create a Full Payment or Fee Schedule Payment plan for a student fee.</summary>
+    // Create a Full Payment or Fee Schedule Payment plan for a student fee.
     // [HttpPost("payment-plans")]
-    //public async Task<IActionResult> CreatePaymentPlan(CreatePaymentPlanRequest request) => Ok(await _service.CreatePaymentPlanAsync(request));
+    // public async Task<IActionResult> CreatePaymentPlan(CreatePaymentPlanRequest request) => Ok(await _service.CreatePaymentPlanAsync(request));
 
-    // <summary>Add one fee schedule installment and due date.</summary>
-    //[HttpPost("payment-plans/{id:int}/installments")]
-    //public async Task<IActionResult> AddInstallment(int id, CreateInstallmentRequest request) => Ok(await _service.AddPaymentPlanInstallmentAsync(id, request));
+    // Add one fee schedule installment and due date.
+    // [HttpPost("payment-plans/{id:int}/installments")]
+    // public async Task<IActionResult> AddInstallment(int id, CreateInstallmentRequest request) => Ok(await _service.AddPaymentPlanInstallmentAsync(id, request));
 
     // ---------------- Collection ----------------
     /// <summary>List student accounts with payable, paid, balance, next due and status.</summary>
     [HttpGet("collection")]
-    public async Task<IActionResult> GetCollection([FromQuery] string? search) => Ok(await _service.GetFeeCollectionAsync(search));
+    public async Task<IActionResult> GetCollection([FromQuery] int? campusId, [FromQuery] string? search, [FromQuery] int? boardId, [FromQuery] int? academicYearId) => Ok(await _service.GetFeeCollectionAsync(campusId, search, boardId, academicYearId));
 
     /// <summary>Collect full or partial payment against a selected fee schedule.</summary>
     [HttpPost("collect")]
@@ -166,17 +166,17 @@ public class FeeController : ControllerBase
     // ---------------- Due / Dashboard / Reports ----------------
     /// <summary>List students and fee schedules with outstanding fees.</summary>
     [HttpGet("due")]
-    public async Task<IActionResult> GetDue() => Ok(await _service.GetDueAsync());
+    public async Task<IActionResult> GetDue([FromQuery] int? campusId, [FromQuery] int? boardId, [FromQuery] int? academicYearId) => Ok(await _service.GetDueAsync(campusId, boardId, academicYearId));
 
     /// <summary>Fee dashboard data for overview cards, upcoming schedules, recent payments and group-wise collection charts.</summary>
     [HttpGet("dashboard")]
-    public async Task<IActionResult> GetDashboard() => Ok(await _service.GetDashboardAsync());
+    public async Task<IActionResult> GetDashboard([FromQuery] int? campusId, [FromQuery] int? boardId, [FromQuery] int? academicYearId) => Ok(await _service.GetDashboardAsync(campusId, boardId, academicYearId));
 
     /// <summary>Return daily fee collection report.</summary>
     [HttpGet("reports/daily")]
-    public async Task<IActionResult> DailyReport([FromQuery] DateTime? date) => Ok(await _service.GetDailyReportAsync(date));
+    public async Task<IActionResult> DailyReport([FromQuery] int? campusId, [FromQuery] DateTime? date) => Ok(await _service.GetDailyReportAsync(campusId, date));
 
     /// <summary>Return monthly fee collection report.</summary>
     [HttpGet("reports/monthly")]
-    public async Task<IActionResult> MonthlyReport([FromQuery] int? year, [FromQuery] int? month) => Ok(await _service.GetMonthlyReportAsync(year, month));
+    public async Task<IActionResult> MonthlyReport([FromQuery] int? campusId, [FromQuery] int? year, [FromQuery] int? month) => Ok(await _service.GetMonthlyReportAsync(campusId, year, month));
 }

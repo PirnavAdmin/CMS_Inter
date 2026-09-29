@@ -42,9 +42,26 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("dashboard-stats")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(StaffDashboardStatsDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetDashboardStats([FromQuery] int? boardId = null)
+        public async Task<IActionResult> GetDashboardStats([FromQuery] int? boardId = null, [FromQuery] int? campusId = null)
         {
-            var stats = await _staffService.GetDashboardStatsAsync(boardId);
+            if (!campusId.HasValue || campusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    campusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        campusId = claimCampusId;
+                    }
+                }
+            }
+
+            var stats = await _staffService.GetDashboardStatsAsync(boardId, campusId);
             return Ok(stats);
         }
 
@@ -57,6 +74,23 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(PagedResult<StaffResponseDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetStaff([FromQuery] StaffQueryParams queryParams)
         {
+            if (!queryParams.CampusId.HasValue || queryParams.CampusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    queryParams.CampusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        queryParams.CampusId = claimCampusId;
+                    }
+                }
+            }
+
             var result = await _staffService.GetPagedStaffAsync(queryParams);
             return Ok(result);
         }
@@ -68,10 +102,29 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("next-employee-id")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetNextEmployeeId([FromQuery] string? staffType = "Teaching", [FromQuery] string? facultyType = null)
+        public async Task<IActionResult> GetNextEmployeeId([FromQuery] string? staffType = "Teaching", [FromQuery] string? facultyType = null, [FromQuery] int? campusId = null)
         {
+            if (!campusId.HasValue || campusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    campusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        campusId = claimCampusId;
+                    }
+                }
+            }
+
+            var finalCampusId = campusId ?? 1;
+
             var type = !string.IsNullOrWhiteSpace(facultyType) ? facultyType : (staffType ?? "Teaching");
-            var nextId = await _staffService.GetNextEmployeeIdAsync(type);
+            var nextId = await _staffService.GetNextEmployeeIdAsync(type, finalCampusId);
             return Ok(new { nextEmployeeId = nextId, employeeId = nextId, staffType = type });
         }
 
@@ -82,10 +135,27 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("dropdown")]
         [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<StaffDropdownDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetStaffDropdown([FromQuery] string? staffType = null, [FromQuery] string? facultyType = null)
+        public async Task<IActionResult> GetStaffDropdown([FromQuery] string? staffType = null, [FromQuery] string? facultyType = null, [FromQuery] int? campusId = null)
         {
+            if (!campusId.HasValue || campusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    campusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        campusId = claimCampusId;
+                    }
+                }
+            }
+
             var type = !string.IsNullOrWhiteSpace(facultyType) ? facultyType : staffType;
-            var result = await _staffService.GetStaffDropdownAsync(type);
+            var result = await _staffService.GetStaffDropdownAsync(type, campusId);
             return Ok(result);
         }
 
@@ -333,7 +403,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(StaffImportResultDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> ImportExcel([FromForm] StaffImportExcelRequestDto dto)
         {
-            var result = await _staffService.ImportStaffFromExcelAsync(dto.File, dto.DefaultStaffType);
+            var result = await _staffService.ImportStaffFromExcelAsync(dto.File, dto.DefaultStaffType, dto.CampusId);
             return Ok(result);
         }
 

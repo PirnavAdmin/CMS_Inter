@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Upload } from "lucide-react";
+import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./StudentManagementPage.css";
 
 export const pageConfig = { title: "Student Management", rows: [], fields: [] };
@@ -48,17 +48,17 @@ const selectOptions = (items, idKeys, labelKeys) => list(items).map((item) => ({
 
 export default function StudentManagementPage() {
   const location = useLocation();
-  const savedListState = location.state?.studentManagement || {};
-  const restoringFiltersRef = useRef(Boolean(savedListState.filters));
-  const preservingPageRef = useRef(Boolean(savedListState.page));
+  const restoredState = location.state?.studentManagement;
+  const restoringFilters = useRef(Boolean(restoredState));
   const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
-  const [query, setQuery] = useState(savedListState.query || "");
-  const [filters, setFilters] = useState({
-    level: savedListState.filters?.level || "",
-    group: savedListState.filters?.group || "",
-    programme: savedListState.filters?.programme || "",
-    section: savedListState.filters?.section || "",
-    status: savedListState.filters?.status || "",
+  const { selectedCampusId } = useCampusContext();
+  const [query, setQuery] = useState(restoredState?.query ?? "");
+  const [filters, setFilters] = useState(restoredState?.filters ?? {
+    level: "",
+    group: "",
+    programme: "",
+    section: "",
+    status: "",
   });
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -84,15 +84,20 @@ export default function StudentManagementPage() {
   const [groupOptions, setGroupOptions] = useState([]);
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
+  const [page, setPage] = useState(restoredState?.page ?? 1);
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      restoringFiltersRef.current = false;
-      preservingPageRef.current = false;
-    }, 0);
+    const timer = window.setTimeout(() => { restoringFilters.current = false; }, 0);
     return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
     let active = true;
+    setStudents([]);
+    setLoading(true);
+    setError("");
+    if (!selectedCampusId || !selectedBoardId || !selectedAcademicYearId) {
+      setLoading(false);
+      return () => { active = false; };
+    }
     apiClient
       .get(apiEndpoints.students.getAll)
       .then(({ data }) => {
@@ -133,6 +138,7 @@ export default function StudentManagementPage() {
               ?? byName.get(normalizedName(student.name));
             const yearId = value(student, "academicYearId", "AcademicYearId") ?? value(admission, "academicYearId", "AcademicYearId");
             const boardId = value(student, "boardId", "BoardId") ?? value(admission, "boardId", "BoardId");
+            const campusId = value(student, "campusId", "CampusId") ?? value(admission, "campusId", "CampusId");
             const levelId = value(student, "academicLevelId", "AcademicLevelId") ?? value(admission, "academicLevelId", "AcademicLevelId");
             const groupId = value(student, "groupId", "GroupId") ?? value(admission, "groupId", "GroupId");
             const programId = value(student, "programId", "ProgramId", "programmeId", "ProgrammeId") ?? value(admission, "programId", "ProgramId", "programmeId", "ProgrammeId");
@@ -147,6 +153,7 @@ export default function StudentManagementPage() {
             return {
               ...student,
               boardId,
+              campusId,
               academicYearId: yearId,
               academicLevelId: levelId,
               groupId,
@@ -166,7 +173,10 @@ export default function StudentManagementPage() {
               isEligibleForStudentManagement: admissionApproved && hasSection && hasRollNumber,
             };
           });
-          const visibleStudents = enriched.filter((student) => student.isEligibleForStudentManagement);
+          const visibleStudents = enriched.filter((student) => student.isEligibleForStudentManagement
+            && String(student.campusId ?? "") === String(selectedCampusId)
+            && String(student.boardId ?? "") === String(selectedBoardId)
+            && String(student.academicYearId ?? "") === String(selectedAcademicYearId));
           if (active) setStudents(visibleStudents);
         });
       })
@@ -175,9 +185,13 @@ export default function StudentManagementPage() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, [reloadKey, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
-    if (!restoringFiltersRef.current) setFilters({ level: "", group: "", programme: "", section: "", status: "" });
+    if (!restoringFilters.current) {
+      setQuery("");
+      setFilters({ level: "", group: "", programme: "", section: "", status: "" });
+      setPage(1);
+    }
     setLevelOptions([]); setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
     if (!selectedBoardId) return undefined;
     let active = true;
@@ -185,9 +199,9 @@ export default function StudentManagementPage() {
       .then((response) => active && setLevelOptions(selectOptions(response.data, ["academicLevelId", "AcademicLevelId", "id", "Id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name", "Name"])))
       .catch(() => active && setLevelOptions([]));
     return () => { active = false; };
-  }, [selectedBoardId]);
+  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
-    if (!restoringFiltersRef.current) setFilters((current) => ({ ...current, group: "", programme: "", section: "" }));
+    if (!restoringFilters.current) setFilters((current) => ({ ...current, group: "", programme: "", section: "" }));
     setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
     if (!selectedBoardId || !filters.level) return undefined;
     let active = true;
@@ -197,7 +211,7 @@ export default function StudentManagementPage() {
     return () => { active = false; };
   }, [filters.level, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
-    if (!restoringFiltersRef.current) setFilters((current) => ({ ...current, programme: "", section: "" }));
+    if (!restoringFilters.current) setFilters((current) => ({ ...current, programme: "", section: "" }));
     setProgrammeOptions([]); setSectionOptions([]);
     if (!filters.group) return undefined;
     let active = true;
@@ -207,7 +221,7 @@ export default function StudentManagementPage() {
     return () => { active = false; };
   }, [filters.group]);
   useEffect(() => {
-    if (!restoringFiltersRef.current) setFilters((current) => ({ ...current, section: "" }));
+    if (!restoringFilters.current) setFilters((current) => ({ ...current, section: "" }));
     setSectionOptions([]);
     if (!filters.programme) return undefined;
     let active = true;
@@ -221,7 +235,7 @@ export default function StudentManagementPage() {
     setCredentialGroups([]);
     setCredentialPrograms([]);
     setCredentialSections([]);
-  }, [selectedBoardId, selectedAcademicYearId]);
+  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
     setCredentialFilters((current) => ({ ...current, group: "", program: "", section: "" }));
     setCredentialGroups([]);
@@ -276,24 +290,20 @@ export default function StudentManagementPage() {
             .includes(query.toLowerCase()) &&
           (!selectedBoardId || String(student.boardId ?? "") === String(selectedBoardId)) &&
           (!selectedAcademicYearId || String(student.academicYearId ?? "") === String(selectedAcademicYearId)) &&
+          (!selectedCampusId || String(student.campusId ?? "") === String(selectedCampusId)) &&
           (!filters.level || String(student.academicLevelId ?? "") === String(filters.level)) &&
           (!filters.group || String(student.groupId ?? "") === String(filters.group)) &&
           (!filters.programme || String(student.programId ?? "") === String(filters.programme)) &&
           (!filters.section || String(student.sectionId ?? "") === String(filters.section)) &&
           (!filters.status || String(student.status || "") === filters.status),
       ),
-    [students, query, filters, selectedBoardId, selectedAcademicYearId],
+    [students, query, filters, selectedCampusId, selectedBoardId, selectedAcademicYearId],
   );
-  const [page, setPage] = useState(savedListState.page || 1);
   const pageSize = 5;
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  useEffect(() => {
-    if (preservingPageRef.current) return;
-    setPage(1);
-  }, [query, filters.level, filters.group, filters.programme, filters.section, filters.status, selectedBoardId, selectedAcademicYearId]);
-  const values = (key) => [...new Set(students.map((student) => student[key]).filter(Boolean))];
+  useEffect(() => { if (!restoringFilters.current) setPage(1); }, [query, filters.level, filters.group, filters.programme, filters.section, filters.status, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   const updateFilter = (key, selectedValue) => {
     setFilters((current) => ({
       ...current,
@@ -447,7 +457,6 @@ export default function StudentManagementPage() {
             ["Group", "group", groupOptions, !filters.level],
             ["Programme", "programme", programmeOptions, !filters.group],
             ["Section", "section", sectionOptions, !filters.programme],
-            ["Status", "status", values("status").map((item) => ({ value: item, label: item })), false],
           ].map(([label, key, options, disabled]) => (
             <label className="cms-field" key={key}>
               <span>{label}</span>
@@ -468,7 +477,7 @@ export default function StudentManagementPage() {
         <div className="student-management-search-row">
           <div className="cms-card-body student-management-toolbar">
             <label className="student-management-search">
-              <Search3DIcon size={18} />
+              <Search size={18} />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -510,7 +519,7 @@ export default function StudentManagementPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10"><div className="cms-empty">Loading approved students...</div></td></tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={10} />)
               ) : pageRows.length ? (
                 pageRows.map((s) => (
                   <tr key={s.id} onClick={() => setSelectedStudentId(String(s.id))}>
@@ -526,13 +535,44 @@ export default function StudentManagementPage() {
                       <StatusBadge value={s.status || "Pending assignment"} />
                     </td>
                     <td>
-                    <div className="student-action-buttons">
-                      <button type="button" aria-label={`Export ${s.name} PDF`} title="Export PDF" disabled={Boolean(exporting)} onClick={() => { setSelectedStudentId(String(s.id)); exportStudents("pdf", s); }}><FileText size={16} /></button>
+                      <div className="student-action-buttons">
+                        <button
+                          type="button"
+                          aria-label={`Export ${s.name} PDF`}
+                          title="Export PDF"
+                          disabled={Boolean(exporting)}
+                          onClick={() => {
+                            setSelectedStudentId(String(s.id));
+                            exportStudents("pdf", s);
+                          }}
+                        >
+                          <FileText size={16} />
+                        </button>
                         <Link to={`/dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
                           <Eye size={16} />
                         </Link>
-                        <button type="button" aria-label={`Upload photo for ${s.name}`} title="Upload or replace photo" onClick={() => { setError(""); setFileAction({ kind: "photo", student: s }); }}><ImageUp size={16} /></button>
-                        <button type="button" aria-label={`Upload documents for ${s.name}`} title="Upload documents" onClick={() => { setError(""); setFileAction({ kind: "document", student: s }); }}><Upload size={16} /></button>
+                        <button
+                          type="button"
+                          aria-label={`Upload or replace photo for ${s.name}`}
+                          title="Upload / replace photo"
+                          onClick={() => {
+                            setError("");
+                            setFileAction({ kind: "photo", student: s });
+                          }}
+                        >
+                          <ImageUp size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Upload document for ${s.name}`}
+                          title="Upload document"
+                          onClick={() => {
+                            setError("");
+                            setFileAction({ kind: "document", student: s });
+                          }}
+                        >
+                          <Upload size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>

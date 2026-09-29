@@ -56,8 +56,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = connection ?? Connection;
             var term = email?.Trim() ?? string.Empty;
 
-            const string sql = "SELECT * FROM `Users` WHERE LOWER(`Email`) = LOWER(@Email) OR `Email` = @Email LIMIT 1;";
-            var user = await conn.QueryFirstOrDefaultAsync<User>(sql, new { Email = term }, transaction);
+            var user = await conn.QueryFirstOrDefaultAsync<User>(
+                "sp_GetUserByEmail",
+                new { p_Email = term },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+
             if (user != null && user.RoleId > 0)
             {
                 user.Role = await GetRoleByIdAsync(user.RoleId, conn, transaction) ?? null!;
@@ -68,58 +72,66 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task UpdateLastLoginAsync(int userId, DateTime lastLogin, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = "UPDATE `Users` SET `LastLogin` = @LastLogin, `UpdatedAt` = @LastLogin WHERE `UserId` = @UserId;";
-            await conn.ExecuteAsync(sql, new { UserId = userId, LastLogin = lastLogin }, transaction);
+            await conn.ExecuteAsync(
+                "sp_UpdateUserLastLogin",
+                new { p_UserId = userId, p_LastLogin = lastLogin },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<User?> GetByStudentIdAsync(int studentId, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = "SELECT * FROM `Users` WHERE `StudentId` = @StudentId LIMIT 1;";
-            return await conn.QueryFirstOrDefaultAsync<User>(sql, new { StudentId = studentId }, transaction);
+            return await conn.QueryFirstOrDefaultAsync<User>(
+                "sp_GetUserByStudentId",
+                new { p_StudentId = studentId },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<User?> GetByStaffIdAsync(int staffId, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = "SELECT * FROM `Users` WHERE `StaffId` = @StaffId LIMIT 1;";
-            return await conn.QueryFirstOrDefaultAsync<User>(sql, new { StaffId = staffId }, transaction);
+            return await conn.QueryFirstOrDefaultAsync<User>(
+                "sp_GetUserByStaffId",
+                new { p_StaffId = staffId },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<User?> GetByAdminIdAsync(int adminId, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = "SELECT * FROM `Users` WHERE `AdminId` = @AdminId LIMIT 1;";
-            return await conn.QueryFirstOrDefaultAsync<User>(sql, new { AdminId = adminId }, transaction);
+            return await conn.QueryFirstOrDefaultAsync<User>(
+                "sp_GetUserByAdminId",
+                new { p_AdminId = adminId },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<int> CreateUserAsync(User user, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = @"
-                INSERT INTO `Users` 
-                (`FullName`, `Email`, `PasswordHash`, `PhoneNumber`, `RoleId`, `StudentId`, `StaffId`, `AdminId`, `IsFirstLogin`, `IsActive`, `CreatedAt`, `UpdatedAt`) 
-                VALUES 
-                (@FullName, @Email, @PasswordHash, @PhoneNumber, @RoleId, @StudentId, @StaffId, @AdminId, @IsFirstLogin, @IsActive, @CreatedAt, @UpdatedAt);
-                SELECT LAST_INSERT_ID();";
-
             var parameters = new
             {
-                FullName = user.FullName ?? string.Empty,
-                Email = user.Email ?? string.Empty,
-                PasswordHash = user.PasswordHash ?? string.Empty,
-                PhoneNumber = user.PhoneNumber ?? string.Empty,
-                RoleId = user.RoleId,
-                StudentId = user.StudentId,
-                StaffId = user.StaffId,
-                AdminId = user.AdminId,
-                IsFirstLogin = user.IsFirstLogin ? 1 : 0,
-                IsActive = user.IsActive ? 1 : 0,
-                CreatedAt = user.CreatedAt == default ? DateTime.UtcNow : user.CreatedAt,
-                UpdatedAt = user.UpdatedAt == default ? DateTime.UtcNow : user.UpdatedAt
+                p_FullName = user.FullName ?? string.Empty,
+                p_Email = user.Email ?? string.Empty,
+                p_PasswordHash = user.PasswordHash ?? string.Empty,
+                p_PhoneNumber = user.PhoneNumber ?? string.Empty,
+                p_RoleId = user.RoleId,
+                p_StudentId = user.StudentId,
+                p_StaffId = user.StaffId,
+                p_AdminId = user.AdminId,
+                p_IsFirstLogin = user.IsFirstLogin ? 1 : 0,
+                p_IsActive = user.IsActive ? 1 : 0
             };
 
-            var id = await conn.ExecuteScalarAsync<int>(sql, parameters, transaction);
+            var id = await conn.ExecuteScalarAsync<int>(
+                "sp_CreateUser",
+                parameters,
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+
             user.UserId = id;
             return id;
         }
@@ -159,15 +171,21 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<Role?> GetRoleByNameAsync(string roleName, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = "SELECT `RoleId`, `RoleName` FROM `Roles` WHERE `RoleName` = @RoleName LIMIT 1;";
-            return await conn.QueryFirstOrDefaultAsync<Role>(sql, new { RoleName = roleName }, transaction);
+            return await conn.QueryFirstOrDefaultAsync<Role>(
+                "sp_GetRoleByName",
+                new { p_RoleName = roleName },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<Role?> GetRoleByIdAsync(int roleId, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = "SELECT `RoleId`, `RoleName` FROM `Roles` WHERE `RoleId` = @RoleId LIMIT 1;";
-            return await conn.QueryFirstOrDefaultAsync<Role>(sql, new { RoleId = roleId }, transaction);
+            return await conn.QueryFirstOrDefaultAsync<Role>(
+                "sp_GetRoleById",
+                new { p_RoleId = roleId },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<List<User>> GetAllUsersAsync()
@@ -191,8 +209,12 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<User?> GetByIdAsync(int id, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = "SELECT * FROM `Users` WHERE `UserId` = @UserId LIMIT 1;";
-            var user = await conn.QueryFirstOrDefaultAsync<User>(sql, new { UserId = id }, transaction);
+            var user = await conn.QueryFirstOrDefaultAsync<User>(
+                "sp_GetUserById",
+                new { p_UserId = id },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+
             if (user != null && user.RoleId > 0)
             {
                 user.Role = await GetRoleByIdAsync(user.RoleId, conn, transaction) ?? null!;
@@ -209,32 +231,17 @@ namespace CollegeManagement.API.Repositories.Implementations
             IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            var now = DateTime.UtcNow;
-
-            const string updateUserSql = @"
-                UPDATE `Users` 
-                SET `PasswordHash` = @PasswordHash, 
-                    `IsFirstLogin` = 0, 
-                    `UpdatedAt` = @UpdatedAt 
-                WHERE `UserId` = @UserId;";
-
-            var rows = await conn.ExecuteAsync(updateUserSql, new { PasswordHash = passwordHash, UpdatedAt = now, UserId = userId }, transaction);
-            if (rows <= 0) return false;
-
-            if (adminId.HasValue && adminId.Value > 0)
-            {
-                const string updateAdminSql = "UPDATE `admins` SET `Password` = @Password WHERE `id` = @AdminId;";
-                await conn.ExecuteAsync(updateAdminSql, new { Password = passwordHash, AdminId = adminId.Value }, transaction);
-            }
-
-            if (studentId.HasValue && studentId.Value > 0)
-            {
-                const string updateStudentSql = @"
-                    UPDATE `Students` 
-                    SET `PasswordHash` = @PasswordHash 
-                    WHERE `StudentId` = @StudentId;";
-                await conn.ExecuteAsync(updateStudentSql, new { PasswordHash = passwordHash, StudentId = studentId.Value }, transaction);
-            }
+            await conn.ExecuteAsync(
+                "sp_UpdateUserPasswordDualWrite",
+                new
+                {
+                    p_UserId = userId,
+                    p_PasswordHash = passwordHash,
+                    p_AdminId = adminId,
+                    p_StudentId = studentId
+                },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
 
             return true;
         }
@@ -243,62 +250,57 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var conn = connection ?? Connection;
             var normalizedEmail = newEmail.Trim().ToUpperInvariant();
-            const string sql = @"
-                UPDATE `Users` 
-                SET `Email` = @Email, 
-                    `UpdatedAt` = @UpdatedAt 
-                WHERE `StaffId` = @StaffId;";
-            var rows = await conn.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StaffId = staffId }, transaction);
-            return rows > 0;
+            await conn.ExecuteAsync(
+                "sp_UpdateUserEmailByLinkedEntity",
+                new { p_StaffId = staffId, p_StudentId = (int?)null, p_Email = normalizedEmail },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+            return true;
         }
 
         public async Task<bool> UpdateEmailByStudentIdAsync(int studentId, string newEmail, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
             var normalizedEmail = newEmail.Trim().ToUpperInvariant();
-            const string sql = @"
-                UPDATE `Users` 
-                SET `Email` = @Email, 
-                    `UpdatedAt` = @UpdatedAt 
-                WHERE `StudentId` = @StudentId;";
-            var rows = await conn.ExecuteAsync(sql, new { Email = normalizedEmail, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
-            return rows > 0;
+            await conn.ExecuteAsync(
+                "sp_UpdateUserEmailByLinkedEntity",
+                new { p_StaffId = (int?)null, p_StudentId = studentId, p_Email = normalizedEmail },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+            return true;
         }
 
         public async Task<bool> UpdateStatusByStaffIdAsync(int staffId, bool isActive, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = @"
-                UPDATE `Users` 
-                SET `IsActive` = @IsActive, 
-                    `UpdatedAt` = @UpdatedAt 
-                WHERE `StaffId` = @StaffId;";
-            var rows = await conn.ExecuteAsync(sql, new { IsActive = isActive ? 1 : 0, UpdatedAt = DateTime.UtcNow, StaffId = staffId }, transaction);
-            return rows > 0;
+            await conn.ExecuteAsync(
+                "sp_UpdateUserStatusByLinkedEntity",
+                new { p_StaffId = staffId, p_StudentId = (int?)null, p_AdminId = (int?)null, p_IsActive = isActive ? 1 : 0 },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+            return true;
         }
 
         public async Task<bool> UpdateStatusByStudentIdAsync(int studentId, bool isActive, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = @"
-                UPDATE `Users` 
-                SET `IsActive` = @IsActive, 
-                    `UpdatedAt` = @UpdatedAt 
-                WHERE `StudentId` = @StudentId;";
-            var rows = await conn.ExecuteAsync(sql, new { IsActive = isActive ? 1 : 0, UpdatedAt = DateTime.UtcNow, StudentId = studentId }, transaction);
-            return rows > 0;
+            await conn.ExecuteAsync(
+                "sp_UpdateUserStatusByLinkedEntity",
+                new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = isActive ? 1 : 0 },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+            return true;
         }
 
         public async Task<bool> UpdateStatusByAdminIdAsync(int adminId, bool isActive, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = @"
-                UPDATE `Users` 
-                SET `IsActive` = @IsActive, 
-                    `UpdatedAt` = @UpdatedAt 
-                WHERE `AdminId` = @AdminId;";
-            var rows = await conn.ExecuteAsync(sql, new { IsActive = isActive ? 1 : 0, UpdatedAt = DateTime.UtcNow, AdminId = adminId }, transaction);
-            return rows > 0;
+            await conn.ExecuteAsync(
+                "sp_UpdateUserStatusByLinkedEntity",
+                new { p_StaffId = (int?)null, p_StudentId = (int?)null, p_AdminId = adminId, p_IsActive = isActive ? 1 : 0 },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+            return true;
         }
 
         public async Task DeleteAsync(int id)
@@ -306,9 +308,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 await Connection.ExecuteAsync(
-                    "DELETE FROM Users WHERE UserId = @UserId",
-                    new { UserId = id },
-                    commandType: CommandType.Text);
+                    "sp_DeleteUserById",
+                    new { p_UserId = id },
+                    commandType: CommandType.StoredProcedure);
             }
             catch
             {

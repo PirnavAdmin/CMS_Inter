@@ -9,6 +9,8 @@ namespace CollegeManagement.API.DTOs.AcademicYear
         [StringLength(50)]
         public string AcademicYearName { get; set; } = string.Empty;
 
+        public int? CampusId { get; set; } = 1;
+
         public int? BoardId { get; set; }
 
         [Required]

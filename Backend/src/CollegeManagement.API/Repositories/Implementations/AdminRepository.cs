@@ -62,9 +62,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 if (transaction != null && connection != null)
                 {
                     return await conn.QueryFirstOrDefaultAsync<Admin>(
-                        "SELECT id AS Id, Email, Password, IsActive FROM admins WHERE Email = @Email LIMIT 1;",
-                        new { Email = email },
-                        transaction: transaction);
+                        "sp_GetAdminAuthByEmail",
+                        new { p_Email = email },
+                        transaction: transaction,
+                        commandType: CommandType.StoredProcedure);
                 }
                 return await _context.Admins.FirstOrDefaultAsync(a => a.Email == email);
             }
@@ -88,10 +89,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 if (transaction != null && connection != null)
                 {
                     var id = await conn.ExecuteScalarAsync<int>(
-                        @"INSERT INTO admins (Email, Password, IsActive) VALUES (@Email, @Password, @IsActive);
-                          SELECT LAST_INSERT_ID();",
-                        new { admin.Email, admin.Password, admin.IsActive },
-                        transaction: transaction);
+                        "sp_CreateAdmin",
+                        new { p_Email = admin.Email, p_Password = admin.Password, p_IsActive = admin.IsActive },
+                        transaction: transaction,
+                        commandType: CommandType.StoredProcedure);
                     admin.Id = id;
                     return id;
                 }
@@ -106,16 +107,27 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var conn = connection ?? Connection;
             await conn.ExecuteAsync(
-                "DELETE FROM admins WHERE id = @Id",
-                new { Id = id },
-                transaction: transaction);
+                "sp_DeleteAdminById",
+                new { p_Id = id },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task UpdateStatusAsync(int id, bool isActive, IDbConnection? connection = null, IDbTransaction? transaction = null)
         {
             var conn = connection ?? Connection;
-            const string sql = "UPDATE `admins` SET `IsActive` = @IsActive WHERE `id` = @Id;";
-            await conn.ExecuteAsync(sql, new { IsActive = isActive ? 1 : 0, Id = id }, transaction);
+            await conn.ExecuteAsync(
+                "sp_UpdateAdminIsActive",
+                new { p_Id = id, p_IsActive = isActive ? 1 : 0 },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
+
+            // Synchronize Users table
+            await conn.ExecuteAsync(
+                "sp_UpdateUserStatusByLinkedEntity",
+                new { p_StaffId = (int?)null, p_StudentId = (int?)null, p_AdminId = id, p_IsActive = isActive ? 1 : 0 },
+                transaction: transaction,
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task UpdatePasswordAsync(int id, string newPasswordHash)
@@ -138,12 +150,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             try
             {
-                // Synchronize Users table
-                const string syncSql = @"
-                    UPDATE `Users` 
-                    SET `PasswordHash` = @NewPasswordHash, `UpdatedAt` = UTC_TIMESTAMP() 
-                    WHERE `AdminId` = @Id OR LOWER(`Email`) = (SELECT LOWER(`Email`) FROM `admins` WHERE `id` = @Id LIMIT 1);";
-                await Connection.ExecuteAsync(syncSql, new { NewPasswordHash = newPasswordHash, Id = id });
+                // Synchronize Users table using dual-write procedure
+                await Connection.ExecuteAsync(
+                    "sp_UpdateUserPasswordDualWrite",
+                    new { p_UserId = 0, p_PasswordHash = newPasswordHash, p_AdminId = id, p_StudentId = (int?)null },
+                    commandType: CommandType.StoredProcedure);
             }
             catch
             {

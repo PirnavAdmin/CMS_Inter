@@ -16,10 +16,21 @@ namespace CollegeManagement.API.Validators.StaffValidators
                 .NotEmpty().WithMessage("Last name is required.")
                 .MaximumLength(100).WithMessage("Last name cannot exceed 100 characters.");
 
-            RuleFor(x => x.Email)
-                .NotEmpty().WithMessage("Email address is required.")
-                .EmailAddress().WithMessage("Please provide a valid email address.")
-                .MaximumLength(150);
+            When(x => string.Equals(x.StaffType, "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(x.StaffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
+                      string.Equals(x.StaffType, "Non Teaching", StringComparison.OrdinalIgnoreCase), () =>
+            {
+                RuleFor(x => x.Email)
+                    .EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.Email))
+                    .WithMessage("Please provide a valid email address if specified.")
+                    .MaximumLength(150);
+            }).Otherwise(() =>
+            {
+                RuleFor(x => x.Email)
+                    .NotEmpty().WithMessage("Email address is required.")
+                    .EmailAddress().WithMessage("Please provide a valid email address.")
+                    .MaximumLength(150);
+            });
 
             RuleFor(x => x.Mobile)
                 .NotEmpty().WithMessage("Mobile number is required.")

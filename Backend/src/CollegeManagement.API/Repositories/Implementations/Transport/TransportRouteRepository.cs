@@ -26,9 +26,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<PagedResult<TransportRouteDto>> GetAllAsync(TransportRouteFilterDto filter)
         {
             using var c = Connection();
+            string? busTypeFilter = !string.IsNullOrWhiteSpace(filter.BusType)
+                ? filter.BusType
+                : (filter.IsAc.HasValue ? (filter.IsAc.Value ? "AC" : "Non-AC") : null);
+
             var all = (await c.QueryAsync<TransportRouteDto>(
                 "sp_GetTransportRoutes",
-                new { p_Search = filter.Search ?? "", p_Status = filter.Status, p_BusType = (string?)null, p_CampusId = filter.CampusId },
+                new
+                {
+                    p_Search = filter.Search ?? "",
+                    p_Status = filter.Status,
+                    p_BusType = busTypeFilter,
+                    p_CampusId = filter.CampusId
+                },
                 commandType: CommandType.StoredProcedure)).ToList();
 
             var totalCount = all.Count;
@@ -66,10 +76,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 : "New Route";
             var startLoc = !string.IsNullOrWhiteSpace(dto.StartLocation) && !dto.StartLocation.Equals("string", System.StringComparison.OrdinalIgnoreCase)
                 ? dto.StartLocation.Trim()
-                : "Main City";
+                : (!string.IsNullOrWhiteSpace(dto.RouteStart) && !dto.RouteStart.Equals("string", System.StringComparison.OrdinalIgnoreCase) ? dto.RouteStart.Trim() : "Main City");
             var endLoc = !string.IsNullOrWhiteSpace(dto.EndLocation) && !dto.EndLocation.Equals("string", System.StringComparison.OrdinalIgnoreCase)
                 ? dto.EndLocation.Trim()
-                : "College Campus";
+                : (!string.IsNullOrWhiteSpace(dto.RouteEnd) && !dto.RouteEnd.Equals("string", System.StringComparison.OrdinalIgnoreCase) ? dto.RouteEnd.Trim() : "College Campus");
 
             return await c.ExecuteScalarAsync<long>(
                 "sp_CreateTransportRoute",
@@ -80,17 +90,16 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_StartLocation = startLoc,
                     p_EndLocation = endLoc,
                     p_Distance = dto.DistanceKm,
-                    p_EstimatedDurationMinutes = dto.EstimatedDurationMinutes > 0 ? dto.EstimatedDurationMinutes : 30,
+                    p_EstimatedDurationMinutes = dto.EstimatedTimeMinutes > 0 ? dto.EstimatedTimeMinutes : 30,
                     p_DefaultMonthlyFee = dto.NonAcBaseFare,
                     p_MinRangeKm = dto.MinRangeKm > 0 ? dto.MinRangeKm : 5m,
                     p_NonAcBaseFare = dto.NonAcBaseFare > 0 ? dto.NonAcBaseFare : 1000m,
-                    p_NonAcRatePerKm = dto.NonAcRatePerKm > 0 ? dto.NonAcRatePerKm : 100m,
+                    p_NonAcRatePerKm = dto.NonAcRatePerKm ?? (dto.NonAcRateAddlKm > 0 ? dto.NonAcRateAddlKm : 100m),
                     p_AcBaseFare = dto.AcBaseFare > 0 ? dto.AcBaseFare : 1200m,
-                    p_AcRatePerKm = dto.AcRatePerKm > 0 ? dto.AcRatePerKm : 150m,
+                    p_AcRatePerKm = dto.AcRatePerKm ?? (dto.AcRateAddlKm > 0 ? dto.AcRateAddlKm : 150m),
                     p_Description = dto.Description ?? "",
                     p_Status = dto.Status ? (sbyte)1 : (sbyte)0,
-                    p_CreatedBy = userId,
-                    p_CampusId = dto.CampusId ?? 1
+                    p_CreatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -105,20 +114,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_RouteId = routeId,
                     p_RouteCode = dto.RouteCode,
                     p_RouteName = dto.RouteName,
-                    p_StartLocation = dto.StartLocation,
-                    p_EndLocation = dto.EndLocation,
+                    p_StartLocation = dto.StartLocation ?? dto.RouteStart,
+                    p_EndLocation = dto.EndLocation ?? dto.RouteEnd,
                     p_Distance = dto.DistanceKm,
-                    p_EstimatedDurationMinutes = dto.EstimatedDurationMinutes > 0 ? dto.EstimatedDurationMinutes : 30,
+                    p_EstimatedDurationMinutes = dto.EstimatedTimeMinutes > 0 ? dto.EstimatedTimeMinutes : 30,
                     p_DefaultMonthlyFee = dto.NonAcBaseFare,
                     p_MinRangeKm = dto.MinRangeKm > 0 ? dto.MinRangeKm : 5m,
                     p_NonAcBaseFare = dto.NonAcBaseFare > 0 ? dto.NonAcBaseFare : 1000m,
-                    p_NonAcRatePerKm = dto.NonAcRatePerKm > 0 ? dto.NonAcRatePerKm : 100m,
+                    p_NonAcRatePerKm = dto.NonAcRatePerKm ?? (dto.NonAcRateAddlKm > 0 ? dto.NonAcRateAddlKm : 100m),
                     p_AcBaseFare = dto.AcBaseFare > 0 ? dto.AcBaseFare : 1200m,
-                    p_AcRatePerKm = dto.AcRatePerKm > 0 ? dto.AcRatePerKm : 150m,
+                    p_AcRatePerKm = dto.AcRatePerKm ?? (dto.AcRateAddlKm > 0 ? dto.AcRateAddlKm : 150m),
                     p_Description = dto.Description ?? "",
                     p_Status = dto.Status ? (sbyte)1 : (sbyte)0,
-                    p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId
+                    p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
@@ -134,12 +142,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             return rows > 0;
         }
 
-        public async Task<IEnumerable<TransportRouteLookupDto>> GetLookupAsync(string? search, int limit)
+        public async Task<IEnumerable<TransportRouteLookupDto>> GetLookupAsync(string? search, string? busType, int limit)
         {
             using var c = Connection();
             return await c.QueryAsync<TransportRouteLookupDto>(
                 "sp_GetTransportRouteLookup",
-                new { p_Search = search ?? "", p_Limit = limit > 0 ? limit : 100 },
+                new
+                {
+                    p_Search = search ?? "",
+                    p_BusType = busType ?? "",
+                    p_Limit = limit > 0 ? limit : 100
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -157,7 +170,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             using var c = Connection();
             var all = await c.QueryAsync<TransportRouteDto>(
                 "sp_GetTransportRoutes",
-                new { p_Search = search, p_Status = (bool?)null, p_BusType = (string?)null, p_CampusId = (int?)null },
+                new { p_Search = search, p_Status = (bool?)null, p_BusType = (string?)null },
                 commandType: CommandType.StoredProcedure);
 
             return all.FirstOrDefault(r => 
@@ -168,15 +181,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> RouteCodeExistsAsync(string routeCode, long? excludeRouteId = null)
         {
             using var c = Connection();
-            var sql = "SELECT COUNT(*) FROM TransportRoutes WHERE IsDeleted = 0 AND LOWER(RouteCode) = @Code AND (@ExcludeId IS NULL OR RouteId != @ExcludeId)";
-            return await c.ExecuteScalarAsync<int>(sql, new { Code = routeCode.Trim().ToLower(), ExcludeId = excludeRouteId }) > 0;
+            return await c.ExecuteScalarAsync<int>(
+                "sp_CheckTransportRouteCodeExists",
+                new { p_RouteCode = routeCode.Trim(), p_ExcludeId = excludeRouteId },
+                commandType: CommandType.StoredProcedure) > 0;
         }
 
         public async Task<bool> RouteNameExistsAsync(string routeName, long? excludeRouteId = null)
         {
             using var c = Connection();
-            var sql = "SELECT COUNT(*) FROM TransportRoutes WHERE IsDeleted = 0 AND LOWER(RouteName) = @Name AND (@ExcludeId IS NULL OR RouteId != @ExcludeId)";
-            return await c.ExecuteScalarAsync<int>(sql, new { Name = routeName.Trim().ToLower(), ExcludeId = excludeRouteId }) > 0;
+            return await c.ExecuteScalarAsync<int>(
+                "sp_CheckTransportRouteNameExists",
+                new { p_RouteName = routeName.Trim(), p_ExcludeId = excludeRouteId },
+                commandType: CommandType.StoredProcedure) > 0;
         }
     }
 }

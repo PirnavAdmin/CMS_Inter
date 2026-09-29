@@ -82,7 +82,9 @@ namespace CollegeManagement.API.DTOs.Students
         [MaxLength(20)]
         public string? Pincode { get; set; }
 
-        // Academic
+        // Academic & Campus
+        public int? CampusId { get; set; } = 1;
+
         [Required]
         public int BoardId { get; set; }
 
@@ -158,7 +160,7 @@ namespace CollegeManagement.API.DTOs.Students
         public string? GuardianMobile { get; set; }
 
         [MaxLength(150)]
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         public decimal? AnnualIncome { get; set; }
 
@@ -191,5 +193,43 @@ namespace CollegeManagement.API.DTOs.Students
         public bool IsFirstLogin { get; set; } = true;
 
         public bool IsActive { get; set; } = true;
+
+        // Residential & Transport Allocation
+        [MaxLength(30)]
+        public string? StudentType { get; set; }
+
+        public bool? TransportRequired { get; set; }
+
+        [MaxLength(20)]
+        public string? BusType { get; set; }
+
+        public int? RouteId { get; set; }
+
+        [MaxLength(100)]
+        public string? BusRoute { get; set; }
+
+        public int? PickupPointId { get; set; }
+
+        [MaxLength(100)]
+        public string? PickupPoint { get; set; }
+
+        public int? HostelId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelBlock { get; set; }
+
+        public int? RoomId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelRoom { get; set; }
+
+        public int? BedId { get; set; }
+
+        [MaxLength(50)]
+        public string? HostelBed { get; set; }
+
+        [MaxLength(50)]
+        public string? HallTicketNumber { get; set; }
     }
 }
+

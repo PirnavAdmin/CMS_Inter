@@ -606,8 +606,30 @@ body {
 .cms-form-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .cms-field { display: flex; flex-direction: column; gap: 6px; }
 .cms-field.full { grid-column: 1 / -1; }
-.cms-field label { font-size: 12.5px; font-weight: 600; color: #334155; }
-.cms-field label .req { color: var(--cms-red); }
+.cms-field label,
+.cms-field-label-row {
+  display: flex;
+  align-items: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  min-height: 20px;
+}
+.cms-field label {
+  justify-content: space-between;
+}
+.cms-field-label-row { justify-content: space-between; }
+.cms-field label:has(.req) {
+  justify-content: flex-start;
+  gap: 2px;
+}
+.cms-field label .req {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  color: var(--cms-red);
+  white-space: nowrap;
+}
 .cms-field input,
 .cms-field select,
 .cms-field textarea {
@@ -633,6 +655,24 @@ body {
 .cms-field.has-error select,
 .cms-field.has-error textarea { border-color: var(--cms-red); }
 .cms-error { color: var(--cms-red); font-size: 11.5px; }
+.cms-caps-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #fff8e6;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  font-size: 10.5px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+.cms-caps-icon {
+  font-size: 12px;
+  font-weight: bold;
+}
 .cms-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
 .cms-check input { width: 16px; height: 16px; }
 

@@ -78,6 +78,12 @@ namespace CollegeManagement.API.Dtos.Transport
             }
         }
 
+        [JsonPropertyName("isAc")]
+        public bool? IsAc { get; set; }
+
+        [JsonPropertyName("busType")]
+        public string? BusType { get; set; }
+
         [JsonPropertyName("createdAt")]
         public DateTime CreatedAt { get; set; }
 

@@ -7,6 +7,11 @@ public class CreateFeeTypeRequest
 {
     [Required, StringLength(100, MinimumLength = 2)] public string FeeTypeName { get; set; } = string.Empty;
     [Required, StringLength(50)] public string Category { get; set; } = "Academic";
+    
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -14,6 +19,11 @@ public class UpdateFeeTypeRequest
 {
     [Required, StringLength(100, MinimumLength = 2)] public string FeeTypeName { get; set; } = string.Empty;
     [Required, StringLength(50)] public string Category { get; set; } = "Academic";
+    
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -23,6 +33,11 @@ public class FeeTypeResponse
     public string FeeTypeCode { get; set; } = string.Empty;
     public string FeeTypeName { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
+    
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -31,6 +46,7 @@ public class FeeTypeResponse
 // ========================= FEE STRUCTURE =========================
 public class CreateFeeStructureRequest
 {
+    public int? CampusId { get; set; }
     [Range(1, int.MaxValue)] public int BoardId { get; set; }
     [Range(1, int.MaxValue)] public int AcademicYearId { get; set; }
     [Range(1, int.MaxValue)] public int GroupId { get; set; }
@@ -40,6 +56,7 @@ public class CreateFeeStructureRequest
 
 public class UpdateFeeStructureRequest
 {
+    public int? CampusId { get; set; }
     public string StructureName { get; set; } = string.Empty;
 
     public string? Description { get; set; }
@@ -64,6 +81,8 @@ public class UpdateFeeStructureItemRequest
 public class FeeStructureResponse
 {
     public int FeeStructureId { get; set; }
+    public int? CampusId { get; set; }
+    public string? CampusName { get; set; }
     public int BoardId { get; set; }
     public string BoardName { get; set; } = string.Empty;
     public int AcademicYearId { get; set; }
@@ -100,6 +119,11 @@ public class CreateScholarshipRequest
     public string? Description { get; set; }
     [Required, StringLength(20)] public string DiscountType { get; set; } = "Percentage";
     [Range(0.01, double.MaxValue)] public decimal DiscountValue { get; set; }
+
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -109,6 +133,11 @@ public class UpdateScholarshipRequest
     public string? Description { get; set; }
     [Required, StringLength(20)] public string DiscountType { get; set; } = "Percentage";
     [Range(0.01, double.MaxValue)] public decimal DiscountValue { get; set; }
+
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; } = true;
 }
 
@@ -119,6 +148,11 @@ public class ScholarshipResponse
     public string? Description { get; set; }
     public string DiscountType { get; set; } = string.Empty;
     public decimal DiscountValue { get; set; }
+
+    public int? CampusId { get; set; }
+    public int? BoardId { get; set; }
+    public int? AcademicYearId { get; set; }
+
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -139,6 +173,8 @@ public class AssignStudentFeeRequest
 public class StudentFeeResponse
 {
     public int StudentFeeId { get; set; }
+    public int? CampusId { get; set; }
+    public string? CampusName { get; set; }
     public int StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string AdmissionNumber { get; set; } = string.Empty;
@@ -151,7 +187,7 @@ public class StudentFeeResponse
     public decimal PaidAmount { get; set; }
     public decimal BalanceAmount { get; set; }
     public string Status { get; set; } = "Pending";
-    public string PaymentPlan { get; set; }
+    public string PaymentPlan { get; set; } = string.Empty;
     public DateTime AssignedAt { get; set; }
     public List<StudentFeeComponentResponse> Components { get; set; } = new();
     public List<FeeScheduleResponse> Schedules { get; set; } = new();
@@ -249,7 +285,7 @@ public class CreateFeePaymentRequest
 {
     [Range(1, int.MaxValue)] public int StudentId { get; set; }
     [Range(1, int.MaxValue)] public int StudentFeeId { get; set; }
-    public int? FeeInstallmentId { get; set; }
+    public List<int> FeeInstallmentIds { get; set; } = new();
     [Range(0.01, double.MaxValue)] public decimal Amount { get; set; }
     public DateTime? PaymentDate { get; set; }
     [Required, StringLength(30)] public string PaymentMode { get; set; } = "Cash";
@@ -278,6 +314,7 @@ public class FeePaymentResponse
     public string Status { get; set; } = "Paid";
     public string ReceiptNumber { get; set; } = string.Empty;
     public string? Note { get; set; }
+    public string? Remarks { get => Note; set => Note = value; }
 }
 
 public class FeeReceiptResponse
@@ -301,12 +338,14 @@ public class FeeReceiptResponse
 public class StudentFeeLedgerResponse
 {
     public int StudentFeeId { get; set; }
+    public int? CampusId { get; set; }
+    public string? CampusName { get; set; }
     public int StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string AdmissionNumber { get; set; } = string.Empty;
     public string GroupName { get; set; } = string.Empty;
     public string SectionName { get; set; } = string.Empty;
-    public string PaymentPlan { get; set; } 
+    public string PaymentPlan { get; set; } = string.Empty;
     public decimal TotalPayable { get; set; }
     public decimal TotalPaid { get; set; }
     public decimal Balance { get; set; }
@@ -316,6 +355,8 @@ public class StudentFeeLedgerResponse
 public class FeeCollectionResponse
 {
     public int StudentFeeId { get; set; }
+    public int? CampusId { get; set; }
+    public string? CampusName { get; set; }
     public int StudentId { get; set; }
     public string AdmissionNumber { get; set; } = string.Empty;
     public string StudentName { get; set; } = string.Empty;
@@ -331,6 +372,8 @@ public class FeeCollectionResponse
 public class FeeDueResponse
 {
     public int StudentFeeId { get; set; }
+    public int? CampusId { get; set; }
+    public string? CampusName { get; set; }
     public int StudentId { get; set; }
     public string AdmissionNumber { get; set; } = string.Empty;
     public string StudentName { get; set; } = string.Empty;
@@ -380,6 +423,8 @@ public class FeeReportResponse
 public class StudentFeeDetailsResponse
 {
     public int StudentFeeId { get; set; }
+    public int? CampusId { get; set; }
+    public string? CampusName { get; set; }
     public int StudentId { get; set; }
     public string StudentName { get; set; } = string.Empty;
     public string AdmissionNumber { get; set; } = string.Empty;
@@ -395,7 +440,7 @@ public class StudentFeeDetailsResponse
     public decimal TotalPayable { get; set; }
     public decimal TotalPaid { get; set; }
     public decimal OutstandingBalance { get; set; }
-    public string PaymentPlan { get; set; } 
+    public string PaymentPlan { get; set; } = string.Empty;
     public string FeeStatus { get; set; } = string.Empty;
     public List<StudentFeeBreakdownResponse> Breakdown { get; set; } = new();
     public List<FeeScheduleResponse> Schedules { get; set; } = new();

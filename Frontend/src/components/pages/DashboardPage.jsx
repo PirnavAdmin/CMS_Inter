@@ -37,8 +37,9 @@ import {
 } from "recharts";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Toast } from "@/components/common/Ui.jsx";
+import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import totalStudentsIcon from "@/assets/dashboard-3d/total-students.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
 import nonTeachingStaffIcon from "@/assets/dashboard-3d/non-teaching-staff.png";
@@ -187,12 +188,32 @@ function CardHeader({ title, action, children }) {
   );
 }
 
-function LoadingState({ label = "Loading..." }) {
+function LoadingState() { return <div className="dashboard-card-loading"><SkeletonText lines={2} /></div>; }
+
+function DashboardCardSkeleton({ variant = "chart" }) {
   return (
-    <div className="dashboard-card-loading">
-      <span className="dashboard-spinner" />
-      <span>{label}</span>
-    </div>
+    <article className="dashboard-card" aria-hidden="true">
+      <div className="dashboard-card-head"><Skeleton style={{ width: "52%", height: 18 }} /></div>
+      <div className="dashboard-card-body">
+        {variant === "chart" ? <Skeleton className="dashboard-skeleton-chart" /> : null}
+        {variant === "attendance" ? <><Skeleton className="dashboard-skeleton-donut" /><div className="dashboard-skeleton-chips">{Array.from({ length: 5 }, (_, index) => <Skeleton key={index} />)}</div></> : null}
+        {variant === "list" ? <div className="dashboard-skeleton-list">{Array.from({ length: 4 }, (_, index) => <div key={index}><Skeleton className="dashboard-skeleton-list-icon" /><SkeletonText lines={2} widths={["72%", "48%"]} /></div>)}</div> : null}
+      </div>
+    </article>
+  );
+}
+
+/** Mirrors the mounted dashboard layout while its required initial requests are pending. */
+function DashboardSkeleton() {
+  return (
+    <main className="dashboard-page dashboard-page-skeleton" aria-label="Loading dashboard" aria-busy="true">
+      <div className="dashboard-header-bar"><div className="dashboard-greeting-wrap"><Skeleton style={{ width: 280, height: 28 }} /><Skeleton style={{ width: 220, height: 14, marginTop: 10 }} /></div><SkeletonButton width={156} /></div>
+      <div className="dashboard-viewing-banner"><Skeleton style={{ width: "78%", height: 14 }} /></div>
+      <section className="dashboard-kpi-grid" aria-label="Loading statistics">{Array.from({ length: 5 }, (_, index) => <article className="dashboard-kpi-card" key={index}><SkeletonAvatar size={42} /><div><Skeleton style={{ width: 92, height: 13 }} /><Skeleton style={{ width: 64, height: 26, marginTop: 9 }} /><Skeleton style={{ width: 78, height: 10, marginTop: 8 }} /></div></article>)}</section>
+      <nav className="dashboard-quick-actions" aria-label="Loading quick actions"><Skeleton style={{ width: 108, height: 18 }} /><div className="dashboard-quick-actions-list">{Array.from({ length: 6 }, (_, index) => <SkeletonButton key={index} width={124} />)}</div></nav>
+      <section className="dashboard-grid-row dashboard-row-three" aria-label="Loading student analytics"><DashboardCardSkeleton /><DashboardCardSkeleton /><DashboardCardSkeleton variant="attendance" /></section>
+      <section className="dashboard-grid-row dashboard-row-three" aria-label="Loading staff and upcoming events"><DashboardCardSkeleton variant="attendance" /><DashboardCardSkeleton variant="list" /><DashboardCardSkeleton variant="list" /></section>
+    </main>
   );
 }
 
@@ -217,6 +238,21 @@ function EmptyState({ message = "No data available." }) {
       <span>{message}</span>
     </div>
   );
+}
+
+function CustomDonutTooltip({ active, payload }) {
+  if (active && payload && payload.length) {
+    const data = payload[0];
+    const dotColor = data.payload?.color || data.color || "#22a447";
+    return (
+      <div className="dashboard-custom-donut-tooltip">
+        <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
+        <span className="tooltip-name">{data.name}:</span>
+        <span className="tooltip-val">{formatNumber(data.value)}</span>
+      </div>
+    );
+  }
+  return null;
 }
 
 function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, rawPctKeys) {
@@ -294,7 +330,7 @@ function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last yea
             <strong className="dashboard-kpi-value">{loading ? "—" : formatNumber(value)}</strong>
             <span className="dashboard-kpi-trend">{isAvailable ? changePct : "—"}</span>
           </div>
-          <span className="dashboard-kpi-subtext">{isAvailable ? changeLabel : "API Pending"}</span>
+          <span className="dashboard-kpi-subtext">{isAvailable ? changeLabel : "No data available"}</span>
         </div>
       </div>
     </article>
@@ -312,8 +348,10 @@ function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last yea
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { selectedCampus, selectedCampusId } = useCampusContext();
   const { selectedBoard, selectedAcademicYear } = useAcademicContext();
 
+  const campusId = selectedCampusId || selectedCampus?.id || selectedCampus?.campusId;
   const boardId = selectedBoard?.id || selectedBoard?.code || selectedBoard?.boardId;
   const academicYearId = selectedAcademicYear?.id || selectedAcademicYear?.code || selectedAcademicYear?.academicYearId;
   const todayDate = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -336,7 +374,7 @@ export default function DashboardPage() {
   const [holidayState, setHolidayState] = useState({ loading: true, error: null, data: null });
   const [certState, setCertState] = useState({ loading: true, error: null, data: null });
   const [examState, setExamState] = useState({ loading: true, error: null, data: null });
-
+  const initialLoading = summaryState.loading || overviewState.loading || groupState.loading || studentAttState.loading || staffAttState.loading || holidayState.loading || examState.loading;
   // Sequence ref counters for race condition protection
   const summarySeq = useRef(0);
   const overviewSeq = useRef(0);
@@ -361,6 +399,7 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         date: todayDate,
       };
       const res = await apiClient.get(DASHBOARD_API.summary, { params });
@@ -372,7 +411,7 @@ export default function DashboardPage() {
         setSummaryState({ loading: false, error: getApiErrorMessage(err, "Failed to load summary metrics"), data: null });
       }
     }
-  }, [boardId, academicYearId, todayDate]);
+  }, [campusId, boardId, academicYearId, todayDate]);
 
   // 2. GET /api/v1/dashboard/students-overview & GET /api/v1/dashboard/admission-trend
   const fetchStudentsOverview = useCallback(async () => {
@@ -382,11 +421,13 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         date: todayDate,
       };
       const trendParams = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
       };
 
       const [overviewRes, trendRes] = await Promise.allSettled([
@@ -397,6 +438,11 @@ export default function DashboardPage() {
       if (overviewSeq.current === seq) {
         const overviewData = overviewRes.status === "fulfilled" ? unwrap(overviewRes.value?.data) : null;
         const trendData = trendRes.status === "fulfilled" ? unwrap(trendRes.value?.data) : null;
+
+        if (overviewRes.status === "rejected" && trendRes.status === "rejected") {
+          setOverviewState({ loading: false, error: getApiErrorMessage(overviewRes.reason, "Failed to load students overview"), data: null });
+          return;
+        }
 
         const mergedData = {
           ...(overviewData && typeof overviewData === "object" ? overviewData : {}),
@@ -409,7 +455,7 @@ export default function DashboardPage() {
         setOverviewState({ loading: false, error: getApiErrorMessage(err, "Failed to load students overview"), data: null });
       }
     }
-  }, [boardId, academicYearId, todayDate]);
+  }, [campusId, boardId, academicYearId, todayDate]);
 
   // 3. GET /api/v1/dashboard/group-distribution
   const fetchGroupDistribution = useCallback(async () => {
@@ -419,6 +465,7 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
       };
       const res = await apiClient.get(DASHBOARD_API.groupDistribution, { params });
       if (groupSeq.current === seq) {
@@ -429,7 +476,7 @@ export default function DashboardPage() {
         setGroupState({ loading: false, error: getApiErrorMessage(err, "Failed to load group distribution"), data: null });
       }
     }
-  }, [boardId, academicYearId]);
+  }, [campusId, boardId, academicYearId]);
 
   // 4. GET /api/v1/dashboard/students-attendance-today
   const fetchStudentAttendance = useCallback(async () => {
@@ -450,20 +497,41 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         viewBy: viewByVal,
       };
       const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
       if (studentAttSeq.current === seq) {
-        const now = new Date();
-        const timeStr = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }).format(now);
-        setStudentAttState({ loading: false, error: null, data: unwrap(res.data), timestamp: `Today, ${timeStr}` });
+        const unwrapped = unwrap(res.data);
+        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated || unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime;
+        const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
+        let formattedTime = "Not marked today";
+        if (serverTime && serverTime !== "Not marked today") {
+          if (typeof serverTime === "string") {
+            if (serverTime.includes("T") || (serverTime.includes("-") && serverTime.includes(":"))) {
+              const d = new Date(serverTime);
+              formattedTime = !isNaN(d.getTime())
+                ? d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
+                : serverTime;
+            } else if (serverTime !== "Today") {
+              formattedTime = serverTime;
+            } else if (presentCount > 0) {
+              formattedTime = "Today";
+            }
+          } else {
+            formattedTime = String(serverTime);
+          }
+        } else if (presentCount > 0) {
+          formattedTime = "Today";
+        }
+        setStudentAttState({ loading: false, error: null, data: unwrapped, timestamp: formattedTime });
       }
     } catch (err) {
       if (studentAttSeq.current === seq) {
         setStudentAttState((prev) => ({ ...prev, loading: false, error: getApiErrorMessage(err, "Failed to load student attendance"), data: null }));
       }
     }
-  }, [boardId, academicYearId, studentView]);
+  }, [campusId, boardId, academicYearId, studentView]);
 
   // 5. GET /api/v1/dashboard/staff-attendance-today (Do NOT send academicYearId)
   const fetchStaffAttendance = useCallback(async () => {
@@ -481,20 +549,42 @@ export default function DashboardPage() {
 
       const params = {
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         staffType: staffTypeVal,
+        date: todayDate,
       };
       const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
       if (staffAttSeq.current === seq) {
-        const now = new Date();
-        const timeStr = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }).format(now);
-        setStaffAttState({ loading: false, error: null, data: unwrap(res.data), timestamp: `Today, ${timeStr}` });
+        const unwrapped = unwrap(res.data);
+        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated || unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime;
+        const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
+        let formattedTime = "Not marked today";
+        if (serverTime && serverTime !== "Not marked today") {
+          if (typeof serverTime === "string") {
+            if (serverTime.includes("T") || (serverTime.includes("-") && serverTime.includes(":"))) {
+              const d = new Date(serverTime);
+              formattedTime = !isNaN(d.getTime())
+                ? d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
+                : serverTime;
+            } else if (serverTime !== "Today") {
+              formattedTime = serverTime;
+            } else if (presentCount > 0) {
+              formattedTime = "Today";
+            }
+          } else {
+            formattedTime = String(serverTime);
+          }
+        } else if (presentCount > 0) {
+          formattedTime = "Today";
+        }
+        setStaffAttState({ loading: false, error: null, data: unwrapped, timestamp: formattedTime });
       }
     } catch (err) {
       if (staffAttSeq.current === seq) {
         setStaffAttState((prev) => ({ ...prev, loading: false, error: getApiErrorMessage(err, "Failed to load staff attendance"), data: null }));
       }
     }
-  }, [boardId, staffType]);
+  }, [campusId, boardId, staffType, todayDate]);
 
   // 6. GET /api/v1/dashboard/upcoming-holidays (with fallback to /api/v1/holidays)
   const fetchUpcomingHolidays = useCallback(async () => {
@@ -504,6 +594,7 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
         limit: 20,
       };
       let res;
@@ -520,7 +611,7 @@ export default function DashboardPage() {
         setHolidayState({ loading: false, error: getApiErrorMessage(err, "Failed to load upcoming holidays"), data: null });
       }
     }
-  }, [boardId, academicYearId]);
+  }, [campusId, boardId, academicYearId]);
 
   // 7. GET /api/v1/dashboard/upcoming-examinations
   const fetchUpcomingExaminations = useCallback(async () => {
@@ -530,6 +621,7 @@ export default function DashboardPage() {
       const params = {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
+        ...(campusId ? { campusId } : {}),
       };
       const res = await apiClient.get(DASHBOARD_API.upcomingExaminations, { params });
       if (examSeq.current === seq) {
@@ -540,9 +632,9 @@ export default function DashboardPage() {
         setExamState({ loading: false, error: getApiErrorMessage(err, "Failed to load upcoming examinations"), data: null });
       }
     }
-  }, [boardId, academicYearId]);
+  }, [campusId, boardId, academicYearId]);
 
-  // Board & Academic Year Context change effect -> Refresh all applicable cards
+  // Campus, Board & Academic Year Context change effect -> Refresh all applicable cards
   useEffect(() => {
     fetchSummary();
     fetchStudentsOverview();
@@ -880,7 +972,7 @@ export default function DashboardPage() {
     const halfDay = metric(data, ["halfDay", "halfDayCount", "halfDays", "late", "lateCount"]);
     const percentage = metric(data, ["percentage", "attendancePercentage"]);
 
-    const chartData = data.chartData || [
+    const chartData = [
       { name: "Present", value: present ?? 0, color: "#22a447" },
       { name: "Absent", value: absent ?? 0, color: "#ef4444" },
       { name: "Half-day", value: halfDay ?? 0, color: "#f59e0b" },
@@ -895,19 +987,27 @@ export default function DashboardPage() {
   const staffAttData = useMemo(() => {
     const data = staffAttState.data || {};
     const total = metric(data, ["total", "totalStaff", "totalCount"]);
-    const present = metric(data, ["present", "presentCount"]);
-    const absent = metric(data, ["absent", "absentCount"]);
-    const late = metric(data, ["late", "lateCount"]);
-    const onLeave = metric(data, ["onLeave", "onLeaveCount", "leaveCount"]);
-    const percentage = metric(data, ["percentage", "attendancePercentage"]);
+    const present = metric(data, ["present", "presentCount"]) ?? 0;
+    let absent = metric(data, ["absent", "absentCount"]);
+    const late = metric(data, ["late", "lateCount"]) ?? 0;
+    const onLeave = metric(data, ["onLeave", "onLeaveCount", "leaveCount"]) ?? 0;
+    const percentage = metric(data, ["percentage", "attendancePercentage"]) ?? 0;
     const teachingCount = metric(data, ["teachingCount", "teachingStaffCount"]);
     const nonTeachingCount = metric(data, ["nonTeachingCount", "nonTeachingStaffCount"]);
 
-    const chartData = data.chartData || [
-      { name: "Present", value: present ?? 0, color: "#22a447" },
-      { name: "Absent", value: absent ?? 0, color: "#ef4444" },
-      { name: "Late", value: late ?? 0, color: "#f59e0b" },
-      { name: "On Leave", value: onLeave ?? 0, color: "#7c3aed" },
+    const numTotal = Number(total ?? 0);
+    // When attendance is not marked today (all 0s) or absent is missing, calculate absent = total - present - late - onLeave
+    if ((absent === undefined || absent === null || (present === 0 && absent === 0 && late === 0 && onLeave === 0)) && numTotal > 0) {
+      absent = Math.max(0, numTotal - present - late - onLeave);
+    } else {
+      absent = Number(absent ?? 0);
+    }
+
+    const chartData = [
+      { name: "Present", value: present, color: "#22a447" },
+      { name: "Absent", value: absent, color: "#ef4444" },
+      { name: "Late", value: late, color: "#f59e0b" },
+      { name: "On Leave", value: onLeave, color: "#7c3aed" },
     ];
 
     return { total, present, absent, late, onLeave, percentage, teachingCount, nonTeachingCount, chartData };
@@ -927,9 +1027,10 @@ export default function DashboardPage() {
 
       let tone = "violet";
       const lowerType = String(type).toLowerCase();
-      if (lowerType.includes("national")) tone = "orange";
-      else if (lowerType.includes("festival")) tone = "violet";
-      else if (lowerType.includes("special")) tone = "cyan";
+      if (lowerType.includes("national") || lowerType.includes("public") || lowerType.includes("gazetted")) tone = "orange";
+      else if (lowerType.includes("festival") || lowerType.includes("religious") || lowerType.includes("cultural")) tone = "violet";
+      else if (lowerType.includes("special") || lowerType.includes("institutional") || lowerType.includes("state") || lowerType.includes("restricted")) tone = "cyan";
+      else if (lowerType.includes("vacation") || lowerType.includes("break") || lowerType.includes("term") || lowerType.includes("semester")) tone = "green";
       else tone = "blue";
 
       return {
@@ -950,26 +1051,51 @@ export default function DashboardPage() {
   const examsList = useMemo(() => {
     const raw = examState.data?.items || examState.data?.examinations || (Array.isArray(examState.data) ? examState.data : []);
     if (!Array.isArray(raw)) return [];
-    return raw.map((item, idx) => ({
-      id: item.id || idx,
-      name: item.name || item.examName || "Examination",
-      context: item.context || item.dateRange || item.groupName || "",
-      badge: item.badge || item.daysLeft || item.status || "",
-    }));
+    return raw.map((item, idx) => {
+      const name = item.examName || item.name || item.title || "Examination";
+      const examCode = item.examCode || item.code || "";
+      const groupName = item.groupName || item.academicLevelName || "";
+      const dateText = item.formattedDate || item.dateRange || item.date || item.startDate || "";
+      const badgeRaw = item.daysRemainingText || item.badge || item.daysLeft || item.status || "Upcoming";
+      
+      const badge = String(badgeRaw).replace(/(\d+)\s+days/i, "$1 Days");
+      const isOngoing = String(badge).toLowerCase().includes("ongoing");
+      const isToday = String(badge).toLowerCase().includes("today");
+
+      let tone = "blue";
+      if (isOngoing || isToday) tone = "green";
+      else if (idx % 2 === 1) tone = "violet";
+      else tone = "blue";
+
+      const typeTag = isOngoing ? "ONGOING EXAM" : (examCode ? examCode : "EXAM");
+      const context = item.context || (groupName && dateText ? `${groupName} • ${dateText}` : dateText || groupName || "Scheduled");
+
+      return {
+        id: item.id || item.examId || idx,
+        name,
+        examCode,
+        typeTag,
+        groupName,
+        dateText,
+        context,
+        badge,
+        tone,
+      };
+    });
   }, [examState.data]);
 
   const greeting = greetingForHour(currentHour);
 
   return (
     <DashboardLayout title={null} subtitle={null} actions={null} breadcrumb={["Overview"]}>
-      <main className="dashboard-page">
+      {initialLoading ? <DashboardSkeleton /> : <main className="dashboard-page">
         {/* Top Header Bar & Control Panel */}
         <div className="dashboard-header-bar">
           <div className="dashboard-greeting-wrap">
             <h1 className="dashboard-greeting-title">
               <span className="dashboard-greeting-emoji">{greeting.icon}</span> {greeting.message}, Admin!
             </h1>
-            <p className="dashboard-greeting-sub">Here's what's happening in your institution today.</p>
+            <p className="dashboard-greeting-sub">Here's what's happening in your college today.</p>
           </div>
           <div className="dashboard-header-controls">
             <div className="dashboard-last-updated-badge">
@@ -993,8 +1119,9 @@ export default function DashboardPage() {
         <div className="dashboard-viewing-banner">
           <Info size={16} className="dashboard-banner-icon" />
           <span>
-            You are viewing data for <strong>{selectedBoard?.name || selectedBoard?.code || "BIEAP"}</strong> •{" "}
-            <strong>Academic Year {selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || "2026–2027"}</strong>. Change Board or Academic Year to view corresponding records.
+            You are viewing data for {selectedCampus?.name ? <><strong>{selectedCampus.name}</strong> • </> : null}
+            <strong>{selectedBoard?.name || selectedBoard?.code || "BIEAP"}</strong> •{" "}
+            <strong>Academic Year {selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || "2026–2027"}</strong>. Change Campus, Board or Academic Year to view corresponding records.
           </span>
         </div>
 
@@ -1036,8 +1163,8 @@ export default function DashboardPage() {
                 <div className="dashboard-area-chart-container">
                   {/* Fixed Y-Axis column (pinned on the left) */}
                   <div className="dashboard-area-chart-yaxis" style={{ width: yMax >= 1000 ? 40 : yMax >= 100 ? 34 : 28, flexShrink: 0 }}>
-                    <ResponsiveContainer width="100%" height={135}>
-                      <AreaChart data={overviewChartData} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
+                    <ResponsiveContainer width="100%" height={142}>
+                      <AreaChart data={overviewChartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
                         <YAxis
                           width={yMax >= 1000 ? 36 : yMax >= 100 ? 30 : 24}
                           domain={[0, yMax]}
@@ -1066,11 +1193,11 @@ export default function DashboardPage() {
                       style={{
                         width: overviewChartData.length > 5 ? `${Math.round((overviewChartData.length / 5) * 100)}%` : "100%",
                         minWidth: "100%",
-                        height: 135,
+                        height: 142,
                       }}
                     >
-                      <ResponsiveContainer width="100%" height={135}>
-                        <AreaChart data={overviewChartData} margin={{ top: 10, right: 32, left: 32, bottom: 0 }}>
+                      <ResponsiveContainer width="100%" height={142}>
+                        <AreaChart data={overviewChartData} margin={{ top: 8, right: 32, left: 32, bottom: 0 }}>
                           <defs>
                             <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
@@ -1188,26 +1315,37 @@ export default function DashboardPage() {
                     <EmptyState message="No student attendance data available for today." />
                   ) : (
                     <>
-                      {/* Donut Chart & Legend */}
+                      {/* Donut Chart & Side Status Legend (Centered Together) */}
                       <div className="dashboard-attendance-donut-row">
                         <div className="dashboard-donut-chart-wrap">
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                               <Pie
-                                data={studentAttData.chartData}
+                                data={
+                                  studentAttData.chartData.some((d) => d.value > 0)
+                                    ? studentAttData.chartData.filter((d) => d.value > 0)
+                                    : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                }
                                 dataKey="value"
                                 nameKey="name"
                                 innerRadius="65%"
                                 outerRadius="90%"
-                                paddingAngle={3}
+                                paddingAngle={studentAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
                                 stroke="var(--cms-surface)"
                                 strokeWidth={2}
                               >
-                                {studentAttData.chartData.map((entry) => (
+                                {(studentAttData.chartData.some((d) => d.value > 0)
+                                  ? studentAttData.chartData.filter((d) => d.value > 0)
+                                  : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                                ).map((entry) => (
                                   <Cell key={entry.name} fill={entry.color} />
                                 ))}
                               </Pie>
-                              <Tooltip formatter={(val) => [formatNumber(val), "Students"]} />
+                              <Tooltip
+                                content={<CustomDonutTooltip />}
+                                wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
+                                allowEscapeViewBox={{ x: true, y: true }}
+                              />
                             </PieChart>
                           </ResponsiveContainer>
                           <div className="dashboard-donut-center">
@@ -1221,24 +1359,15 @@ export default function DashboardPage() {
                             <span className="legend-label">
                               <span className="dot dot-present" /> Present
                             </span>
-                            <span className="legend-val">
-                              <strong>{formatNumber(studentAttData.present)}</strong> <small>({studentAttData.percentage ?? 0}%)</small>
-                            </span>
                           </div>
                           <div className="legend-item">
                             <span className="legend-label">
                               <span className="dot dot-absent" /> Absent
                             </span>
-                            <span className="legend-val">
-                              <strong>{formatNumber(studentAttData.absent)}</strong>
-                            </span>
                           </div>
                           <div className="legend-item">
                             <span className="legend-label">
-                              <span className="dot dot-halfday dot-late" /> Half-day
-                            </span>
-                            <span className="legend-val">
-                              <strong>{formatNumber(studentAttData.halfDay)}</strong>
+                              <span className="dot dot-halfday" /> Half-day
                             </span>
                           </div>
                         </div>
@@ -1262,7 +1391,7 @@ export default function DashboardPage() {
                           <small>Half-day</small>
                           <strong>{formatNumber(studentAttData.halfDay)}</strong>
                         </div>
-                        <div className="att-kpi-chip text-primary">
+                        <div className="att-kpi-chip">
                           <small>Attendance</small>
                           <strong>{formatNumber(studentAttData.percentage)}%</strong>
                         </div>
@@ -1337,26 +1466,37 @@ export default function DashboardPage() {
               <EmptyState message="No staff attendance data available for today." />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
-                {/* Donut Chart & Legend */}
+                {/* Donut Chart & Side Status Legend (Centered Together) */}
                 <div className="dashboard-attendance-donut-row">
                   <div className="dashboard-donut-chart-wrap">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={staffAttData.chartData}
+                          data={
+                            staffAttData.chartData.some((d) => d.value > 0)
+                              ? staffAttData.chartData.filter((d) => d.value > 0)
+                              : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                          }
                           dataKey="value"
                           nameKey="name"
                           innerRadius="65%"
                           outerRadius="90%"
-                          paddingAngle={3}
+                          paddingAngle={staffAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
                           stroke="var(--cms-surface)"
                           strokeWidth={2}
                         >
-                          {staffAttData.chartData.map((entry) => (
+                          {(staffAttData.chartData.some((d) => d.value > 0)
+                            ? staffAttData.chartData.filter((d) => d.value > 0)
+                            : [{ name: "Absent", value: 1, color: "#ef4444" }]
+                          ).map((entry) => (
                             <Cell key={entry.name} fill={entry.color} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(val) => [formatNumber(val), "Staff"]} />
+                        <Tooltip
+                          content={<CustomDonutTooltip />}
+                          wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
+                          allowEscapeViewBox={{ x: true, y: true }}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="dashboard-donut-center">
@@ -1370,32 +1510,20 @@ export default function DashboardPage() {
                       <span className="legend-label">
                         <span className="dot dot-present" /> Present
                       </span>
-                      <span className="legend-val">
-                        <strong>{formatNumber(staffAttData.present)}</strong>
-                      </span>
                     </div>
                     <div className="legend-item">
                       <span className="legend-label">
                         <span className="dot dot-absent" /> Absent
-                      </span>
-                      <span className="legend-val">
-                        <strong>{formatNumber(staffAttData.absent)}</strong>
                       </span>
                     </div>
                     <div className="legend-item">
                       <span className="legend-label">
                         <span className="dot dot-late" /> Late
                       </span>
-                      <span className="legend-val">
-                        <strong>{formatNumber(staffAttData.late)}</strong>
-                      </span>
                     </div>
                     <div className="legend-item">
                       <span className="legend-label">
                         <span className="dot dot-leave" /> On Leave
-                      </span>
-                      <span className="legend-val">
-                        <strong>{formatNumber(staffAttData.onLeave)}</strong>
                       </span>
                     </div>
                   </div>
@@ -1503,15 +1631,20 @@ export default function DashboardPage() {
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">
                   {examsList.map((item, index) => (
-                    <div key={`exam-${item.id}-${index}`} className="dashboard-info-item">
-                      <span className="dashboard-activity-marker">
+                    <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
+                      <span className={`dashboard-list-icon tone-${item.tone}`}>
                         <CalendarDays size={15} />
                       </span>
                       <div className="dashboard-info-content">
-                        <strong>{item.name}</strong>
-                        <small>{item.context}</small>
+                        <div className="dashboard-exam-title-row">
+                          <strong>{item.name}</strong>
+                          <span className={`exam-type-pill pill-${item.tone}`}>{item.typeTag}</span>
+                        </div>
+                        <small className="dashboard-exam-meta">
+                          <span>{item.context}</span>
+                        </small>
                       </div>
-                      <span className="dashboard-days-badge">{item.badge}</span>
+                      <span className={`dashboard-days-badge exam-badge badge-${item.tone}`}>{item.badge}</span>
                     </div>
                   ))}
                 </div>
@@ -1519,7 +1652,7 @@ export default function DashboardPage() {
             )}
           </article>
         </section>
-      </main>
+      </main>}
       <Toast message={toastMessage} onClose={() => setToastMessage("")} />
     </DashboardLayout>
   );

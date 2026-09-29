@@ -8,7 +8,6 @@ import "./LandingPage.css";
 const quickLinks = [
   { label: "Home", to: "/" },
   { label: "Login", to: "/login" },
-  { label: "Register", to: "/register" },
 ];
 
 const modules = ["Admissions", "Attendance", "Exams", "Fees", "Reports"];
@@ -35,8 +34,7 @@ export default function LandingPage() {
             <span><CheckCircle2 size={15} /> Better student outcomes</span>
           </div>
           <div className="cms-hero-actions landing-hero-actions">
-            <Link to="/register" className="cms-btn landing-start-btn">Get Started <ArrowRight size={16} /></Link>
-            <Link to="/login" className="cms-btn landing-start-btn landing-explore-btn">Explore the platform <ArrowRight size={16} /></Link>
+            <Link to="/login" className="cms-btn landing-start-btn">Get Started <ArrowRight size={16} /></Link>
           </div>
         </div>
       </section>

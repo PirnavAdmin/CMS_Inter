@@ -56,7 +56,6 @@ export default function ForgotPassword() {
       )}
       <div className="cms-auth-links">
         <Link to="/login">Back to login</Link>
-        <Link to="/register">Create an account</Link>
       </div>
     </AuthLayout>
   );

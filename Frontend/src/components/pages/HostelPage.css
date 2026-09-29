@@ -581,13 +581,68 @@ button,
 
 /* Print styling for hostel reports */
 @media print {
+  @page {
+    size: auto;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  body * {
+    visibility: visible !important;
+  }
+
   .cms-hostel-tabs,
   .cms-hostel-toolbar,
   .cms-hostel-quick-actions,
   .cms-action-btn,
   .cms-header,
-  .cms-sidebar {
+  .cms-sidebar,
+  .cms-report-header-row,
+  .cms-report-filter-card,
+  .cms-report-actions,
+  .cms-pagination-wrap,
+  .cms-hostel-subnav {
     display: none !important;
+  }
+
+  .cms-hostel-container,
+  .cms-hostel-stack,
+  .cms-report-table-card,
+  .cms-report-table-card * {
+    visibility: visible !important;
+  }
+
+  .cms-report-table-card {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .cms-report-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  .cms-report-th,
+  .cms-report-td {
+    border: 1px solid #d1d5db !important;
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+    color: #111827 !important;
+    background: transparent !important;
+  }
+
+  .cms-report-th {
+    background-color: #f3f4f6 !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
   }
 
   .cms-hostel-table-wrap {
@@ -595,6 +650,7 @@ button,
     box-shadow: none !important;
   }
 }
+
 
 /* Room Sharing Config Modal & Stepper */
 .cms-stepper-tabs {

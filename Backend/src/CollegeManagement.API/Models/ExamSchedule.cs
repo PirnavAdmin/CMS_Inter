@@ -29,6 +29,9 @@ namespace CollegeManagement.API.Models
             set => ExaminationId = value;
         }
 
+        [NotMapped]
+        public int CampusId { get; set; } = 1;
+
         [Required]
         public int SubjectId { get; set; }
 
@@ -78,5 +81,6 @@ namespace CollegeManagement.API.Models
         // Navigation Properties
         public Examination? Examination { get; set; }
         public Subject? Subject { get; set; }
+        public ICollection<InvigilatorAssignment> InvigilatorAssignments { get; set; } = new List<InvigilatorAssignment>();
     }
 }

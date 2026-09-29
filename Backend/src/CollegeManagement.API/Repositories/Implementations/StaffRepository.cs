@@ -252,6 +252,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.BoardRef != null && (s.BoardRef.BoardName == bName || s.BoardRef.BoardCode == bName));
             }
 
+            // 4.1 Campus filter
+            if (queryParams.CampusId.HasValue && queryParams.CampusId.Value > 0)
+            {
+                query = query.Where(s => s.CampusId == queryParams.CampusId.Value);
+            }
+
             // 5. Staff Type filter with String/Enum Normalization (Teaching / Non-Teaching / NonTeaching)
             if (!string.IsNullOrWhiteSpace(queryParams.StaffType) &&
                 !queryParams.StaffType.Equals("All", StringComparison.OrdinalIgnoreCase))
@@ -360,9 +366,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             return (items, totalCount);
         }
 
-        public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null)
+        public async Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null)
         {
             var query = _context.Staffs.AsNoTracking().Where(s => !s.IsDeleted && s.Status == "Active");
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                query = query.Where(s => s.CampusId == campusId.Value);
+            }
             if (!string.IsNullOrWhiteSpace(staffType) && !staffType.Equals("All", StringComparison.OrdinalIgnoreCase))
             {
                 var st = staffType.Trim();
@@ -395,36 +405,46 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .ToListAsync();
         }
 
-        public async Task<string> GenerateNextEmployeeIdAsync(string staffType)
+        public async Task<string> GenerateNextEmployeeIdAsync(string staffType, int campusId)
         {
             var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-            var prefix = isTeaching ? "PCTCH" : "PCNT";
+            var seriesCode = isTeaching ? "STAFF_TCH" : "STAFF_NT";
+            
+            using var conn = _context.Database.GetDbConnection();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_SeriesCode", seriesCode, System.Data.DbType.String);
+            parameters.Add("p_CampusId", campusId, System.Data.DbType.Int32);
 
-            // Find maximum existing sequential numeric suffix for the staff type
-            var existingStaff = await _context.Staffs
-                .Where(s => !s.IsDeleted)
-                .Select(s => new { s.EmployeeId, s.StaffType })
-                .ToListAsync();
+            var nextId = await conn.QueryFirstOrDefaultAsync<string>(
+                "sp_GenerateNextNumberSeries",
+                parameters,
+                commandType: System.Data.CommandType.StoredProcedure);
 
-            int maxNumber = 0;
-            foreach (var s in existingStaff)
+            if (string.IsNullOrWhiteSpace(nextId))
             {
-                var id = s.EmployeeId?.Trim() ?? string.Empty;
-                var currentIsTeaching = !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-                if (currentIsTeaching == isTeaching || id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                // Fallback if SP fails or configuration doesn't exist
+                var prefix = isTeaching ? "PCTCH" : "PCNT";
+                var maxNumber = await _context.Staffs
+                    .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null && s.EmployeeId.StartsWith(prefix))
+                    .Select(s => s.EmployeeId)
+                    .ToListAsync();
+                    
+                int max = 0;
+                foreach (var id in maxNumber)
                 {
                     var match = System.Text.RegularExpressions.Regex.Match(id, @"\d+");
-                    if (match.Success && int.TryParse(match.Value, out int parsedNum) && parsedNum > maxNumber && parsedNum < 100000)
+                    if (match.Success && int.TryParse(match.Value, out int parsedNum) && parsedNum > max)
                     {
-                        maxNumber = parsedNum;
+                        max = parsedNum;
                     }
                 }
+                return $"{prefix}{(max + 1):D4}";
             }
 
-            return $"{prefix}{(maxNumber + 1):D4}";
+            return nextId;
         }
 
-        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null)
+        public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)
         {
             var query = _context.Staffs
                 .AsNoTracking()
@@ -433,6 +453,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (boardId.HasValue && boardId.Value > 0)
             {
                 query = query.Where(s => s.BoardId == boardId.Value || s.BoardId == null);
+            }
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                query = query.Where(s => s.CampusId == campusId.Value);
             }
 
             var activeStaff = await query.ToListAsync();

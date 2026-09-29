@@ -31,14 +31,17 @@ import {
   UserCheck,
   Lock,
   KeyRound,
+  X,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { ConfirmDialog, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, Modal, SkeletonPage, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as staffApi from "@/api/staffApi.js";
+import { loadCachedDepartments, loadCachedDesignations } from "./DepartmentManagementPage.jsx";
 import * as XLSX from "xlsx";
 import "./StaffManagementPage.css";
 import totalStaffIcon from "@/assets/dashboard-3d/add-staff.png";
@@ -663,6 +666,24 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
   return true;
 };
 
+export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
+  if (!selectedCampus) return true;
+  if (!staffRecord) return false;
+
+  const targetId = selectedCampus.campusId ?? selectedCampus.id;
+  const targetName = selectedCampus.campusName ?? selectedCampus.name;
+  const targetCode = selectedCampus.campusCode ?? selectedCampus.code;
+  const recordCampus = staffRecord.campus ?? staffRecord.Campus ?? {};
+  const recordId = staffRecord.campusId ?? staffRecord.CampusId ?? recordCampus.campusId ?? recordCampus.id ?? recordCampus.Id;
+  const recordName = staffRecord.campusName ?? staffRecord.CampusName ?? recordCampus.campusName ?? recordCampus.name ?? recordCampus.Name;
+  const recordCode = staffRecord.campusCode ?? staffRecord.CampusCode ?? recordCampus.campusCode ?? recordCampus.code ?? recordCampus.Code;
+
+  if (recordId != null && targetId != null) return String(recordId) === String(targetId);
+  if (recordCode && targetCode) return String(recordCode).trim().toLowerCase() === String(targetCode).trim().toLowerCase();
+  if (recordName && targetName) return String(recordName).trim().toLowerCase() === String(targetName).trim().toLowerCase();
+  return false;
+};
+
 export const TEACHING_ROLE_NAMES = [
   "Accounts",
   "Examination Cell",
@@ -673,13 +694,13 @@ export const TEACHING_ROLE_NAMES = [
 ];
 
 export const NON_TEACHING_ROLE_NAMES = [
+  "Attendant",
   "Cleaner",
   "Driver",
   "Hostel Warden",
 ];
 
 const teachingFields = [
-  ["board", "Board Name", "select", [], true],
   ["employeeId", "Employee ID", "text", [], true],
   ["role", "Role", "search-select", TEACHING_ROLE_NAMES, true],
   ["firstName", "First Name", "text", [], true],
@@ -701,7 +722,6 @@ const teachingFields = [
 const nonTeachingSteps = [
   // Step 0: Personal Information
   [
-    ["board", "Board Name", "select", [], true],
     ["employeeId", "Employee ID"],
     ["role", "Role", "search-select", NON_TEACHING_ROLE_NAMES, true],
     ["firstName", "First Name"],
@@ -712,7 +732,7 @@ const nonTeachingSteps = [
     ["dateOfBirth", "Date of Birth", "date"],
     ["maritalStatus", "Marital Status", "text", [], false],
     ["bloodGroup", "Blood Group", "select", ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"], false],
-    ["nationality", "Nationality"],
+    ["nationality", "Nationality", "text", [], false],
     ["aadhaar", "Aadhaar Number"],
     ["pan", "PAN Number", "text", [], false],
     ["profilePhoto", "Profile Photo", "file", [], false],
@@ -734,7 +754,7 @@ const nonTeachingSteps = [
     ["department", "Department", "search-select", nonTeachingDepartments, true],
     ["designation", "Designation", "search-select", nonTeachingDesignations, true],
     ["dateOfJoining", "Date of Joining", "date"],
-    ["qualification", "Qualification"],
+    ["qualification", "Qualification", "text", [], false],
     ["experience", "Experience", "text", [], false],
     ["status", "Status", "select", ["Active", "Inactive"], true, "start-new-row"],
   ],
@@ -756,14 +776,14 @@ const nonTeachingSteps = [
   */
   // Step 3 (formerly Step 4): Documents
   [
-    ["aadhaarDocument", "Aadhaar", "file", [], false],
-    ["panDocument", "PAN", "file", [], false],
-    ["qualificationCertificate", "Qualification Certificate", "file", [], false],
-    ["experienceCertificate", "Experience Certificate", "file", [], false],
-    ["resume", "Resume", "file", [], false],
-    ["bankProof", "Bank Passbook / Cancelled Cheque", "file", [], false],
-    ["drivingLicence", "Driving Licence", "file", [], false],
-    ["otherDocuments", "Other Documents", "file", [], false],
+    ["aadhaarDocument", "Aadhaar (PDF)", "file", [], false],
+    ["panDocument", "PAN (PDF)", "file", [], false],
+    ["qualificationCertificate", "Qualification Certificate (PDF)", "file", [], false],
+    ["experienceCertificate", "Experience Certificate (PDF)", "file", [], false],
+    ["resume", "Resume (PDF)", "file", [], false],
+    ["bankProof", "Bank Passbook / Cancelled Cheque (PDF)", "file", [], false],
+    ["drivingLicence", "Driving Licence (PDF)", "file", [], false],
+    ["otherDocuments", "Other Documents (PDF)", "file", [], false],
   ],
   // Step 4 (formerly Step 5): Emergency Contact
   [
@@ -793,11 +813,28 @@ export const getNonTeachingStepFields = (stepIndex, values = {}) => {
     }
     base.push(
       ["dateOfJoining", "Date of Joining", "date", [], true],
-      ["qualification", "Qualification", "text", [], true],
+      ["qualification", "Qualification", "text", [], false],
       ["experience", "Experience", "text", [], false],
       ["status", "Status", "select", ["Active", "Inactive"], true, "start-new-row"]
     );
     return base;
+  }
+  if (stepIndex === 3) {
+    const docs = [
+      ["aadhaarDocument", "Aadhaar (PDF)", "file", [], false],
+      ["panDocument", "PAN (PDF)", "file", [], false],
+      ["qualificationCertificate", "Qualification Certificate (PDF)", "file", [], false],
+      ["experienceCertificate", "Experience Certificate (PDF)", "file", [], false],
+      ["resume", "Resume (PDF)", "file", [], false],
+      ["bankProof", "Bank Passbook / Cancelled Cheque (PDF)", "file", [], false],
+    ];
+    if (isTransport) {
+      docs.push(["drivingLicence", "Driving Licence (PDF)", "file", [], true]);
+    } else {
+      docs.push(["drivingLicence", "Driving Licence (PDF)", "file", [], false]);
+    }
+    docs.push(["otherDocuments", "Other Documents (PDF)", "file", [], false]);
+    return docs;
   }
   return nonTeachingSteps[stepIndex] || [];
 };
@@ -982,8 +1019,10 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             zIndex: 99999,
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.08)",
             border: "1px solid var(--cms-border, #d1d5db)",
-            maxHeight: "220px",
+            maxHeight: "165px",
             overflowY: "auto",
+            overflowX: "hidden",
+            scrollbarWidth: "thin",
           }}
         >
           {filteredOpts.length > 0 ? (
@@ -1223,16 +1262,30 @@ function useStaffTypeOptions(staffType) {
         try {
           const deptRes = await apiClient.get(apiEndpoints.departments.getAll, {
             params: staffType ? { staffType: apiStaffType } : {},
+            skipGlobalLoader: true,
+            silent: true,
+            skipErrorLog: true,
           });
           deptData = deptRes?.data?.items || deptRes?.data?.data || (Array.isArray(deptRes?.data) ? deptRes.data : []);
         } catch {
-          const lookupRes = await apiClient.get(apiEndpoints.faculty.lookupDepartments, {
-            params: staffType ? { staffType: apiStaffType } : {},
-          });
-          deptData = lookupRes?.data?.items || lookupRes?.data?.data || (Array.isArray(lookupRes?.data) ? lookupRes.data : []);
+          try {
+            const lookupRes = await apiClient.get(apiEndpoints.faculty.lookupDepartments, {
+              params: staffType ? { staffType: apiStaffType } : {},
+              skipGlobalLoader: true,
+              silent: true,
+              skipErrorLog: true,
+            });
+            deptData = lookupRes?.data?.items || lookupRes?.data?.data || (Array.isArray(lookupRes?.data) ? lookupRes.data : []);
+          } catch {
+            deptData = [];
+          }
         }
 
-        const filteredDepts = deptData.filter((d) => {
+        if (!Array.isArray(deptData) || deptData.length === 0) {
+          deptData = loadCachedDepartments();
+        }
+
+        const filteredDepts = (Array.isArray(deptData) ? deptData : []).filter((d) => {
           if (!d) return false;
           if (d.isActive === false || d.status === "Inactive") return false;
           const deptName = typeof d === "object" ? d.name || d.departmentName || "" : String(d || "");
@@ -1257,16 +1310,30 @@ function useStaffTypeOptions(staffType) {
               includeInactive: false,
               ...(staffType ? { staffType: apiStaffType } : {}),
             },
+            skipGlobalLoader: true,
+            silent: true,
+            skipErrorLog: true,
           });
           desigData = desigRes?.data?.items || desigRes?.data?.data || (Array.isArray(desigRes?.data) ? desigRes.data : []);
         } catch {
-          const lookupRes = await apiClient.get(apiEndpoints.faculty.lookupDesignations, {
-            params: staffType ? { staffType: apiStaffType } : {},
-          });
-          desigData = lookupRes?.data?.items || lookupRes?.data?.data || (Array.isArray(lookupRes?.data) ? lookupRes.data : []);
+          try {
+            const lookupRes = await apiClient.get(apiEndpoints.faculty.lookupDesignations, {
+              params: staffType ? { staffType: apiStaffType } : {},
+              skipGlobalLoader: true,
+              silent: true,
+              skipErrorLog: true,
+            });
+            desigData = lookupRes?.data?.items || lookupRes?.data?.data || (Array.isArray(lookupRes?.data) ? lookupRes.data : []);
+          } catch {
+            desigData = [];
+          }
         }
 
-        const filteredDesigs = desigData.filter((d) => {
+        if (!Array.isArray(desigData) || desigData.length === 0) {
+          desigData = loadCachedDesignations();
+        }
+
+        const filteredDesigs = (Array.isArray(desigData) ? desigData : []).filter((d) => {
           if (!d) return false;
           if (d.isActive === false || d.status === "Inactive") return false;
           const desigName = typeof d === "object" ? d.name || d.designationName || "" : String(d || "");
@@ -1563,10 +1630,15 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
         }
       }
 
-      // Driver's License Number
-      if (name === "drivingLicenseNumber" || name === "drivingLicence") {
-        if (strVal.length < 3) {
-          newErrors[name] = "Please enter a valid Driver's License Number";
+      // Driver's License Number (All-India Standard Length: 15-16 alphanumeric characters)
+      if (name === "drivingLicenseNumber") {
+        const cleanDL = strVal.toUpperCase().replace(/[-/\s]/g, "");
+        if (cleanDL.length > 0) {
+          if (cleanDL.length < 15 || cleanDL.length > 16) {
+            newErrors[name] = "Driving License Number must be 15 to 16 characters";
+          } else if (!/^[A-Z0-9]{15,16}$/.test(cleanDL)) {
+            newErrors[name] = "Driving License Number must contain only letters and numbers";
+          }
         }
       }
 
@@ -1575,6 +1647,12 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
         const expDate = new Date(strVal);
         if (isNaN(expDate.getTime())) {
           newErrors[name] = "Please enter a valid License Expiry Date";
+        } else {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          if (expDate < today) {
+            newErrors[name] = "Driving license has expired. Please select a valid future expiry date.";
+          }
         }
       }
     }
@@ -1595,6 +1673,9 @@ function Field({
   staffType = null,
 }) {
   const { boards, selectedBoard, setSelectedBoard } = useAcademicContext();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [localFile, setLocalFile] = useState(null);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState("");
   if (!Array.isArray(item) || item.length < 2) return null;
   const name = item[0] || "";
   const label = item[1] || name || "";
@@ -1784,20 +1865,72 @@ function Field({
         change("");
         return;
       }
-      const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-      if (!validTypes.includes(file.type)) {
-        if (typeof setErrors === "function") {
-          setErrors((prev) => ({ ...prev, [name]: "Profile photo must be an image (.jpg, .png, .webp)" }));
+      const isPhoto = name.toLowerCase().includes("photo") || name === "signature";
+      if (isPhoto) {
+        const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+        if (!validTypes.includes(file.type)) {
+          if (typeof setErrors === "function") {
+            setErrors((prev) => ({ ...prev, [name]: `${label} must be an image (.jpg, .png, .webp)` }));
+          }
+          return;
         }
-        return;
+      } else {
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        if (!isPdf) {
+          if (typeof setErrors === "function") {
+            setErrors((prev) => ({ ...prev, [name]: `${label} must be a PDF document (.pdf)` }));
+          }
+          return;
+        }
       }
+
       if (file.size > 5 * 1024 * 1024) {
         if (typeof setErrors === "function") {
-          setErrors((prev) => ({ ...prev, [name]: "Profile photo size must not exceed 5MB" }));
+          setErrors((prev) => ({ ...prev, [name]: "File size must not exceed 5MB" }));
         }
         return;
       }
-      change(file.name);
+
+      let previewUrl = "";
+      try {
+        previewUrl = URL.createObjectURL(file);
+      } catch {}
+      setLocalFile(file);
+      setLocalPreviewUrl(previewUrl);
+
+      if (name === "drivingLicence") {
+        try {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            try {
+              const buffer = ev.target?.result;
+              if (buffer) {
+                const textDecoder = new TextDecoder("latin1");
+                const rawText = textDecoder.decode(buffer);
+                if (typeof setValues === "function") {
+                  setValues((prev) => ({
+                    ...prev,
+                    [name]: file.name,
+                    [name + "_previewUrl"]: previewUrl,
+                    _dlPdfRawText: rawText,
+                  }));
+                }
+              }
+            } catch {}
+          };
+          reader.readAsArrayBuffer(file);
+        } catch {}
+      }
+
+      if (typeof setValues === "function") {
+        setValues((prev) => ({
+          ...prev,
+          [name]: file.name,
+          [name + "_previewUrl"]: previewUrl,
+        }));
+      } else {
+        change(file.name);
+      }
       return;
     }
 
@@ -1813,6 +1946,8 @@ function Field({
       raw = raw.toUpperCase().slice(0, 11);
     } else if (name === "accountNumber") {
       raw = raw.replace(/\D/g, "").slice(0, 18);
+    } else if (name === "drivingLicenseNumber" || name === "drivingLicence") {
+      raw = raw.toUpperCase().replace(/[^A-Z0-9 ]/g, "").slice(0, 16);
     }
 
     change(raw);
@@ -1841,7 +1976,17 @@ function Field({
     inputMaxLength = 11;
   } else if (name === "accountNumber") {
     inputMaxLength = 18;
+  } else if (name === "drivingLicenseNumber" || name === "drivingLicence") {
+    inputMaxLength = 16;
   }
+
+  const placeholderText = undefined;
+
+  const fileAccept = type === "file"
+    ? (name.toLowerCase().includes("photo") || name === "signature" ? "image/jpeg,image/png,image/webp" : ".pdf,application/pdf")
+    : undefined;
+
+  const activePreviewUrl = localPreviewUrl || safeValues[name + "_previewUrl"] || "";
 
   return (
     <label className={[type === "textarea" ? "is-wide" : "", layoutClass, hasError ? "has-field-error" : ""].filter(Boolean).join(" ")}>
@@ -1883,25 +2028,176 @@ function Field({
         />
       ) : type === "textarea" ? (
         <textarea value={val} onChange={handleInputChange} style={errorStyle} />
+      ) : type === "file" ? (
+        <div
+          className={`cms-custom-file-box ${hasError ? "has-field-error" : ""}`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+            minHeight: 35,
+            height: 35,
+            border: hasError ? "1px solid #ef4444" : "1px solid var(--cms-border)",
+            boxShadow: hasError ? "0 0 0 1px #ef4444" : undefined,
+            borderRadius: 7,
+            background: "var(--cms-surface, #ffffff)",
+            overflow: "hidden",
+            position: "relative",
+            boxSizing: "border-box",
+            ...errorStyle,
+          }}
+        >
+          <input
+            type="file"
+            id={`file-input-${name}`}
+            onChange={handleInputChange}
+            accept={fileAccept}
+            style={{ display: "none" }}
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const inp = document.getElementById(`file-input-${name}`);
+              if (inp) inp.click();
+            }}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              height: "100%",
+              padding: "0 10px",
+              background: "var(--cms-subtle, #f3f4f6)",
+              border: "none",
+              borderRight: "1px solid var(--cms-border, #e5e7eb)",
+              fontSize: 10,
+              fontWeight: 600,
+              color: "var(--cms-text, #374151)",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <Upload size={12} style={{ color: "var(--cms-primary, #355e3b)" }} />
+            Choose File
+          </button>
+          <span
+            onClick={val ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setPreviewOpen(true);
+            } : undefined}
+            style={{
+              flex: "1 1 auto",
+              minWidth: 0,
+              padding: "0 8px",
+              fontSize: 10,
+              color: val ? "var(--cms-primary, #355e3b)" : "var(--cms-muted, #9ca3af)",
+              fontWeight: val ? 600 : 400,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              cursor: val ? "pointer" : "default",
+              textDecoration: val ? "underline" : "none",
+              textUnderlineOffset: 2,
+            }}
+            title={val ? `Click to preview: ${val}` : "No file chosen"}
+          >
+            {val || "No file chosen"}
+          </span>
+          {val ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 3, paddingRight: 6, flexShrink: 0 }}>
+              <button
+                type="button"
+                className="cms-file-clear-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  change("");
+                  setLocalFile(null);
+                  setLocalPreviewUrl("");
+                  if (typeof setValues === "function") {
+                    setValues((prev) => ({
+                      ...prev,
+                      [name]: "",
+                      [name + "_previewUrl"]: "",
+                      ...(name === "drivingLicence" ? { _dlPdfRawText: "" } : {}),
+                    }));
+                  }
+                  const inp = document.getElementById(`file-input-${name}`);
+                  if (inp) inp.value = "";
+                }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 22,
+                  height: 22,
+                  border: "none",
+                  borderRadius: "50%",
+                  background: "rgba(239, 68, 68, 0.1)",
+                  color: "#ef4444",
+                  cursor: "pointer",
+                  padding: 0,
+                }}
+                title="Remove selected file"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ) : null}
+          {previewOpen ? (
+            <Modal
+              title={`${label} Preview: ${val}`}
+              onClose={() => setPreviewOpen(false)}
+              size="lg"
+            >
+              <div style={{ width: "100%", height: "70vh", minHeight: 480, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {activePreviewUrl ? (
+                  val.toLowerCase().endsWith(".pdf") ? (
+                    <object
+                      data={activePreviewUrl}
+                      type="application/pdf"
+                      style={{ width: "100%", height: "100%", border: "1px solid var(--cms-border, #e5e7eb)", borderRadius: 8 }}
+                    >
+                      <iframe
+                        src={activePreviewUrl}
+                        title={val}
+                        style={{ width: "100%", height: "100%", border: "none", borderRadius: 8 }}
+                      />
+                    </object>
+                  ) : (
+                    <img
+                      src={activePreviewUrl}
+                      alt={val}
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: 8 }}
+                    />
+                  )
+                ) : (
+                  <div style={{ textAlign: "center", color: "var(--cms-muted)", padding: 40 }}>
+                    <FileText size={48} style={{ color: "var(--cms-primary, #355e3b)", marginBottom: 12, margin: "0 auto" }} />
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "var(--cms-text)" }}>{val}</p>
+                    <p style={{ margin: "6px 0 0", fontSize: 12 }}>Document file selected for upload</p>
+                  </div>
+                )}
+              </div>
+            </Modal>
+          ) : null}
+        </div>
       ) : (
         <input
           type={type}
           readOnly={name === "employeeId"}
-          value={type === "file" ? undefined : val}
+          value={val}
           onChange={handleInputChange}
           maxLength={inputMaxLength}
+          placeholder={placeholderText}
           max={maxDate}
           style={errorStyle}
         />
-      )}{" "}
-      {name === "employeeId" ? (
-        <small className="field-help" style={{ display: "block", marginTop: 4, fontSize: 11, color: "var(--cms-muted)" }}>
-          Generated using ID &amp; Number Series Settings.{" "}
-          <Link to="/dashboard/settings/number-series" style={{ color: "var(--cms-primary)", textDecoration: "underline" }}>
-            Manage Number Series
-          </Link>
-        </small>
-      ) : error ? (
+      )}
+      {error ? (
         <small className="field-error" style={{ color: "#ef4444", fontSize: 11, display: "block", marginTop: 4, fontWeight: 500 }}>{error}</small>
       ) : null}
     </label>
@@ -2094,6 +2390,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
 function Dashboard({ records = [] }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [credModalOpen, setCredModalOpen] = useState(false);
@@ -2107,8 +2404,10 @@ function Dashboard({ records = [] }) {
         const params = {};
         const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         if (activeBoardCode) params.boardCode = activeBoardCode;
         if (activeBoardId) params.boardId = activeBoardId;
+        if (activeCampusId != null && activeCampusId !== "") params.campusId = Number(activeCampusId) || activeCampusId;
 
         const response = await apiClient.get(apiEndpoints.faculty.dashboardStats, { params });
         if (isMounted && response.data) {
@@ -2122,18 +2421,19 @@ function Dashboard({ records = [] }) {
     }
     fetchStats();
     return () => { isMounted = false; };
-  }, [selectedBoard]);
+  }, [selectedBoard, selectedCampus]);
 
   const safeRecords = useMemo(() => {
     const raw = Array.isArray(records) ? records : [];
-    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards));
-  }, [records, selectedBoard, boards]);
+    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards) && isStaffMatchingCampus(r, selectedCampus));
+  }, [records, selectedBoard, boards, selectedCampus]);
 
-  const hasStats = stats !== null && stats !== undefined;
+  // Dashboard stats are global aggregates; use campus-scoped staff records when a campus is selected.
+  const hasStats = !selectedCampus && stats !== null && stats !== undefined;
 
-  const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.length || 0));
-  const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => r?.staffType === "Teaching").length || 0));
-  const nonTeachingCount = loading ? "—" : (hasStats ? (stats.nonTeachingStaff ?? 0) : (safeRecords.filter((r) => r?.staffType === "Non-Teaching").length || 0));
+  const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.filter((r) => !r?.status || r?.status === "Active").length || 0));
+  const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Teaching").length || 0));
+  const nonTeachingCount = loading ? "—" : (hasStats ? (stats.nonTeachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Non-Teaching").length || 0));
   const completedCount = loading ? "—" : (hasStats ? (stats.completedProfiles ?? stats.completed ?? 0) : (safeRecords.filter((r) => r?.profileStatus === "Completed").length || 0));
   const pendingCount = loading ? "—" : (hasStats ? (stats.pendingProfileCompletion ?? stats.pending ?? 0) : (typeof totalCount === "number" ? Math.max(0, totalCount - completedCount) : 0));
   const pct = typeof totalCount === "number" && totalCount > 0 && typeof completedCount === "number" ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -2452,6 +2752,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
 function StaffList({ records = [], setRecords, forced }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
   const list = Array.isArray(records) ? records : [];
   const importInputRef = useRef(null);
   const [tab, setTab] = useState(forced || "All");
@@ -2492,6 +2793,7 @@ function StaffList({ records = [], setRecords, forced }) {
         const currentTab = forced || tab;
         const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         const params = {
           PageNumber: page,
           PageSize: size,
@@ -2502,6 +2804,7 @@ function StaffList({ records = [], setRecords, forced }) {
           ProfileStatus: currentTab === "Completed" ? "Completed" : (currentTab === "Pending" ? "Pending" : undefined),
           BoardCode: activeBoardCode || undefined,
           BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
         };
 
         const res = await apiClient.get(apiEndpoints.faculty.list, { params });
@@ -2524,7 +2827,7 @@ function StaffList({ records = [], setRecords, forced }) {
     }
     fetchStaffList();
     return () => { isMounted = false; };
-  }, [page, size, q, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard]);
+  }, [page, size, q, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus]);
 
   // Handle Client-side Excel Parsing & Row-by-Row Validation
   const handleBulkImport = async (e) => {
@@ -2866,6 +3169,11 @@ function StaffList({ records = [], setRecords, forced }) {
     } finally {
       setRecords((prev) => prev.filter((r) => r.id !== remove.id));
       setRemove(null);
+      try {
+        window.dispatchEvent(new Event("staff-records-updated"));
+      } catch (error) {
+        console.warn("Unable to notify Roles & Permissions about the staff deletion:", error);
+      }
     }
   };
 
@@ -2924,6 +3232,7 @@ function StaffList({ records = [], setRecords, forced }) {
       (r) =>
         r &&
         isStaffMatchingBoard(r, selectedBoard, boards) &&
+        isStaffMatchingCampus(r, selectedCampus) &&
         (currentTab === "All" ||
           (currentTab === "Pending"
             ? r.staffType === "Teaching" && r.profileStatus !== "Completed"
@@ -2937,7 +3246,7 @@ function StaffList({ records = [], setRecords, forced }) {
           String(v || "").toLowerCase().includes((q || "").toLowerCase()),
         ),
     );
-  }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards]);
+  }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards, selectedCampus]);
 
   const [apiFilterDepts, setApiFilterDepts] = useState([]);
   const [apiFilterDesigs, setApiFilterDesigs] = useState([]);
@@ -2951,20 +3260,35 @@ function StaffList({ records = [], setRecords, forced }) {
           : (tab === "Teaching" || tab === "Non-Teaching" ? (tab === "Non-Teaching" ? "NonTeaching" : "Teaching") : undefined);
         const params = staffTypeParam ? { staffType: staffTypeParam } : {};
 
-        const [deptRes, desigRes] = await Promise.allSettled([
-          apiClient.get(apiEndpoints.departments.getAll, { params }),
-          apiClient.get(apiEndpoints.designations.getAll, { params: { includeInactive: false, ...params } }),
-        ]);
+        let deptItems = [];
+        let desigItems = [];
 
-        if (isMounted) {
+        try {
+          const [deptRes, desigRes] = await Promise.allSettled([
+            apiClient.get(apiEndpoints.departments.getAll, { params, skipGlobalLoader: true, silent: true, skipErrorLog: true }),
+            apiClient.get(apiEndpoints.designations.getAll, { params: { includeInactive: false, ...params }, skipGlobalLoader: true, silent: true, skipErrorLog: true }),
+          ]);
+
           if (deptRes.status === "fulfilled" && deptRes.value?.data) {
-            const items = deptRes.value.data.items || deptRes.value.data.data || (Array.isArray(deptRes.value.data) ? deptRes.value.data : []);
-            setApiFilterDepts(items.map((d) => (typeof d === "object" ? d.name || d.departmentName : d)).filter(Boolean));
+            deptItems = deptRes.value.data.items || deptRes.value.data.data || (Array.isArray(deptRes.value.data) ? deptRes.value.data : []);
           }
           if (desigRes.status === "fulfilled" && desigRes.value?.data) {
-            const items = desigRes.value.data.items || desigRes.value.data.data || (Array.isArray(desigRes.value.data) ? desigRes.value.data : []);
-            setApiFilterDesigs(items.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean));
+            desigItems = desigRes.value.data.items || desigRes.value.data.data || (Array.isArray(desigRes.value.data) ? desigRes.value.data : []);
           }
+        } catch {
+          // ignore
+        }
+
+        if (deptItems.length === 0) {
+          deptItems = loadCachedDepartments();
+        }
+        if (desigItems.length === 0) {
+          desigItems = loadCachedDesignations();
+        }
+
+        if (isMounted) {
+          setApiFilterDepts(deptItems);
+          setApiFilterDesigs(desigItems);
         }
       } catch (err) {
         console.warn("Failed to load department/designation filter options from API:", err);
@@ -2975,22 +3299,112 @@ function StaffList({ records = [], setRecords, forced }) {
   }, [forced, tab]);
 
   const departmentOptions = useMemo(() => {
-    const fallback = list.map((r) => r?.department).filter(Boolean);
-    return [...new Set([...apiFilterDepts, ...fallback])];
-  }, [apiFilterDepts, list]);
+    const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+    const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+    const fallbackList = isTeaching ? teachingDepartments : isNonTeaching ? nonTeachingDepartments : [...teachingDepartments, ...nonTeachingDepartments];
+    const apiNames = apiFilterDepts.map((d) => (typeof d === "object" ? d.name || d.departmentName : d)).filter(Boolean);
+    const listNames = list.map((r) => r?.department).filter(Boolean);
+    return [...new Set([...apiNames, ...fallbackList, ...listNames])];
+  }, [apiFilterDepts, forced, tab, list]);
 
   const designationOptions = useMemo(() => {
-    const fallback = list.map((r) => r?.designation).filter(Boolean);
-    return [...new Set([...apiFilterDesigs, ...fallback])];
-  }, [apiFilterDesigs, list]);
+    const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+    const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+    const currentDept = String(departmentFilter || "").trim();
+    const currentDeptNorm = currentDept.toLowerCase().replace(/[-_\s&]/g, "");
+
+    if (currentDept) {
+      // 1. Live designations from API matching selected department
+      const matchingApi = apiFilterDesigs
+        .filter((d) => {
+          if (!d) return false;
+          if (typeof d === "object") {
+            const dDeptName = String(d.departmentName || d.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "");
+            return dDeptName && (dDeptName === currentDeptNorm || currentDeptNorm.includes(dDeptName) || dDeptName.includes(currentDeptNorm));
+          }
+          return false;
+        })
+        .map((d) => (typeof d === "object" ? d.name || d.designationName : d))
+        .filter(Boolean);
+
+      // 2. Static / fallback designation mapping for this department
+      const activeMap = isTeaching ? teachingDesignationMap : isNonTeaching ? nonTeachingDesignationMap : { ...teachingDesignationMap, ...nonTeachingDesignationMap };
+      let mapDesigs = [];
+      for (const [deptKey, desigs] of Object.entries(activeMap)) {
+        const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
+        if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
+          if (Array.isArray(desigs)) mapDesigs = desigs;
+          break;
+        }
+      }
+
+      // 3. Fallback from local list items matching this department
+      const localMatching = list
+        .filter((r) => r && String(r.department || "").trim().toLowerCase().replace(/[-_\s&]/g, "") === currentDeptNorm)
+        .map((r) => r.designation)
+        .filter(Boolean);
+
+      const combined = [...new Set([...matchingApi, ...mapDesigs, ...localMatching])];
+      if (combined.length > 0) return combined;
+    }
+
+    // When no department is selected, return all designations for this staff type
+    const fallbackList = isTeaching ? teachingDesignations : isNonTeaching ? nonTeachingDesignations : [...teachingDesignations, ...nonTeachingDesignations];
+    const apiNames = apiFilterDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean);
+    const listNames = list.map((r) => r?.designation).filter(Boolean);
+    return [...new Set([...apiNames, ...fallbackList, ...listNames])];
+  }, [apiFilterDesigs, departmentFilter, forced, tab, list]);
+
+  const handleDepartmentFilterChange = (newDept) => {
+    setDepartmentFilter(newDept);
+    setPage(1);
+    if (newDept && designationFilter) {
+      const currentDeptNorm = newDept.toLowerCase().replace(/[-_\s&]/g, "");
+      const isTeaching = forced === "Teaching" || (!forced && tab === "Teaching");
+      const isNonTeaching = forced === "Non-Teaching" || (!forced && tab === "Non-Teaching");
+      const activeMap = isTeaching ? teachingDesignationMap : isNonTeaching ? nonTeachingDesignationMap : { ...teachingDesignationMap, ...nonTeachingDesignationMap };
+      let validDesigs = [];
+      for (const [deptKey, desigs] of Object.entries(activeMap)) {
+        const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
+        if (keyNorm === currentDeptNorm || currentDeptNorm.includes(keyNorm) || keyNorm.includes(currentDeptNorm)) {
+          validDesigs = desigs;
+          break;
+        }
+      }
+      const matchingApi = apiFilterDesigs
+        .filter((d) => typeof d === "object" && String(d.departmentName || d.department || "").toLowerCase().replace(/[-_\s&]/g, "") === currentDeptNorm)
+        .map((d) => (typeof d === "object" ? d.name || d.designationName : d));
+      const allValid = new Set([...validDesigs, ...matchingApi]);
+      if (allValid.size > 0 && !allValid.has(designationFilter)) {
+        setDesignationFilter("");
+      }
+    }
+  };
+
   const showStaffType = forced !== "Teaching" && forced !== "Non-Teaching";
-  const shown = rows.slice((page - 1) * size, page * size);
-  const totalRowsCount = totalApiCount || rows.length;
+  const shown = useMemo(() => {
+    if (apiItems !== null && Array.isArray(apiItems)) {
+      return apiItems.filter((r) => isStaffMatchingCampus(r, selectedCampus)).map((r) => {
+        let empId = r.employeeId;
+        if (!empId || typeof empId === "object" || empId === "[object Object]") {
+          empId = r.id ? `PCTCH00${r.id}` : "PCTCH0001";
+        }
+        return {
+          ...r,
+          employeeId: empId,
+          fullName: r.fullName || `${r.firstName || ""} ${r.middleName ? r.middleName + " " : ""}${r.lastName || ""}`.trim(),
+        };
+      });
+    }
+    return rows.slice((page - 1) * size, page * size);
+  }, [apiItems, rows, page, size, selectedCampus]);
+
+  const totalRowsCount = apiItems !== null ? (selectedCampus && shown.length === 0 ? 0 : totalApiCount) : rows.length;
 
   return (
     <DashboardLayout
-      title={forced === "Completed" ? "Completed Profiles" : forced === "All" ? "Staff List" : forced ? `${forced} Staff` : "Staff List"}
-      subtitle={forced === "Completed" ? "View staff members with completed profiles." : "View, edit and manage all staff members."}
+      title={forced === "Completed" ? "Completed Profiles" : forced === "All" ? "Total Staff" : forced ? `${forced} Staff` : "Total Staff"}
+      subtitle={forced === "Completed" ? "View staff members with completed profiles." : forced === "All" || !forced ? "View, edit and manage all staff members across the institution." : `View, edit and manage ${forced.toLowerCase()} staff members.`}
       breadcrumb={["People", "Staff Management"]}
       actions={null}
     >
@@ -3028,7 +3442,7 @@ function StaffList({ records = [], setRecords, forced }) {
                   onChange={(e) => setQ(e.target.value)}
                 />
               </label>
-              <select value={departmentFilter} onChange={(e) => { setDepartmentFilter(e.target.value); setPage(1); }} aria-label="Filter by department">
+              <select value={departmentFilter} onChange={(e) => handleDepartmentFilterChange(e.target.value)} aria-label="Filter by department">
                 <option value="">Department</option>
                 {departmentOptions.map((department) => <option key={department} value={department}>{department}</option>)}
               </select>
@@ -3111,11 +3525,9 @@ function StaffList({ records = [], setRecords, forced }) {
               </thead>
               <tbody>
                 {loadingList ? (
-                  <tr>
-                    <td colSpan={showStaffType ? 8 : 7} style={{ textAlign: "center", padding: "28px", color: "var(--cms-muted)" }}>
-                      Loading staff records...
-                    </td>
-                  </tr>
+                  Array.from({ length: 6 }, (_, index) => (
+                    <SkeletonRow key={index} columns={showStaffType ? 8 : 7} />
+                  ))
                 ) : shown.length > 0 ? (
                   shown.map((r, idx) => (
                     <tr key={`staff-item-${r.id || r.employeeId || idx}`}>
@@ -3237,9 +3649,15 @@ function TypeSelect() {
 // ----------------------------------------------------------------------
 function TeachingForm({ records, setRecords, existing }) {
   const n = useNavigate();
+  const { selectedCampus } = useCampusContext();
   const { boards, selectedBoard } = useAcademicContext();
   const { departments: apiDepts, designations: apiDesigs } = useStaffTypeOptions("Teaching");
   const { roles: apiRoles, roleObjects: apiRoleObjects } = useStaffRoles("Teaching");
+
+  const activeCampusId = selectedCampus?.campusId || selectedCampus?.id;
+  const activeCampusName = selectedCampus?.name || selectedCampus?.campusName || "";
+  const activeCampusCode = selectedCampus?.code || selectedCampus?.campusCode || "";
+
   const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
   const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || activeBoardCode || "";
   const activeBoardId = selectedBoard?.id || selectedBoard?.boardId || undefined;
@@ -3250,6 +3668,9 @@ function TeachingForm({ records, setRecords, existing }) {
       roleName: "",
       roleId: undefined,
       employeeId: "",
+      campusId: activeCampusId ? Number(activeCampusId) || activeCampusId : undefined,
+      campusName: activeCampusName,
+      campusCode: activeCampusCode,
       board: activeBoardName,
       boardName: activeBoardName,
       boardCode: activeBoardCode,
@@ -3265,16 +3686,19 @@ function TeachingForm({ records, setRecords, existing }) {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!existing && activeBoardName && !values.board) {
+    if (!existing) {
       setValues((v) => ({
         ...v,
-        board: activeBoardName,
-        boardName: activeBoardName,
-        boardCode: activeBoardCode,
-        ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
+        campusId: v.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+        campusName: v.campusName || activeCampusName,
+        campusCode: v.campusCode || activeCampusCode,
+        board: v.board || activeBoardName,
+        boardName: v.boardName || activeBoardName,
+        boardCode: v.boardCode || activeBoardCode,
+        boardId: v.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
       }));
     }
-  }, [activeBoardName, activeBoardCode, activeBoardId, existing, values.board]);
+  }, [activeCampusId, activeCampusName, activeCampusCode, activeBoardName, activeBoardCode, activeBoardId, existing]);
 
   // Fetch next employee ID dynamically from Settings Number Series / Staff API
   useEffect(() => {
@@ -3306,10 +3730,16 @@ function TeachingForm({ records, setRecords, existing }) {
 
     const payload = {
       ...values,
+      campusId: values.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+      campusName: values.campusName || activeCampusName,
+      campusCode: values.campusCode || activeCampusCode,
+      board: values.board || activeBoardName,
+      boardName: values.boardName || activeBoardName,
+      boardCode: resolvedCode !== "—" ? resolvedCode : (values.boardCode || activeBoardCode),
+      boardId: values.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
       role: values.role || "Faculty",
       roleName: values.roleName || values.role || "Faculty",
       roleId: Number(resolvedRoleId),
-      boardCode: resolvedCode !== "—" ? resolvedCode : values.boardCode,
       fullName,
       staffType: "Teaching",
       profileStatus: existing?.profileStatus || "Link Sent",
@@ -3431,9 +3861,15 @@ function TeachingForm({ records, setRecords, existing }) {
 // ----------------------------------------------------------------------
 function NonTeachingForm({ records, setRecords, existing }) {
   const n = useNavigate();
+  const { selectedCampus } = useCampusContext();
   const { boards, selectedBoard } = useAcademicContext();
   const { departments: apiDepts, designations: apiDesigs } = useStaffTypeOptions("Non-Teaching");
   const { roles: apiRoles, roleObjects: apiRoleObjects } = useStaffRoles("Non-Teaching");
+
+  const activeCampusId = selectedCampus?.campusId || selectedCampus?.id;
+  const activeCampusName = selectedCampus?.name || selectedCampus?.campusName || "";
+  const activeCampusCode = selectedCampus?.code || selectedCampus?.campusCode || "";
+
   const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
   const activeBoardName = selectedBoard?.name || selectedBoard?.boardName || activeBoardCode || "";
   const activeBoardId = selectedBoard?.id || selectedBoard?.boardId || undefined;
@@ -3445,7 +3881,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
     // "Salary & Bank", // Commented out per requirement: salary structure is assigned in separate module
     "Documents",
     "Emergency Contact",
-    "Review",
+    "Preview",
   ];
   const [step, setStep] = useState(0);
   const [values, setValues] = useState(
@@ -3455,6 +3891,9 @@ function NonTeachingForm({ records, setRecords, existing }) {
       roleName: "",
       roleId: undefined,
       employeeId: "",
+      campusId: activeCampusId ? Number(activeCampusId) || activeCampusId : undefined,
+      campusName: activeCampusName,
+      campusCode: activeCampusCode,
       board: activeBoardName,
       boardName: activeBoardName,
       boardCode: activeBoardCode,
@@ -3471,16 +3910,19 @@ function NonTeachingForm({ records, setRecords, existing }) {
   const [editingFromReview, setEditingFromReview] = useState(false);
 
   useEffect(() => {
-    if (!existing && activeBoardName && !values.board) {
+    if (!existing) {
       setValues((v) => ({
         ...v,
-        board: activeBoardName,
-        boardName: activeBoardName,
-        boardCode: activeBoardCode,
-        ...(activeBoardId ? { boardId: Number(activeBoardId) || activeBoardId } : {}),
+        campusId: v.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+        campusName: v.campusName || activeCampusName,
+        campusCode: v.campusCode || activeCampusCode,
+        board: v.board || activeBoardName,
+        boardName: v.boardName || activeBoardName,
+        boardCode: v.boardCode || activeBoardCode,
+        boardId: v.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
       }));
     }
-  }, [activeBoardName, activeBoardCode, activeBoardId, existing, values.board]);
+  }, [activeCampusId, activeCampusName, activeCampusCode, activeBoardName, activeBoardCode, activeBoardId, existing]);
 
   // Fetch next employee ID dynamically from Settings Number Series / Staff API
   useEffect(() => {
@@ -3565,17 +4007,74 @@ function NonTeachingForm({ records, setRecords, existing }) {
       }
     }
 
+    const isTransport =
+      String(values?.department || "").trim().toLowerCase().includes("transport") ||
+      String(values?.designation || "").trim().toLowerCase().includes("driver");
+
+    if (isTransport && values.drivingLicenseNumber && values._dlPdfRawText) {
+      const cleanDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const rawText = String(values._dlPdfRawText).toUpperCase();
+      const cleanPdfText = rawText.replace(/[^A-Z0-9]/g, "");
+
+      const isDirectMatch = cleanPdfText.includes(cleanDL) || rawText.includes(cleanDL);
+
+      if (!isDirectMatch) {
+        const dlPatternMatches = rawText.match(/\b([A-Z]{2}\d{2,3}\s?(?:19|20)\d{2}\s?\d{7}|[A-Z]{2}\d{13,14})\b/g);
+        if (dlPatternMatches && dlPatternMatches.length > 0) {
+          const foundDiffDL = dlPatternMatches.some((match) => {
+            const cleanFound = match.replace(/[^A-Z0-9]/g, "");
+            return cleanFound.length >= 15 && cleanFound !== cleanDL;
+          });
+          if (foundDiffDL) {
+            setToast("Entered Driver's License Number does not match the uploaded Driving License PDF document.");
+            setErrors({ drivingLicenseNumber: "Entered number does not match the uploaded Driving License PDF document." });
+            setStep(2);
+            return;
+          }
+        }
+      }
+    }
+
+    // ── Duplicate Driving License Number check ──────────────────────────────
+    if (isTransport && values.drivingLicenseNumber) {
+      const enteredDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const currentId = existing?.id || existing?.employeeId || null;
+      const duplicate = (Array.isArray(records) ? records : []).find((r) => {
+        // Skip self when editing
+        const rId = r?.id || r?.employeeId;
+        if (currentId && String(rId) === String(currentId)) return false;
+        const rDL = String(r?.drivingLicenseNumber || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        return rDL.length > 0 && rDL === enteredDL;
+      });
+      if (duplicate) {
+        const dupName = [duplicate.firstName, duplicate.middleName, duplicate.lastName].filter(Boolean).join(" ") || duplicate.employeeId || "another staff member";
+        setErrors({ drivingLicenseNumber: `This Driving License Number is already registered under ${dupName}.` });
+        setToast(`Driving License '${values.drivingLicenseNumber}' is already registered under ${dupName}. Please verify.`);
+        setStep(2);
+        return;
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
-    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : 13));
+    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
 
     const payload = {
       ...values,
+      campusId: values.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
+      campusName: values.campusName || activeCampusName,
+      campusCode: values.campusCode || activeCampusCode,
+      board: values.board || activeBoardName,
+      boardName: values.boardName || activeBoardName,
+      boardCode: resolvedCode !== "—" ? resolvedCode : (values.boardCode || activeBoardCode),
+      boardId: values.boardId || (activeBoardId ? Number(activeBoardId) || activeBoardId : undefined),
+      email: values.email?.trim() ? values.email.trim() : null,
+      qualification: values.qualification?.trim() ? values.qualification.trim() : null,
       role: values.role || "Cleaner",
       roleName: values.roleName || values.role || "Cleaner",
       roleId: Number(resolvedRoleId),
-      boardCode: resolvedCode !== "—" ? resolvedCode : values.boardCode,
       fullName,
       staffType: "Non-Teaching",
       profileStatus: "Completed",
@@ -3609,18 +4108,33 @@ function NonTeachingForm({ records, setRecords, existing }) {
         setToast(errMsg);
         const lower = errMsg.toLowerCase();
         const nextErrors = {};
+        let errorStep = 0;
         if (lower.includes("employee id")) {
           nextErrors.employeeId = errMsg;
+          errorStep = 0;
           try {
             const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records);
             if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
           } catch {}
         }
-        if (lower.includes("email")) nextErrors.email = errMsg;
-        if (lower.includes("mobile")) nextErrors.mobile = errMsg;
-        if (lower.includes("aadhaar")) nextErrors.aadhaar = errMsg;
+        if (lower.includes("aadhaar") || lower.includes("pan") || lower.includes("name")) {
+          if (lower.includes("aadhaar")) nextErrors.aadhaar = errMsg;
+          errorStep = 0;
+        }
+        if (lower.includes("email")) {
+          nextErrors.email = errMsg;
+          errorStep = 1;
+        }
+        if (lower.includes("mobile")) {
+          nextErrors.mobile = errMsg;
+          errorStep = 1;
+        }
+        if (lower.includes("license") || lower.includes("licence") || lower.includes("joining") || lower.includes("department") || lower.includes("designation")) {
+          if (lower.includes("license") || lower.includes("licence")) nextErrors.drivingLicenseNumber = errMsg;
+          errorStep = 2;
+        }
         setErrors(nextErrors);
-        setStep(0);
+        setStep(errorStep);
         return;
       }
       console.warn("Save non-teaching staff API error:", err);
@@ -3682,9 +4196,8 @@ function NonTeachingForm({ records, setRecords, existing }) {
                 fullName: [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" "),
               }}
               groups={labels.slice(0, labels.length - 1).map((label, index) => [label, getNonTeachingStepFields(index, values)])}
-              onEdit={(targetStep) => {
-                setEditingFromReview(true);
-                setStep(targetStep);
+              onSave={(updatedRecord) => {
+                setValues((prev) => ({ ...prev, ...updatedRecord }));
               }}
             />
           )}
@@ -3695,7 +4208,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
               </button>
             ) : null}
             <button className="cms-btn cms-btn-primary" onClick={step === labels.length - 1 ? save : next}>
-              {step === labels.length - 1 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Review" : "Next"}
+              {step === labels.length - 1 ? "Save Non-Teaching Staff" : editingFromReview ? "Save & Return to Preview" : "Next"}
               <ChevronRight />
             </button>
           </footer>
@@ -3798,11 +4311,10 @@ function SendLink({ record, update, activity }) {
       }
     } catch (err) {
       console.warn("POST /api/v1/staff/{id}/send-link fallback handled:", err);
-      // Generate guaranteed functional link even if backend email gateway is offline
-      const fallbackToken = record.profileLinkToken || record.token || record.id || `staff-${record.id}`;
-      finalLink = `${window.location.origin}/staff/onboarding/${fallbackToken}`;
+      // Generate guaranteed functional link for Faculty Dashboard
+      finalLink = `${window.location.origin}/faculty-dashboard`;
       setGeneratedLink(finalLink);
-      receivedToken = fallbackToken;
+      receivedToken = record.profileLinkToken || record.token || record.id || `staff-${record.id}`;
       success = true;
       setFeedback({
         success: true,
@@ -3829,7 +4341,7 @@ function SendLink({ record, update, activity }) {
     }
   };
 
-  const currentActiveLink = generatedLink || `${window.location.origin}/staff/onboarding/${record.profileLinkToken || record.token || record.id || "preview"}`;
+  const currentActiveLink = generatedLink || `${window.location.origin}/faculty-dashboard`;
 
   return (
     <DashboardLayout
@@ -3999,196 +4511,6 @@ function SendLink({ record, update, activity }) {
         </section>
       </main>
     </DashboardLayout>
-  );
-}
-
-// ----------------------------------------------------------------------
-// PORTAL HOME & FORM (GET /api/v1/staff/token/{token}, save-profile-draft, submit-profile)
-// ----------------------------------------------------------------------
-function PortalHome({ record }) {
-  const n = useNavigate();
-  return (
-    <div className="portal-shell">
-      <aside>
-        <GraduationCap />
-        <strong>Pirnav Staff Portal</strong>
-        <span>My Dashboard</span>
-        <span>My Profile</span>
-        <span>Documents</span>
-        <span>Help</span>
-      </aside>
-      <main>
-        <header>
-          <div>
-            <h1>Welcome, {record.fullName}</h1>
-            <p>Complete and submit your professional profile.</p>
-          </div>
-          <Badge value={record.profileStatus} />
-        </header>
-        {record.profileStatus === "Needs Correction" ? (
-          <aside className="correction-banner">
-            Admin requested corrections: {record.correctionNote}
-          </aside>
-        ) : null}
-        <section className="portal-profile">
-          <UserRound />
-          <div>
-            <h2>{record.fullName}</h2>
-            <p>{record.designation} · {record.department}</p>
-          </div>
-          <div className="completion">
-            <strong>{record.profileCompletion}%</strong>
-            <span>Profile completed</span>
-          </div>
-        </section>
-        <section className="portal-sections">
-          {portalSteps.slice(0, 8).map((s, i) => (
-            <article key={s}>
-              <span>
-                {i < Math.floor(record.profileCompletion / 12.5) ? <Check /> : <Clock3 />}
-              </span>
-              <div>
-                <strong>{s}</strong>
-                <small>{i < Math.floor(record.profileCompletion / 12.5) ? "Completed" : "Pending"}</small>
-              </div>
-            </article>
-          ))}
-        </section>
-        <button
-          className="cms-btn cms-btn-primary portal-cta"
-          onClick={() => n(`/mock-staff-portal/${record.id}/complete-profile`)}
-        >
-          Complete Profile <ChevronRight />
-        </button>
-      </main>
-    </div>
-  );
-}
-
-function PortalForm({ record, update, activity }) {
-  const n = useNavigate();
-  const [step, setStep] = useState(0);
-  const [values, setValues] = useState(record);
-  const [errors, setErrors] = useState({});
-  const [confirmed, setConfirmed] = useState(false);
-
-  const handleSaveDraft = async () => {
-    try {
-      // POST /api/v1/staff/{id}/save-profile-draft
-      await apiClient.post(apiEndpoints.faculty.saveProfileDraft(record.id), {
-        sectionName: portalSteps[step],
-        personal: values,
-      });
-    } catch (err) {
-      console.warn("POST /api/v1/staff/{id}/save-profile-draft API offline");
-    }
-    update({ ...values, profileStatus: "In Progress" });
-  };
-
-  const next = () => {
-    handleSaveDraft();
-    update({
-      ...values,
-      profileStatus: "In Progress",
-      profileCompletion: Math.min(95, 35 + (step + 1) * 7),
-    });
-    setStep((s) => s + 1);
-  };
-
-  const submit = async () => {
-    try {
-      // POST /api/v1/staff/{id}/submit-profile
-      await apiClient.post(apiEndpoints.faculty.submitProfile(record.id));
-    } catch (err) {
-      console.warn("POST /api/v1/staff/{id}/submit-profile API offline");
-    }
-
-    update({
-      ...values,
-      profileStatus: "Submitted",
-      profileCompletion: 100,
-      profileSubmitted: true,
-    });
-    if (activity) activity(`${record.fullName} submitted profile`);
-    n(`/mock-staff-portal/${record.id}`);
-  };
-
-  return (
-    <div className="portal-shell">
-      <aside>
-        <GraduationCap />
-        <strong>Pirnav Staff Portal</strong>
-        {portalSteps.map((s, i) => (
-          <button className={i === step ? "is-active" : ""} onClick={() => setStep(i)} key={s}>
-            {i + 1}. {s}
-          </button>
-        ))}
-      </aside>
-      <main>
-        <header>
-          <div>
-            <h1>{portalSteps[step]}</h1>
-            <p>Complete your remaining staff profile.</p>
-          </div>
-          <span>{Math.round(((step + 1) / 8) * 100)}%</span>
-        </header>
-        {step < 7 ? (
-          <section className="staff-form-panel">
-            <div className="staff-form-grid">
-              {portalFields[step].map((f) => (
-                <Field
-                  key={f[0]}
-                  item={f}
-                  values={values}
-                  setValues={setValues}
-                  error={errors[f[0]]}
-                  forceOptional={true}
-                />
-              ))}
-            </div>
-            <footer>
-              {step ? (
-                <button className="cms-btn cms-btn-ghost" onClick={() => setStep((s) => s - 1)}>
-                  Previous
-                </button>
-              ) : null}
-              <button className="cms-btn cms-btn-ghost" onClick={handleSaveDraft}>
-                Save Draft
-              </button>
-              <button className="cms-btn cms-btn-primary" onClick={next}>
-                Save &amp; Continue
-              </button>
-            </footer>
-          </section>
-        ) : (
-          <section className="staff-form-panel">
-            <Summary
-              record={values}
-              onEdit={(groupIndex) => {
-                const map = [0, 1, 2, 5, 6];
-                setStep(map[groupIndex] !== undefined ? map[groupIndex] : groupIndex);
-              }}
-            />
-            <label className="confirm-check">
-              <input
-                type="checkbox"
-                checked={confirmed}
-                onChange={(e) => setConfirmed(e.target.checked)}
-              />{" "}
-              I confirm that the information provided is correct.
-            </label>
-            <footer>
-              <button className="cms-btn cms-btn-ghost" onClick={() => setStep(6)}>
-                Previous
-              </button>
-              <button className="cms-btn cms-btn-primary" disabled={!confirmed} onClick={submit}>
-                Submit Profile
-              </button>
-            </footer>
-          </section>
-        )}
-      </main>
-    </div>
   );
 }
 
@@ -4370,11 +4692,47 @@ function Pending({ records = [], setRecords, activity }) {
   };
 
   const isAllShownSelected = shown.length > 0 && shown.every((r) => selectedIds.includes(r.id));
+  const [resendingId, setResendingId] = useState(null);
+  const [toast, setToast] = useState("");
+
+  const handleDirectResendLink = async (r) => {
+    if (!r?.id) return;
+    try {
+      setResendingId(r.id);
+      const res = await apiClient.post(apiEndpoints.faculty.sendLink(r.id), {
+        email: (r.email || "").trim(),
+        validityDays: 7,
+      });
+      const resData = res?.data?.data || res?.data;
+      const today = new Date().toISOString().split("T")[0];
+
+      if (setRecords) {
+        setRecords((prev) =>
+          prev.map((rec) =>
+            rec.id === r.id
+              ? { ...rec, linkSent: true, linkSentAt: today, profileStatus: "Link Sent" }
+              : rec
+          )
+        );
+      }
+
+      setToast(
+        resData?.emailSent
+          ? `Profile completion email resent successfully to ${resData.emailRecipient || r.email || r.fullName}!`
+          : `Profile completion link generated for ${r.fullName || r.email}.`
+      );
+      if (activity) activity(`${r.fullName} profile link resent directly`);
+    } catch (err) {
+      setToast(getApiErrorMessage(err, "Failed to resend profile link. Please try again."));
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   return (
     <DashboardLayout
-      title="Pending Teaching Staff Submissions"
-      subtitle="Track and review Teaching Staff profile completion."
+      title="Pending Staff Submissions"
+      subtitle="Track and review staff profile completion."
       breadcrumb={["People", "Staff Management"]}
     >
       <main className="staff-mock-page">
@@ -4433,10 +4791,14 @@ function Pending({ records = [], setRecords, activity }) {
                 </tr>
               </thead>
               <tbody>
-                {shown.length === 0 ? (
+                {loading ? (
+                  Array.from({ length: 6 }, (_, index) => (
+                    <SkeletonRow key={index} columns={tab !== "Submitted" ? 9 : 8} />
+                  ))
+                ) : shown.length === 0 ? (
                   <tr>
                     <td colSpan={tab !== "Submitted" ? 9 : 8} style={{ textAlign: "center", padding: "32px", color: "var(--cms-muted)" }}>
-                      {loading ? "Loading submissions..." : `No ${tab.toLowerCase()} teaching staff records found.`}
+                      {`No ${tab.toLowerCase()} teaching staff records found.`}
                     </td>
                   </tr>
                 ) : (
@@ -4494,9 +4856,12 @@ function Pending({ records = [], setRecords, activity }) {
                             <button
                               className="cms-btn cms-btn-ghost"
                               style={{ padding: "5px 10px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                              onClick={() => n(`/dashboard/staff/${r.id || r.employeeId}/send-link`)}
+                              onClick={() => handleDirectResendLink(r)}
+                              disabled={resendingId === r.id}
+                              title="Resend profile completion link directly to staff email"
                             >
-                              <Send size={13} /> {r.linkSent ? "Resend Link" : "Send Link"}
+                              <Send size={13} className={resendingId === r.id ? "spin" : ""} />
+                              {resendingId === r.id ? "Resending..." : r.linkSent ? "Resend Link" : "Send Link"}
                             </button>
                           )}
                           <button
@@ -4527,6 +4892,7 @@ function Pending({ records = [], setRecords, activity }) {
           </footer>
         </section>
       </main>
+      {toast ? <Toast message={toast} onClose={() => setToast("")} /> : null}
     </DashboardLayout>
   );
 }
@@ -4587,9 +4953,7 @@ function Details({ record, records, setRecords, id }) {
     return (
       <DashboardLayout title="Staff Details" breadcrumb={["People", "Staff Management"]}>
         <main className="staff-mock-page">
-          <p style={{ margin: "40px 0", textAlign: "center", color: "var(--cms-muted)" }}>
-            Loading staff details...
-          </p>
+          <SkeletonPage variant="form" rows={8} />
         </main>
       </DashboardLayout>
     );
@@ -4619,6 +4983,11 @@ function Details({ record, records, setRecords, id }) {
       console.warn("PUT /api/v1/staff/{id} API error:", err);
     }
     setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? { ...r, ...updatedRecord } : r)));
+    try {
+      window.dispatchEvent(new Event("staff-records-updated"));
+    } catch (error) {
+      console.warn("Unable to notify Roles & Permissions about the staff update:", error);
+    }
     setToast("Staff details updated successfully.");
   };
 
@@ -4940,7 +5309,23 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     department: ["select", defaultDepartments],
   };
 
-  const renderFieldInput = (key, label) => {
+  const renderFieldInput = (key, label, fieldSpec) => {
+    // fieldSpec = [name, label, type, opts, required, layoutClass?]
+    const specType = fieldSpec?.[2];
+    const specOpts = Array.isArray(fieldSpec?.[3]) && fieldSpec[3].length > 0 ? fieldSpec[3] : null;
+
+    // File fields — read-only display in preview inline edit
+    if (specType === "file") {
+      const rawVal = formData[key] !== undefined ? formData[key] : record[key];
+      const val = rawVal === null || rawVal === undefined ? "" : String(rawVal).trim();
+      return (
+        <span style={{ fontSize: 11, color: val ? "var(--cms-primary, #355e3b)" : "var(--cms-muted)", fontStyle: val ? "normal" : "italic" }}>
+          {val || "No file uploaded"}
+        </span>
+      );
+    }
+
+    // Subject allocation
     if (key === "allocatedSubjects" || key === "subjects") {
       const currentVal = formData.allocatedSubjects || formData.subjects || record.allocatedSubjects || record.subjects || [];
       return (
@@ -4951,22 +5336,39 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         />
       );
     }
-    const config = fieldTypes[key] || ["text"];
-    const [type, options] = config;
+
     const rawVal = formData[key] !== undefined ? formData[key] : record[key];
     const val = rawVal === null || rawVal === undefined ? "" : rawVal;
 
+    // search-select → SearchSelectInput
+    if (specType === "search-select") {
+      const opts = specOpts || [];
+      return (
+        <SearchSelectInput
+          label={label}
+          opts={opts}
+          value={String(val)}
+          onChange={(v) => setFormData((prev) => ({ ...prev, [key]: v }))}
+        />
+      );
+    }
+
+    // Determine type/options from fieldSpec or fieldTypes fallback
+    const config = (specType && specType !== "text" && specType !== "search-select")
+      ? [specType, specOpts]
+      : (fieldTypes[key] || ["text"]);
+    const [type, options] = config;
+
     if (type === "select") {
+      const opts = specOpts || options || [];
       return (
         <select
           value={val}
           onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
         >
           <option value="">Select {label}</option>
-          {(options || []).map((opt) => (
-            <option key={opt} value={opt}>
-              {opt}
-            </option>
+          {opts.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
           ))}
         </select>
       );
@@ -4981,8 +5383,9 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     }
     return (
       <input
-        type={type}
+        type={type === "date" ? "date" : type === "email" ? "email" : "text"}
         value={val}
+        readOnly={key === "employeeId"}
         onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
       />
     );
@@ -5097,7 +5500,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                   <p key={key}>
                     <span>{label}</span>
                     {isEditing ? (
-                      renderFieldInput(key, label)
+                      renderFieldInput(key, label, Array.isArray(field) ? field : null)
                     ) : (
                       <strong>
                         {key === "allocatedSubjects" || key === "subjects" ? (
@@ -5159,6 +5562,7 @@ export default function StaffManagementPage() {
   const n = useNavigate();
   const { id } = useParams();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
 
   const [records, setRaw] = useState(() => []);
   const [activities, setActivityRaw] = useState(() => []);
@@ -5168,8 +5572,8 @@ export default function StaffManagementPage() {
 
   const safeRecords = useMemo(() => {
     const raw = Array.isArray(records) ? records : [];
-    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards));
-  }, [records, selectedBoard, boards]);
+    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards) && isStaffMatchingCampus(r, selectedCampus));
+  }, [records, selectedBoard, boards, selectedCampus]);
 
   const setRecords = (next) => {
     const rawList = Array.isArray(next) ? next : [];
@@ -5203,10 +5607,12 @@ export default function StaffManagementPage() {
     async function loadInit() {
       try {
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         const listRes = await staffApi.getStaffPaged({
           PageNumber: 1,
           PageSize: 100,
           BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
         });
         if (isMounted && listRes.data) {
           const listItems = listRes.data.items || listRes.data.data || (Array.isArray(listRes.data) ? listRes.data : []);
@@ -5218,7 +5624,7 @@ export default function StaffManagementPage() {
     }
     loadInit();
     return () => { isMounted = false; };
-  }, [selectedBoard]);
+  }, [selectedBoard, selectedCampus]);
 
   // Fetch staff record from API whenever id changes
   useEffect(() => {
@@ -5293,14 +5699,14 @@ export default function StaffManagementPage() {
     page = (
       <DashboardLayout title="Staff Details" breadcrumb={["People", "Staff Management"]}>
         <main className="staff-mock-page">
-          <p style={{ margin: "40px 0", textAlign: "center", color: "var(--cms-muted)" }}>
-            Loading staff details...
-          </p>
+          <SkeletonPage variant="form" rows={8} />
         </main>
       </DashboardLayout>
     );
+  else if ((p.includes("/mock-staff-portal") || p.includes("/staff-portal") || p.includes("/staff/onboarding")) && record)
+    page = <Navigate to="/faculty-dashboard" replace />;
   else if (p.endsWith("/send-link") && record)
-    page = <SendLink record={record} update={update} activity={activity} />;
+    page = <Navigate to="/dashboard/staff/pending" replace />;
   else if (p.endsWith("/review") && record)
     page = <Review record={record} update={update} activity={activity} />;
   else if (p.endsWith("/edit") && record)

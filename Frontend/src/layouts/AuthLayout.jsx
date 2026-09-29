@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import HeroSlider from "@/components/common/HeroSlider.jsx";
 import { heroCopy } from "@/data/heroSlides.js";
-import logo from "@/assets/P_LOGO.png";
 import "@/features/auth/styles/auth.css";
 
 export default function AuthLayout({ title, subtitle, children, cardClass = "" }) {
@@ -12,15 +11,9 @@ export default function AuthLayout({ title, subtitle, children, cardClass = "" }
         <HeroSlider variant="bg" />
       </div>
       <aside className="cms-auth-aside">
-        <div className="cms-landing-brand cms-anim-in" style={{ color: "#fff" }}>
-          <span className="cms-brand-mark logo-mark"><img src={logo} alt="Pirnav College logo" /></span>
-          <span>
-            <strong style={{ color: "#fff" }}>{heroCopy.title}</strong>
-          </span>
-        </div>
-        <div className="cms-anim-up">
-          <h2>{heroCopy.headline}</h2>
-          <p>{heroCopy.subtitle}</p>
+        <div className="cms-anim-up cms-auth-hero-copy">
+          <h2 className="cms-auth-hero-title">{heroCopy.headline}</h2>
+          <p className="cms-auth-hero-desc">{heroCopy.subtitle}</p>
         </div>
       </aside>
 

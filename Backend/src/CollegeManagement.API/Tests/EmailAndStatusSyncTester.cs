@@ -23,18 +23,18 @@ using Microsoft.Extensions.DependencyInjection;
 namespace CollegeManagement.API.Tests
 {
     /// <summary>
-    /// Phase 8: Email & Status Synchronization Test Suite.
+    /// Phase 8: Email and Status Synchronization Test Suite.
     ///
     /// Verifies:
     ///   1. Staff email update synchronizes to linked Users.Email (normalized).
     ///   2. Staff duplicate email update is rejected safely.
     ///   3. Staff status update (Inactive / Active) synchronizes to Users.IsActive.
     ///   4. Staff soft delete synchronizes to Users.IsActive = false.
-    ///   5. Student email update (UpdateAsync & UpdateProfileAsync) synchronizes to linked Users.Email.
+    ///   5. Student email update (UpdateAsync and UpdateProfileAsync) synchronizes to linked Users.Email.
     ///   6. Student duplicate email update is rejected safely.
     ///   7. Student status (Suspend / Activate / Delete) synchronizes to Users.IsActive.
     ///   8. Admin status update (UpdateStatusAsync) synchronizes to Users.IsActive.
-    ///   9. Transaction safety & rollback: no partial updates committed.
+    ///   9. Transaction safety and rollback: no partial updates committed.
     ///  10. Baseline data invariants preserved.
     /// </summary>
     public static class EmailAndStatusSyncTester

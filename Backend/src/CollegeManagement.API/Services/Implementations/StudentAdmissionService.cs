@@ -28,6 +28,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
         private readonly ILogger<StudentAdmissionService> _logger;
+        private readonly INumberSeriesService _numberSeriesService;
 
         public StudentAdmissionService(
             IStudentAdmissionRepository repository,
@@ -36,7 +37,8 @@ namespace CollegeManagement.API.Services.Implementations
             AppDbContext context,
             IConfiguration configuration,
             IWebHostEnvironment environment,
-            ILogger<StudentAdmissionService> logger)
+            ILogger<StudentAdmissionService> logger,
+            INumberSeriesService numberSeriesService)
         {
             _repository = repository;
             _userProvisioningService = userProvisioningService;
@@ -45,6 +47,7 @@ namespace CollegeManagement.API.Services.Implementations
             _configuration = configuration;
             _environment = environment;
             _logger = logger;
+            _numberSeriesService = numberSeriesService;
         }
 
 
@@ -103,9 +106,9 @@ namespace CollegeManagement.API.Services.Implementations
         // =====================================================
 
         public async Task<IEnumerable<StudentAdmissionResponseDto>>
-            GetAllAsync()
+            GetAllAsync(int? campusId = null)
         {
-            return await _repository.GetAllAsync();
+            return await _repository.GetAllAsync(campusId);
         }
 
 
@@ -175,9 +178,30 @@ namespace CollegeManagement.API.Services.Implementations
         // GENERATE ADMISSION NUMBER
         // =====================================================
 
-        public async Task<string> GenerateAdmissionNumberAsync()
+        public async Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _repository.GenerateAdmissionNumberAsync();
+            var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
+            { 
+                Board = boardId?.ToString(),
+                AcademicYear = academicYearId?.ToString()
+            };
+            
+            // Auto-sync sequence to actual count BEFORE generating if context is fully specified
+            if (campusId.HasValue && boardId.HasValue && academicYearId.HasValue)
+            {
+                int actualCount = await _repository.GetActualAdmissionCountAsync(campusId.Value, boardId.Value, academicYearId.Value);
+                await _repository.SyncAdmissionSequenceAsync(campusId.Value, boardId.Value, academicYearId.Value, actualCount);
+            }
+            
+            var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
+            
+            if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+            {
+                return generatedDto.GeneratedNumber;
+            }
+            
+            // Fallback to repository if number series configuration doesn't exist
+            return await _repository.GenerateAdmissionNumberAsync(campusId, boardId, academicYearId);
         }
 
         // =====================================================

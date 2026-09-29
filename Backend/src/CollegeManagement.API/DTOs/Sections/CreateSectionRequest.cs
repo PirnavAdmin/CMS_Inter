@@ -4,6 +4,8 @@ namespace CollegeManagement.API.DTOs.Sections
 {
     public class CreateSectionRequest
     {
+        public int CampusId { get; set; } = 1;
+
         public int? BoardId { get; set; }
 
         public string? Board { get; set; }

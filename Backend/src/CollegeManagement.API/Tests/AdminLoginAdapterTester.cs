@@ -24,7 +24,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace CollegeManagement.API.Tests
 {
     /// <summary>
-    /// Phase 6G: Admin Login Adapter & Password-Change Harmonization Test Suite.
+    /// Phase 6G: Admin Login Adapter and Password-Change Harmonization Test Suite.
     ///
     /// Verifies:
     ///   1. POST /api/Admin/login delegating to AuthService.LoginAsync (Users-first, JIT migration).

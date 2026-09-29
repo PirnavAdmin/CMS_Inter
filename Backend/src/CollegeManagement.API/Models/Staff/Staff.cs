@@ -71,10 +71,8 @@ namespace CollegeManagement.API.Models.Staff
         [StringLength(15)]
         public string? AlternateMobile { get; set; }
 
-        [Required]
-        [EmailAddress]
         [StringLength(150)]
-        public string Email { get; set; } = string.Empty;
+        public string? Email { get; set; }
 
         [StringLength(10)]
         public string? BloodGroup { get; set; }
@@ -145,6 +143,14 @@ namespace CollegeManagement.API.Models.Staff
         [NotMapped]
         public string Department { get; set; } = string.Empty;
 
+        public int? CampusId { get; set; }
+
+        [ForeignKey(nameof(CampusId))]
+        public virtual Campus? Campus { get; set; }
+
+        [NotMapped]
+        public string? CampusName => Campus?.CampusName;
+
         public int? BoardId { get; set; }
 
         [ForeignKey(nameof(BoardId))]
@@ -213,6 +219,15 @@ namespace CollegeManagement.API.Models.Staff
             get => DepartmentSpecificJson;
             set => DepartmentSpecificJson = value;
         }
+
+        public bool IsDriver { get; set; } = false;
+
+        [StringLength(100)]
+        public string? DrivingLicenseNumber { get; set; }
+
+        public DateTime? DrivingLicenseExpiryDate { get; set; }
+
+        public int? DrivingExperienceYears { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

@@ -1,4 +1,4 @@
-﻿using Asp.Versioning;
+using Asp.Versioning;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -69,12 +69,13 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAll(
+            [FromQuery] int? campusId = null)
         {
             try
             {
                 var result =
-                    await _service.GetAllAsync();
+                    await _service.GetAllAsync(campusId);
 
                 return Ok(result);
             }
@@ -307,10 +308,26 @@ namespace CollegeManagement.API.Controllers.V1
         }
         //generatenumber//
         [HttpPost("generate-number")]
-        public async Task<IActionResult> GenerateAdmissionNumber()
+        public async Task<IActionResult> GenerateAdmissionNumber([FromBody] GenerateAdmissionNumberRequestDto? request = null, [FromQuery] int? campusId = null)
         {
-            var admissionNumber =
-                await _service.GenerateAdmissionNumberAsync();
+            if (!campusId.HasValue || campusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    campusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        campusId = claimCampusId;
+                    }
+                }
+            }
+
+            var admissionNumber = await _service.GenerateAdmissionNumberAsync(campusId, request?.BoardId, request?.AcademicYearId);
 
             return Ok(new
             {
@@ -373,7 +390,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
 
-        /*// =========================================================
+        // =========================================================
         // SECTION ALLOCATION - SINGLE
         // POST: api/v1/student-admissions/{id}/section
         // =========================================================
@@ -426,10 +443,10 @@ namespace CollegeManagement.API.Controllers.V1
                     details = ex.Message
                 });
             }
-        }*/
+        }
 
 
-      /*  // =========================================================
+        // =========================================================
         // BULK SECTION ALLOCATION
         // POST: api/v1/student-admissions/bulk-section
         // =========================================================
@@ -470,7 +487,7 @@ namespace CollegeManagement.API.Controllers.V1
                     details = ex.Message
                 });
             }
-        }*/
+        }
         //optional check box//
         // POST: api/v1/admissions/5/fee-selections
         [HttpPost("{id:int}/fee-selections")]
@@ -495,7 +512,7 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
 
-       /* // =========================================================
+        // =========================================================
         // BULK ROLL NUMBER ALLOCATION
         // POST: api/v1/student-admissions/bulk-roll-numbers
         // =========================================================
@@ -538,6 +555,12 @@ namespace CollegeManagement.API.Controllers.V1
                     details = ex.Message
                 });
             }
-        }*/
+        }
+    }
+
+    public class GenerateAdmissionNumberRequestDto
+    {
+        public int? BoardId { get; set; }
+        public int? AcademicYearId { get; set; }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
@@ -6,6 +6,7 @@ namespace CollegeManagement.API.DTOs.Sections
 {
     public class BulkCreateSectionsRequest
     {
+        public int CampusId { get; set; } = 1;
         public int? BoardId { get; set; }
         public string? Board { get; set; }
 

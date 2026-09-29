@@ -1,3 +1,4 @@
+using CollegeManagement.API.Common;
 using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
 using CollegeManagement.API.DTOs.Students.Responses;
@@ -22,9 +23,47 @@ namespace CollegeManagement.API.Services
         // STUDENT CRUD
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync()
+        public async Task<PagedResult<StudentListItemDto>> GetPagedAsync(
+            string? search = null,
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            bool? isActive = null,
+            int? campusId = null,
+            int pageNumber = 1,
+            int pageSize = 10)
         {
-            return await _repository.GetAllAsync();
+            return await _repository.GetPagedAsync(
+                search,
+                boardId,
+                academicYearId,
+                academicLevelId,
+                groupId,
+                programId,
+                sectionId,
+                status,
+                isActive,
+                campusId,
+                pageNumber,
+                pageSize);
+        }
+
+        public async Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null,
+            string? search = null)
+        {
+            return await _repository.GetAllAsync(boardId, academicYearId, academicLevelId, groupId, programId, sectionId, status, campusId, search);
         }
 
         public async Task<StudentResponse?> GetByIdAsync(int studentId)
@@ -156,7 +195,8 @@ namespace CollegeManagement.API.Services
             int? academicLevelId,
             int? groupId,
             int? sectionId,
-            bool? isActive)
+            bool? isActive,
+            int? campusId = null)
         {
             return await _repository.SearchAsync(
                 search,
@@ -165,7 +205,8 @@ namespace CollegeManagement.API.Services
                 academicLevelId,
                 groupId,
                 sectionId,
-                isActive);
+                isActive,
+                campusId);
         }
 
 

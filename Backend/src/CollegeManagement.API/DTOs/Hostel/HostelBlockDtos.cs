@@ -1,10 +1,12 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace CollegeManagement.API.DTOs.Hostel
 {
     public class CreateHostelBlockDto
     {
+        public int? CampusId { get; set; } = 1;
+
         [Required]
         [StringLength(150)]
         public string HostelName { get; set; } = string.Empty;
@@ -39,6 +41,8 @@ namespace CollegeManagement.API.DTOs.Hostel
 
     public class UpdateHostelBlockDto
     {
+        public int? CampusId { get; set; } = 1;
+
         [Required]
         [StringLength(150)]
         public string HostelName { get; set; } = string.Empty;
@@ -74,6 +78,8 @@ namespace CollegeManagement.API.DTOs.Hostel
     public class HostelBlockResponseDto
     {
         public int HostelId { get; set; }
+
+        public int? CampusId { get; set; } = 1;
 
         public string HostelName { get; set; } = string.Empty;
 

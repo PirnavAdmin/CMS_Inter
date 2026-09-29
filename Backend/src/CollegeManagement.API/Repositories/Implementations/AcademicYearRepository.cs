@@ -1,10 +1,12 @@
-using CollegeManagement.API.Repositories.Interfaces;
-using CollegeManagement.API.Data;
-using CollegeManagement.API.Models;
-using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
+using CollegeManagement.API.Data;
+using CollegeManagement.API.Models;
+using CollegeManagement.API.Repositories.Interfaces;
+using Dapper;
+using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
@@ -30,12 +32,18 @@ namespace CollegeManagement.API.Repositories.Implementations
             string? search,
             bool? status,
             int pageNumber,
-            int pageSize)
+            int pageSize,
+            int? campusId = null)
         {
             var query = _context.AcademicYears
                 .Include(x => x.Board)
                 .AsNoTracking()
                 .AsQueryable();
+
+            if (campusId.HasValue)
+            {
+                query = query.Where(x => x.CampusId == campusId.Value);
+            }
 
             if (status.HasValue)
             {
@@ -63,12 +71,17 @@ namespace CollegeManagement.API.Repositories.Implementations
             return (items, totalCount);
         }
 
-        public async Task<IEnumerable<AcademicYear>> GetForExportAsync(string? search, bool? status)
+        public async Task<IEnumerable<AcademicYear>> GetForExportAsync(string? search, bool? status, int? campusId = null)
         {
             var query = _context.AcademicYears
                 .Include(x => x.Board)
                 .AsNoTracking()
                 .AsQueryable();
+
+            if (campusId.HasValue)
+            {
+                query = query.Where(x => x.CampusId == campusId.Value);
+            }
 
             if (status.HasValue)
             {
@@ -111,47 +124,24 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task DeleteAsync(AcademicYear academicYear)
         {
             var id = academicYear.AcademicYearId;
-
             var connection = _context.Database.GetDbConnection();
             if (connection.State != System.Data.ConnectionState.Open)
             {
                 await connection.OpenAsync();
             }
 
-            using var cmd = connection.CreateCommand();
-
-            cmd.CommandText = "SET FOREIGN_KEY_CHECKS = 0;";
-            await cmd.ExecuteNonQueryAsync();
-
-            string[] cleanupSqls = new[]
+            try
             {
-                $"DELETE FROM Results WHERE ExamId IN (SELECT ExamId FROM Examinations WHERE AcademicYearId = {id});",
-                $"DELETE FROM Examinations WHERE AcademicYearId = {id};",
-                $"DELETE FROM Marks WHERE AcademicYearId = {id};",
-                $"DELETE FROM FeeStructures WHERE AcademicYearId = {id};",
-                $"DELETE FROM Timetables WHERE AcademicYearId = {id};",
-                $"DELETE FROM AttendanceSessions WHERE AcademicYearId = {id};",
-                $"DELETE FROM Groups WHERE AcademicYearId = {id};",
-                $"UPDATE Students SET AcademicYearId = NULL WHERE AcademicYearId = {id};",
-                $"UPDATE StudentAdmissions SET AcademicYearId = NULL WHERE AcademicYearId = {id};",
-                $"DELETE FROM AcademicYears WHERE AcademicYearId = {id};"
-            };
-
-            foreach (var sql in cleanupSqls)
-            {
-                try
-                {
-                    cmd.CommandText = sql;
-                    await cmd.ExecuteNonQueryAsync();
-                }
-                catch
-                {
-                    // Ignore optional non-existent tables during cascade cleanup
-                }
+                await connection.ExecuteAsync(
+                    "sp_DeleteAcademicYearWithCascade",
+                    new { p_AcademicYearId = id },
+                    commandType: CommandType.StoredProcedure);
             }
-
-            cmd.CommandText = "SET FOREIGN_KEY_CHECKS = 1;";
-            await cmd.ExecuteNonQueryAsync();
+            catch
+            {
+                _context.AcademicYears.Remove(academicYear);
+                await _context.SaveChangesAsync();
+            }
         }
 
         public async Task DeactivateAllExceptAsync(int activeId)

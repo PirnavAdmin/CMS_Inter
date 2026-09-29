@@ -392,17 +392,47 @@
   text-align: left;
 }
 
-.cms-section-table th:nth-child(1) { width: 13%; }
+.cms-cell-center {
+  text-align: center !important;
+}
+
+.cms-two-line {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cms-two-line-primary {
+  color: var(--cms-text, #10203c);
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cms-two-line-secondary {
+  display: inline-block;
+  font-size: 10.5px;
+  color: var(--cms-muted, #64748b);
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cms-section-table th:nth-child(1) { width: 12%; }
 .cms-section-table th:nth-child(2) { width: 8%; }
-.cms-section-table th:nth-child(3) { width: 9%; }
-.cms-section-table th:nth-child(4) { width: 13%; }
-.cms-section-table th:nth-child(5) { width: 13%; }
-.cms-section-table th:nth-child(6) { width: 10%; }
-.cms-section-table th:nth-child(7) { width: 8%; }
-.cms-section-table th:nth-child(8) { width: 10%; }
-.cms-section-table th:nth-child(9) { width: 5%; }
-.cms-section-table th:nth-child(10) { width: 5%; }
-.cms-section-table th:nth-child(11) { width: 6%; }
+.cms-section-table th:nth-child(3) { width: 10%; }
+.cms-section-table th:nth-child(4) { width: 15%; }
+.cms-section-table th:nth-child(5) { width: 8%; text-align: center; }
+.cms-section-table th:nth-child(6) { width: 15%; }
+.cms-section-table th:nth-child(7) { width: 8%; text-align: center; }
+.cms-section-table th:nth-child(8) { width: 9%; text-align: center; }
+.cms-section-table th:nth-child(9) { width: 6%; }
+.cms-section-table th:nth-child(10) { width: 9%; text-align: center; }
 
 .cms-room-table th:nth-child(1) { width: 15%; }
 .cms-room-table th:nth-child(2) { width: 15%; text-align: center; }
@@ -782,11 +812,47 @@
 }
 
 /* ============================================================
-   Section Delete Confirmation Modal (Theme-Based Dialog Layout)
+   Section & Room Delete Confirmation Modal (Theme-Based Dialog Layout)
    ============================================================ */
+.cms-modal.cms-delete-modal {
+  width: min(440px, calc(100vw - 32px)) !important;
+  max-width: 440px !important;
+  background: var(--cms-surface, #ffffff) !important;
+  border-radius: 16px !important;
+  border: 1px solid var(--cms-border, #e4e8f0) !important;
+  box-shadow: 0 20px 40px -12px rgba(16, 32, 60, 0.18), 0 2px 6px rgba(16, 32, 60, 0.06) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  margin: auto !important;
+}
+
+.cms-delete-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 32px 28px 4px 28px;
+  background: transparent;
+}
+
 .cms-delete-modal-icon {
-  background: var(--cms-primary-soft, #F1F4E2);
-  color: var(--cms-primary, #6F8400);
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+  background: var(--cms-amber-soft, #fdf3e0);
+  color: var(--cms-amber, #b7791f);
+  transition: transform 0.2s ease;
+}
+
+.cms-delete-modal-icon.confirm {
+  background: var(--cms-amber-soft, #fdf3e0);
+  color: var(--cms-amber, #b7791f);
 }
 
 .cms-delete-modal-icon.blocked {
@@ -794,9 +860,117 @@
   color: var(--cms-red, #d93636);
 }
 
-.cms-delete-modal-icon.confirm {
+.cms-delete-modal-title {
+  margin: 0 0 10px 0 !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  color: var(--cms-text, #10203c) !important;
+  text-align: center !important;
+  line-height: 1.35;
+}
+
+.cms-delete-modal-desc {
+  margin: 0 auto !important;
+  font-size: 13.5px !important;
+  line-height: 1.55 !important;
+  color: var(--cms-muted, #7B8275) !important;
+  text-align: center !important;
+  max-width: 380px !important;
+}
+
+.cms-delete-modal-alert {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
   background: var(--cms-red-soft, #fdecec);
+  border: 1px solid rgba(217, 54, 54, 0.25);
   color: var(--cms-red, #d93636);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.cms-modal.cms-delete-modal .cms-modal-foot {
+  background: transparent !important;
+  border-top: none !important;
+  padding: 24px 28px 28px 28px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  flex-direction: row !important;
+}
+
+.cms-modal.cms-delete-modal .cms-modal-foot .cms-btn {
+  min-height: 38px !important;
+  border-radius: 8px !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  transition: all 0.15s ease !important;
+  cursor: pointer;
+}
+
+.cms-modal.cms-delete-modal .cms-modal-foot .cms-btn-ghost {
+  background: #fbfcf8 !important;
+  border: 1px solid #dfe5cf !important;
+  color: #3b4914 !important;
+  padding: 8px 22px !important;
+}
+
+.cms-modal.cms-delete-modal .cms-modal-foot .cms-btn-ghost:hover {
+  background: var(--cms-primary-soft, #F1F4E2) !important;
+  border-color: var(--cms-primary-border, #c7d7fe) !important;
+  color: var(--cms-primary, #6F8400) !important;
+}
+
+.cms-modal.cms-delete-modal .cms-modal-foot .cms-btn-danger {
+  background: #c53030 !important;
+  border: 1px solid #c53030 !important;
+  color: #ffffff !important;
+  padding: 8px 20px !important;
+  box-shadow: 0 2px 6px rgba(197, 48, 48, 0.25) !important;
+}
+
+.cms-modal.cms-delete-modal .cms-modal-foot .cms-btn-danger:hover {
+  background: #aa2424 !important;
+  border-color: #aa2424 !important;
+  box-shadow: 0 4px 10px rgba(197, 48, 48, 0.35) !important;
+}
+
+/* Dark theme support for delete modal */
+[data-theme="dark"] .cms-modal.cms-delete-modal {
+  background: var(--cms-surface, #1e2319) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.5) !important;
+}
+
+[data-theme="dark"] .cms-modal.cms-delete-modal .cms-delete-modal-title {
+  color: var(--cms-text, #e6e7de) !important;
+}
+
+[data-theme="dark"] .cms-modal.cms-delete-modal .cms-delete-modal-desc {
+  color: var(--cms-muted, #9ea595) !important;
+}
+
+[data-theme="dark"] .cms-delete-modal-icon.confirm {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #fbbf24 !important;
+}
+
+[data-theme="dark"] .cms-modal.cms-delete-modal .cms-modal-foot .cms-btn-ghost {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #e6e7de !important;
+}
+
+[data-theme="dark"] .cms-modal.cms-delete-modal .cms-modal-foot .cms-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
 }
 
 .cms-allocation-export-btn { white-space: nowrap; }

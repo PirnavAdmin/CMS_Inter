@@ -21,7 +21,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace CollegeManagement.API.Tests
 {
     /// <summary>
-    /// Automated test runner for Phase 6C: Centralized Users Login & Controlled JIT Legacy Migration.
+    /// Automated test runner for Phase 6C: Centralized Users Login and Controlled JIT Legacy Migration.
     /// Strictly verifies:
     /// 1. Centralized Users authentication (Authoritative, Active status, Linked Domain status, LastLogin update).
     /// 2. Email-only login requirement (Rejection of PhoneNumber as login identifier).
@@ -30,7 +30,7 @@ namespace CollegeManagement.API.Tests
     /// 5. Legacy Staff protection (No synthetic passwords or ambiguous JWTs).
     /// 6. Standalone unlinked Users handling (Normal authentication without fuzzy linking).
     /// 7. Concurrency resilience (Atomic JIT insertion, duplicate-key graceful recovery).
-    /// 8. Live database baseline preservation & data safety invariants.
+    /// 8. Live database baseline preservation and data safety invariants.
     /// </summary>
     public static class CentralizedLoginTester
     {

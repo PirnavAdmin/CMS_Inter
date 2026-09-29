@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
+import { SkeletonPage, SkeletonRow } from "@/components/common/Ui.jsx";
 import {
   FiFileText,
   FiCheckSquare,
@@ -35,6 +36,7 @@ import {
   cancelCertificate,
   deleteCertificate,
   downloadCertificatePdf,
+  getActiveTemplates,
 } from "../../api/certificateApi";
 import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES } from "@/components/pages/TemplatesPage.jsx";
 import createCertificateIcon from "@/assets/sidebar-3d/certificates.png";
@@ -42,8 +44,8 @@ import certificateRecordsIcon from "@/assets/settings-3d/audit-logs.png";
 import reviewIssueIcon from "@/assets/reports-3d/toppers.png";
 import "./CertificateManagement.css";
 
-// Supported Certificate Types
-const CERTIFICATE_TYPES = [
+// Supported Certificate Types (Will be populated dynamically from backend)
+const DEFAULT_CERTIFICATE_TYPES = [
   "Bonafide Certificate",
   "Study Certificate",
   "Conduct Certificate",
@@ -90,6 +92,7 @@ const CertificateManagement = () => {
     cancelledCount: 0,
   });
   const [studentsDropdown, setStudentsDropdown] = useState([]);
+  const [certificateTypes, setCertificateTypes] = useState(DEFAULT_CERTIFICATE_TYPES);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -148,10 +151,11 @@ const CertificateManagement = () => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [certsRes, statsRes, studentsRes] = await Promise.allSettled([
+      const [certsRes, statsRes, studentsRes, templatesRes] = await Promise.allSettled([
         getCertificates(),
         getCertificateWorkflowStats(),
         getCertificateStudentsDropdown(),
+        getActiveTemplates(),
       ]);
 
       if (certsRes.status === "fulfilled" && certsRes.value?.data) {
@@ -162,6 +166,12 @@ const CertificateManagement = () => {
       }
       if (studentsRes.status === "fulfilled" && studentsRes.value?.data) {
         setStudentsDropdown(studentsRes.value.data);
+      }
+      if (templatesRes.status === "fulfilled" && templatesRes.value?.data) {
+        const templateTitles = templatesRes.value.data.map(t => t.title);
+        if (templateTitles.length > 0) {
+            setCertificateTypes(templateTitles);
+        }
       }
     } catch (err) {
       console.error("Failed loading certificates data:", err);
@@ -543,7 +553,7 @@ const CertificateManagement = () => {
                   required
                 >
                   <option value="">Select Certificate Type</option>
-                  {CERTIFICATE_TYPES.map((t) => (
+                  {certificateTypes.map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>
@@ -794,7 +804,7 @@ const CertificateManagement = () => {
                   }}
                 >
                   <option value="All">All Certificate Types</option>
-                  {CERTIFICATE_TYPES.map((t) => (
+                  {certificateTypes.map((t) => (
                     <option key={t} value={t}>
                       {t}
                     </option>
@@ -832,11 +842,7 @@ const CertificateManagement = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan="8" className="table-empty-message">
-                      <div className="cert-spinner-inline"></div> Loading certificates...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />)
                 ) : paginatedList.length === 0 ? (
                   <tr>
                     <td colSpan="8" className="table-empty-message">
@@ -1058,11 +1064,7 @@ const CertificateManagement = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan="7" className="table-empty-message">
-                      <div className="cert-spinner-inline"></div> Loading workflow items...
-                    </td>
-                  </tr>
+                  Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />)
                 ) : paginatedList.length === 0 ? (
                   <tr>
                     <td colSpan="7" className="table-empty-message">
@@ -1217,10 +1219,7 @@ const CertificateManagement = () => {
 
             <div className="cert-modal-body">
               {previewLoading ? (
-                <div className="cert-preview-loading" style={{ textAlign: "center", padding: "3rem" }}>
-                  <div className="cert-spinner-inline"></div>
-                  <span>Loading &amp; hydrating certificate template...</span>
-                </div>
+                <SkeletonPage />
               ) : (
                 <div className="cert-preview-card cert-canvas-ornate">
                   <div className="cert-preview-header">
