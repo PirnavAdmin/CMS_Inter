@@ -19,7 +19,7 @@ namespace CollegeManagement.API.Services.Interfaces
             UpdateStudentAdmissionRequest request);
         Task<IEnumerable<string>> GetBloodGroupsAsync();
         //generate//
-        Task<string> GenerateAdmissionNumberAsync();
+        Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
 
 
         // Verify / Approve / Reject

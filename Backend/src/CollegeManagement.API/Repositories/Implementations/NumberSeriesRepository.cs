@@ -122,14 +122,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode, int? campusId = null)
+        public async Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode, int? campusId = null, string? baseSeriesCode = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
                 return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                     "sp_GenerateNextNumberSeries",
-                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId },
+                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId, p_BaseSeriesCode = baseSeriesCode?.Trim() },
                     commandType: CommandType.StoredProcedure);
             }
             catch

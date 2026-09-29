@@ -3030,8 +3030,12 @@ export default function AdmissionPage() {
   const previewAdmissionNumber = useCallback(async () => {
     const seriesCode = await resolveAdmissionNumberSeriesCode();
     const response = await apiClient.get(
-      apiEndpoints.numberSeries.getByCode(seriesCode),
-      { params: admissionNumberPayload },
+      apiEndpoints.numberSeries.preview(seriesCode),
+      { params: { 
+          campusId: admissionNumberPayload.campusId, 
+          board: admissionNumberPayload.boardId ? String(admissionNumberPayload.boardId) : "",
+          academicYear: admissionNumberPayload.academicYearId ? String(admissionNumberPayload.academicYearId) : ""
+      } },
     );
     const data = response.data?.data ?? response.data?.Data ?? response.data;
     const admissionNumber = typeof data === "string"
@@ -3042,9 +3046,8 @@ export default function AdmissionPage() {
   }, [admissionNumberPayload, resolveAdmissionNumberSeriesCode]);
 
   const generateAdmissionNumber = useCallback(async () => {
-    const seriesCode = await resolveAdmissionNumberSeriesCode();
     const response = await apiClient.post(
-      apiEndpoints.numberSeries.generateNext(seriesCode),
+      apiEndpoints.admissions.generateNumber,
       admissionNumberPayload,
     );
     const data = response.data?.data ?? response.data?.Data ?? response.data;
