@@ -208,8 +208,8 @@ export const getGroupStudents = (
 
   if (typeof scopeOrGroupId === "object" && scopeOrGroupId !== null) {
     targetGid = normalizeId(scopeOrGroupId.groupId);
-    targetLevelIds = ensureArray(scopeOrGroupId.academicLevelIds).map(normalizeId).filter(Boolean);
-    targetProgramIds = ensureArray(scopeOrGroupId.programIds).map(normalizeId).filter(Boolean);
+    targetLevelIds = ensureArray(scopeOrGroupId.academicLevelIds || (scopeOrGroupId.academicLevelId ? [scopeOrGroupId.academicLevelId] : [])).map(normalizeId).filter(Boolean);
+    targetProgramIds = ensureArray(scopeOrGroupId.programIds || (scopeOrGroupId.programId ? [scopeOrGroupId.programId] : [])).map(normalizeId).filter(Boolean);
   } else {
     targetGid = normalizeId(scopeOrGroupId);
   }
@@ -223,7 +223,7 @@ export const getGroupStudents = (
       .filter(Boolean);
   }
 
-  // If program scope not specified directly, derive from exam groupProgramSelections
+  // If program scope not specified directly, derive from exam groupProgramSelections or exam program
   if (targetProgramIds.length === 0) {
     let pIds = [];
     if (exam.groupProgramSelections && typeof exam.groupProgramSelections === "object" && !Array.isArray(exam.groupProgramSelections)) {
@@ -231,26 +231,35 @@ export const getGroupStudents = (
     } else if (Array.isArray(exam.groupProgramSelections) && exam.groupProgramSelections.length > 0) {
       const match = exam.groupProgramSelections.find((g) => normalizeId(g.groupId) === targetGid);
       pIds = match ? ensureArray(match.programIds) : [];
-    } else {
-      pIds = ensureArray(exam.programIds || [exam.programId].filter(Boolean));
-      pIds = pIds.filter((id) =>
-        ensureArray(programsList).some(
-          (p) => normalizeId(p.id) === normalizeId(id) && (!p.groupId || normalizeId(p.groupId) === targetGid),
-        ),
-      );
+    }
+    if (pIds.length === 0) {
+      const isAllPrograms = !exam.programId || String(exam.programName || "").trim().toLowerCase() === "all programs";
+      if (!isAllPrograms) {
+        const directProgramId = exam.programId || exam.program?.id || exam.academicProgramId;
+        const rawPids = ensureArray(exam.programIds).map(normalizeId).filter(Boolean);
+        pIds = rawPids.length > 0 ? rawPids : (directProgramId ? [directProgramId] : []);
+      }
     }
     targetProgramIds = [...new Set(pIds.map(normalizeId).filter(Boolean))];
   }
 
-  const selectedProgramObjs = ensureArray(programsList).filter((p) => targetProgramIds.includes(normalizeId(p.id)));
-  const selectedProgCodes = new Set(selectedProgramObjs.map((p) => String(p.code || "").toUpperCase()).filter(Boolean));
-  const selectedProgNames = new Set(selectedProgramObjs.map((p) => String(p.name || "").toLowerCase()).filter(Boolean));
+  const selectedProgramObjs = ensureArray(programsList).filter((p) => targetProgramIds.includes(normalizeId(p.id ?? p.programId)));
+  const selectedProgCodes = new Set(selectedProgramObjs.map((p) => String(p.code || p.programCode || "").toUpperCase()).filter(Boolean));
+  const selectedProgNames = new Set(selectedProgramObjs.map((p) => String(p.name || p.programName || "").toLowerCase()).filter(Boolean));
+
+  const examCampusId = normalizeId(exam.campusId || exam.campus?.id);
 
   const seenStudentIds = new Set();
   return ensureArray(studentsList).filter((s) => {
     if (s.isActive === false || normalizeStatus(s.status) === "INACTIVE" || normalizeStatus(s.status) === "SUSPENDED") return false;
     const sId = normalizeId(s.id ?? s.studentId ?? s._id ?? s.admissionNo);
     if (!sId || seenStudentIds.has(sId)) return false;
+
+    // Campus match: Student MUST match campus if exam campus is specified
+    if (examCampusId) {
+      const sCampusId = normalizeId(s.campusId || s.campus?.id);
+      if (sCampusId && sCampusId !== examCampusId) return false;
+    }
 
     // Explicit group match: Student MUST have a valid groupId that matches targetGid
     const sGid = normalizeId(s.groupId || s.group?.id || s.courseGroupId);
@@ -265,8 +274,8 @@ export const getGroupStudents = (
     // Program match: If programs are specified, student MUST match one of the group's selected programs
     if (targetProgramIds.length > 0) {
       const sPid = normalizeId(s.programId || s.programmeId || s.program?.id || s.programme?.id || s.academicProgramId);
-      const sPName = String(s.programName || s.programmeName || s.program?.name || "").toLowerCase();
-      const sPCode = String(s.programCode || s.programmeCode || s.program?.code || "").toUpperCase();
+      const sPName = String(s.programName || s.programmeName || s.program?.name || "").toLowerCase().trim();
+      const sPCode = String(s.programCode || s.programmeCode || s.program?.code || "").toUpperCase().trim();
 
       const matchesById = sPid && targetProgramIds.includes(sPid);
       const matchesByCode = sPCode && selectedProgCodes.has(sPCode);

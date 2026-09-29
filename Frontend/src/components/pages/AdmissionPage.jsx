@@ -881,13 +881,13 @@ const steps = [
     fields: [
       { name: "fatherName", label: "Father Name" },
       { name: "fatherOccupation", label: "Father Occupation" },
-      { name: "fatherMobile", label: "Father Mobile", type: "tel" },
+      { name: "fatherMobile", label: "Father Mobile", type: "tel", required: true },
       { name: "motherName", label: "Mother Name" },
       { name: "motherOccupation", label: "Mother Occupation" },
       { name: "motherMobile", label: "Mother Mobile", type: "tel" },
       { name: "guardianName", label: "Guardian Name" },
       { name: "guardianMobile", label: "Guardian Mobile", type: "tel" },
-      { name: "annualIncome", label: "Annual Income", type: "number" },
+      { name: "parentGuardianEmail", label: "Parent/Guardian Email", type: "email", required: true },
     ],
   },
   {
@@ -1043,7 +1043,7 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "MotherEmail", values.motherEmail);
   appendIfPresent(formData, "GuardianName", values.guardianName);
   appendIfPresent(formData, "GuardianMobile", values.guardianMobile);
-  appendIfPresent(formData, "ParentparentparentParentGuardianEmail", values.ParentparentparentParentGuardianEmail);
+  appendIfPresent(formData, "ParentGuardianEmail", values.parentGuardianEmail);
   appendIfPresent(formData, "AnnualIncome", values.annualIncome);
   appendIfPresent(formData, "Address", [houseDoorNumber, streetVillage, values.city, values.district, values.state, values.pincode].filter(Boolean).join(", "));
   appendIfPresent(formData, "HouseDoorNumber", houseDoorNumber);
@@ -1631,7 +1631,7 @@ const normalizeAdmissionRow = (item) => {
     || [firstName, lastName].filter(Boolean).join(" ");
   const admissionNo = readText(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber", "number", "Number");
   const status = normalizeAdmissionStatus(readText(item, "status", "Status", "admissionStatus", "AdmissionStatus"));
-  const programName = readText(item, "programName", "ProgramName")
+  const programName = readTextFromSources([item, admission, student], "programName", "ProgramName")
     || (typeof program === "string" ? program : readText(program, "programName", "ProgramName", "name", "Name", "programCode", "ProgramCode"));
   const boardId = readId(item, "boardId", "BoardId") || readId(board, "boardId", "BoardId", "id", "Id");
   const rawBoardName = readText(item, "boardName", "BoardName")
@@ -1643,7 +1643,7 @@ const normalizeAdmissionRow = (item) => {
   const academicYearName = !isRawIdDisplay(rawAcademicYearName, academicYearId) ? rawAcademicYearName : "";
   const groupId = readId(item, "groupId", "GroupId") || readId(group, "groupId", "GroupId", "id", "Id");
   const groupName = readText(item, "groupName", "GroupName") || (typeof group === "string" ? group : readText(group, "groupName", "GroupName", "name", "Name", "groupCode", "GroupCode"));
-  const programId = readId(item, "programId", "ProgramId") || readId(program, "programId", "ProgramId", "id", "Id");
+  const programId = readIdFromSources([item, admission, student], "programId", "ProgramId") || readId(program, "programId", "ProgramId", "id", "Id");
   const campus = read(item, "campus", "Campus");
   const campusId = readId(item, "campusId", "CampusId") || readId(campus, "campusId", "CampusId", "id", "Id");
   const campusName = readText(item, "campusName", "CampusName")
@@ -1713,6 +1713,7 @@ const normalizeAdmissionRow = (item) => {
     groupId,
     group: !isRawIdDisplay(groupName, groupId) ? groupName : groupId,
     programId,
+    programName,
     program: !isRawIdDisplay(programName, programId) ? programName : programId,
     studentPhoto,
     photoUrl,
@@ -1753,7 +1754,7 @@ const normalizeAdmissionRow = (item) => {
       motherEmail: readText(item, "motherEmail", "MotherEmail"),
       guardianName: readText(item, "guardianName", "GuardianName"),
       guardianMobile: readText(item, "guardianMobile", "GuardianMobile"),
-      ParentparentparentParentGuardianEmail: readText(item, "ParentparentparentParentGuardianEmail", "ParentparentparentParentGuardianEmail"),
+      parentGuardianEmail: readText(item, "parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail", "ParentparentparentParentGuardianEmail"),
       annualIncome: readText(item, "annualIncome", "AnnualIncome"),
       houseDoorNumber,
       streetVillage,
@@ -3119,6 +3120,12 @@ export default function AdmissionPage() {
     ));
   }, [masterOptions.boards, masterOptions.groups, masterOptions.levels, masterOptions.sections, values.board, values.group, values.groupName, values.level, values.levelName, values.year]);
   const programOptions = useMemo(() => masterOptions.programs || [], [masterOptions.programs]);
+  const admissionProgramDisplay = useCallback((row) => (
+    lookupLabel(programOptions, row.programId, row.programName)
+    || row.programId
+    || row.program
+    || "-"
+  ), [programOptions]);
   const routeBusTypesByRoute = useMemo(() => {
     const vehicleTypeById = new Map(
       allocationMasterData.vehicles
@@ -5448,7 +5455,7 @@ export default function AdmissionPage() {
                     <td>{admissionYearDisplay(row)}</td>
                     <td>{admissionBoardDisplay(row)}</td>
                     <td>{row.group || "-"}</td>
-                    <td>{row.program || "-"}</td>
+                    <td>{admissionProgramDisplay(row)}</td>
                     <td><span className={`cms-badge ${admissionStatusClass(row.status)}`}>{row.status}</span></td>
                     <td>
                       <div className="cms-actions cms-admission-actions">
@@ -5677,6 +5684,3 @@ export default function AdmissionPage() {
     </DashboardLayout>
   );
 }
-
-
-
