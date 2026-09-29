@@ -492,6 +492,13 @@ export const apiEndpoints = {
     rollback: "/api/v1/promotions/rollback",
     report: "/api/v1/promotions/report",
   },
+  campusTransfers: {
+    create: "/api/v1/promotions/campus-transfers",
+    sent: "/api/v1/promotions/campus-transfers/sent",
+    received: "/api/v1/promotions/campus-transfers/received",
+    approve: (id) => `/api/v1/promotions/campus-transfers/${id}/approve`,
+    reject: (id) => `/api/v1/promotions/campus-transfers/${id}/reject`,
+  },
   reports: {
     dashboard: "/api/reports/dashboard",
     summary: "/api/reports/summary",
@@ -730,3 +737,4 @@ export const uniqueAcademicYearsByName = (items = [], getName = (item) => (
 };
 
 export default apiEndpoints;
+
