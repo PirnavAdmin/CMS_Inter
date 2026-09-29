@@ -99,7 +99,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_AcRatePerKm = dto.AcRatePerKm > 0 ? dto.AcRatePerKm : 150m,
                     p_Description = dto.Description ?? "",
                     p_Status = dto.Status ? (sbyte)1 : (sbyte)0,
-                    p_CreatedBy = userId
+                    p_CreatedBy = userId,
+                    p_CampusId = dto.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -126,7 +127,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_AcRatePerKm = dto.AcRatePerKm > 0 ? dto.AcRatePerKm : 150m,
                     p_Description = dto.Description ?? "",
                     p_Status = dto.Status ? (sbyte)1 : (sbyte)0,
-                    p_UpdatedBy = userId
+                    p_UpdatedBy = userId,
+                    p_CampusId = dto.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
