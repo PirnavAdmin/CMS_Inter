@@ -993,6 +993,7 @@ const admissionMainTabs = [
   { title: "Fee", step: FEE_STEP_INDEX, icon: IndianRupee },
   { title: "Preview", step: PREVIEW_STEP_INDEX, icon: Eye },
 ];
+const ADMISSION_NUMBER_SERIES_CODE = "ADMISSION_NO";
 const admissionStatusFilterOptions = ["Pending", "Verified", "Approved", "Rejected"];
 
 const stepIcons = {
@@ -1227,6 +1228,26 @@ const normalizeHostelRoomOption = (room = {}) => {
     feeAmount: Number(read(room, "fee", "Fee", "monthlyFee", "MonthlyFee") || 0),
     status: isLiveMasterActive(room) ? "Active" : "Inactive",
   };
+};
+
+const toNullableNumberId = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const normalizeSeriesKey = (value) => String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+
+const admissionNumberSeriesCodeFrom = (rows = []) => {
+  const match = rows.find((item) => {
+    const keys = [
+      readText(item, "seriesCode", "SeriesCode", "code", "Code", "key", "Key", "slug", "Slug", "id", "Id"),
+      readText(item, "seriesName", "SeriesName", "name", "Name", "title", "Title"),
+    ].map(normalizeSeriesKey);
+    return keys.some((key) => key === "admissionno" || key === "admissionnumber");
+  });
+  if (!match) return ADMISSION_NUMBER_SERIES_CODE;
+  return readText(match, "seriesCode", "SeriesCode", "code", "Code", "key", "Key", "slug", "Slug", "id", "Id") || ADMISSION_NUMBER_SERIES_CODE;
 };
 
 const normalizeHostelRoomTypeOption = (roomType = {}) => {
@@ -2303,7 +2324,9 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             }}
           >
             {field.loading ? (
-              <div style={{ padding: "10px 12px", color: "#6f7a63" }}>Loading employees...</div>
+              <div style={{ padding: "10px 12px" }} role="status" aria-label="Loading employees">
+                {Array.from({ length: 3 }, (_, index) => <Skeleton key={index} style={{ height: 14, marginBottom: index === 2 ? 0 : 10, width: `${88 - (index * 12)}%` }} />)}
+              </div>
             ) : field.loadError ? (
               <div style={{ padding: "10px 12px", color: "#c43d3d" }}>{field.loadError}</div>
             ) : field.options?.length ? (
@@ -2836,7 +2859,7 @@ export default function AdmissionPage() {
     selectedAcademicYear,
     selectedAcademicYearId,
   } = useAcademicContext();
-  const { campuses, selectedCampus } = useCampusContext();
+  const { campuses, selectedCampus, selectedCampusId } = useCampusContext();
   const [initialDraft] = useState(readAdmissionDraft);
   const [viewMode, setViewMode] = useState("list");
   const [step, setStep] = useState(initialDraft.step);
@@ -2889,6 +2912,7 @@ export default function AdmissionPage() {
   const suppressPersistRef = useRef(false);
   const feeSelectionInitializedRef = useRef(initialDraft.hasFeeSelection);
   const admissionNumberInFlightRef = useRef(false);
+  const admissionNumberSeriesCodeRef = useRef("");
   const pincodeRequestRef = useRef(0);
   const academicLevelRequestRef = useRef(0);
   const programRequestRef = useRef(0);
@@ -2967,7 +2991,16 @@ export default function AdmissionPage() {
       })
       .filter(Boolean)
   ), [campuses]);
-  const selectedCampusValue = selectedCampus?.campusId ?? selectedCampus?.id ?? "";
+  const selectedCampusValue = selectedCampusId || selectedCampus?.campusId || selectedCampus?.id || "";
+  const admissionListParams = useMemo(() => (
+    selectedCampusValue ? { campusId: selectedCampusValue } : {}
+  ), [selectedCampusValue]);
+  const admissionNumberPayload = useMemo(() => ({
+    campusId: toNullableNumberId(selectedCampusValue),
+    boardId: toNullableNumberId(selectedContextBoardValue),
+    academicYearId: toNullableNumberId(selectedContextYearValue),
+  }), [selectedCampusValue, selectedContextBoardValue, selectedContextYearValue]);
+  const canRequestAdmissionNumber = Boolean(admissionNumberPayload.campusId && admissionNumberPayload.boardId && admissionNumberPayload.academicYearId);
   const admittedBySelectedLabel = admissionStaffLabel({
     employeeId: values.admittedByEmployeeId,
     fullName: values.admittedByEmployeeName,
@@ -2980,6 +3013,47 @@ export default function AdmissionPage() {
     return admittedByStaffOptions
       .filter((option) => shouldShowAll || option.searchText.includes(query));
   }, [admittedByDisplayValue, admittedBySelectedLabel, admittedByStaffOptions]);
+
+  const resolveAdmissionNumberSeriesCode = useCallback(async () => {
+    if (admissionNumberSeriesCodeRef.current) return admissionNumberSeriesCodeRef.current;
+    try {
+      const response = await apiClient.get(apiEndpoints.numberSeries.getAll);
+      const code = admissionNumberSeriesCodeFrom(getCollection(response.data));
+      admissionNumberSeriesCodeRef.current = code;
+      return code;
+    } catch {
+      admissionNumberSeriesCodeRef.current = ADMISSION_NUMBER_SERIES_CODE;
+      return ADMISSION_NUMBER_SERIES_CODE;
+    }
+  }, []);
+
+  const previewAdmissionNumber = useCallback(async () => {
+    const seriesCode = await resolveAdmissionNumberSeriesCode();
+    const response = await apiClient.get(
+      apiEndpoints.numberSeries.getByCode(seriesCode),
+      { params: admissionNumberPayload },
+    );
+    const data = response.data?.data ?? response.data?.Data ?? response.data;
+    const admissionNumber = typeof data === "string"
+      ? data
+      : read(data, "livePreview", "LivePreview", "currentExample", "CurrentExample", "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo", "generatedNumber", "GeneratedNumber", "number", "Number");
+    if (!admissionNumber) throw new Error("Admission number could not be generated by the backend.");
+    return String(admissionNumber);
+  }, [admissionNumberPayload, resolveAdmissionNumberSeriesCode]);
+
+  const generateAdmissionNumber = useCallback(async () => {
+    const seriesCode = await resolveAdmissionNumberSeriesCode();
+    const response = await apiClient.post(
+      apiEndpoints.numberSeries.generateNext(seriesCode),
+      admissionNumberPayload,
+    );
+    const data = response.data?.data ?? response.data?.Data ?? response.data;
+    const admissionNumber = typeof data === "string"
+      ? data
+      : read(data, "generatedNumber", "GeneratedNumber", "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo", "number", "Number", "livePreview", "LivePreview");
+    if (!admissionNumber) throw new Error("Admission number could not be generated by the backend.");
+    return String(admissionNumber);
+  }, [admissionNumberPayload, resolveAdmissionNumberSeriesCode]);
   const loadAdmittedByStaffOptions = useCallback(() => {
     setAdmittedByDropdownOpen(true);
     if (admittedByStaffLoaded || admittedByLookupLoading) return;
@@ -3127,18 +3201,58 @@ export default function AdmissionPage() {
     ));
     return { room, roomType, config: config || null };
   }, [allocationMasterData.hostelBlocks, allocationMasterData.hostelFees, allocationMasterData.hostelRooms, allocationMasterData.hostelRoomTypes]);
+  const contextScopedAdmissions = useMemo(() => {
+    const contextBoardValue = selectedContextBoardValue || selectedBoardId;
+    const contextYearValue = selectedContextYearValue || selectedAcademicYearId;
+    return admissions.filter((row) => (
+      optionMatchesRecord(
+        selectedCampusValue,
+        campusOptions,
+        row.campusId,
+        row.values?.campus,
+        row.campus,
+        row.campusName,
+      )
+      && optionMatchesRecord(
+        contextBoardValue,
+        boardOptions,
+        row.boardId,
+        row.values?.board,
+        row.board,
+        row.boardName,
+      )
+      && optionMatchesRecord(
+        contextYearValue,
+        yearOptions,
+        row.academicYearId,
+        row.values?.year,
+        row.academicYear,
+        row.academicYearName,
+      )
+    ));
+  }, [
+    admissions,
+    boardOptions,
+    campusOptions,
+    selectedAcademicYearId,
+    selectedBoardId,
+    selectedCampusValue,
+    selectedContextBoardValue,
+    selectedContextYearValue,
+    yearOptions,
+  ]);
   const groupFilterOptions = useMemo(() => {
     const scopedMasterGroups = (masterOptions.groups || []).filter((item) => (
       scopedOptionMatches(selectedContextBoardValue, boardOptions, item.boardId, item.boardName, selectedContextBoardLabel)
       && scopedOptionMatches(selectedContextYearValue, yearOptions, item.academicYearId, item.academicYearName, selectedContextYearLabel)
     ));
-    const admissionGroups = admissions
+    const admissionGroups = contextScopedAdmissions
       .map((row) => optionFromRecord(row.groupId || row.values?.group, row.group || row.values?.groupName))
       .filter(Boolean);
     return uniqueOptionsByValue([...scopedMasterGroups, ...admissionGroups]);
   }, [
-    admissions,
     boardOptions,
+    contextScopedAdmissions,
     masterOptions.groups,
     selectedContextBoardLabel,
     selectedContextBoardValue,
@@ -3289,7 +3403,7 @@ export default function AdmissionPage() {
   }));
   const displayedAdmissions = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return admissions.filter((row) => {
+    return contextScopedAdmissions.filter((row) => {
       const matchesSearch = !term
         || String(row.studentName || "").toLowerCase().includes(term)
         || String(row.admissionNo || "").toLowerCase().includes(term);
@@ -3313,7 +3427,7 @@ export default function AdmissionPage() {
       const matchesStatus = !filters.status || normalizeAdmissionStatus(row.status) === filters.status;
       return matchesSearch && matchesYear && matchesGroup && matchesStatus;
     });
-  }, [academicYearFilterOptions, admissionYearDisplay, admissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
+  }, [academicYearFilterOptions, admissionYearDisplay, contextScopedAdmissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
   const totalPages = Math.max(1, Math.ceil(displayedAdmissions.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedAdmissions = displayedAdmissions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -3459,12 +3573,13 @@ export default function AdmissionPage() {
     document.save(`${safeExportFileName(`Admission ${admissionNo}`)}.pdf`);
   };
 
-  const refreshAdmissions = async () => {
+  const refreshAdmissions = useCallback(async () => {
     const requestId = admissionsRequestRef.current + 1;
     admissionsRequestRef.current = requestId;
     setListLoading(true);
+    setAdmissions([]);
     try {
-      const response = await apiClient.get(apiEndpoints.admissions.getAll);
+      const response = await apiClient.get(apiEndpoints.admissions.getAll, { params: admissionListParams });
       const apiRows = getCollection(response.data).map(normalizeAdmissionRow);
       if (admissionsRequestRef.current !== requestId) return apiRows;
       setAdmissions(apiRows);
@@ -3475,11 +3590,12 @@ export default function AdmissionPage() {
     } finally {
       if (admissionsRequestRef.current === requestId) setListLoading(false);
     }
-  };
+  }, [admissionListParams]);
 
   useEffect(() => {
+    setPage(1);
     refreshAdmissions();
-  }, []);
+  }, [refreshAdmissions, selectedContextBoardValue, selectedContextYearValue]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3912,6 +4028,7 @@ export default function AdmissionPage() {
         program: "",
         programName: "",
         section: "",
+        ...(campusChanged || boardChanged || yearChanged ? { admissionNo: "" } : {}),
         feeStructureId: "",
         feeItems: [],
         installments: [],
@@ -3924,6 +4041,7 @@ export default function AdmissionPage() {
   useEffect(() => {
     if (viewMode !== "form") return undefined;
     if (editingAdmissionId || values.admissionNo) return undefined;
+    if (!canRequestAdmissionNumber) return undefined;
     if (admissionNumberInFlightRef.current) return undefined;
 
     let ignore = false;
@@ -3932,21 +4050,10 @@ export default function AdmissionPage() {
     setErrors((current) => ({ ...current, admissionNo: undefined }));
     setAdmissionNumberLoading(true);
 
-    apiClient.post(apiEndpoints.admissions.generateNumber)
+    previewAdmissionNumber()
       .then((response) => {
         if (ignore) return;
-        const data = response.data?.data ?? response.data?.Data ?? response.data;
-        const generatedNumber = typeof data === "string"
-          ? data
-          : read(data, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber", "number", "Number");
-        if (generatedNumber) {
-          setValues((currentValues) => ({ ...currentValues, admissionNo: String(generatedNumber) }));
-          return;
-        }
-        const message = "Admission number could not be generated by the backend.";
-        setAdmissionNumberError(message);
-        setErrors((current) => ({ ...current, admissionNo: message }));
-        setToast(message);
+        setValues((currentValues) => ({ ...currentValues, admissionNo: response }));
       })
       .catch((err) => {
         if (ignore) return;
@@ -3964,7 +4071,7 @@ export default function AdmissionPage() {
       ignore = true;
       admissionNumberInFlightRef.current = false;
     };
-  }, [editingAdmissionId, values.admissionNo, viewMode]);
+  }, [canRequestAdmissionNumber, editingAdmissionId, previewAdmissionNumber, selectedCampusValue, values.admissionNo, viewMode]);
 
   useEffect(() => {
     if (viewMode !== "form") return undefined;
@@ -5134,7 +5241,7 @@ export default function AdmissionPage() {
     const visibleMobile = typeof document !== "undefined"
       ? studentMobileValue({ studentMobileNumber: document.getElementById("f-studentMobileNumber")?.value || "" })
       : "";
-    const submitValues = normalizeAdmissionMobileState({
+    let submitValues = normalizeAdmissionMobileState({
       ...values,
       studentMobileNumber: studentMobileValue(values) || visibleMobile,
     });
@@ -5143,7 +5250,17 @@ export default function AdmissionPage() {
     setSaving(true);
     let savedAdmissionId = submitAdmissionId;
     let admissionWriteCompleted = false;
+    let submittedAdmissionNo = submitValues.admissionNo || values.admissionNo;
     try {
+      if (!isUpdate) {
+        const committedAdmissionNo = await generateAdmissionNumber();
+        submittedAdmissionNo = committedAdmissionNo;
+        submitValues = {
+          ...submitValues,
+          admissionNo: committedAdmissionNo,
+        };
+        setValues((current) => ({ ...current, admissionNo: committedAdmissionNo }));
+      }
       const endpoint = isUpdate
         ? apiEndpoints.admissions.update(submitAdmissionId)
         : apiEndpoints.admissions.create;
@@ -5176,7 +5293,7 @@ export default function AdmissionPage() {
         if (savedRow.admissionId) {
           committedAdmissionRef.current = {
             admissionId: savedRow.admissionId,
-            admissionNo: savedRow.admissionNo || values.admissionNo,
+            admissionNo: savedRow.admissionNo || submittedAdmissionNo,
           };
         }
       }
@@ -5187,22 +5304,22 @@ export default function AdmissionPage() {
         if (!isUpdate) {
           committedAdmissionRef.current = {
             admissionId: savedAdmissionId,
-            admissionNo: values.admissionNo,
+            admissionNo: submittedAdmissionNo,
           };
           setEditingAdmissionId(savedAdmissionId);
         }
-        setToast(`Admission ${values.admissionNo} was ${isUpdate ? "updated" : "created"}, but fee selections could not be saved: ${message}`);
+        setToast(`Admission ${submittedAdmissionNo} was ${isUpdate ? "updated" : "created"}, but fee selections could not be saved: ${message}`);
         submitInFlightRef.current = false;
         setSaving(false);
         return;
       }
-      if (!isUpdate && values.admissionNo) {
+      if (!isUpdate && submittedAdmissionNo) {
         const latestAdmissions = await refreshAdmissions();
-        const committedRow = findAdmissionByNumber(latestAdmissions, values.admissionNo);
+        const committedRow = findAdmissionByNumber(latestAdmissions, submittedAdmissionNo);
         if (committedRow?.admissionId) {
           committedAdmissionRef.current = {
             admissionId: committedRow.admissionId,
-            admissionNo: committedRow.admissionNo || values.admissionNo,
+            admissionNo: committedRow.admissionNo || submittedAdmissionNo,
           };
           setEditingAdmissionId(committedRow.admissionId);
           setValues((current) => ({
@@ -5212,7 +5329,7 @@ export default function AdmissionPage() {
           }));
           setViewMode("list");
           setPage(1);
-          setToast(`Admission ${committedRow.admissionNo || values.admissionNo} was created successfully, but fee setup could not be completed: ${message}`);
+          setToast(`Admission ${committedRow.admissionNo || submittedAdmissionNo} was created successfully, but fee setup could not be completed: ${message}`);
           submitInFlightRef.current = false;
           setSaving(false);
           return;
@@ -5224,7 +5341,7 @@ export default function AdmissionPage() {
       return;
     }
 
-    setToast(`Admission ${values.admissionNo} ${isUpdate ? "updated" : "submitted"} successfully.`);
+    setToast(`Admission ${submittedAdmissionNo} ${isUpdate ? "updated" : "submitted"} successfully.`);
     resetAdmissionDraftState();
     setViewMode("list");
     setPage(1);

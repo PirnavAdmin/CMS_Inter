@@ -60,16 +60,48 @@ export const d = (value) =>
 export const normalizeId = (value) => String(value ?? "");
 export const normalizeStatus = (value) => String(value || "").trim().toUpperCase();
 export const normalizeCodePart = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-export const canonicalDate = (value) => (value ? String(value).split("T")[0] : "");
+export const canonicalDate = (value) => {
+  if (!value) return "";
+  const str = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {
+    return str.split("T")[0];
+  }
+  const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (ddmmyyyy) {
+    const day = ddmmyyyy[1].padStart(2, "0");
+    const month = ddmmyyyy[2].padStart(2, "0");
+    const year = ddmmyyyy[3];
+    return `${year}-${month}-${day}`;
+  }
+  const dt = new Date(str);
+  if (!isNaN(dt.getTime())) {
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return str.split("T")[0];
+};
 
 export const formatTimeOnly = (timeStr) => {
   if (!timeStr) return "09:00:00";
   const s = String(timeStr).trim();
-  const parts = s.split(":");
-  const h = (parts[0] || "09").padStart(2, "0");
-  const m = (parts[1] || "00").padStart(2, "0");
-  const sec = (parts[2] || "00").substring(0, 2).padStart(2, "0");
-  return `${h}:${m}:${sec}`;
+  const isPM = /pm/i.test(s);
+  const isAM = /am/i.test(s);
+  const cleaned = s.replace(/[^\d:]/g, "");
+  const parts = cleaned.split(":");
+  let h = parseInt(parts[0] || "9", 10);
+  if (isPM && h < 12) h += 12;
+  if (isAM && h === 12) h = 0;
+  const m = parseInt(parts[1] || "0", 10);
+  const sec = parseInt(parts[2] || "0", 10);
+  const hh = String(isNaN(h) ? 9 : h).padStart(2, "0");
+  const mm = String(isNaN(m) ? 0 : m).padStart(2, "0");
+  const ss = String(isNaN(sec) ? 0 : sec).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
 };
 
 export const parseTimeToMinutes = (timeStr) => {

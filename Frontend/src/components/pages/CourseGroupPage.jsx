@@ -5,7 +5,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import DataTable from "@/components/common/DataTable.jsx";
-import { Field, Modal, StatusBadge, Toast, useForm } from "@/components/common/Ui.jsx";
+import { Field, Modal, SkeletonCard, SkeletonPage, StatusBadge, Toast, useForm } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./CourseGroupPage.css";
 
@@ -629,7 +629,7 @@ function ProgramsPanel({ groupId, groupCode, groupName, selectedProgramIds, onCh
         </button>
       </div>
       <div className="course-program-grid">
-        {loadingPrograms ? <p className="cms-muted">Loading programs...</p> : null}
+        {loadingPrograms ? Array.from({ length: 4 }, (_, index) => <SkeletonCard key={index} lines={2} />) : null}
         {!loadingPrograms && programs.map((program) => (
           <label key={program.programId} className="course-program-option">
             <input
@@ -800,7 +800,7 @@ function CourseGroupFormPage() {
         <form className="cms-card" onSubmit={submit} noValidate>
           <div className="cms-card-body">
             {loading ? (
-              <div className="cms-empty">Loading record...</div>
+              <SkeletonPage variant="form" rows={6} />
             ) : (
               <>
                 <div className="cms-form-grid">

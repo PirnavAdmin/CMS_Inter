@@ -19,6 +19,7 @@ import {
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getDashboard } from "../../../api/transportDriverApi.js";
+import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverHomePage({
   onNavigateTab,
@@ -63,15 +64,7 @@ export default function DriverHomePage({
   const eveningTripStatus = activeTripState?.eveningTripStatus || "Pending";
 
   if (isLoading) {
-    return (
-      <div className="dp-page-container">
-        <div className="dp-page-header">
-          <div className="dp-header-main">
-            <h1 className="dp-page-title">Loading Dashboard...</h1>
-          </div>
-        </div>
-      </div>
-    );
+    return <div className="dp-page-container"><SkeletonPage variant="dashboard" columns={4} /></div>;
   }
 
   if (error) {
