@@ -117,10 +117,12 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? pattern = null,
             [FromQuery] int? numberLength = null,
             [FromQuery] string? prefix = null,
-            [FromQuery] int? campusId = null)
+            [FromQuery] int? campusId = null,
+            [FromQuery] string? board = null,
+            [FromQuery] string? academicYear = null)
         {
             campusId = GetCampusIdFromRequest(campusId);
-            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix, campusId);
+            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix, campusId, board, academicYear);
             return Ok(preview);
         }
         private int? GetCampusIdFromRequest(int? queryCampusId)

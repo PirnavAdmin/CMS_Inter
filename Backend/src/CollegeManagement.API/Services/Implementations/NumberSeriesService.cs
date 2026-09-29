@@ -141,25 +141,50 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null, int? campusId = null)
+        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null, int? campusId = null, string? board = null, string? academicYear = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GetByCodeAsync(code, campusId);
+            var actualCode = code;
 
-            var activePattern = pattern ?? entity?.FormatPattern ?? "{PREFIX}{SEQ}";
-            var activeLength = numberLength ?? entity?.NumberLength ?? 4;
-            var activePrefix = prefix ?? entity?.Prefix ?? "";
-            var curSeq = entity?.CurrentSequence ?? 0;
-            var startNum = entity?.StartNumber ?? 1;
+            var contextParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(board))
+            {
+                contextParts.Add($"B:{board.Trim().ToUpperInvariant()}");
+            }
+            if (!string.IsNullOrWhiteSpace(academicYear))
+            {
+                contextParts.Add($"AY:{academicYear.Trim().ToUpperInvariant()}");
+            }
+
+            if (contextParts.Count > 0)
+            {
+                actualCode = $"{code}|{string.Join("_", contextParts)}";
+            }
+
+            // Fallback to base code if specific entity is not found just to get settings, but we primarily want the current sequence of the specific context
+            var specificEntity = await _repository.GetByCodeAsync(actualCode, campusId);
+            var baseEntity = (actualCode == code) ? specificEntity : await _repository.GetByCodeAsync(code, campusId);
+            
+            var activeEntity = specificEntity ?? baseEntity;
+
+            var activePattern = pattern ?? activeEntity?.FormatPattern ?? "{PREFIX}{SEQ}";
+            var activeLength = numberLength ?? activeEntity?.NumberLength ?? 4;
+            var activePrefix = prefix ?? activeEntity?.Prefix ?? "";
+            
+            // If specific entity exists, use its sequence. If not, the sequence is 0.
+            var curSeq = specificEntity?.CurrentSequence ?? 0;
+            var startNum = baseEntity?.StartNumber ?? 1;
 
             var nextSeq = curSeq < startNum ? startNum : curSeq + 1;
+
+            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear };
 
             return NumberSeriesPatternEvaluator.Evaluate(
                 pattern: activePattern,
                 sequenceNumber: nextSeq,
                 numberLength: activeLength,
                 prefix: activePrefix,
-                context: null,
+                context: contextDto,
                 referenceDate: DateTime.Now,
                 isPreview: true);
         }
