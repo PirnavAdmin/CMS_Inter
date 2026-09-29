@@ -170,9 +170,9 @@ namespace CollegeManagement.API.Validators.StudentValidators
                 .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
                 .WithMessage("Invalid Mother Email address.");
 
-            RuleFor(x => x.GuardianEmail)
+            RuleFor(x => x.ParentGuardianEmail)
                 .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.GuardianEmail))
+                .When(x => !string.IsNullOrWhiteSpace(x.ParentGuardianEmail))
                 .WithMessage("Invalid Guardian Email address.");
         }
     }
@@ -205,9 +205,9 @@ namespace CollegeManagement.API.Validators.StudentValidators
                 .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
                 .WithMessage("Invalid Mother Email address.");
 
-            RuleFor(x => x.GuardianEmail)
+            RuleFor(x => x.ParentGuardianEmail)
                 .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.GuardianEmail))
+                .When(x => !string.IsNullOrWhiteSpace(x.ParentGuardianEmail))
                 .WithMessage("Invalid Guardian Email address.");
         }
     }
@@ -241,9 +241,9 @@ namespace CollegeManagement.API.Validators.StudentValidators
                 .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
                 .WithMessage("Invalid Mother Email address.");
 
-            RuleFor(x => x.GuardianEmail)
+            RuleFor(x => x.ParentGuardianEmail)
                 .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.GuardianEmail))
+                .When(x => !string.IsNullOrWhiteSpace(x.ParentGuardianEmail))
                 .WithMessage("Invalid Guardian Email address.");
         }
     }
@@ -277,9 +277,9 @@ namespace CollegeManagement.API.Validators.StudentValidators
                 .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
                 .WithMessage("Invalid Mother Email address.");
 
-            RuleFor(x => x.GuardianEmail)
+            RuleFor(x => x.ParentGuardianEmail)
                 .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.GuardianEmail))
+                .When(x => !string.IsNullOrWhiteSpace(x.ParentGuardianEmail))
                 .WithMessage("Invalid Guardian Email address.");
         }
     }

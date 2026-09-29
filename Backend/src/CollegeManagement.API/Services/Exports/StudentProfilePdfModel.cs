@@ -59,7 +59,7 @@ namespace CollegeManagement.API.Services.Exports
 
         public string? GuardianName { get; set; }
         public string? GuardianMobile { get; set; }
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
         public decimal? AnnualIncome { get; set; }
 
         // Previous Education

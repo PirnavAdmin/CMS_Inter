@@ -145,7 +145,7 @@ namespace CollegeManagement.API.Services.Imports
                     MotherEmail = GetString(ws.Cell(r, 32)),
                     GuardianName = GetString(ws.Cell(r, 33)),
                     GuardianMobile = GetString(ws.Cell(r, 34)),
-                    GuardianEmail = GetString(ws.Cell(r, 35)),
+                    ParentGuardianEmail = GetString(ws.Cell(r, 35)),
                     Address = GetString(ws.Cell(r, 36)),
                     City = GetString(ws.Cell(r, 37)),
                     District = GetString(ws.Cell(r, 38)),

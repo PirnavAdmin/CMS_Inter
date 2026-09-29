@@ -233,8 +233,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile =
                             request.GuardianMobile,
-                        p_GuardianEmail =
-                            request.GuardianEmail,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail,
 
 
                         // -------------------------------------------------
@@ -292,6 +292,18 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
                 throw new Exception(
                     "Student admission could not be created.");
+            }
+
+            // Force override the Admission Number with the one generated/provided by the frontend
+            // This ensures context-isolated sequences (Board/AcademicYear) are saved correctly
+            // instead of whatever the legacy SP generated internally.
+            if (result.AdmissionId > 0 && !string.IsNullOrWhiteSpace(request.AdmissionNo))
+            {
+                await connection.ExecuteAsync(
+                    "UPDATE `StudentAdmissions` SET `AdmissionNo` = @AdmNo WHERE `AdmissionId` = @AdmId",
+                    new { AdmNo = request.AdmissionNo.Trim(), AdmId = result.AdmissionId });
+                
+                result.AdmissionNo = request.AdmissionNo.Trim();
             }
 
             if (result.AdmissionId > 0)
@@ -538,8 +550,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_GuardianMobile =
                             request.GuardianMobile,
 
-                        p_GuardianEmail =
-                            request.GuardianEmail,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail,
 
 
                         // -------------------------------------------------
@@ -819,7 +831,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         // GENERATE ADMISSION NUMBER
         // =========================================================
-        public async Task<string> GenerateAdmissionNumberAsync()
+        public async Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
             var connection = _context.Database.GetDbConnection();
 
@@ -828,6 +840,28 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
+
+        public async Task<int> GetActualAdmissionCountAsync(int campusId, int boardId, int academicYearId)
+        {
+            var connection = _context.Database.GetDbConnection();
+            return await connection.ExecuteScalarAsync<int>(
+                "sp_GetMaxAdmissionSequence",
+                new { p_CampusId = campusId, p_BoardId = boardId, p_AcademicYearId = academicYearId },
+                commandType: CommandType.StoredProcedure
+            );
+        }
+
+        public async Task SyncAdmissionSequenceAsync(int campusId, int boardId, int academicYearId, int correctSequence)
+        {
+            var connection = _context.Database.GetDbConnection();
+            string seriesCode = $"ADMISSION_NO|B:{boardId}_AY:{academicYearId}";
+            
+            await connection.ExecuteAsync(
+                "sp_SyncAdmissionSequence",
+                new { p_CampusId = campusId, p_SeriesCode = seriesCode, p_CorrectSequence = correctSequence },
+                commandType: CommandType.StoredProcedure
+            );
+        }
 
         // =========================================================
         // SINGLE SECTION ALLOCATION
@@ -957,3 +991,4 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
     }
 }
+

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, Users, UserCheck, UserX, Megaphone, RotateCcw } from "lucide-react";
+import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCircle2, Users, UserCheck, UserX, Megaphone, RotateCcw, ChevronDown } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Field, Modal, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -72,6 +72,45 @@ const isNextAcademicYear = (sourceYear, targetYear) => {
   return Boolean(source && target && target.start === source.start + 1);
 };
 
+const CAMPUS_TRANSFER_OPTIONS = {
+  campuses: [
+    { name: "Main Campus (HQ)", board: "Board of Intermediate Education, Andhra Pradesh (BIEAP)" },
+    { name: "North Campus", board: "Board of Intermediate Education, Andhra Pradesh (BIEAP)" },
+    { name: "City Campus", board: "Central Board of Secondary Education (CBSE)" },
+    { name: "Junior College Campus", board: "" },
+  ],
+  reasons: ["Parent Request", "Change of Residence", "Transportation Convenience", "Academic Requirement", "Administrative Transfer", "Other"],
+};
+
+const CAMPUS_TRANSFER_STUDENTS = [
+  ["ADM-52", "Sahithi R", "1", "First Year", "MPC", "MPC Regular", "MPC-A"],
+  ["ADM-2026-001", "Rahul Kumar", "101", "First Year", "MPC", "MPC Regular", "MPC-A"],
+  ["ADM-2026-002", "Priya Reddy", "102", "First Year", "MPC", "MPC Regular", "MPC-A"],
+  ["ADM-2026-003", "Sai Kiran", "103", "First Year", "MPC", "MPC Regular", "MPC-A"],
+  ["ADM-2026-004", "Anjali Rao", "104", "Second Year", "BiPC", "BiPC Regular", "BiPC-A"],
+].map(([admissionNo, name, rollNo, level, group, program, section]) => ({
+  id: admissionNo,
+  admissionNo,
+  name,
+  rollNo,
+  campus: "Main Campus (HQ)",
+  level,
+  group,
+  program,
+  section,
+  board: "Board of Intermediate Education, Andhra Pradesh (BIEAP)",
+  status: "Active",
+}));
+
+const CAMPUS_TRANSFER_REQUESTS = [
+  { id: 1, student: CAMPUS_TRANSFER_STUDENTS[0], fromCampus: "Main Campus (HQ)", toCampus: "North Campus", requestedBy: "Administrator - Main Campus", requestedTo: "Principal - North Campus", requestDate: "29-09-2026", effectiveDate: "01-10-2026", reason: "Parent Request", remarks: "Requested by parent for better transportation facility.", status: "Pending" },
+  { id: 2, student: CAMPUS_TRANSFER_STUDENTS[1], fromCampus: "Main Campus (HQ)", toCampus: "North Campus", requestedBy: "Administrator - Main Campus", requestedTo: "College Administrator", requestDate: "28-09-2026", effectiveDate: "03-10-2026", reason: "Change of Residence", remarks: "Family relocated near the destination campus.", status: "Approved", approvedBy: "College Administrator", approvedOn: "30-09-2026", approvalRemarks: "Approved. Seat allocated in the corresponding section." },
+  { id: 3, student: CAMPUS_TRANSFER_STUDENTS[2], fromCampus: "North Campus", toCampus: "Main Campus (HQ)", requestedBy: "Administrator - North Campus", requestedTo: "Principal - Main Campus", requestDate: "26-09-2026", effectiveDate: "05-10-2026", reason: "Academic Requirement", remarks: "Requested for academic programme continuity.", status: "Rejected", rejectedBy: "Principal - Main Campus", rejectedOn: "29-09-2026", rejectionReason: "No seats available in the selected programme/section." },
+  { id: 4, student: CAMPUS_TRANSFER_STUDENTS[3], fromCampus: "Main Campus (HQ)", toCampus: "North Campus", requestedBy: "Administrator - Main Campus", requestedTo: "Academic Administrator", requestDate: "25-09-2026", effectiveDate: "06-10-2026", reason: "Administrative Transfer", remarks: "Administrative request.", status: "Pending" },
+  { id: 5, student: CAMPUS_TRANSFER_STUDENTS[4], fromCampus: "Main Campus (HQ)", toCampus: "North Campus", requestedBy: "Administrator - Main Campus", requestedTo: "Principal - North Campus", requestDate: "24-09-2026", effectiveDate: "07-10-2026", reason: "Transportation Convenience", remarks: "Closer transport route available.", status: "Approved", approvedBy: "Principal - North Campus", approvedOn: "28-09-2026", approvalRemarks: "Approved after verification." },
+  { id: 6, student: CAMPUS_TRANSFER_STUDENTS[1], fromCampus: "North Campus", toCampus: "Main Campus (HQ)", requestedBy: "Administrator - North Campus", requestedTo: "Principal - Main Campus", requestDate: "29-09-2026", effectiveDate: "08-10-2026", reason: "Parent Request", remarks: "Requested by the parent.", status: "Pending" },
+];
+
 const getMasterFailureMessage = (responses, names) => {
   const failures = responses
     .map((result, index) => result.status === "rejected" ? { name: names[index], error: result.reason } : null)
@@ -141,7 +180,8 @@ const isEligible = (student) => {
 
 export default function PromotionPage({ screen = "promotion" }) {
   const navigate = useNavigate();
-  const activeTab = screen;
+  const [localTab, setLocalTab] = useState("");
+  const activeTab = localTab || screen;
 
   // Consume global Board & Academic Year from Navbar Context
   const {
@@ -746,6 +786,7 @@ export default function PromotionPage({ screen = "promotion" }) {
         activeTab === "promotion" ? "Student Promotion" :
         activeTab === "single" ? "Single Student Promotion" :
         activeTab === "allocation" ? "Program & Section Allocation" :
+        activeTab === "transfer" ? "Campus Transfer" :
         activeTab === "history" ? "Promotion History" :
         "Promotion Reports"
       }
@@ -758,24 +799,26 @@ export default function PromotionPage({ screen = "promotion" }) {
             ["promotion", "Student Promotion", "/dashboard/promotions/eligible"],
             ["single", "Single Student", "/dashboard/promotions/single"],
             ["allocation", "Program & Section Allocation", "/dashboard/promotions/allocation"],
+            ["transfer", "Campus Transfer", null],
             ["history", "Promotion History", "/dashboard/promotions/history"],
-            ["report", "Reports", "/dashboard/promotions/report"],
           ].map(([value, label, path]) => (
             <button
               key={value}
               className={activeTab === value ? "is-active" : ""}
-              onClick={() => { navigate(path); setError(""); }}
+              onClick={() => {
+                setError("");
+                if (value === "transfer") setLocalTab("transfer");
+                else {
+                  setLocalTab("");
+                  navigate(path);
+                }
+              }}
             >
               {label}
             </button>
           ))}
         </nav>
 
-        {masterError ? (
-          <div className="promotion-error" role="alert">
-            {masterError} <button onClick={loadMasters}>Retry master data</button>
-          </div>
-        ) : null}
         {error ? <div className="promotion-error" role="alert">{error}</div> : null}
 
         {activeTab === "promotion" ? (
@@ -1037,6 +1080,8 @@ export default function PromotionPage({ screen = "promotion" }) {
           />
         ) : null}
 
+        {activeTab === "transfer" ? <CampusTransferScreen onSuccess={setToast} /> : null}
+
         {activeTab === "history" ? (
           <section className="cms-card promotion-card">
             <div className="cms-card-head">
@@ -1092,16 +1137,6 @@ export default function PromotionPage({ screen = "promotion" }) {
           </section>
         ) : null}
 
-        {activeTab === "report" ? (
-          <ReportScreen
-            reportData={reportData}
-            rows={reportRows}
-            loading={reportLoading}
-            loaded={reportLoaded}
-            onLoad={fetchReport}
-            onExportCsv={exportCsv}
-          />
-        ) : null}
       </div>
 
       {previewData ? (
@@ -1223,9 +1258,340 @@ export default function PromotionPage({ screen = "promotion" }) {
         </Modal>
       ) : null}
 
+      <Toast message={masterError} type="error" onClose={() => setMasterError("")} />
       <Toast message={toast} onClose={() => setToast("")} />
     </DashboardLayout>
   );
+}
+
+function CampusTransferScreen({ onSuccess }) {
+  const { selectedCampus } = useCampusContext();
+  const emptyForm = { campus: "", effectiveDate: "", reason: "", remarks: "" };
+  const [transferTab, setTransferTab] = useState("create");
+  const [requestDirection, setRequestDirection] = useState("sent");
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentOpen, setStudentOpen] = useState(false);
+  const [student, setStudent] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [errors, setErrors] = useState({});
+  const [boardAlert, setBoardAlert] = useState(null);
+  const [requests, setRequests] = useState(CAMPUS_TRANSFER_REQUESTS);
+  const [requestSearch, setRequestSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [requestPage, setRequestPage] = useState(1);
+  const [detailRequest, setDetailRequest] = useState(null);
+  const [approveRequest, setApproveRequest] = useState(null);
+  const [rejectRequest, setRejectRequest] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [rejectionError, setRejectionError] = useState("");
+  const [notification, setNotification] = useState(null);
+  const activeCampusName = selectedCampus?.name || selectedCampus?.campusName || "Main Campus (HQ)";
+  const sourceCampus = student?.campus || "Main Campus (HQ)";
+  const sourceBoard = student?.board || CAMPUS_TRANSFER_OPTIONS.campuses.find((campus) => campus.name === sourceCampus)?.board || "";
+  const destination = CAMPUS_TRANSFER_OPTIONS.campuses.find((campus) => campus.name === form.campus);
+
+  const change = (name, value) => {
+    if (name === "campus") {
+      if (value === sourceCampus) {
+        setForm((current) => ({ ...current, campus: "" }));
+        setErrors((current) => ({ ...current, campus: "Destination campus must be different from source campus." }));
+        return;
+      }
+      const selectedCampus = CAMPUS_TRANSFER_OPTIONS.campuses.find((campus) => campus.name === value);
+      if (selectedCampus && !selectedCampus.board) {
+        setBoardAlert({ title: "Board Not Configured", message: "No board is configured for the selected destination campus. Please configure a board before transferring the student." });
+        setForm((current) => ({ ...current, campus: "" }));
+        return;
+      }
+      if (selectedCampus && sourceBoard && selectedCampus.board !== sourceBoard) {
+        setBoardAlert({ title: "Board Mismatch", sourceBoard, destinationBoard: selectedCampus.board, message: "Campus transfer is only allowed between campuses with the same board. Please select a destination campus configured with the same board." });
+        setForm((current) => ({ ...current, campus: "" }));
+        return;
+      }
+    }
+    setForm((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: undefined }));
+  };
+
+  const filteredStudents = useMemo(() => {
+    const query = studentQuery.trim().toLowerCase();
+    if (!query) return CAMPUS_TRANSFER_STUDENTS;
+    return CAMPUS_TRANSFER_STUDENTS.filter((item) => `${item.name} ${item.admissionNo}`.toLowerCase().includes(query));
+  }, [studentQuery]);
+  const validate = () => {
+    const nextErrors = {};
+    if (!student) nextErrors.student = "Student is required.";
+    if (!form.campus) nextErrors.campus = "Destination Campus is required.";
+    if (form.campus === sourceCampus) nextErrors.campus = "Destination campus must be different from source campus.";
+    if (!form.effectiveDate) nextErrors.effectiveDate = "Transfer Effective Date is required.";
+    if (!form.reason) nextErrors.reason = "Transfer Reason is required.";
+    if (form.reason === "Other" && !form.remarks.trim()) nextErrors.remarks = "Reason / Remarks is required.";
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const sendEnabled = Boolean(student && destination?.board === sourceBoard && form.effectiveDate && form.reason && (form.reason !== "Other" || form.remarks.trim()));
+
+  const clear = () => {
+    setStudent(null);
+    setStudentQuery("");
+    setStudentOpen(false);
+    setForm(emptyForm);
+    setErrors({});
+  };
+
+  const sendRequest = () => {
+    if (!validate()) return;
+    if (!destination?.board || destination.board !== sourceBoard) return;
+    const nextRequest = {
+      id: Math.max(0, ...requests.map((request) => Number(request.id) || 0)) + 1,
+      student,
+      fromCampus: sourceCampus,
+      toCampus: destination.name,
+      requestedTo: `Principal - ${destination.name}`,
+      requestedBy: `Administrator - ${sourceCampus}`,
+      requestDate: "29-09-2026",
+      effectiveDate: form.effectiveDate.split("-").reverse().join("-"),
+      reason: form.reason,
+      remarks: form.remarks,
+      status: "Pending",
+    };
+    setRequests((current) => [nextRequest, ...current]);
+    clear();
+    setTransferTab("requests");
+    setDetailRequest(nextRequest);
+    onSuccess("Campus transfer request sent successfully. Waiting for approval.");
+  };
+
+  const sentRequests = useMemo(() => requests.filter((request) => request.fromCampus === activeCampusName), [activeCampusName, requests]);
+  const receivedRequests = useMemo(() => requests.filter((request) => request.toCampus === activeCampusName), [activeCampusName, requests]);
+  const directionalRequests = requestDirection === "sent" ? sentRequests : receivedRequests;
+  const filteredRequests = useMemo(() => {
+    const query = requestSearch.trim().toLowerCase();
+    return directionalRequests.filter((request) => {
+      const matchesQuery = !query || `${request.student.name} ${request.student.admissionNo} ${request.fromCampus} ${request.toCampus}`.toLowerCase().includes(query);
+      return matchesQuery && (statusFilter === "All" || request.status === statusFilter);
+    });
+  }, [directionalRequests, requestSearch, statusFilter]);
+  const pageSize = 5;
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / pageSize));
+  const currentPage = Math.min(requestPage, totalPages);
+  const pagedRequests = filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  const updateRequest = (id, updates) => {
+    let updated;
+    setRequests((current) => current.map((request) => {
+      if (request.id !== id) return request;
+      updated = { ...request, ...updates };
+      return updated;
+    }));
+    return { ...(requests.find((request) => request.id === id) || {}), ...updates };
+  };
+
+  const confirmApproval = () => {
+    const destinationBoard = CAMPUS_TRANSFER_OPTIONS.campuses.find((campus) => campus.name === approveRequest.toCampus)?.board;
+    if (!destinationBoard || destinationBoard !== approveRequest.student.board) {
+      setApproveRequest(null);
+      setBoardAlert({
+        title: "Board Not Configured",
+        sourceBoard: approveRequest.student.board,
+        destinationBoard: destinationBoard || "Not configured",
+        message: "This board is not configured for the destination campus. The transfer cannot be approved.",
+      });
+      return;
+    }
+    const approverName = approveRequest.requestedTo;
+    const updated = updateRequest(approveRequest.id, { status: "Approved", approvedBy: approverName, approvedOn: "29-09-2026", approvalRemarks: "Approved after destination campus verification." });
+    setApproveRequest(null);
+    setDetailRequest(updated);
+    setNotification({ type: "approved", title: "Campus Transfer Request Approved", message: `${updated.student.name}'s campus transfer request to ${updated.toCampus} has been approved.`, request: updated });
+    onSuccess(`Campus transfer request approved by ${approverName}.`);
+  };
+
+  const confirmRejection = () => {
+    if (!rejectionReason.trim()) { setRejectionError("Rejection reason is required."); return; }
+    const approverName = rejectRequest.requestedTo;
+    const updated = updateRequest(rejectRequest.id, { status: "Rejected", rejectedBy: approverName, rejectedOn: "29-09-2026", rejectionReason: rejectionReason.trim() });
+    setRejectRequest(null);
+    setRejectionReason("");
+    setRejectionError("");
+    setDetailRequest(updated);
+    setNotification({ type: "rejected", title: "Campus Transfer Request Rejected", message: `Campus transfer request for ${updated.student.name} (${updated.student.admissionNo}) to ${updated.toCampus} was rejected by ${approverName}.`, request: updated });
+    onSuccess(`Campus transfer request rejected by ${approverName}.`);
+  };
+
+  return (
+    <>
+      <section className={`cms-card promotion-card campus-transfer-card${transferTab === "requests" ? " campus-transfer-requests-card" : ""}`}>
+        <div className="campus-transfer-subtabs" role="tablist">
+          <button type="button" className={transferTab === "create" ? "is-active" : ""} onClick={() => setTransferTab("create")}>Create Transfer Request</button>
+          <button type="button" className={transferTab === "requests" ? "is-active" : ""} onClick={() => setTransferTab("requests")}>Transfer Requests</button>
+        </div>
+
+      {transferTab === "create" ? (
+      <>
+        <div className="cms-card-head">
+          <div><h2>Campus Transfer</h2><p>Transfer an individual student between campuses.</p></div>
+        </div>
+        <div className="cms-card-body campus-transfer-body">
+          <div className={`cms-field campus-transfer-student-picker${errors.student ? " has-error" : ""}`}>
+            <label htmlFor="campus-transfer-student">Student<span className="req">*</span></label>
+            <div className="campus-transfer-combobox">
+              <input
+                id="campus-transfer-student"
+                value={studentQuery}
+                placeholder="Search by student name or admission no"
+                autoComplete="off"
+                onFocus={() => setStudentOpen(true)}
+                onBlur={() => window.setTimeout(() => setStudentOpen(false), 0)}
+                onChange={(event) => { setStudentQuery(event.target.value); setStudent(null); setStudentOpen(true); setErrors((current) => ({ ...current, student: undefined })); }}
+                aria-expanded={studentOpen}
+                aria-autocomplete="list"
+              />
+              <button
+                className={`campus-transfer-combobox-toggle${studentOpen ? " is-open" : ""}`}
+                type="button"
+                aria-label={studentOpen ? "Close student options" : "Open student options"}
+                aria-expanded={studentOpen}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setStudentOpen((open) => !open);
+                  document.getElementById("campus-transfer-student")?.focus();
+                }}
+              >
+                <ChevronDown size={18} aria-hidden="true" />
+              </button>
+              {studentOpen ? (
+                <div className="campus-transfer-options" role="listbox">
+                  <div className="campus-transfer-options-header">Select Student</div>
+                  <div className="campus-transfer-options-list">
+                  {filteredStudents.length ? filteredStudents.map((item) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={student?.id === item.id}
+                      className={student?.id === item.id ? "is-selected" : ""}
+                      key={item.id}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => { setStudent(item); setStudentQuery(`${item.name} — ${item.admissionNo}`); setStudentOpen(false); setErrors((current) => ({ ...current, student: undefined })); }}
+                    >
+                      <span className="campus-transfer-option-copy"><strong>{item.name}</strong><small>{item.admissionNo}</small></span>
+                      {student?.id === item.id ? <CheckCircle2 size={16} className="campus-transfer-option-check" aria-hidden="true" /> : null}
+                    </button>
+                  )) : <div className="campus-transfer-no-option">No matching students.</div>}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {errors.student ? <span className="cms-error">{errors.student}</span> : null}
+          </div>
+
+          {student ? (
+            <div className="campus-transfer-student-info">
+              <h3>Student Information</h3>
+              <div className="campus-transfer-info-grid">
+                <TransferPreviewItem label="Student Name" value={student.name} />
+                <TransferPreviewItem label="Admission No" value={student.admissionNo} />
+                <TransferPreviewItem label="Roll No" value={student.rollNo} />
+                <TransferPreviewItem label="Academic Level" value={student.level} />
+                <TransferPreviewItem label="Group" value={student.group} />
+                <TransferPreviewItem label="Program" value={student.program} />
+                <TransferPreviewItem label="Section" value={student.section} />
+                <TransferPreviewItem label="Board" value={student.board} />
+              </div>
+            </div>
+          ) : null}
+
+          <div className="campus-transfer-details">
+            <h3>Campus Transfer Details</h3>
+            <div className="campus-transfer-form-grid">
+              <div className="cms-field campus-transfer-readonly"><label>Source Campus</label><div>{sourceCampus}</div><small className="campus-transfer-board-note">Board: {sourceBoard}</small></div>
+              <div className={`cms-field${errors.campus ? " has-error" : ""}`}>
+                <label htmlFor="transfer-campus">Destination Campus<span className="req">*</span></label>
+                <select id="transfer-campus" value={form.campus} onChange={(event) => change("campus", event.target.value)}>
+                  <option value="">Select Destination Campus</option>
+                  {CAMPUS_TRANSFER_OPTIONS.campuses.map((campus) => <option key={campus.name} value={campus.name} disabled={campus.name === sourceCampus}>{campus.name}</option>)}
+                </select>
+                {destination?.board ? <small className="campus-transfer-board-note">Board: {destination.board}</small> : null}
+                {errors.campus ? <span className="cms-error">{errors.campus}</span> : null}
+              </div>
+              <div className={`cms-field${errors.effectiveDate ? " has-error" : ""}`}>
+                <label htmlFor="transfer-effective-date">Transfer Effective Date<span className="req">*</span></label>
+                <input id="transfer-effective-date" type="date" value={form.effectiveDate} onChange={(event) => change("effectiveDate", event.target.value)} />
+                {errors.effectiveDate ? <span className="cms-error">{errors.effectiveDate}</span> : null}
+              </div>
+              <div className={`cms-field${errors.reason ? " has-error" : ""}`}>
+                <label htmlFor="transfer-reason">Transfer Reason<span className="req">*</span></label>
+                <select id="transfer-reason" value={form.reason} onChange={(event) => change("reason", event.target.value)}><option value="">Select Reason</option>{CAMPUS_TRANSFER_OPTIONS.reasons.map((reason) => <option key={reason}>{reason}</option>)}</select>
+                {errors.reason ? <span className="cms-error">{errors.reason}</span> : null}
+              </div>
+              <div className={`cms-field campus-transfer-remarks${errors.remarks ? " has-error" : ""}`}>
+                <label htmlFor="transfer-remarks">{form.reason === "Other" ? <>Reason / Remarks<span className="req">*</span></> : "Remarks"}</label>
+                <textarea id="transfer-remarks" value={form.remarks} onChange={(event) => change("remarks", event.target.value)} placeholder={form.reason === "Other" ? "Enter transfer reason" : "Add optional remarks"} />
+                {errors.remarks ? <span className="cms-error">{errors.remarks}</span> : null}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="promotion-actions campus-transfer-actions"><button className="cms-btn cms-btn-ghost" onClick={clear}>Clear</button><button className="cms-btn cms-btn-primary" disabled={!sendEnabled} onClick={sendRequest}>Send Transfer Request</button></div>
+      </>
+      ) : (
+        <div className="campus-transfer-requests-content">
+          <div className="cms-card-head campus-transfer-requests-head">
+            <div><h2>Campus Transfer Requests</h2><p>View and manage campus transfer requests.</p></div>
+            <div className="campus-transfer-direction-tabs" role="tablist" aria-label="Transfer request direction">
+              <button type="button" role="tab" aria-selected={requestDirection === "sent"} className={requestDirection === "sent" ? "is-active" : ""} onClick={() => { setRequestDirection("sent"); setRequestPage(1); }}><span>Sent Requests</span><b>{sentRequests.length}</b></button>
+              <button type="button" role="tab" aria-selected={requestDirection === "received"} className={requestDirection === "received" ? "is-active" : ""} onClick={() => { setRequestDirection("received"); setRequestPage(1); }}><span>Received Requests</span><b>{receivedRequests.length}</b></button>
+            </div>
+          </div>
+          {notification ? <div className={`campus-transfer-notification is-${notification.type}`}><div><strong>{notification.title}</strong><span>{notification.message}</span></div><button type="button" onClick={() => setDetailRequest(notification.request)}>{notification.type === "rejected" ? "View Reason" : "View Details"}</button></div> : null}
+          <div className="campus-transfer-request-tools">
+            <input value={requestSearch} onChange={(event) => { setRequestSearch(event.target.value); setRequestPage(1); }} placeholder="Search by student name, admission no, or campus..." />
+            <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setRequestPage(1); }}><option>All</option><option>Pending</option><option>Approved</option><option>Rejected</option></select>
+          </div>
+          <div className="cms-table-wrap"><table className="cms-table campus-transfer-request-table"><thead><tr><th>#</th><th>Student Name</th><th>Admission No</th><th>{requestDirection === "sent" ? "To Campus" : "From Campus"}</th><th>{requestDirection === "sent" ? "Requested To" : "Requested By"}</th><th>Request Date</th><th>Effective Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+            {pagedRequests.length ? pagedRequests.map((request, index) => <tr key={request.id}><td>{(currentPage - 1) * pageSize + index + 1}</td><td className="cms-strong">{request.student.name}</td><td>{request.student.admissionNo}</td><td>{requestDirection === "sent" ? request.toCampus : request.fromCampus}</td><td>{requestDirection === "sent" ? request.requestedTo : request.requestedBy}</td><td>{request.requestDate}</td><td>{request.effectiveDate}</td><td><span className={`campus-transfer-status-badge is-${request.status.toLowerCase()}`}>{request.status}</span></td><td><div className="campus-transfer-row-actions"><button type="button" onClick={() => setDetailRequest(request)}>View</button>{requestDirection === "received" && request.status === "Pending" ? <><button type="button" className="approve" onClick={() => setApproveRequest(request)}>Approve</button><button type="button" className="reject" onClick={() => { setRejectRequest(request); setRejectionReason(""); setRejectionError(""); }}>Reject</button></> : null}</div></td></tr>) : <tr><td colSpan={9} className="promotion-empty">No {requestDirection} transfer requests are available for {activeCampusName}.</td></tr>}
+          </tbody></table></div>
+          <div className="campus-transfer-request-pagination"><span>Showing {filteredRequests.length ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, filteredRequests.length)} of {filteredRequests.length} entries</span><div><button disabled={currentPage === 1} onClick={() => setRequestPage((page) => Math.max(1, page - 1))}>‹</button><span>{currentPage}</span><button disabled={currentPage === totalPages} onClick={() => setRequestPage((page) => Math.min(totalPages, page + 1))}>›</button></div></div>
+        </div>
+      )}
+      </section>
+
+      {boardAlert ? (
+        <Modal
+          title={boardAlert.title}
+          size="sm"
+          onClose={() => setBoardAlert(null)}
+          footer={<button className="cms-btn cms-btn-primary" onClick={() => setBoardAlert(null)}>OK</button>}
+        >
+          <div className="campus-transfer-board-alert"><p>{boardAlert.title === "Board Mismatch" ? "The selected destination campus is configured with a different board." : boardAlert.message}</p>{boardAlert.sourceBoard ? <><TransferPreviewItem label="Source Campus Board" value={boardAlert.sourceBoard} /><TransferPreviewItem label="Destination Campus Board" value={boardAlert.destinationBoard} /><p>{boardAlert.message}</p></> : null}</div>
+        </Modal>
+      ) : null}
+
+      {detailRequest ? <CampusTransferDetailsModal request={detailRequest} canDecide={requestDirection === "received" && detailRequest.toCampus === activeCampusName} onClose={() => setDetailRequest(null)} onApprove={() => { setApproveRequest(detailRequest); setDetailRequest(null); }} onReject={() => { setRejectRequest(detailRequest); setDetailRequest(null); setRejectionReason(""); setRejectionError(""); }} /> : null}
+      {approveRequest ? <CampusTransferDecisionModal title="Approve Campus Transfer" request={approveRequest} message={`Approving this request will transfer the student to ${approveRequest.toCampus}.`} onClose={() => setApproveRequest(null)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setApproveRequest(null)}>Cancel</button><button className="cms-btn cms-btn-primary" onClick={confirmApproval}>Approve Request</button></>} /> : null}
+      {rejectRequest ? <CampusTransferDecisionModal title="Reject Campus Transfer" request={rejectRequest} onClose={() => setRejectRequest(null)} footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setRejectRequest(null)}>Cancel</button><button className="cms-btn cms-btn-danger" disabled={!rejectionReason.trim()} onClick={confirmRejection}>Reject Request</button></>}><div className={`cms-field campus-transfer-rejection${rejectionError ? " has-error" : ""}`}><label htmlFor="campus-transfer-rejection">Rejection Reason<span className="req">*</span></label><textarea id="campus-transfer-rejection" value={rejectionReason} onChange={(event) => { setRejectionReason(event.target.value); setRejectionError(""); }} onBlur={() => { if (!rejectionReason.trim()) setRejectionError("Rejection reason is required."); }} placeholder="Enter the reason for rejecting this transfer request" />{rejectionError ? <span className="cms-error">{rejectionError}</span> : null}</div></CampusTransferDecisionModal> : null}
+    </>
+  );
+}
+
+function CampusTransferDetailsModal({ request, canDecide, onClose, onApprove, onReject }) {
+  const isPending = request.status === "Pending" && canDecide;
+  return <Modal title="Campus Transfer Request Details" className="campus-transfer-detail-modal" onClose={onClose} footer={<>{isPending ? <><button className="cms-btn cms-btn-danger" onClick={onReject}>Reject</button><button className="cms-btn cms-btn-primary" onClick={onApprove}>Approve</button></> : null}<button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button></>}>
+    <div className="campus-transfer-detail-content">
+      <div className="campus-transfer-detail-heading"><h3>Student Information</h3><span className={`campus-transfer-status-badge is-${request.status.toLowerCase()}`}>{request.status === "Pending" ? "Pending Approval" : request.status}</span></div>
+      <div className="campus-transfer-info-grid campus-transfer-detail-student"><TransferPreviewItem label="Student Name" value={request.student.name} /><TransferPreviewItem label="Admission No" value={request.student.admissionNo} /><TransferPreviewItem label="Roll No" value={request.student.rollNo} /><TransferPreviewItem label="Academic Level" value={request.student.level} /><TransferPreviewItem label="Group" value={request.student.group} /><TransferPreviewItem label="Program" value={request.student.program} /><TransferPreviewItem label="Section" value={request.student.section} /><TransferPreviewItem label="Board" value={request.student.board} /></div>
+      <div className="campus-transfer-detail-columns"><div><h3>Transfer Details</h3><TransferPreviewItem label="From Campus" value={request.fromCampus} /><TransferPreviewItem label="To Campus" value={request.toCampus} /><TransferPreviewItem label="Transfer Effective Date" value={request.effectiveDate} /><TransferPreviewItem label="Transfer Reason" value={request.reason} /><TransferPreviewItem label="Remarks" value={request.remarks || "-"} /></div><div><h3>{request.status === "Approved" ? "Approval Details" : request.status === "Rejected" ? "Rejection Details" : "Request Information"}</h3><TransferPreviewItem label="Requested To" value={request.requestedTo} /><TransferPreviewItem label="Request Date" value={request.requestDate} /><TransferPreviewItem label="Current Status" value={request.status === "Pending" ? "Pending Approval" : request.status} />{request.status === "Approved" ? <><TransferPreviewItem label="Approved By" value={request.approvedBy} /><TransferPreviewItem label="Approved Date" value={request.approvedOn} /><TransferPreviewItem label="Approval Details" value={request.approvalRemarks} /></> : request.status === "Rejected" ? <><TransferPreviewItem label="Rejected By" value={request.rejectedBy} /><TransferPreviewItem label="Rejected Date" value={request.rejectedOn} /><TransferPreviewItem label="Rejection Reason" value={request.rejectionReason} /></> : <p className="campus-transfer-waiting">Waiting for response from destination campus.</p>}</div></div>
+    </div>
+  </Modal>;
+}
+
+function CampusTransferDecisionModal({ title, request, message, onClose, footer, children }) {
+  return <Modal title={title} size="sm" className="campus-transfer-decision-modal" onClose={onClose} footer={footer}><div className="campus-transfer-decision-summary"><strong>{request.student.name}</strong><span>{request.student.admissionNo}</span><TransferPreviewItem label="From" value={request.fromCampus} /><TransferPreviewItem label="To" value={request.toCampus} /><TransferPreviewItem label="Effective Date" value={request.effectiveDate} />{message ? <p>{message}</p> : null}{children}</div></Modal>;
+}
+
+function TransferPreviewItem({ label, value }) {
+  return <div><span>{label}</span><strong>{value}</strong></div>;
 }
 
 function HistoryTable({ rows, onRollback }) {
@@ -1623,8 +1989,8 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
   };
 
   return (
-    <section className="cms-card promotion-card">
-      <div className="promotion-tabs" role="tablist" style={{ marginBottom: "14px" }}>
+    <section className="cms-card promotion-card promotion-allocation-card">
+      <div className="promotion-tabs promotion-allocation-tabs" role="tablist">
         <button
           role="tab"
           aria-selected={isProgram}
@@ -1643,15 +2009,15 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
         </button>
       </div>
 
-      <div style={{ marginBottom: "16px", padding: "12px", background: "var(--cms-subtle)", borderRadius: "8px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-        <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "13px", fontWeight: 600 }}>
+      <div className="promotion-allocation-toolbar">
+        <div className="promotion-allocation-bulk">
+          <span>
             Bulk Assign {isProgram ? "Program" : "Section"} to Selected ({selected.length}):
           </span>
           <select
             value={bulkTarget}
             onChange={(e) => setBulkTarget(e.target.value)}
-            style={{ padding: "6px 12px", borderRadius: "6px", border: "1px solid var(--cms-border)", fontSize: "13px" }}
+            className="promotion-allocation-select"
           >
             <option value="">Select target {isProgram ? "program" : "section"}</option>
             {isProgram
@@ -1662,18 +2028,16 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
             className="cms-btn cms-btn-ghost"
             onClick={handleApplyBulk}
             disabled={!selected.length || !bulkTarget}
-            style={{ padding: "6px 12px" }}
           >
             Apply to Selected
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div className="promotion-allocation-selection-actions">
           <button
             className="cms-btn cms-btn-ghost"
             onClick={() => setSelected(rows.map((r) => r.id))}
             disabled={!rows.length}
-            style={{ padding: "6px 12px" }}
           >
             Select All
           </button>
@@ -1681,7 +2045,6 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
             className="cms-btn cms-btn-ghost"
             onClick={() => setSelected([])}
             disabled={!selected.length}
-            style={{ padding: "6px 12px" }}
           >
             Clear Selection
           </button>
@@ -1690,8 +2053,8 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
 
       {message ? <div className="promotion-error" role="alert">{message}</div> : null}
 
-      <div className="cms-table-wrap">
-        <table className="cms-table promotion-table">
+      <div className="cms-table-wrap promotion-allocation-table-wrap">
+        <table className="cms-table promotion-table promotion-allocation-table">
           <thead>
             <tr>
               <th>Select</th>
@@ -1746,7 +2109,7 @@ function AllocationScreen({ activeTab, setActiveTab, masters, setup, students, d
         </table>
       </div>
 
-      <div className="promotion-actions">
+      <div className="promotion-actions promotion-allocation-save">
         <button
           className="cms-btn cms-btn-primary"
           disabled={!selected.length || saving}
