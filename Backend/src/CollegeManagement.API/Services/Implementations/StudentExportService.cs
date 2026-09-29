@@ -142,7 +142,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 GuardianName = student.GuardianName,
                 GuardianMobile = student.GuardianMobile,
-                GuardianEmail = student.GuardianEmail,
+                ParentGuardianEmail = student.ParentGuardianEmail,
                 AnnualIncome = student.AnnualIncome,
 
                 PreviousSchool = student.PreviousSchool,
@@ -496,3 +496,4 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+

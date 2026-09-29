@@ -47,7 +47,7 @@ namespace CollegeManagement.API.DTOs.Students
         public string? MotherEmail { get; set; }
         public string? GuardianName { get; set; }
         public string? GuardianMobile { get; set; }
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         // [5] Address
         public string? Address { get; set; }

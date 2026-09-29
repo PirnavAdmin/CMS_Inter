@@ -792,7 +792,7 @@ namespace CollegeManagement.API.Services.Implementations
                 MotherEmail = r.MotherEmail?.Trim(),
                 GuardianName = r.GuardianName?.Trim(),
                 GuardianMobile = r.GuardianMobile?.Trim(),
-                GuardianEmail = r.GuardianEmail?.Trim(),
+                ParentGuardianEmail = r.ParentGuardianEmail?.Trim(),
                 Address = r.Address?.Trim(),
                 City = r.City?.Trim(),
                 District = r.District?.Trim(),
@@ -959,7 +959,7 @@ namespace CollegeManagement.API.Services.Implementations
             public string? MotherEmail { get; set; }
             public string? GuardianName { get; set; }
             public string? GuardianMobile { get; set; }
-            public string? GuardianEmail { get; set; }
+            public string? ParentGuardianEmail { get; set; }
             public string? Address { get; set; }
             public string? City { get; set; }
             public string? District { get; set; }
@@ -985,3 +985,4 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+

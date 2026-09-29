@@ -1754,7 +1754,7 @@ const normalizeAdmissionRow = (item) => {
       motherEmail: readText(item, "motherEmail", "MotherEmail"),
       guardianName: readText(item, "guardianName", "GuardianName"),
       guardianMobile: readText(item, "guardianMobile", "GuardianMobile"),
-      parentGuardianEmail: readText(item, "parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail"),
+      parentGuardianEmail: readText(item, "parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail", "ParentparentparentParentGuardianEmail"),
       annualIncome: readText(item, "annualIncome", "AnnualIncome"),
       houseDoorNumber,
       streetVillage,

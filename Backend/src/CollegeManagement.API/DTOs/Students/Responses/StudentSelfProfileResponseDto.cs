@@ -51,7 +51,7 @@ namespace CollegeManagement.API.DTOs.Students.Responses
         public string? MotherEmail { get; set; }
         public string? GuardianName { get; set; }
         public string? GuardianMobile { get; set; }
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         // Previous Education
         public string? PreviousSchool { get; set; }
@@ -96,3 +96,4 @@ namespace CollegeManagement.API.DTOs.Students.Responses
         public string? HallTicketNumber { get; set; }
     }
 }
+
