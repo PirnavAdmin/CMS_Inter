@@ -546,72 +546,28 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             if (string.IsNullOrWhiteSpace(hall)) return false;
 
-            try
-            {
-                var p = new DynamicParameters();
-                p.Add("p_ExamDate", examDate.ToDateTime(TimeOnly.MinValue));
-                p.Add("p_Date", examDate.ToDateTime(TimeOnly.MinValue));
-                p.Add("p_StartTime", startTime.ToTimeSpan());
-                p.Add("p_EndTime", endTime.ToTimeSpan());
-                p.Add("p_Hall", hall.Trim());
-                p.Add("p_ExcludeScheduleId", excludeScheduleId ?? 0);
-                p.Add("p_CampusId", 0);
-
-                var count = await Connection.ExecuteScalarAsync<int>(
-                    "sp_CheckRoomConflict",
-                    p,
-                    commandType: CommandType.StoredProcedure);
-
-                return count > 0;
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "sp_CheckRoomConflict failed for Hall {Hall}, falling back to EF query: {Message}", hall, ex.Message);
-                var hallNorm = hall.Trim().ToLower();
-                return await _context.ExamSchedules.AnyAsync(s =>
-                    s.IsActive &&
-                    (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
-                    s.ExamDate == examDate &&
-                    (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
-                    s.Hall.Trim().ToLower() == hallNorm &&
-                    !(endTime <= s.StartTime || startTime >= s.EndTime));
-            }
+            var hallNorm = hall.Trim().ToLower();
+            return await _context.ExamSchedules.AnyAsync(s =>
+                s.IsActive &&
+                (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
+                s.ExamDate == examDate &&
+                (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
+                s.Hall.Trim().ToLower() == hallNorm &&
+                !(endTime <= s.StartTime || startTime >= s.EndTime));
         }
 
         public async Task<bool> HasInvigilatorConflictAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, string invigilator, int? excludeScheduleId = null)
         {
             if (string.IsNullOrWhiteSpace(invigilator)) return false;
 
-            try
-            {
-                var p = new DynamicParameters();
-                p.Add("p_ExamDate", examDate.ToDateTime(TimeOnly.MinValue));
-                p.Add("p_Date", examDate.ToDateTime(TimeOnly.MinValue));
-                p.Add("p_StartTime", startTime.ToTimeSpan());
-                p.Add("p_EndTime", endTime.ToTimeSpan());
-                p.Add("p_Invigilator", invigilator.Trim());
-                p.Add("p_ExcludeScheduleId", excludeScheduleId ?? 0);
-                p.Add("p_CampusId", 0);
-
-                var count = await Connection.ExecuteScalarAsync<int>(
-                    "sp_CheckInvigilatorConflict",
-                    p,
-                    commandType: CommandType.StoredProcedure);
-
-                return count > 0;
-            }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "sp_CheckInvigilatorConflict failed for Invigilator {Inv}, falling back to EF query: {Message}", invigilator, ex.Message);
-                var invNorm = invigilator.Trim().ToLower();
-                return await _context.ExamSchedules.AnyAsync(s =>
-                    s.IsActive &&
-                    (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
-                    s.ExamDate == examDate &&
-                    (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
-                    s.Invigilator.Trim().ToLower() == invNorm &&
-                    !(endTime <= s.StartTime || startTime >= s.EndTime));
-            }
+            var invNorm = invigilator.Trim().ToLower();
+            return await _context.ExamSchedules.AnyAsync(s =>
+                s.IsActive &&
+                (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
+                s.ExamDate == examDate &&
+                (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
+                s.Invigilator.Trim().ToLower() == invNorm &&
+                !(endTime <= s.StartTime || startTime >= s.EndTime));
         }
 
         public async Task<IEnumerable<Models.Timetable.Room>> GetAvailableHallsAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, int? excludeScheduleId = null)
@@ -882,32 +838,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 if (a.invigilatorId <= 0) continue;
                 try
                 {
-                    await Connection.ExecuteAsync(
-                        "sp_AssignInvigilator",
-                        new
-                        {
-                            p_ExamScheduleId = examScheduleId,
-                            p_InvigilatorId = a.invigilatorId,
-                            p_HallNumber = a.hallNumber ?? string.Empty,
-                            p_CampusId = 0
-                        },
-                        commandType: CommandType.StoredProcedure);
+                    await Connection.ExecuteAsync(@"
+                        INSERT INTO InvigilatorAssignments (ExamScheduleId, InvigilatorId, HallNumber, AssignedAt)
+                        VALUES (@SchedId, @InvId, @Hall, UTC_TIMESTAMP())
+                        ON DUPLICATE KEY UPDATE HallNumber = VALUES(HallNumber), AssignedAt = VALUES(AssignedAt);",
+                        new { SchedId = examScheduleId, InvId = a.invigilatorId, Hall = a.hallNumber ?? string.Empty });
                 }
-                catch (Exception ex)
+                catch (Exception dbEx)
                 {
-                    _logger?.LogWarning(ex, "sp_AssignInvigilator failed for Invigilator {InvId}, Schedule {SchedId}: {Msg}. Attempting direct SQL insert.", a.invigilatorId, examScheduleId, ex.Message);
-                    try
-                    {
-                        await Connection.ExecuteAsync(@"
-                            INSERT INTO InvigilatorAssignments (ExamScheduleId, InvigilatorId, HallNumber, AssignedAt)
-                            VALUES (@SchedId, @InvId, @Hall, UTC_TIMESTAMP())
-                            ON DUPLICATE KEY UPDATE HallNumber = VALUES(HallNumber), AssignedAt = VALUES(AssignedAt);",
-                            new { SchedId = examScheduleId, InvId = a.invigilatorId, Hall = a.hallNumber ?? string.Empty });
-                    }
-                    catch (Exception dbEx)
-                    {
-                        _logger?.LogWarning(dbEx, "Direct insert to InvigilatorAssignments failed for Invigilator {InvId}, Schedule {SchedId}", a.invigilatorId, examScheduleId);
-                    }
+                    _logger?.LogWarning(dbEx, "Direct insert to InvigilatorAssignments failed for Invigilator {InvId}, Schedule {SchedId}", a.invigilatorId, examScheduleId);
                 }
             }
         }

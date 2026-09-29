@@ -1265,7 +1265,7 @@ export default function PromotionPage({ screen = "promotion" }) {
 }
 
 function CampusTransferScreen({ onSuccess }) {
-  const { selectedCampus } = useCampusContext();
+  const { selectedCampus, campuses } = useCampusContext();
   const emptyForm = { campus: "", effectiveDate: "", reason: "", remarks: "" };
   const [transferTab, setTransferTab] = useState("create");
   const [requestDirection, setRequestDirection] = useState("sent");
@@ -1275,7 +1275,90 @@ function CampusTransferScreen({ onSuccess }) {
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
   const [boardAlert, setBoardAlert] = useState(null);
-  const [requests, setRequests] = useState(CAMPUS_TRANSFER_REQUESTS);
+  const [requests, setRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [liveStudents, setLiveStudents] = useState([]);
+  useEffect(() => {
+    if (!selectedCampus) return;
+    const loadStudents = async () => {
+      try {
+        const res = await apiClient.get('/api/v1/promotions/eligible', { params: { campusId: selectedCampus.id || selectedCampus.campusId } });
+        const data = unwrap(res);
+        setLiveStudents(data.map(item => ({
+          id: item.studentId || item.id,
+          admissionNo: item.admissionNumber || item.admissionNo || item.studentCode || "-",
+            name: item.studentName || item.name || "-",
+            rollNo: item.rollNumber || item.rollNo || "-",
+          campus: selectedCampus.name || selectedCampus.campusName,
+          level: item.academicLevel || item.level || "-",
+          group: item.groupName || item.group || "-",
+          program: item.programName || item.program || "-",
+          section: item.sectionName || item.section || "-",
+          board: item.boardName || item.board || "Not configured",
+          status: "Active"
+        })));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    loadStudents();
+  }, [selectedCampus]);
+
+
+  const fetchRequests = useCallback(async () => {
+    setLoadingRequests(true);
+    try {
+      const [sentRes, receivedRes] = await Promise.allSettled([
+        apiClient.get(apiEndpoints.campusTransfers.sent),
+        apiClient.get(apiEndpoints.campusTransfers.received),
+      ]);
+      const sent = sentRes.status === "fulfilled" ? unwrap(sentRes.value) : [];
+      const received = receivedRes.status === "fulfilled" ? unwrap(receivedRes.value) : [];
+      
+      const mapDto = (dto) => ({
+        id: dto.transferId,
+        student: {
+          id: dto.studentId,
+          name: dto.studentName,
+          admissionNo: dto.admissionNo,
+          rollNo: "-",
+          level: "-",
+          group: "-",
+          program: "-",
+          section: "-",
+          board: "-",
+        },
+        fromCampus: dto.fromCampusName,
+        toCampus: dto.toCampusName,
+        requestedBy: dto.requestedByName + " (" + dto.requestedByRole + ")",
+        requestedTo: "Destination Admin",
+        requestDate: new Date(dto.requestDate).toLocaleDateString(),
+        effectiveDate: new Date(dto.effectiveDate).toLocaleDateString(),
+        reason: dto.transferReason,
+        remarks: dto.remarks,
+        status: dto.status,
+        approvedBy: dto.actionedByName,
+        approvedOn: dto.actionDate ? new Date(dto.actionDate).toLocaleDateString() : "-",
+        approvalRemarks: dto.actionRemarks,
+        rejectedBy: dto.actionedByName,
+        rejectedOn: dto.actionDate ? new Date(dto.actionDate).toLocaleDateString() : "-",
+        rejectionReason: dto.actionRemarks,
+      });
+
+      const combined = [...sent.map(mapDto), ...received.map(mapDto)];
+      const uniqueRequests = Array.from(new Map(combined.map(item => [item.id, item])).values());
+      setRequests(uniqueRequests);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
+
   const [requestSearch, setRequestSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [requestPage, setRequestPage] = useState(1);
@@ -1287,8 +1370,8 @@ function CampusTransferScreen({ onSuccess }) {
   const [notification, setNotification] = useState(null);
   const activeCampusName = selectedCampus?.name || selectedCampus?.campusName || "Main Campus (HQ)";
   const sourceCampus = student?.campus || "Main Campus (HQ)";
-  const sourceBoard = student?.board || CAMPUS_TRANSFER_OPTIONS.campuses.find((campus) => campus.name === sourceCampus)?.board || "";
-  const destination = CAMPUS_TRANSFER_OPTIONS.campuses.find((campus) => campus.name === form.campus);
+  const sourceBoard = student?.board || campuses.find((campus) => (campus.campusName || campus.name) === sourceCampus)?.board || "";
+  const destination = campuses.find((campus) => campus.campusName === form.campus || campus.name === form.campus);
 
   const change = (name, value) => {
     if (name === "campus") {
@@ -1297,16 +1380,34 @@ function CampusTransferScreen({ onSuccess }) {
         setErrors((current) => ({ ...current, campus: "Destination campus must be different from source campus." }));
         return;
       }
-      const selectedCampus = CAMPUS_TRANSFER_OPTIONS.campuses.find((campus) => campus.name === value);
-      if (selectedCampus && !selectedCampus.board) {
-        setBoardAlert({ title: "Board Not Configured", message: "No board is configured for the selected destination campus. Please configure a board before transferring the student." });
-        setForm((current) => ({ ...current, campus: "" }));
-        return;
-      }
-      if (selectedCampus && sourceBoard && selectedCampus.board !== sourceBoard) {
-        setBoardAlert({ title: "Board Mismatch", sourceBoard, destinationBoard: selectedCampus.board, message: "Campus transfer is only allowed between campuses with the same board. Please select a destination campus configured with the same board." });
-        setForm((current) => ({ ...current, campus: "" }));
-        return;
+      const selectedCampus = campuses.find((campus) => campus.campusName === value || campus.name === value);
+            if (selectedCampus) {
+        const affBoards = selectedCampus.affiliatedBoards || [];
+        const strBoards = selectedCampus.boards || [];
+        const bIds = selectedCampus.boardIds || [];
+        
+        if (affBoards.length === 0 && strBoards.length === 0 && bIds.length === 0) {
+          setBoardAlert({ 
+            title: "Board Not Configured", 
+            message: `No board is configured for the selected destination campus. Please configure a board before transferring the student.` 
+          });
+          setForm((current) => ({ ...current, campus: "" }));
+          return;
+        }
+        
+        const hasMatchingBoard = affBoards.some(b => b.boardName === sourceBoard || b.name === sourceBoard) || strBoards.includes(sourceBoard);
+        
+        if (sourceBoard && !hasMatchingBoard) {
+          const destBoardsList = affBoards.length > 0 ? affBoards.map(b => b.boardName || b.name).join(", ") : strBoards.join(", ");
+          setBoardAlert({ 
+            title: "Board Mismatch", 
+            sourceBoard, 
+            destinationBoard: destBoardsList || "Unknown", 
+            message: "Campus transfer is only allowed between campuses with the same board. Please select a destination campus configured with the same board." 
+          });
+          setForm((current) => ({ ...current, campus: "" }));
+          return;
+        }
       }
     }
     setForm((current) => ({ ...current, [name]: value }));
@@ -1315,9 +1416,10 @@ function CampusTransferScreen({ onSuccess }) {
 
   const filteredStudents = useMemo(() => {
     const query = studentQuery.trim().toLowerCase();
-    if (!query) return CAMPUS_TRANSFER_STUDENTS;
-    return CAMPUS_TRANSFER_STUDENTS.filter((item) => `${item.name} ${item.admissionNo}`.toLowerCase().includes(query));
-  }, [studentQuery]);
+    const source = liveStudents.length > 0 ? liveStudents : [];
+    if (!query) return source;
+    return source.filter((item) => `${item.name} ${item.admissionNo}`.toLowerCase().includes(query));
+  }, [studentQuery, liveStudents]);
   const validate = () => {
     const nextErrors = {};
     if (!student) nextErrors.student = "Student is required.";
@@ -1330,7 +1432,7 @@ function CampusTransferScreen({ onSuccess }) {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const sendEnabled = Boolean(student && destination?.board === sourceBoard && form.effectiveDate && form.reason && (form.reason !== "Other" || form.remarks.trim()));
+  const sendEnabled = Boolean(student && destination && ((destination.affiliatedBoards || []).some(b => b.boardName === sourceBoard || b.name === sourceBoard) || (destination.boards || []).includes(sourceBoard)) && form.effectiveDate && form.reason && (form.reason !== "Other" || form.remarks.trim()));
 
   const clear = () => {
     setStudent(null);
@@ -1340,27 +1442,26 @@ function CampusTransferScreen({ onSuccess }) {
     setErrors({});
   };
 
-  const sendRequest = () => {
+  const sendRequest = async () => {
     if (!validate()) return;
-    if (!destination?.board || destination.board !== sourceBoard) return;
-    const nextRequest = {
-      id: Math.max(0, ...requests.map((request) => Number(request.id) || 0)) + 1,
-      student,
-      fromCampus: sourceCampus,
-      toCampus: destination.name,
-      requestedTo: `Principal - ${destination.name}`,
-      requestedBy: `Administrator - ${sourceCampus}`,
-      requestDate: "29-09-2026",
-      effectiveDate: form.effectiveDate.split("-").reverse().join("-"),
-      reason: form.reason,
-      remarks: form.remarks,
-      status: "Pending",
-    };
-    setRequests((current) => [nextRequest, ...current]);
-    clear();
-    setTransferTab("requests");
-    setDetailRequest(nextRequest);
-    onSuccess("Campus transfer request sent successfully. Waiting for approval.");
+    const hasMatchingBoard = destination && ((destination.affiliatedBoards || []).some(b => b.boardName === sourceBoard || b.name === sourceBoard) || (destination.boards || []).includes(sourceBoard));
+    if (!hasMatchingBoard) return;
+    
+    try {
+      await apiClient.post(apiEndpoints.campusTransfers.create, {
+          studentId: student.id,
+          toCampusId: destination.id || destination.campusId,
+          effectiveDate: form.effectiveDate,
+          transferReason: form.reason,
+          remarks: form.remarks,
+        });
+      await fetchRequests();
+      clear();
+      setTransferTab("requests");
+      onSuccess("Campus transfer request sent successfully. Waiting for approval.");
+    } catch (error) {
+      setBoardAlert({ title: "Error", message: getApiErrorMessage(error) });
+    }
   };
 
   const sentRequests = useMemo(() => requests.filter((request) => request.fromCampus === activeCampusName), [activeCampusName, requests]);
@@ -1369,7 +1470,7 @@ function CampusTransferScreen({ onSuccess }) {
   const filteredRequests = useMemo(() => {
     const query = requestSearch.trim().toLowerCase();
     return directionalRequests.filter((request) => {
-      const matchesQuery = !query || `${request.student.name} ${request.student.admissionNo} ${request.fromCampus} ${request.toCampus}`.toLowerCase().includes(query);
+      const matchesQuery = !query || `${request.student?.name} ${request.student?.admissionNo} ${request.fromCampus} ${request.toCampus}`.toLowerCase().includes(query);
       return matchesQuery && (statusFilter === "All" || request.status === statusFilter);
     });
   }, [directionalRequests, requestSearch, statusFilter]);
@@ -1378,46 +1479,52 @@ function CampusTransferScreen({ onSuccess }) {
   const currentPage = Math.min(requestPage, totalPages);
   const pagedRequests = filteredRequests.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  const updateRequest = (id, updates) => {
-    let updated;
-    setRequests((current) => current.map((request) => {
-      if (request.id !== id) return request;
-      updated = { ...request, ...updates };
-      return updated;
-    }));
-    return { ...(requests.find((request) => request.id === id) || {}), ...updates };
-  };
-
-  const confirmApproval = () => {
-    const destinationBoard = CAMPUS_TRANSFER_OPTIONS.campuses.find((campus) => campus.name === approveRequest.toCampus)?.board;
-    if (!destinationBoard || destinationBoard !== approveRequest.student.board) {
+  const confirmApproval = async () => {
+    const destCampus = campuses.find((campus) => (campus.campusName === approveRequest.toCampus || campus.name === approveRequest.toCampus));
+    const destAffBoards = destCampus?.affiliatedBoards || [];
+    const destStrBoards = destCampus?.boards || [];
+    const destHasMatchingBoard = destAffBoards.some(b => b.boardName === approveRequest.student?.board || b.name === approveRequest.student?.board) || destStrBoards.includes(approveRequest.student?.board);
+    
+    if (!destHasMatchingBoard) {
       setApproveRequest(null);
       setBoardAlert({
         title: "Board Not Configured",
-        sourceBoard: approveRequest.student.board,
-        destinationBoard: destinationBoard || "Not configured",
+        sourceBoard: approveRequest.student?.board,
+        destinationBoard: destAffBoards.length > 0 ? destAffBoards.map(b => b.boardName || b.name).join(", ") : (destStrBoards.join(", ") || "Not configured"),
         message: "This board is not configured for the destination campus. The transfer cannot be approved.",
       });
       return;
     }
     const approverName = approveRequest.requestedTo;
-    const updated = updateRequest(approveRequest.id, { status: "Approved", approvedBy: approverName, approvedOn: "29-09-2026", approvalRemarks: "Approved after destination campus verification." });
-    setApproveRequest(null);
-    setDetailRequest(updated);
-    setNotification({ type: "approved", title: "Campus Transfer Request Approved", message: `${updated.student.name}'s campus transfer request to ${updated.toCampus} has been approved.`, request: updated });
-    onSuccess(`Campus transfer request approved by ${approverName}.`);
+    
+    try {
+      await apiClient.put(apiEndpoints.campusTransfers.approve(approveRequest.id));
+      await fetchRequests();
+      setNotification({ type: "approved", title: "Campus Transfer Request Approved", message: `${approveRequest.student?.name}'s campus transfer request to ${approveRequest.toCampus} has been approved.`, request: approveRequest });
+      setApproveRequest(null);
+      setDetailRequest(null);
+      onSuccess(`Campus transfer request approved.`);
+    } catch (error) {
+      setBoardAlert({ title: "Error", message: getApiErrorMessage(error) });
+    }
   };
 
-  const confirmRejection = () => {
+  const confirmRejection = async () => {
     if (!rejectionReason.trim()) { setRejectionError("Rejection reason is required."); return; }
     const approverName = rejectRequest.requestedTo;
-    const updated = updateRequest(rejectRequest.id, { status: "Rejected", rejectedBy: approverName, rejectedOn: "29-09-2026", rejectionReason: rejectionReason.trim() });
-    setRejectRequest(null);
-    setRejectionReason("");
-    setRejectionError("");
-    setDetailRequest(updated);
-    setNotification({ type: "rejected", title: "Campus Transfer Request Rejected", message: `Campus transfer request for ${updated.student.name} (${updated.student.admissionNo}) to ${updated.toCampus} was rejected by ${approverName}.`, request: updated });
-    onSuccess(`Campus transfer request rejected by ${approverName}.`);
+    
+    try {
+      await apiClient.put(apiEndpoints.campusTransfers.reject(rejectRequest.id), { reason: rejectionReason.trim() });
+      await fetchRequests();
+      setNotification({ type: "rejected", title: "Campus Transfer Request Rejected", message: `Campus transfer request for ${rejectRequest.student?.name} to ${rejectRequest.toCampus} was rejected.`, request: rejectRequest });
+      setRejectRequest(null);
+      setRejectionReason("");
+      setRejectionError("");
+      setDetailRequest(null);
+      onSuccess(`Campus transfer request rejected.`);
+    } catch (error) {
+      setBoardAlert({ title: "Error", message: getApiErrorMessage(error) });
+    }
   };
 
   return (
@@ -1510,9 +1617,9 @@ function CampusTransferScreen({ onSuccess }) {
                 <label htmlFor="transfer-campus">Destination Campus<span className="req">*</span></label>
                 <select id="transfer-campus" value={form.campus} onChange={(event) => change("campus", event.target.value)}>
                   <option value="">Select Destination Campus</option>
-                  {CAMPUS_TRANSFER_OPTIONS.campuses.map((campus) => <option key={campus.name} value={campus.name} disabled={campus.name === sourceCampus}>{campus.name}</option>)}
+                  {campuses.map((campus) => <option key={campus.campusName || campus.name} value={campus.campusName || campus.name} disabled={(campus.campusName || campus.name) === sourceCampus}>{campus.campusName || campus.name}</option>)}
                 </select>
-                {destination?.board ? <small className="campus-transfer-board-note">Board: {destination.board}</small> : null}
+                {destination?.affiliatedBoards?.length > 0 ? <small className="campus-transfer-board-note">Board: {destination.affiliatedBoards.map(b => b.boardName || b.name).join(", ")}</small> : null}
                 {errors.campus ? <span className="cms-error">{errors.campus}</span> : null}
               </div>
               <div className={`cms-field${errors.effectiveDate ? " has-error" : ""}`}>
@@ -2175,3 +2282,5 @@ function ReportScreen({ reportData, rows, loading, loaded, onLoad, onExportCsv }
     </div>
   );
 }
+
+

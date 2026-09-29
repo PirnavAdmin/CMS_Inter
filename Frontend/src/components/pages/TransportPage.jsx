@@ -67,17 +67,17 @@ const reportTabs = [
   { id: "monthly-cost-reports", label: "Monthly Cost" },
 ];
 
-const reportEndpoints = {
-  "transport-dashboard-report": apiEndpoints.transport.dashboardReport,
-  "trip-reports": apiEndpoints.transport.tripReports,
-  "vehicle-reports": apiEndpoints.transport.vehicleReports,
-  "driver-reports": apiEndpoints.transport.driverReports,
-  "route-reports": apiEndpoints.transport.routeReports,
-  "student-transport-reports": apiEndpoints.transport.studentReports,
-  "pickup-wise-reports": apiEndpoints.transport.pickupWiseReports,
-  "seat-occupancy-reports": apiEndpoints.transport.seatOccupancyReports,
-  "maintenance-reports": apiEndpoints.transport.maintenanceReports,
-  "monthly-cost-reports": apiEndpoints.transport.monthlyCostReports,
+const reportDefinitions = {
+  "transport-dashboard-report": { endpoint: apiEndpoints.transport.reports.dashboard, type: "dashboard", filename: "transport-dashboard" },
+  "trip-reports": { endpoint: apiEndpoints.transport.reports.trips, type: "trips", filename: "transport-trips" },
+  "vehicle-reports": { endpoint: apiEndpoints.transport.reports.vehicles, type: "vehicles", filename: "transport-vehicles" },
+  "driver-reports": { endpoint: apiEndpoints.transport.reports.drivers, type: "drivers", filename: "transport-drivers" },
+  "route-reports": { endpoint: apiEndpoints.transport.reports.routes, type: "routes", filename: "transport-routes" },
+  "student-transport-reports": { endpoint: apiEndpoints.transport.reports.students, type: "students", filename: "transport-students" },
+  "pickup-wise-reports": { endpoint: apiEndpoints.transport.reports.pickupWise, type: "pickup-wise", filename: "transport-pickup-wise" },
+  "seat-occupancy-reports": { endpoint: apiEndpoints.transport.reports.seatOccupancy, type: "seat-occupancy", filename: "transport-seat-occupancy" },
+  "maintenance-reports": { endpoint: apiEndpoints.transport.reports.maintenance, type: "maintenance", filename: "transport-maintenance" },
+  "monthly-cost-reports": { endpoint: apiEndpoints.transport.reports.monthlyCost, type: "monthly-cost", filename: "transport-monthly-cost" },
 };
 
 const currency = new Intl.NumberFormat("en-IN", {
@@ -134,8 +134,8 @@ function exportRows(filename, rows, columns) {
   URL.revokeObjectURL(url);
 }
 
-async function downloadTransportFile(endpoint, filename) {
-  const response = await apiClient.get(endpoint, { responseType: "blob" });
+async function downloadTransportFile(endpoint, filename, params = {}) {
+  const response = await apiClient.get(endpoint, { params, responseType: "blob" });
   const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -401,22 +401,22 @@ function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
     >
       <div className="cms-form-grid cols-3 cms-transport-add-driver-form">
         <label className="cms-field full">
-          <span>Select Driver from Non-Teaching Staff <span className="transport-required">*</span></span>
+          <span>Select Driver from Non-Teaching Staff <span className="required-star">*</span></span>
           <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaffDriver(event.target.value)}>
             <option value="">Select Driver</option>
             {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.driverName} ({driver.employeeId})</option>)}
           </select>
         </label>
         <label className="cms-field">
-          <span>Driver Full Name <span className="transport-required">*</span></span>
+          <span>Driver Full Name <span className="required-star">*</span></span>
           <input value={values.driverName} readOnly />
         </label>
         <label className="cms-field">
-          <span>Employee ID <span className="transport-required">*</span></span>
+          <span>Employee ID <span className="required-star">*</span></span>
           <input value={values.employeeId} readOnly />
         </label>
         <label className="cms-field">
-          <span>Mobile Number <span className="transport-required">*</span></span>
+          <span>Mobile Number <span className="required-star">*</span></span>
           <input value={values.mobileNumber} readOnly />
         </label>
         <label className="cms-field">
@@ -424,7 +424,7 @@ function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
           <input value={values.email} readOnly />
         </label>
         <label className="cms-field">
-          <span>Commercial License No <span className="transport-required">*</span></span>
+          <span>Commercial License No <span className="required-star">*</span></span>
           <input value={values.licenseNumber} disabled={isSaving} onChange={(event) => update("licenseNumber", event.target.value)} />
         </label>
         <label className="cms-field">
@@ -481,16 +481,16 @@ function AddAttendantModal({ staff, isSaving, onCancel, onSave }) {
     >
       <div className="cms-form-grid cols-3">
         <label className="cms-field full">
-          <span>Select Non-Teaching Staff <span className="transport-required">*</span></span>
+          <span>Select Non-Teaching Staff <span className="required-star">*</span></span>
           <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaff(event.target.value)}>
             <option value="">Select Non-Teaching Staff</option>
             {staff.map((member) => <option key={member.id} value={member.id}>{member.name} ({member.employeeId})</option>)}
           </select>
         </label>
-        <label className="cms-field"><span>Employee ID <span className="transport-required">*</span></span><input value={values.employeeId} readOnly /></label>
-        <label className="cms-field"><span>Attendant Name <span className="transport-required">*</span></span><input value={values.attendantName} readOnly /></label>
-        <label className="cms-field"><span>Mobile Number <span className="transport-required">*</span></span><input value={values.mobileNumber} readOnly /></label>
-        <label className="cms-field"><span>Gender <span className="transport-required">*</span></span><input value={values.gender} readOnly /></label>
+        <label className="cms-field"><span>Employee ID <span className="required-star">*</span></span><input value={values.employeeId} readOnly /></label>
+        <label className="cms-field"><span>Attendant Name <span className="required-star">*</span></span><input value={values.attendantName} readOnly /></label>
+        <label className="cms-field"><span>Mobile Number <span className="required-star">*</span></span><input value={values.mobileNumber} readOnly /></label>
+        <label className="cms-field"><span>Gender <span className="required-star">*</span></span><input value={values.gender} readOnly /></label>
         <label className="cms-field"><span>Status</span><select value={values.status} disabled={isSaving} onChange={(event) => setValues((current) => ({ ...current, status: event.target.value }))}><option value="Active">Active</option><option value="On Leave">On Leave</option><option value="Inactive">Inactive</option></select></label>
         {error ? <p className="cms-error">{error}</p> : null}
       </div>
@@ -545,6 +545,41 @@ function extractList(data) {
     }
   }
   return [];
+}
+
+function unwrapReportPayload(payload) {
+  let value = payload;
+  for (let depth = 0; depth < 3; depth += 1) {
+    const nested = value?.data ?? value?.Data ?? value?.result ?? value?.Result;
+    if (!nested || nested === value) break;
+    value = nested;
+  }
+  return value;
+}
+
+function reportRowsFromPayload(payload) {
+  const value = unwrapReportPayload(payload);
+  const knownRows = extractList(value);
+  if (knownRows.length || Array.isArray(value)) return knownRows;
+  if (!value || typeof value !== "object") return [];
+
+  const nestedRows = Object.values(value).find(Array.isArray);
+  if (nestedRows) return nestedRows;
+
+  return Object.entries(value)
+    .filter(([key, item]) => !["success", "message", "statusCode", "timestamp"].includes(key) && (item == null || ["string", "number", "boolean"].includes(typeof item)))
+    .map(([key, item]) => ({
+      id: `report-metric-${key}`,
+      name: key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
+      value: item ?? "-",
+    }));
+}
+
+function readReportMetric(payload, keys, fallback) {
+  const value = unwrapReportPayload(payload);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+  const key = keys.find((candidate) => value[candidate] !== undefined && value[candidate] !== null);
+  return key ? value[key] : fallback;
 }
 
 function readDepartmentSpecific(staff) {
@@ -663,6 +698,7 @@ export default function TransportPage() {
   const [gpsSnapshots, setGpsSnapshots] = useState([]);
   const [dashboardMetrics, setDashboardMetrics] = useState(null);
   const [reportApiRows, setReportApiRows] = useState({});
+  const [reportApiPayloads, setReportApiPayloads] = useState({});
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
 
@@ -1022,15 +1058,24 @@ export default function TransportPage() {
 
   useEffect(() => {
     if (activeSection !== "reports") return undefined;
-    const endpoint = reportEndpoints[activeReportTab];
-    if (!endpoint) return undefined;
+    const definition = reportDefinitions[activeReportTab];
+    if (!definition) return undefined;
     let active = true;
+    const params = {
+      campusId: selectedCampusId || undefined,
+      boardId: selectedBoardId || undefined,
+      academicYearId: selectedAcademicYearId || undefined,
+      routeId: reportFilters.route !== "All" ? reportFilters.route : undefined,
+      vehicleId: reportFilters.vehicle !== "All" ? reportFilters.vehicle : undefined,
+      status: reportFilters.status !== "All" ? reportFilters.status : undefined,
+    };
     setReportLoading(true);
     setReportError("");
-    apiClient.get(endpoint)
+    apiClient.get(definition.endpoint, { params })
       .then((response) => {
         if (!active) return;
-        setReportApiRows((current) => ({ ...current, [activeReportTab]: extractList(response.data) }));
+        setReportApiPayloads((current) => ({ ...current, [activeReportTab]: response.data }));
+        setReportApiRows((current) => ({ ...current, [activeReportTab]: reportRowsFromPayload(response.data) }));
       })
       .catch((error) => {
         if (!active) return;
@@ -1038,7 +1083,16 @@ export default function TransportPage() {
       })
       .finally(() => active && setReportLoading(false));
     return () => { active = false; };
-  }, [activeSection, activeReportTab, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
+  }, [
+    activeSection,
+    activeReportTab,
+    selectedCampusId,
+    selectedBoardId,
+    selectedAcademicYearId,
+    reportFilters.route,
+    reportFilters.vehicle,
+    reportFilters.status,
+  ]);
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
   const vehicleOptions = vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.vehicleNumber }));
@@ -1162,6 +1216,45 @@ export default function TransportPage() {
   };
 
   const openEditForm = async (key, title, fields, record) => {
+    if (key === "pickupPoints") {
+      const pickupPointId = Number(String(record.id).replace(/[^\d]/g, "")) || record.id;
+      try {
+        const response = await apiClient.get(apiEndpoints.transport.pickupPointById(pickupPointId));
+        const payload = response.data?.data ?? response.data ?? {};
+        const detail = payload.pickupPoint ?? payload.PickupPoint ?? payload;
+        const routeName = detail.routeName ?? detail.RouteName ?? record.routeName;
+        const routeId = detail.routeId
+          ?? detail.RouteId
+          ?? record.routeId
+          ?? routes.find((route) => String(route.routeName).trim().toLowerCase() === String(routeName || "").trim().toLowerCase())?.id
+          ?? "";
+        const rawStatus = detail.status ?? detail.Status ?? detail.isActive ?? detail.IsActive;
+
+        openForm(key, title, fields, {
+          ...record,
+          id: record.id,
+          routeId,
+          routeName,
+          pickupName: detail.pickupPointName ?? detail.PickupPointName ?? detail.pickupName ?? detail.PickupName ?? detail.stopName ?? record.pickupName,
+          landmark: detail.landmark ?? detail.Landmark ?? detail.stopAddress ?? record.landmark,
+          sequenceNumber: detail.sequenceNo ?? detail.SequenceNo ?? detail.sequenceNumber ?? detail.SequenceNumber ?? detail.stopOrder ?? record.sequenceNumber,
+          pickupTime: toTimeInputValue(detail.pickupTime ?? detail.PickupTime ?? detail.morningPickupTime ?? detail.MorningPickupTime ?? record.pickupTime),
+          dropTime: toTimeInputValue(detail.dropTime ?? detail.DropTime ?? detail.eveningDropTime ?? detail.EveningDropTime ?? record.dropTime),
+          distanceKm: detail.distanceFromStart ?? detail.DistanceFromStart ?? detail.distanceFromSchool ?? detail.DistanceFromSchool ?? detail.distanceKm ?? record.distanceKm,
+          monthlyFee: detail.monthlyFee ?? detail.MonthlyFee ?? detail.monthlyFare ?? detail.MonthlyFare ?? record.monthlyFee,
+          status: rawStatus === true || rawStatus === 1 || rawStatus === "Active" ? "Active" : rawStatus === false || rawStatus === 0 || rawStatus === "Inactive" ? "Inactive" : record.status,
+        });
+      } catch (error) {
+        openForm(key, title, fields, {
+          ...record,
+          pickupTime: toTimeInputValue(record.pickupTime),
+          dropTime: toTimeInputValue(record.dropTime),
+        });
+        setToast(`Latest pickup-point details unavailable: ${getApiErrorMessage(error)}`);
+      }
+      return;
+    }
+
     if (key !== "studentAssignments") {
       openForm(key, title, fields, record);
       return;
@@ -2174,6 +2267,11 @@ export default function TransportPage() {
   const renderReports = () => {
     const totalTransportRevenue = studentAssignments.reduce((total, item) => total + (Number(item.annualFee) || 0), 0);
     const activeMaintenanceCost = maintenance.reduce((total, item) => total + (Number(item.cost) || 0), 0);
+    const dashboardReportPayload = reportApiPayloads["transport-dashboard-report"];
+    const dashboardAnnualFee = readReportMetric(dashboardReportPayload, ["annualTransportFee", "totalTransportRevenue", "totalRevenue", "annualFee"], totalTransportRevenue);
+    const dashboardMaintenanceCost = readReportMetric(dashboardReportPayload, ["maintenanceCost", "totalMaintenanceCost", "activeMaintenanceCost"], activeMaintenanceCost);
+    const dashboardFleetCapacity = readReportMetric(dashboardReportPayload, ["fleetCapacity", "totalFleetCapacity", "totalSeats"], vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0));
+    const dashboardStaffCount = readReportMetric(dashboardReportPayload, ["driversAndAttendants", "transportStaff", "totalStaff"], drivers.length + attendants.length);
     const localReportRows = activeReportTab === "student-transport-reports"
       ? studentAssignments
       : activeReportTab === "route-reports"
@@ -2297,6 +2395,18 @@ export default function TransportPage() {
       );
     };
     const needsCompactReportToolbar = activeReportTab === "trip-reports" || activeReportTab === "student-transport-reports";
+    const activeReportDefinition = reportDefinitions[activeReportTab];
+    const reportRequestParams = {
+      reportType: activeReportDefinition?.type,
+      campusId: selectedCampusId || undefined,
+      boardId: selectedBoardId || undefined,
+      academicYearId: selectedAcademicYearId || undefined,
+      routeId: reportFilters.route !== "All" ? reportFilters.route : undefined,
+      vehicleId: reportFilters.vehicle !== "All" ? reportFilters.vehicle : undefined,
+      status: reportFilters.status !== "All" ? reportFilters.status : undefined,
+      search: query.trim() || undefined,
+    };
+    const reportFilename = activeReportDefinition?.filename || "transport-report";
 
     return (
       <div className="cms-transport-stack">
@@ -2312,10 +2422,10 @@ export default function TransportPage() {
         />
         {activeReportTab === "transport-dashboard-report" ? (
           <div className="cms-transport-stat-grid">
-            <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(totalTransportRevenue)} hint="from active assignments" tone="green" />
-            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(activeMaintenanceCost)} hint="logged fleet service costs" tone="amber" />
-            <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0))} hint="total seats" tone="blue" />
-            <StatCard icon={UserCheck} label="Drivers & Attendants" value={drivers.length + attendants.length} hint="staff profiles" tone="violet" />
+            <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(dashboardAnnualFee)} hint="from active assignments" tone="green" />
+            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(dashboardMaintenanceCost)} hint="logged fleet service costs" tone="amber" />
+            <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(dashboardFleetCapacity)} hint="total seats" tone="blue" />
+            <StatCard icon={UserCheck} label="Drivers & Attendants" value={formatNumber(dashboardStaffCount)} hint="staff profiles" tone="violet" />
           </div>
         ) : null}
         {reportLoading ? <SkeletonTable columns={6} rows={5} /> : null}
@@ -2333,15 +2443,15 @@ export default function TransportPage() {
           rowFilter={filterReportRow}
           toolbarClassName={`cms-transport-report-toolbar${needsCompactReportToolbar ? " cms-transport-report-toolbar-compact" : ""}`}
           onPrint={async () => {
-            try { await downloadTransportFile(apiEndpoints.transport.printReport, "transport-report.pdf"); }
+            try { await downloadTransportFile(apiEndpoints.transport.reports.print, `${reportFilename}.pdf`, reportRequestParams); }
             catch (error) { setToast(`Unable to print report: ${getApiErrorMessage(error)}`); }
           }}
           onPdfExport={async () => {
-            try { await downloadTransportFile(apiEndpoints.transport.exportReportPdf, "transport-report.pdf"); }
+            try { await downloadTransportFile(apiEndpoints.transport.reports.exportPdf, `${reportFilename}.pdf`, reportRequestParams); }
             catch (error) { setToast(`Unable to export PDF: ${getApiErrorMessage(error)}`); }
           }}
           onExport={async () => {
-            try { await downloadTransportFile(apiEndpoints.transport.exportReportCsv, "transport-report.csv"); }
+            try { await downloadTransportFile(apiEndpoints.transport.reports.exportCsv, `${reportFilename}.csv`, reportRequestParams); }
             catch (error) { setToast(`Unable to export CSV: ${getApiErrorMessage(error)}`); }
           }}
         /> : null}
