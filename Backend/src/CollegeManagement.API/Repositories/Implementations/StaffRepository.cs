@@ -213,30 +213,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
             }
 
-            // 3b. IsDriver filter
-            if (queryParams.IsDriver.HasValue)
-            {
-                if (queryParams.IsDriver.Value)
-                {
-                    query = query.Where(s =>
-                        s.IsDriver ||
-                        s.RoleId == 12 ||
-                        s.DesignationId == 276 ||
-                        s.Designation == "Driver" ||
-                        s.Designation == "Bus Driver" ||
-                        (s.DesignationRef != null && (s.DesignationRef.Name == "Driver" || s.DesignationRef.Name == "Bus Driver")));
-                }
-                else
-                {
-                    query = query.Where(s =>
-                        !s.IsDriver &&
-                        s.RoleId != 12 &&
-                        s.DesignationId != 276 &&
-                        s.Designation != "Driver" &&
-                        s.Designation != "Bus Driver" &&
-                        (s.DesignationRef == null || (s.DesignationRef.Name != "Driver" && s.DesignationRef.Name != "Bus Driver")));
-                }
-            }
+
 
             // 4. Board filter
             if (queryParams.BoardId.HasValue && queryParams.BoardId.Value > 0)

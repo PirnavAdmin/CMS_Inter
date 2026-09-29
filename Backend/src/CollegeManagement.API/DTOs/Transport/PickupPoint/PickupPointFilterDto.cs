@@ -10,8 +10,6 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
 
         public bool? Status { get; set; }
 
-        public int? CampusId { get; set; }
-
         public string SortBy { get; set; } = "pickupPointName";
 
         public string SortOrder { get; set; } = "asc";
