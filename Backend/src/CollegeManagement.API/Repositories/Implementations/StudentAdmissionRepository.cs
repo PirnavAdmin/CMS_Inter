@@ -211,8 +211,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                             request.FatherOccupation,
                         p_FatherMobile =
                             request.FatherMobile,
-                        p_FatherEmail =
-                            request.FatherEmail,
 
 
                         // -------------------------------------------------
@@ -223,8 +221,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                             request.MotherOccupation,
                         p_MotherMobile =
                             request.MotherMobile,
-                        p_MotherEmail =
-                            request.MotherEmail,
 
 
                         // -------------------------------------------------
@@ -521,9 +517,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                         p_FatherMobile =
                             request.FatherMobile,
 
-                        p_FatherEmail =
-                            request.FatherEmail,
-
 
                         // -------------------------------------------------
                         // MOTHER
@@ -536,9 +529,6 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                         p_MotherMobile =
                             request.MotherMobile,
-
-                        p_MotherEmail =
-                            request.MotherEmail,
 
 
                         // -------------------------------------------------

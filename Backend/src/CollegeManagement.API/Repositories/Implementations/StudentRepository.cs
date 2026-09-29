@@ -307,14 +307,12 @@ namespace CollegeManagement.API.Repositories
                         p_FatherOccupation =
                             request.FatherOccupation,
                         p_FatherMobile = request.FatherMobile,
-                        p_FatherEmail = request.FatherEmail,
 
                         // Mother
                         p_MotherName = request.MotherName,
                         p_MotherOccupation =
                             request.MotherOccupation,
                         p_MotherMobile = request.MotherMobile,
-                        p_MotherEmail = request.MotherEmail,
 
                         // Guardian
                         p_GuardianName = request.GuardianName,
@@ -489,12 +487,10 @@ namespace CollegeManagement.API.Repositories
                         p_FatherName = request.FatherName,
                         p_FatherOccupation = request.FatherOccupation,
                         p_FatherMobile = request.FatherMobile,
-                        p_FatherEmail = request.FatherEmail,
 
                         p_MotherName = request.MotherName,
                         p_MotherOccupation = request.MotherOccupation,
                         p_MotherMobile = request.MotherMobile,
-                        p_MotherEmail = request.MotherEmail,
 
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile = request.GuardianMobile,
@@ -667,7 +663,9 @@ namespace CollegeManagement.API.Repositories
                         p_GuardianName =
                             request.GuardianName,
                         p_GuardianMobile =
-                            request.GuardianMobile
+                            request.GuardianMobile,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail
                     },
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
@@ -1203,9 +1201,7 @@ namespace CollegeManagement.API.Repositories
                     p_PreviousYearOfPassing = request.PreviousYearOfPassing,
                     p_PreviousPercentage = request.PreviousPercentage,
                     p_FatherMobile = request.FatherMobile,
-                    p_FatherEmail = request.FatherEmail,
                     p_MotherMobile = request.MotherMobile,
-                    p_MotherEmail = request.MotherEmail,
                     p_GuardianMobile = request.GuardianMobile,
                     p_ParentGuardianEmail = request.ParentGuardianEmail
                 },
