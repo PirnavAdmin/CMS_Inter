@@ -786,8 +786,8 @@ export default function DashboardPage() {
       const match = yearName.match(/(\d{4})/);
       if (match) {
         startY = parseInt(match[1], 10);
-        // Default start month to earliest admission month in that year, or March/June
-        startM = earliestRaw && earliestRaw.year === startY ? earliestRaw.month : (earliestRaw ? Math.min(earliestRaw.month, 2) : 2);
+        // Always start from January (0) to show the full year trend and allow dragging back
+        startM = 0;
       } else {
         startY = earliestRaw ? earliestRaw.year : currentYear;
         startM = earliestRaw ? earliestRaw.month : 0;
@@ -853,15 +853,9 @@ export default function DashboardPage() {
         curM = 0;
         curY++;
       }
-      }
     }
 
     const finalData = result.length > 0 ? result : (raw.length > 0 ? raw.map((i) => ({ period: i.period || i.month || "", studentsJoined: Number(i.studentsJoined || 0) })) : []);
-    
-    // As per requirement: only show the latest 5 months in the chart
-    if (finalData.length > 5) {
-      return finalData.slice(-5);
-    }
     
     return finalData;
   }, [overviewState.data, selectedAcademicYear]);
@@ -920,14 +914,19 @@ export default function DashboardPage() {
   }, [overviewChartData]);
 
   // Auto-scroll Students Overview chart to the far right (present month & latest 4 months in view) on data load
+  const chartEndRef = useRef(null);
   useEffect(() => {
-    if (chartScrollRef.current) {
-      const timer = setTimeout(() => {
-        if (chartScrollRef.current) {
-          chartScrollRef.current.scrollLeft = chartScrollRef.current.scrollWidth;
+    if (overviewChartData.length > 5) {
+      // Use setInterval to ensure scrollIntoView fires after any internal Recharts re-renders
+      let attempts = 0;
+      const interval = setInterval(() => {
+        if (chartEndRef.current) {
+          chartEndRef.current.scrollIntoView({ behavior: "instant", block: "nearest", inline: "end" });
         }
-      }, 50);
-      return () => clearTimeout(timer);
+        attempts++;
+        if (attempts > 15) clearInterval(interval); // 15 * 100ms = 1.5s
+      }, 100);
+      return () => clearInterval(interval);
     }
   }, [overviewChartData]);
 
@@ -1202,10 +1201,11 @@ export default function DashboardPage() {
                         width: overviewChartData.length > 5 ? `${Math.round((overviewChartData.length / 5) * 100)}%` : "100%",
                         minWidth: "100%",
                         height: 142,
+                        position: "relative"
                       }}
                     >
                       <ResponsiveContainer width="100%" height={142}>
-                        <AreaChart data={overviewChartData} margin={{ top: 8, right: 32, left: 32, bottom: 0 }}>
+                        <AreaChart data={overviewChartData} margin={{ top: 8, right: 0, left: 15, bottom: 0 }}>
                           <defs>
                             <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
@@ -1220,6 +1220,7 @@ export default function DashboardPage() {
                             height={22}
                             tick={{ fontSize: 10, fill: "var(--cms-muted, #64748b)" }}
                             interval={0}
+                            padding={{ left: 20, right: 20 }}
                           />
                           <YAxis hide domain={[0, yMax]} ticks={yTicks} />
                           <Tooltip formatter={(val) => [formatNumber(val), "Students"]} />
@@ -1233,6 +1234,7 @@ export default function DashboardPage() {
                           />
                         </AreaChart>
                       </ResponsiveContainer>
+                      <div ref={chartEndRef} style={{ position: "absolute", right: 0, top: 0, width: 1, height: 1, visibility: "hidden" }} />
                     </div>
                   </div>
                 </div>
