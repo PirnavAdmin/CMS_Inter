@@ -853,9 +853,17 @@ export default function DashboardPage() {
         curM = 0;
         curY++;
       }
+      }
     }
 
-    return result.length > 0 ? result : (raw.length > 0 ? raw.map((i) => ({ period: i.period || i.month || "", studentsJoined: Number(i.studentsJoined || 0) })) : []);
+    const finalData = result.length > 0 ? result : (raw.length > 0 ? raw.map((i) => ({ period: i.period || i.month || "", studentsJoined: Number(i.studentsJoined || 0) })) : []);
+    
+    // As per requirement: only show the latest 5 months in the chart
+    if (finalData.length > 5) {
+      return finalData.slice(-5);
+    }
+    
+    return finalData;
   }, [overviewState.data, selectedAcademicYear]);
 
   // Dynamic Y-Axis scale calculation based on student admission numbers
