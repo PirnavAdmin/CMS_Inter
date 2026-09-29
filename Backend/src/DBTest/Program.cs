@@ -33,42 +33,6 @@ namespace DBTest
                 return;
             }
 
-            if (args.Length > 0 && args[0] == "--test-scheduling")
-            {
-                await ExamScheduleTester.RunTestsAsync();
-                return;
-            }
-
-            if (args.Length > 0 && args[0] == "--inspect-invigilator")
-            {
-                await InspectInvigilator.RunAsync();
-                return;
-            }
-
-            if (args.Length > 0 && args[0] == "--check-exams")
-            {
-                await CheckExamDetails.RunAsync();
-                return;
-            }
-
-            if (args.Length > 0 && args[0] == "--check-staff1")
-            {
-                await CheckStaff1.RunAsync();
-                return;
-            }
-
-            if (args.Length > 0 && args[0] == "--check-inactive-schedules")
-            {
-                await CheckInactiveSchedules.RunAsync();
-                return;
-            }
-
-            if (args.Length > 0 && args[0] == "--fix-invigilators")
-            {
-                await FixInvigilatorAssignments.RunAsync();
-                return;
-            }
-
             Console.OutputEncoding = Encoding.UTF8;
             Console.WriteLine("================================================================================");
             Console.WriteLine("          LIVE DATABASE INSPECTION & REPORTS CALCULATION VERIFICATION           ");
