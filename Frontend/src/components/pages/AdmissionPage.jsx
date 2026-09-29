@@ -1043,7 +1043,7 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "MotherEmail", values.motherEmail);
   appendIfPresent(formData, "GuardianName", values.guardianName);
   appendIfPresent(formData, "GuardianMobile", values.guardianMobile);
-  appendIfPresent(formData, "GuardianEmail", values.guardianEmail);
+  appendIfPresent(formData, "ParentparentparentParentGuardianEmail", values.ParentparentparentParentGuardianEmail);
   appendIfPresent(formData, "AnnualIncome", values.annualIncome);
   appendIfPresent(formData, "Address", [houseDoorNumber, streetVillage, values.city, values.district, values.state, values.pincode].filter(Boolean).join(", "));
   appendIfPresent(formData, "HouseDoorNumber", houseDoorNumber);
@@ -1753,7 +1753,7 @@ const normalizeAdmissionRow = (item) => {
       motherEmail: readText(item, "motherEmail", "MotherEmail"),
       guardianName: readText(item, "guardianName", "GuardianName"),
       guardianMobile: readText(item, "guardianMobile", "GuardianMobile"),
-      guardianEmail: readText(item, "guardianEmail", "GuardianEmail"),
+      ParentparentparentParentGuardianEmail: readText(item, "ParentparentparentParentGuardianEmail", "ParentparentparentParentGuardianEmail"),
       annualIncome: readText(item, "annualIncome", "AnnualIncome"),
       houseDoorNumber,
       streetVillage,
@@ -5677,3 +5677,6 @@ export default function AdmissionPage() {
     </DashboardLayout>
   );
 }
+
+
+
