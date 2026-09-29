@@ -666,6 +666,24 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
   return true;
 };
 
+export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
+  if (!selectedCampus) return true;
+  if (!staffRecord) return false;
+
+  const targetId = selectedCampus.campusId ?? selectedCampus.id;
+  const targetName = selectedCampus.campusName ?? selectedCampus.name;
+  const targetCode = selectedCampus.campusCode ?? selectedCampus.code;
+  const recordCampus = staffRecord.campus ?? staffRecord.Campus ?? {};
+  const recordId = staffRecord.campusId ?? staffRecord.CampusId ?? recordCampus.campusId ?? recordCampus.id ?? recordCampus.Id;
+  const recordName = staffRecord.campusName ?? staffRecord.CampusName ?? recordCampus.campusName ?? recordCampus.name ?? recordCampus.Name;
+  const recordCode = staffRecord.campusCode ?? staffRecord.CampusCode ?? recordCampus.campusCode ?? recordCampus.code ?? recordCampus.Code;
+
+  if (recordId != null && targetId != null) return String(recordId) === String(targetId);
+  if (recordCode && targetCode) return String(recordCode).trim().toLowerCase() === String(targetCode).trim().toLowerCase();
+  if (recordName && targetName) return String(recordName).trim().toLowerCase() === String(targetName).trim().toLowerCase();
+  return false;
+};
+
 export const TEACHING_ROLE_NAMES = [
   "Accounts",
   "Examination Cell",
@@ -2372,6 +2390,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
 function Dashboard({ records = [] }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [credModalOpen, setCredModalOpen] = useState(false);
@@ -2385,8 +2404,10 @@ function Dashboard({ records = [] }) {
         const params = {};
         const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         if (activeBoardCode) params.boardCode = activeBoardCode;
         if (activeBoardId) params.boardId = activeBoardId;
+        if (activeCampusId != null && activeCampusId !== "") params.campusId = Number(activeCampusId) || activeCampusId;
 
         const response = await apiClient.get(apiEndpoints.faculty.dashboardStats, { params });
         if (isMounted && response.data) {
@@ -2400,14 +2421,15 @@ function Dashboard({ records = [] }) {
     }
     fetchStats();
     return () => { isMounted = false; };
-  }, [selectedBoard]);
+  }, [selectedBoard, selectedCampus]);
 
   const safeRecords = useMemo(() => {
     const raw = Array.isArray(records) ? records : [];
-    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards));
-  }, [records, selectedBoard, boards]);
+    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards) && isStaffMatchingCampus(r, selectedCampus));
+  }, [records, selectedBoard, boards, selectedCampus]);
 
-  const hasStats = stats !== null && stats !== undefined;
+  // Dashboard stats are global aggregates; use campus-scoped staff records when a campus is selected.
+  const hasStats = !selectedCampus && stats !== null && stats !== undefined;
 
   const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.filter((r) => !r?.status || r?.status === "Active").length || 0));
   const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Teaching").length || 0));
@@ -2730,6 +2752,7 @@ function StaffImportValidationModal({ state, onClose, onConfirm, isSubmitting })
 function StaffList({ records = [], setRecords, forced }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
   const list = Array.isArray(records) ? records : [];
   const importInputRef = useRef(null);
   const [tab, setTab] = useState(forced || "All");
@@ -2770,6 +2793,7 @@ function StaffList({ records = [], setRecords, forced }) {
         const currentTab = forced || tab;
         const activeBoardCode = selectedBoard?.code || selectedBoard?.boardCode || "";
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         const params = {
           PageNumber: page,
           PageSize: size,
@@ -2780,6 +2804,7 @@ function StaffList({ records = [], setRecords, forced }) {
           ProfileStatus: currentTab === "Completed" ? "Completed" : (currentTab === "Pending" ? "Pending" : undefined),
           BoardCode: activeBoardCode || undefined,
           BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
         };
 
         const res = await apiClient.get(apiEndpoints.faculty.list, { params });
@@ -2802,7 +2827,7 @@ function StaffList({ records = [], setRecords, forced }) {
     }
     fetchStaffList();
     return () => { isMounted = false; };
-  }, [page, size, q, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard]);
+  }, [page, size, q, departmentFilter, designationFilter, staffTypeFilter, forced, tab, records, selectedBoard, selectedCampus]);
 
   // Handle Client-side Excel Parsing & Row-by-Row Validation
   const handleBulkImport = async (e) => {
@@ -3207,6 +3232,7 @@ function StaffList({ records = [], setRecords, forced }) {
       (r) =>
         r &&
         isStaffMatchingBoard(r, selectedBoard, boards) &&
+        isStaffMatchingCampus(r, selectedCampus) &&
         (currentTab === "All" ||
           (currentTab === "Pending"
             ? r.staffType === "Teaching" && r.profileStatus !== "Completed"
@@ -3220,7 +3246,7 @@ function StaffList({ records = [], setRecords, forced }) {
           String(v || "").toLowerCase().includes((q || "").toLowerCase()),
         ),
     );
-  }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards]);
+  }, [apiItems, list, currentTab, q, departmentFilter, designationFilter, staffTypeFilter, selectedBoard, boards, selectedCampus]);
 
   const [apiFilterDepts, setApiFilterDepts] = useState([]);
   const [apiFilterDesigs, setApiFilterDesigs] = useState([]);
@@ -3358,7 +3384,7 @@ function StaffList({ records = [], setRecords, forced }) {
   const showStaffType = forced !== "Teaching" && forced !== "Non-Teaching";
   const shown = useMemo(() => {
     if (apiItems !== null && Array.isArray(apiItems)) {
-      return apiItems.map((r) => {
+      return apiItems.filter((r) => isStaffMatchingCampus(r, selectedCampus)).map((r) => {
         let empId = r.employeeId;
         if (!empId || typeof empId === "object" || empId === "[object Object]") {
           empId = r.id ? `PCTCH00${r.id}` : "PCTCH0001";
@@ -3371,9 +3397,9 @@ function StaffList({ records = [], setRecords, forced }) {
       });
     }
     return rows.slice((page - 1) * size, page * size);
-  }, [apiItems, rows, page, size]);
+  }, [apiItems, rows, page, size, selectedCampus]);
 
-  const totalRowsCount = apiItems !== null ? totalApiCount : rows.length;
+  const totalRowsCount = apiItems !== null ? (selectedCampus && shown.length === 0 ? 0 : totalApiCount) : rows.length;
 
   return (
     <DashboardLayout
@@ -5536,6 +5562,7 @@ export default function StaffManagementPage() {
   const n = useNavigate();
   const { id } = useParams();
   const { boards, selectedBoard } = useAcademicContext();
+  const { selectedCampus } = useCampusContext();
 
   const [records, setRaw] = useState(() => []);
   const [activities, setActivityRaw] = useState(() => []);
@@ -5545,8 +5572,8 @@ export default function StaffManagementPage() {
 
   const safeRecords = useMemo(() => {
     const raw = Array.isArray(records) ? records : [];
-    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards));
-  }, [records, selectedBoard, boards]);
+    return raw.filter((r) => isStaffMatchingBoard(r, selectedBoard, boards) && isStaffMatchingCampus(r, selectedCampus));
+  }, [records, selectedBoard, boards, selectedCampus]);
 
   const setRecords = (next) => {
     const rawList = Array.isArray(next) ? next : [];
@@ -5580,10 +5607,12 @@ export default function StaffManagementPage() {
     async function loadInit() {
       try {
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
+        const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
         const listRes = await staffApi.getStaffPaged({
           PageNumber: 1,
           PageSize: 100,
           BoardId: activeBoardId || undefined,
+          CampusId: activeCampusId != null && activeCampusId !== "" ? Number(activeCampusId) || activeCampusId : undefined,
         });
         if (isMounted && listRes.data) {
           const listItems = listRes.data.items || listRes.data.data || (Array.isArray(listRes.data) ? listRes.data : []);
@@ -5595,7 +5624,7 @@ export default function StaffManagementPage() {
     }
     loadInit();
     return () => { isMounted = false; };
-  }, [selectedBoard]);
+  }, [selectedBoard, selectedCampus]);
 
   // Fetch staff record from API whenever id changes
   useEffect(() => {

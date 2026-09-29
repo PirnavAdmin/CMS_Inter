@@ -28,6 +28,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import * as numberSeriesApi from "@/api/numberSeriesApi.js";
+import * as staffApi from "@/api/staffApi.js";
 import {
   readNumberSeriesSettings,
   writeNumberSeriesSettings,
@@ -66,6 +67,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
 
   const fetchSeries = async () => {
     setLoading(true);
+    let data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
     try {
       const serverData = await numberSeriesApi.getNumberSeriesList();
       const items = Array.isArray(serverData) ? serverData : serverData?.items || serverData?.data || [];
@@ -80,17 +82,35 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           if (s.slug) map.set(s.slug, s);
         });
         const merged = Array.from(new Set(map.values())).filter((s) => !isSeriesRemoved(s));
-        setSeriesList(merged);
+        data = merged;
         writeNumberSeriesSettings(merged);
-        return;
       }
     } catch (err) {
       console.warn("GET /api/v1/settings/number-series fallback:", err?.message || err);
     } finally {
       setLoading(false);
     }
-    const data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
     setSeriesList(data);
+    const [teachingResult, nonTeachingResult] = await Promise.allSettled([
+      staffApi.getNextEmployeeId("Teaching"),
+      staffApi.getNextEmployeeId("Non-Teaching"),
+    ]);
+    const getPreview = (result) => {
+      if (result.status !== "fulfilled") return null;
+      const response = result.value;
+      const payload = response?.data ?? response;
+      return typeof payload === "string" ? payload : payload?.nextEmployeeId || payload?.employeeId || payload?.nextId || payload?.data?.nextEmployeeId || null;
+    };
+    const previews = {
+      "teaching-staff-id": getPreview(teachingResult),
+      "non-teaching-staff-id": getPreview(nonTeachingResult),
+    };
+    setSeriesList((current) => current.map((series) => {
+      const key = series.id === "teaching-staff-id" || series.slug === "teaching-staff-id" ? "teaching-staff-id"
+        : series.id === "non-teaching-staff-id" || series.slug === "non-teaching-staff-id" ? "non-teaching-staff-id" : null;
+      const preview = key ? previews[key] : null;
+      return preview ? { ...series, livePreview: preview, currentExample: preview } : series;
+    }));
   };
 
   useEffect(() => {
@@ -328,7 +348,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
 
                 <div className="ns-card-example-box">
                   <span className="ns-card-example-lbl">Current / Next Example:</span>
-                  <div className="ns-card-example-val">{series.currentExample || nextVal}</div>
+                  <div className="ns-card-example-val">{series.livePreview || series.currentExample || nextVal}</div>
                 </div>
 
                 <p className="ns-card-desc">{series.description}</p>

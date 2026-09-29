@@ -4,13 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using AutoMapper;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Examination.Requests;
 using CollegeManagement.API.DTOs.Examination.Responses;
 using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -19,15 +22,21 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IExaminationRepository _examinationRepository;
         private readonly IMapper _mapper;
         private readonly IMemoryCache _memoryCache;
+        private readonly AppDbContext _context;
+        private readonly ILogger<ExaminationService> _logger;
 
         public ExaminationService(
             IExaminationRepository examinationRepository,
             IMapper mapper,
-            IMemoryCache memoryCache)
+            IMemoryCache memoryCache,
+            AppDbContext context,
+            ILogger<ExaminationService> logger)
         {
             _examinationRepository = examinationRepository;
             _mapper = mapper;
             _memoryCache = memoryCache;
+            _context = context;
+            _logger = logger;
         }
 
         private void EvictExamCache(int? examinationId)
@@ -56,6 +65,143 @@ namespace CollegeManagement.API.Services.Implementations
             if (lower.Contains("annual") || lower.Contains("board") || lower.Contains("final")) return 5;
 
             return 1; // Unit Test / Default
+        }
+
+        private static List<(int invigilatorId, string hallNumber)> ExtractInvigilatorAssignments(object? rawHallAssignments, int? directInvigilatorId, string? defaultHall)
+        {
+            var result = new List<(int invigilatorId, string hallNumber)>();
+            var seen = new HashSet<int>();
+
+            void AddAssignment(int invId, string? hall)
+            {
+                if (invId > 0 && seen.Add(invId))
+                {
+                    result.Add((invId, !string.IsNullOrWhiteSpace(hall) ? hall.Trim() : (defaultHall ?? string.Empty)));
+                }
+            }
+
+            if (rawHallAssignments != null)
+            {
+                try
+                {
+                    System.Text.Json.JsonElement root;
+                    if (rawHallAssignments is System.Text.Json.JsonElement elem)
+                    {
+                        root = elem;
+                    }
+                    else if (rawHallAssignments is string jsonStr && !string.IsNullOrWhiteSpace(jsonStr))
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(jsonStr);
+                        root = doc.RootElement.Clone();
+                    }
+                    else
+                    {
+                        var json = System.Text.Json.JsonSerializer.Serialize(rawHallAssignments);
+                        using var doc = System.Text.Json.JsonDocument.Parse(json);
+                        root = doc.RootElement.Clone();
+                    }
+
+                    if (root.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var item in root.EnumerateArray())
+                        {
+                            if (item.ValueKind != System.Text.Json.JsonValueKind.Object) continue;
+
+                            string? itemHall = null;
+                            string[] hallProps = { "hallNumber", "roomNumber", "hallName", "roomName", "hall", "room" };
+                            foreach (var hp in hallProps)
+                            {
+                                if (item.TryGetProperty(hp, out var hallVal))
+                                {
+                                    itemHall = hallVal.ValueKind == System.Text.Json.JsonValueKind.String ? hallVal.GetString() : hallVal.ToString();
+                                    if (!string.IsNullOrWhiteSpace(itemHall)) break;
+                                }
+                            }
+                            if (string.IsNullOrWhiteSpace(itemHall)) itemHall = defaultHall;
+
+                            // Check invigilatorIds array
+                            if (item.TryGetProperty("invigilatorIds", out var idsProp) && idsProp.ValueKind == System.Text.Json.JsonValueKind.Array)
+                            {
+                                foreach (var idElem in idsProp.EnumerateArray())
+                                {
+                                    if (idElem.ValueKind == System.Text.Json.JsonValueKind.Number && idElem.TryGetInt32(out var id))
+                                    {
+                                        AddAssignment(id, itemHall);
+                                    }
+                                    else if (idElem.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(idElem.GetString(), out var parsedId))
+                                    {
+                                        AddAssignment(parsedId, itemHall);
+                                    }
+                                }
+                            }
+
+                            // Check single invigilatorId / facultyId / staffId
+                            string[] singleIdProps = { "invigilatorId", "facultyId", "staffId" };
+                            foreach (var ip in singleIdProps)
+                            {
+                                if (item.TryGetProperty(ip, out var idVal))
+                                {
+                                    if (idVal.ValueKind == System.Text.Json.JsonValueKind.Number && idVal.TryGetInt32(out var id))
+                                    {
+                                        AddAssignment(id, itemHall);
+                                    }
+                                    else if (idVal.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(idVal.GetString(), out var parsedId))
+                                    {
+                                        AddAssignment(parsedId, itemHall);
+                                    }
+                                }
+                            }
+
+                            // Check invigilators array (could be objects or numbers/strings)
+                            if (item.TryGetProperty("invigilators", out var invsProp) && invsProp.ValueKind == System.Text.Json.JsonValueKind.Array)
+                            {
+                                foreach (var invElem in invsProp.EnumerateArray())
+                                {
+                                    if (invElem.ValueKind == System.Text.Json.JsonValueKind.Number && invElem.TryGetInt32(out var id))
+                                    {
+                                        AddAssignment(id, itemHall);
+                                    }
+                                    else if (invElem.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(invElem.GetString(), out var parsedId))
+                                    {
+                                        AddAssignment(parsedId, itemHall);
+                                    }
+                                    else if (invElem.ValueKind == System.Text.Json.JsonValueKind.Object)
+                                    {
+                                        foreach (var ip in singleIdProps)
+                                        {
+                                            if (invElem.TryGetProperty(ip, out var nestedIdVal))
+                                            {
+                                                if (nestedIdVal.ValueKind == System.Text.Json.JsonValueKind.Number && nestedIdVal.TryGetInt32(out var nid))
+                                                {
+                                                    AddAssignment(nid, itemHall);
+                                                    break;
+                                                }
+                                                else if (nestedIdVal.ValueKind == System.Text.Json.JsonValueKind.String && int.TryParse(nestedIdVal.GetString(), out var parsedNid))
+                                                {
+                                                    AddAssignment(parsedNid, itemHall);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Ignore JSON parsing errors and fallback to directInvigilatorId
+                }
+            }
+
+            // Fallback to top-level direct InvigilatorId if not already included
+            if (directInvigilatorId.HasValue && directInvigilatorId.Value > 0)
+            {
+                AddAssignment(directInvigilatorId.Value, defaultHall);
+            }
+
+            return result;
         }
 
         #region Examination Implementations
@@ -329,11 +475,14 @@ namespace CollegeManagement.API.Services.Implementations
                 return await CreateExamScheduleAsync(first);
             }
 
+            // 1. Examination ID Format Validation
             if (request.ExaminationId <= 0)
             {
+                _logger.LogWarning("Examination validation failed: Examination ID is required and must be greater than zero. Request: {@Request}", request);
                 throw new ValidationException("Examination ID is required and must be greater than zero.");
             }
 
+            // 2. Resolve & Validate SubjectId
             if (request.SubjectId <= 0 && request.IncludedSubjectIds != null && request.IncludedSubjectIds.Any())
             {
                 request.SubjectId = request.IncludedSubjectIds.First();
@@ -343,26 +492,104 @@ namespace CollegeManagement.API.Services.Implementations
                 request.SubjectId = request.SubjectIds.First();
             }
 
+            if (request.SubjectId <= 0)
+            {
+                _logger.LogWarning("Subject validation failed: Subject ID is missing or invalid for Examination ID {ExamId}.", request.ExaminationId);
+                throw new ValidationException("Subject ID is required for examination schedule.");
+            }
+
+            // 3. Date & Time Validation
+            if (request.ExamDate == default || request.ExamDate.Year < 2000)
+            {
+                _logger.LogWarning("Date validation failed: Invalid Exam Date '{ExamDate}' for Examination ID {ExamId}.", request.ExamDate, request.ExaminationId);
+                throw new ValidationException("A valid Exam Date is required.");
+            }
+
+            if (request.StartTime == default && request.EndTime == default)
+            {
+                _logger.LogWarning("Time validation failed: Start Time and End Time are missing for Examination ID {ExamId}.", request.ExaminationId);
+                throw new ValidationException("Start Time and End Time are required.");
+            }
+
+            if (request.EndTime <= request.StartTime)
+            {
+                _logger.LogWarning("Time validation failed: End Time ({EndTime}) must be later than Start Time ({StartTime}) for Exam ID {ExamId}.",
+                    request.EndTime, request.StartTime, request.ExaminationId);
+                throw new ValidationException($"End Time ({request.EndTime:HH\\:mm}) must be later than Start Time ({request.StartTime:HH\\:mm}).");
+            }
+
+            // 4. Examination Existence & Status Validation
             var exam = await _examinationRepository.GetExaminationByIdAsync(request.ExaminationId);
             if (exam == null)
             {
+                _logger.LogWarning("Examination validation failed: Examination with ID {ExamId} does not exist.", request.ExaminationId);
                 throw new ValidationException($"Examination with ID {request.ExaminationId} not found.");
+            }
+
+            if (!exam.IsActive)
+            {
+                _logger.LogWarning("Examination validation failed: Examination '{ExamName}' (ID {ExamId}) is marked as inactive.", exam.ExamName, exam.ExamId);
+                throw new ValidationException($"Examination '{exam.ExamName}' (ID {request.ExaminationId}) is marked as inactive and cannot be scheduled.");
             }
 
             if (string.Equals(exam.Status, "CANCELLED", StringComparison.OrdinalIgnoreCase))
             {
-                throw new ValidationException("Cannot create schedule entries for a cancelled examination.");
+                _logger.LogWarning("Examination validation failed: Examination '{ExamName}' (ID {ExamId}) is CANCELLED.", exam.ExamName, exam.ExamId);
+                throw new ValidationException($"Cannot schedule examination '{exam.ExamName}' because it has been cancelled.");
             }
 
-            if (request.InvigilatorId.HasValue && request.InvigilatorId.Value > 0 && request.SubjectId > 0)
+            if (string.Equals(exam.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
             {
-                var isSubjectTeacher = await _examinationRepository.IsInvigilatorTeachingSubjectAsync(request.InvigilatorId.Value, request.SubjectId);
-                if (isSubjectTeacher)
-                {
-                    throw new ValidationException("An invigilator cannot be assigned to an examination for the subject they teach.");
-                }
+                _logger.LogWarning("Examination validation failed: Examination '{ExamName}' (ID {ExamId}) is already COMPLETED.", exam.ExamName, exam.ExamId);
+                throw new ValidationException($"Cannot schedule examination '{exam.ExamName}' because it has already been completed.");
             }
 
+            // 5. Resolve CampusId
+            var resolvedCampusId = request.CampusId.HasValue && request.CampusId.Value > 0
+                ? request.CampusId.Value
+                : (exam.CampusId ?? 1);
+            request.CampusId = resolvedCampusId;
+
+            // 6. Group Validation
+            if (request.GroupId.HasValue && request.GroupId.Value > 0 && exam.GroupId > 0 && request.GroupId.Value != exam.GroupId)
+            {
+                _logger.LogWarning("Group validation failed: Provided Group ID {ReqGroup} does not match Exam Group ID {ExamGroup} for Exam {ExamId}",
+                    request.GroupId.Value, exam.GroupId, exam.ExamId);
+                throw new ValidationException($"Provided Group ID {request.GroupId.Value} does not match the Examination's Group ID {exam.GroupId}.");
+            }
+            if (!request.GroupId.HasValue || request.GroupId.Value <= 0)
+            {
+                request.GroupId = exam.GroupId;
+            }
+
+            var subject = await _context.Subjects.AsNoTracking().FirstOrDefaultAsync(s => s.SubjectId == request.SubjectId);
+            if (subject == null)
+            {
+                _logger.LogWarning("Subject validation failed: Subject ID {SubjectId} does not exist in database.", request.SubjectId);
+                throw new ValidationException($"Subject with ID {request.SubjectId} does not exist.");
+            }
+
+            if (!subject.IsActive)
+            {
+                _logger.LogWarning("Subject validation failed: Subject '{SubjectName}' (ID {SubjectId}) is inactive.", subject.SubjectName, subject.SubjectId);
+                throw new ValidationException($"Subject '{subject.SubjectName}' (ID {request.SubjectId}) is inactive.");
+            }
+
+            if (exam.GroupId > 0 && subject.GroupId > 0 && subject.GroupId != exam.GroupId)
+            {
+                _logger.LogWarning("Subject validation failed: Subject {SubjectId} ('{SubjectName}') belongs to Group {SubGroup}, but Exam {ExamId} belongs to Group {ExamGroup}",
+                    subject.SubjectId, subject.SubjectName, subject.GroupId, exam.ExamId, exam.GroupId);
+                throw new ValidationException($"Subject '{subject.SubjectName}' (ID {request.SubjectId}) does not belong to the examination group (Exam Group: {exam.GroupId}, Subject Group: {subject.GroupId}).");
+            }
+
+            if (exam.BoardId > 0 && subject.BoardId > 0 && subject.BoardId != exam.BoardId)
+            {
+                _logger.LogWarning("Subject validation failed: Subject {SubjectId} belongs to Board {SubBoard}, but Exam {ExamId} belongs to Board {ExamBoard}",
+                    subject.SubjectId, subject.BoardId, exam.ExamId, exam.BoardId);
+                throw new ValidationException($"Subject '{subject.SubjectName}' (ID {request.SubjectId}) does not belong to the examination board (Exam Board: {exam.BoardId}, Subject Board: {subject.BoardId}).");
+            }
+
+            // Adjust examination date range if schedule is outside it
             if (exam.StartDate == default || exam.EndDate == default)
             {
                 if (exam.StartDate == default) exam.StartDate = request.ExamDate;
@@ -376,9 +603,55 @@ namespace CollegeManagement.API.Services.Implementations
                 await _examinationRepository.UpdateExaminationAsync(exam);
             }
 
-            if (request.EndTime <= request.StartTime)
+            // 6. Duplicate Schedule Checks within this Exam
+            var existingSchedules = await _examinationRepository.GetExamSchedulesAsync(request.ExaminationId);
+            if (existingSchedules != null)
             {
-                throw new ValidationException("End Time must be later than Start Time.");
+                foreach (var s in existingSchedules.Where(s => s.IsActive))
+                {
+                    if (s.SubjectId == request.SubjectId)
+                    {
+                        _logger.LogWarning("Duplicate schedule detected: Subject ID {SubId} already scheduled for Exam {ExamId} on {Date}",
+                            request.SubjectId, exam.ExamId, s.ExamDate);
+                        throw new ValidationException($"Subject '{subject.SubjectName}' is already scheduled for examination '{exam.ExamName}' on {s.ExamDate:yyyy-MM-dd}.");
+                    }
+
+                    if (s.ExamDate == request.ExamDate && !(request.EndTime <= s.StartTime || request.StartTime >= s.EndTime))
+                    {
+                        _logger.LogWarning("Schedule time overlap in Exam {ExamId}: {Start}-{End} overlaps with existing schedule {ExistStart}-{ExistEnd}",
+                            exam.ExamId, request.StartTime, request.EndTime, s.StartTime, s.EndTime);
+                        throw new ValidationException($"Examination '{exam.ExamName}' already has a subject scheduled during {s.StartTime:HH\\:mm} - {s.EndTime:HH\\:mm} on {request.ExamDate:yyyy-MM-dd}.");
+                    }
+                }
+            }
+
+            // 7. Room / Hall Validation & Capacity Checks
+            if (request.RoomId.HasValue && request.RoomId.Value > 0)
+            {
+                var room = await _context.Rooms.AsNoTracking().FirstOrDefaultAsync(r => r.RoomId == request.RoomId.Value);
+                if (room == null)
+                {
+                    _logger.LogWarning("Room validation failed: Room ID {RoomId} does not exist.", request.RoomId.Value);
+                    throw new ValidationException($"Room with ID {request.RoomId.Value} does not exist.");
+                }
+
+                if (!room.IsActive)
+                {
+                    _logger.LogWarning("Room validation failed: Room ID {RoomId} ('{RoomName}') is inactive.", room.RoomId, room.RoomName);
+                    throw new ValidationException($"Room '{room.RoomName ?? room.RoomNumber}' (ID {request.RoomId.Value}) is inactive.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Hall))
+                {
+                    request.Hall = !string.IsNullOrWhiteSpace(room.RoomNumber) ? room.RoomNumber : room.RoomName;
+                }
+
+                if (request.CandidateCount.HasValue && request.CandidateCount.Value > 0 && room.Capacity > 0 && request.CandidateCount.Value > room.Capacity)
+                {
+                    _logger.LogWarning("Room capacity exceeded: Room '{RoomName}' capacity {Capacity} < requested candidates {Count}",
+                        room.RoomName ?? room.RoomNumber, room.Capacity, request.CandidateCount.Value);
+                    throw new ValidationException($"Room '{room.RoomName ?? room.RoomNumber}' capacity ({room.Capacity}) is less than required candidate count ({request.CandidateCount.Value}).");
+                }
             }
 
             var hall = request.Hall ?? request.RoomNumber ?? string.Empty;
@@ -387,7 +660,98 @@ namespace CollegeManagement.API.Services.Implementations
                 var roomConflict = await _examinationRepository.HasRoomConflictAsync(request.ExamDate, request.StartTime, request.EndTime, hall);
                 if (roomConflict)
                 {
+                    _logger.LogWarning("Room conflict detected: Room/Hall '{Hall}' is already booked on {Date} from {Start} to {End}",
+                        hall, request.ExamDate, request.StartTime, request.EndTime);
                     throw new ValidationException($"Room/Hall '{hall}' is already booked for another examination during {request.StartTime:HH\\:mm} - {request.EndTime:HH\\:mm} on {request.ExamDate:yyyy-MM-dd}.");
+                }
+            }
+
+            // 8. Invigilator Validation & Conflict Checks
+            var invAssignments = ExtractInvigilatorAssignments(request.HallAssignments, request.InvigilatorId, hall);
+            if ((!request.InvigilatorId.HasValue || request.InvigilatorId.Value <= 0) && invAssignments.Count > 0)
+            {
+                request.InvigilatorId = invAssignments[0].invigilatorId;
+            }
+
+            if (request.InvigilatorId.HasValue && request.InvigilatorId.Value > 0)
+            {
+                int invId = request.InvigilatorId.Value;
+                string? invFirstName = null;
+                string? invLastName = null;
+                string? invStatus = null;
+                bool invIsDeleted = false;
+                bool found = false;
+
+                // 1. Query Staff table first (primary modern storage for teaching/non-teaching staff)
+                try
+                {
+                    var staff = await _context.Staffs.AsNoTracking()
+                        .Where(s => s.Id == invId)
+                        .Select(s => new { s.Id, s.FirstName, s.LastName, s.Status, s.IsDeleted })
+                        .FirstOrDefaultAsync();
+
+                    if (staff != null)
+                    {
+                        found = true;
+                        invFirstName = staff.FirstName;
+                        invLastName = staff.LastName;
+                        invStatus = staff.Status;
+                        invIsDeleted = staff.IsDeleted;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Staff table lookup failed for Invigilator ID {InvId}", invId);
+                }
+
+                // 2. Fallback to Faculties table (legacy)
+                if (!found)
+                {
+                    try
+                    {
+                        var fac = await _context.Faculties.AsNoTracking()
+                            .Where(f => f.Id == invId)
+                            .Select(f => new { f.Id, f.FirstName, f.LastName, f.Status, f.IsDeleted })
+                            .FirstOrDefaultAsync();
+
+                        if (fac != null)
+                        {
+                            found = true;
+                            invFirstName = fac.FirstName;
+                            invLastName = fac.LastName;
+                            invStatus = fac.Status;
+                            invIsDeleted = fac.IsDeleted;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Faculties table lookup failed for Invigilator ID {InvId}", invId);
+                    }
+                }
+
+                if (!found)
+                {
+                    _logger.LogWarning("Invigilator validation failed: Faculty/Staff ID {InvId} does not exist.", invId);
+                    throw new ValidationException($"Invigilator with ID {invId} does not exist.");
+                }
+
+                if (invIsDeleted || string.Equals(invStatus, "Inactive", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("Invigilator validation failed: Faculty/Staff ID {InvId} is inactive.", invId);
+                    throw new ValidationException($"Invigilator '{invFirstName}' is marked as inactive.");
+                }
+
+                if (string.IsNullOrWhiteSpace(request.Invigilator))
+                {
+                    request.Invigilator = $"{invFirstName} {invLastName}".Trim();
+                }
+
+                var isSubjectTeacher = await _examinationRepository.IsInvigilatorTeachingSubjectAsync(invId, request.SubjectId);
+                if (isSubjectTeacher)
+                {
+                    _logger.LogWarning("Invigilator conflict: Faculty {InvId} ('{InvName}') teaches Subject ID {SubId}",
+                        invId, request.Invigilator, request.SubjectId);
+                    throw new ValidationException($"Faculty '{request.Invigilator}' cannot be assigned as invigilator because they teach this subject.");
                 }
             }
 
@@ -397,18 +761,42 @@ namespace CollegeManagement.API.Services.Implementations
                 var invigilatorConflict = await _examinationRepository.HasInvigilatorConflictAsync(request.ExamDate, request.StartTime, request.EndTime, invigilator);
                 if (invigilatorConflict)
                 {
+                    _logger.LogWarning("Invigilator conflict detected: Invigilator '{Inv}' is already assigned on {Date} from {Start} to {End}",
+                        invigilator, request.ExamDate, request.StartTime, request.EndTime);
                     throw new ValidationException($"Invigilator '{invigilator}' is already assigned to another examination during {request.StartTime:HH\\:mm} - {request.EndTime:HH\\:mm} on {request.ExamDate:yyyy-MM-dd}.");
                 }
             }
 
+            // 9. Persist Schedule
             var schedule = _mapper.Map<ExamSchedule>(request);
-            schedule.CampusId = request.CampusId.HasValue && request.CampusId.Value > 0 ? request.CampusId.Value : (exam.CampusId ?? 1);
+            schedule.CampusId = resolvedCampusId;
             var createdSchedule = await _examinationRepository.CreateExamScheduleAsync(schedule);
 
-            var fullyLoadedSchedule = await _examinationRepository.GetExamScheduleByIdAsync(createdSchedule.ExamScheduleId);
+            // Assign invigilator(s) to schedule in InvigilatorAssignments
+            if (invAssignments.Count > 0)
+            {
+                await _examinationRepository.AssignInvigilatorHallsAsync(createdSchedule.ExamScheduleId, invAssignments);
+            }
+
+            // 10. Update Draft Exam Status to SCHEDULED
+            if (string.Equals(exam.Status, "DRAFT", StringComparison.OrdinalIgnoreCase))
+            {
+                exam.Status = "SCHEDULED";
+                await _examinationRepository.UpdateExaminationAsync(exam);
+            }
+
+            // 11. Retrieve fully loaded schedule with resilient fallback
+            ExamSchedule? fullyLoadedSchedule = null;
+            if (createdSchedule.ExamScheduleId > 0)
+            {
+                fullyLoadedSchedule = await _examinationRepository.GetExamScheduleByIdAsync(createdSchedule.ExamScheduleId);
+            }
+
             if (fullyLoadedSchedule == null)
             {
-                throw new InvalidOperationException("Unable to retrieve created exam schedule.");
+                createdSchedule.Subject = subject;
+                createdSchedule.Examination = exam;
+                fullyLoadedSchedule = createdSchedule;
             }
 
             EvictExamCache(request.ExaminationId);
@@ -508,6 +896,13 @@ namespace CollegeManagement.API.Services.Implementations
             schedule.CampusId = request.CampusId.HasValue && request.CampusId.Value > 0 ? request.CampusId.Value : (parentExam?.CampusId ?? schedule.CampusId);
 
             await _examinationRepository.UpdateExamScheduleAsync(schedule);
+
+            var updateInvAssignments = ExtractInvigilatorAssignments(request.HallAssignments, request.InvigilatorId, schedule.Hall);
+            if (updateInvAssignments.Count > 0)
+            {
+                await _examinationRepository.AssignInvigilatorHallsAsync(examScheduleId, updateInvAssignments);
+            }
+
             EvictExamCache(schedule.ExaminationId);
 
             var updatedSchedule = await _examinationRepository.GetExamScheduleByIdAsync(examScheduleId);
@@ -601,7 +996,12 @@ namespace CollegeManagement.API.Services.Implementations
                     var schedule = _mapper.Map<ExamSchedule>(schReq);
                     schedule.ExaminationId = examinationId;
                     schedule.IsActive = true;
-                    await _examinationRepository.CreateExamScheduleAsync(schedule);
+                    var created = await _examinationRepository.CreateExamScheduleAsync(schedule);
+                    var pubInvAssignments = ExtractInvigilatorAssignments(schReq.HallAssignments, schReq.InvigilatorId, created.Hall);
+                    if (pubInvAssignments.Count > 0)
+                    {
+                        await _examinationRepository.AssignInvigilatorHallsAsync(created.ExamScheduleId, pubInvAssignments);
+                    }
                 }
                 schedules = (await _examinationRepository.GetExamSchedulesAsync(examinationId)).Where(s => s.IsActive).ToList();
             }
@@ -766,6 +1166,10 @@ namespace CollegeManagement.API.Services.Implementations
                 };
 
                 var created = await _examinationRepository.CreateExamScheduleAsync(schedule);
+                if (request.InvigilatorId.HasValue && request.InvigilatorId.Value > 0)
+                {
+                    await _examinationRepository.AssignInvigilatorHallsAsync(created.ExamScheduleId, new[] { (request.InvigilatorId.Value, hall ?? string.Empty) });
+                }
                 var fullyLoaded = await _examinationRepository.GetExamScheduleByIdAsync(created.ExamScheduleId);
                 if (fullyLoaded != null)
                 {

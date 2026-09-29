@@ -52,6 +52,7 @@ BEGIN
     SELECT 
         e.ExamId,
         e.ExamId AS ExaminationId,
+        COALESCE(e.CampusId, 1) AS CampusId,
         COALESCE(e.ExamCode, CONCAT('EXM-', YEAR(e.StartDate), '-', LPAD(e.ExamId, 3, '0'))) AS ExamCode,
         e.ExamName,
         e.BoardId,
@@ -99,6 +100,7 @@ BEGIN
     LEFT JOIN Programs p ON p.ProgramId = e.ProgramId
     LEFT JOIN AssessmentTypes at ON at.AssessmentTypeId = e.AssessmentTypeId
     WHERE e.IsActive = 1
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR COALESCE(e.CampusId, 1) = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR e.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR e.AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR e.AcademicLevelId = p_AcademicLevelId)
@@ -128,6 +130,7 @@ BEGIN
     SELECT 
         e.ExamId,
         e.ExamId AS ExaminationId,
+        COALESCE(e.CampusId, 1) AS CampusId,
         COALESCE(e.ExamCode, CONCAT('EXM-', YEAR(e.StartDate), '-', LPAD(e.ExamId, 3, '0'))) AS ExamCode,
         e.ExamName,
         e.BoardId,

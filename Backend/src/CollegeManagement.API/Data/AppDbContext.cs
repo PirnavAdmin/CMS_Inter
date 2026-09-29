@@ -444,6 +444,25 @@ namespace CollegeManagement.API.Data
                       .HasForeignKey(es => es.SubjectId)
                       .OnDelete(DeleteBehavior.Restrict);
             });
+
+            modelBuilder.Entity<InvigilatorAssignment>(entity =>
+            {
+                entity.ToTable("InvigilatorAssignments");
+                entity.HasKey(ia => ia.InvigilatorAssignmentId);
+                entity.Property(ia => ia.InvigilatorAssignmentId).HasColumnName("InvigilatorAssignmentId");
+                entity.Property(ia => ia.ExamScheduleId).HasColumnName("ExamScheduleId");
+                entity.Property(ia => ia.InvigilatorId).HasColumnName("InvigilatorId");
+                entity.Property(ia => ia.HallNumber).HasColumnName("HallNumber").HasMaxLength(100);
+                entity.Property(ia => ia.AssignedAt).HasColumnName("AssignedAt");
+                entity.HasOne(ia => ia.ExamSchedule)
+                      .WithMany(es => es.InvigilatorAssignments)
+                      .HasForeignKey(ia => ia.ExamScheduleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(ia => ia.InvigilatorStaff)
+                      .WithMany()
+                      .HasForeignKey(ia => ia.InvigilatorId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
           
 
 
@@ -1194,6 +1213,7 @@ namespace CollegeManagement.API.Data
 
             modelBuilder.Entity<Faculty>(entity =>
             {
+                entity.Ignore(f => f.Aadhaar);
                 entity.HasOne(f => f.DesignationRef)
                     .WithMany(d => d.Faculties)
                     .HasForeignKey(f => f.DesignationId)

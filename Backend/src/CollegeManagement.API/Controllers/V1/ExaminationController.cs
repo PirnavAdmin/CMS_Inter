@@ -301,44 +301,75 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var options = new JsonSerializerOptions
             {
-                PropertyNameCaseInsensitive = true
+                PropertyNameCaseInsensitive = true,
+                NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString
             };
             options.Converters.Add(new Helpers.DateOnlyJsonConverter());
+            options.Converters.Add(new Helpers.NullableDateOnlyJsonConverter());
+            options.Converters.Add(new Helpers.TimeOnlyJsonConverter());
+            options.Converters.Add(new Helpers.NullableTimeOnlyJsonConverter());
+            options.Converters.Add(new Helpers.TimeSpanJsonConverter());
+            options.Converters.Add(new Helpers.NullableTimeSpanJsonConverter());
 
             var scheduleRequests = new List<CreateExamScheduleRequest>();
 
-            if (rawBody.ValueKind == JsonValueKind.Array)
+            try
             {
-                var list = JsonSerializer.Deserialize<List<CreateExamScheduleRequest>>(rawBody.GetRawText(), options);
-                if (list != null) scheduleRequests.AddRange(list);
-            }
-            else if (rawBody.ValueKind == JsonValueKind.Object)
-            {
-                if (rawBody.TryGetProperty("schedules", out var schedulesElement) && schedulesElement.ValueKind == JsonValueKind.Array)
+                if (rawBody.ValueKind == JsonValueKind.Array)
                 {
-                    var list = JsonSerializer.Deserialize<List<CreateExamScheduleRequest>>(schedulesElement.GetRawText(), options);
+                    var list = JsonSerializer.Deserialize<List<CreateExamScheduleRequest>>(rawBody.GetRawText(), options);
                     if (list != null) scheduleRequests.AddRange(list);
                 }
-                else
+                else if (rawBody.ValueKind == JsonValueKind.Object)
                 {
-                    var single = JsonSerializer.Deserialize<CreateExamScheduleRequest>(rawBody.GetRawText(), options);
-                    if (single != null)
+                    if (rawBody.TryGetProperty("schedules", out var schedulesElement) && schedulesElement.ValueKind == JsonValueKind.Array)
                     {
-                        if (single.Schedules != null && single.Schedules.Any())
+                        var list = JsonSerializer.Deserialize<List<CreateExamScheduleRequest>>(schedulesElement.GetRawText(), options);
+                        if (list != null) scheduleRequests.AddRange(list);
+                    }
+                    else
+                    {
+                        var single = JsonSerializer.Deserialize<CreateExamScheduleRequest>(rawBody.GetRawText(), options);
+                        if (single != null)
                         {
-                            scheduleRequests.AddRange(single.Schedules);
-                        }
-                        else
-                        {
-                            scheduleRequests.Add(single);
+                            if (single.Schedules != null && single.Schedules.Any())
+                            {
+                                scheduleRequests.AddRange(single.Schedules);
+                            }
+                            else
+                            {
+                                scheduleRequests.Add(single);
+                            }
                         }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deserialize examination schedule payload for ExaminationId: {ExamId}. Payload: {Payload}",
+                    examinationId, rawBody.GetRawText());
+                return BadRequest(new
+                {
+                    statusCode = StatusCodes.Status400BadRequest,
+                    success = false,
+                    message = $"Invalid examination schedule payload format: {ex.Message}",
+                    errors = new[] { ex.Message },
+                    examinationId = examinationId
+                });
+            }
 
             if (!scheduleRequests.Any())
             {
-                return BadRequest(new { message = "At least one exam schedule entry is required." });
+                _logger.LogWarning("Exam schedule creation failed: No schedule items provided for Examination ID: {ExamId}. Payload: {Payload}",
+                    examinationId, rawBody.GetRawText());
+                return BadRequest(new
+                {
+                    statusCode = StatusCodes.Status400BadRequest,
+                    success = false,
+                    message = "At least one exam schedule entry is required.",
+                    errors = new[] { "Request payload must contain at least one schedule entry." },
+                    examinationId = examinationId
+                });
             }
 
             var effectiveExamId = examinationId > 0
@@ -346,17 +377,61 @@ namespace CollegeManagement.API.Controllers.V1
                 : (scheduleRequests.FirstOrDefault(s => s.ExaminationId > 0)?.ExaminationId ?? 0);
 
             var createdList = new List<ExamScheduleResponse>();
-            foreach (var item in scheduleRequests)
-            {
-                item.CampusId = ResolveCampusId(item.CampusId);
-                if (item.ExaminationId <= 0 && effectiveExamId > 0)
-                {
-                    item.ExaminationId = effectiveExamId;
-                }
 
-                _logger.LogInformation("Creating schedule for Examination ID: {ExamId}, Subject ID: {SubId}", item.ExaminationId, item.SubjectId);
-                var res = await _examinationService.CreateExamScheduleAsync(item);
-                createdList.Add(res);
+            try
+            {
+                foreach (var item in scheduleRequests)
+                {
+                    item.CampusId = ResolveCampusId(item.CampusId);
+                    if (item.ExaminationId <= 0 && effectiveExamId > 0)
+                    {
+                        item.ExaminationId = effectiveExamId;
+                    }
+
+                    _logger.LogInformation("Creating schedule for Examination ID: {ExamId}, Subject ID: {SubId}, Date: {Date}, Time: {Start}-{End}",
+                        item.ExaminationId, item.SubjectId, item.ExamDate, item.StartTime, item.EndTime);
+                    var res = await _examinationService.CreateExamScheduleAsync(item);
+                    createdList.Add(res);
+                }
+            }
+            catch (ValidationException vex)
+            {
+                _logger.LogWarning("Validation failure while scheduling Examination {ExamId}: {Message}. Payload: {Payload}",
+                    effectiveExamId, vex.Message, rawBody.GetRawText());
+                return BadRequest(new
+                {
+                    statusCode = StatusCodes.Status400BadRequest,
+                    success = false,
+                    message = vex.Message,
+                    errors = new[] { vex.Message },
+                    examinationId = effectiveExamId
+                });
+            }
+            catch (InvalidOperationException ioex)
+            {
+                _logger.LogWarning("Business rule failure while scheduling Examination {ExamId}: {Message}. Payload: {Payload}",
+                    effectiveExamId, ioex.Message, rawBody.GetRawText());
+                return BadRequest(new
+                {
+                    statusCode = StatusCodes.Status400BadRequest,
+                    success = false,
+                    message = ioex.Message,
+                    errors = new[] { ioex.Message },
+                    examinationId = effectiveExamId
+                });
+            }
+            catch (ArgumentException aex)
+            {
+                _logger.LogWarning("Argument failure while scheduling Examination {ExamId}: {Message}. Payload: {Payload}",
+                    effectiveExamId, aex.Message, rawBody.GetRawText());
+                return BadRequest(new
+                {
+                    statusCode = StatusCodes.Status400BadRequest,
+                    success = false,
+                    message = aex.Message,
+                    errors = new[] { aex.Message },
+                    examinationId = effectiveExamId
+                });
             }
 
             if (createdList.Count == 1 && rawBody.ValueKind != JsonValueKind.Array && (!rawBody.TryGetProperty("schedules", out var sArr) || sArr.GetArrayLength() == 1))

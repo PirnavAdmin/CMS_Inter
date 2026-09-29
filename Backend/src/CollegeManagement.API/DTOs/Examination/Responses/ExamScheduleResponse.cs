@@ -32,5 +32,6 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
         public decimal MaxMarks { get; set; } = 100.00m;
         public decimal PassingMarks { get; set; } = 35.00m;
         public string Status { get; set; } = "Scheduled";
+        public System.Collections.Generic.List<InvigilatorAssignmentResponse> InvigilatorAssignments { get; set; } = new();
     }
 }
