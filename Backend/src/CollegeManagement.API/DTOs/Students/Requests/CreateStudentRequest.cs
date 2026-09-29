@@ -136,9 +136,6 @@ namespace CollegeManagement.API.DTOs.Students
         [MaxLength(20)]
         public string? FatherMobile { get; set; }
 
-        [MaxLength(150)]
-        public string? FatherEmail { get; set; }
-
         // Mother
         [MaxLength(150)]
         public string? MotherName { get; set; }
@@ -149,9 +146,6 @@ namespace CollegeManagement.API.DTOs.Students
         [MaxLength(20)]
         public string? MotherMobile { get; set; }
 
-        [MaxLength(150)]
-        public string? MotherEmail { get; set; }
-
         // Guardian
         [MaxLength(150)]
         public string? GuardianName { get; set; }
@@ -160,7 +154,7 @@ namespace CollegeManagement.API.DTOs.Students
         public string? GuardianMobile { get; set; }
 
         [MaxLength(150)]
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         public decimal? AnnualIncome { get; set; }
 
@@ -232,3 +226,4 @@ namespace CollegeManagement.API.DTOs.Students
         public string? HallTicketNumber { get; set; }
     }
 }
+

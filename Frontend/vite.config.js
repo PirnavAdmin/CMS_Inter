@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev";
+  const apiBaseUrl = env.VITE_API_BASE_URL || "https://superior-hatchery-gibberish.ngrok-free.dev";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -33,8 +33,8 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: !isHttpsApi ? true : false,
           agent: isHttpsApi ? new https.Agent({ keepAlive: false, rejectUnauthorized: false }) : undefined,
-          proxyTimeout: 10000,
-          timeout: 10000,
+          proxyTimeout: 120000,
+          timeout: 120000,
           headers: {
             "ngrok-skip-browser-warning": "true",
           },

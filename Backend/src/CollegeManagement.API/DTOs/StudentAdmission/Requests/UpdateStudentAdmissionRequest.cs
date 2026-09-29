@@ -81,8 +81,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? FatherMobile { get; set; }
 
-        public string? FatherEmail { get; set; }
-
 
         // Mother - Optional
         public string? MotherName { get; set; }
@@ -91,15 +89,13 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? MotherMobile { get; set; }
 
-        public string? MotherEmail { get; set; }
-
 
         // Guardian - Optional
         public string? GuardianName { get; set; }
 
         public string? GuardianMobile { get; set; }
 
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
 
         // Other
@@ -156,3 +152,4 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public string? HallTicketNumber { get; set; }
     }
 }
+

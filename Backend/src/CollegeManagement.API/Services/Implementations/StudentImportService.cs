@@ -785,14 +785,12 @@ namespace CollegeManagement.API.Services.Implementations
                 FatherName = r.FatherName?.Trim(),
                 FatherOccupation = r.FatherOccupation?.Trim(),
                 FatherMobile = r.FatherMobile?.Trim(),
-                FatherEmail = r.FatherEmail?.Trim(),
                 MotherName = r.MotherName?.Trim(),
                 MotherOccupation = r.MotherOccupation?.Trim(),
                 MotherMobile = r.MotherMobile?.Trim(),
-                MotherEmail = r.MotherEmail?.Trim(),
                 GuardianName = r.GuardianName?.Trim(),
                 GuardianMobile = r.GuardianMobile?.Trim(),
-                GuardianEmail = r.GuardianEmail?.Trim(),
+                ParentGuardianEmail = r.ParentGuardianEmail?.Trim(),
                 Address = r.Address?.Trim(),
                 City = r.City?.Trim(),
                 District = r.District?.Trim(),
@@ -952,14 +950,12 @@ namespace CollegeManagement.API.Services.Implementations
             public string? FatherName { get; set; }
             public string? FatherOccupation { get; set; }
             public string? FatherMobile { get; set; }
-            public string? FatherEmail { get; set; }
             public string? MotherName { get; set; }
             public string? MotherOccupation { get; set; }
             public string? MotherMobile { get; set; }
-            public string? MotherEmail { get; set; }
             public string? GuardianName { get; set; }
             public string? GuardianMobile { get; set; }
-            public string? GuardianEmail { get; set; }
+            public string? ParentGuardianEmail { get; set; }
             public string? Address { get; set; }
             public string? City { get; set; }
             public string? District { get; set; }
@@ -985,3 +981,4 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+

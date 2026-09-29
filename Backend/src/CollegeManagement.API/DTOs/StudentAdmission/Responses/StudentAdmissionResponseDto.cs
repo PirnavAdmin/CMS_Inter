@@ -83,8 +83,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? FatherMobile { get; set; }
 
-        public string? FatherEmail { get; set; }
-
 
         // Mother
 
@@ -94,8 +92,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? MotherMobile { get; set; }
 
-        public string? MotherEmail { get; set; }
-
 
         // Guardian
 
@@ -103,7 +99,7 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? GuardianMobile { get; set; }
 
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
 
         // Other
@@ -203,3 +199,4 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public List<int> SelectedFeeStructureComponentIds { get; set; } = new();
     }
 }
+

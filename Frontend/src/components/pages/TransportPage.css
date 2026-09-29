@@ -295,12 +295,13 @@
 }
 
 .cms-transport-form-modal .cms-field > label .req,
-.cms-transport-add-driver-modal .transport-required,
-.cms-transport-add-attendant-modal .transport-required {
-  display: inline;
+.cms-transport-form-modal .required-star,
+.cms-transport-add-driver-modal .required-star,
+.cms-transport-add-attendant-modal .required-star {
+  display: inline-flex;
   flex: 0 0 auto;
   margin-left: 2px;
-  color: var(--cms-red, #dc2626);
+  color: #dc2626 !important;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -349,10 +350,6 @@
   gap: 4px;
   min-height: 36px;
   line-height: 1.3;
-}
-
-.cms-transport-pickup-modal .cms-field label .req {
-  color: var(--cms-danger);
 }
 
 .cms-transport-pickup-modal .cms-field input,
@@ -1096,6 +1093,213 @@
   .cms-transport-status-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+/* Transport-only dark theme: higher contrast without changing shared CMS surfaces. */
+[data-theme="dark"] .cms-content:has(> .cms-transport-page) {
+  background: linear-gradient(135deg, #0c1912 0%, #102319 54%, #0d1c14 100%);
+}
+[data-theme="dark"] .cms-content:has(> .cms-transport-page) > .cms-page-head h1,
+[data-theme="dark"] .cms-content:has(> .cms-transport-page) > .cms-page-head h2 {
+  color: #f5faf7;
+}
+[data-theme="dark"] .cms-content:has(> .cms-transport-page) > .cms-page-head p {
+  color: #bdcbc3;
+}
+[data-theme="dark"] .cms-transport-page {
+  border-radius: 14px;
+  padding: 2px;
+  background: #0d1b14;
+  color: #f1f7f3;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-card {
+  border-color: #294536;
+  background: #122219;
+  box-shadow: 0 8px 20px rgba(3, 12, 8, 0.24);
+}
+
+[data-theme="dark"] .cms-transport-page .cms-card-head {
+  border-color: #294536;
+  background: #14271c;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-card-head h2,
+[data-theme="dark"] .cms-transport-page .cms-card-head strong,
+[data-theme="dark"] .cms-transport-page .cms-strong,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat strong,
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric strong,
+[data-theme="dark"] .cms-transport-page .cms-transport-trip strong,
+[data-theme="dark"] .cms-transport-page .cms-transport-route-distribution strong {
+  color: #f5faf7;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-card-head p,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat small,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat em,
+[data-theme="dark"] .cms-transport-page .cms-transport-trip small,
+[data-theme="dark"] .cms-transport-page .cms-transport-route-distribution small,
+[data-theme="dark"] .cms-transport-page .cms-transport-empty,
+[data-theme="dark"] .cms-transport-page .cms-transport-pagination,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter {
+  color: #b9c9c0;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tabs {
+  border-color: #355744;
+  background: #102018;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tab {
+  color: #bdccc3;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tab:hover {
+  background: #1b3526;
+  color: #f4f9f6;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tab.is-active {
+  background: linear-gradient(135deg, #789600, #9abd08);
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(125, 157, 0, 0.24);
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tabs.is-compact .cms-transport-tab.is-active {
+  border-color: #789934;
+  background: #293d16;
+  color: #d9f48d;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-stat {
+  border-color: #38543f;
+  background: #17301d;
+  box-shadow: 0 7px 16px rgba(2, 12, 7, 0.22);
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(1) { border-color: #587520; background: linear-gradient(135deg, #1b381b, #243f18); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(2) { border-color: #167e58; background: linear-gradient(135deg, #103b2a, #12472f); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(3) { border-color: #8a7217; background: linear-gradient(135deg, #383612, #493d12); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(4) { border-color: #694095; background: linear-gradient(135deg, #2f2141, #39244e); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(5) { border-color: #078967; background: linear-gradient(135deg, #0a3f30, #07523b); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(6) { border-color: #a16317; background: linear-gradient(135deg, #483311, #5b3d0e); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(7),
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(8) { border-color: #9d3434; background: linear-gradient(135deg, #3c1d1d, #4c2020); }
+
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-icon {
+  background: #526d0c;
+  color: #edff9e;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
+}
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(2) .cms-transport-stat-icon,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(5) .cms-transport-stat-icon { background: #007a55; color: #baffdf; }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(3) .cms-transport-stat-icon { background: #7b6500; color: #fff3a3; }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(4) .cms-transport-stat-icon { background: #66369b; color: #f0dcff; }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(6) .cms-transport-stat-icon { background: #b45f00; color: #fff1cf; }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(7) .cms-transport-stat-icon,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(8) .cms-transport-stat-icon { background: #a51f2b; color: #ffe5e7; }
+
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric {
+  border-color: #3c5146;
+  background: #27342e;
+}
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric span { color: #d4ded8; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(1) { border-color: #72c49d; background: #b9f2d5; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(1) span,
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(1) strong { color: #075934; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(2) { border-color: #07865d; background: #07583e; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(3) { border-color: #74aee5; background: #b9ddfb; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(3) span,
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(3) strong { color: #094e86; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(4) { border-color: #a9780a; background: #6a4c05; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(5) { border-color: #4a5b53; background: #293630; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(6) { border-color: #a43b3b; background: #572424; }
+
+[data-theme="dark"] .cms-transport-page .cms-transport-search,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter select,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter input {
+  border-color: #3a5948;
+  background: #172920;
+  color: #eef6f1;
+}
+[data-theme="dark"] .cms-transport-page .cms-transport-search:focus-within,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter select:focus,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter input:focus {
+  border-color: #91ad2a;
+  box-shadow: 0 0 0 3px rgba(145, 173, 42, 0.16);
+  outline: 0;
+}
+[data-theme="dark"] .cms-transport-page input::placeholder { color: #91a399; }
+[data-theme="dark"] .cms-transport-page select option { background: #172920; color: #eef6f1; }
+
+[data-theme="dark"] .cms-transport-page .cms-table-wrap {
+  border-color: #304c3c;
+  background: #122219;
+}
+[data-theme="dark"] .cms-transport-page .cms-table thead,
+[data-theme="dark"] .cms-transport-page .cms-table th { background: #1c3024; color: #d6e1da; }
+[data-theme="dark"] .cms-transport-page .cms-table td { border-color: #294536; color: #e6eee9; background: #122219; }
+[data-theme="dark"] .cms-transport-page .cms-table tbody tr:hover td { background: #193024; }
+
+[data-theme="dark"] .cms-transport-page .cms-btn-ghost,
+[data-theme="dark"] .cms-transport-page .cms-action-btn,
+[data-theme="dark"] .cms-transport-page .cms-transport-details-btn {
+  border-color: #42614f;
+  background: #172a20;
+  color: #dce8e1;
+}
+[data-theme="dark"] .cms-transport-page .cms-btn-ghost:hover,
+[data-theme="dark"] .cms-transport-page .cms-action-btn:hover,
+[data-theme="dark"] .cms-transport-page .cms-transport-details-btn:hover {
+  border-color: #91ad2a;
+  background: #294017;
+  color: #edffad;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-trip,
+[data-theme="dark"] .cms-transport-page .cms-transport-route-distribution > div,
+[data-theme="dark"] .cms-transport-page .cms-transport-gps-card,
+[data-theme="dark"] .cms-transport-page .cms-transport-info-grid span {
+  border-color: #304c3c;
+  background: #172a20;
+}
+[data-theme="dark"] .cms-transport-page .cms-transport-trip:hover,
+[data-theme="dark"] .cms-transport-page .cms-transport-route-distribution > div:hover { border-color: #698834; background: #20391f; }
+[data-theme="dark"] .cms-transport-page .cms-transport-progress { background: #293d32; }
+[data-theme="dark"] .cms-transport-page .cms-transport-warning { border-color: #a06c18; background: #49350f; color: #fff4d4; }
+[data-theme="dark"] .cms-transport-page .cms-transport-warning em { background: #7a4b08; color: #ffe2a3; }
+
+[data-theme="dark"] .cms-modal.cms-transport-form-modal,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal,
+[data-theme="dark"] .cms-modal.cms-transport-detail-modal,
+[data-theme="dark"] .cms-modal.cms-transport-trip-detail-modal {
+  border-color: #345342;
+  background: #13241b;
+  color: #edf5f0;
+}
+[data-theme="dark"] .cms-modal.cms-transport-form-modal .cms-modal-head,
+[data-theme="dark"] .cms-modal.cms-transport-form-modal .cms-modal-foot,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal .cms-modal-head,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal .cms-modal-foot,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal .cms-modal-head,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal .cms-modal-foot,
+[data-theme="dark"] .cms-modal.cms-transport-detail-modal .cms-modal-head,
+[data-theme="dark"] .cms-modal.cms-transport-trip-detail-modal .cms-modal-head {
+  border-color: #304c3c;
+  background: #172a20;
+}
+[data-theme="dark"] .cms-modal.cms-transport-form-modal input,
+[data-theme="dark"] .cms-modal.cms-transport-form-modal select,
+[data-theme="dark"] .cms-modal.cms-transport-form-modal textarea,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal input,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal select,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal input,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal select {
+  border-color: #3b5b49;
+  background: #102018;
+  color: #eef6f1;
 }
 
 @media (max-width: 900px) {

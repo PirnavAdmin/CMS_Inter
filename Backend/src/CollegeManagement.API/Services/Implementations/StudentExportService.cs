@@ -133,16 +133,14 @@ namespace CollegeManagement.API.Services.Implementations
                 FatherName = student.FatherName,
                 FatherOccupation = student.FatherOccupation,
                 FatherMobile = student.FatherMobile,
-                FatherEmail = student.FatherEmail,
 
                 MotherName = student.MotherName,
                 MotherOccupation = student.MotherOccupation,
                 MotherMobile = student.MotherMobile,
-                MotherEmail = student.MotherEmail,
 
                 GuardianName = student.GuardianName,
                 GuardianMobile = student.GuardianMobile,
-                GuardianEmail = student.GuardianEmail,
+                ParentGuardianEmail = student.ParentGuardianEmail,
                 AnnualIncome = student.AnnualIncome,
 
                 PreviousSchool = student.PreviousSchool,
@@ -496,3 +494,4 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+

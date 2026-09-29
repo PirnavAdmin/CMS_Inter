@@ -1207,6 +1207,7 @@
   border: 1px solid var(--cms-border);
   border-radius: 12px;
   background: var(--cms-subtle);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
 }
 
 .exam-allocation-summary {
@@ -1216,6 +1217,7 @@
   gap: 12px 20px;
   color: var(--cms-muted);
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .exam-allocation-summary .cms-btn {
@@ -1231,6 +1233,24 @@
   border: 1px solid var(--cms-border);
   border-radius: 10px;
   background: var(--cms-surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.035);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.exam-hall-row:focus-within {
+  border-color: var(--cms-primary, #647a00);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary, #647a00) 12%, transparent);
+}
+
+.exam-hall-row .cms-field {
+  min-width: 0;
+}
+
+.exam-hall-row .cms-field > label {
+  margin-bottom: 6px;
+  color: var(--cms-text, #334155);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .exam-remove-hall {
@@ -1332,7 +1352,7 @@
   .examination-form-page .cms-form-grid.cols-2,
   .exam-schedule-card .cms-form-grid.cols-3,
   .exam-hall-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .exam-table-toolbar {
