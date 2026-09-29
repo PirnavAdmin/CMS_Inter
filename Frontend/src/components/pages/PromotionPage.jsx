@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, Users, UserCheck, UserX, Megaphone, RotateCcw } from "lucide-react";
+import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCircle2, Users, UserCheck, UserX, Megaphone, RotateCcw, ChevronDown } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Field, Modal, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -72,6 +72,37 @@ const isNextAcademicYear = (sourceYear, targetYear) => {
   return Boolean(source && target && target.start === source.start + 1);
 };
 
+const CAMPUS_TRANSFER_OPTIONS = {
+  campuses: ["Main Campus (HQ)", "North Campus", "City Campus", "Junior College Campus"],
+  reasons: ["Parent Request", "Change of Residence", "Transportation Convenience", "Academic Requirement", "Administrative Transfer", "Other"],
+};
+
+const CAMPUS_TRANSFER_STUDENTS = [
+  ["ADM-52", "Sahithi R", "1", "First Year", "MPC", "MPC Regular", "MPC-A"],
+  ["ADM-2026-001", "Rahul Kumar", "101", "First Year", "MPC", "MPC Regular", "MPC-A"],
+  ["ADM-2026-002", "Priya Reddy", "102", "First Year", "MPC", "MPC Regular", "MPC-A"],
+  ["ADM-2026-003", "Sai Kiran", "103", "First Year", "MPC", "MPC Regular", "MPC-A"],
+  ["ADM-2026-004", "Anjali Rao", "104", "Second Year", "BiPC", "BiPC Regular", "BiPC-A"],
+].map(([admissionNo, name, rollNo, level, group, program, section]) => ({
+  id: admissionNo,
+  admissionNo,
+  name,
+  rollNo,
+  campus: "Main Campus (HQ)",
+  level,
+  group,
+  program,
+  section,
+  status: "Active",
+}));
+
+const CAMPUS_TRANSFER_APPROVERS = [
+  { id: "principal-main", name: "Principal – Main Campus", detail: "Main Campus (HQ) • Principal" },
+  { id: "principal-destination", name: "Principal – Destination Campus", detail: "Selected Destination Campus • Principal" },
+  { id: "college-admin", name: "College Administrator", detail: "All Campuses • Administrator" },
+  { id: "academic-admin", name: "Academic Administrator", detail: "Academic Office • Administrator" },
+];
+
 const getMasterFailureMessage = (responses, names) => {
   const failures = responses
     .map((result, index) => result.status === "rejected" ? { name: names[index], error: result.reason } : null)
@@ -141,7 +172,8 @@ const isEligible = (student) => {
 
 export default function PromotionPage({ screen = "promotion" }) {
   const navigate = useNavigate();
-  const activeTab = screen;
+  const [localTab, setLocalTab] = useState("");
+  const activeTab = localTab || screen;
 
   // Consume global Board & Academic Year from Navbar Context
   const {
@@ -746,6 +778,7 @@ export default function PromotionPage({ screen = "promotion" }) {
         activeTab === "promotion" ? "Student Promotion" :
         activeTab === "single" ? "Single Student Promotion" :
         activeTab === "allocation" ? "Program & Section Allocation" :
+        activeTab === "transfer" ? "Campus Transfer" :
         activeTab === "history" ? "Promotion History" :
         "Promotion Reports"
       }
@@ -758,13 +791,21 @@ export default function PromotionPage({ screen = "promotion" }) {
             ["promotion", "Student Promotion", "/dashboard/promotions/eligible"],
             ["single", "Single Student", "/dashboard/promotions/single"],
             ["allocation", "Program & Section Allocation", "/dashboard/promotions/allocation"],
+            ["transfer", "Campus Transfer", null],
             ["history", "Promotion History", "/dashboard/promotions/history"],
             ["report", "Reports", "/dashboard/promotions/report"],
           ].map(([value, label, path]) => (
             <button
               key={value}
               className={activeTab === value ? "is-active" : ""}
-              onClick={() => { navigate(path); setError(""); }}
+              onClick={() => {
+                setError("");
+                if (value === "transfer") setLocalTab("transfer");
+                else {
+                  setLocalTab("");
+                  navigate(path);
+                }
+              }}
             >
               {label}
             </button>
@@ -1037,6 +1078,8 @@ export default function PromotionPage({ screen = "promotion" }) {
           />
         ) : null}
 
+        {activeTab === "transfer" ? <CampusTransferScreen onSuccess={setToast} /> : null}
+
         {activeTab === "history" ? (
           <section className="cms-card promotion-card">
             <div className="cms-card-head">
@@ -1226,6 +1269,264 @@ export default function PromotionPage({ screen = "promotion" }) {
       <Toast message={toast} onClose={() => setToast("")} />
     </DashboardLayout>
   );
+}
+
+function CampusTransferScreen({ onSuccess }) {
+  const sourceCampus = "Main Campus (HQ)";
+  const emptyForm = { campus: "", effectiveDate: "", reason: "", remarks: "" };
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentOpen, setStudentOpen] = useState(false);
+  const [student, setStudent] = useState(null);
+  const [approverQuery, setApproverQuery] = useState("");
+  const [approverOpen, setApproverOpen] = useState(false);
+  const [approver, setApprover] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [errors, setErrors] = useState({});
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [requestStatus, setRequestStatus] = useState("");
+  const [approvalMessage, setApprovalMessage] = useState("");
+
+  const change = (name, value) => {
+    setForm((current) => ({ ...current, [name]: value }));
+    setErrors((current) => ({ ...current, [name]: undefined }));
+    if (name === "campus" && value === sourceCampus) {
+      setErrors((current) => ({ ...current, campus: "Destination campus must be different from source campus." }));
+    }
+  };
+
+  const filteredStudents = useMemo(() => {
+    const query = studentQuery.trim().toLowerCase();
+    if (!query) return CAMPUS_TRANSFER_STUDENTS;
+    return CAMPUS_TRANSFER_STUDENTS.filter((item) => `${item.name} ${item.admissionNo}`.toLowerCase().includes(query));
+  }, [studentQuery]);
+  const filteredApprovers = useMemo(() => {
+    const query = approverQuery.trim().toLowerCase();
+    if (!query) return CAMPUS_TRANSFER_APPROVERS;
+    return CAMPUS_TRANSFER_APPROVERS.filter((item) => `${item.name} ${item.detail}`.toLowerCase().includes(query));
+  }, [approverQuery]);
+
+  const validate = () => {
+    const nextErrors = {};
+    if (!student) nextErrors.student = "Student is required.";
+    if (!form.campus) nextErrors.campus = "Destination Campus is required.";
+    if (form.campus === sourceCampus) nextErrors.campus = "Destination campus must be different from source campus.";
+    if (!form.effectiveDate) nextErrors.effectiveDate = "Transfer Effective Date is required.";
+    if (!form.reason) nextErrors.reason = "Transfer Reason is required.";
+    if (!approver) nextErrors.approver = "Send Request To is required.";
+    if (form.reason === "Other" && !form.remarks.trim()) nextErrors.remarks = "Reason / Remarks is required.";
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const previewEnabled = Boolean(student && form.campus && form.campus !== sourceCampus && form.effectiveDate && form.reason && approver && (form.reason !== "Other" || form.remarks.trim()));
+
+  const clear = () => {
+    setStudent(null);
+    setStudentQuery("");
+    setStudentOpen(false);
+    setApprover(null);
+    setApproverQuery("");
+    setApproverOpen(false);
+    setForm(emptyForm);
+    setErrors({});
+    setRequestStatus("");
+    setApprovalMessage("");
+  };
+
+  const openPreview = () => {
+    if (!validate()) return;
+    setPreviewOpen(true);
+  };
+
+  return (
+    <>
+      <section className="cms-card promotion-card campus-transfer-card">
+        <div className="cms-card-head">
+          <div><h2>Campus Transfer</h2><p>Transfer an individual student between campuses.</p></div>
+        </div>
+        <div className="cms-card-body campus-transfer-body">
+          <div className={`cms-field campus-transfer-student-picker${errors.student ? " has-error" : ""}`}>
+            <label htmlFor="campus-transfer-student">Student<span className="req">*</span></label>
+            <div className="campus-transfer-combobox">
+              <input
+                id="campus-transfer-student"
+                value={studentQuery}
+                placeholder="Search by student name or admission no"
+                autoComplete="off"
+                onFocus={() => setStudentOpen(true)}
+                onBlur={() => window.setTimeout(() => setStudentOpen(false), 0)}
+                onChange={(event) => { setStudentQuery(event.target.value); setStudent(null); setStudentOpen(true); setErrors((current) => ({ ...current, student: undefined })); }}
+                aria-expanded={studentOpen}
+                aria-autocomplete="list"
+              />
+              <button
+                className={`campus-transfer-combobox-toggle${studentOpen ? " is-open" : ""}`}
+                type="button"
+                aria-label={studentOpen ? "Close student options" : "Open student options"}
+                aria-expanded={studentOpen}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setStudentOpen((open) => !open);
+                  document.getElementById("campus-transfer-student")?.focus();
+                }}
+              >
+                <ChevronDown size={18} aria-hidden="true" />
+              </button>
+              {studentOpen ? (
+                <div className="campus-transfer-options" role="listbox">
+                  <div className="campus-transfer-options-header">Select Student</div>
+                  <div className="campus-transfer-options-list">
+                  {filteredStudents.length ? filteredStudents.map((item) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={student?.id === item.id}
+                      className={student?.id === item.id ? "is-selected" : ""}
+                      key={item.id}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => { setStudent(item); setStudentQuery(`${item.name} — ${item.admissionNo}`); setStudentOpen(false); setErrors((current) => ({ ...current, student: undefined })); }}
+                    >
+                      <span className="campus-transfer-option-copy"><strong>{item.name}</strong><small>{item.admissionNo}</small></span>
+                      {student?.id === item.id ? <CheckCircle2 size={16} className="campus-transfer-option-check" aria-hidden="true" /> : null}
+                    </button>
+                  )) : <div className="campus-transfer-no-option">No matching students.</div>}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            {errors.student ? <span className="cms-error">{errors.student}</span> : null}
+          </div>
+
+          {student ? (
+            <div className="campus-transfer-student-info">
+              <h3>Student Information</h3>
+              <div className="campus-transfer-info-grid">
+                <TransferPreviewItem label="Student Name" value={student.name} />
+                <TransferPreviewItem label="Admission No" value={student.admissionNo} />
+                <TransferPreviewItem label="Roll No" value={student.rollNo} />
+                <TransferPreviewItem label="Academic Level" value={student.level} />
+                <TransferPreviewItem label="Group" value={student.group} />
+                <TransferPreviewItem label="Section" value={student.section} />
+              </div>
+            </div>
+          ) : null}
+
+          <div className="campus-transfer-details">
+            <h3>Campus Transfer Details</h3>
+            <div className="campus-transfer-form-grid">
+              <div className="cms-field campus-transfer-readonly"><label>Source Campus</label><div>{sourceCampus}</div></div>
+              <div className={`cms-field${errors.campus ? " has-error" : ""}`}>
+                <label htmlFor="transfer-campus">Destination Campus<span className="req">*</span></label>
+                <select id="transfer-campus" value={form.campus} onChange={(event) => change("campus", event.target.value)}>
+                  <option value="">Select Destination Campus</option>
+                  {CAMPUS_TRANSFER_OPTIONS.campuses.map((campus) => <option key={campus} value={campus} disabled={campus === sourceCampus}>{campus}</option>)}
+                </select>
+                {errors.campus ? <span className="cms-error">{errors.campus}</span> : null}
+              </div>
+              <div className={`cms-field${errors.effectiveDate ? " has-error" : ""}`}>
+                <label htmlFor="transfer-effective-date">Transfer Effective Date<span className="req">*</span></label>
+                <input id="transfer-effective-date" type="date" value={form.effectiveDate} onChange={(event) => change("effectiveDate", event.target.value)} />
+                {errors.effectiveDate ? <span className="cms-error">{errors.effectiveDate}</span> : null}
+              </div>
+              <div className={`cms-field${errors.reason ? " has-error" : ""}`}>
+                <label htmlFor="transfer-reason">Transfer Reason<span className="req">*</span></label>
+                <select id="transfer-reason" value={form.reason} onChange={(event) => change("reason", event.target.value)}><option value="">Select Reason</option>{CAMPUS_TRANSFER_OPTIONS.reasons.map((reason) => <option key={reason}>{reason}</option>)}</select>
+                {errors.reason ? <span className="cms-error">{errors.reason}</span> : null}
+              </div>
+              <div className={`cms-field campus-transfer-approver-field${errors.approver ? " has-error" : ""}`}>
+                <label htmlFor="transfer-approver">Send Request To<span className="req">*</span></label>
+                <div className="campus-transfer-combobox">
+                  <input
+                    id="transfer-approver"
+                    value={approverQuery}
+                    placeholder="Search authorized user or role"
+                    autoComplete="off"
+                    onFocus={() => setApproverOpen(true)}
+                    onBlur={() => window.setTimeout(() => setApproverOpen(false), 0)}
+                    onChange={(event) => { setApproverQuery(event.target.value); setApprover(null); setApproverOpen(true); setErrors((current) => ({ ...current, approver: undefined })); }}
+                    aria-expanded={approverOpen}
+                    aria-autocomplete="list"
+                  />
+                  <button
+                    className={`campus-transfer-combobox-toggle${approverOpen ? " is-open" : ""}`}
+                    type="button"
+                    aria-label={approverOpen ? "Close approver options" : "Open approver options"}
+                    aria-expanded={approverOpen}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => { setApproverOpen((open) => !open); document.getElementById("transfer-approver")?.focus(); }}
+                  ><ChevronDown size={18} aria-hidden="true" /></button>
+                  {approverOpen ? (
+                    <div className="campus-transfer-options" role="listbox">
+                      <div className="campus-transfer-options-header">Select Approver</div>
+                      <div className="campus-transfer-options-list">
+                        {filteredApprovers.length ? filteredApprovers.map((item) => (
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={approver?.id === item.id}
+                            className={approver?.id === item.id ? "is-selected" : ""}
+                            key={item.id}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => { setApprover(item); setApproverQuery(item.name); setApproverOpen(false); setErrors((current) => ({ ...current, approver: undefined })); }}
+                          >
+                            <span className="campus-transfer-option-copy"><strong>{item.name}</strong><small>{item.detail}</small></span>
+                            {approver?.id === item.id ? <CheckCircle2 size={16} className="campus-transfer-option-check" aria-hidden="true" /> : null}
+                          </button>
+                        )) : <div className="campus-transfer-no-option">No matching approvers.</div>}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                {errors.approver ? <span className="cms-error">{errors.approver}</span> : null}
+              </div>
+              <div className="cms-field campus-transfer-status-field">
+                <label>Request Status</label>
+                <div>
+                  {requestStatus ? (
+                    <span className={`campus-transfer-status-badge is-${requestStatus.toLowerCase()}`}>{requestStatus === "Pending" ? "Pending Approval" : "Approved"}</span>
+                  ) : <span className="campus-transfer-status-empty">—</span>}
+                </div>
+              </div>
+              <div className={`cms-field campus-transfer-remarks${errors.remarks ? " has-error" : ""}`}>
+                <label htmlFor="transfer-remarks">{form.reason === "Other" ? <>Reason / Remarks<span className="req">*</span></> : "Remarks"}</label>
+                <textarea id="transfer-remarks" value={form.remarks} onChange={(event) => change("remarks", event.target.value)} placeholder={form.reason === "Other" ? "Enter transfer reason" : "Add optional remarks"} />
+                {errors.remarks ? <span className="cms-error">{errors.remarks}</span> : null}
+              </div>
+            </div>
+          </div>
+          {requestStatus ? (
+            <div className={`campus-transfer-request-state is-${requestStatus.toLowerCase()}`} role="status">
+              <div>
+                <strong>{requestStatus === "Pending" ? `Transfer request sent to ${approver?.name}.` : approvalMessage}</strong>
+              </div>
+              {requestStatus === "Pending" ? <button type="button" className="cms-btn cms-btn-ghost" onClick={() => { const message = `Campus transfer request approved by ${approver?.name}.`; setRequestStatus("Approved"); setApprovalMessage(message); onSuccess(message); }}>Approve Request (Demo)</button> : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="promotion-actions campus-transfer-actions"><button className="cms-btn cms-btn-ghost" onClick={clear}>Clear</button><button className="cms-btn cms-btn-primary" disabled={!previewEnabled || Boolean(requestStatus)} onClick={openPreview}>Send Transfer Request</button></div>
+      </section>
+
+      {previewOpen ? (
+        <Modal
+          title="Campus Transfer Request Preview"
+          onClose={() => setPreviewOpen(false)}
+          footer={<><button className="cms-btn cms-btn-ghost" onClick={() => setPreviewOpen(false)}>Cancel</button><button className="cms-btn cms-btn-primary" onClick={() => { setPreviewOpen(false); setRequestStatus("Pending"); setApprovalMessage(""); onSuccess("Campus transfer request sent successfully. Waiting for approval."); }}>Confirm & Send Request</button></>}
+        >
+          <div className="promotion-preview-details campus-transfer-preview-details">
+            <TransferPreviewItem label="Student" value={student?.name} /><TransferPreviewItem label="Admission No" value={student?.admissionNo} />
+            <TransferPreviewItem label="Source Campus" value={sourceCampus} /><TransferPreviewItem label="Destination Campus" value={form.campus} />
+            <TransferPreviewItem label="Effective Date" value={form.effectiveDate ? form.effectiveDate.split("-").reverse().join("-") : ""} /><TransferPreviewItem label="Reason" value={form.reason} />
+            <TransferPreviewItem label="Request Sent To" value={approver?.name} />
+            {form.remarks ? <TransferPreviewItem label="Remarks" value={form.remarks} /> : null}
+          </div>
+        </Modal>
+      ) : null}
+    </>
+  );
+}
+
+function TransferPreviewItem({ label, value }) {
+  return <div><span>{label}</span><strong>{value}</strong></div>;
 }
 
 function HistoryTable({ rows, onRollback }) {
