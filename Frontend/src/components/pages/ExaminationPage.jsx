@@ -3119,33 +3119,36 @@ export default function ExaminationPage() {
         });
       }
 
-      // If admissions had records not present in students list, add them too
-      ensureArray(rawAdmissions).forEach((adm) => {
-        const id = normalizeId(adm.studentId ?? adm.id);
-        const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? "").trim();
-        const sName = String(adm.studentName ?? adm.fullName ?? adm.name ?? "Student").trim();
-        const dedupKey = id || admNo || sName.toLowerCase();
-        if (dedupKey && !seenIds.has(dedupKey)) {
-          seenIds.add(dedupKey);
-          const admCampusId = normalizeId(adm.campusId ?? adm.CampusId ?? adm.campus?.id);
-          normalizedStudents.push({
-            id: id || admNo || `adm-${dedupKey}`,
-            studentId: id || admNo,
-            campusId: admCampusId,
-            name: sName,
-            admissionNo: admNo,
-            rollNo: adm.rollNo ?? adm.rollNumber ?? "",
-            academicLevelId: normalizeId(adm.academicLevelId ?? adm.levelId),
-            academicYearId: normalizeId(adm.academicYearId),
-            groupId: normalizeId(adm.groupId ?? adm.group?.id),
-            groupName: adm.groupName ?? "",
-            programId: normalizeId(adm.programId ?? adm.programmeId ?? adm.program?.id),
-            programName: adm.programName ?? adm.programmeName ?? "",
-            status: adm.status ?? "Active",
-            isActive: adm.isActive !== false && normalizeStatus(adm.status) !== "INACTIVE",
-          });
-        }
-      });
+      // If admissions had records and students list was completely empty, add them as fallback
+      if (combinedRaw.length === 0) {
+        ensureArray(rawAdmissions).forEach((adm) => {
+          const id = normalizeId(adm.studentId ?? adm.id);
+          const admNo = String(adm.admissionNo ?? adm.admissionNumber ?? "").trim();
+          const admFullName = `${adm.firstName ?? ""} ${adm.lastName ?? ""}`.trim();
+          const sName = String(adm.studentName ?? adm.fullName ?? adm.name ?? (admFullName || "Student")).trim();
+          const dedupKey = id || admNo || sName.toLowerCase();
+          if (dedupKey && !seenIds.has(dedupKey)) {
+            seenIds.add(dedupKey);
+            const admCampusId = normalizeId(adm.campusId ?? adm.CampusId ?? adm.campus?.id);
+            normalizedStudents.push({
+              id: id || admNo || `adm-${dedupKey}`,
+              studentId: id || admNo,
+              campusId: admCampusId,
+              name: sName,
+              admissionNo: admNo,
+              rollNo: adm.rollNo ?? adm.rollNumber ?? "",
+              academicLevelId: normalizeId(adm.academicLevelId ?? adm.levelId),
+              academicYearId: normalizeId(adm.academicYearId),
+              groupId: normalizeId(adm.groupId ?? adm.group?.id),
+              groupName: adm.groupName ?? "",
+              programId: normalizeId(adm.programId ?? adm.programmeId ?? adm.program?.id),
+              programName: adm.programName ?? adm.programmeName ?? "",
+              status: adm.status ?? "Active",
+              isActive: adm.isActive !== false && normalizeStatus(adm.status) !== "INACTIVE",
+            });
+          }
+        });
+      }
 
       setStudents(normalizedStudents);
       return normalizedStudents;
@@ -4332,7 +4335,7 @@ export default function ExaminationPage() {
       }
       return [];
     }
-  }, [effectiveCampusId, currentExam]);
+  }, [effectiveCampusId, currentExam?.id]);
 
   // Load examination schedules from backend whenever examId changes
   useEffect(() => {
@@ -8787,6 +8790,7 @@ function ScheduleTable({
   const displayEntries = useMemo(() => {
     if (!entries || !entries.length) return [];
     const patternSessionMap = new Map();
+    const subjectWiseMap = new Map();
     const result = [];
 
     entries.forEach((item) => {
@@ -8795,15 +8799,9 @@ function ScheduleTable({
         Boolean(item.patternName) ||
         (Array.isArray(item.includedSubjectIds) && item.includedSubjectIds.length > 1);
 
-      if (!isPatternWise) {
-        result.push(item);
-        return;
-      }
-
       const slotDate = canonicalDate(item.date || item.examDate);
       const slotStart = formatTimeOnly(item.startTime);
       const slotEnd = formatTimeOnly(item.endTime);
-      const slotKey = `${normalizeId(item.examId)}_${normalizeId(item.groupId)}_${slotDate}_${slotStart}_${slotEnd}_${item.patternName || ""}`;
 
       const itemAssignments = (item.hallAssignments && item.hallAssignments.length > 0)
         ? item.hallAssignments
@@ -8819,6 +8817,54 @@ function ScheduleTable({
             invigilatorName: item.invigilatorName || item.invigilator || "",
           }]
           : [];
+
+      if (!isPatternWise) {
+        const subKey = `${normalizeId(item.examId)}_${normalizeId(item.groupId)}_${normalizeId(item.subjectId || item.subjectCode || slotDate)}`;
+        if (!subjectWiseMap.has(subKey)) {
+          const itemCopy = {
+            ...item,
+            date: slotDate || item.date,
+            startTime: slotStart || item.startTime,
+            endTime: slotEnd || item.endTime,
+            allScheduleIds: item.id ? [item.id] : [],
+            hallAssignments: [...itemAssignments],
+            allHallAssignments: [...itemAssignments],
+          };
+          subjectWiseMap.set(subKey, itemCopy);
+          result.push(itemCopy);
+        } else {
+          // Merge duplicate schedule rows for same subject into one consolidated row
+          const existing = subjectWiseMap.get(subKey);
+          if (item.id && !existing.allScheduleIds.includes(item.id)) {
+            existing.allScheduleIds.push(item.id);
+          }
+          itemAssignments.forEach((ass) => {
+            const assHallId = normalizeId(ass.hallId || ass.roomId);
+            const existingAss = existing.hallAssignments?.find(
+              (e) => normalizeId(e.hallId || e.roomId) === assHallId
+            );
+            if (existingAss) {
+              existingAss.candidateCount = (Number(existingAss.candidateCount) || 0) + (Number(ass.candidateCount) || 0);
+              const mergedInv = ensureArray(existingAss.invigilatorIds || existingAss.facultyIds);
+              ensureArray(ass.invigilatorIds || ass.facultyIds).forEach((fid) => {
+                if (!mergedInv.includes(fid)) mergedInv.push(fid);
+              });
+              existingAss.invigilatorIds = mergedInv;
+            } else if (existing.hallAssignments) {
+              existing.hallAssignments.push({ ...ass });
+            }
+          });
+          existing.allHallAssignments = existing.hallAssignments;
+          if (existing.hallAssignments?.length > 1) {
+            existing.roomName = existing.hallAssignments.map((a) => a.hallName || a.roomNumber).filter(Boolean).join(", ");
+            existing.hall = existing.roomName;
+            existing.roomNumber = existing.roomName;
+          }
+        }
+        return;
+      }
+
+      const slotKey = `${normalizeId(item.examId)}_${normalizeId(item.groupId)}_${slotDate}_${slotStart}_${slotEnd}_${item.patternName || ""}`;
 
       if (!patternSessionMap.has(slotKey)) {
         const sessionCopy = {
