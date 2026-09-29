@@ -793,7 +793,6 @@ export default function PromotionPage({ screen = "promotion" }) {
             ["allocation", "Program & Section Allocation", "/dashboard/promotions/allocation"],
             ["transfer", "Campus Transfer", null],
             ["history", "Promotion History", "/dashboard/promotions/history"],
-            ["report", "Reports", "/dashboard/promotions/report"],
           ].map(([value, label, path]) => (
             <button
               key={value}
@@ -1135,16 +1134,6 @@ export default function PromotionPage({ screen = "promotion" }) {
           </section>
         ) : null}
 
-        {activeTab === "report" ? (
-          <ReportScreen
-            reportData={reportData}
-            rows={reportRows}
-            loading={reportLoading}
-            loaded={reportLoaded}
-            onLoad={fetchReport}
-            onExportCsv={exportCsv}
-          />
-        ) : null}
       </div>
 
       {previewData ? (
