@@ -96,6 +96,45 @@ namespace CollegeManagement.API.Services.Implementations
             var (staffs, totalCount) = await _staffRepository.GetPagedStaffAsync(queryParams);
             var dtos = _mapper.Map<List<StaffResponseDto>>(staffs);
 
+            var driverDtos = dtos.Where(d => d.IsDriver).ToList();
+            if (driverDtos.Any())
+            {
+                try
+                {
+                    var empIds = driverDtos.Select(d => d.EmployeeId).Where(e => !string.IsNullOrWhiteSpace(e)).ToList();
+                    var staffIds = driverDtos.Select(d => (int?)d.Id).ToList();
+
+                    var transportDrivers = await _context.TransportDrivers
+                        .AsNoTracking()
+                        .Where(td => !td.IsDeleted && (empIds.Contains(td.EmployeeId!) || staffIds.Contains(td.StaffId)))
+                        .ToListAsync();
+
+                    foreach (var d in driverDtos)
+                    {
+                        var td = transportDrivers.FirstOrDefault(t => t.StaffId == d.Id || (!string.IsNullOrWhiteSpace(t.EmployeeId) && string.Equals(t.EmployeeId, d.EmployeeId, StringComparison.OrdinalIgnoreCase)));
+                        if (td != null)
+                        {
+                            if (string.IsNullOrWhiteSpace(d.DrivingLicenseNumber))
+                            {
+                                d.DrivingLicenseNumber = td.LicenceNumber ?? td.LicenseNumber;
+                            }
+                            if (string.IsNullOrWhiteSpace(d.DrivingLicenseExpiryDate) && td.LicenceExpiry.HasValue)
+                            {
+                                d.DrivingLicenseExpiryDate = td.LicenceExpiry.Value.ToString("yyyy-MM-dd");
+                            }
+                            if (!d.DrivingExperienceYears.HasValue && td.Experience.HasValue)
+                            {
+                                d.DrivingExperienceYears = td.Experience.Value;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to enrich staff driver license details; continuing with standard staff records.");
+                }
+            }
+
             return new PagedResult<StaffResponseDto>
             {
                 Items = dtos,
@@ -116,7 +155,18 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            return _mapper.Map<StaffResponseDto>(staff);
+            var dto = _mapper.Map<StaffResponseDto>(staff);
+            if (dto.IsDriver)
+            {
+                var td = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(t => !t.IsDeleted && (t.StaffId == dto.Id || t.EmployeeId == dto.EmployeeId));
+                if (td != null)
+                {
+                    if (string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)) dto.DrivingLicenseNumber = td.LicenceNumber ?? td.LicenseNumber;
+                    if (string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && td.LicenceExpiry.HasValue) dto.DrivingLicenseExpiryDate = td.LicenceExpiry.Value.ToString("yyyy-MM-dd");
+                    if (!dto.DrivingExperienceYears.HasValue && td.Experience.HasValue) dto.DrivingExperienceYears = td.Experience.Value;
+                }
+            }
+            return dto;
         }
 
         public async Task<StaffResponseDto?> GetStaffByEmployeeIdAsync(string employeeId)
@@ -125,7 +175,18 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with Employee ID {employeeId} not found.");
 
-            return _mapper.Map<StaffResponseDto>(staff);
+            var dto = _mapper.Map<StaffResponseDto>(staff);
+            if (dto.IsDriver)
+            {
+                var td = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(t => !t.IsDeleted && (t.StaffId == dto.Id || t.EmployeeId == dto.EmployeeId));
+                if (td != null)
+                {
+                    if (string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)) dto.DrivingLicenseNumber = td.LicenceNumber ?? td.LicenseNumber;
+                    if (string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && td.LicenceExpiry.HasValue) dto.DrivingLicenseExpiryDate = td.LicenceExpiry.Value.ToString("yyyy-MM-dd");
+                    if (!dto.DrivingExperienceYears.HasValue && td.Experience.HasValue) dto.DrivingExperienceYears = td.Experience.Value;
+                }
+            }
+            return dto;
         }
 
         public async Task<StaffProfileFullDto> GetStaffProfileFullAsync(int id)
@@ -324,6 +385,22 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.DepartmentSpecific, dto.Documents, dto.DepartmentSpecificJson);
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
+
+            if (dto.IsDriver == true || string.Equals(resolvedDesignationName, "Driver", StringComparison.OrdinalIgnoreCase) || string.Equals(resolvedDesignationName, "Bus Driver", StringComparison.OrdinalIgnoreCase))
+            {
+                staff.IsDriver = true;
+                staff.StaffType = "Non-Teaching";
+                staff.Designation = "Driver";
+                staff.RoleId = 12;
+                staff.DepartmentId = resolvedDepartmentId.HasValue && resolvedDepartmentId.Value > 0 ? resolvedDepartmentId.Value : 79;
+                staff.Department = !string.IsNullOrWhiteSpace(deptName) ? deptName : "Transport";
+                staff.DrivingLicenseNumber = dto.DrivingLicenseNumber;
+                if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expDate))
+                {
+                    staff.DrivingLicenseExpiryDate = expDate;
+                }
+                staff.DrivingExperienceYears = dto.DrivingExperienceYears ?? (staff.Experience > 0 ? (int)staff.Experience : null);
+            }
 
             // ==================================================================================
             // ATOMIC TRANSACTION: Create Staff + User Account (Shared EF Core + Dapper Connection)
@@ -555,6 +632,26 @@ namespace CollegeManagement.API.Services.Implementations
 
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
+
+            if (existingStaff.IsDriver || dto.IsDriver == true || string.Equals(resolvedDesignationName, "Driver", StringComparison.OrdinalIgnoreCase) || string.Equals(resolvedDesignationName, "Bus Driver", StringComparison.OrdinalIgnoreCase))
+            {
+                existingStaff.IsDriver = true;
+                existingStaff.StaffType = "Non-Teaching";
+                existingStaff.Designation = "Driver";
+                existingStaff.RoleId = 12;
+                if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
+                {
+                    existingStaff.DrivingLicenseNumber = dto.DrivingLicenseNumber;
+                }
+                if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expDate))
+                {
+                    existingStaff.DrivingLicenseExpiryDate = expDate;
+                }
+                if (dto.DrivingExperienceYears.HasValue)
+                {
+                    existingStaff.DrivingExperienceYears = dto.DrivingExperienceYears.Value;
+                }
+            }
 
             // Transactional update: Staff domain + Users sync
             var updateStrategy = _context.Database.CreateExecutionStrategy();
@@ -1647,6 +1744,27 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.BoardCode = staff.BoardRef.BoardCode;
             }
             if (staff.DesignationRef != null && string.IsNullOrWhiteSpace(dto.Designation)) dto.Designation = staff.DesignationRef.Name;
+
+            // Driver Fields & Classification
+            dto.Phone = staff.Mobile;
+            dto.IsDriver = staff.IsDriver || (staff.RoleId == 12) || (!string.IsNullOrWhiteSpace(staff.Designation) && (staff.Designation.Contains("Driver", StringComparison.OrdinalIgnoreCase) || staff.Designation.Equals("Bus Driver", StringComparison.OrdinalIgnoreCase)));
+            if (dto.IsDriver)
+            {
+                dto.Designation = "Driver";
+                dto.DesignationName = "Driver";
+                dto.RoleName = "Driver";
+                dto.Role = "Driver";
+                dto.StaffType = "Non-Teaching";
+                dto.DrivingLicenseNumber = staff.DrivingLicenseNumber;
+                dto.DrivingLicenseExpiryDate = staff.DrivingLicenseExpiryDate?.ToString("yyyy-MM-dd");
+                dto.DrivingExperienceYears = staff.DrivingExperienceYears ?? (int)staff.Experience;
+            }
+            else
+            {
+                dto.DesignationName = !string.IsNullOrWhiteSpace(staff.Designation) ? staff.Designation : (staff.DesignationRef?.Name ?? string.Empty);
+                dto.RoleName = staff.RoleId == 13 ? "Attendant" : (staff.StaffType == "Teaching" ? "Faculty" : "Staff");
+                dto.Role = dto.RoleName;
+            }
 
             // Allocated Subjects list
             if (staff.StaffSubjectAllocations != null && staff.StaffSubjectAllocations.Any())

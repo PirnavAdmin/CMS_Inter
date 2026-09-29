@@ -58,10 +58,13 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
         [JsonPropertyName("status")]
         public string Status { get; set; } = "Active";
 
-        [JsonPropertyName("statusText")]
-        public string StatusText { get; set; } = "Active";
-
         [JsonPropertyName("createdAt")]
         public DateTime CreatedAt { get; set; }
+
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
+
+        [JsonPropertyName("campusName")]
+        public string? CampusName { get; set; }
     }
 }

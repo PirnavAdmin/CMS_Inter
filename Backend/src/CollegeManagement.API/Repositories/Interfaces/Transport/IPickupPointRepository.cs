@@ -23,5 +23,11 @@ namespace CollegeManagement.API.Repositories.Interfaces
             long routeId,
             string pickupPointName,
             long? excludePickupPointId = null);
+
+        Task<bool> SequenceExistsAsync(
+            long routeId,
+            int sequenceNo,
+            long? excludePickupPointId = null);
     }
 }
+

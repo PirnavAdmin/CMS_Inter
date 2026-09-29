@@ -1389,15 +1389,15 @@ private static void ConfigureTransportDriver(ModelBuilder modelBuilder)
                 entity.HasIndex(x => x.MobileNumber);
 
                 entity.Property(x => x.DriverName)
-                    .IsRequired()
+                    .IsRequired(false)
                     .HasMaxLength(100);
 
                 entity.Property(x => x.MobileNumber).HasColumnName("MobileNo")
-                    .IsRequired()
+                    .IsRequired(false)
                     .HasMaxLength(20);
 
                 entity.Property(x => x.LicenceNumber).HasColumnName("LicenseNo")
-                    .IsRequired()
+                    .IsRequired(false)
                     .HasMaxLength(50);
 
                 entity.Property(x => x.Status)

@@ -232,6 +232,8 @@ namespace CollegeManagement.API.DTOs.Staff
             get => DrivingLicenseExpiryDate;
             set => DrivingLicenseExpiryDate = value;
         }
+        public int? DrivingExperienceYears { get; set; }
+        public bool? IsDriver { get; set; }
         public string? OtherDocuments { get; set; }
         public string? Photo { get; set; }
         public string? Signature { get; set; }

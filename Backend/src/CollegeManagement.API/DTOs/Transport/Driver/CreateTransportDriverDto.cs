@@ -1,146 +1,78 @@
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using CollegeManagement.API.Common;
 
 namespace CollegeManagement.API.Dtos.Transport.Driver
 {
+    /// <summary>
+    /// Request model to associate an existing Staff member as a Transport Driver.
+    /// Staff is the single source of truth for employee identity.
+    /// </summary>
     public class CreateTransportDriverDto
     {
-        private string _driverName = string.Empty;
-        private string _mobileNumber = string.Empty;
-        private string _licenceNumber = string.Empty;
-
-        private string _employeeId = string.Empty;
+        [JsonPropertyName("staffId")]
+        public int? StaffId { get; set; }
 
         [JsonPropertyName("employeeId")]
-        public string EmployeeId
+        public string? EmployeeId { get; set; }
+
+        private string _licenseNumber = string.Empty;
+        [JsonPropertyName("licenseNumber")]
+        public string LicenseNumber
         {
-            get => !string.IsNullOrWhiteSpace(_employeeId) ? _employeeId : $"DRV-{Random.Shared.Next(1, 99)}";
-            set => _employeeId = value ?? string.Empty;
+            get => _licenseNumber;
+            set => _licenseNumber = value ?? string.Empty;
         }
 
-        [JsonPropertyName("empId")]
-        public string? EmpId
+        [JsonPropertyName("licenceNumber")]
+        public string? LicenceNumber
         {
-            get => EmployeeId;
-            set { if (!string.IsNullOrWhiteSpace(value)) EmployeeId = value; }
+            get => _licenseNumber;
+            set { if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_licenseNumber)) _licenseNumber = value; }
         }
 
+        [JsonPropertyName("drivingLicenseNumber")]
+        public string? DrivingLicenseNumber
+        {
+            get => _licenseNumber;
+            set { if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_licenseNumber)) _licenseNumber = value; }
+        }
+
+        [JsonPropertyName("licenseExpiryDate")]
+        [JsonConverter(typeof(FlexibleNullableDateTimeConverter))]
+        public DateTime? LicenseExpiryDate { get; set; }
+
+        [JsonPropertyName("licenceExpiry")]
+        [JsonConverter(typeof(FlexibleNullableDateTimeConverter))]
+        public DateTime? LicenceExpiry
+        {
+            get => LicenseExpiryDate;
+            set { if (value.HasValue && !LicenseExpiryDate.HasValue) LicenseExpiryDate = value; }
+        }
+
+        [JsonPropertyName("experienceYears")]
+        public int ExperienceYears { get; set; } = 5;
+
+        [JsonPropertyName("assignedVehicleId")]
+        public long? AssignedVehicleId { get; set; }
+
+        [JsonPropertyName("status")]
+        [JsonConverter(typeof(FlexibleBoolConverter))]
+        public bool Status { get; set; } = true;
+
+        // --- Backward Compatibility Pass-Through Fields (Read for Staff lookup/fallback, not persisted as duplicate identity) ---
         [JsonPropertyName("driverName")]
-        public string DriverName
-        {
-            get => !string.IsNullOrWhiteSpace(_driverName) ? _driverName : "New Driver";
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                    _driverName = value;
-            }
-        }
-
-        [JsonPropertyName("driverFullName")]
-        public string? DriverFullName
-        {
-            get => DriverName;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_driverName))
-                    _driverName = value;
-            }
-        }
-
-        [JsonPropertyName("fullName")]
-        public string? FullName
-        {
-            get => DriverName;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_driverName))
-                    _driverName = value;
-            }
-        }
-
-        [JsonPropertyName("name")]
-        public string? Name
-        {
-            get => DriverName;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_driverName))
-                    _driverName = value;
-            }
-        }
+        public string? DriverName { get; set; }
 
         [JsonPropertyName("mobileNumber")]
-        public string MobileNumber
-        {
-            get => !string.IsNullOrWhiteSpace(_mobileNumber) ? _mobileNumber : "0000000000";
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                    _mobileNumber = value;
-            }
-        }
-
-        [JsonPropertyName("phone")]
-        public string? Phone
-        {
-            get => MobileNumber;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_mobileNumber))
-                    _mobileNumber = value;
-            }
-        }
+        public string? MobileNumber { get; set; }
 
         [JsonPropertyName("alternateMobileNumber")]
         public string? AlternateMobileNumber { get; set; }
 
         [JsonPropertyName("email")]
         public string? Email { get; set; }
-
-        [JsonPropertyName("licenceNumber")]
-        public string LicenceNumber
-        {
-            get => !string.IsNullOrWhiteSpace(_licenceNumber) ? _licenceNumber : $"LIC-{Random.Shared.Next(1000, 9999)}";
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                    _licenceNumber = value;
-            }
-        }
-
-        [JsonPropertyName("licenseNumber")]
-        public string? LicenseNumber
-        {
-            get => LicenceNumber;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_licenceNumber))
-                    _licenceNumber = value;
-            }
-        }
-
-        [JsonPropertyName("commercialLicenseNo")]
-        public string? CommercialLicenseNo
-        {
-            get => LicenceNumber;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_licenceNumber))
-                    _licenceNumber = value;
-            }
-        }
-
-        [JsonPropertyName("licenceExpiry")]
-        [JsonConverter(typeof(FlexibleNullableDateTimeConverter))]
-        public DateTime? LicenceExpiry { get; set; }
-
-        [JsonPropertyName("licenseExpiryDate")]
-        public string? LicenseExpiryDate
-        {
-            get => LicenceExpiry?.ToString("yyyy-MM-dd");
-            set { if (DateTime.TryParse(value, out var d)) LicenceExpiry = d; }
-        }
 
         [JsonPropertyName("address")]
         public string? Address { get; set; }
@@ -153,19 +85,5 @@ namespace CollegeManagement.API.Dtos.Transport.Driver
 
         [JsonPropertyName("emergencyContactNumber")]
         public string? EmergencyContactNumber { get; set; }
-
-        [JsonPropertyName("emergencyContact")]
-        public string? EmergencyContact
-        {
-            get => EmergencyContactNumber ?? EmergencyContactName;
-            set { if (!string.IsNullOrWhiteSpace(value)) { EmergencyContactNumber = value; EmergencyContactName = value; } }
-        }
-
-        [JsonPropertyName("experienceYears")]
-        public int ExperienceYears { get; set; } = 5;
-
-        [JsonPropertyName("status")]
-        [JsonConverter(typeof(FlexibleBoolConverter))]
-        public bool Status { get; set; } = true;
     }
 }

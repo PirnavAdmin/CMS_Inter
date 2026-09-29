@@ -9,6 +9,8 @@ namespace CollegeManagement.API.Dtos.Transport
 
         public bool? Status { get; set; }
 
+        public int? CampusId { get; set; }
+
         public string SortBy { get; set; } = "createdAt";
 
         public string SortOrder { get; set; } = "desc";

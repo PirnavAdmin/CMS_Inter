@@ -33,6 +33,7 @@ namespace CollegeManagement.API.DTOs.Staff
         }
         public string? PanNumber { get; set; }
         public string Mobile { get; set; } = string.Empty;
+        public string Phone => Mobile;
         public string? AlternateMobile { get; set; }
         public string Email { get; set; } = string.Empty;
         public string? BloodGroup { get; set; }
@@ -53,7 +54,14 @@ namespace CollegeManagement.API.DTOs.Staff
 
         public string Qualification { get; set; } = string.Empty;
         public string Designation { get; set; } = string.Empty;
+        public string DesignationName => Designation;
         public int? DesignationId { get; set; }
+        public string? RoleName { get; set; }
+        public string? Role => RoleName;
+        public bool IsDriver { get; set; } = false;
+        public string? DrivingLicenseNumber { get; set; }
+        public string? DrivingLicenseExpiryDate { get; set; }
+        public int? DrivingExperienceYears { get; set; }
         public string StaffType { get; set; } = "Teaching";
         public string FacultyType => StaffType;
         public int? DepartmentId { get; set; }

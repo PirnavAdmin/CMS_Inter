@@ -16,9 +16,6 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleMaintenance
         [JsonPropertyName("vehicleNumber")]
         public string VehicleNumber { get; set; } = string.Empty;
 
-        [JsonPropertyName("busNumber")]
-        public string BusNumber => VehicleNumber;
-
         [JsonPropertyName("serviceType")]
         public string ServiceType { get; set; } = string.Empty;
 
@@ -27,9 +24,6 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleMaintenance
 
         [JsonPropertyName("cost")]
         public decimal Cost { get; set; }
-
-        [JsonPropertyName("vendor")]
-        public string? Vendor => VendorCenter;
 
         [JsonPropertyName("vendorCenter")]
         public string? VendorCenter { get; set; }
@@ -43,10 +37,7 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleMaintenance
         [JsonPropertyName("status")]
         public string Status => StatusBool ? "Completed" : "Scheduled";
 
-        [JsonPropertyName("statusText")]
-        public string StatusText => Status;
-
-        [JsonPropertyName("statusBool")]
+        [JsonIgnore]
         public bool StatusBool { get; set; }
     }
 }

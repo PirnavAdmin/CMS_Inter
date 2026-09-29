@@ -195,9 +195,47 @@ namespace CollegeManagement.API.Repositories.Implementations
                      !queryParams.Designation.Equals("All Designations", StringComparison.OrdinalIgnoreCase))
             {
                 var desig = queryParams.Designation.Trim();
-                query = query.Where(s =>
-                    s.Designation == desig ||
-                    (s.DesignationRef != null && s.DesignationRef.Name == desig));
+                if (desig.Equals("Driver", StringComparison.OrdinalIgnoreCase) || desig.Equals("Bus Driver", StringComparison.OrdinalIgnoreCase))
+                {
+                    query = query.Where(s =>
+                        s.IsDriver ||
+                        s.RoleId == 12 ||
+                        s.DesignationId == 276 ||
+                        s.Designation == "Driver" ||
+                        s.Designation == "Bus Driver" ||
+                        (s.DesignationRef != null && (s.DesignationRef.Name == "Driver" || s.DesignationRef.Name == "Bus Driver")));
+                }
+                else
+                {
+                    query = query.Where(s =>
+                        s.Designation == desig ||
+                        (s.DesignationRef != null && s.DesignationRef.Name == desig));
+                }
+            }
+
+            // 3b. IsDriver filter
+            if (queryParams.IsDriver.HasValue)
+            {
+                if (queryParams.IsDriver.Value)
+                {
+                    query = query.Where(s =>
+                        s.IsDriver ||
+                        s.RoleId == 12 ||
+                        s.DesignationId == 276 ||
+                        s.Designation == "Driver" ||
+                        s.Designation == "Bus Driver" ||
+                        (s.DesignationRef != null && (s.DesignationRef.Name == "Driver" || s.DesignationRef.Name == "Bus Driver")));
+                }
+                else
+                {
+                    query = query.Where(s =>
+                        !s.IsDriver &&
+                        s.RoleId != 12 &&
+                        s.DesignationId != 276 &&
+                        s.Designation != "Driver" &&
+                        s.Designation != "Bus Driver" &&
+                        (s.DesignationRef == null || (s.DesignationRef.Name != "Driver" && s.DesignationRef.Name != "Bus Driver")));
+                }
             }
 
             // 4. Board filter

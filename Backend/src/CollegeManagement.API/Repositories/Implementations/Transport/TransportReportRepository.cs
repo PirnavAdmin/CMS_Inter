@@ -154,7 +154,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 DriverName = (string)(x.DriverName ?? ""),
                 MobileNumber = (string)(x.MobileNumber ?? ""),
                 LicenseNumber = (string)(x.LicenseNumber ?? ""),
-                LicenseExpiry = x.LicenseExpiryDate != null ? ((DateTime)x.LicenseExpiryDate).ToString("yyyy-MM-dd") : "N/A",
+                LicenseExpiry = x.LicenseExpiryDate != null ? (x.LicenseExpiryDate is DateTime dt ? dt.ToString("yyyy-MM-dd") : x.LicenseExpiryDate.ToString()) : "N/A",
                 CurrentBus = "Assigned Bus",
                 CurrentRoute = "Assigned Route",
                 BusAttendant = "Attendant",
@@ -222,8 +222,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 ClassName = "Class 1",
                 RouteName = (string)(x.RouteName ?? "N/A"),
                 PickupPoint = (string)(x.PickupPointName ?? "N/A"),
-                AssignedBus = (string)(x.VehicleNumber ?? "Unassigned"),
-                DriverName = "Assigned Driver",
+                VehicleNumber = (string)(x.VehicleNumber ?? "Unassigned"),
+                DriverName = (string)(x.DriverName ?? "Assigned Driver"),
                 Status = (string)(x.Status ?? "Active")
             }).ToList();
         }

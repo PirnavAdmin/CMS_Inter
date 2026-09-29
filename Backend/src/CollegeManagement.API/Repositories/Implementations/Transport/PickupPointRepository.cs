@@ -25,6 +25,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         public async Task<PagedResult<PickupPointDto>> GetAllAsync(PickupPointFilterDto filter)
         {
+            var pageNumber = filter.PageNumber < 1 ? 1 : filter.PageNumber;
+            var pageSize = filter.PageSize < 1 ? 10 : filter.PageSize;
+
             using var c = Connection();
             var all = (await c.QueryAsync<PickupPointDto>(
                 "sp_GetPickupPoints",
@@ -32,22 +35,23 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 {
                     p_RouteId = filter.RouteId,
                     p_Search = filter.Search ?? "",
-                    p_Status = filter.Status
+                    p_Status = filter.Status,
+                    p_CampusId = filter.CampusId
                 },
                 commandType: CommandType.StoredProcedure)).ToList();
 
             var totalCount = all.Count;
             var paged = all
-                .Skip((filter.PageNumber - 1) * filter.PageSize)
-                .Take(filter.PageSize)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToList();
 
             return new PagedResult<PickupPointDto>
             {
                 Items = paged,
                 TotalCount = totalCount,
-                PageNumber = filter.PageNumber,
-                PageSize = filter.PageSize
+                PageNumber = pageNumber,
+                PageSize = pageSize
             };
         }
 
@@ -80,7 +84,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Status = dto.Status ? (sbyte)1 : (sbyte)0,
                     p_IsActive = (sbyte)1,
                     p_CreatedBy = userId,
-                    p_UpdatedBy = (long?)null
+                    p_UpdatedBy = (long?)null,
+                    p_CampusId = dto.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -109,6 +114,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_UpdatedBy = userId
                 },
                 commandType: CommandType.StoredProcedure);
+
             return rows > 0;
         }
 
@@ -150,7 +156,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             using var c = Connection();
             var all = await c.QueryAsync<PickupPointDto>(
                 "sp_GetPickupPoints",
-                new { p_RouteId = routeId, p_Search = search, p_Status = (bool?)null },
+                new { p_RouteId = routeId, p_Search = search, p_Status = (bool?)null, p_CampusId = (int?)null },
                 commandType: CommandType.StoredProcedure);
 
             return all.FirstOrDefault(p => p.PickupPointName.Equals(search, System.StringComparison.OrdinalIgnoreCase));
