@@ -191,6 +191,12 @@
   font-weight: 700;
   text-decoration: underline;
 }
+.cms-toast-error {
+  border: 1px solid #ef4444;
+  background: #b91c1c;
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(127, 29, 29, 0.3);
+}
 .promotion-table-head {
   gap: 14px;
 }
@@ -536,6 +542,38 @@
   width: min(860px, 100%);
   margin-inline: auto;
 }
+.campus-transfer-subtabs {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  gap: 5px;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--cms-border);
+  border-radius: 0;
+  padding: 9px 20px;
+  background: transparent;
+}
+.campus-transfer-card .campus-transfer-subtabs + .cms-card-head {
+  padding-top: 6px;
+  padding-bottom: 8px;
+}
+.campus-transfer-subtabs button {
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 13px;
+  background: transparent;
+  color: var(--cms-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.campus-transfer-subtabs button.is-active {
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
 .campus-transfer-body {
   display: grid;
   gap: 18px;
@@ -672,6 +710,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.campus-transfer-board-note {
+  overflow: hidden;
+  color: var(--cms-muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .campus-transfer-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -729,6 +774,14 @@
   background: #d9f1df;
   color: #17663d;
 }
+.campus-transfer-status-badge.is-pending {
+  background: #fff0bf;
+  color: #946200;
+}
+.campus-transfer-status-badge.is-rejected {
+  background: #ffe1e3;
+  color: #c52d35;
+}
 .campus-transfer-request-state .cms-btn {
   flex: 0 0 auto;
   min-height: 34px;
@@ -738,6 +791,262 @@
 .campus-transfer-preview-details > div:first-child,
 .campus-transfer-preview-details > div:nth-child(2) {
   grid-column: auto;
+}
+.campus-transfer-requests-card {
+  min-width: 0;
+  width: 100%;
+}
+.campus-transfer-requests-content { min-width: 0; }
+.campus-transfer-requests-head {
+  justify-content: flex-start;
+  gap: 20px;
+  padding-block: 12px;
+}
+.campus-transfer-direction-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+.campus-transfer-direction-tabs button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 35px;
+  gap: 8px;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  padding: 7px 13px;
+  background: var(--cms-surface);
+  color: var(--cms-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.campus-transfer-direction-tabs button.is-active {
+  border-color: var(--cms-primary);
+  background: var(--cms-primary);
+  color: #fff;
+}
+.campus-transfer-direction-tabs b {
+  display: grid;
+  min-width: 19px;
+  height: 19px;
+  place-items: center;
+  border-radius: 999px;
+  padding-inline: 5px;
+  background: #e33b45;
+  color: #fff;
+  font-size: 9.5px;
+  line-height: 1;
+}
+.campus-transfer-direction-tabs button.is-active b {
+  background: #fff;
+  color: var(--cms-primary);
+}
+.campus-transfer-notification {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 12px 18px 0;
+  border: 1px solid #add9b9;
+  border-radius: 10px;
+  padding: 11px 13px;
+  background: #effaf2;
+}
+.campus-transfer-notification.is-rejected {
+  border-color: #ffc3c7;
+  background: #fff3f3;
+}
+.campus-transfer-notification > div { display: grid; gap: 3px; min-width: 0; }
+.campus-transfer-notification strong { color: var(--cms-text); font-size: 12.5px; }
+.campus-transfer-notification span { color: var(--cms-muted); font-size: 11.5px; }
+.campus-transfer-notification button {
+  flex: 0 0 auto;
+  border: 0;
+  padding: 4px 0;
+  background: transparent;
+  color: var(--cms-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 750;
+}
+.campus-transfer-request-tools {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 160px;
+  gap: 10px;
+  padding: 14px 18px;
+}
+.campus-transfer-request-tools input,
+.campus-transfer-request-tools select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--cms-border);
+  border-radius: 9px;
+  padding: 9px 11px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
+}
+.campus-transfer-request-table { min-width: 980px; }
+.campus-transfer-request-table th,
+.campus-transfer-request-table td {
+  padding: 9px 10px;
+  font-size: 11.5px;
+  vertical-align: middle;
+}
+.campus-transfer-row-actions { display: flex; gap: 5px; }
+.campus-transfer-row-actions button {
+  border: 1px solid var(--cms-border);
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+.campus-transfer-row-actions button.approve { color: #17663d; }
+.campus-transfer-row-actions button.reject { color: var(--cms-red); }
+.campus-transfer-request-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--cms-border);
+  padding: 12px 18px;
+  color: var(--cms-muted);
+  font-size: 11.5px;
+}
+.campus-transfer-request-pagination > div { display: flex; align-items: center; gap: 6px; }
+.campus-transfer-request-pagination button,
+.campus-transfer-request-pagination > div > span {
+  display: grid;
+  min-width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--cms-border);
+  border-radius: 7px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  font: inherit;
+}
+.campus-transfer-request-pagination > div > span { border-color: var(--cms-primary); background: var(--cms-primary); color: #fff; font-weight: 700; }
+.campus-transfer-request-pagination button:not(:disabled) { cursor: pointer; }
+.campus-transfer-request-pagination button:disabled { opacity: 0.45; }
+.campus-transfer-board-alert { display: grid; gap: 12px; }
+.campus-transfer-board-alert p { margin: 0; color: var(--cms-muted); font-size: 13px; line-height: 1.55; }
+.campus-transfer-board-alert > div { display: grid; gap: 4px; border: 1px solid var(--cms-border); border-radius: 9px; padding: 10px 12px; background: var(--cms-subtle); }
+.campus-transfer-board-alert span { color: var(--cms-muted); font-size: 11px; }
+.campus-transfer-board-alert strong { color: var(--cms-text); font-size: 12.5px; }
+.campus-transfer-detail-content { display: grid; gap: 16px; }
+.campus-transfer-detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.campus-transfer-detail-heading h3,
+.campus-transfer-detail-columns h3 { margin: 0 0 10px; color: var(--cms-text); font-size: 13px; }
+.campus-transfer-detail-student { border: 1px solid var(--cms-border); border-radius: 10px; padding: 12px; background: var(--cms-subtle); }
+.campus-transfer-detail-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.campus-transfer-detail-columns > div { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.campus-transfer-detail-columns > div + div { border-left: 1px solid var(--cms-border); padding-left: 18px; }
+.campus-transfer-detail-columns > div > div,
+.campus-transfer-decision-summary > div { display: grid; grid-template-columns: minmax(110px, .8fr) minmax(0, 1.2fr); gap: 8px; }
+.campus-transfer-detail-columns span,
+.campus-transfer-decision-summary > div span { color: var(--cms-muted); font-size: 11.5px; }
+.campus-transfer-detail-columns strong,
+.campus-transfer-decision-summary > div strong { color: var(--cms-text); font-size: 12px; overflow-wrap: anywhere; }
+.campus-transfer-waiting { margin: 4px 0 0; border-radius: 8px; padding: 9px 10px; background: #fff7dc; color: #846000; font-size: 11.5px; }
+.campus-transfer-decision-summary { display: grid; gap: 9px; }
+.campus-transfer-decision-summary > strong { color: var(--cms-text); font-size: 15px; }
+.campus-transfer-decision-summary > span { margin-top: -6px; color: var(--cms-muted); font-size: 11.5px; }
+.campus-transfer-decision-summary > p { margin: 5px 0 0; border-radius: 8px; padding: 10px; background: var(--cms-primary-soft); color: var(--cms-text); font-size: 12px; }
+.campus-transfer-rejection { margin-top: 8px; }
+.campus-transfer-rejection textarea { min-height: 92px !important; }
+
+.promotion-allocation-card {
+  width: 100%;
+}
+.promotion-allocation-tabs {
+  width: calc(100% - 32px);
+  margin: 14px 16px 12px;
+  border-radius: 8px;
+  padding: 3px;
+  background: var(--cms-subtle);
+}
+.promotion-allocation-tabs button {
+  padding: 7px 12px;
+  font-size: 12px;
+}
+.promotion-allocation-tabs button.is-active {
+  background: var(--cms-primary);
+  color: #fff;
+}
+.promotion-allocation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 16px 12px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--cms-subtle);
+}
+.promotion-allocation-bulk,
+.promotion-allocation-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.promotion-allocation-bulk { flex: 1 1 auto; }
+.promotion-allocation-bulk > span {
+  flex: 0 0 auto;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.promotion-allocation-select {
+  width: clamp(180px, 24vw, 310px);
+  min-width: 0;
+  border: 1px solid var(--cms-border);
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.promotion-allocation-toolbar .cms-btn {
+  min-height: 34px;
+  padding: 6px 11px;
+  white-space: nowrap;
+}
+.promotion-allocation-table-wrap {
+  width: 100%;
+  margin: 0;
+}
+.promotion-allocation-table {
+  width: 100%;
+  table-layout: auto;
+}
+.promotion-allocation-table th,
+.promotion-allocation-table td {
+  height: 44px;
+  padding: 8px 12px;
+  vertical-align: middle;
+}
+.promotion-allocation-table .promotion-empty {
+  height: 92px;
+  text-align: center;
+  vertical-align: middle;
+}
+.promotion-allocation-save {
+  margin: 0;
+  border-top: 1px solid var(--cms-border);
+  padding: 12px 16px;
 }
 @media (max-width: 1050px) {
   .promotion-setup-grid {
@@ -828,6 +1137,22 @@
   .promotion-tabs {
     width: 100%;
   }
+  .promotion-allocation-tabs {
+    width: calc(100% - 28px);
+    margin: 12px 14px 10px;
+  }
+  .promotion-allocation-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    margin-inline: 14px;
+  }
+  .promotion-allocation-bulk {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .promotion-allocation-bulk > span { width: 100%; }
+  .promotion-allocation-select { width: auto; flex: 1 1 190px; }
+  .promotion-allocation-selection-actions { justify-content: flex-end; }
   .campus-transfer-info-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -841,6 +1166,29 @@
   .campus-transfer-request-state > div {
     align-items: flex-start;
     flex-direction: column;
+  }
+  .campus-transfer-request-tools,
+  .campus-transfer-detail-columns {
+    grid-template-columns: 1fr;
+  }
+  .campus-transfer-detail-columns > div + div {
+    border-top: 1px solid var(--cms-border);
+    border-left: 0;
+    padding-top: 14px;
+    padding-left: 0;
+  }
+  .campus-transfer-notification,
+  .campus-transfer-request-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .campus-transfer-direction-tabs {
+    overflow-x: auto;
+  }
+  .campus-transfer-requests-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
   }
 }
 @media (max-width: 480px) {
@@ -860,6 +1208,16 @@
   }
   .campus-transfer-info-grid {
     grid-template-columns: 1fr;
+  }
+  .campus-transfer-subtabs {
+    width: 100%;
+    max-width: 100%;
+    margin-inline: 0;
+    padding-inline: 14px;
+  }
+  .campus-transfer-subtabs button {
+    flex: 1;
+    padding-inline: 8px;
   }
 }
 

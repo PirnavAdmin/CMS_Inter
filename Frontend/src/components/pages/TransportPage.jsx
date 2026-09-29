@@ -312,8 +312,8 @@ function TableSection({
               </tr>
             </thead>
             <tbody>
-              {paginatedRows.length ? paginatedRows.map((row) => (
-                <tr key={row.id}>
+              {paginatedRows.length ? paginatedRows.map((row, rowIndex) => (
+                <tr key={`${row.id ?? "transport-row"}-${(currentPage - 1) * TABLE_PAGE_SIZE + rowIndex}`}>
                   {columns.map((column) => (
                     <td key={column.key} className={column.strong ? "cms-strong" : ""}>
                       {column.badge ? <StatusBadge value={row[column.key]} /> : column.currency ? formatCurrency(row[column.key]) : column.value ? column.value(row) : row[column.key]}
@@ -686,6 +686,7 @@ export default function TransportPage() {
       const [
         routesRes,
         pickupsRes,
+        pickupLookupsRes,
         vehiclesRes,
         staffRes,
         driversRes,
@@ -698,7 +699,14 @@ export default function TransportPage() {
         dashboardRes,
       ] = await Promise.allSettled([
         apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+        apiClient.get(apiEndpoints.transport.pickupPoints, {
+          params: {
+            CampusId: selectedCampusId,
+            PageNumber: 1,
+            PageSize: 1000,
+          },
+        }),
+        apiClient.get(apiEndpoints.transport.lookups.pickupPoints),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
         apiClient.get(driverListUrl),
         apiClient.get(`${apiEndpoints.transport.drivers}?PageNumber=1&PageSize=1000`),
@@ -761,21 +769,26 @@ export default function TransportPage() {
         );
       }
 
-      if (pickupsRes.status === "fulfilled" && pickupsRes.value?.data) {
-        const items = scoped(extractList(pickupsRes.value.data));
+      if ((pickupsRes.status === "fulfilled" && pickupsRes.value?.data) || (pickupLookupsRes.status === "fulfilled" && pickupLookupsRes.value?.data)) {
+        const detailedItems = pickupsRes.status === "fulfilled" ? scoped(extractList(pickupsRes.value.data)) : [];
+        const detailedIds = new Set(detailedItems.map((point) => String(point.pickupPointId || point.id)));
+        const lookupItems = pickupLookupsRes.status === "fulfilled"
+          ? extractList(pickupLookupsRes.value.data).filter((point) => !detailedIds.has(String(point.pickupPointId || point.id)))
+          : [];
+        const items = [...detailedItems, ...lookupItems];
         setPickupPoints(
           items.map((p) => ({
             id: p.pickupPointId || p.id,
-            routeId: p.routeId,
-            routeName: p.routeName || "",
+            routeId: p.routeId ?? p.RouteId ?? "",
+            routeName: p.routeName || p.RouteName || "-",
             pickupName: p.pickupPointName || p.stopName || p.pickupName || "",
             landmark: p.landmark || p.stopAddress || "",
             sequenceNumber: p.sequenceNo || p.sequenceNumber || p.stopOrder || 1,
-            pickupTime: p.pickupTime ? String(p.pickupTime).substring(0, 5) : "07:30",
-            dropTime: p.dropTime ? String(p.dropTime).substring(0, 5) : "16:15",
+            pickupTime: p.pickupTime ? String(p.pickupTime).substring(0, 5) : "",
+            dropTime: p.dropTime ? String(p.dropTime).substring(0, 5) : "",
             distanceKm: Number(p.distanceFromStart || p.distanceFromSchool || p.distanceKm || 0),
             monthlyFee: Number(p.monthlyFee || 0),
-            status: p.status === true || p.status === 1 || p.status === "Active" ? "Active" : "Inactive",
+            status: p.status == null || p.status === true || p.status === 1 || p.status === "Active" ? "Active" : "Inactive",
           }))
         );
       }
@@ -983,8 +996,8 @@ export default function TransportPage() {
             routeId: s.routeId,
             routeName: s.routeName || "",
             pickupPointName: s.pickupPointName || s.pickupPoint || "",
-            vehicleNumber: s.vehicleNumber || "Unassigned",
-            vehicleId: s.vehicleId || 1,
+            vehicleNumber: s.vehicleNumber || s.VehicleNumber || s.assignedVehicleNumber || s.vehicle?.vehicleNumber || "Unassigned",
+            vehicleId: s.vehicleId ?? s.VehicleId ?? s.assignedVehicleId ?? s.AssignedVehicleId ?? s.vehicle?.vehicleId ?? s.vehicle?.id ?? s.vehicleAssignment?.vehicleId ?? "",
             feePlan: s.feePlan || "Annual",
             monthlyFee: Number(s.monthlyFee || 1200),
             annualFee: Number(s.annualFee || (s.monthlyFee ? s.monthlyFee * 10 : 12000)),
@@ -1135,8 +1148,73 @@ export default function TransportPage() {
           studentsPresent: record.studentsPresent ?? "",
           status: record.status || "",
         }
-      : record;
+      : key === "studentAssignments" && record
+        ? {
+            ...record,
+            routeId: record.routeId ?? routes.find((route) => route.routeName === record.routeName)?.id ?? "",
+            vehicleId: record.vehicleId || (
+              vehicles.find((vehicle) => String(vehicle.vehicleNumber).trim().toLowerCase() === String(record.vehicleNumber || "").trim().toLowerCase())?.id
+              ?? ""
+            ),
+          }
+        : record;
     setFormConfig({ key, title, fields, record: formRecord });
+  };
+
+  const openEditForm = async (key, title, fields, record) => {
+    if (key !== "studentAssignments") {
+      openForm(key, title, fields, record);
+      return;
+    }
+
+    const assignmentId = Number(String(record.id).replace(/[^\d]/g, "")) || record.id;
+    try {
+      const response = await apiClient.get(apiEndpoints.transport.studentAssignmentById(assignmentId));
+      const payload = response.data?.data ?? response.data ?? {};
+      const detail = payload.studentAssignment ?? payload.assignment ?? payload;
+      const linkedAssignmentId = detail.vehicleAssignmentId ?? detail.VehicleAssignmentId ?? detail.vehicleAssignment?.assignmentId;
+      const linkedVehicleId = vehicleAssignments.find((assignment) => String(assignment.id) === String(linkedAssignmentId))?.vehicleId;
+      const vehicleId = [
+        detail.vehicleId,
+        detail.VehicleId,
+        detail.assignedVehicleId,
+        detail.AssignedVehicleId,
+        detail.vehicle?.vehicleId,
+        detail.vehicle?.id,
+        detail.vehicleAssignment?.vehicleId,
+        linkedVehicleId,
+        record.vehicleId,
+      ].find((value) => value !== undefined && value !== null && String(value).trim() !== "");
+      const vehicleNumber = detail.vehicleNumber
+        ?? detail.VehicleNumber
+        ?? detail.assignedVehicleNumber
+        ?? detail.vehicle?.vehicleNumber
+        ?? record.vehicleNumber;
+      const resolvedVehicleId = vehicleId
+        ?? vehicles.find((vehicle) => String(vehicle.vehicleNumber).trim().toLowerCase() === String(vehicleNumber || "").trim().toLowerCase())?.id
+        ?? "";
+
+      openForm(key, title, fields, {
+        ...record,
+        ...detail,
+        id: record.id,
+        studentName: detail.studentName ?? detail.StudentName ?? record.studentName,
+        admissionNo: detail.admissionNo ?? detail.AdmissionNo ?? detail.admissionNumber ?? record.admissionNo,
+        routeId: detail.routeId ?? detail.RouteId ?? record.routeId,
+        pickupPointName: detail.pickupPointName ?? detail.PickupPointName ?? detail.pickupPoint ?? record.pickupPointName,
+        vehicleId: resolvedVehicleId,
+        vehicleNumber,
+        monthlyFee: detail.monthlyFee ?? detail.MonthlyFee ?? record.monthlyFee,
+        status: detail.status === true || detail.status === 1 || detail.Status === true || detail.Status === 1
+          ? "Active"
+          : typeof (detail.status ?? detail.Status) === "string"
+            ? (detail.status ?? detail.Status)
+            : record.status,
+      });
+    } catch (error) {
+      openForm(key, title, fields, record);
+      setToast(`Latest student transport details unavailable: ${getApiErrorMessage(error)}`);
+    }
   };
 
   const saveForm = async (values) => {
@@ -1183,6 +1261,22 @@ export default function TransportPage() {
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.pickupPointById(numericId), payload);
         } else {
+          const normalizedPickupName = String(payload.pickupPointName || "").trim().toLowerCase();
+          let existingPickupPoints = pickupPoints;
+          if (!existingPickupPoints.some((point) => String(point.routeId) === String(payload.routeId) && String(point.pickupName || "").trim().toLowerCase() === normalizedPickupName)) {
+            const existingResponse = await apiClient.get(`${apiEndpoints.transport.lookups.pickupPoints}?routeId=${encodeURIComponent(payload.routeId)}`);
+            existingPickupPoints = extractList(existingResponse.data).map((point) => ({
+              routeId: point.routeId ?? point.RouteId ?? payload.routeId,
+              pickupName: point.pickupPointName ?? point.PickupPointName ?? point.stopName ?? point.pickupName,
+            }));
+          }
+          const duplicateExists = existingPickupPoints.some((point) =>
+            String(point.routeId) === String(payload.routeId)
+            && String(point.pickupName || "").trim().toLowerCase() === normalizedPickupName
+          );
+          if (duplicateExists) {
+            throw new Error("Pickup point already exists for this route.");
+          }
           await apiClient.post(apiEndpoints.transport.pickupPoints, payload);
         }
       } else if (key === "vehicles") {
@@ -1333,7 +1427,8 @@ export default function TransportPage() {
       setToast(isEdit ? "Transport record updated successfully." : "Transport record added successfully.");
     } catch (err) {
       console.error("API error saving transport record:", err);
-      setToast(`Error saving record: ${getApiErrorMessage(err)}`);
+      const backendDetails = err?.response?.data?.details ?? err?.response?.data?.Details;
+      setToast(`Error saving record: ${backendDetails || getApiErrorMessage(err)}`);
     } finally {
       setIsFormSubmitting(false);
     }
@@ -1634,8 +1729,8 @@ export default function TransportPage() {
         { key: "pickupName", label: "Pickup", strong: true },
         { key: "routeId", label: "Route", value: (row) => findRoute(row.routeId)?.routeName || row.routeName || "-" },
         { key: "sequenceNumber", label: "Seq" },
-        { key: "pickupTime", label: "Pickup" },
-        { key: "dropTime", label: "Drop" },
+        { key: "pickupTime", label: "Pickup", value: (row) => row.pickupTime || "-" },
+        { key: "dropTime", label: "Drop", value: (row) => row.dropTime || "-" },
         { key: "distanceKm", label: "Distance", value: (row) => `${row.distanceKm} km` },
         { key: "status", label: "Status", badge: true },
       ],
@@ -1916,7 +2011,7 @@ export default function TransportPage() {
         }
         rowFilter={isTripsTable ? filterTripRow : isSetupFilterTable ? (row) => filterSetupRow(key, row) : undefined}
         onAdd={key === "drivers" ? () => setIsAddDriverOpen(true) : key === "attendants" ? () => setIsAddAttendantOpen(true) : config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
-        onEdit={config.fields ? (row) => openForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
+        onEdit={config.fields ? (row) => openEditForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
         onView={(row) => openRecordDetails(key, row, config.title)}
         toolbarClassName={key === "vehicles" ? "cms-transport-vehicle-toolbar" : undefined}
