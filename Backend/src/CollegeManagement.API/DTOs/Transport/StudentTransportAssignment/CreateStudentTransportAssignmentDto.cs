@@ -12,19 +12,31 @@ namespace CollegeManagement.API.Dtos.Transport.StudentTransportAssignment
 
         [JsonPropertyName("routeId")]
         [JsonConverter(typeof(FlexibleLongConverter))]
-        public long RouteId { get; set; } = 1;
+        public long RouteId { get; set; } = 0;
 
         [JsonPropertyName("pickupPointId")]
         [JsonConverter(typeof(FlexibleLongConverter))]
-        public long PickupPointId { get; set; } = 1;
+        public long PickupPointId { get; set; } = 0;
+
+        [JsonPropertyName("pickupPointName")]
+        public string? PickupPointName { get; set; }
+
+        [JsonPropertyName("monthlyFee")]
+        public decimal? MonthlyFee { get; set; }
+
+        [JsonPropertyName("studentId")]
+        public long? StudentId { get; set; }
+
+        [JsonPropertyName("studentName")]
+        public string? StudentName { get; set; }
 
         [JsonPropertyName("vehicleAssignmentId")]
         [JsonConverter(typeof(FlexibleLongConverter))]
-        public long VehicleAssignmentId { get; set; } = 1;
+        public long VehicleAssignmentId { get; set; } = 0;
 
         [JsonPropertyName("vehicleId")]
         [JsonConverter(typeof(FlexibleLongConverter))]
-        public long VehicleId { get; set; } = 1;
+        public long VehicleId { get; set; } = 0;
 
         [JsonPropertyName("effectiveFrom")]
         public DateTime EffectiveFrom { get; set; } = DateTime.UtcNow;

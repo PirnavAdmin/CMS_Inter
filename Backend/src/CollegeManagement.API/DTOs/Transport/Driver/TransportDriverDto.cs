@@ -1,3 +1,4 @@
+using System;
 using System.Text.Json.Serialization;
 
 namespace CollegeManagement.API.Dtos.Transport.Driver
@@ -5,31 +6,24 @@ namespace CollegeManagement.API.Dtos.Transport.Driver
     public class TransportDriverDto
     {
         [JsonPropertyName("id")]
-        public string Id => DriverId > 0 ? DriverId.ToString() : "1";
+        public string Id => (StaffId.HasValue && StaffId.Value > 0) 
+            ? StaffId.Value.ToString() 
+            : (DriverId > 0 ? DriverId.ToString() : string.Empty);
 
         [JsonPropertyName("driverId")]
         public long DriverId { get; set; }
 
+        [JsonPropertyName("staffId")]
+        public int? StaffId { get; set; }
+
+        [JsonPropertyName("employeeId")]
+        public string EmployeeId { get; set; } = string.Empty;
+
         [JsonPropertyName("driverName")]
         public string DriverName { get; set; } = string.Empty;
 
-        [JsonPropertyName("employeeId")]
-        public string EmployeeId { get; set; } = "DRV-1";
-
-        [JsonPropertyName("empId")]
-        public string EmpId => EmployeeId;
-
-        [JsonPropertyName("driverFullName")]
-        public string DriverFullName => DriverName;
-
-        [JsonPropertyName("fullName")]
-        public string FullName => DriverName;
-
         [JsonPropertyName("mobileNumber")]
         public string MobileNumber { get; set; } = string.Empty;
-
-        [JsonPropertyName("phone")]
-        public string Phone => MobileNumber;
 
         [JsonPropertyName("alternateMobileNumber")]
         public string? AlternateMobileNumber { get; set; }
@@ -37,20 +31,11 @@ namespace CollegeManagement.API.Dtos.Transport.Driver
         [JsonPropertyName("email")]
         public string? Email { get; set; }
 
-        [JsonPropertyName("licenceNumber")]
-        public string LicenceNumber { get; set; } = string.Empty;
-
         [JsonPropertyName("licenseNumber")]
-        public string LicenseNumber => LicenceNumber;
-
-        [JsonPropertyName("commercialLicenseNo")]
-        public string CommercialLicenseNo => LicenceNumber;
-
-        [JsonPropertyName("licenceExpiry")]
-        public DateTime? LicenceExpiry { get; set; }
+        public string LicenseNumber { get; set; } = string.Empty;
 
         [JsonPropertyName("licenseExpiryDate")]
-        public string? LicenseExpiryDate => LicenceExpiry?.ToString("yyyy-MM-dd");
+        public string? LicenseExpiryDate { get; set; }
 
         [JsonPropertyName("address")]
         public string? Address { get; set; }
@@ -64,22 +49,25 @@ namespace CollegeManagement.API.Dtos.Transport.Driver
         [JsonPropertyName("emergencyContactNumber")]
         public string? EmergencyContactNumber { get; set; }
 
-        [JsonPropertyName("emergencyContact")]
-        public string? EmergencyContact => !string.IsNullOrWhiteSpace(EmergencyContactNumber) ? EmergencyContactNumber : EmergencyContactName;
-
         [JsonPropertyName("experienceYears")]
         public int ExperienceYears { get; set; } = 5;
+
+        [JsonPropertyName("assignedVehicleId")]
+        public long? AssignedVehicleId { get; set; }
+
+        [JsonPropertyName("assignedVehicleNumber")]
+        public string? AssignedVehicleNumber { get; set; }
 
         [JsonPropertyName("status")]
         public string Status { get; set; } = "Active";
 
-        [JsonPropertyName("statusText")]
-        public string StatusText { get; set; } = "Active";
-
-        [JsonPropertyName("isLicenceExpired")]
-        public bool IsLicenceExpired { get; set; }
-
         [JsonPropertyName("createdAt")]
-        public DateTime CreatedAt { get; set; }
+        public DateTime? CreatedAt { get; set; }
+
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
+
+        [JsonPropertyName("campusName")]
+        public string? CampusName { get; set; }
     }
 }

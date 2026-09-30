@@ -61,6 +61,11 @@ namespace CollegeManagement.API.Services.Implementations
 
             NormalizeUpdateDto(dto);
 
+            if (!dto.CampusId.HasValue)
+            {
+                dto.CampusId = existingRoute.CampusId ?? 1;
+            }
+
             return await _repository.UpdateAsync(routeId, dto, userId);
         }
 

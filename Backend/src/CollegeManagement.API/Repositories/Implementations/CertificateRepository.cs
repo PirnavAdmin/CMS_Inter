@@ -742,6 +742,8 @@ public class CertificateRepository : ICertificateRepository
     // =========================================================
     public async Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
         int? campusId = null,
+        int? boardId = null,
+        int? academicYearId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
@@ -750,6 +752,8 @@ public class CertificateRepository : ICertificateRepository
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId, DbType.Int32);
+            parameters.Add("p_BoardId", boardId, DbType.Int32);
+            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
 
             var list = await connection.QueryAsync<StudentCertificateDropdownDto>(new CommandDefinition(
                 "sp_GetStudentsForCertificateDropdown",

@@ -154,7 +154,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 DriverName = (string)(x.DriverName ?? ""),
                 MobileNumber = (string)(x.MobileNumber ?? ""),
                 LicenseNumber = (string)(x.LicenseNumber ?? ""),
-                LicenseExpiry = x.LicenseExpiryDate != null ? ((DateTime)x.LicenseExpiryDate).ToString("yyyy-MM-dd") : "N/A",
+                LicenseExpiry = x.LicenseExpiryDate != null ? (x.LicenseExpiryDate is DateTime dt ? dt.ToString("yyyy-MM-dd") : x.LicenseExpiryDate.ToString()) : "N/A",
                 CurrentBus = "Assigned Bus",
                 CurrentRoute = "Assigned Route",
                 BusAttendant = "Attendant",
@@ -218,12 +218,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 AssignmentId = (long)(x.StudentTransportAssignmentId ?? 0),
                 AdmissionNo = (string)(x.AdmissionNo ?? ""),
                 StudentName = (string)(x.StudentName ?? ""),
-                ClassSection = "Class 1-A",
-                ClassName = "Class 1",
+                ClassSection = (string)(x.ClassSection ?? "N/A"),
+                ClassName = (string)(x.ClassName ?? "N/A"),
                 RouteName = (string)(x.RouteName ?? "N/A"),
                 PickupPoint = (string)(x.PickupPointName ?? "N/A"),
-                AssignedBus = (string)(x.VehicleNumber ?? "Unassigned"),
-                DriverName = "Assigned Driver",
+                VehicleNumber = (string)(x.VehicleNumber ?? "Unassigned"),
+                DriverName = (string)(x.DriverName ?? "Assigned Driver"),
                 Status = (string)(x.Status ?? "Active")
             }).ToList();
         }
@@ -289,7 +289,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             using var c = Connection();
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetPickupPoints",
-                new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "", p_Status = (byte?)null },
+                new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "", p_Status = (byte?)null, p_CampusId = filter.CampusId },
                 commandType: CommandType.StoredProcedure);
 
             return raw.Select(x => new PickupPointReportDto

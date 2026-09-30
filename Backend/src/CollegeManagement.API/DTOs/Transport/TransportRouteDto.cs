@@ -19,26 +19,14 @@ namespace CollegeManagement.API.Dtos.Transport
         [JsonPropertyName("startLocation")]
         public string StartLocation { get; set; } = string.Empty;
 
-        [JsonPropertyName("routeStart")]
-        public string RouteStart => StartLocation;
-
         [JsonPropertyName("endLocation")]
         public string EndLocation { get; set; } = string.Empty;
-
-        [JsonPropertyName("routeEnd")]
-        public string RouteEnd => EndLocation;
 
         [JsonPropertyName("distanceKm")]
         public decimal DistanceKm { get; set; }
 
-        [JsonPropertyName("totalDistanceKm")]
-        public decimal TotalDistanceKm => DistanceKm;
-
         [JsonPropertyName("estimatedDurationMinutes")]
         public int EstimatedDurationMinutes { get; set; }
-
-        [JsonPropertyName("estimatedTimeMinutes")]
-        public int EstimatedTimeMinutes => EstimatedDurationMinutes;
 
         [JsonPropertyName("estimatedDurationText")]
         public string EstimatedDurationText { get; set; } = string.Empty;
@@ -49,20 +37,11 @@ namespace CollegeManagement.API.Dtos.Transport
         [JsonPropertyName("totalPickupPoints")]
         public int TotalPickupPoints { get; set; } = 0;
 
-        [JsonPropertyName("pickupPointCount")]
-        public int PickupPointCount => TotalPickupPoints;
-
         [JsonPropertyName("assignedBus")]
         public string AssignedBus { get; set; } = "Unassigned";
 
-        [JsonPropertyName("assignedVehicleNumber")]
-        public string AssignedVehicleNumber => AssignedBus;
-
         [JsonPropertyName("assignedDriver")]
         public string AssignedDriver { get; set; } = "Unassigned";
-
-        [JsonPropertyName("assignedDriverName")]
-        public string AssignedDriverName => AssignedDriver;
 
         [JsonPropertyName("pickupPointSequenceText")]
         public string PickupPointSequenceText { get; set; } = string.Empty;
@@ -70,32 +49,34 @@ namespace CollegeManagement.API.Dtos.Transport
         [JsonPropertyName("minRangeKm")]
         public decimal MinRangeKm { get; set; } = 5;
 
-        [JsonPropertyName("minRange")]
-        public decimal MinRange => MinRangeKm;
-
         [JsonPropertyName("nonAcBaseFare")]
         public decimal NonAcBaseFare { get; set; } = 1000;
 
-        [JsonPropertyName("nonAcRateAddlKm")]
-        public decimal NonAcRateAddlKm { get; set; } = 100;
-
         [JsonPropertyName("nonAcRatePerKm")]
-        public decimal NonAcRatePerKm => NonAcRateAddlKm;
+        public decimal NonAcRatePerKm { get; set; } = 100;
 
         [JsonPropertyName("acBaseFare")]
         public decimal AcBaseFare { get; set; } = 1200;
 
-        [JsonPropertyName("acRateAddlKm")]
-        public decimal AcRateAddlKm { get; set; } = 150;
-
         [JsonPropertyName("acRatePerKm")]
-        public decimal AcRatePerKm => AcRateAddlKm;
+        public decimal AcRatePerKm { get; set; } = 150;
+
+        private string _status = "Active";
 
         [JsonPropertyName("status")]
-        public string Status { get; set; } = "Active";
-
-        [JsonPropertyName("statusText")]
-        public string StatusText { get; set; } = "Active";
+        public string Status
+        {
+            get => _status;
+            set
+            {
+                if (string.Equals(value, "True", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "1"))
+                    _status = "Active";
+                else if (string.Equals(value, "False", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "0"))
+                    _status = "Inactive";
+                else if (!string.IsNullOrWhiteSpace(value))
+                    _status = value;
+            }
+        }
 
         [JsonPropertyName("isAc")]
         public bool? IsAc { get; set; }
@@ -108,5 +89,11 @@ namespace CollegeManagement.API.Dtos.Transport
 
         [JsonPropertyName("updatedAt")]
         public DateTime? UpdatedAt { get; set; }
+
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
+
+        [JsonPropertyName("campusName")]
+        public string? CampusName { get; set; }
     }
 }

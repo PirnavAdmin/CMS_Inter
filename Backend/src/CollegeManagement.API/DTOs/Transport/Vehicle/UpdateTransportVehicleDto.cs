@@ -103,6 +103,9 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
         [JsonPropertyName("status")]
         [JsonConverter(typeof(FlexibleBoolConverter))]
         public bool Status { get; set; } = true;
+
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
     }
 }
 

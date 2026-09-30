@@ -67,12 +67,12 @@ namespace CollegeManagement.API.Services.Implementations
                 if (activeVehicle != null) dto.VehicleId = activeVehicle.VehicleId;
             }
 
-            // Auto-resolve driverId if missing or non-existent
-            if (dto.DriverId <= 0 || !await _context.TransportDrivers.AnyAsync(x => x.DriverId == dto.DriverId && !x.IsDeleted))
+            // Auto-resolve driverId if missing or non-existent (Staff is single source of truth for drivers)
+            if (dto.DriverId <= 0 || !await _context.Staffs.AnyAsync(x => x.Id == dto.DriverId && !x.IsDeleted && x.IsDriver))
             {
-                var activeDriver = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.Status)
-                    ?? await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted);
-                if (activeDriver != null) dto.DriverId = activeDriver.DriverId;
+                var activeDriver = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.IsDriver && x.Status == "Active")
+                    ?? await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.IsDriver);
+                if (activeDriver != null) dto.DriverId = activeDriver.Id;
             }
 
             await ValidateAssignmentAsync(
@@ -136,8 +136,8 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.VehicleId = existing.VehicleId;
             }
 
-            // Auto-resolve driverId if missing or non-existent
-            if (dto.DriverId <= 0 || !await _context.TransportDrivers.AnyAsync(x => x.DriverId == dto.DriverId && !x.IsDeleted))
+            // Auto-resolve driverId if missing or non-existent (Staff is single source of truth for drivers)
+            if (dto.DriverId <= 0 || !await _context.Staffs.AnyAsync(x => x.Id == dto.DriverId && !x.IsDeleted && x.IsDriver))
             {
                 dto.DriverId = existing.DriverId;
             }
@@ -248,16 +248,17 @@ namespace CollegeManagement.API.Services.Implementations
                     "The selected vehicle does not exist or is inactive.");
             }
 
-            var driver = await _context.TransportDrivers
+            var driver = await _context.Staffs
                 .AsNoTracking()
                 .Where(x =>
-                    x.DriverId == driverId &&
+                    x.Id == driverId &&
                     !x.IsDeleted &&
-                    x.Status)
+                    x.IsDriver &&
+                    x.Status == "Active")
                 .Select(x => new
                 {
-                    x.DriverId,
-                    x.LicenceExpiry
+                    DriverId = x.Id,
+                    LicenceExpiry = x.DrivingLicenseExpiryDate
                 })
                 .FirstOrDefaultAsync();
 
