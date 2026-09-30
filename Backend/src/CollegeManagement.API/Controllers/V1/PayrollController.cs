@@ -19,6 +19,44 @@ namespace CollegeManagement.API.Controllers
             _payrollService = payrollService;
         }
 
+        private int? ResolveCampusId(int? explicitlyProvided = null)
+        {
+            if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
+                return explicitlyProvided.Value;
+
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
+                int.TryParse(headerVal, out var campusId) && campusId > 0)
+            {
+                return campusId;
+            }
+
+            if (Request.Headers.TryGetValue("Campus-Id", out var headerVal2) &&
+                int.TryParse(headerVal2, out var campusId2) && campusId2 > 0)
+            {
+                return campusId2;
+            }
+
+            if (Request.Query.TryGetValue("campusId", out var queryVal) &&
+                int.TryParse(queryVal, out var qCampusId) && qCampusId > 0)
+            {
+                return qCampusId;
+            }
+
+            if (Request.Cookies.TryGetValue("cms_selected_campus_id", out var cookieVal) &&
+                int.TryParse(cookieVal, out var cCampusId) && cCampusId > 0)
+            {
+                return cCampusId;
+            }
+
+            var campusClaim = User?.Claims?.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+            if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+            {
+                return claimCampusId;
+            }
+
+            return null;
+        }
+
 
 
         // GET: api/payroll/salary-structures
@@ -120,12 +158,15 @@ namespace CollegeManagement.API.Controllers
         [HttpGet("employees")]
         public async Task<IActionResult> GetEmployees(
             [FromQuery] string? staffType,
-            [FromQuery] string? search)
+            [FromQuery] string? search,
+            [FromQuery] int? campusId)
         {
+            var resolvedCampusId = ResolveCampusId(campusId);
             var result =
                 await _payrollService.GetEmployeesAsync(
                     staffType,
-                    search);
+                    search,
+                    resolvedCampusId);
 
             return Ok(result);
         }
@@ -136,7 +177,8 @@ namespace CollegeManagement.API.Controllers
         [HttpGet("salary-assignments")]
         public async Task<IActionResult> GetSalaryAssignments(
             [FromQuery] int? staffId,
-            [FromQuery] string? status)
+            [FromQuery] string? status,
+            [FromQuery] int? campusId)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -148,8 +190,9 @@ namespace CollegeManagement.API.Controllers
                     Message = "Status must be Active or On Hold."
                 });
 
+            var resolvedCampusId = ResolveCampusId(campusId);
             var result = await _payrollService
-                .GetSalaryAssignmentsAsync(staffId, status);
+                .GetSalaryAssignmentsAsync(staffId, status, resolvedCampusId);
             return Ok(result);
         }
 
@@ -412,16 +455,25 @@ namespace CollegeManagement.API.Controllers
 
 
         // PATCH: api/payroll/payslips/5/status
-        [HttpPatch("payslips/{id:int}/status")]
+        [HttpPatch("payslips/{id}/status")]
         public async Task<IActionResult> UpdatePayslipStatus(
-            int id,
+            string id,
             [FromQuery] string status)
         {
-            if (id <= 0)
+            if (string.IsNullOrWhiteSpace(id))
             {
                 return BadRequest(new
                 {
                     Message = "Valid payslip Id is required."
+                });
+            }
+
+            var numericId = await _payrollService.ResolvePayslipIdAsync(id);
+            if (!numericId.HasValue)
+            {
+                return NotFound(new
+                {
+                    Message = "Payslip not found."
                 });
             }
 
@@ -439,7 +491,7 @@ namespace CollegeManagement.API.Controllers
 
             var updated =
                 await _payrollService.UpdatePayslipStatusAsync(
-                    id,
+                    numericId.Value,
                     status);
 
             if (!updated)
@@ -460,10 +512,10 @@ namespace CollegeManagement.API.Controllers
 
 
         // POST: api/payroll/payslips/5/send-email
-        [HttpPost("payslips/{id:int}/send-email")]
-        public async Task<IActionResult> SendPayslipEmail(int id)
+        [HttpPost("payslips/{id}/send-email")]
+        public async Task<IActionResult> SendPayslipEmail(string id)
         {
-            if (id <= 0)
+            if (string.IsNullOrWhiteSpace(id))
             {
                 return BadRequest(new
                 {
@@ -471,15 +523,24 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
-            var sent =
-                await _payrollService.SendPayslipEmailAsync(id);
-
-            if (!sent)
+            var numericId = await _payrollService.ResolvePayslipIdAsync(id);
+            if (!numericId.HasValue)
             {
                 return NotFound(new
                 {
+                    Message = "Payslip not found."
+                });
+            }
+
+            var sent =
+                await _payrollService.SendPayslipEmailAsync(numericId.Value);
+
+            if (!sent)
+            {
+                return StatusCode(500, new
+                {
                     Message =
-                        "Payslip or staff email not found."
+                        "Failed to deliver payslip email. Please check staff email address or mail server connectivity."
                 });
             }
 
@@ -497,24 +558,44 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? payrollMonth,
             [FromQuery] int? payrollYear,
             [FromQuery] string? staffType,
-            [FromQuery] string? search)
+            [FromQuery] string? search,
+            [FromQuery] int? campusId)
         {
+            var resolvedCampusId = ResolveCampusId(campusId);
             var result =
                 await _payrollService.GetPayslipHistoryAsync(
                     payrollMonth,
                     payrollYear,
                     staffType,
-                    search);
+                    search,
+                    resolvedCampusId);
 
             return Ok(result);
         }
 
         // GET: api/payroll/payslips/5
-        [HttpGet("payslips/{id:int}")]
-        public async Task<IActionResult> GetPayslipById(int id)
+        [HttpGet("payslips/{id}")]
+        public async Task<IActionResult> GetPayslipById(string id)
         {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return BadRequest(new
+                {
+                    Message = "Valid payslip Id is required."
+                });
+            }
+
+            var numericId = await _payrollService.ResolvePayslipIdAsync(id);
+            if (!numericId.HasValue)
+            {
+                return NotFound(new
+                {
+                    Message = "Payslip not found."
+                });
+            }
+
             var result =
-                await _payrollService.GetPayslipByIdAsync(id);
+                await _payrollService.GetPayslipByIdAsync(numericId.Value);
 
             if (result == null)
             {
@@ -527,13 +608,46 @@ namespace CollegeManagement.API.Controllers
             return Ok(result);
         }
 
+        // GET: api/payroll/payslips/{id}/pdf
+        [HttpGet("payslips/{id}/pdf")]
+        [HttpGet("payslips/{id}/download-pdf")]
+        public async Task<IActionResult> DownloadPayslipPdf(string id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                return BadRequest(new
+                {
+                    Message = "Valid payslip Id is required."
+                });
+            }
 
+            var numericId = await _payrollService.ResolvePayslipIdAsync(id);
+            if (!numericId.HasValue)
+            {
+                return NotFound(new
+                {
+                    Message = "Payslip not found."
+                });
+            }
+
+            var pdfBytes = await _payrollService.GeneratePayslipPdfAsync(numericId.Value);
+            if (pdfBytes == null || pdfBytes.Length == 0)
+            {
+                return NotFound(new
+                {
+                    Message = "Payslip not found or failed to generate PDF."
+                });
+            }
+
+            return File(pdfBytes, "application/pdf", $"Payslip_{numericId.Value}.pdf");
+        }
 
         // GET: api/payroll/revisions?staffId=10&status=Pending
         [HttpGet("revisions")]
         public async Task<IActionResult> GetSalaryRevisions(
             [FromQuery] int? staffId,
-            [FromQuery] string? status)
+            [FromQuery] string? status,
+            [FromQuery] int? campusId)
         {
             if (staffId.HasValue && staffId.Value <= 0)
             {
@@ -554,8 +668,9 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            var resolvedCampusId = ResolveCampusId(campusId);
             var result = await _payrollService
-                .GetSalaryRevisionsAsync(staffId, status);
+                .GetSalaryRevisionsAsync(staffId, status, resolvedCampusId);
 
             return Ok(result);
         }
@@ -648,7 +763,8 @@ namespace CollegeManagement.API.Controllers
         [HttpGet("bonuses")]
         public async Task<IActionResult> GetBonuses(
             [FromQuery] int? staffId,
-            [FromQuery] string? status)
+            [FromQuery] string? status,
+            [FromQuery] int? campusId)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -662,7 +778,8 @@ namespace CollegeManagement.API.Controllers
                     Message = "Status must be Pending, Approved or Rejected."
                 });
 
-            var result = await _payrollService.GetBonusesAsync(staffId, status);
+            var resolvedCampusId = ResolveCampusId(campusId);
+            var result = await _payrollService.GetBonusesAsync(staffId, status, resolvedCampusId);
             return Ok(result);
         }
 
@@ -739,7 +856,8 @@ namespace CollegeManagement.API.Controllers
         [HttpGet("advances")]
         public async Task<IActionResult> GetAdvances(
             [FromQuery] int? staffId,
-            [FromQuery] string? status)
+            [FromQuery] string? status,
+            [FromQuery] int? campusId)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -754,7 +872,8 @@ namespace CollegeManagement.API.Controllers
                     Message = "Status must be Pending, Approved, Rejected or Closed."
                 });
 
-            var result = await _payrollService.GetAdvancesAsync(staffId, status);
+            var resolvedCampusId = ResolveCampusId(campusId);
+            var result = await _payrollService.GetAdvancesAsync(staffId, status, resolvedCampusId);
             return Ok(result);
         }
 
@@ -879,7 +998,7 @@ namespace CollegeManagement.API.Controllers
         // GET: api/v1/payroll/summary?month=9&year=2026
         [HttpGet("summary")]
         public async Task<IActionResult> GetMonthlyPayrollSummary(
-            [FromQuery] int? month, [FromQuery] int? year)
+            [FromQuery] int? month, [FromQuery] int? year, [FromQuery] int? campusId)
         {
             var targetMonth = month.GetValueOrDefault(DateTime.UtcNow.Month);
             var targetYear = year.GetValueOrDefault(DateTime.UtcNow.Year);
@@ -887,22 +1006,27 @@ namespace CollegeManagement.API.Controllers
             if (targetMonth < 1 || targetMonth > 12 || targetYear < 2000)
                 return BadRequest(new { Message = "Valid month (1-12) and year (>= 2000) are required." });
 
-            var result = await _payrollService.GetMonthlyPayrollSummaryAsync(targetMonth, targetYear);
+            var resolvedCampusId = ResolveCampusId(campusId);
+            var result = await _payrollService.GetMonthlyPayrollSummaryAsync(targetMonth, targetYear, resolvedCampusId);
             return Ok(result);
         }
 
         // GET: api/payroll/payslips/10/advance-repayments
-        [HttpGet("payslips/{id:int}/advance-repayments")]
-        public async Task<IActionResult> GetAdvanceRepaymentsByPayslip(int id)
+        [HttpGet("payslips/{id}/advance-repayments")]
+        public async Task<IActionResult> GetAdvanceRepaymentsByPayslip(string id)
         {
-            if (id <= 0)
+            if (string.IsNullOrWhiteSpace(id))
                 return BadRequest(new { Message = "Valid payslip Id is required." });
 
-            var payslip = await _payrollService.GetPayslipByIdAsync(id);
+            var numericId = await _payrollService.ResolvePayslipIdAsync(id);
+            if (!numericId.HasValue)
+                return NotFound(new { Message = "Payslip not found." });
+
+            var payslip = await _payrollService.GetPayslipByIdAsync(numericId.Value);
             if (payslip == null)
                 return NotFound(new { Message = "Payslip not found." });
 
-            var repayments = await _payrollService.GetAdvanceRepaymentsByPayslipAsync(id);
+            var repayments = await _payrollService.GetAdvanceRepaymentsByPayslipAsync(numericId.Value);
             return Ok(repayments);
         }
 

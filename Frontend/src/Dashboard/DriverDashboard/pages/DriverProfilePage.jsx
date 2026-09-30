@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getProfile, updateProfileContact } from "../../../api/transportDriverApi.js";
+import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverProfilePage() {
   const [driverProfile, setDriverProfile] = useState({});
@@ -84,7 +85,7 @@ export default function DriverProfilePage() {
     triggerToast(`Downloading ${doc.title}...`);
   };
 
-  if (loading) return <div className="dp-page-container"><p>Loading Profile Data...</p></div>;
+  if (loading) return <div className="dp-page-container"><SkeletonPage variant="form" rows={8} /></div>;
   if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
 
   return (

@@ -288,6 +288,30 @@
   background: var(--cms-surface);
 }
 
+/* Required markers are scoped to Transport forms and stay attached to their labels. */
+.cms-transport-form-modal .cms-field > label {
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.cms-transport-form-modal .cms-field > label .req,
+.cms-transport-add-driver-modal .transport-required,
+.cms-transport-add-attendant-modal .transport-required {
+  display: inline;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  color: var(--cms-red, #dc2626);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cms-transport-add-driver-modal .cms-field > span:first-child,
+.cms-transport-add-attendant-modal .cms-field > span:first-child {
+  display: inline;
+  color: var(--cms-text);
+  white-space: normal;
+}
+
 /* Pickup Points form only: a balanced three-column modal without affecting other Transport forms. */
 .cms-modal.cms-transport-pickup-modal {
   width: min(720px, calc(100vw - 32px));
@@ -347,6 +371,93 @@
 
 .cms-transport-pickup-modal .cms-modal-foot .cms-btn {
   min-width: 104px;
+}
+
+/* Vehicle form only: compact three-column Add/Edit modal. */
+.cms-modal.cms-transport-vehicle-modal {
+  width: min(680px, calc(100vw - 32px));
+  max-width: 680px;
+  max-height: calc(100vh - 32px);
+}
+
+.cms-transport-vehicle-modal .cms-modal-head {
+  min-height: 62px;
+  padding: 15px 22px;
+  align-items: center;
+}
+
+.cms-transport-vehicle-modal .cms-modal-body {
+  padding: 20px 22px;
+}
+
+.cms-transport-vehicle-modal .cms-form-grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 16px;
+  align-items: start;
+}
+
+.cms-transport-vehicle-modal .cms-field {
+  min-width: 0;
+}
+
+.cms-transport-vehicle-modal .cms-field input:not([type="checkbox"]),
+.cms-transport-vehicle-modal .cms-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  height: 42px;
+}
+
+.cms-transport-vehicle-modal .cms-field:has(input[type="checkbox"]) {
+  gap: 10px;
+}
+
+.cms-transport-vehicle-modal .cms-field:has(input[type="checkbox"]) .cms-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cms-text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.cms-transport-vehicle-modal .cms-check input[type="checkbox"] {
+  appearance: auto;
+  box-sizing: border-box;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0;
+  padding: 0;
+  border: initial;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  accent-color: var(--cms-primary);
+  cursor: pointer;
+}
+
+.cms-transport-vehicle-modal .cms-check > span {
+  margin: 0;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.cms-transport-vehicle-modal .cms-modal-foot {
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+}
+
+.cms-transport-vehicle-modal .cms-modal-foot .cms-btn {
+  min-width: 88px;
 }
 
 .cms-transport-toolbar-actions {
@@ -450,6 +561,23 @@
 .cms-transport-report-toolbar .cms-transport-toolbar-actions {
   margin-left: auto;
   flex-wrap: nowrap;
+}
+
+.cms-transport-report-state {
+  margin: 0 20px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--cms-border);
+  border-radius: 9px;
+  background: var(--cms-subtle);
+  color: var(--cms-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cms-transport-report-state.is-error {
+  border-color: color-mix(in srgb, var(--cms-red) 30%, var(--cms-border));
+  background: color-mix(in srgb, var(--cms-red) 7%, var(--cms-surface));
+  color: var(--cms-red);
 }
 
 .cms-transport-report-toolbar-compact {
@@ -967,6 +1095,30 @@
 
   .cms-transport-status-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .cms-transport-vehicle-modal .cms-form-grid.cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .cms-modal.cms-transport-vehicle-modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .cms-transport-vehicle-modal .cms-modal-head,
+  .cms-transport-vehicle-modal .cms-modal-body,
+  .cms-transport-vehicle-modal .cms-modal-foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .cms-transport-vehicle-modal .cms-form-grid.cols-3 {
+    grid-template-columns: 1fr;
   }
 }
 

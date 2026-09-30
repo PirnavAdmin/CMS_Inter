@@ -25,10 +25,11 @@ import {
 } from "recharts";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import collegeLogo from "@/assets/pirnav-colleges-logo.png";
 import {
   COLLEGE_NAME,
@@ -81,6 +82,10 @@ const getObject = (payload) => {
   if (data && !Array.isArray(data)) return data;
   return {};
 };
+
+const cleanParams = (params = {}) => Object.fromEntries(
+  Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+);
 
 const read = (item, ...keys) => {
   const key = keys.find((candidate) => item?.[candidate] !== undefined && item?.[candidate] !== null && item?.[candidate] !== "");
@@ -209,6 +214,7 @@ const normalizeHostelBlockRows = (rows = []) => rows.map((row) => ({
   id: read(row, "hostelId", "HostelId", "id", "Id"),
   name: textValue(row, "hostelName", "HostelName", "name", "Name") || "Hostel Block",
   code: textValue(row, "hostelCode", "HostelCode", "code", "Code"),
+  campusId: read(row, "campusId", "CampusId"),
   status: textValue(row, "status", "Status") || "Active",
 })).filter((row) => row.id);
 
@@ -240,6 +246,17 @@ const normalizeHostelFeeRows = (rows = []) => rows.map((row, index) => {
     status: textValue(row, "status", "Status") || "Active",
   };
 });
+
+const filterHostelFeesByCampus = (configs = [], blocks = [], campusId = "") => {
+  if (!campusId) return { configs, blocks };
+  const campusBlocks = blocks.filter((block) => block.campusId && String(block.campusId) === String(campusId));
+  if (!campusBlocks.length) return { configs, blocks };
+  const campusBlockIds = new Set(campusBlocks.map((block) => String(block.id)));
+  return {
+    blocks: campusBlocks,
+    configs: configs.filter((config) => campusBlockIds.has(String(config.hostelId || config.hostelBlock))),
+  };
+};
 
 const normalizeFineRuleRows = (rows = []) => rows.map((row, index) => {
   const id = read(row, "fineRuleId", "FineRuleId", "id", "Id");
@@ -2444,7 +2461,7 @@ function LedgerTab({ accounts, fineRules = [], onView, onPrint, masters, loading
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="cms-fee-empty-row">Loading fee accounts...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={11} />)
             ) : error ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
@@ -2523,7 +2540,7 @@ function FeeCollectionTab({ accounts, fineRules = [], onCollect, loading = false
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={9} className="cms-fee-empty-row">Loading fee accounts...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
             ) : error ? (
               <tr><td colSpan={9} className="cms-fee-empty-row">Unable to load fee accounts: {error}</td></tr>
             ) : rows.length === 0 ? (
@@ -3425,7 +3442,7 @@ function FineTab({ fineRules, feeTypes, loading, error, onToast, onRefresh }) {
                 </tr>
               ))}
               {!loading && !fineRules.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No fine rules configured.</td></tr> : null}
-              {loading ? <tr><td colSpan={7} className="cms-fee-empty-row">Loading fine rules...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : null}
             </tbody>
           </table>
         </div>
@@ -3526,7 +3543,7 @@ function StructureTab({ structures, onToast, onRefresh, loading, error, feeTypes
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} className="cms-fee-empty-row">Loading fee structures...</td></tr>
+              Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={6} />)
             ) : structures.length === 0 ? (
               <tr><td colSpan={6} className="cms-fee-empty-row">{error || "No fee structures found."}</td></tr>
             ) : paginatedStructures.map((row) => {
@@ -3723,7 +3740,7 @@ function HostelFeesTab({ configs, masters, loading, error, onToast, onRefresh })
                 </tr>
               ))}
               {!loading && !configs.length ? <tr><td colSpan={8} className="cms-fee-empty-row">No hostel fee configurations found.</td></tr> : null}
-              {loading ? <tr><td colSpan={8} className="cms-fee-empty-row">Loading hostel fee configurations...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={8} />) : null}
             </tbody>
           </table>
         </div>
@@ -3911,7 +3928,7 @@ function TransportFeesTab({ routes, pickupPoints, loading, error, onToast, onRef
                 </tr>
               ))}
               {!loading && !pickupPoints.length ? <tr><td colSpan={7} className="cms-fee-empty-row">No transport fee configurations found.</td></tr> : null}
-              {loading ? <tr><td colSpan={7} className="cms-fee-empty-row">Loading transport fee configurations...</td></tr> : null}
+              {loading ? Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={7} />) : null}
             </tbody>
           </table>
         </div>
@@ -4144,7 +4161,7 @@ function HistoryTab({ transactions = [], onReceipt, loading = false, error = "" 
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="cms-fee-empty-row">Loading payment history...</td></tr>
+              Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={11} />)
             ) : error ? (
               <tr><td colSpan={11} className="cms-fee-empty-row">Unable to load payment history: {error}</td></tr>
             ) : rows.length === 0 ? (
@@ -4184,6 +4201,8 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     selectedBoardId,
     selectedAcademicYearId,
   } = useAcademicContext();
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const selectedCampusValue = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id ?? "";
   const [tab, setTab] = useState(initialTab);
   const [setupTab, setSetupTab] = useState(initialSetupTab);
   const [ledgerTab, setLedgerTab] = useState(initialLedgerTab);
@@ -4302,8 +4321,18 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     accountRequestRef.current = { ...accountRequestRef.current, [source]: requestId };
     setAccountLoading((current) => ({ ...current, [source]: true }));
     setAccountErrors((current) => ({ ...current, [source]: "" }));
+    if (source === "collection") {
+      setCollectionAccounts([]);
+    } else {
+      setLedgerAccounts([]);
+    }
     try {
-      const response = await apiClient.get(endpoint);
+      const response = await apiClient.get(endpoint, {
+        params: cleanParams({
+          campusId: selectedCampusValue,
+          academicYearId: source === "ledger" ? selectedAcademicYearId : "",
+        }),
+      });
       if (accountRequestRef.current[source] !== requestId) return;
       const rows = getCollection(response.data);
       const context = await loadAccountContext(rows);
@@ -4359,18 +4388,21 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         setAccountLoading((current) => ({ ...current, [source]: false }));
       }
     }
-  }, [loadAccountContext]);
+  }, [loadAccountContext, selectedAcademicYearId, selectedCampusValue]);
 
   const loadOverviewData = useCallback(async () => {
     const requestId = overviewRequestRef.current + 1;
     overviewRequestRef.current = requestId;
     setDashboardLoaded(false);
     setOverviewError("");
-    const dashboardResult = await apiClient.get(apiEndpoints.fee.dashboard).then(
+    setDashboardData(null);
+    setDueRows([]);
+    const overviewParams = cleanParams({ campusId: selectedCampusValue });
+    const dashboardResult = await apiClient.get(apiEndpoints.fee.dashboard, { params: overviewParams }).then(
       (response) => ({ status: "fulfilled", response }),
       (error) => ({ status: "rejected", error }),
     );
-    const dueResult = await apiClient.get(apiEndpoints.fee.due || apiEndpoints.fee.getDue).then(
+    const dueResult = await apiClient.get(apiEndpoints.fee.due || apiEndpoints.fee.getDue, { params: overviewParams }).then(
       (response) => ({ status: "fulfilled", response }),
       (error) => ({ status: "rejected", error }),
     );
@@ -4387,7 +4419,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       .filter((result) => result.status === "rejected")
       .map((result) => getApiErrorMessage(result.error));
     if (messages.length) setOverviewError(messages.join(" "));
-  }, []);
+  }, [selectedCampusValue]);
 
   const loadMissingPaymentHistories = useCallback(async (accounts) => {
     const targets = accounts.filter((account) => (
@@ -4418,30 +4450,36 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     setFineRuleState({ loading: true, error: "" });
     setStructureError("");
     setMasterErrors({});
-    const [typesResult, structuresResult, scholarshipsResult, yearsResult, levelsResult, groupsResult, programsResult, transportRoutesResult, transportPickupsResult, hostelFeesResult, hostelBlocksResult, hostelRoomTypesResult, fineRulesResult] = await Promise.allSettled([
+    const [typesResult, structuresResult, scholarshipsResult, yearsResult, levelsResult, groupsResult, programsResult, transportRoutesResult, hostelFeesResult, hostelBlocksResult, hostelRoomTypesResult, fineRulesResult] = await Promise.allSettled([
       apiClient.get(apiEndpoints.fee.feeTypes),
-      apiClient.get(apiEndpoints.fee.getStructures),
+      apiClient.get(apiEndpoints.fee.getStructures, { params: cleanParams({ campusId: selectedCampusValue }) }),
       apiClient.get(apiEndpoints.fee.scholarships),
       apiClient.get(apiEndpoints.academicYears.getAll),
       apiClient.get(apiEndpoints.boards.getAcademicLevels),
       apiClient.get(apiEndpoints.groups.getAll, { params: { isActive: true } }).catch(() => apiClient.get(apiEndpoints.groups.dropdown)),
       apiClient.get(apiEndpoints.programs.getAll),
-      apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
-      apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+      apiClient.get(apiEndpoints.transport.routes, { params: cleanParams({ PageNumber: 1, PageSize: 1000, campusId: selectedCampusValue }) }),
       apiClient.get(apiEndpoints.hostel.fees),
       apiClient.get(apiEndpoints.hostel.blocks),
       apiClient.get(apiEndpoints.hostel.roomTypes),
       apiClient.get(apiEndpoints.fee.fineRules),
     ]);
     if (structureRequestRef.current !== requestId) return;
-    const transportError = [transportRoutesResult, transportPickupsResult]
+    const routeRows = transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [];
+    const pickupResults = routeRows.length
+      ? await Promise.allSettled(routeRows.map((route) => (
+        apiClient.get(apiEndpoints.transport.pickupPoints, { params: cleanParams({ PageNumber: 1, PageSize: 1000, routeId: route.id }) })
+      )))
+      : [];
+    if (structureRequestRef.current !== requestId) return;
+    const transportError = [transportRoutesResult, ...pickupResults]
       .filter((result) => result.status === "rejected")
       .map((result) => getApiErrorMessage(result.reason))
       .filter(Boolean)
       .join(" ");
     setTransportFees({
-      routes: transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [],
-      pickupPoints: transportPickupsResult.status === "fulfilled" ? normalizeTransportPickupRows(getCollection(transportPickupsResult.value.data)) : [],
+      routes: routeRows,
+      pickupPoints: normalizeTransportPickupRows(pickupResults.flatMap((result) => (result.status === "fulfilled" ? getCollection(result.value.data) : []))),
       loading: false,
       error: transportError,
     });
@@ -4450,10 +4488,13 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       .map((result) => getApiErrorMessage(result.reason))
       .filter(Boolean)
       .join(" ");
+    const hostelBlocks = hostelBlocksResult.status === "fulfilled" ? normalizeHostelBlockRows(getCollection(hostelBlocksResult.value.data)) : [];
+    const hostelConfigs = hostelFeesResult.status === "fulfilled" ? normalizeHostelFeeRows(getCollection(hostelFeesResult.value.data)) : [];
+    const campusHostelData = filterHostelFeesByCampus(hostelConfigs, hostelBlocks, selectedCampusValue);
     setHostelFees({
-      configs: hostelFeesResult.status === "fulfilled" ? normalizeHostelFeeRows(getCollection(hostelFeesResult.value.data)) : [],
+      configs: campusHostelData.configs,
       masters: {
-        blocks: hostelBlocksResult.status === "fulfilled" ? normalizeHostelBlockRows(getCollection(hostelBlocksResult.value.data)) : [],
+        blocks: campusHostelData.blocks,
         roomTypes: hostelRoomTypesResult.status === "fulfilled" ? normalizeHostelRoomTypeRows(getCollection(hostelRoomTypesResult.value.data)) : [],
       },
       loading: false,
@@ -4543,7 +4584,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       scholarships: scholarshipsResult.status === "rejected" ? getApiErrorMessage(scholarshipsResult.reason) : "",
     });
     if (structureRequestRef.current === requestId) setStructureLoading(false);
-  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions]);
+  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue]);
 
   const openCollectPayment = (id) => {
     setSelectedId(id);
@@ -4610,19 +4651,24 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
 
   useEffect(() => {
     loadOverviewData();
-    loadedTabsRef.current.add("Overview");
-  }, [loadOverviewData]);
+    loadedTabsRef.current.add(`Overview:${selectedCampusValue || ""}`);
+  }, [loadOverviewData, selectedCampusValue]);
 
   useEffect(() => {
-    const contextKey = `${selectedBoardId || ""}:${selectedAcademicYearId || ""}`;
-    const loadKey = tab === "Student Fee Ledger" ? `${tab}:${ledgerTab}:${contextKey}` : `${tab}:${contextKey}`;
+    const campusKey = selectedCampusValue || "";
+    const boardYearKey = `${selectedBoardId || ""}:${selectedAcademicYearId || ""}`;
+    const loadKey = tab === "Overview"
+      ? `${tab}:${campusKey}`
+      : tab === "Student Fee Ledger"
+        ? `${tab}:${ledgerTab}:${campusKey}:${ledgerTab === "Fee Collection" ? "" : selectedAcademicYearId || ""}`
+        : `${tab}:${campusKey}:${boardYearKey}`;
     if (loadedTabsRef.current.has(loadKey)) return;
     loadedTabsRef.current.add(loadKey);
     if (tab === "Overview") loadOverviewData();
     if (tab === "Fee Setup") loadFeeApiData();
     if (tab === "Student Fee Ledger" && ledgerTab === "Fee Collection") loadFeeAccounts("collection");
     if (tab === "Student Fee Ledger" && ledgerTab !== "Fee Collection") loadFeeAccounts("ledger");
-  }, [ledgerTab, loadFeeAccounts, loadFeeApiData, loadOverviewData, selectedAcademicYearId, selectedBoardId, tab]);
+  }, [ledgerTab, loadFeeAccounts, loadFeeApiData, loadOverviewData, selectedAcademicYearId, selectedBoardId, selectedCampusValue, tab]);
 
   useEffect(() => {
     if (tab !== "Student Fee Ledger" || ledgerTab !== "Payment History") return;

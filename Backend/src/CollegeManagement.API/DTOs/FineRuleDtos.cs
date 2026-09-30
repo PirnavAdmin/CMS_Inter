@@ -11,6 +11,11 @@ namespace CollegeManagement.API.DTOs
         public string ApplicableFeeName { get; set; } = string.Empty;
         public string FineType { get; set; } = string.Empty;
         public decimal FineAmount { get; set; }
+        
+        public int? CampusId { get; set; }
+        public int? BoardId { get; set; }
+        public int? AcademicYearId { get; set; }
+
         public int GracePeriod { get; set; }
         public string Status { get; set; } = string.Empty;
     }
@@ -31,6 +36,10 @@ namespace CollegeManagement.API.DTOs
         [Required]
         [Range(0, double.MaxValue)]
         public decimal FineAmount { get; set; }
+
+        public int? CampusId { get; set; }
+        public int? BoardId { get; set; }
+        public int? AcademicYearId { get; set; }
 
         [Required]
         [Range(0, int.MaxValue)]

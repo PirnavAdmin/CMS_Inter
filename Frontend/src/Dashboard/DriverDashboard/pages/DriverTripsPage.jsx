@@ -18,6 +18,7 @@ import {
 import DriverTripCard from "../components/DriverTripCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getTrips, startTrip, endTrip, getProfile, getDashboard } from "../../../api/transportDriverApi.js";
+import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverTripsPage({
   onNavigateTab,
@@ -149,7 +150,7 @@ export default function DriverTripsPage({
   };
 
   if (isLoading) {
-    return <div className="dp-page-container"><p>Loading trips...</p></div>;
+    return <div className="dp-page-container"><SkeletonPage variant="page" /></div>;
   }
 
   if (error) {
