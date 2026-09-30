@@ -150,21 +150,27 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode)
+        public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
-                var maxSeq = await conn.ExecuteScalarAsync<int?>(
-                    "sp_GetMaxSequenceForBaseSeries", 
-                    new { p_BaseCode = baseSeriesCode.Trim() },
-                    commandType: CommandType.StoredProcedure);
+                
+                // Fallback to query since sp doesn't take campusId
+                var query = @"
+                    SELECT MAX(`CurrentSequence`)
+                    FROM `NumberSeriesConfigurations`
+                    WHERE (`SeriesCode` = @BaseCode OR `SeriesCode` LIKE CONCAT(@BaseCode, '|%'))
+                      AND (`CampusId` = @CampusId OR `CampusId` <=> @CampusId);";
+                      
+                var maxSeq = await conn.ExecuteScalarAsync<int?>(query, new { BaseCode = baseSeriesCode.Trim(), CampusId = campusId });
                 return maxSeq ?? 0;
             }
             catch
             {
                 var max = await _context.Set<NumberSeriesConfiguration>()
-                    .Where(n => n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
+                    .Where(n => (n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
+                             && (n.CampusId == campusId || n.CampusId == null))
                     .MaxAsync(n => (int?)n.CurrentSequence);
                 return max ?? 0;
             }

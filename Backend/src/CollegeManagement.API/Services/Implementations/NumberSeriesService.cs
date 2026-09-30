@@ -176,10 +176,16 @@ namespace CollegeManagement.API.Services.Implementations
             // If specific entity exists, use its sequence. If not, the sequence is 0.
             var curSeq = specificEntity?.CurrentSequence ?? 0;
             
+            // If specificEntity is actually a global fallback, reset curSeq
+            if (specificEntity != null && campusId.HasValue && specificEntity.CampusId != campusId)
+            {
+                curSeq = specificEntity.StartNumber > 0 ? specificEntity.StartNumber - 1 : 0;
+            }
+            
             // If we are previewing the base series itself, get the absolute max across all its sub-series
             if (actualCode == code)
             {
-                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(code);
+                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(code, campusId);
                 curSeq = Math.Max(curSeq, maxSeq);
             }
 
@@ -203,6 +209,15 @@ namespace CollegeManagement.API.Services.Implementations
         {
             var curSeq = entity.CurrentSequence;
             
+            // If the entity we are using as base is from a different campus (global fallback), 
+            // the sequence for the requested campus should not inherit the global one directly 
+            // unless we're just rendering a preview. But to show the correct preview (e.g. 1 instead of 99)
+            // we should reset to 0 if it's a cross-campus fallback.
+            if (campusId.HasValue && entity.CampusId != campusId)
+            {
+                curSeq = entity.StartNumber > 0 ? entity.StartNumber - 1 : 0;
+            }
+            
             if (context != null && (!string.IsNullOrWhiteSpace(context.Board) || !string.IsNullOrWhiteSpace(context.AcademicYear)))
             {
                 var contextParts = new List<string>();
@@ -218,12 +233,12 @@ namespace CollegeManagement.API.Services.Implementations
                 }
                 else
                 {
-                    curSeq = 0;
+                    curSeq = entity.StartNumber > 0 ? entity.StartNumber - 1 : 0;
                 }
             }
             else if (!entity.SeriesCode.Contains("|"))
             {
-                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode);
+                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode, campusId);
                 curSeq = Math.Max(curSeq, maxSeq);
             }
 

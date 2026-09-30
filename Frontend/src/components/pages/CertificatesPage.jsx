@@ -1978,7 +1978,13 @@ export default function CertificatesPage() {
     try {
       let raw = null;
       try {
-        const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { skipGlobalLoader: true });
+        const { boardId, academicYearId, campusId } = academicCtx || {};
+        const params = {};
+        if (campusId) params.campusId = campusId;
+        if (boardId) params.boardId = boardId;
+        if (academicYearId) params.academicYearId = academicYearId;
+        
+        const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { params, skipGlobalLoader: true });
         raw = response?.data;
       } catch {
         try {

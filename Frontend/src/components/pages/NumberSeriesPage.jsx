@@ -49,7 +49,6 @@ const SERIES_ICONS = {
   "non-teaching-staff-id": UserCheck,
   "admission-no": GraduationCap,
   "exam-code": FileText,
-  "certificate-number": Award,
   "receipt-no": Receipt,
 };
 
