@@ -9,7 +9,7 @@ import DriverGpsPage from "./pages/DriverGpsPage.jsx";
 import DriverReportsPage from "./pages/DriverReportsPage.jsx";
 import DriverProfilePage from "./pages/DriverProfilePage.jsx";
 import "./DriverDashboard.css";
-import { getAuthUser } from "../../features/authStorage.js";
+import { clearAuthSession, getAuthUser } from "../../features/authStorage.js";
 
 export default function DriverDashboard() {
   const location = useLocation();
@@ -62,7 +62,8 @@ export default function DriverDashboard() {
   }, []);
 
   const handleLogout = () => {
-    navigate("/login");
+    clearAuthSession();
+    navigate("/login", { replace: true });
   };
 
   const handleSelectTab = (tabId) => {
