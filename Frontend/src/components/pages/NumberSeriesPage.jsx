@@ -28,6 +28,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import * as numberSeriesApi from "@/api/numberSeriesApi.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import {
   readNumberSeriesSettings,
   writeNumberSeriesSettings,
@@ -772,6 +773,7 @@ function RenderTableRow({ seriesId, row, index }) {
 // ======================================================================
 function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
   const navigate = useNavigate();
+  const { selectedCampusId } = useCampusContext();
 
   const [formState, setFormState] = useState({
     prefix: series.prefix || "",
@@ -814,6 +816,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
           pattern: formState.format,
           numberLength: formState.numberLength,
           prefix: formState.prefix,
+          campusId: selectedCampusId,
         });
         if (typeof res === "string" && res.trim()) {
           setApiPreview(res.trim());
@@ -823,7 +826,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
       }
     }, 200);
     return () => clearTimeout(timer);
-  }, [formState.format, formState.numberLength, formState.prefix, series, liveValidation.valid]);
+  }, [formState.format, formState.numberLength, formState.prefix, series, selectedCampusId, liveValidation.valid]);
 
   const livePreviewVal = apiPreview || localLivePreviewVal;
 

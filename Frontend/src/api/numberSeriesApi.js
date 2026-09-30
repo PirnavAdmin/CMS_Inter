@@ -104,12 +104,13 @@ export async function generateNextNumber(seriesCode, context = {}) {
  * 5. GET /api/v1/settings/number-series/{seriesCode}/preview (or /api/v1/number-series/{seriesCode}/preview)
  * Dynamic on-the-fly preview calculation for UI typing without persisting changes.
  */
-export async function previewNumberSeries(seriesCode, { pattern, numberLength, prefix } = {}) {
+export async function previewNumberSeries(seriesCode, { pattern, numberLength, prefix, campusId } = {}) {
   if (!seriesCode) throw new Error("seriesCode is required");
   const params = {};
   if (pattern !== undefined) params.pattern = pattern;
   if (numberLength !== undefined) params.numberLength = Number(numberLength);
   if (prefix !== undefined) params.prefix = prefix;
+  if (campusId !== undefined) params.campusId = campusId;
 
   try {
     const response = await apiClient.get(apiEndpoints.numberSeries.preview(seriesCode), { params });
