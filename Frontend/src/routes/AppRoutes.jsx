@@ -45,7 +45,7 @@ import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
-import FacultyDashboard from "@/Dashboard/Facultydashboard.jsx";
+import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
 import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
 import ParentChildrenPage, { ParentChildDetailsRoute } from "@/Dashboard/Parent Dashboard/pages/ParentChildrenPage.jsx";
@@ -330,7 +330,7 @@ export default function AppRoutes() {
         <Route path="/parent-dashboard/settings" element={<ParentSettingsPage />} />
       </Route>
 
-      <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
+      <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />
       <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />

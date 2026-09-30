@@ -2890,9 +2890,9 @@ export default function SectionManagementPage() {
                     </div>
                   </div>
                   <div className="cms-sec-toolbar-spacer" />
-                  <button type="button" className="cms-btn cms-btn-ghost cms-sec-compact-btn cms-allocation-export-btn" onClick={exportAllocationExcel}>
+                  {/* <button type="button" className="cms-btn cms-btn-ghost cms-sec-compact-btn cms-allocation-export-btn" onClick={exportAllocationExcel}>
                     <Download size={15} /> Download Excel
-                  </button>
+                  </button> */}
                   <button type="button" className="cms-btn cms-btn-primary cms-sec-compact-btn" onClick={openAddSection}>
                     <Plus size={16} /> Add Section
                   </button>
@@ -2910,19 +2910,17 @@ export default function SectionManagementPage() {
                         <th className="cms-cell-center">Room No</th>
                         <th>Incharge</th>
                         <th className="cms-cell-center">Capacity</th>
-                        <th className="cms-cell-center">No of Students</th>
-                        <th>Status</th>
-                        <th className="cms-cell-center">Actions</th>
+                        <th style={{ width: "6%", textAlign: "left" }}>Status</th>
+                        <th className="cms-cell-center" style={{ width: "9%" }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {initialLoading ? (
-                        Array.from({ length: sectionPageSize }, (_, index) => <SkeletonRow key={index} columns={10} />)
+                        Array.from({ length: sectionPageSize }, (_, index) => <SkeletonRow key={index} columns={9} />)
                       ) : shownSections.length ? (
                         shownSections.map((sec) => {
                           const detail = resolveSection(sec);
                           const teacherCode = detail.facultyEmployeeId;
-                          const studentCount = sectionStudentCounts[sec.id] !== undefined ? sectionStudentCounts[sec.id] : 0;
                           return (
                             <tr key={sec.id}>
                               <td className="cms-sec-name-cell">{sec.name}</td>
@@ -2943,7 +2941,6 @@ export default function SectionManagementPage() {
                                 )}
                               </td>
                               <td className="cms-cell-center">{sec.strength || "—"}</td>
-                              <td className="cms-cell-center">{studentCount ?? 0}</td>
                               <td>
                                 <span
                                   className={`cms-sec-status-badge ${sec.status === "Active" ? "cms-badge-active" : "cms-badge-inactive"

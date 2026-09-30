@@ -132,6 +132,8 @@ export default function ResultProcessingPage() {
   const [publishedGroups, setPublishedGroups] = useState([]);
   const [loadingPublished, setLoadingPublished] = useState(false);
   const publishedGroupsRef = useRef(publishedGroups);
+  const publishedGroupsCampusRef = useRef(null);
+  const publishedFetchSequenceRef = useRef(0);
   useEffect(() => {
     publishedGroupsRef.current = publishedGroups;
   }, [publishedGroups]);
@@ -294,6 +296,8 @@ export default function ResultProcessingPage() {
     if (!effectiveCampus) return String(selectedCampusId || "1");
     return String(effectiveCampus.campusId ?? effectiveCampus.id);
   }, [effectiveCampus, selectedCampusId]);
+
+  const publishedRequestCampusRef = useRef(effectiveCampusId);
 
   const campusAffiliatedBoardIds = useMemo(() => {
     if (!effectiveCampus) return [];
@@ -483,6 +487,12 @@ export default function ResultProcessingPage() {
 
   // Reactive reset of results state when active campus changes
   useEffect(() => {
+    publishedRequestCampusRef.current = effectiveCampusId;
+    publishedGroupsCampusRef.current = effectiveCampusId;
+    publishedGroupsRef.current = [];
+    setPublishedGroups([]);
+    setSelectedPublishedGroup(null);
+    setSelectedPublishedSection(null);
     setResultsGenerated(false);
     setSectionSummaries([]);
     setSelectedSectionDetails(null);
@@ -1224,6 +1234,8 @@ export default function ResultProcessingPage() {
      TAB 2: PUBLISHED RESULTS & SECTION STUDENT BREAKDOWN
      ============================================================ */
   const fetchPublishedGroups = useCallback(async () => {
+    const requestedCampusId = effectiveCampusId;
+    const requestSequence = ++publishedFetchSequenceRef.current;
     setLoadingPublished(true);
     const bId = Number(selectedBoardId || filters.board || applied.board);
     const yId = Number(selectedAcademicYearId || filters.year || applied.year);
@@ -1256,7 +1268,11 @@ export default function ResultProcessingPage() {
               : [];
 
         // If filtering by params returned empty, fallback to fetching all published items
-        let itemsToProcess = rawList;
+        const isForRequestedCampus = (item) => {
+          const itemCampusId = item?.campusId ?? item?.CampusId ?? item?.campus?.campusId ?? item?.campus?.id;
+          return itemCampusId == null || String(itemCampusId) === String(requestedCampusId);
+        };
+        let itemsToProcess = rawList.filter(isForRequestedCampus);
         if (itemsToProcess.length === 0 && Object.keys(queryParams).length > 0) {
           try {
             const fallbackRes = await apiClient.get("/api/v1/results/published", {
@@ -1270,8 +1286,9 @@ export default function ResultProcessingPage() {
               : Array.isArray(fallbackRes?.data?.data)
                 ? fallbackRes.data.data
                 : [];
-            if (fallbackList.length > 0) {
-              itemsToProcess = fallbackList;
+            const campusFallbackList = fallbackList.filter(isForRequestedCampus);
+            if (campusFallbackList.length > 0) {
+              itemsToProcess = campusFallbackList;
             }
           } catch (fbErr) {
             console.warn("Fallback fetch all published results notice:", fbErr);
@@ -1417,7 +1434,10 @@ export default function ResultProcessingPage() {
       }
 
       // Merge newly published session groups only if not already provided by backend
-      (publishedGroupsRef.current || []).forEach((pg) => {
+      const cachedGroups = publishedGroupsCampusRef.current === requestedCampusId
+        ? (publishedGroupsRef.current || [])
+        : [];
+      cachedGroups.forEach((pg) => {
         const itemExamId = Number(pg.examId ?? pg.examinationId ?? pg.publishedId);
         const itemGroupId = Number(pg.groupId || 0);
         if (itemExamId > 0) {
@@ -1430,11 +1450,14 @@ export default function ResultProcessingPage() {
 
       // Convert Map to Array and update state
       const finalPublishedList = Array.from(fetchedGroupsMap.values());
+      if (publishedRequestCampusRef.current !== requestedCampusId) return;
+      publishedGroupsCampusRef.current = requestedCampusId;
+      publishedGroupsRef.current = finalPublishedList;
       setPublishedGroups(finalPublishedList);
     } catch (err) {
       console.error("fetchPublishedGroups error:", err);
     } finally {
-      setLoadingPublished(false);
+      if (publishedFetchSequenceRef.current === requestSequence) setLoadingPublished(false);
     }
   }, [selectedBoardId, selectedAcademicYearId, filters.board, filters.year, filters.group, applied.board, applied.year, applied.group, effectiveCampusId]);
 
@@ -2270,6 +2293,7 @@ export default function ResultProcessingPage() {
               <PublishedGroupsList
                 groups={publishedGroups}
                 loading={loadingPublished}
+                campusName={effectiveCampus?.name || selectedCampus?.name || "selected campus"}
                 search={publishedSearch}
                 setSearch={setPublishedSearch}
                 statusFilter={publishedStatusFilter}
@@ -2653,6 +2677,7 @@ function SectionsTable({
 function PublishedGroupsList({
   groups,
   loading = false,
+  campusName = "selected campus",
   search,
   setSearch,
   statusFilter,
@@ -2826,7 +2851,11 @@ function PublishedGroupsList({
               ) : (
                 <tr>
                   <td colSpan={10} className="cms-empty-td">
-                    {loading ? "Loading published examination results from database..." : "No published exam results match your filter."}
+                    {loading
+                      ? `Loading published examination results for ${campusName}...`
+                      : groups.length === 0
+                        ? `No published examination results are available for ${campusName}.`
+                        : `No published examination results match your filters for ${campusName}.`}
                   </td>
                 </tr>
               )}

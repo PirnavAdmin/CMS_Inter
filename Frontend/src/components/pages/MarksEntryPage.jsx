@@ -3338,7 +3338,7 @@ function Context({ context, masters }) {
   return (
     <section className="cms-context-summary">
       <div className="cms-context-content">
-        <strong className="cms-context-title">{groupTitle}</strong>
+        <strong className="cms-context-title" style={{ marginRight: 6 }}>{groupTitle}</strong>
         <span className="cms-context-subtitle">{subtitle || "—"}</span>
       </div>
     </section>
