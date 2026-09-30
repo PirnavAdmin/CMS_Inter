@@ -1,4 +1,5 @@
-﻿using System.Data;
+using System.Data;
+using System.Text.RegularExpressions;
 using CollegeManagement.API.DTOs.Payroll;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using Dapper;
@@ -147,12 +148,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
         public async Task<IEnumerable<PayrollEmployeeDto>>
             GetEmployeesAsync(
                 string? staffType,
-                string? search)
+                string? search,
+                int? campusId = null)
         {
             var parameters = new DynamicParameters();
 
             parameters.Add("p_StaffType", staffType);
             parameters.Add("p_Search", search);
+            parameters.Add("p_CampusId", campusId);
 
             return await _dbConnection.QueryAsync<PayrollEmployeeDto>(
                 "sp_PayrollEmployee_GetAll",
@@ -163,11 +166,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
 
 
         public async Task<IEnumerable<SalaryAssignmentDto>>
-            GetSalaryAssignmentsAsync(int? staffId, string? status)
+            GetSalaryAssignmentsAsync(int? staffId, string? status, int? campusId = null)
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_StaffId", staffId);
             parameters.Add("p_Status", status);
+            parameters.Add("p_CampusId", campusId);
 
             return await _dbConnection.QueryAsync<SalaryAssignmentDto>(
                 "sp_PayrollStaffSalary_GetAll",
@@ -349,6 +353,88 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                     commandType: CommandType.StoredProcedure);
         }
 
+        public async Task<int?> ResolvePayslipIdAsync(string rawId)
+        {
+            if (string.IsNullOrWhiteSpace(rawId))
+                return null;
+
+            // 1. Direct integer check (safe 32-bit int)
+            if (int.TryParse(rawId, out int directId) && directId > 0 && directId <= 2000000000)
+            {
+                var exists = await _dbConnection.ExecuteScalarAsync<int?>(
+                    "SELECT PayslipId FROM payroll_payslips WHERE PayslipId = @id LIMIT 1;",
+                    new { id = directId });
+                if (exists.HasValue) return exists.Value;
+            }
+
+            string? staffStr = null;
+            int? year = null;
+            int? month = null;
+
+            // 2. Format: slip-{staff}-{year}-{month}-{timestamp}
+            var m = Regex.Match(rawId, @"^slip-([^-]+)-(\d{4})-(\d{1,2})", RegexOptions.IgnoreCase);
+            if (m.Success)
+            {
+                staffStr = m.Groups[1].Value;
+                if (int.TryParse(m.Groups[2].Value, out int y)) year = y;
+                if (int.TryParse(m.Groups[3].Value, out int mo)) month = mo;
+            }
+            // 3. Numeric concatenated: {staff}{year:4}{month:2}{timestamp:13} (e.g. 372026091790666200000)
+            else if (rawId.Length >= 19 && Regex.IsMatch(rawId, @"^\d+$"))
+            {
+                try
+                {
+                    string monthPart = rawId.Substring(rawId.Length - 15, 2);
+                    string yearPart = rawId.Substring(rawId.Length - 19, 4);
+                    string staffPart = rawId.Substring(0, rawId.Length - 19);
+
+                    int parsedMonth = int.Parse(monthPart);
+                    int parsedYear = int.Parse(yearPart);
+
+                    if (parsedMonth >= 1 && parsedMonth <= 12 && parsedYear >= 2000 && parsedYear <= 2100)
+                    {
+                        month = parsedMonth;
+                        year = parsedYear;
+                        staffStr = staffPart;
+                    }
+                }
+                catch
+                {
+                    // Ignore parse failures
+                }
+            }
+
+            if (year.HasValue && month.HasValue)
+            {
+                int.TryParse(staffStr, out int numericStaff);
+
+                string sql = @"
+                    SELECT pp.PayslipId 
+                    FROM payroll_payslips pp
+                    JOIN Staffs s ON s.Id = pp.StaffId
+                    WHERE pp.PayrollYear = @year 
+                      AND pp.PayrollMonth = @month
+                      AND (
+                          (@numericStaff > 0 AND s.Id = @numericStaff)
+                          OR (@staffStr IS NOT NULL AND s.EmployeeId = @staffStr)
+                          OR (@staffStr IS NOT NULL AND s.EmployeeId LIKE CONCAT('%', @staffStr))
+                      )
+                    ORDER BY pp.PayslipId DESC
+                    LIMIT 1;";
+
+                var found = await _dbConnection.ExecuteScalarAsync<int?>(sql, new { year = year.Value, month = month.Value, staffStr, numericStaff });
+                if (found.HasValue) return found.Value;
+
+                // Fallback: If only 1 payslip exists for that year & month, or most recent
+                var fallback = await _dbConnection.ExecuteScalarAsync<int?>(
+                    "SELECT pp.PayslipId FROM payroll_payslips pp WHERE pp.PayrollYear = @year AND pp.PayrollMonth = @month ORDER BY pp.PayslipId DESC LIMIT 1;",
+                    new { year = year.Value, month = month.Value });
+                if (fallback.HasValue) return fallback.Value;
+            }
+
+            return null;
+        }
+
 
 
         public async Task<IEnumerable<PayslipDto>>
@@ -356,7 +442,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 int? payrollMonth,
                 int? payrollYear,
                 string? staffType,
-                string? search)
+                string? search,
+                int? campusId = null)
         {
             var parameters = new DynamicParameters();
 
@@ -364,6 +451,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add("p_PayrollYear", payrollYear);
             parameters.Add("p_StaffType", staffType);
             parameters.Add("p_Search", search);
+            parameters.Add("p_CampusId", campusId);
 
             return await _dbConnection.QueryAsync<PayslipDto>(
                 "sp_PayrollPayslip_GetHistory",
@@ -417,12 +505,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
         public async Task<IEnumerable<SalaryRevisionDto>>
             GetSalaryRevisionsAsync(
                 int? staffId,
-                string? status)
+                string? status,
+                int? campusId = null)
         {
             var parameters = new DynamicParameters();
 
             parameters.Add("p_StaffId", staffId);
             parameters.Add("p_Status", status);
+            parameters.Add("p_CampusId", campusId);
 
             return await _dbConnection
                 .QueryAsync<SalaryRevisionDto>(
@@ -475,12 +565,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
 
         public async Task<IEnumerable<BonusDto>> GetBonusesAsync(
             int? staffId,
-            string? status)
+            string? status,
+            int? campusId = null)
         {
             var parameters = new DynamicParameters();
 
             parameters.Add("p_StaffId", staffId);
             parameters.Add("p_Status", status);
+            parameters.Add("p_CampusId", campusId);
 
             return await _dbConnection.QueryAsync<BonusDto>(
                 "sp_PayrollBonus_GetAll",
@@ -542,12 +634,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
 
         public async Task<IEnumerable<AdvanceDto>> GetAdvancesAsync(
             int? staffId,
-            string? status)
+            string? status,
+            int? campusId = null)
         {
             var parameters = new DynamicParameters();
 
             parameters.Add("p_StaffId", staffId);
             parameters.Add("p_Status", status);
+            parameters.Add("p_CampusId", campusId);
 
             return await _dbConnection.QueryAsync<AdvanceDto>(
                 "sp_PayrollAdvance_GetAll",
@@ -623,11 +717,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
         }
 
         // Monthly payroll summary
-        public async Task<MonthlyPayrollSummaryDto> GetMonthlyPayrollSummaryAsync(int month, int year)
+        public async Task<MonthlyPayrollSummaryDto> GetMonthlyPayrollSummaryAsync(int month, int year, int? campusId = null)
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_PayrollMonth", month);
             parameters.Add("p_PayrollYear", year);
+            parameters.Add("p_CampusId", campusId);
             return await _dbConnection.QuerySingleAsync<MonthlyPayrollSummaryDto>(
                 "sp_Payroll_GetMonthlySummary", parameters,
                 commandType: CommandType.StoredProcedure);
