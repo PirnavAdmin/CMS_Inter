@@ -5,14 +5,24 @@ import { apiEndpoints } from "./apiEndpoints.js";
  * 1. GET /api/v1/settings/number-series (or /api/v1/number-series)
  * Returns list of configurations for all supported number series.
  */
-export async function getNumberSeriesList() {
+export async function getNumberSeriesList(campusId, boardId, academicYearId) {
+  const headers = campusId !== undefined && campusId !== null && campusId !== ""
+    ? { "X-Campus-Id": String(campusId) }
+    : {};
+  const params = {};
+  if (boardId !== undefined && boardId !== null && boardId !== "") params.board = String(boardId);
+  if (academicYearId !== undefined && academicYearId !== null && academicYearId !== "") {
+    params.academicYear = String(academicYearId);
+  }
+  const requestConfig = { headers, params };
+
   try {
-    const response = await apiClient.get(apiEndpoints.numberSeries.getAll);
+    const response = await apiClient.get(apiEndpoints.numberSeries.getAll, requestConfig);
     return response.data;
   } catch (err) {
     // Fallback to /api/v1/number-series if settings prefix route fails
     try {
-      const fallbackRes = await apiClient.get("/api/v1/number-series");
+      const fallbackRes = await apiClient.get("/api/v1/number-series", requestConfig);
       return fallbackRes.data;
     } catch {
       throw err;
@@ -44,8 +54,11 @@ export async function getNumberSeriesByCode(seriesCode) {
  * 3. PUT /api/v1/settings/number-series/{seriesCode} (or /api/v1/number-series/{seriesCode})
  * Updates configuration: prefix, formatPattern, numberLength, startNumber, description.
  */
-export async function updateNumberSeries(seriesCode, configData) {
+export async function updateNumberSeries(seriesCode, configData, campusId) {
   if (!seriesCode) throw new Error("seriesCode is required");
+  const headers = campusId !== undefined && campusId !== null && campusId !== ""
+    ? { "X-Campus-Id": String(campusId) }
+    : {};
   const payload = {
     prefix: configData.prefix ?? "",
     formatPattern: configData.formatPattern ?? configData.format ?? "",
@@ -55,11 +68,15 @@ export async function updateNumberSeries(seriesCode, configData) {
   };
 
   try {
-    const response = await apiClient.put(apiEndpoints.numberSeries.update(seriesCode), payload);
+    const response = await apiClient.put(apiEndpoints.numberSeries.update(seriesCode), payload, { headers });
     return response.data;
   } catch (err) {
     try {
-      const fallbackRes = await apiClient.put(`/api/v1/number-series/${encodeURIComponent(seriesCode)}`, payload);
+      const fallbackRes = await apiClient.put(
+        `/api/v1/number-series/${encodeURIComponent(seriesCode)}`,
+        payload,
+        { headers },
+      );
       return fallbackRes.data;
     } catch {
       throw err;
