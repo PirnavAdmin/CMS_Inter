@@ -48,9 +48,12 @@ public class FeeStructureComponent
 {
     [Key] public int FeeStructureComponentId { get; set; }
     [Required] public int FeeStructureId { get; set; }
-    [Required] public int FeeTypeId { get; set; }
-    [Required, MaxLength(20)] public string Rule { get; set; } = "Mandatory";
+    [Required, Column("FeeComponentId")] public int FeeTypeId { get; set; }
+    [Column("IsMandatory")] public bool IsMandatory { get; set; } = true;
+    [NotMapped] public string Rule { get => IsMandatory ? "Mandatory" : "Optional"; set => IsMandatory = (value == "Mandatory"); }
     [Column(TypeName = "decimal(18,2)")] public decimal Amount { get; set; }
+    [Column(TypeName = "decimal(18,2)")] public decimal? DefaultAmount { get; set; }
+    public DateTime? DueDate { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
@@ -108,6 +111,7 @@ public class StudentFeeComponent
     [Column(TypeName = "decimal(18,2)")] public decimal PayableAmount { get; set; }
     [Column(TypeName = "decimal(18,2)")] public decimal PaidAmount { get; set; }
     [Column(TypeName = "decimal(18,2)")] public decimal BalanceAmount { get; set; }
+    public DateTime? DueDate { get; set; }
     [MaxLength(30)] public string Status { get; set; } = "Pending";
     public StudentFee? StudentFee { get; set; }
     public FeeStructureComponent? FeeStructureComponent { get; set; }
