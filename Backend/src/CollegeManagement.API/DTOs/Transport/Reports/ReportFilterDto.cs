@@ -33,5 +33,9 @@ namespace CollegeManagement.API.Dtos.Transport.Reports
 
         [JsonPropertyName("reportType")]
         public string? ReportType { get; set; }
+
+        [JsonPropertyName("campusId")]
+        [JsonConverter(typeof(FlexibleLongConverter))]
+        public long? CampusId { get; set; }
     }
 }

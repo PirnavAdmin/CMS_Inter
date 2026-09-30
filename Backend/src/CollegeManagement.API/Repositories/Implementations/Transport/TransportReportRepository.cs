@@ -218,8 +218,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 AssignmentId = (long)(x.StudentTransportAssignmentId ?? 0),
                 AdmissionNo = (string)(x.AdmissionNo ?? ""),
                 StudentName = (string)(x.StudentName ?? ""),
-                ClassSection = "Class 1-A",
-                ClassName = "Class 1",
+                ClassSection = (string)(x.ClassSection ?? "N/A"),
+                ClassName = (string)(x.ClassName ?? "N/A"),
                 RouteName = (string)(x.RouteName ?? "N/A"),
                 PickupPoint = (string)(x.PickupPointName ?? "N/A"),
                 VehicleNumber = (string)(x.VehicleNumber ?? "Unassigned"),
@@ -289,7 +289,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             using var c = Connection();
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetPickupPoints",
-                new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "", p_Status = (byte?)null },
+                new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "", p_Status = (byte?)null, p_CampusId = filter.CampusId },
                 commandType: CommandType.StoredProcedure);
 
             return raw.Select(x => new PickupPointReportDto
