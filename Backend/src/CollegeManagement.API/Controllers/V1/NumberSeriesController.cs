@@ -48,10 +48,10 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetByCode(string seriesCode, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> GetByCode(string seriesCode, [FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null)
         {
             campusId = GetCampusIdFromRequest(campusId);
-            var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, campusId);
+            var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, campusId, board, academicYear);
             if (result == null)
             {
                 return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });

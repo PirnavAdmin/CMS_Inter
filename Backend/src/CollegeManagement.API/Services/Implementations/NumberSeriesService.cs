@@ -73,13 +73,14 @@ namespace CollegeManagement.API.Services.Implementations
             return dtos;
         }
 
-        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug, int? campusId = null)
+        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug, int? campusId = null, string? board = null, string? academicYear = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
             var entity = await _repository.GetByCodeAsync(code, campusId);
             if (entity == null) return null;
 
-            return await MapToDtoAsync(entity, null, campusId);
+            var context = (board != null || academicYear != null) ? new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear } : null;
+            return await MapToDtoAsync(entity, context, campusId);
         }
 
         public async Task<NumberSeriesResponseDto?> UpdateSeriesAsync(string seriesCodeOrSlug, UpdateNumberSeriesDto dto, int? campusId = null)
