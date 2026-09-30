@@ -156,14 +156,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
                 var conn = await GetOpenConnectionAsync();
                 
-                // Fallback to query since sp doesn't take campusId
-                var query = @"
-                    SELECT MAX(`CurrentSequence`)
-                    FROM `NumberSeriesConfigurations`
-                    WHERE (`SeriesCode` = @BaseCode OR `SeriesCode` LIKE CONCAT(@BaseCode, '|%'))
-                      AND (`CampusId` = @CampusId OR `CampusId` <=> @CampusId);";
+                var maxSeq = await conn.ExecuteScalarAsync<int?>(
+                    "sp_GetMaxSequenceForBaseSeries",
+                    new { p_BaseCode = baseSeriesCode.Trim(), p_CampusId = campusId },
+                    commandType: CommandType.StoredProcedure);
                       
-                var maxSeq = await conn.ExecuteScalarAsync<int?>(query, new { BaseCode = baseSeriesCode.Trim(), CampusId = campusId });
                 return maxSeq ?? 0;
             }
             catch
