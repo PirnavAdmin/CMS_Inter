@@ -89,7 +89,8 @@ const currency = new Intl.NumberFormat("en-IN", {
 });
 
 const TABLE_PAGE_SIZE = 5;
-const today = new Date("2026-09-15T00:00:00");
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 
 function formatCurrency(value) {
   return currency.format(Number(value) || 0);
@@ -1207,7 +1208,7 @@ export default function TransportPage() {
   }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
   useEffect(() => {
-    if (activeSection !== "reports") return undefined;
+    if (activeSection !== "reports" || activeReportTab === "trip-reports") return undefined;
     const definition = reportDefinitions[activeReportTab];
     if (!definition) return undefined;
     let active = true;
@@ -1287,6 +1288,7 @@ export default function TransportPage() {
       completedTrips: trips.filter((trip) => trip.status === "Completed").length,
       expiringDocs: dashboardMetrics?.expiringVehicleDocuments ?? expiringDocs.length,
       expiringLicenses: dashboardMetrics?.expiringDriverLicenses ?? expiringLicenses.length,
+      expiringLicenseDrivers: expiringLicenses,
       utilization: totalCapacity ? Math.round((totalAssigned / totalCapacity) * 100) : 0,
     };
   })();
@@ -2306,7 +2308,9 @@ export default function TransportPage() {
       {(summary.expiringDocs || summary.expiringLicenses) ? (
         <div className="cms-transport-warning">
           <AlertTriangle size={18} />
-          <span><strong>Regulatory Compliance Warning</strong> {summary.expiringDocs} vehicle document(s) and {summary.expiringLicenses} driver license(s) expiring soon.</span>
+          <span><strong>Regulatory Compliance Warning</strong> {summary.expiringDocs} vehicle document(s) and {summary.expiringLicenses} driver license(s) expiring soon.
+            {summary.expiringLicenseDrivers.length ? ` Drivers: ${summary.expiringLicenseDrivers.map((driver) => `${driver.driverName} (${driver.licenseExpiryDate})`).join(", ")}.` : ""}
+          </span>
           <em>Action Required</em>
         </div>
       ) : null}
@@ -2465,7 +2469,11 @@ export default function TransportPage() {
                 ? vehicleAssignments
                 : [];
     const hasApiReport = Object.prototype.hasOwnProperty.call(reportApiRows, activeReportTab);
-    const rawReportRows = hasApiReport ? reportApiRows[activeReportTab] : localReportRows;
+    const rawReportRows = activeReportTab === "driver-reports"
+      ? drivers.filter((driver) => String(driver.driverName || "").trim())
+      : activeReportTab === "trip-reports"
+        ? trips
+      : hasApiReport ? reportApiRows[activeReportTab] : localReportRows;
     const reportRows = activeReportTab === "vehicle-reports"
       ? rawReportRows.map((row) => {
           const vehicle = vehicles.find((item) =>
@@ -2603,7 +2611,11 @@ export default function TransportPage() {
       : activeReportTab === "maintenance-reports"
         ? new Set(["maintenanceid", "id"])
         : new Set();
-    const reportColumns = (hasApiReport ? reportColumnsFromRows(reportRows, fallbackReportColumns) : fallbackReportColumns)
+    const reportColumns = (activeReportTab === "trip-reports"
+      ? tableConfigs.trips.columns
+      : activeReportTab === "driver-reports"
+      ? tableConfigs.drivers.columns.filter((column) => !["id", "transportDriverId", "driverApiId"].includes(column.key))
+      : hasApiReport ? reportColumnsFromRows(reportRows, fallbackReportColumns) : fallbackReportColumns)
       .filter((column) => !excludedReportColumnKeys.has(String(column.key).replace(/[_-]/g, "").toLowerCase()));
     const filterOption = (value, label) => ({ value, label });
     const routeFilterOptions = [
