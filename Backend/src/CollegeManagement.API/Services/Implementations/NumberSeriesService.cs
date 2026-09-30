@@ -185,7 +185,7 @@ namespace CollegeManagement.API.Services.Implementations
             // If we are previewing the base series itself, get the absolute max across all its sub-series
             if (actualCode == code)
             {
-                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(code, campusId);
+                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(code, campusId, board, academicYear);
                 curSeq = Math.Max(curSeq, maxSeq);
             }
 
@@ -238,7 +238,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
             else if (!entity.SeriesCode.Contains("|"))
             {
-                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode, campusId);
+                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode, campusId, context?.Board, context?.AcademicYear);
                 curSeq = Math.Max(curSeq, maxSeq);
             }
 

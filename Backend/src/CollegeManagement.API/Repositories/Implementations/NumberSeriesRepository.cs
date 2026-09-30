@@ -150,7 +150,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null)
+        public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null, string? board = null, string? academicYear = null)
         {
             try
             {
@@ -158,7 +158,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 
                 var maxSeq = await conn.ExecuteScalarAsync<int?>(
                     "sp_GetMaxSequenceForBaseSeries",
-                    new { p_BaseCode = baseSeriesCode.Trim(), p_CampusId = campusId },
+                    new { p_BaseCode = baseSeriesCode.Trim(), p_CampusId = campusId, p_Board = board, p_AcademicYear = academicYear },
                     commandType: CommandType.StoredProcedure);
                       
                 return maxSeq ?? 0;
