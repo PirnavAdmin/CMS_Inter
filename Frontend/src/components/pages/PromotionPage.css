@@ -914,6 +914,21 @@
 }
 .campus-transfer-row-actions button.approve { color: #17663d; }
 .campus-transfer-row-actions button.reject { color: var(--cms-red); }
+.campus-transfer-row-actions .campus-transfer-view-action {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border-radius: 8px;
+  color: var(--cms-primary);
+}
+.campus-transfer-row-actions .campus-transfer-view-action:hover {
+  border-color: var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
 .campus-transfer-request-pagination {
   display: flex;
   align-items: center;
