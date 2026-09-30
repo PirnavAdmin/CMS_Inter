@@ -31,6 +31,8 @@ const EMPTY_HISTORY_FILTERS = {
   groupId: "", programId: "", section: "", studentId: "", search: "", promotionStatus: "", fromDate: "", toDate: "",
 };
 
+const PROMOTION_STUDENT_PAGE_SIZE = 10;
+
 const read = (item, ...keys) => {
   const key = keys.find((candidate) => item?.[candidate] !== undefined && item?.[candidate] !== null);
   return key ? item[key] : undefined;
@@ -202,6 +204,9 @@ export default function PromotionPage({ screen = "promotion" }) {
   const [students, setStudents] = useState([]);
   const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsPage, setStudentsPage] = useState(1);
+  const [studentsTotalCount, setStudentsTotalCount] = useState(0);
+  const [studentsTotalPages, setStudentsTotalPages] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
   const [search, setSearch] = useState("");
   const [eligibilityFilter, setEligibilityFilter] = useState("");
@@ -509,7 +514,7 @@ export default function PromotionPage({ screen = "promotion" }) {
 
   const academicLevelLabel = useCallback((levelId) => masters.levels.find((level) => level.value === asString(levelId))?.label || asString(levelId), [masters.levels]);
 
-  const eligibleParams = useCallback(() => {
+  const eligibleParams = useCallback((pageNumber = studentsPage) => {
     return compactParams({
       CampusId: numericId(activeCampusId),
       AcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
@@ -522,33 +527,49 @@ export default function PromotionPage({ screen = "promotion" }) {
       TargetAcademicLevel: academicLevelLabel(setup.toLevel),
       TargetGroupId: numericId(setup.toGroup),
       TargetSection: setup.toSection,
+      PageNumber: pageNumber,
+      PageSize: PROMOTION_STUDENT_PAGE_SIZE,
     });
-  }, [activeCampusId, academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup]);
+  }, [activeCampusId, academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup, studentsPage]);
 
-  const fetchEligibleStudents = useCallback(async () => {
+  const fetchEligibleStudents = useCallback(async (pageNumber = studentsPage) => {
     setStudentsLoading(true);
     setError("");
     try {
-      const data = await getEligibleStudents(eligibleParams());
+      const data = await getEligibleStudents(eligibleParams(pageNumber));
       const rows = unwrap(data, ["students", "Students", "eligibleStudents", "EligibleStudents"]).map(normalizeStudent).filter((student) => isPresent(student.id));
+      const paging = unwrapObject(data);
+      const totalCount = Number(read(paging, "totalCount", "TotalCount", "count", "Count") ?? rows.length) || 0;
+      const totalPages = Math.max(1, Number(read(paging, "totalPages", "TotalPages") ?? Math.ceil(totalCount / PROMOTION_STUDENT_PAGE_SIZE)) || 1);
+      const resolvedPage = Math.min(totalPages, Math.max(1, Number(read(paging, "pageNumber", "PageNumber") ?? pageNumber) || pageNumber));
       setStudents(rows);
+      setStudentsPage(resolvedPage);
+      setStudentsTotalCount(totalCount);
+      setStudentsTotalPages(totalPages);
       setStudentsLoaded(true);
-      setSelectedIds((current) => current.filter((id) => rows.some((student) => student.id === id && isEligible(student))));
+      setSelectedIds([]);
     } catch (requestError) {
       setStudents([]);
+      setStudentsTotalCount(0);
+      setStudentsTotalPages(1);
       setStudentsLoaded(true);
       setError(getApiErrorMessage(requestError));
     } finally {
       setStudentsLoading(false);
     }
-  }, [eligibleParams]);
+  }, [eligibleParams, studentsPage]);
 
   const loadStudents = async () => {
     if (!validateFields(sourceFields)) {
       setError("Please complete the required source level, group, and section.");
       return;
     }
-    await fetchEligibleStudents();
+    await fetchEligibleStudents(1);
+  };
+
+  const changeStudentsPage = async (nextPage) => {
+    if (nextPage < 1 || nextPage > studentsTotalPages || studentsLoading) return;
+    await fetchEligibleStudents(nextPage);
   };
 
   const visibleStudents = useMemo(() => {
@@ -935,7 +956,7 @@ export default function PromotionPage({ screen = "promotion" }) {
                   <h2>2. Student Eligibility</h2>
                   <p>
                     {studentsLoaded
-                      ? `${students.length} student${students.length === 1 ? "" : "s"} returned by the Promotion API.`
+                      ? `${studentsTotalCount} student${studentsTotalCount === 1 ? "" : "s"} returned by the Promotion API.`
                       : "Select the cohort level, group, and section above, then click Load Students."}
                   </p>
                 </div>
@@ -965,8 +986,9 @@ export default function PromotionPage({ screen = "promotion" }) {
               {studentsLoading ? (
                 <SkeletonTable columns={isFinalYear ? 9 : 10} rows={6} />
               ) : studentsLoaded ? (
-                <div className="cms-table-wrap">
-                  <table className="cms-table promotion-table">
+                <>
+                  <div className="cms-table-wrap">
+                    <table className="cms-table promotion-table">
                     <thead>
                       <tr>
                         <th>Select</th>
@@ -1026,8 +1048,34 @@ export default function PromotionPage({ screen = "promotion" }) {
                         </tr>
                       )}
                     </tbody>
-                  </table>
-                </div>
+                    </table>
+                  </div>
+                  <footer className="promotion-pagination">
+                  <span>
+                    Showing {students.length ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + 1 : 0}-
+                    {students.length ? Math.min((studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + students.length, studentsTotalCount) : 0} of {studentsTotalCount} students
+                  </span>
+                  <div>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      disabled={studentsLoading || studentsPage === 1}
+                      onClick={() => changeStudentsPage(studentsPage - 1)}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {studentsPage} of {studentsTotalPages}</span>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      disabled={studentsLoading || studentsPage === studentsTotalPages}
+                      onClick={() => changeStudentsPage(studentsPage + 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                  </footer>
+                </>
               ) : (
                 <div className="promotion-empty">Select the source details, then load students.</div>
               )}
@@ -1035,7 +1083,7 @@ export default function PromotionPage({ screen = "promotion" }) {
 
             {studentsLoaded ? (
               <section className="promotion-summary" style={{ gridTemplateColumns: "repeat(2, minmax(100px, 1fr))" }}>
-                <div><span>Total Students</span><strong>{students.length}</strong></div>
+                <div><span>Total Students</span><strong>{studentsTotalCount}</strong></div>
                 <div><span>Selected</span><strong>{selectedIds.length}</strong></div>
               </section>
             ) : null}

@@ -191,6 +191,7 @@ const slotSubjectName = (slot, subjects) =>
 const slotFacultyName = (slot) => pick(slot, "facultyName", "FacultyName", "staffName", "StaffName") ?? pick(slot?.faculty, "facultyName", "FacultyName", "staffName", "StaffName", "fullName", "FullName", "name", "Name") ?? "Unassigned";
 const slotRoomName = (slot) => pick(slot, "roomName", "RoomName", "roomCode", "RoomCode") ?? pick(slot?.room, "roomName", "RoomName", "roomCode", "RoomCode", "name", "Name") ?? "—";
 const slotSectionId = (slot) => pick(slot, "sectionId", "SectionId") ?? pick(slot?.section ?? slot?.Section, "sectionId", "SectionId", "id", "Id");
+const slotCampusId = (slot) => pick(slot, "campusId", "CampusId") ?? pick(slot?.campus ?? slot?.Campus, "campusId", "CampusId", "id", "Id");
 const periodNumber = (period) => pick(period?.raw ?? period, "periodNumber", "PeriodNumber", "number", "Number");
 const isBreakPeriod = (period) => {
   const raw = period?.raw ?? period;
@@ -1855,9 +1856,14 @@ function Draft({ initial, notify }) {
     try {
       const r = await apiClient.get(apiEndpoints.timetable.getBySection(value.sectionId), {
         params: {
-          academicYearId: value.academicYearId,
-          campusId: value.campusId,
-          ...(publishedFilter === "true" || publishedFilter === "false" ? { isPublished: publishedFilter } : {}),
+          CampusId: Number(value.campusId),
+          BoardId: Number(value.boardId),
+          AcademicYearId: Number(value.academicYearId),
+          AcademicLevelId: Number(value.academicLevelId),
+          GroupId: Number(value.groupId),
+          ProgramId: Number(value.programId),
+          SectionId: Number(value.sectionId),
+          ...(publishedFilter === "true" || publishedFilter === "false" ? { IsPublished: publishedFilter } : {}),
         },
       });
       let fetchedSlots = list(r.data);
@@ -1878,9 +1884,14 @@ function Draft({ initial, notify }) {
         });
         fetchedSlots = list(fallback.data);
       }
+      fetchedSlots = fetchedSlots.filter((slot) => {
+        const campusId = slotCampusId(slot);
+        return campusId == null || String(campusId) === String(value.campusId);
+      });
       const generatedSlotsHaveSections = generatedSlots.some((slot) => slotSectionId(slot) != null);
       const responseSlots = generatedSlots.filter(
-        (slot) => !generatedSlotsHaveSections || String(slotSectionId(slot)) === String(value.sectionId),
+        (slot) => (slotCampusId(slot) == null || String(slotCampusId(slot)) === String(value.campusId))
+          && (!generatedSlotsHaveSections || String(slotSectionId(slot)) === String(value.sectionId)),
       );
       const currentSlots = fetchedSlots.length ? fetchedSlots : responseSlots;
       setSlots(currentSlots);
@@ -2593,14 +2604,20 @@ function LatestDraft({ notify }) {
 export default function TimetablePage({ screen = "latest" }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { selectedCampusId } = useCampusContext();
   const [toast, setToast] = useState("");
+  // A timetable view keeps several dependent lookups (rooms, periods,
+  // sections and subjects). Remount it when the global campus changes so no
+  // lookup or generated timetable state is retained from the previous campus.
+  const campusViewKey = `campus-${selectedCampusId || "none"}`;
   const view =
     screen === "latest" ? (
-      <MainTimetable notify={setToast} />
+      <MainTimetable key={campusViewKey} notify={setToast} />
     ) : screen === "draft" ? (
-      <Draft initial={location.state?.timetableContext} notify={setToast} />
+      <Draft key={campusViewKey} initial={location.state?.timetableContext} notify={setToast} />
     ) : screen === "generate" ? (
       <Generate
+        key={campusViewKey}
         notify={setToast}
         initial={location.state?.timetableContext}
         goDraft={(context) =>
@@ -2608,7 +2625,7 @@ export default function TimetablePage({ screen = "latest" }) {
         }
       />
     ) : (
-      <Structures notify={setToast} initial={location.state?.timetableContext} />
+      <Structures key={campusViewKey} notify={setToast} initial={location.state?.timetableContext} />
     );
   return (
     <div className="timetable-module">

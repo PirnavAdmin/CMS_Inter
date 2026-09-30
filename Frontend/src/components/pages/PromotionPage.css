@@ -200,6 +200,24 @@
 .promotion-table-head {
   gap: 14px;
 }
+.promotion-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--cms-border);
+  background: var(--cms-subtle);
+  color: var(--cms-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.promotion-pagination > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.promotion-pagination .cms-btn { min-height: 34px; }
 .promotion-table-controls {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto minmax(180px, 245px) auto auto;
