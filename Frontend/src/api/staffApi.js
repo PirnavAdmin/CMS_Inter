@@ -1,4 +1,5 @@
 import api from "./axios";
+import { apiEndpoints } from "./apiEndpoints.js";
 
 // ==================== STAFF MANAGEMENT APIs ====================
 
@@ -7,11 +8,39 @@ export const getStaffPaged = (params) => {
   return api.get("/api/v1/staff", { params });
 };
 
-// 2. Get next sequential employee ID (PJCTCH0001 / PJCNTCH0001)
-export const getNextEmployeeId = (staffType = "Teaching") => {
-  return api.get("/api/v1/staff/next-employee-id", {
-    params: { staffType },
+// 2. Generate the next employee ID through the number-series endpoint.
+// The staff next-employee-id endpoint uses a stored-procedure parameter name
+// that does not match the deployed database procedure.
+export const getNextEmployeeId = async (staffType = "Teaching") => {
+  const normalizedType = String(staffType || "Teaching").replace(/[^a-z]/gi, "").toLowerCase();
+  const isNonTeaching = normalizedType === "nonteaching";
+  const seriesCode = isNonTeaching ? "NON_TEACHING_STAFF_ID" : "TEACHING_STAFF_ID";
+  const response = await api.post(apiEndpoints.numberSeries.generateNext(seriesCode), {
+    board: "",
+    dept: "",
+    type: staffType,
+    staff: "",
+    desig: "",
+    cert: "",
+    academicYear: "",
+    group: "",
+    section: "",
+    level: "",
+    exam: "",
   });
+  const payload = response?.data?.data ?? response?.data ?? {};
+  const nextEmployeeId = typeof payload === "string"
+    ? payload
+    : payload.generatedNumber || payload.nextEmployeeId || payload.employeeId || payload.code;
+
+  return {
+    ...response,
+    data: {
+      ...(typeof payload === "object" ? payload : {}),
+      nextEmployeeId,
+      employeeId: nextEmployeeId,
+    },
+  };
 };
 
 // 3. Get staff for dropdown

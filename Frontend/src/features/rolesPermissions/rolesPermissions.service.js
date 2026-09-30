@@ -190,9 +190,8 @@ export async function updateRolePermissions(roleId, payload) {
       const endpoint = typeof rbacEndpoints.updateRolePermissions === "function"
         ? rbacEndpoints.updateRolePermissions(numericRoleId)
         : `${rbacEndpoints.updateRolePermissions}/${numericRoleId}/permissions`;
-      const response = await apiClient.put(endpoint, { roleId: numericRoleId, permissions: normalized });
-      const permissions = normalizeApiArray(response.data);
-      return apiResult(normalizePermissionPayload(permissions.length ? permissions : normalized));
+      await apiClient.put(endpoint, { roleId: numericRoleId, permissions: normalized });
+      return getRolePermissions(numericRoleId);
     } catch (error) {
       throw apiError(error, "Unable to save role permissions.");
     }
@@ -200,43 +199,24 @@ export async function updateRolePermissions(roleId, payload) {
   throw new Error("Role permissions API is not configured or the role ID is invalid.");
 }
 
-async function getAllRoleAssignmentMembers(roleId, filters = {}) {
-  const pageSize = 100;
-  const firstResponse = await getUserRoleAssignments({
-    roleId,
-    page: 1,
-    pageSize,
-    ...filters,
-  });
-  const firstItems = firstResponse.data?.items || [];
-  const total = Number(firstResponse.data?.total ?? firstItems.length);
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const remainingResponses = totalPages > 1
-    ? await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => getUserRoleAssignments({
-        roleId,
-        page: index + 2,
-        pageSize,
-        ...filters,
-      })))
-    : [];
-
-  return [
-    ...firstItems,
-    ...remainingResponses.flatMap((response) => response.data?.items || []),
-  ];
-}
-
 export async function getRoleMembers(roleId, roleCode, filters = {}) {
   const numericRoleId = resolveRoleId(roleId ?? roleCode);
-  if (rbacEndpoints.userAssignments && numericRoleId) {
+  if (rbacEndpoints.roleMembers && numericRoleId) {
     try {
-      const members = await getAllRoleAssignmentMembers(numericRoleId, filters);
+      const endpoint = typeof rbacEndpoints.roleMembers === "function"
+        ? rbacEndpoints.roleMembers(numericRoleId)
+        : `${rbacEndpoints.roleMembers}/${numericRoleId}/members`;
+      const response = await apiClient.get(endpoint, {
+        params: filters && Object.keys(filters).length ? filters : undefined,
+        skipGlobalLoader: true,
+      });
+      const members = normalizeApiArray(response.data).map(normalizeUserAssignment);
       return apiResult(members);
     } catch (error) {
       throw apiError(error, "Unable to load role members.");
     }
   }
-  throw new Error("User role assignments API is not configured or the role ID is invalid.");
+  throw new Error("Role members API is not configured or the role ID is invalid.");
 }
 
 export async function getUserPermissions(userId) {
@@ -278,9 +258,8 @@ export async function updateUserPermissions(userId, payload) {
       const endpoint = typeof rbacEndpoints.updateUserPermissions === "function"
         ? rbacEndpoints.updateUserPermissions(userId)
         : `${rbacEndpoints.updateUserPermissions}/${userId}/permissions`;
-      const response = await apiClient.put(endpoint, { userId, permissions: normalized });
-      const permissions = normalizeApiArray(response.data);
-      return apiResult(normalizePermissionPayload(permissions.length ? permissions : normalized));
+      await apiClient.put(endpoint, { userId, permissions: normalized });
+      return getUserPermissions(userId);
     } catch (error) {
       throw apiError(error, "Unable to save user permissions.");
     }

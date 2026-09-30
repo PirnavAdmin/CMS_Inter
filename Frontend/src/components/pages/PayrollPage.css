@@ -298,14 +298,14 @@
 
 .salary-form-grid-3 {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 12px;
 }
 
 .salary-form-grid-2 {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -329,6 +329,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .salary-form-group label {
@@ -358,28 +359,38 @@
   box-shadow: 0 0 0 2px var(--cms-primary-soft);
 }
 
-/* Searchable Picker for Department & Designation */
+/* Searchable pickers used by staff and salary form fields */
 .salary-search-picker {
   position: relative;
   width: 100%;
+  min-width: 0;
 }
 
 .salary-search-input-wrap {
   position: relative;
-  display: flex;
-  align-items: center;
+  display: block;
+  width: 100%;
+  min-width: 0;
 }
 
-.salary-search-input-wrap svg {
+.salary-search-input-wrap > :is(svg, img, .cms-search-3d-icon) {
   position: absolute;
   left: 10px;
+  top: 50%;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
   color: var(--cms-muted);
   pointer-events: none;
 }
 
 .salary-search-input-wrap input {
+  display: block;
+  box-sizing: border-box;
   width: 100%;
-  padding: 7px 10px 7px 30px;
+  min-width: 0;
+  padding: 7px 10px 7px 32px;
   border-radius: 6px;
   border: 1px solid var(--cms-border);
   background: var(--cms-bg);

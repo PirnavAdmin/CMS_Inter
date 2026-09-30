@@ -34,8 +34,6 @@ export const student = {
 };
 
 export const attendance = { percentage: 92, present: 92, absent: 8, workingDays: 100 };
-export const fees = { total: 60000, paid: 55000, due: 5000, nextDueDate: "15-Oct-2026", paymentPlan: "Two Installments" };
-
 export const todaySchedule = [
   ["1", "08:30 - 09:20", "Mathematics", "Dr. S. Rao", "R-201", "Completed"],
   ["2", "09:20 - 10:10", "Physics", "Ms. P. Lakshmi", "Lab-1", "Completed"],
@@ -61,8 +59,6 @@ export const subjectAttendance = [
 export const monthlyAttendance = [["June", 18, 17, 1, "94%"], ["July", 25, 23, 2, "92%"], ["August", 24, 22, 2, "92%"], ["September", 20, 18, 2, "90%"]];
 export const resultSubjects = [["Mathematics", 18, 20, 65, 103, 120, "A", "Pass"], ["Physics", 17, 19, 58, 94, 120, "A", "Pass"], ["Chemistry", 18, 18, 60, 96, 120, "A", "Pass"], ["English", 19, 0, 69, 88, 100, "A", "Pass"], ["Sanskrit", 18, 0, 67, 85, 100, "A", "Pass"]];
 export const results = [["Unit Test I", "87%", "A", "Published"], ["Monthly Test - August", "84%", "A", "Published"]];
-export const feeBreakdown = [["Admission Fee", 10000, 10000, 0], ["Tuition Fee", 45000, 40000, 5000], ["Laboratory Fee", 5000, 5000, 0]];
-export const paymentHistory = [["RCPT-260041", "12-Jun-2026", "₹30,000", "UPI", "Paid"], ["RCPT-260184", "14-Aug-2026", "₹25,000", "Bank Transfer", "Paid"]];
 export const transport = { route: "Vijayawada Central", routeCode: "RT-04", pickupPoint: "Benz Circle", pickupTime: "07:20 AM", dropTime: "04:40 PM", vehicle: "AP 16 TZ 4821", driver: "Ramesh Kumar", attendant: "S. Devi", status: "Active" };
 export const certificates = [["CERT-26012", "Bonafide Certificate", "02-Sep-2026", "Bank scholarship", "Ready"], ["CERT-26018", "Study Certificate", "14-Sep-2026", "Education loan", "Processing"]];
 export const holidays = [["Gandhi Jayanti", "02-Oct-2026", "Friday", "National", "Upcoming"], ["Dussehra", "19-Oct-2026", "Monday", "Festival", "Upcoming"], ["Diwali", "08-Nov-2026", "Sunday", "Festival", "Upcoming"], ["Christmas", "25-Dec-2026", "Friday", "Festival", "Upcoming"]];

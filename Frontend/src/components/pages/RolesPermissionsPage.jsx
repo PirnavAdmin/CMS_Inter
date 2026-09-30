@@ -239,7 +239,7 @@ function RoleList({ roles, selectedRoleId, onSelect, onOpenMembers, query, onQue
   );
 }
 
-function RoleMembersDialog({ role, members, loading, onSelectMember, onClose }) {
+function RoleMembersDialog({ role, members, loading, error, onRetry, onSelectMember, onClose }) {
   const [query, setQuery] = useState("");
   const searchRef = useRef(null);
   const filteredMembers = useMemo(() => {
@@ -260,6 +260,9 @@ function RoleMembersDialog({ role, members, loading, onSelectMember, onClose }) 
       member.status,
     ].some((value) => String(value || "").toLowerCase().includes(normalizedQuery)));
   }, [members, query]);
+  const dialogCount = loading || error
+    ? (role?.assignedUserCount == null ? "—" : role.assignedUserCount)
+    : members.length;
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -284,7 +287,7 @@ function RoleMembersDialog({ role, members, loading, onSelectMember, onClose }) 
           <div>
             <span className="rbac-member-dialog-title-row">
               <h3 id="rbac-member-dialog-title">{role.name} Members</h3>
-              <strong className="rbac-member-dialog-count">{loading ? (role.assignedUserCount == null ? "—" : role.assignedUserCount) : members.length}</strong>
+              <strong className="rbac-member-dialog-count">{dialogCount}</strong>
             </span>
             <p>Members currently assigned to this role.</p>
           </div>
@@ -301,7 +304,7 @@ function RoleMembersDialog({ role, members, loading, onSelectMember, onClose }) 
         />
         <div className="rbac-member-list">
           {loading ? <Loader label="Loading role members..." /> : null}
-          {!loading && filteredMembers.length ? filteredMembers.map((member) => {
+          {!loading && !error && filteredMembers.length ? filteredMembers.map((member) => {
             const memberId = member.userCode || member.employeeId || member.studentId || member.userId;
             const contact = member.email || member.phoneNumber || member.mobile;
             return (
@@ -321,7 +324,15 @@ function RoleMembersDialog({ role, members, loading, onSelectMember, onClose }) 
               </button>
             );
           }) : null}
-          {!loading && !members.length ? (
+          {!loading && error ? (
+            <div className="rbac-member-empty">
+              <AlertTriangle size={24} aria-hidden="true" />
+              <strong>Unable to load members.</strong>
+              <span>{error}</span>
+              {onRetry ? <button type="button" className="cms-btn cms-btn-ghost" onClick={onRetry}>Retry</button> : null}
+            </div>
+          ) : null}
+          {!loading && !error && !members.length ? (
             <div className="rbac-member-empty">
               <Users size={24} aria-hidden="true" />
               <strong>No members assigned to this role.</strong>
@@ -1114,6 +1125,7 @@ export default function RolesPermissionsPage() {
   const [selectedRole, setSelectedRole] = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
   const [roleMembers, setRoleMembers] = useState([]);
+  const [membersError, setMembersError] = useState("");
   const [membersRole, setMembersRole] = useState(null);
   const [permissions, setPermissions] = useState([]);
   const [lastSavedPermissions, setLastSavedPermissions] = useState([]);
@@ -1181,11 +1193,13 @@ export default function RolesPermissionsPage() {
     if (openDialog) {
       setMembersRole(role);
       setRoleMembers([]);
+      setMembersError("");
       setMembersDialogOpen(true);
     }
     try {
       const members = getUniqueMembers((await getRoleMembers(role.id, role.code, activeContextFilters)).data || []);
       setRoleMembers(members);
+      setMembersError("");
       setMembersRole((current) => (
         current && String(current.id) === String(role.id)
           ? { ...current, assignedUserCount: role.assignedUserCount }
@@ -1193,6 +1207,7 @@ export default function RolesPermissionsPage() {
       ));
     } catch (err) {
       setRoleMembers([]);
+      setMembersError(err?.message || "Unable to load role members.");
       setToast({ type: "error", message: err?.message || "Unable to load role members." });
     } finally {
       setMembersLoading(false);
@@ -1290,6 +1305,7 @@ export default function RolesPermissionsPage() {
     setMembersDialogOpen(false);
     setMembersRole(null);
     setRoleMembers([]);
+    setMembersError("");
   }, []);
 
   const useRolePermissions = async () => {
@@ -1425,6 +1441,8 @@ export default function RolesPermissionsPage() {
             role={membersRole}
             members={roleMembers}
             loading={membersLoading}
+            error={membersError}
+            onRetry={() => membersRole && loadRoleMembers(membersRole, true)}
             onSelectMember={selectMember}
             onClose={closeMembersDialog}
           />

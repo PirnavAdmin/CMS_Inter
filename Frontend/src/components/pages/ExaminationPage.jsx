@@ -6787,7 +6787,6 @@ function ExamForm({
               <div className="cms-form-section-heading">
                 <div>
                   <h2>Academic Scope & Category Configuration</h2>
-                  <p>Board and Academic Year are auto-fetched from active records. Configure remaining academic scope.</p>
                 </div>
               </div>
 
@@ -6803,9 +6802,9 @@ function ExamForm({
                     placeholder="Select Board"
                     showSearch={false}
                   />
-                  <small style={{ color: "var(--cms-muted, #64748b)", fontSize: "11px", display: "block", marginTop: "4px" }}>
+                  {/* <small style={{ color: "var(--cms-muted, #64748b)", fontSize: "11px", display: "block", marginTop: "4px" }}>
                     Locked to Navbar selection (read-only)
-                  </small>
+                  </small> */}
                 </div>
 
                 <div>
@@ -6819,9 +6818,9 @@ function ExamForm({
                     placeholder="Select Academic Year"
                     showSearch={false}
                   />
-                  <small style={{ color: "var(--cms-muted, #64748b)", fontSize: "11px", display: "block", marginTop: "4px" }}>
+                  {/* <small style={{ color: "var(--cms-muted, #64748b)", fontSize: "11px", display: "block", marginTop: "4px" }}>
                     Locked to Navbar selection (read-only)
-                  </small>
+                  </small> */}
                 </div>
 
                 <div>
@@ -6896,9 +6895,9 @@ function ExamForm({
                   <div className="exam-scope-block" style={{ marginBottom: "20px" }}>
                     <div className="exam-scope-header">
                       <label className="exam-scope-label">Groups & Conducted Programs *</label>
-                      <span className="exam-scope-hint">
+                      {/* <span className="exam-scope-hint">
                         Select a Group tab (filtered by {codeOf(boards, form.boardId)}) to configure programs and pattern.
-                      </span>
+                      </span> */}
                     </div>
 
                     <div className="exam-group-tabs-bar">
@@ -7091,7 +7090,7 @@ function ExamForm({
                       />
                       Eligible Subjects ({(form.selectedSubjectIds || []).length} of {eligibleSubjects.length} Selected) *
                     </label>
-                    <span className="exam-scope-hint">
+                    {/* <span className="exam-scope-hint">
                       {form.examCategory === "Others"
                         ? "All subjects are displayed. Select manually which exams you want to conduct."
                         : String(form.examCategory || "").toLowerCase().includes("practical")
@@ -7099,7 +7098,7 @@ function ExamForm({
                           : String(form.examCategory || "").toLowerCase().includes("objective")
                             ? "Filtered core subjects (MPC, BiPC, MEC, CEC core) without languages."
                             : "Toggle subjects to conduct for this specific examination."}
-                    </span>
+                    </span> */}
                   </div>
                   {eligibleSubjects.length > 0 && (
                     <div style={{ display: "flex", gap: "8px" }}>
@@ -8032,14 +8031,14 @@ function ScheduleSection({
             >
               <Award size={15} /> Export Excel (.xlsx)
             </button>
-            <button
+            {/* <button
               type="button"
               className="cms-btn cms-btn-ghost"
               onClick={() => window.print()}
               style={{ display: "flex", alignItems: "center", gap: "6px" }}
             >
               <Printer size={15} /> Print Schedule
-            </button>
+            </button> */}
           </div>
         )}
       </div>

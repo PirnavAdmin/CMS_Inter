@@ -160,16 +160,6 @@ namespace CollegeManagement.API.Validators.StudentValidators
                 .When(x => x.Pincode != null)
                 .WithMessage("Pincode cannot exceed 20 characters.");
 
-            RuleFor(x => x.FatherEmail)
-                .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.FatherEmail))
-                .WithMessage("Invalid Father Email address.");
-
-            RuleFor(x => x.MotherEmail)
-                .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
-                .WithMessage("Invalid Mother Email address.");
-
             RuleFor(x => x.ParentGuardianEmail)
                 .EmailAddress()
                 .When(x => !string.IsNullOrWhiteSpace(x.ParentGuardianEmail))
@@ -194,16 +184,6 @@ namespace CollegeManagement.API.Validators.StudentValidators
                     .MaximumLength(150)
                     .WithMessage("Email cannot exceed 150 characters.");
             });
-
-            RuleFor(x => x.FatherEmail)
-                .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.FatherEmail))
-                .WithMessage("Invalid Father Email address.");
-
-            RuleFor(x => x.MotherEmail)
-                .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
-                .WithMessage("Invalid Mother Email address.");
 
             RuleFor(x => x.ParentGuardianEmail)
                 .EmailAddress()
@@ -231,16 +211,6 @@ namespace CollegeManagement.API.Validators.StudentValidators
                 .When(x => !string.IsNullOrWhiteSpace(x.StudentEmail))
                 .WithMessage("Invalid Student Email address.");
 
-            RuleFor(x => x.FatherEmail)
-                .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.FatherEmail))
-                .WithMessage("Invalid Father Email address.");
-
-            RuleFor(x => x.MotherEmail)
-                .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
-                .WithMessage("Invalid Mother Email address.");
-
             RuleFor(x => x.ParentGuardianEmail)
                 .EmailAddress()
                 .When(x => !string.IsNullOrWhiteSpace(x.ParentGuardianEmail))
@@ -266,16 +236,6 @@ namespace CollegeManagement.API.Validators.StudentValidators
                 .EmailAddress()
                 .When(x => !string.IsNullOrWhiteSpace(x.StudentEmail))
                 .WithMessage("Invalid Student Email address.");
-
-            RuleFor(x => x.FatherEmail)
-                .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.FatherEmail))
-                .WithMessage("Invalid Father Email address.");
-
-            RuleFor(x => x.MotherEmail)
-                .EmailAddress()
-                .When(x => !string.IsNullOrWhiteSpace(x.MotherEmail))
-                .WithMessage("Invalid Mother Email address.");
 
             RuleFor(x => x.ParentGuardianEmail)
                 .EmailAddress()

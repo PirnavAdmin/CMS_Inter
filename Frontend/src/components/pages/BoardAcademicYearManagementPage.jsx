@@ -13,7 +13,7 @@ import {
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { SkeletonPage, SkeletonRow, Toast } from "@/components/common/Ui.jsx";
+import { SkeletonPage, SkeletonRow, Toast, useConfirmDialog } from "@/components/common/Ui.jsx";
 import "./BoardAcademicYearManagementPage.css";
 
 const PAGE_SIZE = 5;
@@ -413,6 +413,7 @@ const academicYearPayload = (draft) => {
 };
 
 function AcademicYearWorkspace() {
+  const { confirm: confirmDelete, confirmationDialog } = useConfirmDialog();
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -588,7 +589,13 @@ function AcademicYearWorkspace() {
     }
   };
   const deleteAcademicYear = async (row) => {
-    if (deletingId || !window.confirm(`Delete academic year ${row.year}? This action cannot be undone.`)) return;
+    if (deletingId) return;
+    const confirmed = await confirmDelete({
+      title: "Delete academic year?",
+      message: `Are you sure you want to delete academic year "${row.year}"? This action cannot be undone.`,
+      confirmLabel: "Delete",
+    });
+    if (!confirmed) return;
     setDeletingId(row.id);
     try {
       await apiClient.delete(ACADEMIC_YEAR_API.delete(row.id), {
@@ -911,12 +918,14 @@ function AcademicYearWorkspace() {
           </form>
         </article>
       </div>
+      {confirmationDialog}
       <Toast message={toast} onClose={() => setToast("")} />
     </section>
   );
 }
 
 export default function BoardAcademicYearManagementPage() {
+  const { confirm: confirmDelete, confirmationDialog } = useConfirmDialog();
   const [searchParams, setSearchParams] = useSearchParams();
   const screen = searchParams.get("screen");
   const tabParam = searchParams.get("tab");
@@ -1363,7 +1372,13 @@ export default function BoardAcademicYearManagementPage() {
     }
   };
   const deleteBoard = async (row) => {
-    if (boardDeletingId || !window.confirm(`Delete ${row.board}? This action cannot be undone.`)) return;
+    if (boardDeletingId) return;
+    const confirmed = await confirmDelete({
+      title: "Delete board?",
+      message: `Are you sure you want to delete board "${row.board}"? This action cannot be undone.`,
+      confirmLabel: "Delete",
+    });
+    if (!confirmed) return;
     setBoardDeletingId(row.id);
     try {
       const detailsResponse = await apiClient.get(BOARD_API.byId(row.id));
@@ -1822,6 +1837,7 @@ export default function BoardAcademicYearManagementPage() {
             )}
           </section>
         ) : null}
+        {confirmationDialog}
         <Toast message={toast} onClose={() => setToast("")} />
       </main>
     </DashboardLayout>
