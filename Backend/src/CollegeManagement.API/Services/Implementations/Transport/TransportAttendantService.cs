@@ -72,19 +72,19 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             // Reject if Staff is Driver
-            if (linkedStaff.RoleId == 12 || linkedStaff.IsDriver)
+            if (linkedStaff.IsDriver)
             {
                 throw new InvalidOperationException($"Staff member '{linkedStaff.EmployeeId}' is assigned as a Driver and cannot be assigned as Attendant.");
             }
 
             // Reject if Staff is not Attendant (RoleId != 13 and designation not Attendant)
-            bool isAttendantRole = linkedStaff.RoleId == 13
+            bool isAttendantRole = false
                 || string.Equals(linkedStaff.Designation, "Attendant", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(linkedStaff.Designation, "Bus Attendant", StringComparison.OrdinalIgnoreCase);
 
             if (!isAttendantRole)
             {
-                throw new InvalidOperationException($"Staff member '{linkedStaff.EmployeeId}' is not an Attendant. Staff RoleId must be 13 (Attendant).");
+                throw new InvalidOperationException($"Staff member '{linkedStaff.EmployeeId}' is not an Attendant. Staff Designation must be Attendant.");
             }
 
             // Prevent duplicate active attendant assignments
@@ -97,7 +97,7 @@ namespace CollegeManagement.API.Services.Implementations
             linkedStaff.StaffType = "Non-Teaching";
             linkedStaff.Designation = "Attendant";
             linkedStaff.DesignationId = 290;
-            linkedStaff.RoleId = 13;
+            // linkedStaff.RoleId = 13;
             linkedStaff.DepartmentId = 79;
             linkedStaff.Department = "Transport";
             linkedStaff.Status = dto.Status ? "Active" : "Inactive";
