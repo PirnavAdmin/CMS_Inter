@@ -69,10 +69,10 @@ namespace CollegeManagement.API.Middleware
 
             var response = new
             {
-                success = false,
                 statusCode = context.Response.StatusCode,
                 message = message,
-                errors = new { },
+                details = exception.InnerException != null ? $"{exception.Message} --> {exception.InnerException.Message}" : exception.Message,
+                stackTrace = exception.StackTrace,
                 path = context.Request.Path.Value,
                 timestamp = DateTime.UtcNow
             };

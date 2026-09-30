@@ -195,25 +195,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                      !queryParams.Designation.Equals("All Designations", StringComparison.OrdinalIgnoreCase))
             {
                 var desig = queryParams.Designation.Trim();
-                if (desig.Equals("Driver", StringComparison.OrdinalIgnoreCase) || desig.Equals("Bus Driver", StringComparison.OrdinalIgnoreCase))
-                {
-                    query = query.Where(s =>
-                        s.IsDriver ||
-                        s.RoleId == 12 ||
-                        s.DesignationId == 276 ||
-                        s.Designation == "Driver" ||
-                        s.Designation == "Bus Driver" ||
-                        (s.DesignationRef != null && (s.DesignationRef.Name == "Driver" || s.DesignationRef.Name == "Bus Driver")));
-                }
-                else
-                {
-                    query = query.Where(s =>
-                        s.Designation == desig ||
-                        (s.DesignationRef != null && s.DesignationRef.Name == desig));
-                }
+                query = query.Where(s =>
+                    s.Designation == desig ||
+                    (s.DesignationRef != null && s.DesignationRef.Name == desig));
             }
-
-
 
             // 4. Board filter
             if (queryParams.BoardId.HasValue && queryParams.BoardId.Value > 0)

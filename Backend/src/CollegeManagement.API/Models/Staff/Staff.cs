@@ -113,17 +113,6 @@ namespace CollegeManagement.API.Models.Staff
         [ForeignKey(nameof(DesignationId))]
         public Designation? DesignationRef { get; set; }
 
-        public int? RoleId { get; set; }
-
-        public bool IsDriver { get; set; } = false;
-
-        [StringLength(100)]
-        public string? DrivingLicenseNumber { get; set; }
-
-        public DateTime? DrivingLicenseExpiryDate { get; set; }
-
-        public int? DrivingExperienceYears { get; set; }
-
         [Required]
         [StringLength(20)]
         public string StaffType { get; set; } = "Teaching"; // "Teaching" | "Non-Teaching"
@@ -219,6 +208,15 @@ namespace CollegeManagement.API.Models.Staff
             get => DepartmentSpecificJson;
             set => DepartmentSpecificJson = value;
         }
+
+        public bool IsDriver { get; set; } = false;
+
+        [StringLength(100)]
+        public string? DrivingLicenseNumber { get; set; }
+
+        public DateTime? DrivingLicenseExpiryDate { get; set; }
+
+        public int? DrivingExperienceYears { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
