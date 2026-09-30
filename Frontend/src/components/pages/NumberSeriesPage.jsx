@@ -28,7 +28,6 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import * as numberSeriesApi from "@/api/numberSeriesApi.js";
-import * as staffApi from "@/api/staffApi.js";
 import {
   readNumberSeriesSettings,
   writeNumberSeriesSettings,
@@ -91,26 +90,6 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
       setLoading(false);
     }
     setSeriesList(data);
-    const [teachingResult, nonTeachingResult] = await Promise.allSettled([
-      staffApi.getNextEmployeeId("Teaching"),
-      staffApi.getNextEmployeeId("Non-Teaching"),
-    ]);
-    const getPreview = (result) => {
-      if (result.status !== "fulfilled") return null;
-      const response = result.value;
-      const payload = response?.data ?? response;
-      return typeof payload === "string" ? payload : payload?.nextEmployeeId || payload?.employeeId || payload?.nextId || payload?.data?.nextEmployeeId || null;
-    };
-    const previews = {
-      "teaching-staff-id": getPreview(teachingResult),
-      "non-teaching-staff-id": getPreview(nonTeachingResult),
-    };
-    setSeriesList((current) => current.map((series) => {
-      const key = series.id === "teaching-staff-id" || series.slug === "teaching-staff-id" ? "teaching-staff-id"
-        : series.id === "non-teaching-staff-id" || series.slug === "non-teaching-staff-id" ? "non-teaching-staff-id" : null;
-      const preview = key ? previews[key] : null;
-      return preview ? { ...series, livePreview: preview, currentExample: preview } : series;
-    }));
   };
 
   useEffect(() => {
