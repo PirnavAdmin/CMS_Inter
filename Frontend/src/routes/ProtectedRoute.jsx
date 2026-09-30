@@ -58,16 +58,15 @@ export function PublicOnlyRoute({ children }) {
 
   if (isTokenValid) {
     if (isAdmin) return <Navigate to="/dashboard" replace />;
-    if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     if (isParent) return <Navigate to="/parent-dashboard" replace />;
-    return <Navigate to="/student-dashboard" replace />;
+    if (!isFaculty) return <Navigate to="/student-dashboard" replace />;
   }
   return children || <Outlet />;
 }
 
 function isAdminRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
-  return normalized === "admin" || normalized === "super admin";
+  return normalized === "admin" || normalized.includes("admin");
 }
 
 

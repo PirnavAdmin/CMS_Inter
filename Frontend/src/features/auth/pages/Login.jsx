@@ -91,7 +91,9 @@ export default function Login() {
         userRole.includes("staff") ||
         userRole.includes("lecturer");
 
-      if (isFacultyOrStaff) {
+      if (result.user.isAdmin || userRole.includes("admin")) {
+        navigate("/dashboard", { replace: true });
+      } else if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
       } else if (userRole.includes("driver")) {
         navigate("/driver", { replace: true });
