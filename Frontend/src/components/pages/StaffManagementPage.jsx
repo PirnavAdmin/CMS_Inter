@@ -679,19 +679,20 @@ export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
 };
 
 export const TEACHING_ROLE_NAMES = [
-  "Accounts",
-  "Examination Cell",
-  "Faculty",
+  "Dean",
+  "Principal",
   "HOD",
-  "Library",
-  "Placement Officer",
+  "Faculty",
 ];
 
 export const NON_TEACHING_ROLE_NAMES = [
-  "Attendant",
-  "Cleaner",
-  "Driver",
+  "Accountant",
+  "Examination Cell",
+  "Library / Librarian",
   "Hostel Warden",
+  "Placement Officer",
+  "Bus Driver",
+  "Attendant",
 ];
 
 const teachingFields = [
