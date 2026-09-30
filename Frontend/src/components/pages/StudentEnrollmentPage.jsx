@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Bus, ClipboardList, GraduationCap, Mail, MapPin, School, User, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { SkeletonPage, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -8,7 +9,7 @@ import { env } from "@/config/env.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./StudentManagementPage.css";
 
-const emptyForm = () => ({ admissionId: "", admissionNo: "", admissionNumber: "", admissionDate: "", admissionType: "", admissionQuota: "", campusId: "", medium: "", secondLanguage: "", studentName: "", photo: "", gender: "", dateOfBirth: "", bloodGroup: "", email: "", mobileNumber: "", aadhaarNumber: "", nationality: "", religion: "", category: "", address: "", city: "", district: "", state: "", pincode: "", boardId: "", academicYearId: "", academicLevelId: "", groupId: "", programId: "", sectionId: "", rollNo: "", rollNumber: "", feeStructureId: "", paymentPlan: "", studentType: "", transportRequired: "", busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", hostelBlock: "", hostelBlockName: "", hostelRoom: "", hostelRoomName: "", previousSchool: "", previousHallTicketNumber: "", previousBoard: "", previousYearOfPassing: "", previousPercentage: "", studentCategory: "", scholarshipStatus: "", scholarshipAmount: "", fatherName: "", fatherOccupation: "", fatherMobile: "", fatherEmail: "", motherName: "", motherOccupation: "", motherMobile: "", motherEmail: "", guardianName: "", guardianMobile: "", parentParentGuardianEmail: "", annualIncome: "", remarks: "" });
+const emptyForm = () => ({ admissionId: "", admissionNo: "", admissionNumber: "", admissionDate: "", admissionType: "", admissionQuota: "", campusId: "", medium: "", secondLanguage: "", studentName: "", photo: "", gender: "", dateOfBirth: "", bloodGroup: "", email: "", mobileNumber: "", aadhaarNumber: "", nationality: "", religion: "", category: "", address: "", city: "", district: "", state: "", pincode: "", boardId: "", academicYearId: "", academicLevelId: "", groupId: "", programId: "", sectionId: "", rollNo: "", rollNumber: "", feeStructureId: "", paymentPlan: "", studentType: "", transportRequired: "", busType: "", busRoute: "", busRouteName: "", pickupPoint: "", pickupPointName: "", hostelBlock: "", hostelBlockName: "", hostelRoom: "", hostelRoomName: "", previousSchool: "", previousHallTicketNumber: "", previousBoard: "", previousYearOfPassing: "", previousPercentage: "", studentCategory: "", scholarshipStatus: "", scholarshipAmount: "", fatherName: "", fatherOccupation: "", fatherMobile: "", fatherEmail: "", motherName: "", motherOccupation: "", motherMobile: "", motherEmail: "", guardianName: "", guardianMobile: "", parentGuardianEmail: "", annualIncome: "", remarks: "" });
 const valueOf = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value !== undefined && value !== null) ?? "";
 const asList = (value) => {
   const data = value?.data ?? value?.Data ?? value;
@@ -33,7 +34,7 @@ const imageUrl = (value) => {
   return `${env.apiBaseUrl.replace(/\/$/, "")}/${path.replace(/^\/+/, "")}`;
 };
 const initialsOf = (name) => String(name ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "ST";
-const fieldKeys = ["admissionNo", "admissionNumber", "admissionDate", "campusId", "studentName", "gender", "dateOfBirth", "email", "mobileNumber", "aadhaarNumber", "nationality", "address", "city", "district", "state", "pincode", "studentType", "transportRequired", "busType", "busRoute", "pickupPoint", "hostelBlock", "hostelRoom", "previousYearOfPassing", "previousPercentage", "fatherName", "fatherOccupation", "fatherMobile", "fatherEmail", "motherName", "motherOccupation", "motherMobile", "motherEmail", "guardianName", "guardianMobile", "parentParentGuardianEmail"];
+const fieldKeys = ["admissionNo", "admissionNumber", "admissionDate", "campusId", "studentName", "gender", "dateOfBirth", "email", "mobileNumber", "aadhaarNumber", "nationality", "address", "city", "district", "state", "pincode", "studentType", "transportRequired", "busType", "busRoute", "pickupPoint", "hostelBlock", "hostelRoom", "previousYearOfPassing", "previousPercentage", "fatherName", "fatherOccupation", "fatherMobile", "fatherEmail", "motherName", "motherOccupation", "motherMobile", "motherEmail", "guardianName", "guardianMobile", "parentGuardianEmail"];
 const studentUpdateError = (error) => {
   const response = error?.response?.data ?? error?.data ?? {};
   const details = String(response?.details ?? response?.Details ?? "");
@@ -93,7 +94,13 @@ const pickupPointFrom = (point = {}) => {
   const value = id !== "" ? String(id) : label;
   if (!value) return null;
   const routeId = valueOf(point, "routeId", "RouteId");
-  return { value, label: label || value, routeId: routeId === "" ? "" : String(routeId), active: isActiveMaster(point) };
+  return {
+    value,
+    label: label || value,
+    routeId: routeId === "" ? "" : String(routeId),
+    monthlyFee: Number(valueOf(point, "monthlyFee", "MonthlyFee", "monthlyFare", "MonthlyFare", "feeAmount", "FeeAmount")) || 0,
+    active: isActiveMaster(point),
+  };
 };
 const vehicleFrom = (vehicle = {}) => {
   const id = valueOf(vehicle, "vehicleId", "VehicleId", "id", "Id");
@@ -105,6 +112,10 @@ const vehicleAssignmentFrom = (assignment = {}) => {
   const vehicleId = valueOf(assignment, "vehicleId", "VehicleId");
   if (routeId === "" || vehicleId === "") return null;
   return { routeId: String(routeId), vehicleId: String(vehicleId), busType: normalizeBusType(valueOf(assignment, "isAC", "IsAC", "isAc", "IsAc", "ac", "AC", "busType", "BusType")), active: isActiveMaster(assignment) };
+};
+const studentTransportAssignmentId = (assignment = {}) => {
+  const id = valueOf(assignment, "studentTransportAssignmentId", "StudentTransportAssignmentId", "studentAssignmentId", "StudentAssignmentId", "assignmentId", "AssignmentId", "id", "Id");
+  return id === "" ? null : id;
 };
 const hostelBlockFrom = (block = {}) => {
   const id = valueOf(block, "hostelId", "HostelId", "id", "Id");
@@ -172,7 +183,7 @@ const formFromStudent = (record) => {
     studentName: text("studentName", "StudentName", "fullName", "name"), photo: text("photo", "Photo", "photoPath", "PhotoPath"), gender: text("gender", "Gender"), dateOfBirth: asDateInput(valueOf(source, "dateOfBirth", "DateOfBirth", "dob", "DOB")), bloodGroup: text("bloodGroup", "BloodGroup"), email: text("email", "Email", "studentEmail", "StudentEmail"), mobileNumber: text("mobileNumber", "MobileNumber", "mobile", "Mobile"), aadhaarNumber: text("aadhaarNumber", "AadhaarNumber", "aadhaar", "Aadhaar"), nationality: text("nationality", "Nationality"), religion: text("religion", "Religion"), category: text("category", "Category"), address: text("address", "Address", "addressLine1", "AddressLine1"), city: text("city", "City"), district: text("district", "District"), state: text("state", "State"), pincode: text("pincode", "Pincode", "pinCode", "PinCode"),
     boardId: text("boardId", "BoardId"), academicYearId: text("academicYearId", "AcademicYearId"), academicLevelId: text("academicLevelId", "AcademicLevelId"), groupId: text("groupId", "GroupId"), programId: text("programId", "ProgramId"), sectionId: text("sectionId", "SectionId"), rollNo: text("rollNo", "RollNo"), rollNumber: text("rollNumber", "RollNumber"), feeStructureId: text("feeStructureId", "FeeStructureId"), paymentPlan: text("paymentPlan", "PaymentPlan"), ...allocation,
     previousSchool: text("previousSchool", "PreviousSchool"), previousHallTicketNumber: text("previousHallTicketNumber", "PreviousHallTicketNumber"), previousBoard: text("previousBoard", "PreviousBoard"), previousYearOfPassing: text("previousYearOfPassing", "PreviousYearOfPassing"), previousPercentage: text("previousPercentage", "PreviousPercentage"), studentCategory: text("studentCategory", "StudentCategory"), scholarshipStatus: text("scholarshipStatus", "ScholarshipStatus"), scholarshipAmount: text("scholarshipAmount", "ScholarshipAmount"),
-    fatherName: text("fatherName", "FatherName"), fatherOccupation: text("fatherOccupation", "FatherOccupation"), fatherMobile: text("fatherMobile", "FatherMobile"), fatherEmail: text("fatherEmail", "FatherEmail"), motherName: text("motherName", "MotherName"), motherOccupation: text("motherOccupation", "MotherOccupation"), motherMobile: text("motherMobile", "MotherMobile"), motherEmail: text("motherEmail", "MotherEmail"), guardianName: text("guardianName", "GuardianName"), guardianMobile: text("guardianMobile", "GuardianMobile"), parentParentGuardianEmail: text("parentParentGuardianEmail", "parentParentGuardianEmail"), annualIncome: text("annualIncome", "AnnualIncome"), remarks: text("remarks", "Remarks"),
+    fatherName: text("fatherName", "FatherName"), fatherOccupation: text("fatherOccupation", "FatherOccupation"), fatherMobile: text("fatherMobile", "FatherMobile"), fatherEmail: text("fatherEmail", "FatherEmail"), motherName: text("motherName", "MotherName"), motherOccupation: text("motherOccupation", "MotherOccupation"), motherMobile: text("motherMobile", "MotherMobile"), motherEmail: text("motherEmail", "MotherEmail"), guardianName: text("guardianName", "GuardianName"), guardianMobile: text("guardianMobile", "GuardianMobile"), parentGuardianEmail: text("parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail", "parentParentGuardianEmail", "ParentParentGuardianEmail"), annualIncome: text("annualIncome", "AnnualIncome"), remarks: text("remarks", "Remarks"),
   };
 };
 
@@ -213,7 +224,7 @@ const validate = (form) => {
   mobile("fatherMobile", "Father mobile number"); mobile("motherMobile", "Mother mobile number"); mobile("guardianMobile", "Guardian mobile number");
   if (form.fatherEmail.trim() && !emailPattern.test(form.fatherEmail.trim())) errors.fatherEmail = "Enter a valid father email address.";
   if (form.motherEmail.trim() && !emailPattern.test(form.motherEmail.trim())) errors.motherEmail = "Enter a valid mother email address.";
-  if (form.parentParentGuardianEmail.trim() && !emailPattern.test(form.parentParentGuardianEmail.trim())) errors.parentParentGuardianEmail = "Enter a valid guardian email address.";
+  if (form.parentGuardianEmail.trim() && !emailPattern.test(form.parentGuardianEmail.trim())) errors.parentGuardianEmail = "Enter a valid guardian email address.";
   if (form.previousYearOfPassing && (!/^\d{4}$/.test(form.previousYearOfPassing) || Number(form.previousYearOfPassing) > new Date().getFullYear())) errors.previousYearOfPassing = "Enter a valid passing year.";
   if (form.previousPercentage && (Number(form.previousPercentage) < 0 || Number(form.previousPercentage) > 100)) errors.previousPercentage = "Percentage must be between 0 and 100.";
   return errors;
@@ -221,7 +232,7 @@ const validate = (form) => {
 
 export default function StudentEnrollmentPage({ id, embedded = false, onCancel, onSaved }) {
   const navigate = useNavigate();
-  const { campuses } = useCampusContext();
+  const { campuses, selectedCampusId } = useCampusContext();
   const redirectTimer = useRef(null);
   const photoInputRef = useRef(null);
   const [student, setStudent] = useState(null), [form, setForm] = useState(emptyForm), [loading, setLoading] = useState(true), [saving, setSaving] = useState(false), [loadError, setLoadError] = useState(""), [errors, setErrors] = useState({}), [touched, setTouched] = useState({}), [message, setMessage] = useState(""), [photoFile, setPhotoFile] = useState(null), [photoPreview, setPhotoPreview] = useState(""), [photoError, setPhotoError] = useState(""), [lookups, setLookups] = useState({ boards: [], years: [], levels: [], groups: [], programs: [], sections: [] }), [allocationLookups, setAllocationLookups] = useState({ routes: [], pickupPoints: [], vehicles: [], vehicleAssignments: [], hostelBlocks: [], hostelRoomTypes: [], hostelRooms: [], hostelFees: [] }), [allocationLookupError, setAllocationLookupError] = useState("");
@@ -284,10 +295,13 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
   useEffect(() => {
     let active = true;
     const loadAllocationLookups = async () => {
+      if (!Number(selectedCampusId)) return;
       setAllocationLookupError("");
       const results = await Promise.allSettled([
         apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+        apiClient.get(apiEndpoints.transport.pickupPoints, {
+          params: { CampusId: Number(selectedCampusId), PageNumber: 1, PageSize: 1000 },
+        }),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
         apiClient.get(apiEndpoints.hostel.blocks),
@@ -303,7 +317,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     };
     loadAllocationLookups();
     return () => { active = false; };
-  }, []);
+  }, [selectedCampusId]);
   const routeBusTypes = useMemo(() => {
     const vehicleTypes = new Map(allocationLookups.vehicles.filter((vehicle) => vehicle.active && vehicle.busType).map((vehicle) => [vehicle.value, vehicle.busType]));
     return allocationLookups.vehicleAssignments.filter((assignment) => assignment.active).reduce((map, assignment) => {
@@ -394,6 +408,46 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     });
     setErrors((current) => ({ ...current, studentType: undefined, transportRequired: undefined, busType: undefined, busRoute: undefined, pickupPoint: undefined, hostelBlock: undefined, hostelRoom: undefined }));
   };
+  const syncStudentTransport = async () => {
+    if (!form.studentType) return;
+    const transportSelected = form.studentType === "Non-Residential" && form.transportRequired === "Yes";
+    const studentId = Number(id);
+    const assignmentsResponse = await apiClient.get(`${apiEndpoints.transport.studentAssignments}?PageNumber=1&PageSize=1000`);
+    const existingAssignment = asList(assignmentsResponse.data).find((assignment) =>
+      String(valueOf(assignment, "studentId", "StudentId")) === String(studentId));
+    const existingAssignmentId = studentTransportAssignmentId(existingAssignment);
+
+    if (!transportSelected) {
+      if (existingAssignmentId !== null) await apiClient.delete(apiEndpoints.transport.studentAssignmentById(existingAssignmentId));
+      return;
+    }
+
+    const vehicleAssignment = allocationLookups.vehicleAssignments.find((assignment) =>
+      assignment.active
+      && assignment.routeId === String(form.busRoute)
+      && (!form.busType || !assignment.busType || assignment.busType === form.busType));
+    if (!vehicleAssignment?.vehicleId) {
+      throw new Error("No active vehicle assignment is available for the selected transport route and bus type.");
+    }
+
+    const pickupPoint = allocationLookups.pickupPoints.find((point) => point.value === String(form.pickupPoint));
+    const transportPayload = {
+      studentId,
+      studentName: form.studentName.trim(),
+      admissionNo: form.admissionNo.trim() || form.admissionNumber.trim(),
+      routeId: Number(form.busRoute),
+      pickupPointId: Number(form.pickupPoint),
+      pickupPointName: form.pickupPointName || pickupPoint?.label || "",
+      vehicleId: Number(vehicleAssignment.vehicleId),
+      monthlyFee: pickupPoint?.monthlyFee || 0,
+      status: true,
+    };
+    if (existingAssignmentId !== null) {
+      await apiClient.put(apiEndpoints.transport.studentAssignmentById(existingAssignmentId), transportPayload);
+    } else {
+      await apiClient.post(apiEndpoints.transport.studentAssignments, transportPayload);
+    }
+  };
   const numericChange = (key, maximum) => (event) => updateField(key, digitsOnly(event.target.value, maximum));
   const choosePhoto = (event) => {
     const file = event.target.files?.[0] ?? null;
@@ -421,16 +475,19 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       boardId: numberOrZero(form.boardId), academicYearId: numberOrZero(form.academicYearId), academicLevelId: numberOrZero(form.academicLevelId), groupId: numberOrZero(form.groupId), programId: numberOrZero(form.programId), sectionId: numberOrZero(form.sectionId), rollNo: form.rollNo.trim(), rollNumber: form.rollNumber.trim(), feeStructureId: numberOrZero(form.feeStructureId), paymentPlan: form.paymentPlan.trim(),
       studentType: form.studentType,
       transportRequired: form.studentType === "Non-Residential" && form.transportRequired === "Yes",
-      ...(form.studentType === "Non-Residential" && form.transportRequired === "Yes" ? { routeId: numberOrZero(form.busRoute), pickupPointId: numberOrZero(form.pickupPoint) } : {}),
+      ...(form.studentType === "Non-Residential" && form.transportRequired === "Yes"
+        ? { busType: form.busType, routeId: numberOrZero(form.busRoute), pickupPointId: numberOrZero(form.pickupPoint) }
+        : {}),
       ...(form.studentType === "Residential" ? { hostelId: numberOrZero(form.hostelBlock), hostelRoom: form.hostelRoomName || form.hostelRoom } : {}),
       previousSchool: form.previousSchool.trim(), previousHallTicketNumber: form.previousHallTicketNumber.trim(), previousBoard: form.previousBoard.trim(), previousYearOfPassing: numberOrZero(form.previousYearOfPassing), previousPercentage: numberOrZero(form.previousPercentage), studentCategory: form.studentCategory.trim(), scholarshipStatus: form.scholarshipStatus.trim(), scholarshipAmount: numberOrZero(form.scholarshipAmount),
-      fatherName: form.fatherName.trim(), fatherOccupation: form.fatherOccupation.trim(), fatherMobile: form.fatherMobile.trim(), fatherEmail: optionalEmail(form.fatherEmail), motherName: form.motherName.trim(), motherOccupation: form.motherOccupation.trim(), motherMobile: form.motherMobile.trim(), motherEmail: optionalEmail(form.motherEmail), guardianName: form.guardianName.trim(), guardianMobile: form.guardianMobile.trim(), parentParentGuardianEmail: optionalEmail(form.parentParentGuardianEmail), annualIncome: numberOrZero(form.annualIncome), remarks: form.remarks.trim(),
+      fatherName: form.fatherName.trim(), fatherOccupation: form.fatherOccupation.trim(), fatherMobile: form.fatherMobile.trim(), fatherEmail: optionalEmail(form.fatherEmail), motherName: form.motherName.trim(), motherOccupation: form.motherOccupation.trim(), motherMobile: form.motherMobile.trim(), motherEmail: optionalEmail(form.motherEmail), guardianName: form.guardianName.trim(), guardianMobile: form.guardianMobile.trim(), parentGuardianEmail: optionalEmail(form.parentGuardianEmail), annualIncome: numberOrZero(form.annualIncome), remarks: form.remarks.trim(),
     };
     if (import.meta.env.DEV) console.info("Student profile update payload:", payload);
     setSaving(true);
     let saved = false;
     try {
       await apiClient.put(apiEndpoints.students.update(id), payload);
+      await syncStudentTransport();
       if (photoFile) {
         const photoData = new FormData();
         photoData.append("file", photoFile);
@@ -472,16 +529,15 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
       <Field label="Previous School"><input value={form.previousSchool} onChange={change("previousSchool")} /></Field><Field label="Previous Hall Ticket Number"><input value={form.previousHallTicketNumber} onChange={change("previousHallTicketNumber")} /></Field><Field label="Previous Board"><input value={form.previousBoard} onChange={change("previousBoard")} /></Field><Field label="Previous Year of Passing" {...field("previousYearOfPassing")}><input type="number" min="1900" max={new Date().getFullYear()} value={form.previousYearOfPassing} onChange={change("previousYearOfPassing")} /></Field><Field label="Previous Percentage" {...field("previousPercentage")}><input type="number" min="0" max="100" step="0.01" value={form.previousPercentage} onChange={change("previousPercentage")} /></Field>
     </ProfileSection>
     <ProfileSection title="Address"><Field label="Address" className="student-profile-full" {...field("address")}><textarea value={form.address} onChange={change("address")} rows="3" maxLength="250" /></Field><Field label="City" {...field("city")}><input value={form.city} onChange={change("city")} maxLength="100" /></Field><Field label="District" {...field("district")}><input value={form.district} onChange={change("district")} maxLength="100" /></Field><Field label="State" {...field("state")}><input value={form.state} onChange={change("state")} maxLength="100" /></Field><Field label="Pincode" {...field("pincode")}><input type="text" inputMode="numeric" maxLength="6" value={form.pincode} onChange={numericChange("pincode", 6)} /></Field></ProfileSection>
-    <ProfileSection title="Father Details"><Field label="Father Name" {...field("fatherName")}><input value={form.fatherName} onChange={change("fatherName")} maxLength="100" /></Field><Field label="Occupation" {...field("fatherOccupation")}><input value={form.fatherOccupation} onChange={change("fatherOccupation")} maxLength="100" /></Field><Field label="Mobile Number" {...field("fatherMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.fatherMobile} onChange={numericChange("fatherMobile", 10)} /></Field><Field label="Email" {...field("fatherEmail")}><input type="email" value={form.fatherEmail} onChange={change("fatherEmail")} maxLength="254" /></Field></ProfileSection>
-    <ProfileSection title="Mother Details"><Field label="Mother Name" {...field("motherName")}><input value={form.motherName} onChange={change("motherName")} maxLength="100" /></Field><Field label="Occupation" {...field("motherOccupation")}><input value={form.motherOccupation} onChange={change("motherOccupation")} maxLength="100" /></Field><Field label="Mobile Number" {...field("motherMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.motherMobile} onChange={numericChange("motherMobile", 10)} /></Field><Field label="Email" {...field("motherEmail")}><input type="email" value={form.motherEmail} onChange={change("motherEmail")} maxLength="254" /></Field></ProfileSection>
-    <ProfileSection title="Guardian Details"><Field label="Guardian Name" {...field("guardianName")}><input value={form.guardianName} onChange={change("guardianName")} maxLength="100" /></Field><Field label="Mobile Number" {...field("guardianMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.guardianMobile} onChange={numericChange("guardianMobile", 10)} /></Field><Field label="Email" {...field("parentParentGuardianEmail")}><input type="email" value={form.parentParentGuardianEmail} onChange={change("parentParentGuardianEmail")} maxLength="254" /></Field></ProfileSection>
+    <ProfileSection title="Parent Details"><Field label="Father Name" {...field("fatherName")}><input value={form.fatherName} onChange={change("fatherName")} maxLength="100" /></Field><Field label="Father Occupation" {...field("fatherOccupation")}><input value={form.fatherOccupation} onChange={change("fatherOccupation")} maxLength="100" /></Field><Field label="Father Mobile" {...field("fatherMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.fatherMobile} onChange={numericChange("fatherMobile", 10)} /></Field><Field label="Mother Name" {...field("motherName")}><input value={form.motherName} onChange={change("motherName")} maxLength="100" /></Field><Field label="Mother Occupation" {...field("motherOccupation")}><input value={form.motherOccupation} onChange={change("motherOccupation")} maxLength="100" /></Field><Field label="Mother Mobile" {...field("motherMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.motherMobile} onChange={numericChange("motherMobile", 10)} /></Field><Field label="Guardian Name" {...field("guardianName")}><input value={form.guardianName} onChange={change("guardianName")} maxLength="100" /></Field><Field label="Guardian Mobile" {...field("guardianMobile")}><input type="tel" inputMode="numeric" maxLength="10" value={form.guardianMobile} onChange={numericChange("guardianMobile", 10)} /></Field><Field label="Parent/Guardian Email" {...field("parentGuardianEmail")}><input type="email" value={form.parentGuardianEmail} onChange={change("parentGuardianEmail")} maxLength="254" /></Field></ProfileSection>
     <div className="student-profile-edit-actions">{embedded ? <button type="button" className="cms-btn cms-btn-ghost" onClick={onCancel} disabled={saving}>Cancel</button> : <Link to={`/dashboard/students/${id}`} className="cms-btn cms-btn-ghost">Cancel</Link>}<button className="cms-btn cms-btn-primary" type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button></div>
   </form>;
   if (embedded) return <>{editor}<Toast message={message} onClose={() => setMessage("")} /></>;
   return <DashboardLayout title="EDIT STUDENT PROFILE" subtitle="Update student personal and family information." breadcrumb={["People", "Students"]}>{editor}<Toast message={message} onClose={() => setMessage("")} /></DashboardLayout>;
 }
 
-function ProfileSection({ title, children }) { return <section className="student-profile-section"><h2>{title}</h2><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
+const profileSectionIcons = { "Admission Details": ClipboardList, "Personal Information": User, "Contact Information": Mail, "Academic Placement": GraduationCap, "Student Type & Residential Allocation": Bus, "Previous Education": School, Address: MapPin, "Parent Details": Users };
+function ProfileSection({ title, children }) { const Icon = profileSectionIcons[title]; return <section className="student-profile-section"><header className="student-profile-section-head">{Icon ? <span className="student-profile-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
 function Field({ label, error, className = "", children, onBlur }) { return <label className={`cms-field ${className}${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}</span>{children}{error ? <small className="cms-field-error">{error}</small> : null}</label>; }
 function SelectField({ label, value, onChange, options, placeholder, disabled = false, required = false, error, onBlur }) {
   const selected = String(value ?? "");

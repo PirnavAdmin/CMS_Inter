@@ -1328,28 +1328,14 @@ namespace CollegeManagement.API.Services.Implementations
             bool isPatternWise = string.Equals(request.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
                                  string.Equals(exam.ExamPattern, "OBJECTIVE", StringComparison.OrdinalIgnoreCase);
 
-            // 4. Check & Handle Existing Schedules for this group
+            // 4. Check & Handle Existing Schedules for this exam
             var existingGroupSchedules = await _context.ExamSchedules
-                .Include(s => s.Subject)
-                .Where(s => s.IsActive && s.ExaminationId == examinationId && s.Subject != null && s.Subject.GroupId == targetGroupId)
+                .Where(s => s.IsActive && s.ExaminationId == examinationId)
                 .ToListAsync();
 
-            if (existingGroupSchedules.Any())
+            if (existingGroupSchedules.Any() && !request.ReplaceExisting)
             {
-                if (!request.ReplaceExisting)
-                {
-                    throw new ValidationException($"This Group already has {existingGroupSchedules.Count} saved schedule(s). Edit or remove those entries before automatic scheduling.");
-                }
-                else
-                {
-                    var oldSchedIds = existingGroupSchedules.Select(s => s.ExamScheduleId).ToList();
-                    var oldAssignments = await _context.InvigilatorAssignments
-                        .Where(ia => oldSchedIds.Contains(ia.ExamScheduleId))
-                        .ToListAsync();
-                    _context.InvigilatorAssignments.RemoveRange(oldAssignments);
-                    _context.ExamSchedules.RemoveRange(existingGroupSchedules);
-                    await _context.SaveChangesAsync();
-                }
+                throw new ValidationException($"This Examination already has {existingGroupSchedules.Count} saved schedule(s). Select 'Replace Existing' or edit/remove those entries before automatic scheduling.");
             }
 
             // 5. Query Active Subjects to Schedule
@@ -1571,6 +1557,23 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     createdResponses.Clear();
 
+                    // If replaceExisting or cleaning up prior schedules for this exam & subjects
+                    var targetSubjectIds = plannedSessions.Select(p => p.subject?.SubjectId ?? 0).Where(id => id > 0).ToHashSet();
+                    var priorSchedules = await _context.ExamSchedules
+                        .Where(s => s.IsActive && s.ExaminationId == examinationId && (targetSubjectIds.Contains(s.SubjectId) || request.ReplaceExisting))
+                        .ToListAsync();
+
+                    if (priorSchedules.Any())
+                    {
+                        var priorSchedIds = priorSchedules.Select(s => s.ExamScheduleId).ToList();
+                        var priorAssignments = await _context.InvigilatorAssignments
+                            .Where(ia => priorSchedIds.Contains(ia.ExamScheduleId))
+                            .ToListAsync();
+                        if (priorAssignments.Any()) _context.InvigilatorAssignments.RemoveRange(priorAssignments);
+                        _context.ExamSchedules.RemoveRange(priorSchedules);
+                        await _context.SaveChangesAsync();
+                    }
+
                     decimal defaultTotalMarks = request.TotalMarks.HasValue && request.TotalMarks.Value > 0
                         ? request.TotalMarks.Value
                         : (exam.TotalMarks.HasValue && exam.TotalMarks.Value > 0
@@ -1582,6 +1585,9 @@ namespace CollegeManagement.API.Services.Implementations
                         : (exam.PassPercentage.HasValue && exam.PassPercentage.Value > 0
                             ? Math.Round(defaultTotalMarks * exam.PassPercentage.Value / 100.0m, 2)
                             : (isPatternWise ? 120.00m : 35.00m));
+
+                    // Step 1: Add all ExamSchedules in batch
+                    var plannedEntities = new List<(ExamSchedule schedule, Subject? sub, List<(Models.Timetable.Room room, int count, List<Models.Staff.Staff> invigilators)> roomAllocs)>();
 
                     foreach (var (sub, examDate, roomAllocs) in plannedSessions)
                     {
@@ -1618,8 +1624,17 @@ namespace CollegeManagement.API.Services.Implementations
                         };
 
                         _context.ExamSchedules.Add(newSchedule);
-                        await _context.SaveChangesAsync();
+                        plannedEntities.Add((newSchedule, sub, roomAllocs));
+                    }
 
+                    // Save all schedules in one DB trip
+                    await _context.SaveChangesAsync();
+
+                    // Step 2: Add all InvigilatorAssignments in batch
+                    var allNewAssignments = new List<InvigilatorAssignment>();
+
+                    foreach (var (newSchedule, sub, roomAllocs) in plannedEntities)
+                    {
                         var invAssignmentsList = new List<InvigilatorAssignmentResponse>();
                         var hallAssignmentsList = new List<HallAssignmentDto>();
 
@@ -1652,7 +1667,7 @@ namespace CollegeManagement.API.Services.Implementations
                                     HallNumber = rHall,
                                     AssignedAt = DateTime.UtcNow
                                 };
-                                _context.InvigilatorAssignments.Add(assignment);
+                                allNewAssignments.Add(assignment);
 
                                 invAssignmentsList.Add(new InvigilatorAssignmentResponse
                                 {
@@ -1667,8 +1682,6 @@ namespace CollegeManagement.API.Services.Implementations
                                 });
                             }
                         }
-
-                        await _context.SaveChangesAsync();
 
                         createdResponses.Add(new ExamScheduleResponse
                         {
@@ -1700,6 +1713,12 @@ namespace CollegeManagement.API.Services.Implementations
                             HallAssignments = hallAssignmentsList,
                             InvigilatorAssignments = invAssignmentsList
                         });
+                    }
+
+                    if (allNewAssignments.Any())
+                    {
+                        _context.InvigilatorAssignments.AddRange(allNewAssignments);
+                        await _context.SaveChangesAsync();
                     }
 
                     if (request.FinalizeSchedule)

@@ -121,6 +121,12 @@ apiClient.interceptors.request.use(
     beginApiLoading(config);
     const token = getStoredAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
+    try {
+      const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
+      if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
+    } catch {
+      // Storage may be unavailable in restricted browser contexts.
+    }
     if (import.meta.env.DEV) {
       const expiry = token ? getJwtExpiryState(token) : {};
       console.log("API request:", {

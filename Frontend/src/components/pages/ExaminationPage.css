@@ -204,26 +204,32 @@
 
 .exam-schedule-back-link {
   display: inline-flex;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: fit-content !important;
+  max-width: 100%;
+  min-height: 30px;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  background: var(--cms-surface, #ffffff);
-  border: 1px solid var(--cms-border, #e2e8f0);
+  padding: 5px 12px;
+  background: var(--cms-surface);
+  border: 1px solid var(--cms-border);
   border-radius: 8px;
-  color: var(--cms-text, #1e293b);
-  font-size: 13px;
+  color: var(--cms-text);
+  font-size: 12px;
+  line-height: 1.25;
   font-weight: 600;
   text-decoration: none !important;
   cursor: pointer;
   transition: all 0.2s ease;
   margin-bottom: 16px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--cms-shadow-sm, none);
 }
 
 .exam-schedule-back-link:hover {
-  background: var(--cms-primary-soft, #f4f6e8);
-  border-color: var(--cms-primary, #6F8400);
-  color: var(--cms-primary-dark, #566900);
+  background: var(--cms-primary-soft);
+  border-color: var(--cms-primary);
+  color: var(--cms-primary-dark);
 }
 
 .exam-back-text-link:hover,
@@ -1207,6 +1213,7 @@
   border: 1px solid var(--cms-border);
   border-radius: 12px;
   background: var(--cms-subtle);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
 }
 
 .exam-allocation-summary {
@@ -1216,6 +1223,7 @@
   gap: 12px 20px;
   color: var(--cms-muted);
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .exam-allocation-summary .cms-btn {
@@ -1231,6 +1239,24 @@
   border: 1px solid var(--cms-border);
   border-radius: 10px;
   background: var(--cms-surface);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.035);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.exam-hall-row:focus-within {
+  border-color: var(--cms-primary, #647a00);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cms-primary, #647a00) 12%, transparent);
+}
+
+.exam-hall-row .cms-field {
+  min-width: 0;
+}
+
+.exam-hall-row .cms-field > label {
+  margin-bottom: 6px;
+  color: var(--cms-text, #334155);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .exam-remove-hall {
@@ -1332,7 +1358,7 @@
   .examination-form-page .cms-form-grid.cols-2,
   .exam-schedule-card .cms-form-grid.cols-3,
   .exam-hall-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .exam-table-toolbar {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Users,
@@ -28,7 +28,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import * as numberSeriesApi from "@/api/numberSeriesApi.js";
-import * as staffApi from "@/api/staffApi.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
   readNumberSeriesSettings,
   writeNumberSeriesSettings,
@@ -56,6 +57,11 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const navigate = useNavigate();
   const { seriesId, id } = useParams();
   const activeId = seriesId || id;
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
+  const activeCampusId = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
+  const activeBoardId = selectedBoardId;
+  const activeAYId = selectedAcademicYearId;
 
   const [seriesList, setSeriesList] = useState(() =>
     readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem)
@@ -65,11 +71,15 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const [toast, setToast] = useState(null);
   const [previewModalSeries, setPreviewModalSeries] = useState(null);
 
-  const fetchSeries = async () => {
+  const fetchSeries = useCallback(async () => {
     setLoading(true);
     let data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
     try {
-      const serverData = await numberSeriesApi.getNumberSeriesList();
+      const serverData = await numberSeriesApi.getNumberSeriesList(
+        activeCampusId,
+        activeBoardId,
+        activeAYId,
+      );
       const items = Array.isArray(serverData) ? serverData : serverData?.items || serverData?.data || [];
       if (Array.isArray(items) && items.length > 0) {
         const normalized = items.filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
@@ -91,31 +101,11 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
       setLoading(false);
     }
     setSeriesList(data);
-    const [teachingResult, nonTeachingResult] = await Promise.allSettled([
-      staffApi.getNextEmployeeId("Teaching"),
-      staffApi.getNextEmployeeId("Non-Teaching"),
-    ]);
-    const getPreview = (result) => {
-      if (result.status !== "fulfilled") return null;
-      const response = result.value;
-      const payload = response?.data ?? response;
-      return typeof payload === "string" ? payload : payload?.nextEmployeeId || payload?.employeeId || payload?.nextId || payload?.data?.nextEmployeeId || null;
-    };
-    const previews = {
-      "teaching-staff-id": getPreview(teachingResult),
-      "non-teaching-staff-id": getPreview(nonTeachingResult),
-    };
-    setSeriesList((current) => current.map((series) => {
-      const key = series.id === "teaching-staff-id" || series.slug === "teaching-staff-id" ? "teaching-staff-id"
-        : series.id === "non-teaching-staff-id" || series.slug === "non-teaching-staff-id" ? "non-teaching-staff-id" : null;
-      const preview = key ? previews[key] : null;
-      return preview ? { ...series, livePreview: preview, currentExample: preview } : series;
-    }));
-  };
+  }, [activeCampusId, activeBoardId, activeAYId]);
 
   useEffect(() => {
     fetchSeries();
-  }, []);
+  }, [fetchSeries]);
 
   const activeSeries = useMemo(() => {
     if (!activeId) return null;
@@ -141,7 +131,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     let savedData = null;
 
     try {
-      savedData = await numberSeriesApi.updateNumberSeries(code, updatedSeries);
+      savedData = await numberSeriesApi.updateNumberSeries(code, updatedSeries, activeCampusId);
     } catch (err) {
       console.warn("PUT /api/v1/settings/number-series/{seriesCode} fallback:", err?.message || err);
     }
@@ -793,6 +783,7 @@ function RenderTableRow({ seriesId, row, index }) {
 // ======================================================================
 function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
   const navigate = useNavigate();
+  const { selectedCampusId } = useCampusContext();
 
   const [formState, setFormState] = useState({
     prefix: series.prefix || "",
@@ -835,6 +826,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
           pattern: formState.format,
           numberLength: formState.numberLength,
           prefix: formState.prefix,
+          campusId: selectedCampusId,
         });
         if (typeof res === "string" && res.trim()) {
           setApiPreview(res.trim());
@@ -844,7 +836,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
       }
     }, 200);
     return () => clearTimeout(timer);
-  }, [formState.format, formState.numberLength, formState.prefix, series, liveValidation.valid]);
+  }, [formState.format, formState.numberLength, formState.prefix, series, selectedCampusId, liveValidation.valid]);
 
   const livePreviewVal = apiPreview || localLivePreviewVal;
 

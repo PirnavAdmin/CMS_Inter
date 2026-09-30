@@ -244,9 +244,9 @@ export const createSalaryRevision = async (payload) => {
   }
 };
 
-export const approveSalaryRevision = async (id, payload = {}) => {
+export const approveSalaryRevision = async (id) => {
   try {
-    const res = await apiClient.patch(apiEndpoints.payroll.approveRevision(id), payload);
+    const res = await apiClient.patch(apiEndpoints.payroll.approveRevision(id));
     return unwrapResponse(res);
   } catch (error) {
     console.warn(`payrollApi.approveSalaryRevision(${id}) error:`, getApiErrorMessage(error));
@@ -288,9 +288,9 @@ export const createBonus = async (payload) => {
   }
 };
 
-export const approveBonus = async (id, payload = {}) => {
+export const approveBonus = async (id) => {
   try {
-    const res = await apiClient.patch(apiEndpoints.payroll.approveBonus(id), payload);
+    const res = await apiClient.patch(apiEndpoints.payroll.approveBonus(id));
     return unwrapResponse(res);
   } catch (error) {
     console.warn(`payrollApi.approveBonus(${id}) error:`, getApiErrorMessage(error));
@@ -332,9 +332,9 @@ export const createSalaryAdvance = async (payload) => {
   }
 };
 
-export const approveSalaryAdvance = async (id, payload = {}) => {
+export const approveSalaryAdvance = async (id) => {
   try {
-    const res = await apiClient.patch(apiEndpoints.payroll.approveAdvance(id), payload);
+    const res = await apiClient.patch(apiEndpoints.payroll.approveAdvance(id));
     return unwrapResponse(res);
   } catch (error) {
     console.warn(`payrollApi.approveSalaryAdvance(${id}) error:`, getApiErrorMessage(error));
@@ -391,4 +391,3 @@ export const getStaffSummary = async (staffId, params = {}) => {
     throw error;
   }
 };
-

@@ -135,9 +135,6 @@ namespace CollegeManagement.API.DTOs.Students
         public string? FatherMobile { get; set; }
 
         [MaxLength(150)]
-        public string? FatherEmail { get; set; }
-
-        [MaxLength(150)]
         public string? MotherName { get; set; }
 
         [MaxLength(100)]
@@ -145,9 +142,6 @@ namespace CollegeManagement.API.DTOs.Students
 
         [MaxLength(20)]
         public string? MotherMobile { get; set; }
-
-        [MaxLength(150)]
-        public string? MotherEmail { get; set; }
 
         [MaxLength(150)]
         public string? GuardianName { get; set; }

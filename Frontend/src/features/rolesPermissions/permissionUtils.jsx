@@ -8,14 +8,50 @@ const normalizeCode = (value = "") =>
     .replace(/[^A-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+const normalizeModuleKey = (value = "") => String(value).trim().toLowerCase();
+
+const normalizeActionKey = (value = "") => {
+  const action = String(value).trim().toLowerCase();
+  if (action === "add") return ACTIONS.CREATE;
+  if (action === "update") return ACTIONS.EDIT;
+  return action;
+};
+
+const getPermissionModuleKey = (item = {}) =>
+  item?.moduleId
+  ?? item?.ModuleId
+  ?? item?.moduleKey
+  ?? item?.ModuleKey
+  ?? item?.subModule
+  ?? item?.SubModule
+  ?? item?.module
+  ?? item?.Module
+  ?? "";
+
+const getPermissionActions = (item = {}) => {
+  if (Array.isArray(item)) return item;
+  if (Array.isArray(item?.actions)) return item.actions;
+  if (Array.isArray(item?.Actions)) return item.Actions;
+
+  return [
+    (item?.canView ?? item?.CanView) && ACTIONS.VIEW,
+    (item?.canAdd ?? item?.CanAdd ?? item?.canCreate ?? item?.CanCreate) && ACTIONS.CREATE,
+    (item?.canEdit ?? item?.CanEdit ?? item?.canUpdate ?? item?.CanUpdate) && ACTIONS.EDIT,
+    (item?.canDelete ?? item?.CanDelete) && ACTIONS.DELETE,
+  ].filter(Boolean);
+};
+
 const toPermissionMap = (permissions = []) => {
   if (permissions && typeof permissions === "object" && !Array.isArray(permissions)) {
-    return permissions;
+    return Object.entries(permissions).reduce((acc, [moduleKey, actions]) => {
+      acc[normalizeModuleKey(moduleKey)] = getPermissionActions(actions).map(normalizeActionKey);
+      return acc;
+    }, {});
   }
   return permissions.reduce((acc, item) => {
-    const moduleKey = item?.module || item?.moduleKey || item?.moduleId;
+    const moduleKey = normalizeModuleKey(getPermissionModuleKey(item));
     if (!moduleKey) return acc;
-    acc[moduleKey] = Array.isArray(item?.actions) ? item.actions : [];
+    acc[moduleKey] = getPermissionActions(item).map(normalizeActionKey);
     return acc;
   }, {});
 };
@@ -42,9 +78,9 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
   const source = permissions ?? user?.permissions ?? user?.rolePermissions;
   if (!source) return true;
   const permissionMap = toPermissionMap(source);
-  const actions = permissionMap[moduleKey];
+  const actions = permissionMap[normalizeModuleKey(moduleKey)];
   if (!Array.isArray(actions)) return false;
-  return actions.includes(actionKey);
+  return actions.includes(normalizeActionKey(actionKey));
 }
 
 export function PermissionGuard({ moduleKey, actionKey = ACTIONS.VIEW, permissions, fallback = null, children }) {
@@ -75,20 +111,18 @@ export function togglePermissionAction(currentActions = [], actionKey, enabled) 
 }
 
 export function normalizePermissionPayload(permissions = []) {
-  const seen = new Set();
-  return permissions
-    .map((item) => ({
-      module: item.module || item.moduleKey || item.moduleId,
-      actions: Array.isArray(item.actions) ? item.actions : [],
-    }))
-    .filter((item) => item.module)
-    .map((item) => ({
-      ...item,
-      actions: item.actions.filter((action) => {
-        const key = `${item.module}.${action}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }),
-    }));
+  const byModule = new Map();
+
+  permissions.forEach((item) => {
+    const module = normalizeModuleKey(getPermissionModuleKey(item));
+    if (!module) return;
+
+    const actions = byModule.get(module) || [];
+    getPermissionActions(item).map(normalizeActionKey).forEach((action) => {
+      if (action && !actions.includes(action)) actions.push(action);
+    });
+    byModule.set(module, actions);
+  });
+
+  return [...byModule.entries()].map(([module, actions]) => ({ module, actions }));
 }

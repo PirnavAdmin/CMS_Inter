@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCircle2, Users, UserCheck, UserX, Megaphone, RotateCcw, ChevronDown } from "lucide-react";
+import { RefreshCw, Download, ArrowRight, Layers, Calendar, CheckCircle, CheckCircle2, Users, UserCheck, UserX, Megaphone, RotateCcw, ChevronDown, Eye } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Field, Modal, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -30,6 +30,8 @@ const EMPTY_HISTORY_FILTERS = {
   academicYearId: "", academicLevel: "",
   groupId: "", programId: "", section: "", studentId: "", search: "", promotionStatus: "", fromDate: "", toDate: "",
 };
+
+const PROMOTION_STUDENT_PAGE_SIZE = 10;
 
 const read = (item, ...keys) => {
   const key = keys.find((candidate) => item?.[candidate] !== undefined && item?.[candidate] !== null);
@@ -202,6 +204,9 @@ export default function PromotionPage({ screen = "promotion" }) {
   const [students, setStudents] = useState([]);
   const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsPage, setStudentsPage] = useState(1);
+  const [studentsTotalCount, setStudentsTotalCount] = useState(0);
+  const [studentsTotalPages, setStudentsTotalPages] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
   const [search, setSearch] = useState("");
   const [eligibilityFilter, setEligibilityFilter] = useState("");
@@ -509,7 +514,7 @@ export default function PromotionPage({ screen = "promotion" }) {
 
   const academicLevelLabel = useCallback((levelId) => masters.levels.find((level) => level.value === asString(levelId))?.label || asString(levelId), [masters.levels]);
 
-  const eligibleParams = useCallback(() => {
+  const eligibleParams = useCallback((pageNumber = studentsPage) => {
     return compactParams({
       CampusId: numericId(activeCampusId),
       AcademicYearId: numericId(setup.fromYear || selectedAcademicYearId),
@@ -522,33 +527,49 @@ export default function PromotionPage({ screen = "promotion" }) {
       TargetAcademicLevel: academicLevelLabel(setup.toLevel),
       TargetGroupId: numericId(setup.toGroup),
       TargetSection: setup.toSection,
+      PageNumber: pageNumber,
+      PageSize: PROMOTION_STUDENT_PAGE_SIZE,
     });
-  }, [activeCampusId, academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup]);
+  }, [activeCampusId, academicLevelLabel, nextAcademicYearObj?.value, selectedAcademicYearId, selectedBoardId, setup, studentsPage]);
 
-  const fetchEligibleStudents = useCallback(async () => {
+  const fetchEligibleStudents = useCallback(async (pageNumber = studentsPage) => {
     setStudentsLoading(true);
     setError("");
     try {
-      const data = await getEligibleStudents(eligibleParams());
+      const data = await getEligibleStudents(eligibleParams(pageNumber));
       const rows = unwrap(data, ["students", "Students", "eligibleStudents", "EligibleStudents"]).map(normalizeStudent).filter((student) => isPresent(student.id));
+      const paging = unwrapObject(data);
+      const totalCount = Number(read(paging, "totalCount", "TotalCount", "count", "Count") ?? rows.length) || 0;
+      const totalPages = Math.max(1, Number(read(paging, "totalPages", "TotalPages") ?? Math.ceil(totalCount / PROMOTION_STUDENT_PAGE_SIZE)) || 1);
+      const resolvedPage = Math.min(totalPages, Math.max(1, Number(read(paging, "pageNumber", "PageNumber") ?? pageNumber) || pageNumber));
       setStudents(rows);
+      setStudentsPage(resolvedPage);
+      setStudentsTotalCount(totalCount);
+      setStudentsTotalPages(totalPages);
       setStudentsLoaded(true);
-      setSelectedIds((current) => current.filter((id) => rows.some((student) => student.id === id && isEligible(student))));
+      setSelectedIds([]);
     } catch (requestError) {
       setStudents([]);
+      setStudentsTotalCount(0);
+      setStudentsTotalPages(1);
       setStudentsLoaded(true);
       setError(getApiErrorMessage(requestError));
     } finally {
       setStudentsLoading(false);
     }
-  }, [eligibleParams]);
+  }, [eligibleParams, studentsPage]);
 
   const loadStudents = async () => {
     if (!validateFields(sourceFields)) {
       setError("Please complete the required source level, group, and section.");
       return;
     }
-    await fetchEligibleStudents();
+    await fetchEligibleStudents(1);
+  };
+
+  const changeStudentsPage = async (nextPage) => {
+    if (nextPage < 1 || nextPage > studentsTotalPages || studentsLoading) return;
+    await fetchEligibleStudents(nextPage);
   };
 
   const visibleStudents = useMemo(() => {
@@ -935,7 +956,7 @@ export default function PromotionPage({ screen = "promotion" }) {
                   <h2>2. Student Eligibility</h2>
                   <p>
                     {studentsLoaded
-                      ? `${students.length} student${students.length === 1 ? "" : "s"} returned by the Promotion API.`
+                      ? `${studentsTotalCount} student${studentsTotalCount === 1 ? "" : "s"} returned by the Promotion API.`
                       : "Select the cohort level, group, and section above, then click Load Students."}
                   </p>
                 </div>
@@ -965,8 +986,9 @@ export default function PromotionPage({ screen = "promotion" }) {
               {studentsLoading ? (
                 <SkeletonTable columns={isFinalYear ? 9 : 10} rows={6} />
               ) : studentsLoaded ? (
-                <div className="cms-table-wrap">
-                  <table className="cms-table promotion-table">
+                <>
+                  <div className="cms-table-wrap">
+                    <table className="cms-table promotion-table">
                     <thead>
                       <tr>
                         <th>Select</th>
@@ -1026,8 +1048,34 @@ export default function PromotionPage({ screen = "promotion" }) {
                         </tr>
                       )}
                     </tbody>
-                  </table>
-                </div>
+                    </table>
+                  </div>
+                  <footer className="promotion-pagination">
+                  <span>
+                    Showing {students.length ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + 1 : 0}-
+                    {students.length ? Math.min((studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + students.length, studentsTotalCount) : 0} of {studentsTotalCount} students
+                  </span>
+                  <div>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      disabled={studentsLoading || studentsPage === 1}
+                      onClick={() => changeStudentsPage(studentsPage - 1)}
+                    >
+                      Previous
+                    </button>
+                    <span>Page {studentsPage} of {studentsTotalPages}</span>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-ghost"
+                      disabled={studentsLoading || studentsPage === studentsTotalPages}
+                      onClick={() => changeStudentsPage(studentsPage + 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                  </footer>
+                </>
               ) : (
                 <div className="promotion-empty">Select the source details, then load students.</div>
               )}
@@ -1035,7 +1083,7 @@ export default function PromotionPage({ screen = "promotion" }) {
 
             {studentsLoaded ? (
               <section className="promotion-summary" style={{ gridTemplateColumns: "repeat(2, minmax(100px, 1fr))" }}>
-                <div><span>Total Students</span><strong>{students.length}</strong></div>
+                <div><span>Total Students</span><strong>{studentsTotalCount}</strong></div>
                 <div><span>Selected</span><strong>{selectedIds.length}</strong></div>
               </section>
             ) : null}
@@ -1657,7 +1705,7 @@ function CampusTransferScreen({ onSuccess }) {
             <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setRequestPage(1); }}><option>All</option><option>Pending</option><option>Approved</option><option>Rejected</option></select>
           </div>
           <div className="cms-table-wrap"><table className="cms-table campus-transfer-request-table"><thead><tr><th>#</th><th>Student Name</th><th>Admission No</th><th>{requestDirection === "sent" ? "To Campus" : "From Campus"}</th><th>{requestDirection === "sent" ? "Requested To" : "Requested By"}</th><th>Request Date</th><th>Effective Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-            {pagedRequests.length ? pagedRequests.map((request, index) => <tr key={request.id}><td>{(currentPage - 1) * pageSize + index + 1}</td><td className="cms-strong">{request.student.name}</td><td>{request.student.admissionNo}</td><td>{requestDirection === "sent" ? request.toCampus : request.fromCampus}</td><td>{requestDirection === "sent" ? request.requestedTo : request.requestedBy}</td><td>{request.requestDate}</td><td>{request.effectiveDate}</td><td><span className={`campus-transfer-status-badge is-${request.status.toLowerCase()}`}>{request.status}</span></td><td><div className="campus-transfer-row-actions"><button type="button" onClick={() => setDetailRequest(request)}>View</button>{requestDirection === "received" && request.status === "Pending" ? <><button type="button" className="approve" onClick={() => setApproveRequest(request)}>Approve</button><button type="button" className="reject" onClick={() => { setRejectRequest(request); setRejectionReason(""); setRejectionError(""); }}>Reject</button></> : null}</div></td></tr>) : <tr><td colSpan={9} className="promotion-empty">No {requestDirection} transfer requests are available for {activeCampusName}.</td></tr>}
+            {pagedRequests.length ? pagedRequests.map((request, index) => <tr key={request.id}><td>{(currentPage - 1) * pageSize + index + 1}</td><td className="cms-strong">{request.student.name}</td><td>{request.student.admissionNo}</td><td>{requestDirection === "sent" ? request.toCampus : request.fromCampus}</td><td>{requestDirection === "sent" ? request.requestedTo : request.requestedBy}</td><td>{request.requestDate}</td><td>{request.effectiveDate}</td><td><span className={`campus-transfer-status-badge is-${request.status.toLowerCase()}`}>{request.status}</span></td><td><div className="campus-transfer-row-actions"><button type="button" className="cms-action-btn campus-transfer-view-action" title="View Details" aria-label="View Details" onClick={() => setDetailRequest(request)}><Eye size={16} aria-hidden="true" /></button>{requestDirection === "received" && request.status === "Pending" ? <><button type="button" className="approve" onClick={() => setApproveRequest(request)}>Approve</button><button type="button" className="reject" onClick={() => { setRejectRequest(request); setRejectionReason(""); setRejectionError(""); }}>Reject</button></> : null}</div></td></tr>) : <tr><td colSpan={9} className="promotion-empty">No {requestDirection} transfer requests are available for {activeCampusName}.</td></tr>}
           </tbody></table></div>
           <div className="campus-transfer-request-pagination"><span>Showing {filteredRequests.length ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, filteredRequests.length)} of {filteredRequests.length} entries</span><div><button disabled={currentPage === 1} onClick={() => setRequestPage((page) => Math.max(1, page - 1))}>‹</button><span>{currentPage}</span><button disabled={currentPage === totalPages} onClick={() => setRequestPage((page) => Math.min(totalPages, page + 1))}>›</button></div></div>
         </div>

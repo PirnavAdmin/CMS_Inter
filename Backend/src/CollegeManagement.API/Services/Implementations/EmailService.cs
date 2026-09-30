@@ -19,23 +19,51 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
+            await SendEmailWithAttachmentAsync(toEmail, subject, body, null!, null!);
+        }
+
+        public async Task SendEmailWithAttachmentAsync(string toEmail, string subject, string body, byte[] attachmentBytes, string attachmentFileName, string contentType = "application/pdf")
+        {
             var email = new MimeMessage();
 
             email.From.Add(new MailboxAddress(_settings.SenderName, _settings.SenderEmail));
             email.To.Add(MailboxAddress.Parse(toEmail));
             email.Subject = subject;
 
-            var bodyPart = new TextPart("html")
+            var builder = new BodyBuilder
             {
-                Text = body
+                HtmlBody = body
             };
-            bodyPart.ContentType.Charset = "utf-8";
-            email.Body = bodyPart;
+
+            if (attachmentBytes != null && attachmentBytes.Length > 0 && !string.IsNullOrWhiteSpace(attachmentFileName))
+            {
+                builder.Attachments.Add(attachmentFileName, attachmentBytes, ContentType.Parse(contentType));
+            }
+
+            email.Body = builder.ToMessageBody();
 
             using var smtp = new SmtpClient();
+            smtp.CheckCertificateRevocation = false;
+            smtp.ServerCertificateValidationCallback = (s, c, h, e) => true;
+            smtp.Timeout = 15000;
+
+            var host = _settings.SmtpServer;
+            try
+            {
+                var ips = await System.Net.Dns.GetHostAddressesAsync(host);
+                var ipv4 = System.Linq.Enumerable.FirstOrDefault(ips, ip => ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+                if (ipv4 != null)
+                {
+                    host = ipv4.ToString();
+                }
+            }
+            catch
+            {
+                // Fallback to configured host name
+            }
 
             await smtp.ConnectAsync(
-                _settings.SmtpServer,
+                host,
                 _settings.Port,
                 SecureSocketOptions.StartTls);
 

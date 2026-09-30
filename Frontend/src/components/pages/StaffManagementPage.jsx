@@ -501,88 +501,82 @@ export const normalizeStaffRecord = (raw) => {
   };
 };
 
-export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existingRecords = []) => {
+export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existingRecords = [], selectedCampus = null) => {
   const isTeaching = String(staffType || "").toLowerCase().includes("teach") && !String(staffType || "").toLowerCase().includes("non");
   const prefix = isTeaching ? "PCTCH" : "PCNT";
   const seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-  const seriesKey = isTeaching ? "teaching-staff-id" : "non-teaching-staff-id";
+  const requestedStaffType = isTeaching ? "Teaching" : "Non-Teaching";
+  const campusId = selectedCampus?.campusId ?? selectedCampus?.id;
 
-  // Helper to compute sequential ID from existing records
-  const computeFromRecords = () => {
-    if (!Array.isArray(existingRecords) || existingRecords.length === 0) {
-      return null;
+  const readSeriesSettings = async (campusId) => {
+    try {
+      const response = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode), {
+        params: campusId != null ? { campusId } : undefined,
+      });
+      return response?.data?.data ?? response?.data?.Data ?? response?.data ?? {};
+    } catch {
+      return {};
     }
-    const relevant = existingRecords.filter((r) => {
-      if (!r) return false;
-      const type = String(r.staffType || "").toLowerCase();
-      const empId = String(r.employeeId || "").toUpperCase();
-      if (isTeaching) {
-        return (!type.includes("non") && type.includes("teach")) || empId.startsWith("PCTCH");
-      }
-      return type.includes("non") || empId.startsWith("PCNT");
-    });
-    let maxSeq = 0;
-    for (const r of relevant) {
-      const empId = String(r.employeeId || "");
-      const match = empId.match(/(\d+)/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > maxSeq && num < 100000) {
-          maxSeq = num;
-        }
-      }
-    }
-    const nextSeq = maxSeq > 0 ? maxSeq + 1 : 1;
-    return `${prefix}${String(nextSeq).padStart(4, "0")}`;
   };
 
-  // 1. Try Staff next-employee-id endpoint
-  try {
-    const res = await staffApi.getNextEmployeeId(staffType);
-    if (res?.data) {
-      const raw = typeof res.data === "object"
-        ? (res.data.employeeId || res.data.nextEmployeeId || res.data.id || res.data.data || res.data.code)
-        : res.data;
-      if (raw && (typeof raw === "string" || typeof raw === "number")) {
-        const str = String(raw).trim();
-        if (str && !str.includes("[object")) {
-          return str;
-        }
-      }
+  const nextIdFromStaffRecords = (staffRecords, settings = {}) => {
+    const configuredPrefix = String(settings.prefix || prefix).trim();
+    const numberLength = Math.max(1, Number(settings.numberLength) || 4);
+    const startNumber = Math.max(1, Number(settings.startNumber) || 1);
+    let maxSequence = startNumber - 1;
+
+    for (const record of staffRecords) {
+      const employeeId = String(record?.employeeId ?? record?.EmployeeId ?? record?.employeeID ?? "").trim();
+      if (!employeeId.toUpperCase().startsWith(configuredPrefix.toUpperCase())) continue;
+      const suffix = employeeId.slice(configuredPrefix.length);
+      if (!/^\d+$/.test(suffix)) continue;
+      maxSequence = Math.max(maxSequence, Number(suffix));
     }
-  } catch {}
 
-  // 2. Try Settings Number Series API
+    return `${configuredPrefix}${String(maxSequence + 1).padStart(numberLength, "0")}`;
+  };
+
+  let staffRecords = null;
   try {
-    const nsRes = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode));
-    if (nsRes?.data) {
-      const live = nsRes.data.livePreview || nsRes.data.currentExample || nsRes.data.generatedNumber;
-      if (live && typeof live === "string" && !live.includes("[object")) {
-        return live.trim();
-      }
-    }
-  } catch {}
-
-  try {
-    const nsRes2 = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesKey));
-    if (nsRes2?.data) {
-      const live2 = nsRes2.data.livePreview || nsRes2.data.currentExample || nsRes2.data.generatedNumber;
-      if (live2 && typeof live2 === "string" && !live2.includes("[object")) {
-        return live2.trim();
-      }
-    }
-  } catch {}
-
-  // 3. Fallback to computing from existing records
-  const calculated = computeFromRecords();
-  if (calculated) return calculated;
-
-  // 4. Fallback to Local Number Series Settings
-  const localVal = generateNextNumber(seriesKey);
-  if (localVal && !String(localVal).includes("[object")) {
-    return String(localVal).trim();
+    const params = {
+      PageNumber: 1,
+      PageSize: 1000,
+      StaffType: requestedStaffType,
+      ...(campusId != null && campusId !== "" ? { CampusId: Number(campusId) || campusId } : {}),
+    };
+    const response = await staffApi.getStaffPaged(params);
+    const data = response?.data?.data ?? response?.data?.Data ?? response?.data ?? {};
+    const candidates = [
+      data?.items,
+      data?.Items,
+      data?.staff,
+      data?.Staff,
+      data?.results,
+      data?.Results,
+      data?.data?.items,
+      data?.data?.Items,
+      Array.isArray(data) ? data : null,
+    ];
+    staffRecords = candidates.find(Array.isArray) ?? null;
+  } catch {
+    // Use records already loaded by the staff page if the API is unavailable.
   }
-  return isTeaching ? "PCTCH0001" : "PCNT0001";
+
+  if (!Array.isArray(staffRecords)) {
+    staffRecords = Array.isArray(existingRecords) ? existingRecords : [];
+  }
+
+  staffRecords = staffRecords.filter((record) => {
+    if (selectedCampus && !isStaffMatchingCampus(record, selectedCampus)) return false;
+    const type = String(record?.staffType ?? record?.StaffType ?? "").toLowerCase();
+    const employeeId = String(record?.employeeId ?? record?.EmployeeId ?? record?.employeeID ?? "").toUpperCase();
+    return isTeaching
+      ? (!type.includes("non") && type.includes("teach")) || employeeId.startsWith(prefix)
+      : type.includes("non") || employeeId.startsWith(prefix);
+  });
+
+  const settings = await readSeriesSettings(campusId);
+  return nextIdFromStaffRecords(staffRecords, settings);
 };
 
 export const resolveBoardCode = (staffRecord, boardsList = []) => {
@@ -685,19 +679,20 @@ export const isStaffMatchingCampus = (staffRecord, selectedCampus) => {
 };
 
 export const TEACHING_ROLE_NAMES = [
-  "Accounts",
-  "Examination Cell",
-  "Faculty",
+  "Dean",
+  "Principal",
   "HOD",
-  "Library",
-  "Placement Officer",
+  "Faculty",
 ];
 
 export const NON_TEACHING_ROLE_NAMES = [
-  "Attendant",
-  "Cleaner",
-  "Driver",
+  "Accountant",
+  "Examination Cell",
+  "Library / Librarian",
   "Hostel Warden",
+  "Placement Officer",
+  "Bus Driver",
+  "Attendant",
 ];
 
 const teachingFields = [
@@ -3645,7 +3640,7 @@ function TypeSelect() {
 }
 
 // ----------------------------------------------------------------------
-// CREATE / EDIT TEACHING FORM (POST /api/v1/staff & GET /api/v1/staff/next-employee-id)
+// CREATE / EDIT TEACHING FORM (POST /api/v1/staff with a generated number-series ID)
 // ----------------------------------------------------------------------
 function TeachingForm({ records, setRecords, existing }) {
   const n = useNavigate();
@@ -3689,9 +3684,9 @@ function TeachingForm({ records, setRecords, existing }) {
     if (!existing) {
       setValues((v) => ({
         ...v,
-        campusId: v.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
-        campusName: v.campusName || activeCampusName,
-        campusCode: v.campusCode || activeCampusCode,
+        campusId: activeCampusId ? Number(activeCampusId) || activeCampusId : v.campusId,
+        campusName: activeCampusId ? activeCampusName : v.campusName,
+        campusCode: activeCampusId ? activeCampusCode : v.campusCode,
         board: v.board || activeBoardName,
         boardName: v.boardName || activeBoardName,
         boardCode: v.boardCode || activeBoardCode,
@@ -3700,18 +3695,18 @@ function TeachingForm({ records, setRecords, existing }) {
     }
   }, [activeCampusId, activeCampusName, activeCampusCode, activeBoardName, activeBoardCode, activeBoardId, existing]);
 
-  // Fetch next employee ID dynamically from Settings Number Series / Staff API
+  // Build the next employee ID from existing staff without advancing a series on form load.
   useEffect(() => {
     let isMounted = true;
     async function fetchNextId() {
-      const nextId = await resolveNextStaffEmployeeId("Teaching", records);
+      const nextId = await resolveNextStaffEmployeeId("Teaching", records, selectedCampus);
       if (isMounted && nextId) {
         setValues((v) => ({ ...v, employeeId: nextId }));
       }
     }
     if (!existing) fetchNextId();
     return () => { isMounted = false; };
-  }, [existing, records]);
+  }, [existing, records, activeCampusId]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -3781,7 +3776,7 @@ function TeachingForm({ records, setRecords, existing }) {
         if (lower.includes("employee id")) {
           nextErrors.employeeId = errMsg;
           try {
-            const nextId = await resolveNextStaffEmployeeId("Teaching", records);
+            const nextId = await resolveNextStaffEmployeeId("Teaching", records, selectedCampus);
             if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
           } catch {}
         }
@@ -3913,9 +3908,9 @@ function NonTeachingForm({ records, setRecords, existing }) {
     if (!existing) {
       setValues((v) => ({
         ...v,
-        campusId: v.campusId || (activeCampusId ? Number(activeCampusId) || activeCampusId : undefined),
-        campusName: v.campusName || activeCampusName,
-        campusCode: v.campusCode || activeCampusCode,
+        campusId: activeCampusId ? Number(activeCampusId) || activeCampusId : v.campusId,
+        campusName: activeCampusId ? activeCampusName : v.campusName,
+        campusCode: activeCampusId ? activeCampusCode : v.campusCode,
         board: v.board || activeBoardName,
         boardName: v.boardName || activeBoardName,
         boardCode: v.boardCode || activeBoardCode,
@@ -3928,14 +3923,14 @@ function NonTeachingForm({ records, setRecords, existing }) {
   useEffect(() => {
     let isMounted = true;
     async function fetchNextId() {
-      const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records);
+      const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records, selectedCampus);
       if (isMounted && nextId) {
         setValues((v) => ({ ...v, employeeId: nextId }));
       }
     }
     if (!existing) fetchNextId();
     return () => { isMounted = false; };
-  }, [existing, records]);
+  }, [existing, records, activeCampusId]);
 
   useEffect(() => {
     const pincode = String(values.pin || "").replace(/\D/g, "").slice(0, 6);
@@ -4113,7 +4108,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
           nextErrors.employeeId = errMsg;
           errorStep = 0;
           try {
-            const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records);
+            const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records, selectedCampus);
             if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
           } catch {}
         }

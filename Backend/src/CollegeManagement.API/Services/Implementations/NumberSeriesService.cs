@@ -65,7 +65,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             foreach (var entity in entities)
             {
-                dtos.Add(MapToDto(entity));
+                dtos.Add(await MapToDtoAsync(entity));
             }
 
             return dtos;
@@ -77,7 +77,7 @@ namespace CollegeManagement.API.Services.Implementations
             var entity = await _repository.GetByCodeAsync(code, campusId);
             if (entity == null) return null;
 
-            return MapToDto(entity);
+            return await MapToDtoAsync(entity);
         }
 
         public async Task<NumberSeriesResponseDto?> UpdateSeriesAsync(string seriesCodeOrSlug, UpdateNumberSeriesDto dto, int? campusId = null)
@@ -97,7 +97,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (updated == null) return null;
 
-            return MapToDto(updated);
+            return await MapToDtoAsync(updated);
         }
 
         public async Task<GenerateNumberSeriesResponseDto?> GenerateNextNumberAsync(string seriesCodeOrSlug, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
@@ -173,6 +173,14 @@ namespace CollegeManagement.API.Services.Implementations
             
             // If specific entity exists, use its sequence. If not, the sequence is 0.
             var curSeq = specificEntity?.CurrentSequence ?? 0;
+            
+            // If we are previewing the base series itself, get the absolute max across all its sub-series
+            if (actualCode == code)
+            {
+                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(code);
+                curSeq = Math.Max(curSeq, maxSeq);
+            }
+
             var startNum = baseEntity?.StartNumber ?? 1;
 
             var nextSeq = curSeq < startNum ? startNum : curSeq + 1;
@@ -189,11 +197,20 @@ namespace CollegeManagement.API.Services.Implementations
                 isPreview: true);
         }
 
-        private NumberSeriesResponseDto MapToDto(NumberSeriesConfiguration entity)
+        private async Task<NumberSeriesResponseDto> MapToDtoAsync(NumberSeriesConfiguration entity)
         {
-            var nextSeq = entity.CurrentSequence < entity.StartNumber
+            var curSeq = entity.CurrentSequence;
+            
+            // If it's a base series, ensure we use the absolute max sequence for previews
+            if (!entity.SeriesCode.Contains("|"))
+            {
+                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode);
+                curSeq = Math.Max(curSeq, maxSeq);
+            }
+
+            var nextSeq = curSeq < entity.StartNumber
                 ? entity.StartNumber
-                : entity.CurrentSequence + 1;
+                : curSeq + 1;
 
             var livePreview = NumberSeriesPatternEvaluator.Evaluate(
                 pattern: entity.FormatPattern,
@@ -204,7 +221,7 @@ namespace CollegeManagement.API.Services.Implementations
                 referenceDate: DateTime.Now,
                 isPreview: true);
 
-            var curSeqToUse = entity.CurrentSequence > 0 ? entity.CurrentSequence : entity.StartNumber;
+            var curSeqToUse = curSeq > 0 ? curSeq : entity.StartNumber;
             var currentExample = NumberSeriesPatternEvaluator.Evaluate(
                 pattern: entity.FormatPattern,
                 sequenceNumber: curSeqToUse,
@@ -224,7 +241,7 @@ namespace CollegeManagement.API.Services.Implementations
                 FormatPattern = entity.FormatPattern,
                 NumberLength = entity.NumberLength,
                 StartNumber = entity.StartNumber,
-                CurrentSequence = entity.CurrentSequence,
+                CurrentSequence = curSeq,
                 Description = entity.Description,
                 IsActive = entity.IsActive,
                 LivePreview = livePreview,

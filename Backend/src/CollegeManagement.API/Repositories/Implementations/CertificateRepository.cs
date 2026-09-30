@@ -935,7 +935,7 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_MoveCertificateStatus",
                 parameters,
                 commandType: CommandType.StoredProcedure,
@@ -961,11 +961,12 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_BulkReviewCertificates",
                 parameters,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
+            return (int)affected;
         }
         catch
         {
@@ -984,11 +985,12 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_BulkApproveCertificates",
                 parameters,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
+            return (int)affected;
         }
         catch
         {
@@ -1007,11 +1009,12 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_BulkIssueCertificates",
                 parameters,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
+            return (int)affected;
         }
         catch
         {
@@ -1032,7 +1035,7 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_CancelCertificate",
                 parameters,
                 commandType: CommandType.StoredProcedure,
@@ -1060,7 +1063,7 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_DeleteCertificate",
                 parameters,
                 commandType: CommandType.StoredProcedure,

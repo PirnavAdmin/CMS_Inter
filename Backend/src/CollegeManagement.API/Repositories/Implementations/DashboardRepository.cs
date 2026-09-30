@@ -801,7 +801,12 @@ public class DashboardRepository : IDashboardRepository
                     AStatus = g.Where(x => (int?)x.Session == 2 || x.Session == null || (int?)x.Session == 0).Select(x => (byte?)x.Status).FirstOrDefault()
                 }).ToList();
 
-            int total = groupedAttendances.Count;
+            var studentsQuery = _db.Students.AsNoTracking().Where(s => s.IsActive);
+            if (boardId.HasValue) studentsQuery = studentsQuery.Where(s => s.BoardId == boardId.Value);
+            if (academicYearId.HasValue) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == academicYearId.Value);
+            if (campusId.HasValue) studentsQuery = studentsQuery.Where(s => s.CampusId == campusId.Value);
+            
+            int total = await studentsQuery.CountAsync(ct);
             summary.TotalStudents = total;
 
             int present = groupedAttendances.Count(x => 
@@ -824,7 +829,7 @@ public class DashboardRepository : IDashboardRepository
 
             summary.Present = present;
             summary.HalfDay = halfDay;
-            summary.Absent = absent;
+            summary.Absent = Math.Max(0, total - present - halfDay);
 
             var latestTime = attendances.OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt).Select(a => (DateTime?)(a.UpdatedAt ?? a.CreatedAt)).FirstOrDefault();
             summary.LastUpdatedTime = latestTime;
