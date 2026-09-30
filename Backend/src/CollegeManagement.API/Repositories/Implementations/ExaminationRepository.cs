@@ -12,6 +12,7 @@ using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -21,10 +22,12 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class ExaminationRepository : IExaminationRepository
     {
         private readonly AppDbContext _context;
+        private readonly ILogger<ExaminationRepository>? _logger;
 
-        public ExaminationRepository(AppDbContext context)
+        public ExaminationRepository(AppDbContext context, ILogger<ExaminationRepository>? logger = null)
         {
             _context = context;
+            _logger = logger;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
@@ -160,6 +163,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var exam = new Examination
             {
                 ExaminationId = (int)row.ExamId,
+                CampusId = (int?)row.CampusId ?? 1,
                 ExamCode = (string?)row.ExamCode,
                 ExamName = (string)row.ExamName,
                 BoardId = (int)row.BoardId,
@@ -227,6 +231,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return rows.Select(row => new Examination
             {
                 ExaminationId = (int)row.ExamId,
+                CampusId = (int?)row.CampusId ?? 1,
                 ExamCode = (string?)row.ExamCode,
                 ExamName = (string)row.ExamName,
                 BoardId = (int)row.BoardId,
@@ -318,10 +323,26 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             if (string.IsNullOrWhiteSpace(schedule.Invigilator) && schedule.InvigilatorId.HasValue && schedule.InvigilatorId.Value > 0)
             {
-                var fac = await _context.Faculties.AsNoTracking().FirstOrDefaultAsync(f => f.Id == schedule.InvigilatorId.Value);
-                if (fac != null)
+                var staff = await _context.Staffs.AsNoTracking()
+                    .Where(s => s.Id == schedule.InvigilatorId.Value)
+                    .Select(s => new { s.FirstName, s.LastName })
+                    .FirstOrDefaultAsync();
+
+                if (staff != null)
                 {
-                    schedule.Invigilator = $"{fac.FirstName} {fac.LastName}".Trim();
+                    schedule.Invigilator = $"{staff.FirstName} {staff.LastName}".Trim();
+                }
+                else
+                {
+                    var fac = await _context.Faculties.AsNoTracking()
+                        .Where(f => f.Id == schedule.InvigilatorId.Value)
+                        .Select(f => new { f.FirstName, f.LastName })
+                        .FirstOrDefaultAsync();
+
+                    if (fac != null)
+                    {
+                        schedule.Invigilator = $"{fac.FirstName} {fac.LastName}".Trim();
+                    }
                 }
             }
 
@@ -336,48 +357,117 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             var p = new DynamicParameters();
             p.Add("p_ExamId", schedule.ExaminationId);
+            p.Add("p_ExaminationId", schedule.ExaminationId);
             p.Add("p_SubjectId", schedule.SubjectId);
             p.Add("p_ExamDate", schedule.ExamDate.ToDateTime(TimeOnly.MinValue));
+            p.Add("p_Date", schedule.ExamDate.ToDateTime(TimeOnly.MinValue));
             p.Add("p_StartTime", schedule.StartTime.ToTimeSpan());
             p.Add("p_EndTime", schedule.EndTime.ToTimeSpan());
             p.Add("p_SessionId", schedule.SessionId);
             p.Add("p_ScheduleMode", schedule.ScheduleMode);
             p.Add("p_RoomId", schedule.RoomId);
             p.Add("p_InvigilatorId", schedule.InvigilatorId);
-            p.Add("p_Hall", schedule.Hall);
-            p.Add("p_Invigilator", schedule.Invigilator);
-            p.Add("p_ExamMode", schedule.ExamMode);
+            p.Add("p_Hall", schedule.Hall ?? string.Empty);
+            p.Add("p_Invigilator", schedule.Invigilator ?? string.Empty);
+            p.Add("p_ExamMode", schedule.ExamMode ?? "Written");
             p.Add("p_MaxMarks", schedule.MaxMarks);
             p.Add("p_PassingMarks", schedule.PassingMarks);
             p.Add("p_CampusId", schedule.CampusId > 0 ? schedule.CampusId : 1);
 
-            var newId = await Connection.ExecuteScalarAsync<int>(
-                "sp_CreateExamSchedule",
-                p,
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                var rawId = await Connection.ExecuteScalarAsync<object>(
+                    "sp_CreateExamSchedule",
+                    p,
+                    commandType: CommandType.StoredProcedure);
 
-            schedule.ExamScheduleId = newId;
-            return schedule;
+                var newId = Convert.ToInt32(rawId);
+                if (newId <= 0)
+                {
+                    newId = await Connection.ExecuteScalarAsync<int>(
+                        "SELECT ScheduleId FROM ExamSchedules WHERE ExamId = @ExamId AND SubjectId = @SubjectId ORDER BY ScheduleId DESC LIMIT 1;",
+                        new { ExamId = schedule.ExaminationId, SubjectId = schedule.SubjectId });
+                }
+
+                schedule.ExamScheduleId = newId;
+                _logger?.LogInformation("Successfully created ExamSchedule ID {ScheduleId} for Exam {ExamId}, Subject {SubId}",
+                    newId, schedule.ExaminationId, schedule.SubjectId);
+                return schedule;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to execute sp_CreateExamSchedule for Exam {ExamId}, Subject {SubId}: {Message}",
+                    schedule.ExaminationId, schedule.SubjectId, ex.Message);
+                throw;
+            }
         }
 
         public async Task<ExamSchedule?> GetExamScheduleByIdAsync(int examScheduleId)
         {
             var p = new DynamicParameters();
             p.Add("p_ExamScheduleId", examScheduleId);
+            p.Add("p_ScheduleId", examScheduleId);
             p.Add("p_CampusId", 0);
 
-            var results = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
-                "sp_GetExamScheduleById",
-                (schedule, subject) =>
-                {
-                    schedule.Subject = subject;
-                    return schedule;
-                },
-                p,
-                splitOn: "SubjectName",
-                commandType: CommandType.StoredProcedure);
+            ExamSchedule? schedule = null;
+            try
+            {
+                var results = await Connection.QueryAsync<ExamSchedule, Subject, ExamSchedule>(
+                    "sp_GetExamScheduleById",
+                    (s, subject) =>
+                    {
+                        s.Subject = subject;
+                        return s;
+                    },
+                    p,
+                    splitOn: "SubjectName",
+                    commandType: CommandType.StoredProcedure);
 
-            return results.FirstOrDefault();
+                schedule = results.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "sp_GetExamScheduleById failed for ID {Id}, falling back to EF query: {Message}", examScheduleId, ex.Message);
+            }
+
+            if (schedule == null)
+            {
+                schedule = await _context.ExamSchedules
+                    .Include(s => s.Subject)
+                    .Include(s => s.Examination)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.ExamScheduleId == examScheduleId);
+            }
+
+            if (schedule != null)
+            {
+                try
+                {
+                    var invigilators = await GetInvigilatorsByScheduleIdAsync(schedule.ExamScheduleId);
+                    if (invigilators != null && invigilators.Any())
+                    {
+                        schedule.InvigilatorAssignments = invigilators.ToList();
+                        var primaryInv = schedule.InvigilatorAssignments.FirstOrDefault();
+                        if (primaryInv != null)
+                        {
+                            if (string.IsNullOrWhiteSpace(schedule.Invigilator))
+                            {
+                                schedule.Invigilator = primaryInv.InvigilatorName;
+                            }
+                            if (!schedule.InvigilatorId.HasValue || schedule.InvigilatorId.Value <= 0)
+                            {
+                                schedule.InvigilatorId = primaryInv.InvigilatorId;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "Failed to load invigilator assignments for Schedule {Id}", schedule.ExamScheduleId);
+                }
+            }
+
+            return schedule;
         }
 
         public async Task<IEnumerable<ExamSchedule>> GetExamSchedulesAsync(int? examinationId)
@@ -456,40 +546,28 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             if (string.IsNullOrWhiteSpace(hall)) return false;
 
-            var count = await Connection.ExecuteScalarAsync<int>(
-                "sp_CheckRoomConflict",
-                new
-                {
-                    p_ExamDate = examDate.ToDateTime(TimeOnly.MinValue),
-                    p_StartTime = startTime.ToTimeSpan(),
-                    p_EndTime = endTime.ToTimeSpan(),
-                    p_Hall = hall,
-                    p_ExcludeScheduleId = excludeScheduleId ?? 0,
-                    p_CampusId = 0
-                },
-                commandType: CommandType.StoredProcedure);
-
-            return count > 0;
+            var hallNorm = hall.Trim().ToLower();
+            return await _context.ExamSchedules.AnyAsync(s =>
+                s.IsActive &&
+                (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
+                s.ExamDate == examDate &&
+                (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
+                s.Hall.Trim().ToLower() == hallNorm &&
+                !(endTime <= s.StartTime || startTime >= s.EndTime));
         }
 
         public async Task<bool> HasInvigilatorConflictAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, string invigilator, int? excludeScheduleId = null)
         {
             if (string.IsNullOrWhiteSpace(invigilator)) return false;
 
-            var count = await Connection.ExecuteScalarAsync<int>(
-                "sp_CheckInvigilatorConflict",
-                new
-                {
-                    p_ExamDate = examDate.ToDateTime(TimeOnly.MinValue),
-                    p_StartTime = startTime.ToTimeSpan(),
-                    p_EndTime = endTime.ToTimeSpan(),
-                    p_Invigilator = invigilator,
-                    p_ExcludeScheduleId = excludeScheduleId ?? 0,
-                    p_CampusId = 0
-                },
-                commandType: CommandType.StoredProcedure);
-
-            return count > 0;
+            var invNorm = invigilator.Trim().ToLower();
+            return await _context.ExamSchedules.AnyAsync(s =>
+                s.IsActive &&
+                (s.Examination == null || (s.Examination.IsActive && s.Examination.Status != "CANCELLED" && s.Examination.Status != "DELETED")) &&
+                s.ExamDate == examDate &&
+                (!excludeScheduleId.HasValue || s.ExamScheduleId != excludeScheduleId.Value) &&
+                s.Invigilator.Trim().ToLower() == invNorm &&
+                !(endTime <= s.StartTime || startTime >= s.EndTime));
         }
 
         public async Task<IEnumerable<Models.Timetable.Room>> GetAvailableHallsAsync(DateOnly examDate, TimeOnly startTime, TimeOnly endTime, int? excludeScheduleId = null)
@@ -747,27 +825,49 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task AssignInvigilatorsAsync(int examScheduleId, IEnumerable<int> invigilatorIds, string hallNumber)
         {
-            foreach (var id in invigilatorIds)
+            if (invigilatorIds == null || !invigilatorIds.Any()) return;
+            await AssignInvigilatorHallsAsync(examScheduleId, invigilatorIds.Select(id => (id, hallNumber)));
+        }
+
+        public async Task AssignInvigilatorHallsAsync(int examScheduleId, IEnumerable<(int invigilatorId, string hallNumber)> assignments)
+        {
+            if (assignments == null || !assignments.Any()) return;
+
+            foreach (var a in assignments)
             {
-                await Connection.ExecuteAsync(
-                    "sp_AssignInvigilator",
-                    new
-                    {
-                        p_ExamScheduleId = examScheduleId,
-                        p_InvigilatorId = id,
-                        p_HallNumber = hallNumber ?? string.Empty,
-                        p_CampusId = 0
-                    },
-                    commandType: CommandType.StoredProcedure);
+                if (a.invigilatorId <= 0) continue;
+                try
+                {
+                    await Connection.ExecuteAsync(@"
+                        INSERT INTO InvigilatorAssignments (ExamScheduleId, InvigilatorId, HallNumber, AssignedAt)
+                        VALUES (@SchedId, @InvId, @Hall, UTC_TIMESTAMP())
+                        ON DUPLICATE KEY UPDATE HallNumber = VALUES(HallNumber), AssignedAt = VALUES(AssignedAt);",
+                        new { SchedId = examScheduleId, InvId = a.invigilatorId, Hall = a.hallNumber ?? string.Empty });
+                }
+                catch (Exception dbEx)
+                {
+                    _logger?.LogWarning(dbEx, "Direct insert to InvigilatorAssignments failed for Invigilator {InvId}, Schedule {SchedId}", a.invigilatorId, examScheduleId);
+                }
             }
         }
 
         public async Task<IEnumerable<InvigilatorAssignment>> GetInvigilatorsByScheduleIdAsync(int examScheduleId)
         {
-            return await Connection.QueryAsync<InvigilatorAssignment>(
-                "sp_GetInvigilatorsBySchedule",
-                new { p_ExamScheduleId = examScheduleId, p_CampusId = 0 },
-                commandType: CommandType.StoredProcedure);
+            try
+            {
+                return await Connection.QueryAsync<InvigilatorAssignment>(
+                    "sp_GetInvigilatorsBySchedule",
+                    new { p_ExamScheduleId = examScheduleId, p_CampusId = 0 },
+                    commandType: CommandType.StoredProcedure);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "sp_GetInvigilatorsBySchedule failed for Schedule {SchedId}, falling back to EF query", examScheduleId);
+                return await _context.InvigilatorAssignments
+                    .Include(ia => ia.InvigilatorStaff)
+                    .Where(ia => ia.ExamScheduleId == examScheduleId)
+                    .ToListAsync();
+            }
         }
 
         public async Task<DTOs.Examination.Responses.SchedulingContextResponseDto> GetSchedulingContextAsync(int examinationId)

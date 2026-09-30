@@ -66,6 +66,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
 
   const fetchSeries = async () => {
     setLoading(true);
+    let data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
     try {
       const serverData = await numberSeriesApi.getNumberSeriesList();
       const items = Array.isArray(serverData) ? serverData : serverData?.items || serverData?.data || [];
@@ -80,16 +81,14 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           if (s.slug) map.set(s.slug, s);
         });
         const merged = Array.from(new Set(map.values())).filter((s) => !isSeriesRemoved(s));
-        setSeriesList(merged);
+        data = merged;
         writeNumberSeriesSettings(merged);
-        return;
       }
     } catch (err) {
       console.warn("GET /api/v1/settings/number-series fallback:", err?.message || err);
     } finally {
       setLoading(false);
     }
-    const data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
     setSeriesList(data);
   };
 
@@ -328,7 +327,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
 
                 <div className="ns-card-example-box">
                   <span className="ns-card-example-lbl">Current / Next Example:</span>
-                  <div className="ns-card-example-val">{series.currentExample || nextVal}</div>
+                  <div className="ns-card-example-val">{series.livePreview || series.currentExample || nextVal}</div>
                 </div>
 
                 <p className="ns-card-desc">{series.description}</p>

@@ -503,7 +503,7 @@ export default function DashboardPage() {
       const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
       if (studentAttSeq.current === seq) {
         const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime || unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated || unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime;
         const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
         let formattedTime = "Not marked today";
         if (serverTime && serverTime !== "Not marked today") {
@@ -556,7 +556,7 @@ export default function DashboardPage() {
       const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
       if (staffAttSeq.current === seq) {
         const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime || unwrapped?.lastUpdated || unwrapped?.LastUpdated;
+        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated || unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime;
         const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
         let formattedTime = "Not marked today";
         if (serverTime && serverTime !== "Not marked today") {
@@ -786,8 +786,8 @@ export default function DashboardPage() {
       const match = yearName.match(/(\d{4})/);
       if (match) {
         startY = parseInt(match[1], 10);
-        // Default start month to earliest admission month in that year, or March/June
-        startM = earliestRaw && earliestRaw.year === startY ? earliestRaw.month : (earliestRaw ? Math.min(earliestRaw.month, 2) : 2);
+        // Always start from January (0) to show the full year trend and allow dragging back
+        startM = 0;
       } else {
         startY = earliestRaw ? earliestRaw.year : currentYear;
         startM = earliestRaw ? earliestRaw.month : 0;
@@ -855,7 +855,9 @@ export default function DashboardPage() {
       }
     }
 
-    return result.length > 0 ? result : (raw.length > 0 ? raw.map((i) => ({ period: i.period || i.month || "", studentsJoined: Number(i.studentsJoined || 0) })) : []);
+    const finalData = result.length > 0 ? result : (raw.length > 0 ? raw.map((i) => ({ period: i.period || i.month || "", studentsJoined: Number(i.studentsJoined || 0) })) : []);
+    
+    return finalData;
   }, [overviewState.data, selectedAcademicYear]);
 
   // Dynamic Y-Axis scale calculation based on student admission numbers
@@ -913,13 +915,17 @@ export default function DashboardPage() {
 
   // Auto-scroll Students Overview chart to the far right (present month & latest 4 months in view) on data load
   useEffect(() => {
-    if (chartScrollRef.current) {
-      const timer = setTimeout(() => {
+    if (overviewChartData.length > 5) {
+      // Use setInterval to aggressively push scroll to the right for 2 seconds after data loads
+      let attempts = 0;
+      const interval = setInterval(() => {
         if (chartScrollRef.current) {
-          chartScrollRef.current.scrollLeft = chartScrollRef.current.scrollWidth;
+          chartScrollRef.current.scrollLeft = 999999; // Brute force scroll to end
         }
-      }, 50);
-      return () => clearTimeout(timer);
+        attempts++;
+        if (attempts > 20) clearInterval(interval); // 20 * 100ms = 2.0s
+      }, 100);
+      return () => clearInterval(interval);
     }
   }, [overviewChartData]);
 
@@ -1194,10 +1200,11 @@ export default function DashboardPage() {
                         width: overviewChartData.length > 5 ? `${Math.round((overviewChartData.length / 5) * 100)}%` : "100%",
                         minWidth: "100%",
                         height: 142,
+                        position: "relative"
                       }}
                     >
                       <ResponsiveContainer width="100%" height={142}>
-                        <AreaChart data={overviewChartData} margin={{ top: 8, right: 32, left: 32, bottom: 0 }}>
+                        <AreaChart data={overviewChartData} margin={{ top: 8, right: 0, left: 15, bottom: 0 }}>
                           <defs>
                             <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="0%" stopColor="#22a447" stopOpacity={0.35} />
@@ -1212,6 +1219,7 @@ export default function DashboardPage() {
                             height={22}
                             tick={{ fontSize: 10, fill: "var(--cms-muted, #64748b)" }}
                             interval={0}
+                            padding={{ left: 20, right: 20 }}
                           />
                           <YAxis hide domain={[0, yMax]} ticks={yTicks} />
                           <Tooltip formatter={(val) => [formatNumber(val), "Students"]} />

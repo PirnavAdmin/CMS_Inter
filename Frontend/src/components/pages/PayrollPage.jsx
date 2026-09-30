@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Wallet, DollarSign, Plus, Upload, Download, Printer, Eye, Edit3, Trash2, CheckCircle,
@@ -12,13 +12,11 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import DataTable from "@/components/common/DataTable.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
-import {
-  loadSalaryData, saveSalaryData, formatINR, calculateGrossSalary,
-  calculateTotalDeductions, calculateNetSalary, calculateLOP, calculateOvertime
-} from "@/data/payrollData.js";
-import apiClient from "@/api/apiClient.js";
+import { formatINR, calculateNetSalary } from "@/data/payrollData.js";
+import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as payrollApi from "@/api/payrollApi.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./PayrollPage.css";
 
 // 3D Unique Icons
@@ -53,313 +51,377 @@ import boardAcademicYear3d from "@/assets/settings-3d/board-academic-year.png";
 
 const COLORS = ["#6F8400", "#108E50", "#B7791F", "#6D28D9", "#D93636", "#2563EB"];
 
+const getPayrollField = (record, ...keys) => {
+  if (!record || typeof record !== "object") return undefined;
+  for (const key of keys) {
+    const pascalKey = key.charAt(0).toUpperCase() + key.slice(1);
+    if (record[key] !== undefined && record[key] !== null) return record[key];
+    if (record[pascalKey] !== undefined && record[pascalKey] !== null) return record[pascalKey];
+  }
+  return undefined;
+};
+
+const getPayrollList = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  for (const key of ["items", "Items", "records", "Records", "results", "Results", "$values", "data", "Data", "payload", "Payload"]) {
+    if (Array.isArray(value[key])) return value[key];
+  }
+  for (const key of ["data", "Data", "payload", "Payload", "result", "Result"]) {
+    if (value[key] && typeof value[key] === "object") {
+      const nested = getPayrollList(value[key]);
+      if (nested.length) return nested;
+    }
+  }
+  return [];
+};
+
+const getPayrollRecord = (value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  for (const key of ["data", "Data", "payload", "Payload", "result", "Result"]) {
+    if (value[key] && typeof value[key] === "object" && !Array.isArray(value[key])) {
+      return getPayrollRecord(value[key]);
+    }
+  }
+  return value;
+};
+
+const mapApiPayslip = (payslip, employee = {}) => {
+  const payrollMonth = Number(getPayrollField(payslip, "payrollMonth") ?? 0);
+  const payrollYear = Number(getPayrollField(payslip, "payrollYear") ?? 0);
+  const month = payrollMonth && payrollYear
+    ? `${payrollYear}-${String(payrollMonth).padStart(2, "0")}`
+    : "";
+  const numericId = getPayrollField(payslip, "payslipId", "id");
+  return {
+    id: numericId != null ? `slip-${numericId}` : "",
+    numericId,
+    rawStaffId: getPayrollField(payslip, "staffId"),
+    staffId: getPayrollField(payslip, "employeeId") || employee.employeeId || "",
+    staffName: getPayrollField(payslip, "staffName") || employee.staffName || "",
+    staffType: getPayrollField(payslip, "staffType") || employee.staffType || "",
+    department: getPayrollField(payslip, "departmentName", "department") || employee.departmentName || employee.department || "",
+    designation: getPayrollField(payslip, "designation") || employee.designation || "",
+    salaryStructureId: getPayrollField(payslip, "salaryStructureId"),
+    structureName: getPayrollField(payslip, "structureName") || "",
+    month,
+    periodLabel: month,
+    year: payrollYear || "",
+    basicPay: Number(getPayrollField(payslip, "basicPay") ?? 0),
+    hra: Number(getPayrollField(payslip, "hra") ?? 0),
+    da: Number(getPayrollField(payslip, "da") ?? 0),
+    conveyanceAllowance: Number(getPayrollField(payslip, "conveyanceAllowance") ?? 0),
+    medicalAllowance: Number(getPayrollField(payslip, "medicalAllowance") ?? 0),
+    otherAllowance: Number(getPayrollField(payslip, "otherAllowance") ?? 0),
+    pf: Number(getPayrollField(payslip, "pf") ?? 0),
+    professionalTax: Number(getPayrollField(payslip, "professionalTax") ?? 0),
+    tds: Number(getPayrollField(payslip, "tds") ?? 0),
+    esi: Number(getPayrollField(payslip, "esi") ?? 0),
+    insuranceOtherDeduction: Number(getPayrollField(payslip, "insuranceOtherDeduction") ?? 0),
+    grossSalary: Number(getPayrollField(payslip, "grossSalary") ?? 0),
+    totalDeductions: Number(getPayrollField(payslip, "totalDeductions") ?? 0),
+    netSalary: Number(getPayrollField(payslip, "netSalary") ?? 0),
+    status: getPayrollField(payslip, "payslipStatus", "status") || "",
+    generatedAt: getPayrollField(payslip, "generatedAt") || "",
+  };
+};
+
+const getNumericApiId = (value) => {
+  const candidate = Number(value);
+  return Number.isSafeInteger(candidate) && candidate > 0 ? candidate : null;
+};
+
+const dispatchPayslipEmail = async (record, setToast) => {
+  const numericId = getNumericApiId(record?.numericId);
+  if (!numericId) {
+    setToast("The API did not provide a payslip ID, so the email cannot be sent.");
+    return;
+  }
+  try {
+    await payrollApi.sendPayslipEmail(numericId);
+    setToast(`Payslip email sent to ${record.staffName || "the staff member"}.`);
+  } catch (err) {
+    setToast(`Unable to send payslip email: ${getApiErrorMessage(err)}`);
+  }
+};
+
+const createEmptyPayrollStore = () => ({
+  structures: [],
+  assignments: [],
+  payrollMonths: [],
+  payslips: [],
+  revisions: [],
+  bonuses: [],
+  loans: [],
+  reimbursements: [],
+  overtime: [],
+  apiEmployees: [],
+  apiSummary: null,
+});
+
 export default function PayrollPage({ mode = "payroll" }) {
   const navigate = useNavigate();
   const { id, month, staffId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { selectedCampusId } = useCampusContext();
 
-  const [store, setStore] = useState(loadSalaryData);
+  const [store, setStore] = useState(createEmptyPayrollStore);
   const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null);
   const [viewingPayslip, setViewingPayslip] = useState(null);
-
-  // Sync to sessionStorage on state updates
-  useEffect(() => {
-    saveSalaryData(store);
-  }, [store]);
+  const payrollRequestRef = useRef(0);
 
   // Live API Synchronization: Fetch structures, employees, assignments, payslips, revisions, bonuses, advances, summary
   useEffect(() => {
+    const requestId = ++payrollRequestRef.current;
     let isMounted = true;
     const fetchPayrollFromApi = async () => {
-      try {
-        const [structRes, empRes, asgnRes, slipRes, revRes, bonusRes, advRes, summaryRes] = await Promise.allSettled([
-          payrollApi.getSalaryStructures(),
-          payrollApi.getEmployees(),
-          payrollApi.getSalaryAssignments(),
-          payrollApi.getPayslips(),
-          payrollApi.getSalaryRevisions(),
-          payrollApi.getBonuses(),
-          payrollApi.getSalaryAdvances(),
-          payrollApi.getPayrollSummary({ month: new Date().getMonth() + 1, year: new Date().getFullYear() }),
-        ]);
+      const campusParams = selectedCampusId != null && selectedCampusId !== ""
+        ? { campusId: Number(selectedCampusId) || selectedCampusId }
+        : {};
+      const results = await Promise.allSettled([
+        payrollApi.getSalaryStructures(),
+        payrollApi.getEmployees(campusParams),
+        payrollApi.getSalaryAssignments(campusParams),
+        payrollApi.getPayslips(campusParams),
+        payrollApi.getSalaryRevisions(campusParams),
+        payrollApi.getBonuses(campusParams),
+        payrollApi.getSalaryAdvances(),
+        payrollApi.getPayrollSummary({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), ...campusParams }),
+      ]);
 
-        if (!isMounted) return;
+      if (!isMounted || requestId !== payrollRequestRef.current) return;
 
-        setStore((prev) => {
-          let updated = { ...prev };
+      const [structRes, empRes, asgnRes, slipRes, revRes, bonusRes, advRes, summaryRes] = results;
+      const structuresRaw = structRes.status === "fulfilled" ? getPayrollList(structRes.value) : [];
+      const employeesRaw = empRes.status === "fulfilled" ? getPayrollList(empRes.value) : [];
+      const assignmentsRaw = asgnRes.status === "fulfilled" ? getPayrollList(asgnRes.value) : [];
+      const payslipsRaw = slipRes.status === "fulfilled" ? getPayrollList(slipRes.value) : [];
+      const revisionsRaw = revRes.status === "fulfilled" ? getPayrollList(revRes.value) : [];
+      const bonusesRaw = bonusRes.status === "fulfilled" ? getPayrollList(bonusRes.value) : [];
+      const advancesRaw = advRes.status === "fulfilled" ? getPayrollList(advRes.value) : [];
 
-          // Structures
-          if (structRes.status === "fulfilled" && Array.isArray(structRes.value) && structRes.value.length > 0) {
-            updated.structures = structRes.value.map((s) => ({
-              id: s.id ? `struct-${s.id}` : s.id,
-              numericId: s.id,
-              name: s.structureName || s.name || `Structure #${s.id}`,
-              staffType: s.staffType || "Both",
-              department: s.departmentName || s.department || "General",
-              designation: s.designationName || s.designation || "All",
-              basicPay: Number(s.basicPay || 0),
-              hra: Number(s.hra || 0),
-              da: Number(s.da || 0),
-              transportAllowance: Number(s.conveyanceAllowance || s.transportAllowance || 0),
-              medicalAllowance: Number(s.medicalAllowance || 0),
-              specialAllowance: Number(s.specialAllowance || 0),
-              academicAllowance: Number(s.academicAllowance || 0),
-              otherAllowances: Number(s.otherAllowance || s.otherAllowances || 0),
-              pf: Number(s.pf || 0),
-              employerPf: Number(s.employerPf || s.pf || 0),
-              esi: Number(s.esi || 0),
-              professionalTax: Number(s.professionalTax || 0),
-              tds: Number(s.tds || 0),
-              insurance: Number(s.insuranceOtherDeduction || s.insurance || 0),
-              otherDeductions: Number(s.otherDeductions || 0),
-              grossSalary: Number(s.grossSalary || (Number(s.basicPay || 0) + Number(s.hra || 0) + Number(s.da || 0) + Number(s.conveyanceAllowance || 0) + Number(s.medicalAllowance || 0) + Number(s.otherAllowance || 0))),
-              totalDeductions: Number(s.totalDeductions || (Number(s.pf || 0) + Number(s.esi || 0) + Number(s.professionalTax || 0) + Number(s.tds || 0) + Number(s.insuranceOtherDeduction || 0))),
-              netSalary: Number(s.netSalary || 0),
-              assignedCount: Number(s.assignedStaff || s.assignedCount || 0),
-              status: s.status || "Active",
-            }));
-          }
+      const apiEmployees = employeesRaw.map((employee) => ({
+        staffId: getPayrollField(employee, "staffId", "id"),
+        employeeId: getPayrollField(employee, "employeeId"),
+        staffName: getPayrollField(employee, "staffName", "name") || "",
+        name: getPayrollField(employee, "staffName", "name") || "",
+        staffType: getPayrollField(employee, "staffType", "employmentType") || "",
+        departmentId: getPayrollField(employee, "departmentId"),
+        departmentName: getPayrollField(employee, "departmentName", "department") || "",
+        designationId: getPayrollField(employee, "designationId"),
+        designation: getPayrollField(employee, "designation", "designationName") || "",
+        assignmentId: getPayrollField(employee, "assignmentId"),
+        salaryStructureId: getPayrollField(employee, "salaryStructureId"),
+        structureName: getPayrollField(employee, "structureName") || "",
+        basicPay: getPayrollField(employee, "basicPay") == null ? null : Number(getPayrollField(employee, "basicPay")),
+        grossSalary: getPayrollField(employee, "grossSalary") == null ? null : Number(getPayrollField(employee, "grossSalary")),
+        totalDeductions: getPayrollField(employee, "totalDeductions") == null ? null : Number(getPayrollField(employee, "totalDeductions")),
+        netSalary: getPayrollField(employee, "netSalary") == null ? null : Number(getPayrollField(employee, "netSalary")),
+        effectiveFrom: getPayrollField(employee, "effectiveFrom") || "",
+        effectiveTo: getPayrollField(employee, "effectiveTo") || "",
+        status: getPayrollField(employee, "status") || "",
+      }));
+      const empMap = new Map();
+      apiEmployees.forEach((employee) => {
+        [employee.staffId, employee.employeeId].filter((key) => key != null && key !== "").forEach((key) => empMap.set(String(key), employee));
+      });
 
-          // Employees & Assignments
-          const extractList = (val) => {
-            if (Array.isArray(val)) return val;
-            if (Array.isArray(val?.data)) return val.data;
-            if (Array.isArray(val?.items)) return val.items;
-            return [];
-          };
-          const empList = extractList(empRes.status === "fulfilled" ? empRes.value : null);
-          const asgnList = extractList(asgnRes.status === "fulfilled" ? asgnRes.value : null);
+      const structures = structuresRaw.map((structure) => {
+        const idValue = getPayrollField(structure, "id");
+        const basicPay = Number(getPayrollField(structure, "basicPay") ?? 0);
+        const hra = Number(getPayrollField(structure, "hra") ?? 0);
+        const da = Number(getPayrollField(structure, "da") ?? 0);
+        const conveyanceAllowance = Number(getPayrollField(structure, "conveyanceAllowance") ?? 0);
+        const medicalAllowance = Number(getPayrollField(structure, "medicalAllowance") ?? 0);
+        const otherAllowance = Number(getPayrollField(structure, "otherAllowance") ?? 0);
+        const pf = Number(getPayrollField(structure, "pf") ?? 0);
+        const esi = Number(getPayrollField(structure, "esi") ?? 0);
+        const professionalTax = Number(getPayrollField(structure, "professionalTax") ?? 0);
+        const tds = Number(getPayrollField(structure, "tds") ?? 0);
+        const insuranceOtherDeduction = Number(getPayrollField(structure, "insuranceOtherDeduction") ?? 0);
+        const grossSalary = Number(getPayrollField(structure, "grossSalary") ?? (basicPay + hra + da + conveyanceAllowance + medicalAllowance + otherAllowance));
+        const totalDeductions = Number(getPayrollField(structure, "totalDeductions") ?? (pf + esi + professionalTax + tds + insuranceOtherDeduction));
+        return {
+          id: idValue != null ? `struct-${idValue}` : "",
+          numericId: idValue,
+          name: getPayrollField(structure, "structureName", "name") || "",
+          staffType: getPayrollField(structure, "staffType") || "",
+          departmentId: getPayrollField(structure, "departmentId"),
+          department: getPayrollField(structure, "departmentName", "department") || "",
+          designationId: getPayrollField(structure, "designationId"),
+          designation: getPayrollField(structure, "designationName", "designation") || "",
+          basicPay,
+          hra,
+          da,
+          transportAllowance: conveyanceAllowance,
+          medicalAllowance,
+          specialAllowance: 0,
+          academicAllowance: 0,
+          otherAllowances: otherAllowance,
+          pf,
+          employerPf: 0,
+          esi,
+          professionalTax,
+          tds,
+          insurance: insuranceOtherDeduction,
+          otherDeductions: 0,
+          grossSalary,
+          totalDeductions,
+          netSalary: Number(getPayrollField(structure, "netSalary") ?? Math.max(0, grossSalary - totalDeductions)),
+          assignedCount: Number(getPayrollField(structure, "assignedStaff", "assignedCount") ?? 0),
+          status: getPayrollField(structure, "status") || "",
+        };
+      });
+      const structureMap = new Map(structures.map((structure) => [String(structure.numericId), structure]));
 
-          // Build employee lookup map by staffId
-          const empMap = new Map();
-          empList.forEach((emp) => {
-            const key = emp.staffId != null ? String(emp.staffId) : (emp.id != null ? String(emp.id) : null);
-            if (key) empMap.set(key, emp);
-          });
+      const assignments = assignmentsRaw.map((assignment) => {
+        const assignmentId = getPayrollField(assignment, "assignmentId", "id");
+        const rawStaffId = getPayrollField(assignment, "staffId");
+        const employee = empMap.get(String(rawStaffId)) || {};
+        const rawStructureId = getPayrollField(assignment, "salaryStructureId") ?? employee.salaryStructureId;
+        const structure = structureMap.get(String(rawStructureId)) || {};
+        const employeeId = employee.employeeId || getPayrollField(assignment, "employeeId") || "";
+        return {
+          id: assignmentId != null ? `asgn-${assignmentId}` : `asgn-staff-${rawStaffId ?? ""}`,
+          numericId: assignmentId,
+          assignmentId,
+          staffId: employeeId || String(rawStaffId ?? ""),
+          rawStaffId,
+          staffName: employee.staffName || getPayrollField(assignment, "staffName") || "",
+          staffType: employee.staffType || getPayrollField(assignment, "staffType") || "",
+          department: employee.departmentName || getPayrollField(assignment, "departmentName", "department") || "",
+          designation: employee.designation || getPayrollField(assignment, "designation") || "",
+          structureId: rawStructureId != null ? `struct-${rawStructureId}` : "",
+          rawStructureId,
+          structureName: structure.name || getPayrollField(assignment, "structureName") || "",
+          basicPay: Number(employee.basicPay ?? getPayrollField(assignment, "basicPay") ?? structure.basicPay ?? 0),
+          grossSalary: Number(employee.grossSalary ?? getPayrollField(assignment, "grossSalary") ?? structure.grossSalary ?? 0),
+          totalDeductions: Number(employee.totalDeductions ?? getPayrollField(assignment, "totalDeductions") ?? structure.totalDeductions ?? 0),
+          netSalary: Number(employee.netSalary ?? getPayrollField(assignment, "netSalary") ?? structure.netSalary ?? 0),
+          effectiveFrom: String(getPayrollField(assignment, "effectiveFrom") || employee.effectiveFrom || "").split("T")[0],
+          status: getPayrollField(assignment, "status") || employee.status || "",
+          paymentMode: getPayrollField(assignment, "paymentMode") || "",
+          bankName: getPayrollField(assignment, "bankName") || "",
+          accountNumber: getPayrollField(assignment, "accountNumber") || "",
+          ifscCode: getPayrollField(assignment, "ifscCode") || "",
+          panNumber: getPayrollField(assignment, "panNumber") || "",
+          uanNumber: getPayrollField(assignment, "uanNumber") || "",
+        };
+      });
 
-          const rawAssignments = asgnList.length > 0 ? asgnList : empList;
+      const mapPersonFields = (row) => {
+        const rawStaffId = getPayrollField(row, "staffId");
+        const employee = empMap.get(String(rawStaffId)) || {};
+        return {
+          staffId: employee.employeeId || getPayrollField(row, "employeeId") || String(rawStaffId ?? ""),
+          rawStaffId,
+          staffName: employee.staffName || getPayrollField(row, "staffName") || "",
+          staffType: employee.staffType || getPayrollField(row, "staffType") || "",
+          department: employee.departmentName || getPayrollField(row, "departmentName", "department") || "",
+          designation: employee.designation || getPayrollField(row, "designation") || "",
+        };
+      };
+      const payslips = payslipsRaw.map((payslip) => {
+        const person = mapPersonFields(payslip);
+        return mapApiPayslip(payslip, person);
+      });
+      const revisions = revisionsRaw.map((revision) => {
+        const person = mapPersonFields(revision);
+        const currentStructureId = getPayrollField(revision, "currentSalaryStructureId");
+        const proposedStructureId = getPayrollField(revision, "proposedSalaryStructureId");
+        const currentStructure = structureMap.get(String(currentStructureId)) || {};
+        const proposedStructure = structureMap.get(String(proposedStructureId)) || {};
+        const currentGross = Number(currentStructure.grossSalary ?? 0);
+        const proposedGross = Number(proposedStructure.grossSalary ?? 0);
+        return {
+          ...person,
+          id: `rev-${getPayrollField(revision, "id") ?? ""}`,
+          numericId: getPayrollField(revision, "id"),
+          currentSalaryStructureId: currentStructureId,
+          proposedSalaryStructureId: proposedStructureId,
+          previousGross: currentGross,
+          revisedGross: proposedGross,
+          currentSalary: currentGross,
+          revisedSalary: proposedGross,
+          percentage: currentGross > 0 ? ((proposedGross - currentGross) / currentGross) * 100 : 0,
+          effectiveDate: String(getPayrollField(revision, "effectiveFrom") || "").split("T")[0],
+          reason: getPayrollField(revision, "reason") || "",
+          status: getPayrollField(revision, "status") || "",
+          approvedBy: getPayrollField(revision, "approvedBy") ?? null,
+        };
+      });
+      const bonuses = bonusesRaw.map((bonus) => ({
+        ...mapPersonFields(bonus),
+        id: `bonus-${getPayrollField(bonus, "id") ?? ""}`,
+        numericId: getPayrollField(bonus, "id"),
+        type: getPayrollField(bonus, "bonusType") || "",
+        bonusType: getPayrollField(bonus, "bonusType") || "",
+        amount: Number(getPayrollField(bonus, "amount") ?? 0),
+        month: `${getPayrollField(bonus, "bonusYear") || ""}-${String(getPayrollField(bonus, "bonusMonth") || "").padStart(2, "0")}`,
+        reason: getPayrollField(bonus, "reason") || "",
+        status: getPayrollField(bonus, "status") || "",
+        approvedBy: getPayrollField(bonus, "approvedBy") ?? null,
+      }));
+      const loans = advancesRaw.map((advance) => ({
+        ...mapPersonFields(advance),
+        id: `adv-${getPayrollField(advance, "id") ?? ""}`,
+        numericId: getPayrollField(advance, "id"),
+        type: getPayrollField(advance, "advanceType") || "",
+        advanceAmount: Number(getPayrollField(advance, "amount") ?? 0),
+        loanAmount: Number(getPayrollField(advance, "amount") ?? 0),
+        amount: Number(getPayrollField(advance, "amount") ?? 0),
+        monthlyDeduction: Number(getPayrollField(advance, "monthlyDeduction") ?? 0),
+        emi: Number(getPayrollField(advance, "monthlyDeduction") ?? 0),
+        repaymentMonths: Number(getPayrollField(advance, "repaymentMonths") ?? 0),
+        tenureMonths: Number(getPayrollField(advance, "repaymentMonths") ?? 0),
+        startMonth: Number(getPayrollField(advance, "startMonth") ?? 0),
+        startYear: Number(getPayrollField(advance, "startYear") ?? 0),
+        reason: getPayrollField(advance, "reason") || "",
+        status: getPayrollField(advance, "status") || "",
+        approvedBy: getPayrollField(advance, "approvedBy") ?? null,
+      }));
 
-          if (rawAssignments.length > 0) {
-            updated.assignments = rawAssignments.map((e, index) => {
-              const staffKey = String(e.staffId ?? e.rawStaffId ?? e.id ?? "");
-              const empInfo = empMap.get(staffKey) || {};
+      setStore((previous) => ({
+        ...previous,
+        structures,
+        apiEmployees,
+        assignments,
+        payslips,
+        revisions,
+        bonuses,
+        loans,
+        apiSummary: summaryRes.status === "fulfilled" ? getPayrollRecord(summaryRes.value) : null,
+      }));
 
-              const asgnId = e.assignmentId || empInfo.assignmentId || e.id || e.Id;
-              const numericId = asgnId || e.staffId || empInfo.staffId || index + 1;
-              const rowKey = asgnId ? `asgn-${asgnId}` : `emp-${e.staffId || empInfo.staffId || index + 1}`;
-
-              const staffName = (empInfo.staffName && empInfo.staffName.trim())
-                || (e.staffName && e.staffName.trim())
-                || (empInfo.name && empInfo.name.trim())
-                || (e.name && e.name.trim())
-                || (e.staffId || empInfo.staffId ? `Staff #${e.staffId || empInfo.staffId}` : "-");
-
-              const employeeId = (empInfo.employeeId && empInfo.employeeId.trim())
-                || (e.employeeId && e.employeeId.trim())
-                || (e.staffId || empInfo.staffId ? `STF-${e.staffId || empInfo.staffId}` : "-");
-
-              const department = (empInfo.departmentName && empInfo.departmentName.trim())
-                || (e.departmentName && e.departmentName.trim())
-                || (empInfo.department && empInfo.department.trim())
-                || (e.department && e.department.trim())
-                || "General";
-
-              const rawStaffType = empInfo.staffType || e.staffType || empInfo.employmentType || e.employmentType;
-              const staffType = (rawStaffType === "Teaching" || rawStaffType === "Non-Teaching")
-                ? rawStaffType
-                : (rawStaffType && String(rawStaffType).toLowerCase().includes("non") ? "Non-Teaching" : "Teaching");
-
-              const designation = (empInfo.designation && empInfo.designation.trim())
-                || (e.designation && e.designation.trim())
-                || (empInfo.designationName && empInfo.designationName.trim())
-                || (e.designationName && e.designationName.trim())
-                || "-";
-
-              const structureId = (e.salaryStructureId || empInfo.salaryStructureId)
-                ? `struct-${e.salaryStructureId || empInfo.salaryStructureId}`
-                : null;
-
-              const structureName = empInfo.structureName
-                || e.structureName
-                || (e.salaryStructureId || empInfo.salaryStructureId ? `Structure #${e.salaryStructureId || empInfo.salaryStructureId}` : "Standard Grade");
-
-              const basicPay = Number(empInfo.basicPay ?? e.basicPay ?? 0);
-              const grossSalary = Number(empInfo.grossSalary ?? e.grossSalary ?? 0);
-              const totalDeductions = Number(empInfo.totalDeductions ?? e.totalDeductions ?? 0);
-              const netSalary = Number(empInfo.netSalary ?? e.netSalary ?? 0);
-
-              return {
-                id: rowKey,
-                numericId,
-                assignmentId: asgnId,
-                staffId: employeeId,
-                rawStaffId: e.staffId || empInfo.staffId,
-                staffName,
-                staffType,
-                department,
-                designation,
-                structureId,
-                rawStructureId: e.salaryStructureId || empInfo.salaryStructureId,
-                structureName,
-                basicPay,
-                grossSalary,
-                totalDeductions,
-                netSalary,
-                effectiveFrom: (e.effectiveFrom || empInfo.effectiveFrom)
-                  ? String(e.effectiveFrom || empInfo.effectiveFrom).split("T")[0]
-                  : "",
-                status: e.status || empInfo.status || "Active",
-                paymentMode: e.paymentMode || empInfo.paymentMode || "Bank Transfer",
-                bankName: e.bankName || empInfo.bankName || "State Bank of India",
-                accountNumber: e.accountNumber || empInfo.accountNumber || "9876543210123",
-                ifscCode: e.ifscCode || empInfo.ifscCode || "SBIN0001234",
-                panNumber: e.panNumber || empInfo.panNumber || "ABCDE1234F",
-                uanNumber: e.uanNumber || empInfo.uanNumber || "100987654321",
-              };
-            });
-            updated.apiEmployees = empList.length > 0 ? empList : rawAssignments;
-          }
-
-          // Payslips
-          if (slipRes.status === "fulfilled" && Array.isArray(slipRes.value) && slipRes.value.length > 0) {
-            updated.payslips = slipRes.value.map((p) => {
-              const staffKey = String(p.staffId || p.rawStaffId || "");
-              const empInfo = empMap.get(staffKey) || {};
-              const monthStr = p.payrollYear && p.payrollMonth
-                ? `${p.payrollYear}-${String(p.payrollMonth).padStart(2, "0")}`
-                : p.month || "2026-09";
-              return {
-                id: p.payslipId ? `slip-${p.payslipId}` : p.id,
-                numericId: p.payslipId || p.id,
-                staffId: p.employeeId || empInfo.employeeId || (p.staffId ? `STF-${p.staffId}` : "-"),
-                rawStaffId: p.staffId,
-                staffName: p.staffName || empInfo.staffName || (p.staffId ? `Staff #${p.staffId}` : "-"),
-                staffType: p.staffType || empInfo.staffType || "Teaching",
-                department: p.departmentName || p.department || empInfo.departmentName || empInfo.department || "General",
-                designation: p.designation || empInfo.designation || "-",
-                month: monthStr,
-                periodLabel: p.periodLabel || monthStr,
-                year: p.payrollYear || 2026,
-                basicPay: Number(p.basicPay || empInfo.basicPay || 0),
-                hra: Number(p.hra || 0),
-                da: Number(p.da || 0),
-                grossSalary: Number(p.grossSalary || empInfo.grossSalary || 0),
-                totalDeductions: Number(p.totalDeductions || empInfo.totalDeductions || 0),
-                netSalary: Number(p.netSalary || empInfo.netSalary || 0),
-                status: p.payslipStatus || p.status || "Generated",
-                paymentMode: p.paymentMode || empInfo.paymentMode || "Bank Transfer",
-                generatedAt: p.generatedAt || new Date().toISOString(),
-              };
-            });
-          }
-
-          // Revisions
-          if (revRes.status === "fulfilled" && Array.isArray(revRes.value) && revRes.value.length > 0) {
-            updated.revisions = revRes.value.map((r) => {
-              const staffKey = String(r.staffId || r.rawStaffId || "");
-              const empInfo = empMap.get(staffKey) || {};
-              return {
-                id: r.id ? `rev-${r.id}` : r.id,
-                numericId: r.id,
-                staffId: r.employeeId || empInfo.employeeId || (r.staffId ? `STF-${r.staffId}` : "-"),
-                rawStaffId: r.staffId,
-                staffName: r.staffName || empInfo.staffName || (r.staffId ? `Staff #${r.staffId}` : "-"),
-                staffType: r.staffType || empInfo.staffType || "Teaching",
-                department: r.departmentName || r.department || empInfo.departmentName || empInfo.department || "General",
-                designation: r.designation || empInfo.designation || "-",
-                currentSalary: Number(r.previousGrossSalary || r.currentSalary || 0),
-                revisedSalary: Number(r.newGrossSalary || r.revisedSalary || 0),
-                percentage: Number(r.revisionPercentage || 0),
-                effectiveDate: r.effectiveDate ? String(r.effectiveDate).split("T")[0] : "",
-                reason: r.reason || "",
-                status: r.status || "Pending",
-                approvedBy: r.approvedBy || null,
-              };
-            });
-          }
-
-          // Bonuses
-          if (bonusRes.status === "fulfilled" && Array.isArray(bonusRes.value) && bonusRes.value.length > 0) {
-            updated.bonuses = bonusRes.value.map((b) => {
-              const staffKey = String(b.staffId || b.rawStaffId || "");
-              const empInfo = empMap.get(staffKey) || {};
-              return {
-                id: b.id ? `bonus-${b.id}` : b.id,
-                numericId: b.id,
-                staffId: b.employeeId || empInfo.employeeId || (b.staffId ? `STF-${b.staffId}` : "-"),
-                rawStaffId: b.staffId,
-                staffName: b.staffName || empInfo.staffName || (b.staffId ? `Staff #${b.staffId}` : "-"),
-                staffType: b.staffType || empInfo.staffType || "Teaching",
-                department: b.departmentName || b.department || empInfo.departmentName || empInfo.department || "General",
-                type: b.bonusType || "Performance Bonus",
-                bonusType: b.bonusType || "Performance Bonus",
-                amount: Number(b.bonusAmount || 0),
-                bonusPercentage: Number(b.bonusPercentage || 0),
-                month: b.payrollYear && b.payrollMonth ? `${b.payrollYear}-${String(b.payrollMonth).padStart(2, "0")}` : "2026-09",
-                reason: b.reason || "",
-                status: b.status || "Pending",
-                approvedBy: b.approvedBy || null,
-              };
-            });
-          }
-
-          // Salary Advances / Loans
-          if (advRes.status === "fulfilled" && Array.isArray(advRes.value) && advRes.value.length > 0) {
-            updated.loans = advRes.value.map((a) => {
-              const staffKey = String(a.staffId || a.rawStaffId || "");
-              const empInfo = empMap.get(staffKey) || {};
-              return {
-                id: a.id ? `adv-${a.id}` : a.id,
-                numericId: a.id,
-                staffId: a.employeeId || empInfo.employeeId || (a.staffId ? `STF-${a.staffId}` : "-"),
-                rawStaffId: a.staffId,
-                staffName: a.staffName || empInfo.staffName || (a.staffId ? `Staff #${a.staffId}` : "-"),
-                staffType: a.staffType || empInfo.staffType || "Teaching",
-                department: a.departmentName || a.department || empInfo.departmentName || empInfo.department || "General",
-                advanceAmount: Number(a.advanceAmount || 0),
-                loanAmount: Number(a.advanceAmount || 0),
-                monthlyDeduction: Number(a.monthlyDeduction || 0),
-                emi: Number(a.monthlyDeduction || 0),
-                repaymentMonths: Number(a.repaymentMonths || 0),
-                tenureMonths: Number(a.repaymentMonths || 0),
-                disbursedDate: a.advanceDate ? String(a.advanceDate).split("T")[0] : "",
-                advanceDate: a.advanceDate ? String(a.advanceDate).split("T")[0] : "",
-                reason: a.reason || "",
-                status: a.status || "Pending",
-                approvedBy: a.approvedBy || null,
-              };
-            });
-          }
-
-          // Summary Metrics from API
-          if (summaryRes.status === "fulfilled" && summaryRes.value && typeof summaryRes.value === "object") {
-            updated.apiSummary = summaryRes.value;
-          }
-
-          return updated;
-        });
-      } catch (err) {
-        console.warn("Payroll API sync fallback to local storage:", err);
+      const resourceNames = ["salary structures", "employees", "salary assignments", "payslips", "revisions", "bonuses", "advances", "summary"];
+      const failedIndexes = results.map((result, index) => result.status === "rejected" ? index : -1).filter((index) => index >= 0);
+      if (failedIndexes.length) {
+        const failure = getApiErrorMessage(results[failedIndexes[0]].reason);
+        setToast(`Unable to load Payroll ${failedIndexes.map((index) => resourceNames[index]).join(", ")}: ${failure}`);
       }
     };
 
     fetchPayrollFromApi();
-    return () => { isMounted = false; };
-  }, []);
+    return () => {
+      isMounted = false;
+      if (payrollRequestRef.current === requestId) payrollRequestRef.current += 1;
+    };
+  }, [selectedCampusId]);
 
   // Derived KPI metrics
   const kpiData = useMemo(() => {
     const assignments = Array.isArray(store?.assignments) ? store.assignments : [];
     const structures = Array.isArray(store?.structures) ? store.structures : [];
-    const totalStaff = assignments.length;
+    const summary = store?.apiSummary || {};
+    const totalStaff = Number(getPayrollField(summary, "totalEmployees") ?? assignments.length);
     const teachingAssigned = assignments.filter((a) => a.staffType === "Teaching" && a.status === "Active").length;
     const nonTeachingAssigned = assignments.filter((a) => a.staffType === "Non-Teaching" && a.status === "Active").length;
     const pendingAssigned = assignments.filter((a) => a.status === "Pending").length;
     const activeStructures = structures.filter((s) => s.status === "Active").length;
     const grossTotal = assignments.reduce((sum, a) => sum + Number(a.grossSalary || 0), 0);
     const deductionsTotal = assignments.reduce((sum, a) => sum + Number(a.totalDeductions || 0), 0);
-    const netTotal = assignments.reduce((sum, a) => sum + Number(a.netSalary || 0), 0);
+    const netTotal = Number(getPayrollField(summary, "totalNetSalary") ?? assignments.reduce((sum, a) => sum + Number(a.netSalary || 0), 0));
     const onHold = assignments.filter((a) => a.status === "On Hold").length;
 
     return {
@@ -378,98 +440,104 @@ export default function PayrollPage({ mode = "payroll" }) {
   // Handler helpers
   const handleHoldToggle = async (asgnId, currentStatus) => {
     const nextStatus = currentStatus === "On Hold" ? "Active" : "On Hold";
-    const numericId = parseInt(String(asgnId).replace(/\D+/g, ""), 10);
-    if (numericId) {
-      try {
-        await payrollApi.updateSalaryAssignmentStatus(numericId, nextStatus);
-      } catch (err) {
-        console.warn("Salary assignment status API call fallback:", err);
-      }
+    const assignment = store.assignments.find((item) => item.id === asgnId);
+    const numericId = getNumericApiId(assignment?.numericId);
+    if (!numericId) {
+      setToast("The API did not provide a salary assignment ID, so its status cannot be changed.");
+      return;
     }
-
-    setStore((prev) => ({
-      ...prev,
-      assignments: prev.assignments.map((a) => (a.id === asgnId ? { ...a, status: nextStatus } : a)),
-    }));
-    setToast(`Status updated to ${nextStatus}`);
-    setModal(null);
+    try {
+      await payrollApi.updateSalaryAssignmentStatus(numericId, nextStatus);
+      setStore((prev) => ({
+        ...prev,
+        assignments: prev.assignments.map((a) => (a.id === asgnId ? { ...a, status: nextStatus } : a)),
+      }));
+      setToast(`Status updated to ${nextStatus}`);
+      setModal(null);
+    } catch (err) {
+      setToast(`Unable to update assignment status: ${getApiErrorMessage(err)}`);
+    }
   };
 
   const handleDeleteStructure = async (structId) => {
-    const numericId = parseInt(String(structId).replace(/\D+/g, ""), 10);
-    if (numericId) {
-      try {
-        await payrollApi.deleteSalaryStructure(numericId);
-      } catch (err) {
-        console.warn("Delete salary structure API call fallback:", err);
-      }
+    const structure = store.structures.find((item) => item.id === structId);
+    const numericId = getNumericApiId(structure?.numericId);
+    if (!numericId) {
+      setToast("The API did not provide a salary structure ID, so it cannot be deleted.");
+      return;
     }
-
-    setStore((prev) => ({
-      ...prev,
-      structures: prev.structures.filter((s) => s.id !== structId),
-    }));
-    setToast("Salary structure deleted successfully");
-    setModal(null);
+    try {
+      await payrollApi.deleteSalaryStructure(numericId);
+      setStore((prev) => ({
+        ...prev,
+        structures: prev.structures.filter((s) => s.id !== structId),
+      }));
+      setToast("Salary structure deleted successfully");
+      setModal(null);
+    } catch (err) {
+      setToast(`Unable to delete salary structure: ${getApiErrorMessage(err)}`);
+    }
   };
 
   const handleDeleteAssignment = async (asgnId) => {
-    const numericId = parseInt(String(asgnId).replace(/\D+/g, ""), 10);
-    if (numericId) {
-      try {
-        await payrollApi.deleteSalaryAssignment(numericId);
-      } catch (err) {
-        console.warn("Delete salary assignment API call fallback:", err);
-      }
+    const assignment = store.assignments.find((item) => item.id === asgnId);
+    const numericId = getNumericApiId(assignment?.numericId);
+    if (!numericId) {
+      setToast("The API did not provide a salary assignment ID, so it cannot be deleted.");
+      return;
     }
-
-    setStore((prev) => ({
-      ...prev,
-      assignments: prev.assignments.filter((a) => a.id !== asgnId),
-    }));
-    setToast("Salary assignment removed successfully");
-    setModal(null);
+    try {
+      await payrollApi.deleteSalaryAssignment(numericId);
+      setStore((prev) => ({
+        ...prev,
+        assignments: prev.assignments.filter((a) => a.id !== asgnId),
+      }));
+      setToast("Salary assignment removed successfully");
+      setModal(null);
+    } catch (err) {
+      setToast(`Unable to remove salary assignment: ${getApiErrorMessage(err)}`);
+    }
   };
 
   const handleApproveItem = async (type, itemId) => {
-    const numericId = parseInt(String(itemId).replace(/\D+/g, ""), 10);
-    if (numericId) {
-      try {
-        if (type === "revision") {
-          await payrollApi.approveSalaryRevision(numericId, { approvedBy: "Admin", remarks: "Approved" });
-        } else if (type === "bonus") {
-          await payrollApi.approveBonus(numericId, { approvedBy: "Admin", remarks: "Approved" });
-        } else if (type === "loan" || type === "advance") {
-          await payrollApi.approveSalaryAdvance(numericId, { approvedBy: "Admin", remarks: "Approved" });
-        }
-      } catch (err) {
-        console.warn(`Approve ${type} API call fallback:`, err);
-      }
+    if (type === "reimbursement") {
+      setToast("The supplied Payroll APIs do not include reimbursement approval.");
+      return;
+    }
+    const records = type === "revision" ? store.revisions
+      : type === "bonus" ? store.bonuses
+      : type === "loan" || type === "advance" ? store.loans
+      : [];
+    const record = records.find((item) => item.id === itemId);
+    const numericId = getNumericApiId(record?.numericId);
+    if (!numericId) {
+      setToast("The API did not provide an approval record ID.");
+      return;
     }
 
-    if (type === "revision") {
-      setStore((prev) => ({
-        ...prev,
-        revisions: prev.revisions.map((r) => (r.id === itemId ? { ...r, status: "Approved", approvedBy: "Admin" } : r)),
-      }));
-    } else if (type === "bonus") {
-      setStore((prev) => ({
-        ...prev,
-        bonuses: prev.bonuses.map((b) => (b.id === itemId ? { ...b, status: "Approved", approvedBy: "Admin" } : b)),
-      }));
-    } else if (type === "loan" || type === "advance") {
-      setStore((prev) => ({
-        ...prev,
-        loans: prev.loans.map((l) => (l.id === itemId ? { ...l, status: "Active" } : l)),
-      }));
-    } else if (type === "reimbursement") {
-      setStore((prev) => ({
-        ...prev,
-        reimbursements: prev.reimbursements.map((rm) => (rm.id === itemId ? { ...rm, status: "Approved" } : rm)),
-      }));
+    try {
+      if (type === "revision") {
+        await payrollApi.approveSalaryRevision(numericId);
+      } else if (type === "bonus") {
+        await payrollApi.approveBonus(numericId);
+      } else if (type === "loan" || type === "advance") {
+        await payrollApi.approveSalaryAdvance(numericId);
+      } else {
+        return;
+      }
+
+      if (type === "revision") {
+        setStore((prev) => ({ ...prev, revisions: prev.revisions.map((item) => item.id === itemId ? { ...item, status: "Approved" } : item) }));
+      } else if (type === "bonus") {
+        setStore((prev) => ({ ...prev, bonuses: prev.bonuses.map((item) => item.id === itemId ? { ...item, status: "Approved" } : item) }));
+      } else {
+        setStore((prev) => ({ ...prev, loans: prev.loans.map((item) => item.id === itemId ? { ...item, status: "Active" } : item) }));
+      }
+      setToast(`${type.toUpperCase()} request approved`);
+      setModal(null);
+    } catch (err) {
+      setToast(`Unable to approve ${type}: ${getApiErrorMessage(err)}`);
     }
-    setToast(`${type.toUpperCase()} request approved`);
-    setModal(null);
   };
 
   // Render Sub-Views based on mode
@@ -659,7 +727,7 @@ function AuthoritativePayrollScreen({
           <button
             type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={() => setToast("Downloading Monthly Payroll Summary Report...")}
+            onClick={() => setToast("The supplied Payroll APIs do not include a report download endpoint.")}
           >
             <img src={reportsAnalytics3d} alt="" className="payroll-3d-icon" width={16} height={16} /> Monthly Report
           </button>
@@ -679,7 +747,7 @@ function AuthoritativePayrollScreen({
           <button
             type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={() => setToast("Exporting full payslip history...")}
+            onClick={() => setToast("The supplied Payroll APIs do not include a payslip export endpoint.")}
           >
             <img src={results3d} alt="" className="payroll-3d-icon" width={16} height={16} /> Export History
           </button>
@@ -1091,7 +1159,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
               type="button"
               className="cms-btn cms-btn-ghost"
               style={{ fontSize: "12px", padding: "6px 12px", whiteSpace: "nowrap", height: "36px" }}
-              onClick={() => setToast("Exporting salary structure templates...")}
+              onClick={() => setToast("The supplied Payroll APIs do not include a salary structure export endpoint.")}
             >
               <Download size={14} /> Export CSV
             </button>
@@ -1115,7 +1183,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
           {
             key: "department",
             label: "Department & Role",
-            render: (r) => `${r.department || "General"} — ${r.designation || "All"}`,
+            render: (r) => `${r.department || "—"} — ${r.designation || "—"}`,
           },
           { key: "basicPay", label: "Basic Pay", render: (r) => formatINR(r.basicPay) },
           { key: "grossSalary", label: "Gross Salary", render: (r) => <strong style={{ color: "#6F8400" }}>{formatINR(r.grossSalary)}</strong> },
@@ -1173,8 +1241,9 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
 // TAB 3 — GENERATE PAYSLIPS
 // ----------------------------------------------------------------------
 function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPayslip }) {
-  const [selectedMonth, setSelectedMonth] = useState("09");
-  const [selectedYear, setSelectedYear] = useState("2026");
+  const { selectedCampusId } = useCampusContext();
+  const [selectedMonth, setSelectedMonth] = useState(() => String(new Date().getMonth() + 1).padStart(2, "0"));
+  const [selectedYear, setSelectedYear] = useState(() => String(new Date().getFullYear()));
   const [presetPeriod, setPresetPeriod] = useState("1m");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -1209,10 +1278,22 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
   const assignmentsList = useMemo(() => {
     return Array.isArray(store?.assignments) ? store.assignments : [];
   }, [store?.assignments]);
+  const assignmentsSignature = assignmentsList.map((assignment) => assignment.id).join("|");
+  const previousAssignmentsSignature = useRef(null);
+  useEffect(() => {
+    if (previousAssignmentsSignature.current === assignmentsSignature) return;
+    previousAssignmentsSignature.current = assignmentsSignature;
+    setSelectedStaffIds(assignmentsList.map((assignment) => assignment.id));
+  }, [assignmentsSignature, assignmentsList]);
 
   const payslipsList = useMemo(() => {
     return Array.isArray(store?.payslips) ? store.payslips : [];
   }, [store?.payslips]);
+
+  const availableGenerationYears = useMemo(() => Array.from(new Set([
+    String(new Date().getFullYear()),
+    ...payslipsList.map((payslip) => String(payslip.year || "")).filter(Boolean),
+  ])).sort((first, second) => Number(second) - Number(first)), [payslipsList]);
 
   const filteredStaff = useMemo(() => {
     return assignmentsList.filter((a) => {
@@ -1256,77 +1337,78 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
 
     const targetMonthKey = `${selectedYear}-${selectedMonth}`;
     const periodLabel = currentPeriodLabel;
-
-    const numericStaffIds = assignmentsList
-      .filter((a) => selectedStaffIds.includes(a.id))
-      .map((a) => parseInt(String(a.rawStaffId || a.staffId || a.id).replace(/\D+/g, ""), 10))
-      .filter((id) => !isNaN(id) && id > 0);
-
-    if (numericStaffIds.length > 0) {
-      try {
-        if (selectedStaffIds.length > 1) {
-          await payrollApi.generatePayslipsBulk({
-            staffIds: numericStaffIds,
-            payrollMonth: Number(selectedMonth),
-            payrollYear: Number(selectedYear),
-          });
-        } else {
-          for (const sId of numericStaffIds) {
-            await payrollApi.generatePayslip({
-              staffId: sId,
-              payrollMonth: Number(selectedMonth),
-              payrollYear: Number(selectedYear),
-            }).catch(() => {});
-          }
-        }
-      } catch (err) {
-        console.warn("Generate payslips API call fallback:", err);
-      }
+    const selectedAssignments = assignmentsList.filter((assignment) => selectedStaffIds.includes(assignment.id));
+    const numericStaffIds = selectedAssignments.map((assignment) => getNumericApiId(assignment.rawStaffId));
+    if (numericStaffIds.some((staffId) => !staffId)) {
+      setToast("The API did not provide a numeric staff ID for every selected employee.");
+      setIsGenerating(false);
+      return;
     }
 
-    const newPayslips = assignmentsList
-      .filter((a) => selectedStaffIds.includes(a.id))
-      .map((a) => {
-        const employerPF = Math.round(Number(a.basicPay || 40000) * 0.12);
-        const ctc = Number(a.grossSalary || 0) + employerPF;
-
-        return {
-          id: `slip-${a.staffId}-${targetMonthKey}-${Date.now()}`,
-          staffId: a.staffId,
-          rawStaffId: a.rawStaffId,
-          staffName: a.staffName,
-          department: a.department,
-          designation: a.designation,
-          month: targetMonthKey,
-          periodLabel,
-          year: Number(selectedYear),
-          grossSalary: Number(a.grossSalary || 0),
-          totalDeductions: Number(a.totalDeductions || 0),
-          netSalary: Number(a.netSalary || 0),
-          ctc,
-          status: "Generated",
-          paymentMode: a.paymentMode || "Bank Transfer",
-          generatedAt: new Date().toISOString(),
-        };
-      });
-
-    setStore((prev) => {
-      const existingSlips = Array.isArray(prev?.payslips) ? prev.payslips : [];
-      return {
-        ...prev,
-        payslips: [...newPayslips, ...existingSlips.filter((p) => p.month !== targetMonthKey)],
+    try {
+      const payload = {
+        payrollMonth: Number(selectedMonth),
+        payrollYear: Number(selectedYear),
       };
-    });
+      if (numericStaffIds.length === 1) {
+        await payrollApi.generatePayslip({ staffId: numericStaffIds[0], ...payload });
+      } else {
+        await payrollApi.generatePayslipsBulk({ staffIds: numericStaffIds, ...payload });
+      }
 
-    setIsGenerating(false);
-    setToast(`Successfully generated ${newPayslips.length} payslips for ${periodLabel}!`);
+      const query = {
+        payrollMonth: Number(selectedMonth),
+        payrollYear: Number(selectedYear),
+        ...(selectedCampusId != null && selectedCampusId !== "" ? { campusId: Number(selectedCampusId) || selectedCampusId } : {}),
+      };
+      const [payslipsResult, summaryResult] = await Promise.allSettled([
+        payrollApi.getPayslips(query),
+        payrollApi.getPayrollSummary({ month: Number(selectedMonth), year: Number(selectedYear), ...(selectedCampusId != null && selectedCampusId !== "" ? { campusId: Number(selectedCampusId) || selectedCampusId } : {}) }),
+      ]);
+      if (payslipsResult.status === "rejected") throw payslipsResult.reason;
+      const refreshedPayslips = getPayrollList(payslipsResult.value).map((payslip) => mapApiPayslip(payslip));
+      setStore((previous) => ({
+        ...previous,
+        payslips: refreshedPayslips,
+        ...(summaryResult.status === "fulfilled" ? { apiSummary: getPayrollRecord(summaryResult.value) } : {}),
+      }));
+      setToast(summaryResult.status === "rejected"
+        ? `Generated payslips for ${periodLabel}, but summary refresh failed: ${getApiErrorMessage(summaryResult.reason)}`
+        : `Generated payslips for ${periodLabel}.`);
+    } catch (err) {
+      setToast(`Unable to generate or refresh payslips: ${getApiErrorMessage(err)}`);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSendSelectedEmails = async () => {
+    const selectedIds = new Set(selectedAssignmentsForPeriod.map((assignment) => String(assignment.rawStaffId)));
+    const matchingPayslips = payslipsList.filter((payslip) =>
+      payslip.month === `${selectedYear}-${selectedMonth}` && selectedIds.has(String(payslip.rawStaffId))
+    );
+    if (matchingPayslips.length === 0) {
+      setToast("No generated payslips exist for the selected employees and period.");
+      return;
+    }
+    const validPayslips = matchingPayslips.filter((payslip) => getNumericApiId(payslip.numericId));
+    const missingIds = matchingPayslips.length - validPayslips.length;
+    const results = await Promise.allSettled(validPayslips.map((payslip) =>
+      payrollApi.sendPayslipEmail(getNumericApiId(payslip.numericId))
+    ));
+    const sentCount = results.filter((result) => result.status === "fulfilled").length;
+    const failedCount = results.length - sentCount + missingIds;
+    setToast(failedCount
+      ? `Sent ${sentCount} payslip email(s); ${failedCount} failed.`
+      : `Sent ${sentCount} payslip email(s).`);
   };
 
   // Recently Generated Payslips for Selected Period
   const targetMonthKey = `${selectedYear}-${selectedMonth}`;
   const recentlyGenerated = useMemo(() => {
-    return payslipsList.filter((p) => p && (p.month === targetMonthKey || p.year === Number(selectedYear)));
+    return payslipsList.filter((p) => p && p.month === targetMonthKey);
   }, [payslipsList, targetMonthKey, selectedYear]);
+  const selectedAssignmentsForPeriod = useMemo(() => assignmentsList.filter((assignment) => selectedStaffIds.includes(assignment.id)), [assignmentsList, selectedStaffIds]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -1442,9 +1524,7 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
                 cursor: "pointer",
               }}
             >
-              <option value="2026">2026</option>
-              <option value="2025">2025</option>
-              <option value="2024">2024</option>
+              {availableGenerationYears.map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
 
             {/* Staff Type / Category Filter */}
@@ -1520,7 +1600,7 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
             <button
               type="button"
               className="cms-btn cms-btn-ghost"
-              onClick={() => setToast("Dispatching payslip email notifications to selected staff...")}
+              onClick={handleSendSelectedEmails}
             >
               <Mail size={14} /> Send Payslip Emails
             </button>
@@ -1562,7 +1642,7 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
             {
               key: "ctc",
               label: "CTC",
-              render: (r) => formatINR(r.ctc || Number(r.grossSalary || 0) * 1.12),
+              render: (r) => r.ctc == null ? "—" : formatINR(r.ctc),
             },
             {
               key: "status",
@@ -1594,7 +1674,7 @@ function PayrollGenerateTab({ store, setStore, navigate, setToast, onPreviewPays
                     type="button"
                     className="cms-btn cms-btn-ghost"
                     style={{ padding: "2px 6px", fontSize: "11px" }}
-                    onClick={() => setToast(`Payslip emailed to ${r.staffName}!`)}
+                    onClick={() => dispatchPayslipEmail(r, setToast)}
                   >
                     <Mail size={12} />
                   </button>
@@ -1637,6 +1717,10 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
     });
     return Array.from(set).sort();
   }, [payslipsList]);
+
+  const availableYears = useMemo(() => Array.from(new Set(
+    payslipsList.map((payslip) => String(payslip.year || "")).filter(Boolean)
+  )).sort((first, second) => Number(second) - Number(first)), [payslipsList]);
 
   const filteredHistory = useMemo(() => {
     return payslipsList.filter((p) => {
@@ -1742,9 +1826,7 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
               }}
             >
               <option value="All">All Years</option>
-              <option value="2026">2026</option>
-              <option value="2025">2025</option>
-              <option value="2024">2024</option>
+              {availableYears.map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
 
             {/* Department Filter */}
@@ -1807,7 +1889,7 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
             label: "Payment Status",
             render: (r) => (
               <span className={`cms-badge ${r.status === "Paid" ? "cms-badge-success" : "cms-badge-primary"}`}>
-                {r.status || "Paid"}
+                {r.status || "—"}
               </span>
             ),
           },
@@ -1839,7 +1921,7 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
                   className="cms-btn cms-btn-ghost"
                   style={{ padding: "2px 6px", fontSize: "11px" }}
                   title="Email Payslip"
-                  onClick={() => setToast(`Payslip sent to ${r.staffName} successfully!`)}
+                  onClick={() => dispatchPayslipEmail(r, setToast)}
                 >
                   <Mail size={12} />
                 </button>
@@ -1856,22 +1938,32 @@ function PayrollHistoryTab({ store, navigate, setToast, onPreviewPayslip }) {
 // INTERACTIVE PAYSLIP MODAL
 // ----------------------------------------------------------------------
 function InteractivePayslipModal({ record, onClose, setToast }) {
+  const [payslipDetails, setPayslipDetails] = useState(record);
+
+  useEffect(() => {
+    let active = true;
+    setPayslipDetails(record);
+    const numericId = getNumericApiId(record?.numericId);
+    if (!numericId) return () => { active = false; };
+    payrollApi.getPayslipById(numericId)
+      .then((response) => {
+        if (active) setPayslipDetails({ ...record, ...mapApiPayslip(getPayrollRecord(response), record) });
+      })
+      .catch((err) => {
+        if (active) setToast(`Unable to load payslip details: ${getApiErrorMessage(err)}`);
+      });
+    return () => { active = false; };
+  }, [record?.numericId, record?.id]);
+
   if (!record) return null;
+  const displayRecord = payslipDetails || record;
 
   const handlePrint = () => {
     window.print();
   };
 
   const handleSendEmail = async () => {
-    const numericId = parseInt(String(record.numericId || record.id).replace(/\D+/g, ""), 10);
-    if (numericId) {
-      try {
-        await payrollApi.sendPayslipEmail(numericId);
-      } catch (err) {
-        console.warn("Send payslip email API call fallback:", err);
-      }
-    }
-    setToast(`Payslip email dispatched to ${record.staffName}!`);
+    await dispatchPayslipEmail(displayRecord, setToast);
   };
 
   return (
@@ -1893,16 +1985,16 @@ function InteractivePayslipModal({ record, onClose, setToast }) {
             <div className="payslip-header">
               <h2>PIRNAV JUNIOR COLLEGE</h2>
               <p>Affiliated to State Board of Intermediate Education</p>
-              <p style={{ fontSize: "12px", color: "var(--cms-muted)" }}>Salary Payslip for the Month of {record.periodLabel || record.month || "August 2026"}</p>
+              <p style={{ fontSize: "12px", color: "var(--cms-muted)" }}>Salary Payslip for the Month of {displayRecord.periodLabel || displayRecord.month || "—"}</p>
             </div>
 
             <div className="payslip-meta-grid">
-              <div className="payslip-meta-item"><span>Employee ID:</span><strong>{record.staffId}</strong></div>
-              <div className="payslip-meta-item"><span>Staff Name:</span><strong>{record.staffName}</strong></div>
-              <div className="payslip-meta-item"><span>Department:</span><strong>{record.department || "General"}</strong></div>
-              <div className="payslip-meta-item"><span>Designation:</span><strong>{record.designation || "Staff"}</strong></div>
-              <div className="payslip-meta-item"><span>Payment Mode:</span><strong>{record.paymentMode || "Bank Transfer"}</strong></div>
-              <div className="payslip-meta-item"><span>Status:</span><span className="cms-badge cms-badge-success">{record.status || "Paid"}</span></div>
+              <div className="payslip-meta-item"><span>Employee ID:</span><strong>{displayRecord.staffId || "—"}</strong></div>
+              <div className="payslip-meta-item"><span>Staff Name:</span><strong>{displayRecord.staffName || "—"}</strong></div>
+              <div className="payslip-meta-item"><span>Department:</span><strong>{displayRecord.department || "—"}</strong></div>
+              <div className="payslip-meta-item"><span>Designation:</span><strong>{displayRecord.designation || "—"}</strong></div>
+              <div className="payslip-meta-item"><span>Payment Mode:</span><strong>—</strong></div>
+              <div className="payslip-meta-item"><span>Status:</span><span className="cms-badge cms-badge-success">{displayRecord.status || "—"}</span></div>
             </div>
 
             <div className="payslip-tables-grid">
@@ -1911,11 +2003,11 @@ function InteractivePayslipModal({ record, onClose, setToast }) {
                 <h4>EARNINGS</h4>
                 <table className="payslip-table">
                   <tbody>
-                    <tr><td>Basic Pay</td><td>{formatINR(Number(record.basicPay || record.grossSalary * 0.5 || 40000))}</td></tr>
-                    <tr><td>House Rent Allowance (HRA)</td><td>{formatINR(Number(record.hra || record.grossSalary * 0.2 || 12000))}</td></tr>
-                    <tr><td>Dearness Allowance (DA)</td><td>{formatINR(Number(record.da || record.grossSalary * 0.15 || 8000))}</td></tr>
-                    <tr><td>Special & Other Allowances</td><td>{formatINR(Number(record.grossSalary * 0.15 || 6000))}</td></tr>
-                    <tr className="subtotal"><td>Total Gross Earnings</td><td>{formatINR(record.grossSalary)}</td></tr>
+                    <tr><td>Basic Pay</td><td>{formatINR(displayRecord.basicPay)}</td></tr>
+                    <tr><td>House Rent Allowance (HRA)</td><td>{formatINR(displayRecord.hra)}</td></tr>
+                    <tr><td>Dearness Allowance (DA)</td><td>{formatINR(displayRecord.da)}</td></tr>
+                    <tr><td>Other Allowances</td><td>{formatINR(Number(displayRecord.conveyanceAllowance || 0) + Number(displayRecord.medicalAllowance || 0) + Number(displayRecord.otherAllowance || 0))}</td></tr>
+                    <tr className="subtotal"><td>Total Gross Earnings</td><td>{formatINR(displayRecord.grossSalary)}</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1925,11 +2017,12 @@ function InteractivePayslipModal({ record, onClose, setToast }) {
                 <h4>DEDUCTIONS</h4>
                 <table className="payslip-table">
                   <tbody>
-                    <tr><td>Provident Fund (PF)</td><td>{formatINR(Number(record.totalDeductions * 0.5 || 4800))}</td></tr>
-                    <tr><td>Professional Tax (PT)</td><td>{formatINR(200)}</td></tr>
-                    <tr><td>TDS (Income Tax)</td><td>{formatINR(Number(record.totalDeductions * 0.4 || 3500))}</td></tr>
-                    <tr><td>Insurance & Other</td><td>{formatINR(Number(record.totalDeductions * 0.1 || 500))}</td></tr>
-                    <tr className="subtotal"><td>Total Deductions</td><td>{formatINR(record.totalDeductions)}</td></tr>
+                    <tr><td>Provident Fund (PF)</td><td>{formatINR(displayRecord.pf)}</td></tr>
+                    <tr><td>Professional Tax (PT)</td><td>{formatINR(displayRecord.professionalTax)}</td></tr>
+                    <tr><td>TDS (Income Tax)</td><td>{formatINR(displayRecord.tds)}</td></tr>
+                    <tr><td>ESI</td><td>{formatINR(displayRecord.esi)}</td></tr>
+                    <tr><td>Insurance & Other</td><td>{formatINR(displayRecord.insuranceOtherDeduction)}</td></tr>
+                    <tr className="subtotal"><td>Total Deductions</td><td>{formatINR(displayRecord.totalDeductions)}</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -1939,7 +2032,7 @@ function InteractivePayslipModal({ record, onClose, setToast }) {
             <div className="payslip-net-box">
               <div>
                 <span style={{ fontSize: "12px", color: "var(--cms-muted)", display: "block" }}>Net Take-Home Salary</span>
-                <strong style={{ fontSize: "22px", color: "#108E50" }}>{formatINR(record.netSalary)}</strong>
+                <strong style={{ fontSize: "22px", color: "#108E50" }}>{formatINR(displayRecord.netSalary)}</strong>
               </div>
               <div style={{ textAlign: "right", fontSize: "11px", color: "var(--cms-muted)" }}>
                 <div>This is a computer-generated salary slip.</div>
@@ -2062,7 +2155,7 @@ function SearchableInputPicker({ label, placeholder, value, onChange, options = 
 // ----------------------------------------------------------------------
 // SCREEN — ADD / EDIT SALARY STRUCTURE
 // ----------------------------------------------------------------------
-function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
+function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
   const existing = useMemo(() => {
     if (!id) return null;
     return (store.structures || []).find((s) => s.id === id || String(s.numericId) === String(id));
@@ -2072,12 +2165,14 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
     if (existing) {
       return {
         name: existing.name || "",
-        staffType: existing.staffType || "Teaching",
+        staffType: existing.staffType || "",
         department: existing.department || "",
+        departmentId: existing.departmentId ?? null,
         designation: existing.designation || "",
-        effectiveFrom: existing.effectiveFrom || new Date().toISOString().split("T")[0],
-        status: existing.status || "Active",
-        taxability: existing.taxability || "Taxable",
+        designationId: existing.designationId ?? null,
+        effectiveFrom: existing.effectiveFrom || "",
+        status: existing.status || "",
+        taxability: existing.taxability || "",
         basicPay: Number(existing.basicPay || 0),
         hra: Number(existing.hra || 0),
         da: Number(existing.da || 0),
@@ -2100,73 +2195,114 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
     }
     return {
       name: "",
-      staffType: "Teaching",
+      staffType: "",
       department: "",
       designation: "",
-      effectiveFrom: new Date().toISOString().split("T")[0],
-      status: "Active",
-      taxability: "Taxable",
-      basicPay: 50000,
-      hra: 15000,
-      da: 8000,
-      specialAllowance: 5000,
-      transportAllowance: 3000,
-      medicalAllowance: 2000,
-      academicAllowance: 2000,
-      otherAllowances: 0,
-      pfApplicable: true,
-      pf: 6000,
-      employerPf: 6000,
+      effectiveFrom: "",
+      status: "",
+      taxability: "",
+      basicPay: "",
+      hra: "",
+      da: "",
+      specialAllowance: "",
+      transportAllowance: "",
+      medicalAllowance: "",
+      academicAllowance: "",
+      otherAllowances: "",
+      pfApplicable: false,
+      pf: "",
+      employerPf: "",
       esiApplicable: false,
-      esi: 0,
-      ptApplicable: true,
-      professionalTax: 200,
-      tds: 3500,
-      insurance: 1000,
-      otherDeductions: 0,
+      esi: "",
+      ptApplicable: false,
+      professionalTax: "",
+      tds: "",
+      insurance: "",
+      otherDeductions: "",
     };
   });
 
-  const defaultDepartments = useMemo(() => [
-    "Computer Science", "Mathematics", "Physics", "Chemistry", "English",
-    "Administration", "Accounts", "Library", "Maintenance", "Transport",
-    "Electronics", "Mechanical Engineering", "Civil Engineering", "Commerce"
-  ], []);
+  useEffect(() => {
+    if (!existing) return;
+    setFormData((previous) => ({
+      ...previous,
+      name: existing.name || "",
+      staffType: existing.staffType || "",
+      department: existing.department || "",
+      departmentId: existing.departmentId ?? null,
+      designation: existing.designation || "",
+      designationId: existing.designationId ?? null,
+      effectiveFrom: existing.effectiveFrom || "",
+      status: existing.status || "",
+      basicPay: Number(existing.basicPay ?? 0),
+      hra: Number(existing.hra ?? 0),
+      da: Number(existing.da ?? 0),
+      transportAllowance: Number(existing.transportAllowance ?? 0),
+      medicalAllowance: Number(existing.medicalAllowance ?? 0),
+      otherAllowances: Number(existing.otherAllowances ?? 0),
+      pfApplicable: Number(existing.pf ?? 0) > 0,
+      pf: Number(existing.pf ?? 0),
+      esi: Number(existing.esi ?? 0),
+      esiApplicable: Number(existing.esi ?? 0) > 0,
+      ptApplicable: Number(existing.professionalTax ?? 0) > 0,
+      professionalTax: Number(existing.professionalTax ?? 0),
+      tds: Number(existing.tds ?? 0),
+      insurance: Number(existing.insurance ?? 0),
+    }));
+  }, [existing?.id]);
 
-  const departmentOptions = useMemo(() => {
-    let saved = [];
-    try {
-      saved = JSON.parse(sessionStorage.getItem("pjc-ui-departments") || "[]")
-        .map((item) => item.name)
+  const [departmentRows, setDepartmentRows] = useState([]);
+  const [designationRows, setDesignationRows] = useState([]);
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      apiClient.get(apiEndpoints.departments.getAll, { skipGlobalLoader: true }),
+      apiClient.get(apiEndpoints.designations.getAll, { skipGlobalLoader: true }),
+    ]).then((results) => {
+      if (!active) return;
+      if (results[0].status === "fulfilled") setDepartmentRows(getPayrollList(results[0].value));
+      if (results[1].status === "fulfilled") setDesignationRows(getPayrollList(results[1].value));
+      const failedLookups = results
+        .map((result, index) => result.status === "rejected" ? ["departments", "designations"][index] : null)
         .filter(Boolean);
-    } catch {}
-    return Array.from(new Set([...saved, ...defaultDepartments]));
-  }, [defaultDepartments]);
+      if (failedLookups.length) setToast(`Unable to load ${failedLookups.join(" and ")} for salary structures.`);
+    });
+    return () => { active = false; };
+  }, [setToast]);
 
-  const defaultDesignations = useMemo(() => [
-    "HOD", "Professor", "Associate Professor", "Assistant Professor",
-    "Senior Lecturer", "Junior Lecturer", "Lecturer", "Lab Technician",
-    "Administrative Officer", "Accountant", "Librarian", "Office Assistant",
-    "System Administrator", "Physical Director"
-  ], []);
+  const departmentOptions = useMemo(() => Array.from(new Set(
+    departmentRows.map((department) => getPayrollField(department, "departmentName", "name")).filter(Boolean)
+  )), [departmentRows]);
+  const designationOptions = useMemo(() => Array.from(new Set(
+    designationRows.map((designation) => getPayrollField(designation, "designationName", "name")).filter(Boolean)
+  )), [designationRows]);
 
   // Update PF automatically when Basic Pay or PF toggle changes
   useEffect(() => {
-    if (formData.pfApplicable) {
-      const computedPf = Math.round(Number(formData.basicPay || 0) * 0.12);
+    if (existing) return;
+    if (!formData.pfApplicable) {
       setFormData((prev) => ({
         ...prev,
-        pf: computedPf,
-        employerPf: computedPf,
+        pf: "",
+        employerPf: "",
       }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        pf: 0,
-        employerPf: 0,
-      }));
+      return;
     }
-  }, [formData.basicPay, formData.pfApplicable]);
+
+    const computedPf = formData.basicPay === ""
+      ? ""
+      : Math.round(Number(formData.basicPay || 0) * 0.12);
+    setFormData((prev) => ({
+      ...prev,
+      pf: computedPf,
+      employerPf: computedPf,
+    }));
+  }, [existing, formData.basicPay, formData.pfApplicable]);
+
+  const setAmount = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value === "" ? "" : Number(value) }));
+  };
+  const amountDisplay = (value) => value === "" || value == null ? "—" : formatINR(value);
 
   const grossSalary = useMemo(() => {
     return Number(formData.basicPay || 0) + Number(formData.hra || 0) + Number(formData.da || 0) +
@@ -2183,16 +2319,38 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
 
   const netSalary = useMemo(() => calculateNetSalary(grossSalary, totalDeductions), [grossSalary, totalDeductions]);
   const ctc = useMemo(() => grossSalary + Number(formData.employerPf || 0), [grossSalary, formData.employerPf]);
+  const hasEnteredEarnings = [
+    formData.basicPay, formData.hra, formData.da, formData.specialAllowance,
+    formData.transportAllowance, formData.medicalAllowance, formData.academicAllowance,
+    formData.otherAllowances,
+  ].some((value) => value !== "" && value != null);
+  const hasEnteredDeductions = [
+    formData.pf, formData.esi, formData.professionalTax, formData.tds,
+    formData.insurance, formData.otherDeductions,
+  ].some((value) => value !== "" && value != null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name) return;
+    if (!formData.name || !formData.staffType) return;
+
+    const departmentMatch = departmentRows.find((department) => getPayrollField(department, "departmentName", "name") === formData.department);
+    const designationMatch = designationRows.find((designation) => getPayrollField(designation, "designationName", "name") === formData.designation);
+    const departmentId = formData.departmentId ?? getPayrollField(departmentMatch, "departmentId", "id") ?? null;
+    const designationId = formData.designationId ?? getPayrollField(designationMatch, "designationId", "id") ?? null;
+    if (formData.department && !departmentId) {
+      setToast("Select a department returned by the Departments API so its ID can be saved.");
+      return;
+    }
+    if (formData.designation && !designationId) {
+      setToast("Select a designation returned by the Designations API so its ID can be saved.");
+      return;
+    }
 
     const payload = {
       structureName: formData.name,
-      staffType: formData.staffType || "Teaching",
-      departmentId: null,
-      designationId: null,
+      staffType: formData.staffType,
+      departmentId,
+      designationId,
       basicPay: Number(formData.basicPay || 0),
       hra: Number(formData.hra || 0),
       da: Number(formData.da || 0),
@@ -2204,61 +2362,30 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
       tds: Number(formData.tds || 0),
       esi: Number(formData.esi || 0),
       insuranceOtherDeduction: Number(formData.insurance || 0) + Number(formData.otherDeductions || 0),
-      status: formData.status || "Active",
+      status: formData.status,
     };
 
-    let targetNumericId = existing?.numericId || parseInt(String(id || "").replace(/\D+/g, ""), 10) || null;
-    let targetId = existing?.id || id || `struct-${Date.now()}`;
-
     if (existing || id) {
-      if (targetNumericId) {
-        try {
-          await payrollApi.updateSalaryStructure(targetNumericId, payload);
-        } catch (err) {
-          console.warn("Failed to update structure via API, persisting to local store:", err);
-        }
+      const targetNumericId = getNumericApiId(existing?.numericId);
+      if (!targetNumericId) {
+        setToast("The API did not provide a salary structure ID, so it cannot be updated.");
+        return;
       }
-      const updatedStructure = {
-        ...existing,
-        ...formData,
-        id: targetId,
-        numericId: targetNumericId,
-        grossSalary,
-        totalDeductions,
-        netSalary,
-        ctc,
-      };
-      setStore((prev) => ({
-        ...prev,
-        structures: prev.structures.map((s) => (s.id === targetId || String(s.numericId) === String(targetNumericId) ? updatedStructure : s)),
-      }));
-      setToast("Salary Structure updated successfully!");
+      try {
+        await payrollApi.updateSalaryStructure(targetNumericId, payload);
+      } catch (err) {
+        setToast(`Unable to update salary structure: ${getApiErrorMessage(err)}`);
+        return;
+      }
+      setToast("Salary structure updated successfully.");
     } else {
       try {
-        const res = await payrollApi.createSalaryStructure(payload);
-        if (res?.id || res?.Id) {
-          targetNumericId = res.id || res.Id;
-          targetId = `struct-${targetNumericId}`;
-        }
+        await payrollApi.createSalaryStructure(payload);
       } catch (err) {
-        console.warn("Failed to create structure via API, persisting to local store:", err);
+        setToast(`Unable to create salary structure: ${getApiErrorMessage(err)}`);
+        return;
       }
-
-      const newStructure = {
-        ...formData,
-        id: targetId,
-        numericId: targetNumericId,
-        grossSalary,
-        totalDeductions,
-        netSalary,
-        ctc,
-        assignedCount: 0,
-      };
-      setStore((prev) => ({
-        ...prev,
-        structures: [newStructure, ...prev.structures],
-      }));
-      setToast("Salary Structure created successfully!");
+      setToast("Salary structure created successfully.");
     }
     navigate("/dashboard/payroll?tab=structures");
   };
@@ -2281,11 +2408,12 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
               <div className="salary-form-grid-3">
                 <div className="salary-form-group">
                   <label>Structure Name *</label>
-                  <input type="text" required placeholder="e.g. Senior Professor Grade A" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+                  <input type="text" required placeholder="Enter structure name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                 </div>
                 <div className="salary-form-group">
                   <label>Staff Type *</label>
-                  <select value={formData.staffType} onChange={(e) => setFormData({ ...formData, staffType: e.target.value })}>
+                  <select required value={formData.staffType} onChange={(e) => setFormData({ ...formData, staffType: e.target.value })}>
+                    <option value="">Select staff type</option>
                     <option value="Teaching">Teaching</option>
                     <option value="Non-Teaching">Non-Teaching</option>
                     <option value="Both">Both</option>
@@ -2296,14 +2424,20 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
                   placeholder="Search department..."
                   value={formData.department}
                   options={departmentOptions}
-                  onChange={(val) => setFormData({ ...formData, department: val })}
+                  onChange={(val) => {
+                    const match = departmentRows.find((department) => getPayrollField(department, "departmentName", "name") === val);
+                    setFormData({ ...formData, department: val, departmentId: getPayrollField(match, "departmentId", "id") ?? null });
+                  }}
                 />
                 <SearchableInputPicker
                   label="Designation"
                   placeholder="Search designation..."
                   value={formData.designation}
-                  options={defaultDesignations}
-                  onChange={(val) => setFormData({ ...formData, designation: val })}
+                  options={designationOptions}
+                  onChange={(val) => {
+                    const match = designationRows.find((designation) => getPayrollField(designation, "designationName", "name") === val);
+                    setFormData({ ...formData, designation: val, designationId: getPayrollField(match, "designationId", "id") ?? null });
+                  }}
                 />
                 <div className="salary-form-group">
                   <label>Effective From *</label>
@@ -2311,7 +2445,8 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
                 </div>
                 <div className="salary-form-group">
                   <label>Status *</label>
-                  <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
+                  <select required value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })}>
+                    <option value="">Select status</option>
                     <option value="Active">Active</option>
                     <option value="Inactive">Inactive</option>
                   </select>
@@ -2322,35 +2457,35 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
               <div className="salary-form-grid-3">
                 <div className="salary-form-group">
                   <label>Basic Pay *</label>
-                  <input type="number" required min="0" value={formData.basicPay} onChange={(e) => setFormData({ ...formData, basicPay: Number(e.target.value) })} />
+                  <input type="number" required min="0" placeholder="Enter basic pay" value={formData.basicPay} onChange={(e) => setAmount("basicPay", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>HRA (House Rent Allowance)</label>
-                  <input type="number" min="0" value={formData.hra} onChange={(e) => setFormData({ ...formData, hra: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter HRA" value={formData.hra} onChange={(e) => setAmount("hra", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>DA (Dearness Allowance)</label>
-                  <input type="number" min="0" value={formData.da} onChange={(e) => setFormData({ ...formData, da: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter DA" value={formData.da} onChange={(e) => setAmount("da", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Special Allowance</label>
-                  <input type="number" min="0" value={formData.specialAllowance} onChange={(e) => setFormData({ ...formData, specialAllowance: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter special allowance" value={formData.specialAllowance} onChange={(e) => setAmount("specialAllowance", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Transport Allowance</label>
-                  <input type="number" min="0" value={formData.transportAllowance} onChange={(e) => setFormData({ ...formData, transportAllowance: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter transport allowance" value={formData.transportAllowance} onChange={(e) => setAmount("transportAllowance", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Medical Allowance</label>
-                  <input type="number" min="0" value={formData.medicalAllowance} onChange={(e) => setFormData({ ...formData, medicalAllowance: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter medical allowance" value={formData.medicalAllowance} onChange={(e) => setAmount("medicalAllowance", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Academic / Research Allowance</label>
-                  <input type="number" min="0" value={formData.academicAllowance} onChange={(e) => setFormData({ ...formData, academicAllowance: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter academic / research allowance" value={formData.academicAllowance} onChange={(e) => setAmount("academicAllowance", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Other Allowances</label>
-                  <input type="number" min="0" value={formData.otherAllowances} onChange={(e) => setFormData({ ...formData, otherAllowances: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter other allowances" value={formData.otherAllowances} onChange={(e) => setAmount("otherAllowances", e.target.value)} />
                 </div>
               </div>
 
@@ -2361,43 +2496,43 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
                   <strong>PF Applicable (12% of Basic)</strong>
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", cursor: "pointer" }}>
-                  <input type="checkbox" checked={formData.esiApplicable} onChange={(e) => setFormData({ ...formData, esiApplicable: e.target.checked })} />
+                  <input type="checkbox" checked={formData.esiApplicable} onChange={(e) => setFormData({ ...formData, esiApplicable: e.target.checked, esi: e.target.checked ? formData.esi : "" })} />
                   <strong>ESI Applicable (1.75%)</strong>
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", cursor: "pointer" }}>
                   <input
                     type="checkbox"
                     checked={formData.ptApplicable}
-                    onChange={(e) => setFormData({ ...formData, ptApplicable: e.target.checked, professionalTax: e.target.checked ? 200 : 0 })}
+                    onChange={(e) => setFormData({ ...formData, ptApplicable: e.target.checked, professionalTax: e.target.checked ? formData.professionalTax : "" })}
                   />
-                  <strong>Professional Tax Applicable (₹200)</strong>
+                  <strong>Professional Tax Applicable</strong>
                 </label>
               </div>
 
               <div className="salary-form-grid-3">
                 <div className="salary-form-group">
                   <label>Employee PF (12% Basic)</label>
-                  <input type="number" min="0" value={formData.pf} onChange={(e) => setFormData({ ...formData, pf: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Calculated when PF applies" value={formData.pf} onChange={(e) => setAmount("pf", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Employer PF (12% - CTC Cost)</label>
-                  <input type="number" min="0" value={formData.employerPf} onChange={(e) => setFormData({ ...formData, employerPf: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Calculated when PF applies" value={formData.employerPf} onChange={(e) => setAmount("employerPf", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Professional Tax (PT)</label>
-                  <input type="number" min="0" value={formData.professionalTax} onChange={(e) => setFormData({ ...formData, professionalTax: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter professional tax" value={formData.professionalTax} onChange={(e) => setAmount("professionalTax", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>TDS (Income Tax)</label>
-                  <input type="number" min="0" value={formData.tds} onChange={(e) => setFormData({ ...formData, tds: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter TDS" value={formData.tds} onChange={(e) => setAmount("tds", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>ESI Deduction</label>
-                  <input type="number" min="0" value={formData.esi} onChange={(e) => setFormData({ ...formData, esi: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter ESI deduction" value={formData.esi} onChange={(e) => setAmount("esi", e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Insurance / Other Deductions</label>
-                  <input type="number" min="0" value={formData.insurance} onChange={(e) => setFormData({ ...formData, insurance: Number(e.target.value) })} />
+                  <input type="number" min="0" placeholder="Enter insurance / other deductions" value={formData.insurance} onChange={(e) => setAmount("insurance", e.target.value)} />
                 </div>
               </div>
 
@@ -2410,26 +2545,26 @@ function AddSalaryStructureScreen({ id, store, setStore, navigate, setToast }) {
             {/* Live Breakup Preview */}
             <div className="salary-preview-sticky">
               <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 700 }}>Live Calculation Preview</h4>
-              <div className="breakup-row"><span>Basic Pay</span><strong>{formatINR(formData.basicPay)}</strong></div>
-              <div className="breakup-row"><span>HRA</span><span>{formatINR(formData.hra)}</span></div>
-              <div className="breakup-row"><span>DA</span><span>{formatINR(formData.da)}</span></div>
-              <div className="breakup-row"><span>Allowances</span><span>{formatINR(formData.specialAllowance + formData.transportAllowance + formData.academicAllowance)}</span></div>
-              <div className="breakup-row total"><span>Gross Earnings</span><strong style={{ color: "#6F8400" }}>{formatINR(grossSalary)}</strong></div>
+              <div className="breakup-row"><span>Basic Pay</span><strong>{amountDisplay(formData.basicPay)}</strong></div>
+              <div className="breakup-row"><span>HRA</span><span>{amountDisplay(formData.hra)}</span></div>
+              <div className="breakup-row"><span>DA</span><span>{amountDisplay(formData.da)}</span></div>
+              <div className="breakup-row"><span>Allowances</span><span>{[formData.specialAllowance, formData.transportAllowance, formData.academicAllowance].some((value) => value !== "" && value != null) ? formatINR(Number(formData.specialAllowance || 0) + Number(formData.transportAllowance || 0) + Number(formData.academicAllowance || 0)) : "—"}</span></div>
+              <div className="breakup-row total"><span>Gross Earnings</span><strong style={{ color: "#6F8400" }}>{hasEnteredEarnings ? formatINR(grossSalary) : "—"}</strong></div>
 
               <div style={{ margin: "16px 0 8px", fontSize: "12px", fontWeight: 700, color: "var(--cms-muted)" }}>EMPLOYEE DEDUCTIONS</div>
-              <div className="breakup-row"><span>Employee PF (12%)</span><span>{formatINR(formData.pf)}</span></div>
-              <div className="breakup-row"><span>Professional Tax (PT)</span><span>{formatINR(formData.professionalTax)}</span></div>
-              <div className="breakup-row"><span>TDS (Income Tax)</span><span>{formatINR(formData.tds)}</span></div>
-              <div className="breakup-row total"><span>Total Deductions</span><strong style={{ color: "#B7791F" }}>{formatINR(totalDeductions)}</strong></div>
+              <div className="breakup-row"><span>Employee PF (12%)</span><span>{amountDisplay(formData.pf)}</span></div>
+              <div className="breakup-row"><span>Professional Tax (PT)</span><span>{amountDisplay(formData.professionalTax)}</span></div>
+              <div className="breakup-row"><span>TDS (Income Tax)</span><span>{amountDisplay(formData.tds)}</span></div>
+              <div className="breakup-row total"><span>Total Deductions</span><strong style={{ color: "#B7791F" }}>{hasEnteredDeductions ? formatINR(totalDeductions) : "—"}</strong></div>
 
               <div className="breakup-row net">
                 <span>Net Take-Home Salary</span>
-                <strong style={{ fontSize: "18px", color: "#108E50" }}>{formatINR(netSalary)}</strong>
+                <strong style={{ fontSize: "18px", color: "#108E50" }}>{hasEnteredEarnings || hasEnteredDeductions ? formatINR(netSalary) : "—"}</strong>
               </div>
 
               <div style={{ margin: "16px 0 8px", fontSize: "12px", fontWeight: 700, color: "var(--cms-muted)" }}>COMPANY CTC</div>
-              <div className="breakup-row"><span>Employer PF Contribution</span><span>{formatINR(formData.employerPf)}</span></div>
-              <div className="breakup-row total"><span>Total Cost to Company (CTC)</span><strong style={{ color: "var(--cms-primary-dark)" }}>{formatINR(ctc)}</strong></div>
+              <div className="breakup-row"><span>Employer PF Contribution</span><span>{amountDisplay(formData.employerPf)}</span></div>
+              <div className="breakup-row total"><span>Total Cost to Company (CTC)</span><strong style={{ color: "var(--cms-primary-dark)" }}>{hasEnteredEarnings || formData.employerPf !== "" ? formatINR(ctc) : "—"}</strong></div>
             </div>
           </div>
         </form>
@@ -2486,9 +2621,9 @@ function SalaryStructureDetailsScreen({ id, store, navigate, setModal, setToast 
             <div className="salary-form-section-title">Structure Summary</div>
             <div className="salary-form-grid-3" style={{ marginBottom: "20px" }}>
               <div><span>Staff Type:</span> <strong>{struct.staffType}</strong></div>
-              <div><span>Department:</span> <strong>{struct.department || "All Departments"}</strong></div>
-              <div><span>Designation:</span> <strong>{struct.designation || "All Roles"}</strong></div>
-              <div><span>Effective Date:</span> <strong>{struct.effectiveFrom}</strong></div>
+              <div><span>Department:</span> <strong>{struct.department || "—"}</strong></div>
+              <div><span>Designation:</span> <strong>{struct.designation || "—"}</strong></div>
+              <div><span>Effective Date:</span> <strong>{struct.effectiveFrom || "—"}</strong></div>
               <div><span>Status:</span> <span className="cms-badge cms-badge-success">{struct.status}</span></div>
               <div><span>Assigned Count:</span> <strong>{struct.assignedCount || 0} Staff</strong></div>
             </div>
@@ -2497,7 +2632,7 @@ function SalaryStructureDetailsScreen({ id, store, navigate, setModal, setToast 
             <div className="breakup-row"><span>Basic Pay</span><strong>{formatINR(struct.basicPay)}</strong></div>
             <div className="breakup-row"><span>HRA</span><span>{formatINR(struct.hra)}</span></div>
             <div className="breakup-row"><span>DA</span><span>{formatINR(struct.da)}</span></div>
-            <div className="breakup-row"><span>Special Allowance</span><span>{formatINR(struct.specialAllowance)}</span></div>
+            <div className="breakup-row"><span>Other Allowances</span><span>{formatINR(struct.otherAllowances)}</span></div>
             <div className="breakup-row"><span>Transport Allowance</span><span>{formatINR(struct.transportAllowance)}</span></div>
             <div className="breakup-row"><span>Medical Allowance</span><span>{formatINR(struct.medicalAllowance)}</span></div>
             <div className="breakup-row total"><span>Total Gross Earnings</span><strong style={{ color: "#6F8400" }}>{formatINR(struct.grossSalary)}</strong></div>
@@ -2518,7 +2653,7 @@ function SalaryStructureDetailsScreen({ id, store, navigate, setModal, setToast 
               <span>Net Monthly Salary</span>
               <strong style={{ fontSize: "20px", color: "#108E50" }}>{formatINR(struct.netSalary)}</strong>
             </div>
-            <div className="breakup-row"><span>Annual CTC Approx</span><strong>{formatINR(Number(struct.grossSalary) * 12 * 1.12)}</strong></div>
+            <div className="breakup-row"><span>Annual CTC Approx</span><strong>—</strong></div>
           </div>
         </div>
       </main>
@@ -2539,7 +2674,7 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
     if (!q) return staffList;
     return staffList.filter((s) => {
       const name = (s.name || "").toLowerCase();
-      const id = (s.id || "").toLowerCase();
+      const id = (s.staffCode || s.id || "").toLowerCase();
       const dept = (s.department || "").toLowerCase();
       return name.includes(q) || id.includes(q) || dept.includes(q);
     });
@@ -2561,7 +2696,7 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
           <input
             type="text"
             placeholder="Search staff by name / ID..."
-            value={open ? query : selectedStaff ? `${selectedStaff.name} (${selectedStaff.id})` : ""}
+            value={open ? query : selectedStaff ? `${selectedStaff.name} (${selectedStaff.staffCode || selectedStaff.id})` : ""}
             onFocus={() => {
               setQuery("");
               setOpen(true);
@@ -2612,61 +2747,81 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
     if (!id) return null;
     return (store.assignments || []).find((a) => a.id === id || String(a.numericId) === String(id));
   }, [id, store.assignments]);
+  const assignmentStaffType = existingAssignment?.staffType || staffType;
 
   const staffList = useMemo(() => {
-    const sourceList = Array.isArray(store.apiEmployees) && store.apiEmployees.length > 0
-      ? store.apiEmployees
-      : Array.isArray(store.assignments)
-      ? store.assignments
-      : [];
+    const sourceList = Array.isArray(store.apiEmployees) ? store.apiEmployees : [];
 
     return sourceList
-      .filter((a) => !staffType || a.staffType === staffType)
+      .filter((a) => !assignmentStaffType || a.staffType === assignmentStaffType)
       .map((a) => ({
-        id: String(a.rawStaffId || a.staffId || a.id),
-        staffCode: a.employeeId || a.staffId || a.staffCode || `STF-${a.rawStaffId || a.staffId}`,
-        rawStaffId: a.rawStaffId || a.staffId || parseInt(String(a.id || "").replace(/\D+/g, ""), 10) || 1,
-        name: a.staffName || a.name || `Staff #${a.rawStaffId || a.staffId}`,
-        department: a.departmentName || a.department || "General",
-        designation: a.designation || a.designationName || "-",
+        id: String(a.staffId ?? a.id ?? ""),
+        staffCode: a.employeeId || "",
+        staffType: a.staffType || "",
+        rawStaffId: getNumericApiId(a.staffId ?? a.id),
+        name: a.staffName || a.name || "",
+        department: a.departmentName || a.department || "",
+        designation: a.designation || a.designationName || "",
       }));
-  }, [store.apiEmployees, store.assignments, staffType]);
+  }, [store.apiEmployees, assignmentStaffType]);
 
   const [selectedStaffId, setSelectedStaffId] = useState(() => {
     if (existingAssignment) return String(existingAssignment.rawStaffId || existingAssignment.staffId);
-    return staffList[0]?.id || "101";
+    return "";
   });
   const [selectedStructId, setSelectedStructId] = useState(() => {
-    if (existingAssignment) return existingAssignment.structureId || store.structures[0]?.id || "";
-    return store.structures[0]?.id || "";
+    if (existingAssignment) return existingAssignment.structureId || "";
+    return "";
   });
   const [effectiveFrom, setEffectiveFrom] = useState(() => {
     if (existingAssignment?.effectiveFrom) return existingAssignment.effectiveFrom;
     return new Date().toISOString().split("T")[0];
   });
-  const [paymentMode, setPaymentMode] = useState(existingAssignment?.paymentMode || "Bank Transfer");
-  const [bankName, setBankName] = useState(existingAssignment?.bankName || "State Bank of India");
-  const [accountNumber, setAccountNumber] = useState(existingAssignment?.accountNumber || "9876543210123");
-  const [ifscCode, setIfscCode] = useState(existingAssignment?.ifscCode || "SBIN0001234");
-  const [panNumber, setPanNumber] = useState(existingAssignment?.panNumber || "ABCDE1234F");
-  const [uanNumber, setUanNumber] = useState(existingAssignment?.uanNumber || "100987654321");
+  const [paymentMode, setPaymentMode] = useState(existingAssignment?.paymentMode || "");
+  const [bankName, setBankName] = useState(existingAssignment?.bankName || "");
+  const [accountNumber, setAccountNumber] = useState(existingAssignment?.accountNumber || "");
+  const [ifscCode, setIfscCode] = useState(existingAssignment?.ifscCode || "");
+  const [panNumber, setPanNumber] = useState(existingAssignment?.panNumber || "");
+  const [uanNumber, setUanNumber] = useState(existingAssignment?.uanNumber || "");
+
+  useEffect(() => {
+    if (!existingAssignment) return;
+    setSelectedStaffId(String(existingAssignment.rawStaffId ?? ""));
+    setSelectedStructId(existingAssignment.structureId || "");
+    setEffectiveFrom(existingAssignment.effectiveFrom || "");
+    setPaymentMode(existingAssignment.paymentMode || "");
+    setBankName(existingAssignment.bankName || "");
+    setAccountNumber(existingAssignment.accountNumber || "");
+    setIfscCode(existingAssignment.ifscCode || "");
+    setPanNumber(existingAssignment.panNumber || "");
+    setUanNumber(existingAssignment.uanNumber || "");
+  }, [existingAssignment?.id]);
 
   const chosenStruct = useMemo(() => {
-    return store.structures.find((s) => s.id === selectedStructId) || store.structures[0];
+    return store.structures.find((s) => s.id === selectedStructId) || null;
   }, [store.structures, selectedStructId]);
 
   const chosenStaff = useMemo(() => {
-    return staffList.find((s) => s.id === selectedStaffId) || staffList[0];
+    return staffList.find((s) => s.id === selectedStaffId) || null;
   }, [staffList, selectedStaffId]);
 
   const handleSaveAssignment = async (e) => {
     e.preventDefault();
-    if (!chosenStaff || !chosenStruct) return;
+    if (!chosenStaff || !chosenStruct || !paymentMode) {
+      setToast("Select a staff member, salary structure, and payment mode.");
+      return;
+    }
 
-    let createdAsgnId = existingAssignment?.id || `asgn-${Date.now()}`;
-    const numericStaffId = parseInt(String(chosenStaff.rawStaffId || chosenStaff.id || "").replace(/\D+/g, ""), 10) || 1;
-    const numericStructId = parseInt(String(chosenStruct.numericId || chosenStruct.id || "").replace(/\D+/g, ""), 10) || 1;
-    const existingNumericId = existingAssignment?.numericId || parseInt(String(existingAssignment?.id || "").replace(/\D+/g, ""), 10) || null;
+    const numericStaffId = getNumericApiId(chosenStaff.rawStaffId);
+    const numericStructId = getNumericApiId(chosenStruct.numericId);
+    const existingNumericId = getNumericApiId(existingAssignment?.numericId);
+    if (!numericStaffId || !numericStructId || (existingAssignment && !existingNumericId)) {
+      setToast("A required numeric staff, salary structure, or assignment ID is missing from the API response.");
+      return;
+    }
+
+    let createdAsgnId = existingAssignment?.id || "";
+    let createdNumericId = existingNumericId;
 
     try {
       if (existingAssignment && existingNumericId) {
@@ -2679,7 +2834,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
           staffId: numericStaffId,
           salaryStructureId: numericStructId,
           effectiveFrom: effectiveFrom ? new Date(effectiveFrom).toISOString() : new Date().toISOString(),
-          paymentMode: paymentMode || "Bank Transfer",
+          paymentMode,
           bankName: bankName || "",
           accountNumber: accountNumber || "",
           ifscCode: ifscCode || "",
@@ -2687,20 +2842,27 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
           uanNumber: uanNumber || "",
         };
         const res = await payrollApi.createSalaryAssignment(payload);
-        if (res?.assignmentId || res?.AssignmentId || res?.id || res?.Id) {
-          createdAsgnId = `asgn-${res.assignmentId || res.AssignmentId || res.id || res.Id}`;
+        createdNumericId = getNumericApiId(getPayrollField(res, "assignmentId", "id"));
+        if (!createdNumericId) {
+          setToast("The API accepted the assignment but did not return its ID. Refresh the page to load it from the server.");
+          navigate("/dashboard/payroll?tab=employees");
+          return;
         }
+        createdAsgnId = `asgn-${createdNumericId}`;
       }
     } catch (err) {
-      console.warn("Failed to assign salary structure via API, persisting to local store:", err);
+      setToast(`Unable to save salary assignment: ${getApiErrorMessage(err)}`);
+      return;
     }
 
     const newAssignment = {
       id: createdAsgnId,
-      staffId: chosenStaff.staffCode || chosenStaff.id,
+      numericId: createdNumericId,
+      staffId: chosenStaff.staffCode || "",
       rawStaffId: numericStaffId,
+      rawStructureId: numericStructId,
       staffName: chosenStaff.name,
-      staffType,
+      staffType: chosenStaff.staffType || assignmentStaffType,
       department: chosenStaff.department,
       designation: chosenStaff.designation,
       structureId: chosenStruct.id,
@@ -2720,7 +2882,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
 
     setStore((prev) => ({
       ...prev,
-      assignments: [newAssignment, ...prev.assignments.filter((a) => a.staffId !== (chosenStaff.staffCode || chosenStaff.id))],
+      assignments: [newAssignment, ...prev.assignments.filter((a) => a.rawStaffId !== numericStaffId)],
     }));
 
     setToast(`Salary assigned successfully to ${chosenStaff.name}!`);
@@ -2744,7 +2906,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
               <div className="salary-form-section-title">Step 1 — Staff & Structure Selection</div>
               <div className="salary-form-grid-2">
                 <SearchableStaffPicker
-                  label={`Select ${staffType} Staff *`}
+                  label={`Select ${assignmentStaffType} Staff *`}
                   staffList={staffList}
                   selectedId={selectedStaffId}
                   onSelect={setSelectedStaffId}
@@ -2752,7 +2914,8 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
 
                 <div className="salary-form-group">
                   <label>Select Salary Structure *</label>
-                  <select value={selectedStructId} onChange={(e) => setSelectedStructId(e.target.value)}>
+                  <select required value={selectedStructId} onChange={(e) => setSelectedStructId(e.target.value)}>
+                    <option value="">Select salary structure</option>
                     {store.structures.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} ({s.staffType}) — Gross: {formatINR(s.grossSalary)}
@@ -2766,7 +2929,8 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
               <div className="salary-form-grid-3">
                 <div className="salary-form-group">
                   <label>Payment Mode</label>
-                  <select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
+                  <select required value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
+                    <option value="">Select payment mode</option>
                     <option value="Bank Transfer">Bank Transfer</option>
                     <option value="Cheque">Cheque</option>
                     <option value="Cash">Cash</option>
@@ -2774,23 +2938,23 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
                 </div>
                 <div className="salary-form-group">
                   <label>Bank Name</label>
-                  <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} />
+                  <input type="text" placeholder="Enter bank name" value={bankName} onChange={(e) => setBankName(e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>Account Number</label>
-                  <input type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} />
+                  <input type="text" placeholder="Enter account number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>IFSC Code</label>
-                  <input type="text" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} />
+                  <input type="text" placeholder="Enter IFSC code" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>PAN Number</label>
-                  <input type="text" value={panNumber} onChange={(e) => setPanNumber(e.target.value)} />
+                  <input type="text" placeholder="Enter PAN number" value={panNumber} onChange={(e) => setPanNumber(e.target.value)} />
                 </div>
                 <div className="salary-form-group">
                   <label>UAN / PF Number</label>
-                  <input type="text" value={uanNumber} onChange={(e) => setUanNumber(e.target.value)} />
+                  <input type="text" placeholder="Enter UAN / PF number" value={uanNumber} onChange={(e) => setUanNumber(e.target.value)} />
                 </div>
               </div>
 
@@ -2816,7 +2980,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
                     <strong style={{ fontSize: "18px", color: "#108E50" }}>{formatINR(chosenStruct.netSalary)}</strong>
                   </div>
                 </>
-              ) : null}
+              ) : <p className="salary-preview-empty">Select a salary structure to preview its breakdown.</p>}
             </div>
           </div>
         </form>
@@ -2880,12 +3044,12 @@ function SalaryAssignmentDetailsScreen({ id, store, navigate }) {
 
             <div className="salary-form-section-title">Bank & Statutory Accounts</div>
             <div className="salary-form-grid-3">
-              <div><span>Payment Mode:</span> <strong>{asgn.paymentMode || "Bank Transfer"}</strong></div>
-              <div><span>Bank:</span> <strong>{asgn.bankName || "State Bank of India"}</strong></div>
-              <div><span>Account No:</span> <strong>{asgn.accountNumber || "9876543210123"}</strong></div>
-              <div><span>IFSC:</span> <strong>{asgn.ifscCode || "SBIN0001234"}</strong></div>
-              <div><span>PAN:</span> <strong>{asgn.panNumber || "ABCDE1234F"}</strong></div>
-              <div><span>UAN / PF:</span> <strong>{asgn.uanNumber || "100987654321"}</strong></div>
+              <div><span>Payment Mode:</span> <strong>{asgn.paymentMode || "—"}</strong></div>
+              <div><span>Bank:</span> <strong>{asgn.bankName || "—"}</strong></div>
+              <div><span>Account No:</span> <strong>{asgn.accountNumber || "—"}</strong></div>
+              <div><span>IFSC:</span> <strong>{asgn.ifscCode || "—"}</strong></div>
+              <div><span>PAN:</span> <strong>{asgn.panNumber || "—"}</strong></div>
+              <div><span>UAN / PF:</span> <strong>{asgn.uanNumber || "—"}</strong></div>
             </div>
           </div>
 
@@ -3091,15 +3255,15 @@ function PayrollReportsScreen({ store, navigate, setToast }) {
       <main className="salary-page-container">
         <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-kpi-grid">
-          <div className="salary-kpi-card" onClick={() => setToast("Generating Monthly Salary Register...")}>
+          <div className="salary-kpi-card" onClick={() => setToast("The supplied Payroll APIs do not include a salary register export endpoint.")}>
             <div className="salary-kpi-icon"><FileSpreadsheet size={20} /></div>
             <div className="salary-kpi-data"><span>Monthly Register</span><strong>Download</strong></div>
           </div>
-          <div className="salary-kpi-card" onClick={() => setToast("Generating PF Monthly Return ECR...")}>
+          <div className="salary-kpi-card" onClick={() => setToast("The supplied Payroll APIs do not include a PF ECR export endpoint.")}>
             <div className="salary-kpi-icon"><ShieldAlert size={20} /></div>
             <div className="salary-kpi-data"><span>PF ECR File</span><strong>Generate</strong></div>
           </div>
-          <div className="salary-kpi-card" onClick={() => setToast("Generating TDS Form 16 Summary...")}>
+          <div className="salary-kpi-card" onClick={() => setToast("The supplied Payroll APIs do not include a TDS report export endpoint.")}>
             <div className="salary-kpi-icon"><DollarSign size={20} /></div>
             <div className="salary-kpi-data"><span>TDS Form 24Q</span><strong>Export</strong></div>
           </div>
@@ -3121,9 +3285,9 @@ function PayrollSettingsScreen({ store, setStore, navigate, setToast }) {
         <div className="salary-card-panel">
           <div className="salary-form-section-title">Statutory Contribution Rules</div>
           <div className="salary-form-grid-3">
-            <div className="salary-form-group"><label>Employee PF Rate (%)</label><input type="number" defaultValue={12} /></div>
-            <div className="salary-form-group"><label>Employer PF Rate (%)</label><input type="number" defaultValue={12} /></div>
-            <div className="salary-form-group"><label>Professional Tax (₹)</label><input type="number" defaultValue={200} /></div>
+            <div className="salary-form-group"><label>Employee PF Rate (%)</label><input type="number" /></div>
+            <div className="salary-form-group"><label>Employer PF Rate (%)</label><input type="number" /></div>
+            <div className="salary-form-group"><label>Professional Tax (₹)</label><input type="number" defaultValue="" /></div>
           </div>
         </div>
       </main>
@@ -3145,7 +3309,7 @@ function SalaryImportScreen({ navigate, setToast }) {
             <Upload size={40} color="var(--cms-primary)" style={{ marginBottom: "12px" }} />
             <h3>Upload Staff Salary Data</h3>
             <p style={{ color: "var(--cms-muted)", marginBottom: "20px" }}>Drag and drop CSV template file or browse your computer.</p>
-            <button type="button" className="cms-btn cms-btn-primary" onClick={() => { setToast("Import simulated successfully!"); navigate("/dashboard/payroll"); }}>
+            <button type="button" className="cms-btn cms-btn-primary" onClick={() => setToast("The supplied Payroll APIs do not include a salary import endpoint.")}>
               Upload CSV File
             </button>
           </div>

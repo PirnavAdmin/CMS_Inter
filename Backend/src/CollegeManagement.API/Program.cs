@@ -45,10 +45,16 @@ Dapper.SqlMapper.AddTypeHandler(new NullableTimeOnlyTypeHandler());
 #endregion
 
 #region Controllers & JSON
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<CollegeManagement.API.Filters.GlobalIsolationFilter>();
+    })
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new DateOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableDateOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new TimeOnlyJsonConverter());
+        options.JsonSerializerOptions.Converters.Add(new NullableTimeOnlyJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new TimeSpanJsonConverter());
         options.JsonSerializerOptions.Converters.Add(new NullableTimeSpanJsonConverter());
     });
@@ -231,6 +237,8 @@ builder.Services.AddScoped<IMarksService, MarksService>();
 builder.Services.AddScoped<IEvaluationService, EvaluationService>();
 builder.Services.AddScoped<IResultService, ResultService>();
 builder.Services.AddScoped<IPromotionService, PromotionService>();
+builder.Services.AddScoped<ICampusTransferRepository, CampusTransferRepository>();
+builder.Services.AddScoped<ICampusTransferService, CampusTransferService>();
 builder.Services.AddScoped<ITimetableService, TimetableService>();
 builder.Services.AddScoped<ITimetableSubstitutionService, TimetableSubstitutionService>();
 builder.Services.AddScoped<ITimetableExportService, TimetableExportService>();
@@ -512,3 +520,4 @@ app.MapControllers();
 #endregion
 
 app.Run();
+

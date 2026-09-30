@@ -308,10 +308,26 @@ namespace CollegeManagement.API.Controllers.V1
         }
         //generatenumber//
         [HttpPost("generate-number")]
-        public async Task<IActionResult> GenerateAdmissionNumber()
+        public async Task<IActionResult> GenerateAdmissionNumber([FromBody] GenerateAdmissionNumberRequestDto? request = null, [FromQuery] int? campusId = null)
         {
-            var admissionNumber =
-                await _service.GenerateAdmissionNumberAsync();
+            if (!campusId.HasValue || campusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                    int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                {
+                    campusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        campusId = claimCampusId;
+                    }
+                }
+            }
+
+            var admissionNumber = await _service.GenerateAdmissionNumberAsync(campusId, request?.BoardId, request?.AcademicYearId);
 
             return Ok(new
             {
@@ -540,5 +556,11 @@ namespace CollegeManagement.API.Controllers.V1
                 });
             }
         }
+    }
+
+    public class GenerateAdmissionNumberRequestDto
+    {
+        public int? BoardId { get; set; }
+        public int? AcademicYearId { get; set; }
     }
 }

@@ -33,5 +33,6 @@ namespace CollegeManagement.API.DTOs.Examination.Requests
         public string? ExamMode { get; set; }
         public decimal? MaxMarks { get; set; }
         public decimal? PassingMarks { get; set; }
+        public object? HallAssignments { get; set; }
     }
 }
