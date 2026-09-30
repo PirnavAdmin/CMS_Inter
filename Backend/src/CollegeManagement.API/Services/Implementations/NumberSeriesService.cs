@@ -58,14 +58,16 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync(int? campusId = null)
+        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync(int? campusId = null, string? board = null, string? academicYear = null)
         {
             var entities = await _repository.GetAllAsync(campusId);
             var dtos = new List<NumberSeriesResponseDto>();
 
+            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear };
+
             foreach (var entity in entities)
             {
-                dtos.Add(await MapToDtoAsync(entity));
+                dtos.Add(await MapToDtoAsync(entity, contextDto, campusId));
             }
 
             return dtos;
@@ -77,7 +79,7 @@ namespace CollegeManagement.API.Services.Implementations
             var entity = await _repository.GetByCodeAsync(code, campusId);
             if (entity == null) return null;
 
-            return await MapToDtoAsync(entity);
+            return await MapToDtoAsync(entity, null, campusId);
         }
 
         public async Task<NumberSeriesResponseDto?> UpdateSeriesAsync(string seriesCodeOrSlug, UpdateNumberSeriesDto dto, int? campusId = null)
@@ -97,7 +99,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (updated == null) return null;
 
-            return await MapToDtoAsync(updated);
+            return await MapToDtoAsync(updated, null, campusId);
         }
 
         public async Task<GenerateNumberSeriesResponseDto?> GenerateNextNumberAsync(string seriesCodeOrSlug, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
@@ -197,12 +199,29 @@ namespace CollegeManagement.API.Services.Implementations
                 isPreview: true);
         }
 
-        private async Task<NumberSeriesResponseDto> MapToDtoAsync(NumberSeriesConfiguration entity)
+        private async Task<NumberSeriesResponseDto> MapToDtoAsync(NumberSeriesConfiguration entity, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
         {
             var curSeq = entity.CurrentSequence;
             
-            // If it's a base series, ensure we use the absolute max sequence for previews
-            if (!entity.SeriesCode.Contains("|"))
+            if (context != null && (!string.IsNullOrWhiteSpace(context.Board) || !string.IsNullOrWhiteSpace(context.AcademicYear)))
+            {
+                var contextParts = new List<string>();
+                if (!string.IsNullOrWhiteSpace(context.Board)) contextParts.Add($"B:{context.Board.Trim().ToUpperInvariant()}");
+                if (!string.IsNullOrWhiteSpace(context.AcademicYear)) contextParts.Add($"AY:{context.AcademicYear.Trim().ToUpperInvariant()}");
+                
+                var actualCode = $"{entity.SeriesCode}|{string.Join("_", contextParts)}";
+                var subEntity = await _repository.GetByCodeAsync(actualCode, campusId);
+                
+                if (subEntity != null)
+                {
+                    curSeq = subEntity.CurrentSequence;
+                }
+                else
+                {
+                    curSeq = 0;
+                }
+            }
+            else if (!entity.SeriesCode.Contains("|"))
             {
                 var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode);
                 curSeq = Math.Max(curSeq, maxSeq);
@@ -217,7 +236,7 @@ namespace CollegeManagement.API.Services.Implementations
                 sequenceNumber: nextSeq,
                 numberLength: entity.NumberLength,
                 prefix: entity.Prefix,
-                context: null,
+                context: context,
                 referenceDate: DateTime.Now,
                 isPreview: true);
 
@@ -227,7 +246,7 @@ namespace CollegeManagement.API.Services.Implementations
                 sequenceNumber: curSeqToUse,
                 numberLength: entity.NumberLength,
                 prefix: entity.Prefix,
-                context: null,
+                context: context,
                 referenceDate: DateTime.Now,
                 isPreview: true);
 

@@ -370,7 +370,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<string> GenerateNextEmployeeIdAsync(string staffType, int campusId)
         {
             var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-            var seriesCode = isTeaching ? "STAFF_TCH" : "STAFF_NT";
+            var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
             
             using var conn = _context.Database.GetDbConnection();
             var parameters = new DynamicParameters();
