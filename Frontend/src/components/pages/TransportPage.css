@@ -288,6 +288,84 @@
   background: var(--cms-surface);
 }
 
+/* Report sub-tabs scroll inside their own viewport; the page itself never widens. */
+.cms-transport-report-tabs-nav {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin-top: -10px;
+}
+
+.cms-transport-report-tabs-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-inline: contain;
+}
+
+.cms-transport-report-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.cms-transport-report-tabs-scroll .cms-transport-tab {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+
+.cms-transport-report-tabs-scroll .cms-transport-tab.is-active {
+  border-color: var(--cms-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
+
+.cms-transport-report-tabs-arrow {
+  position: relative;
+  z-index: 2;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--cms-border);
+  border-radius: 50%;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  box-shadow: var(--cms-shadow);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.cms-transport-report-tabs-arrow:hover:not(:disabled) {
+  border-color: var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
+
+.cms-transport-report-tabs-arrow.is-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cms-transport-report-tabs-arrow:focus-visible {
+  outline: 2px solid var(--cms-primary);
+  outline-offset: 2px;
+}
+
 /* Required markers are scoped to Transport forms and stay attached to their labels. */
 .cms-transport-form-modal .cms-field > label {
   justify-content: flex-start;
@@ -560,23 +638,6 @@
   flex-wrap: nowrap;
 }
 
-.cms-transport-report-state {
-  margin: 0 20px 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--cms-border);
-  border-radius: 9px;
-  background: var(--cms-subtle);
-  color: var(--cms-muted);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.cms-transport-report-state.is-error {
-  border-color: color-mix(in srgb, var(--cms-red) 30%, var(--cms-border));
-  background: color-mix(in srgb, var(--cms-red) 7%, var(--cms-surface));
-  color: var(--cms-red);
-}
-
 .cms-transport-report-toolbar-compact {
   gap: 8px;
 }
@@ -617,10 +678,22 @@
   white-space: nowrap;
 }
 
-.cms-transport-table th:last-child,
-.cms-transport-table td:last-child {
+.cms-transport-table.has-actions th:last-child,
+.cms-transport-table.has-actions td:last-child {
   width: 126px;
   min-width: 126px;
+}
+
+.cms-transport-report-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.cms-transport-report-table th,
+.cms-transport-report-table td {
+  width: auto;
+  white-space: normal;
+  vertical-align: middle;
 }
 
 /* Driver data is kept directly below its matching header at desktop widths. */
