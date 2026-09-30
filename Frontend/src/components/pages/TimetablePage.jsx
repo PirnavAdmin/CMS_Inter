@@ -2593,14 +2593,20 @@ function LatestDraft({ notify }) {
 export default function TimetablePage({ screen = "latest" }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { selectedCampusId } = useCampusContext();
   const [toast, setToast] = useState("");
+  // A timetable view keeps several dependent lookups (rooms, periods,
+  // sections and subjects). Remount it when the global campus changes so no
+  // lookup or generated timetable state is retained from the previous campus.
+  const campusViewKey = `campus-${selectedCampusId || "none"}`;
   const view =
     screen === "latest" ? (
-      <MainTimetable notify={setToast} />
+      <MainTimetable key={campusViewKey} notify={setToast} />
     ) : screen === "draft" ? (
-      <Draft initial={location.state?.timetableContext} notify={setToast} />
+      <Draft key={campusViewKey} initial={location.state?.timetableContext} notify={setToast} />
     ) : screen === "generate" ? (
       <Generate
+        key={campusViewKey}
         notify={setToast}
         initial={location.state?.timetableContext}
         goDraft={(context) =>
@@ -2608,7 +2614,7 @@ export default function TimetablePage({ screen = "latest" }) {
         }
       />
     ) : (
-      <Structures notify={setToast} initial={location.state?.timetableContext} />
+      <Structures key={campusViewKey} notify={setToast} initial={location.state?.timetableContext} />
     );
   return (
     <div className="timetable-module">

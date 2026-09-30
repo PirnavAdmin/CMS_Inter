@@ -2594,7 +2594,9 @@ export default function TransportPage() {
               : activeReportTab === "transport-dashboard-report"
                 ? tableConfigs.vehicleAssignments.columns
                 : [{ key: "name", label: "Report Item" }, { key: "value", label: "Value" }];
-    const excludedReportColumnKeys = activeReportTab === "pickup-wise-reports"
+    const excludedReportColumnKeys = activeReportTab === "student-transport-reports"
+      ? new Set(["assignmentid", "id"])
+      : activeReportTab === "pickup-wise-reports"
       ? new Set(["pickuppointid", "pickupid"])
       : activeReportTab === "seat-occupancy-reports"
       ? new Set(["vehicleid"])
