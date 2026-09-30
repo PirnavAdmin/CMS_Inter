@@ -33,8 +33,8 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: !isHttpsApi ? true : false,
           agent: isHttpsApi ? new https.Agent({ keepAlive: false, rejectUnauthorized: false }) : undefined,
-          proxyTimeout: 10000,
-          timeout: 10000,
+          proxyTimeout: 120000,
+          timeout: 120000,
           headers: {
             "ngrok-skip-browser-warning": "true",
           },

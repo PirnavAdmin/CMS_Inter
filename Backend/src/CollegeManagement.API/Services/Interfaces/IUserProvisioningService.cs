@@ -36,6 +36,15 @@ namespace CollegeManagement.API.Services.Interfaces
             IDbTransaction? transaction = null);
 
         /// <summary>
+        /// Provisions or links a Parent/Guardian user account using the normalized parent email and mapping table.
+        /// If the parent account already exists (e.g. for a sibling), links the new child without changing credentials.
+        /// </summary>
+        Task<ParentUserProvisioningResult> ProvisionParentUserAsync(
+            ProvisionParentUserRequest request,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null);
+
+        /// <summary>
         /// Generic user account provisioning for advanced or custom role-based assignments.
         /// </summary>
         Task<UserProvisioningResult> ProvisionUserAsync(

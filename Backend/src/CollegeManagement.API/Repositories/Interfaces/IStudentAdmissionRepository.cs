@@ -51,7 +51,9 @@ namespace CollegeManagement.API.Repositories.Interfaces
             return Task.FromResult(bloodGroups);
         }
 
-        Task<string> GenerateAdmissionNumberAsync();
+        Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
+        Task<int> GetActualAdmissionCountAsync(int campusId, int boardId, int academicYearId);
+        Task SyncAdmissionSequenceAsync(int campusId, int boardId, int academicYearId, int correctSequence);
 
         // =====================================================
         // VERIFY / APPROVE / REJECT
