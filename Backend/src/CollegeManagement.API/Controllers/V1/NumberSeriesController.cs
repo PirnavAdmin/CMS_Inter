@@ -32,9 +32,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet]
         [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<NumberSeriesResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null)
+        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null)
         {
-            var result = await _numberSeriesService.GetAllSeriesAsync(campusId);
+            campusId = GetCampusIdFromRequest(campusId);
+            var result = await _numberSeriesService.GetAllSeriesAsync(campusId, board, academicYear);
             return Ok(result);
         }
 
@@ -47,9 +48,10 @@ namespace CollegeManagement.API.Controllers.V1
         [AllowAnonymous]
         [ProducesResponseType(typeof(NumberSeriesResponseDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetByCode(string seriesCode, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> GetByCode(string seriesCode, [FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null)
         {
-            var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, campusId);
+            campusId = GetCampusIdFromRequest(campusId);
+            var result = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, campusId, board, academicYear);
             if (result == null)
             {
                 return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });
@@ -73,6 +75,7 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(ModelState);
             }
 
+            campusId = GetCampusIdFromRequest(campusId);
             var result = await _numberSeriesService.UpdateSeriesAsync(seriesCode, dto, campusId);
             if (result == null)
             {
@@ -92,6 +95,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         public async Task<IActionResult> GenerateNext(string seriesCode, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] GenerateNumberSeriesRequestDto? context = null, [FromQuery] int? campusId = null)
         {
+            campusId = GetCampusIdFromRequest(campusId);
             var result = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, context, campusId);
             if (result == null)
             {
@@ -113,10 +117,32 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? pattern = null,
             [FromQuery] int? numberLength = null,
             [FromQuery] string? prefix = null,
-            [FromQuery] int? campusId = null)
+            [FromQuery] int? campusId = null,
+            [FromQuery] string? board = null,
+            [FromQuery] string? academicYear = null)
         {
-            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix, campusId);
+            campusId = GetCampusIdFromRequest(campusId);
+            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, pattern, numberLength, prefix, campusId, board, academicYear);
             return Ok(preview);
+        }
+        private int? GetCampusIdFromRequest(int? queryCampusId)
+        {
+            if (queryCampusId.HasValue && queryCampusId > 0)
+                return queryCampusId;
+
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+            {
+                return cId;
+            }
+
+            var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+            if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+            {
+                return claimCampusId;
+            }
+
+            return null;
         }
     }
 }

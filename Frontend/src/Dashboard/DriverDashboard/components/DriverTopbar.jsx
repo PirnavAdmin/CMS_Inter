@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Menu,
   Bell,
   RefreshCw,
   Calendar,
+  Building2,
+  ChevronDown,
   Shield,
   User,
   LogOut,
@@ -12,6 +14,7 @@ import {
   Info,
 } from "lucide-react";
 import { driverProfile, notificationsList } from "../data/driverMockData.js";
+import { useCampusContext } from "../../../context/CampusContext.jsx";
 
 export default function DriverTopbar({
   onMenuToggle,
@@ -21,9 +24,13 @@ export default function DriverTopbar({
 }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [campusOpen, setCampusOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [notifications, setNotifications] = useState(notificationsList);
+  const campusRef = useRef(null);
+  const { activeCampuses, campuses, selectedCampus, setSelectedCampus } = useCampusContext();
+  const campusOptions = activeCampuses?.length ? activeCampuses : campuses || [];
 
   const unreadCount = notifications.filter((n) => n.unread).length;
 
@@ -33,6 +40,26 @@ export default function DriverTopbar({
     month: "short",
     year: "numeric",
   });
+
+  useEffect(() => {
+    if (!campusOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (campusRef.current && !campusRef.current.contains(event.target)) {
+        setCampusOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setCampusOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [campusOpen]);
 
   const handleSyncClick = () => {
     setIsSyncing(true);
@@ -76,6 +103,68 @@ export default function DriverTopbar({
       <div className="dp-topbar-right">
         {syncMessage && <span className="dp-sync-feedback">{syncMessage}</span>}
 
+        <div className="dp-popover-wrapper dp-campus-selector" ref={campusRef}>
+          <button
+            type="button"
+            className={`dp-campus-trigger ${campusOpen ? "is-open" : ""}`}
+            onClick={() => {
+              setCampusOpen((prev) => !prev);
+              setNotificationsOpen(false);
+              setProfileOpen(false);
+            }}
+            disabled={!campusOptions.length}
+            aria-label="Select campus"
+            aria-haspopup="menu"
+            aria-expanded={campusOpen}
+            title={selectedCampus?.name || selectedCampus?.campusName || selectedCampus?.code || "Select campus"}
+          >
+            <span className="dp-campus-icon"><Building2 size={15} /></span>
+            <span className="dp-campus-copy">
+              <span className="dp-campus-label">Campus</span>
+              <span className="dp-campus-name">
+                {selectedCampus?.name || selectedCampus?.campusName || selectedCampus?.code || "Select campus"}
+              </span>
+            </span>
+            <ChevronDown size={13} className="dp-campus-chevron" />
+          </button>
+
+          {campusOpen && (
+            <div className="dp-dropdown-menu dp-campus-dropdown" role="menu" aria-label="Campus options">
+              <div className="dp-campus-dropdown-title">Select Campus</div>
+              <div className="dp-campus-options">
+                {campusOptions.length ? campusOptions.map((campus) => {
+                  const campusId = campus.id ?? campus.campusId;
+                  const selectedId = selectedCampus?.id ?? selectedCampus?.campusId;
+                  const isSelected = String(campusId) === String(selectedId);
+                  const campusName = campus.name || campus.campusName || campus.code || "Campus";
+
+                  return (
+                    <button
+                      key={campusId}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={isSelected}
+                      className={`dp-campus-option ${isSelected ? "is-selected" : ""}`}
+                      onClick={() => {
+                        setSelectedCampus(campus);
+                        setCampusOpen(false);
+                      }}
+                    >
+                      <span className="dp-campus-option-copy">
+                        <span className="dp-campus-option-name" title={campusName}>{campusName}</span>
+                        {campus.code && <small>{campus.code}</small>}
+                      </span>
+                      {isSelected && <CheckCircle size={15} />}
+                    </button>
+                  );
+                }) : (
+                  <div className="dp-campus-empty">No active campuses available</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         <button
           type="button"
           className={`dp-icon-btn ${isSyncing ? "is-syncing" : ""}`}
@@ -93,6 +182,7 @@ export default function DriverTopbar({
             onClick={() => {
               setNotificationsOpen((prev) => !prev);
               setProfileOpen(false);
+              setCampusOpen(false);
             }}
             title="Notifications"
           >
@@ -147,6 +237,7 @@ export default function DriverTopbar({
             onClick={() => {
               setProfileOpen((prev) => !prev);
               setNotificationsOpen(false);
+              setCampusOpen(false);
             }}
           >
             <div className="dp-profile-avatar">{driverProfile.initials}</div>
@@ -202,4 +293,3 @@ export default function DriverTopbar({
     </header>
   );
 }
-

@@ -84,27 +84,7 @@ export const FIXED_NUMBER_SERIES = [
       { format: "EXAM-{YEAR}-{SEQ}", example: "EXAM-2026-0001" },
     ],
   },
-  {
-    id: "certificate-number",
-    key: "certificate-number",
-    name: "Certificate Number",
-    category: "Certificates & Degrees",
-    prefix: "CND",
-    format: "CND-{YEAR}-{RANDOM}",
-    numberLength: 6,
-    startNumber: 1,
-    currentNumber: 439,
-    totalGenerated: 439,
-    currentExample: "CND-2026-82FC40",
-    description: "Configure certificate number format for generated certificates.",
-    status: "Active",
-    allowedTokens: ["{CERT}", "{TYPE}", "{YEAR}", "{SEQ}", "{RANDOM}"],
-    sampleFormats: [
-      { format: "CND-{YEAR}-{RANDOM}", example: "CND-2026-82FC40" },
-      { format: "CERT-{YEAR}-{SEQ}", example: "CERT-2026-000001" },
-      { format: "TC-{YEAR}-{RANDOM}", example: "TC-2026-A94F12" },
-    ],
-  },
+
   {
     id: "receipt-no",
     key: "receipt-no",

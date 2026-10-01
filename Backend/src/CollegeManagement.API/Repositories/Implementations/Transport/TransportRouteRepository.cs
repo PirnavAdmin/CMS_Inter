@@ -76,10 +76,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 : "New Route";
             var startLoc = !string.IsNullOrWhiteSpace(dto.StartLocation) && !dto.StartLocation.Equals("string", System.StringComparison.OrdinalIgnoreCase)
                 ? dto.StartLocation.Trim()
-                : (!string.IsNullOrWhiteSpace(dto.RouteStart) && !dto.RouteStart.Equals("string", System.StringComparison.OrdinalIgnoreCase) ? dto.RouteStart.Trim() : "Main City");
+                : "Main City";
             var endLoc = !string.IsNullOrWhiteSpace(dto.EndLocation) && !dto.EndLocation.Equals("string", System.StringComparison.OrdinalIgnoreCase)
                 ? dto.EndLocation.Trim()
-                : (!string.IsNullOrWhiteSpace(dto.RouteEnd) && !dto.RouteEnd.Equals("string", System.StringComparison.OrdinalIgnoreCase) ? dto.RouteEnd.Trim() : "College Campus");
+                : "College Campus";
 
             return await c.ExecuteScalarAsync<long>(
                 "sp_CreateTransportRoute",
@@ -90,16 +90,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_StartLocation = startLoc,
                     p_EndLocation = endLoc,
                     p_Distance = dto.DistanceKm,
-                    p_EstimatedDurationMinutes = dto.EstimatedTimeMinutes > 0 ? dto.EstimatedTimeMinutes : 30,
+                    p_EstimatedDurationMinutes = dto.EstimatedDurationMinutes > 0 ? dto.EstimatedDurationMinutes : 30,
                     p_DefaultMonthlyFee = dto.NonAcBaseFare,
                     p_MinRangeKm = dto.MinRangeKm > 0 ? dto.MinRangeKm : 5m,
                     p_NonAcBaseFare = dto.NonAcBaseFare > 0 ? dto.NonAcBaseFare : 1000m,
-                    p_NonAcRatePerKm = dto.NonAcRatePerKm ?? (dto.NonAcRateAddlKm > 0 ? dto.NonAcRateAddlKm : 100m),
+                    p_NonAcRatePerKm = dto.NonAcRatePerKm > 0 ? dto.NonAcRatePerKm : 100m,
                     p_AcBaseFare = dto.AcBaseFare > 0 ? dto.AcBaseFare : 1200m,
-                    p_AcRatePerKm = dto.AcRatePerKm ?? (dto.AcRateAddlKm > 0 ? dto.AcRateAddlKm : 150m),
+                    p_AcRatePerKm = dto.AcRatePerKm > 0 ? dto.AcRatePerKm : 150m,
                     p_Description = dto.Description ?? "",
                     p_Status = dto.Status ? (sbyte)1 : (sbyte)0,
-                    p_CreatedBy = userId
+                    p_CreatedBy = userId,
+                    p_CampusId = dto.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -114,19 +115,20 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_RouteId = routeId,
                     p_RouteCode = dto.RouteCode,
                     p_RouteName = dto.RouteName,
-                    p_StartLocation = dto.StartLocation ?? dto.RouteStart,
-                    p_EndLocation = dto.EndLocation ?? dto.RouteEnd,
+                    p_StartLocation = dto.StartLocation,
+                    p_EndLocation = dto.EndLocation,
                     p_Distance = dto.DistanceKm,
-                    p_EstimatedDurationMinutes = dto.EstimatedTimeMinutes > 0 ? dto.EstimatedTimeMinutes : 30,
+                    p_EstimatedDurationMinutes = dto.EstimatedDurationMinutes > 0 ? dto.EstimatedDurationMinutes : 30,
                     p_DefaultMonthlyFee = dto.NonAcBaseFare,
                     p_MinRangeKm = dto.MinRangeKm > 0 ? dto.MinRangeKm : 5m,
                     p_NonAcBaseFare = dto.NonAcBaseFare > 0 ? dto.NonAcBaseFare : 1000m,
-                    p_NonAcRatePerKm = dto.NonAcRatePerKm ?? (dto.NonAcRateAddlKm > 0 ? dto.NonAcRateAddlKm : 100m),
+                    p_NonAcRatePerKm = dto.NonAcRatePerKm > 0 ? dto.NonAcRatePerKm : 100m,
                     p_AcBaseFare = dto.AcBaseFare > 0 ? dto.AcBaseFare : 1200m,
-                    p_AcRatePerKm = dto.AcRatePerKm ?? (dto.AcRateAddlKm > 0 ? dto.AcRateAddlKm : 150m),
+                    p_AcRatePerKm = dto.AcRatePerKm > 0 ? dto.AcRatePerKm : 150m,
                     p_Description = dto.Description ?? "",
                     p_Status = dto.Status ? (sbyte)1 : (sbyte)0,
-                    p_UpdatedBy = userId
+                    p_UpdatedBy = userId,
+                    p_CampusId = dto.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;

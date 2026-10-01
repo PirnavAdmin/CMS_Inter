@@ -78,7 +78,7 @@ namespace CollegeManagement.API.Models
         public string? GuardianMobile { get; set; }
 
         [MaxLength(150)]
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal? AnnualIncome { get; set; }
@@ -214,3 +214,4 @@ namespace CollegeManagement.API.Models
         public string? HallTicketNumber { get; set; }
     }
 }
+

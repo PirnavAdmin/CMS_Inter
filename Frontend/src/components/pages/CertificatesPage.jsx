@@ -520,7 +520,7 @@ function formatDateDdMmYyyy(value) {
 const baseFormFields = [
   { name: "admissionNo", label: "Admission No.", type: "text", placeholder: "Enter admission number", required: true },
   { name: "type", label: "Certificate Type", type: "select", required: true },
-  { name: "purpose", label: "Purpose", placeholder: "e.g. Higher Education / Official Purpose", required: true },
+  { name: "purpose", label: "Purpose", placeholder: "e.g. Higher Education / Official Purpose" },
   { name: "requestDate", label: "Request Date", type: "date", required: true },
   { name: "remarks", label: "Remarks" },
 ];
@@ -1978,7 +1978,13 @@ export default function CertificatesPage() {
     try {
       let raw = null;
       try {
-        const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { skipGlobalLoader: true });
+        const { boardId, academicYearId, campusId } = academicCtx || {};
+        const params = {};
+        if (campusId) params.campusId = campusId;
+        if (boardId) params.boardId = boardId;
+        if (academicYearId) params.academicYearId = academicYearId;
+        
+        const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { params, skipGlobalLoader: true });
         raw = response?.data;
       } catch {
         try {
@@ -2230,9 +2236,7 @@ export default function CertificatesPage() {
       next.customType = "Enter the certificate type";
     }
 
-    if (!purpose) {
-      next.purpose = "Purpose is required";
-    } else if (purpose.length > MAX_PURPOSE_LENGTH) {
+    if (purpose.length > MAX_PURPOSE_LENGTH) {
       next.purpose = `Purpose should not exceed ${MAX_PURPOSE_LENGTH} characters`;
     }
 

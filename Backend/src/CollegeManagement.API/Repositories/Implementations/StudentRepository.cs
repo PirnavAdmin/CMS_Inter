@@ -1,7 +1,9 @@
+using CollegeManagement.API.Common;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
 using CollegeManagement.API.DTOs.Students.Responses;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
@@ -20,170 +22,151 @@ namespace CollegeManagement.API.Repositories
 
 
         // =========================================================
-        // GET ALL STUDENTS
+        // GET ALL / PAGED STUDENTS
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync(
+        public async Task<PagedResult<StudentListItemDto>> GetPagedAsync(
+            string? search = null,
             int? boardId = null,
+            int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
             int? programId = null,
             int? sectionId = null,
             string? status = null,
-            int? campusId = null)
+            bool? isActive = null,
+            int? campusId = null,
+            int pageNumber = 1,
+            int pageSize = 10)
         {
-            var connection = _context.Database.GetDbConnection();
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageSize < 1) pageSize = 10;
+            if (pageSize > 500) pageSize = 500;
 
-            try
+            var query = _context.Students
+                .Include(s => s.BoardNavigation)
+                .Include(s => s.AcademicYear)
+                .Include(s => s.AcademicLevelNavigation)
+                .Include(s => s.GroupNavigation)
+                .Include(s => s.SectionNavigation)
+                .Include(s => s.CampusNavigation)
+                .Include(s => s.ProgramNavigation)
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (campusId.HasValue && campusId.Value > 0)
+                query = query.Where(s => s.CampusId == campusId.Value);
+
+            if (boardId.HasValue && boardId.Value > 0)
+                query = query.Where(s => s.BoardId == boardId.Value);
+
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+                query = query.Where(s => s.AcademicYearId == academicYearId.Value);
+
+            if (academicLevelId.HasValue && academicLevelId.Value > 0)
+                query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
+
+            if (groupId.HasValue && groupId.Value > 0)
+                query = query.Where(s => s.GroupId == groupId.Value);
+
+            if (programId.HasValue && programId.Value > 0)
+                query = query.Where(s => s.ProgramId == programId.Value);
+
+            if (sectionId.HasValue && sectionId.Value > 0)
+                query = query.Where(s => s.SectionId == sectionId.Value);
+
+            if (!string.IsNullOrWhiteSpace(status))
+                query = query.Where(s => s.Status == status);
+
+            if (isActive.HasValue)
+                query = query.Where(s => s.IsActive == isActive.Value);
+
+            if (!string.IsNullOrWhiteSpace(search))
             {
-                var parameters = new DynamicParameters();
-                if (campusId.HasValue && campusId.Value > 0)
-                {
-                    parameters.Add("p_CampusId", campusId.Value, DbType.Int32);
-                }
-                else
-                {
-                    parameters.Add("p_CampusId", null, DbType.Int32);
-                }
-
-                var result = (await connection.QueryAsync<StudentListItemDto>(
-                    "sp_GetAllStudents",
-                    parameters,
-                    commandType: CommandType.StoredProcedure)).ToList();
-
-                if (campusId.HasValue && campusId.Value > 0)
-                {
-                    result = result.Where(x => x.CampusId == campusId.Value).ToList();
-                }
-                if (boardId.HasValue && boardId.Value > 0)
-                {
-                    result = result.Where(x => x.BoardId == boardId.Value).ToList();
-                }
-                if (academicLevelId.HasValue && academicLevelId.Value > 0)
-                {
-                    result = result.Where(x => x.AcademicLevelId == academicLevelId.Value).ToList();
-                }
-                if (groupId.HasValue && groupId.Value > 0)
-                {
-                    result = result.Where(x => x.GroupId == groupId.Value).ToList();
-                }
-                if (programId.HasValue && programId.Value > 0)
-                {
-                    result = result.Where(x => x.ProgramId == programId.Value).ToList();
-                }
-                if (sectionId.HasValue && sectionId.Value > 0)
-                {
-                    result = result.Where(x => x.SectionId == sectionId.Value).ToList();
-                }
-                if (!string.IsNullOrWhiteSpace(status))
-                {
-                    result = result.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
-                }
-
-                return result;
+                var sTerm = search.Trim();
+                query = query.Where(s =>
+                    s.StudentName.Contains(sTerm) ||
+                    (s.AdmissionNo != null && s.AdmissionNo.Contains(sTerm)) ||
+                    (s.RollNo != null && s.RollNo.Contains(sTerm)) ||
+                    (s.MobileNumber != null && s.MobileNumber.Contains(sTerm)) ||
+                    (s.Email != null && s.Email.Contains(sTerm)));
             }
-            catch
+
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .OrderBy(s => s.StudentName)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(s => new StudentListItemDto
+                {
+                    StudentId = s.StudentId,
+                    AdmissionNo = s.AdmissionNo ?? "",
+                    RollNo = s.RollNo ?? "",
+                    StudentName = s.StudentName,
+                    Photo = s.Photo,
+                    Gender = s.Gender,
+                    Email = s.Email,
+                    MobileNumber = s.MobileNumber,
+                    CampusId = s.CampusId,
+                    CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
+                    BoardId = s.BoardId,
+                    BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
+                    AcademicYearId = s.AcademicYearId,
+                    AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
+                    AcademicLevelId = s.AcademicLevelId ?? 0,
+                    AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
+                    GroupId = s.GroupId ?? 0,
+                    GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
+                    SectionId = s.SectionId ?? 0,
+                    SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
+                    ProgramId = s.ProgramId ?? 0,
+                    ProgramName = s.ProgramNavigation != null ? s.ProgramNavigation.ProgramName : null,
+                    IsActive = s.IsActive,
+                    Status = s.Status,
+                    CreatedAt = s.CreatedAt,
+                    StudentType = s.StudentType,
+                    TransportRequired = s.TransportRequired,
+                    HostelBlock = s.HostelBlock,
+                    BusRoute = s.BusRoute
+                })
+                .ToListAsync();
+
+            return new PagedResult<StudentListItemDto>
             {
-                try
-                {
-                    var result = (await connection.QueryAsync<StudentListItemDto>(
-                        "sp_GetAllStudents",
-                        commandType: CommandType.StoredProcedure)).ToList();
+                Items = items,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                TotalCount = totalCount
+            };
+        }
 
-                    if (campusId.HasValue && campusId.Value > 0)
-                    {
-                        result = result.Where(x => x.CampusId == campusId.Value).ToList();
-                    }
-                    if (boardId.HasValue && boardId.Value > 0)
-                    {
-                        result = result.Where(x => x.BoardId == boardId.Value).ToList();
-                    }
-                    if (academicLevelId.HasValue && academicLevelId.Value > 0)
-                    {
-                        result = result.Where(x => x.AcademicLevelId == academicLevelId.Value).ToList();
-                    }
-                    if (groupId.HasValue && groupId.Value > 0)
-                    {
-                        result = result.Where(x => x.GroupId == groupId.Value).ToList();
-                    }
-                    if (programId.HasValue && programId.Value > 0)
-                    {
-                        result = result.Where(x => x.ProgramId == programId.Value).ToList();
-                    }
-                    if (sectionId.HasValue && sectionId.Value > 0)
-                    {
-                        result = result.Where(x => x.SectionId == sectionId.Value).ToList();
-                    }
-                    if (!string.IsNullOrWhiteSpace(status))
-                    {
-                        result = result.Where(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase)).ToList();
-                    }
+        public async Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null,
+            string? search = null)
+        {
+            var paged = await GetPagedAsync(
+                search,
+                boardId,
+                academicYearId,
+                academicLevelId,
+                groupId,
+                programId,
+                sectionId,
+                status,
+                null,
+                campusId,
+                1,
+                int.MaxValue);
 
-                    return result;
-                }
-                catch
-                {
-                    var query = _context.Students
-                        .Include(s => s.BoardNavigation)
-                        .Include(s => s.AcademicYear)
-                        .Include(s => s.AcademicLevelNavigation)
-                        .Include(s => s.GroupNavigation)
-                        .Include(s => s.SectionNavigation)
-                        .Include(s => s.CampusNavigation)
-                        .AsNoTracking()
-                        .AsQueryable();
-
-                    if (campusId.HasValue && campusId.Value > 0)
-                        query = query.Where(s => s.CampusId == campusId.Value);
-                    if (boardId.HasValue && boardId.Value > 0)
-                        query = query.Where(s => s.BoardId == boardId.Value);
-                    if (academicLevelId.HasValue && academicLevelId.Value > 0)
-                        query = query.Where(s => s.AcademicLevelId == academicLevelId.Value);
-                    if (groupId.HasValue && groupId.Value > 0)
-                        query = query.Where(s => s.GroupId == groupId.Value);
-                    if (programId.HasValue && programId.Value > 0)
-                        query = query.Where(s => s.ProgramId == programId.Value);
-                    if (sectionId.HasValue && sectionId.Value > 0)
-                        query = query.Where(s => s.SectionId == sectionId.Value);
-                    if (!string.IsNullOrWhiteSpace(status))
-                        query = query.Where(s => s.Status == status);
-
-                    return await query
-                        .OrderBy(s => s.StudentName)
-                        .Select(s => new StudentListItemDto
-                        {
-                            StudentId = s.StudentId,
-                            AdmissionNo = s.AdmissionNo ?? "",
-                            RollNo = s.RollNo ?? "",
-                            StudentName = s.StudentName,
-                            Photo = s.Photo,
-                            Gender = s.Gender,
-                            Email = s.Email,
-                            MobileNumber = s.MobileNumber,
-                            CampusId = s.CampusId,
-                            CampusName = s.CampusNavigation != null ? s.CampusNavigation.CampusName : null,
-                            BoardId = s.BoardId,
-                            BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
-                            AcademicYearId = s.AcademicYearId,
-                            AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
-                            AcademicLevelId = s.AcademicLevelId ?? 0,
-                            AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
-                            GroupId = s.GroupId ?? 0,
-                            GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
-                            SectionId = s.SectionId ?? 0,
-                            SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
-                            ProgramId = s.ProgramId ?? 0,
-                            IsActive = s.IsActive,
-                            Status = s.Status,
-                            CreatedAt = s.CreatedAt,
-                            StudentType = s.StudentType,
-                            TransportRequired = s.TransportRequired,
-                            HostelBlock = s.HostelBlock,
-                            BusRoute = s.BusRoute
-                        })
-                        .ToListAsync();
-                }
-            }
+            return paged.Items.ToList();
         }
 
 
@@ -325,21 +308,19 @@ namespace CollegeManagement.API.Repositories
                         p_FatherOccupation =
                             request.FatherOccupation,
                         p_FatherMobile = request.FatherMobile,
-                        p_FatherEmail = request.FatherEmail,
 
                         // Mother
                         p_MotherName = request.MotherName,
                         p_MotherOccupation =
                             request.MotherOccupation,
                         p_MotherMobile = request.MotherMobile,
-                        p_MotherEmail = request.MotherEmail,
 
                         // Guardian
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile =
                             request.GuardianMobile,
-                        p_GuardianEmail =
-                            request.GuardianEmail,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail,
 
                         p_AnnualIncome =
                             request.AnnualIncome,
@@ -507,16 +488,14 @@ namespace CollegeManagement.API.Repositories
                         p_FatherName = request.FatherName,
                         p_FatherOccupation = request.FatherOccupation,
                         p_FatherMobile = request.FatherMobile,
-                        p_FatherEmail = request.FatherEmail,
 
                         p_MotherName = request.MotherName,
                         p_MotherOccupation = request.MotherOccupation,
                         p_MotherMobile = request.MotherMobile,
-                        p_MotherEmail = request.MotherEmail,
 
                         p_GuardianName = request.GuardianName,
                         p_GuardianMobile = request.GuardianMobile,
-                        p_GuardianEmail = request.GuardianEmail,
+                        p_ParentGuardianEmail = request.ParentGuardianEmail,
 
                         p_StudentType = request.StudentType,
                         p_TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
@@ -545,6 +524,39 @@ namespace CollegeManagement.API.Repositories
                         transaction,
                         commandType: CommandType.StoredProcedure);
                 }
+
+                var parentFullName = !string.IsNullOrWhiteSpace(request.FatherName)
+                    ? request.FatherName.Trim()
+                    : (!string.IsNullOrWhiteSpace(request.MotherName)
+                        ? request.MotherName.Trim()
+                        : (!string.IsNullOrWhiteSpace(request.GuardianName)
+                            ? request.GuardianName.Trim()
+                            : null));
+
+                var parentMobile = !string.IsNullOrWhiteSpace(request.FatherMobile)
+                    ? request.FatherMobile.Trim()
+                    : (!string.IsNullOrWhiteSpace(request.MotherMobile)
+                        ? request.MotherMobile.Trim()
+                        : (!string.IsNullOrWhiteSpace(request.GuardianMobile)
+                            ? request.GuardianMobile.Trim()
+                            : null));
+
+                var relationshipType = !string.IsNullOrWhiteSpace(request.FatherName)
+                    ? "Father"
+                    : (!string.IsNullOrWhiteSpace(request.MotherName)
+                        ? "Mother"
+                        : (!string.IsNullOrWhiteSpace(request.GuardianName)
+                            ? "Guardian"
+                            : "Parent"));
+
+                await SyncParentUserMappingAsync(
+                    connection,
+                    transaction,
+                    studentId,
+                    request.ParentGuardianEmail,
+                    parentFullName,
+                    parentMobile,
+                    relationshipType);
 
                 transaction.Commit();
                 return result;
@@ -685,7 +697,9 @@ namespace CollegeManagement.API.Repositories
                         p_GuardianName =
                             request.GuardianName,
                         p_GuardianMobile =
-                            request.GuardianMobile
+                            request.GuardianMobile,
+                        p_ParentGuardianEmail =
+                            request.ParentGuardianEmail
                     },
                     transaction: transaction,
                     commandType: CommandType.StoredProcedure);
@@ -698,6 +712,39 @@ namespace CollegeManagement.API.Repositories
                         transaction,
                         commandType: CommandType.StoredProcedure);
                 }
+
+                var parentFullName = !string.IsNullOrWhiteSpace(request.FatherName)
+                    ? request.FatherName.Trim()
+                    : (!string.IsNullOrWhiteSpace(request.MotherName)
+                        ? request.MotherName.Trim()
+                        : (!string.IsNullOrWhiteSpace(request.GuardianName)
+                            ? request.GuardianName.Trim()
+                            : null));
+
+                var parentMobile = !string.IsNullOrWhiteSpace(request.FatherMobile)
+                    ? request.FatherMobile.Trim()
+                    : (!string.IsNullOrWhiteSpace(request.MotherMobile)
+                        ? request.MotherMobile.Trim()
+                        : (!string.IsNullOrWhiteSpace(request.GuardianMobile)
+                            ? request.GuardianMobile.Trim()
+                            : null));
+
+                var relationshipType = !string.IsNullOrWhiteSpace(request.FatherName)
+                    ? "Father"
+                    : (!string.IsNullOrWhiteSpace(request.MotherName)
+                        ? "Mother"
+                        : (!string.IsNullOrWhiteSpace(request.GuardianName)
+                            ? "Guardian"
+                            : "Parent"));
+
+                await SyncParentUserMappingAsync(
+                    connection,
+                    transaction,
+                    studentId,
+                    request.ParentGuardianEmail,
+                    parentFullName,
+                    parentMobile,
+                    relationshipType);
 
                 transaction.Commit();
                 return result;
@@ -1199,37 +1246,273 @@ namespace CollegeManagement.API.Repositories
                 await connection.OpenAsync();
             }
 
-            var rows = await connection.ExecuteAsync(
-                "sp_UpdateStudentSelfProfile",
-                new
-                {
-                    p_StudentId = studentId,
-                    p_MobileNumber = request.MobileNumber,
-                    p_Email = request.Email,
-                    p_Address = request.Address,
-                    p_City = request.City,
-                    p_District = request.District,
-                    p_State = request.State,
-                    p_Pincode = request.Pincode,
-                    p_BloodGroup = request.BloodGroup,
-                    p_AadhaarNumber = request.AadhaarNumber,
-                    p_Nationality = request.Nationality,
-                    p_Religion = request.Religion,
-                    p_PreviousSchool = request.PreviousSchool,
-                    p_PreviousHallTicketNumber = request.PreviousHallTicketNumber,
-                    p_PreviousBoard = request.PreviousBoard,
-                    p_PreviousYearOfPassing = request.PreviousYearOfPassing,
-                    p_PreviousPercentage = request.PreviousPercentage,
-                    p_FatherMobile = request.FatherMobile,
-                    p_FatherEmail = request.FatherEmail,
-                    p_MotherMobile = request.MotherMobile,
-                    p_MotherEmail = request.MotherEmail,
-                    p_GuardianMobile = request.GuardianMobile,
-                    p_GuardianEmail = request.GuardianEmail
-                },
-                commandType: CommandType.StoredProcedure);
+            var normalizedEmail = !string.IsNullOrWhiteSpace(request.Email) ? request.Email.Trim() : null;
+            using var transaction = connection.BeginTransaction();
+            try
+            {
+                var rows = await connection.ExecuteAsync(
+                    "sp_UpdateStudentSelfProfile",
+                    new
+                    {
+                        p_StudentId = studentId,
+                        p_MobileNumber = request.MobileNumber,
+                        p_Email = request.Email,
+                        p_Address = request.Address,
+                        p_City = request.City,
+                        p_District = request.District,
+                        p_State = request.State,
+                        p_Pincode = request.Pincode,
+                        p_BloodGroup = request.BloodGroup,
+                        p_AadhaarNumber = request.AadhaarNumber,
+                        p_Nationality = request.Nationality,
+                        p_Religion = request.Religion,
+                        p_PreviousSchool = request.PreviousSchool,
+                        p_PreviousHallTicketNumber = request.PreviousHallTicketNumber,
+                        p_PreviousBoard = request.PreviousBoard,
+                        p_PreviousYearOfPassing = request.PreviousYearOfPassing,
+                        p_PreviousPercentage = request.PreviousPercentage,
+                        p_FatherMobile = request.FatherMobile,
+                        p_MotherMobile = request.MotherMobile,
+                        p_GuardianMobile = request.GuardianMobile,
+                        p_ParentGuardianEmail = request.ParentGuardianEmail
+                    },
+                    transaction: transaction,
+                    commandType: CommandType.StoredProcedure);
 
-            return rows > 0;
+                if (!string.IsNullOrWhiteSpace(normalizedEmail))
+                {
+                    await connection.ExecuteAsync(
+                        "sp_UpdateUserEmailByLinkedEntity",
+                        new { p_StaffId = (int?)null, p_StudentId = studentId, p_Email = normalizedEmail },
+                        transaction,
+                        commandType: CommandType.StoredProcedure);
+                }
+
+                var parentMobile = !string.IsNullOrWhiteSpace(request.FatherMobile)
+                    ? request.FatherMobile.Trim()
+                    : (!string.IsNullOrWhiteSpace(request.MotherMobile)
+                        ? request.MotherMobile.Trim()
+                        : (!string.IsNullOrWhiteSpace(request.GuardianMobile)
+                            ? request.GuardianMobile.Trim()
+                            : null));
+
+                await SyncParentUserMappingAsync(
+                    connection,
+                    transaction,
+                    studentId,
+                    request.ParentGuardianEmail,
+                    parentFullName: null,
+                    parentPhoneNumber: parentMobile,
+                    relationshipType: "Parent");
+
+                transaction.Commit();
+                return rows > 0;
+            }
+            catch
+            {
+                try { transaction.Rollback(); } catch { }
+                throw;
+            }
+        }
+
+        // =========================================================
+        // PARENT EMAIL & BRIDGING MAPPING SYNCHRONIZATION HELPER
+        // =========================================================
+
+        private async Task SyncParentUserMappingAsync(
+            IDbConnection connection,
+            IDbTransaction transaction,
+            int studentId,
+            string? rawNewParentEmail,
+            string? parentFullName = null,
+            string? parentPhoneNumber = null,
+            string? relationshipType = "Parent")
+        {
+            var newParentEmail = !string.IsNullOrWhiteSpace(rawNewParentEmail)
+                ? rawNewParentEmail.Trim().ToLowerInvariant()
+                : null;
+
+            // 1. Find existing parent mapping for this student
+            const string findMappingSql = @"
+                SELECT Id, ParentUserId, StudentId, RelationshipType, IsPrimaryContact 
+                FROM ParentStudentMappings 
+                WHERE StudentId = @StudentId 
+                LIMIT 1;";
+
+            var existingMapping = await connection.QueryFirstOrDefaultAsync<ParentStudentMapping>(
+                findMappingSql, new { StudentId = studentId }, transaction: transaction);
+
+            int? oldParentUserId = existingMapping?.ParentUserId;
+            string? oldParentEmail = null;
+
+            if (oldParentUserId.HasValue && oldParentUserId.Value > 0)
+            {
+                const string findUserSql = "SELECT Email FROM Users WHERE UserId = @UserId LIMIT 1;";
+                oldParentEmail = await connection.QueryFirstOrDefaultAsync<string>(
+                    findUserSql, new { UserId = oldParentUserId.Value }, transaction: transaction);
+                oldParentEmail = oldParentEmail?.Trim().ToLowerInvariant();
+            }
+
+            // If both emails are empty or identical, no changes needed to parent account/mapping
+            if (string.Equals(oldParentEmail, newParentEmail, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            // 2. Case A: Admin removed/cleared the Parent Email
+            if (string.IsNullOrWhiteSpace(newParentEmail))
+            {
+                if (oldParentUserId.HasValue)
+                {
+                    // Remove mapping for this student
+                    await connection.ExecuteAsync(
+                        "DELETE FROM ParentStudentMappings WHERE StudentId = @StudentId;",
+                        new { StudentId = studentId }, transaction: transaction);
+
+                    // Check if old parent user has any other children remaining
+                    var remainingChildren = await connection.ExecuteScalarAsync<int>(
+                        "SELECT COUNT(1) FROM ParentStudentMappings WHERE ParentUserId = @ParentUserId;",
+                        new { ParentUserId = oldParentUserId.Value }, transaction: transaction);
+
+                    if (remainingChildren == 0)
+                    {
+                        // Deactivate orphan parent user so they cannot log in with the old email
+                        await connection.ExecuteAsync(
+                            "UPDATE Users SET IsActive = 0, UpdatedAt = CURRENT_TIMESTAMP(6) WHERE UserId = @UserId;",
+                            new { UserId = oldParentUserId.Value }, transaction: transaction);
+                    }
+                }
+                return;
+            }
+
+            // 3. Case B: Admin set or changed the Parent Email to a new valid email
+            // Check if a target user with new email already exists in Users
+            var targetUser = await connection.QueryFirstOrDefaultAsync<User>(
+                "SELECT UserId, Email, RoleId FROM Users WHERE LOWER(Email) = @Email LIMIT 1;",
+                new { Email = newParentEmail }, transaction: transaction);
+
+            if (targetUser != null)
+            {
+                // Target Parent user ALREADY EXISTS (e.g. Sibling Parent account)
+                int targetUserId = targetUser.UserId;
+
+                // Upsert / Re-link mapping for this student to target parent
+                const string upsertMappingSql = @"
+                    INSERT INTO ParentStudentMappings (ParentUserId, StudentId, RelationshipType, IsPrimaryContact, CreatedAt)
+                    VALUES (@ParentUserId, @StudentId, @RelationshipType, 1, CURRENT_TIMESTAMP(6))
+                    ON DUPLICATE KEY UPDATE ParentUserId = VALUES(ParentUserId), RelationshipType = VALUES(RelationshipType);";
+
+                await connection.ExecuteAsync(upsertMappingSql, new
+                {
+                    ParentUserId = targetUserId,
+                    StudentId = studentId,
+                    RelationshipType = string.IsNullOrWhiteSpace(relationshipType) ? "Parent" : relationshipType.Trim()
+                }, transaction: transaction);
+
+                // If old parent user was different, clean up old mapping & check for orphan
+                if (oldParentUserId.HasValue && oldParentUserId.Value != targetUserId)
+                {
+                    await connection.ExecuteAsync(
+                        "DELETE FROM ParentStudentMappings WHERE ParentUserId = @OldParentUserId AND StudentId = @StudentId;",
+                        new { OldParentUserId = oldParentUserId.Value, StudentId = studentId }, transaction: transaction);
+
+                    var remainingChildren = await connection.ExecuteScalarAsync<int>(
+                        "SELECT COUNT(1) FROM ParentStudentMappings WHERE ParentUserId = @ParentUserId;",
+                        new { ParentUserId = oldParentUserId.Value }, transaction: transaction);
+
+                    if (remainingChildren == 0)
+                    {
+                        // Deactivate the old orphan user so old credentials cannot log in
+                        await connection.ExecuteAsync(
+                            "UPDATE Users SET IsActive = 0, UpdatedAt = CURRENT_TIMESTAMP(6) WHERE UserId = @UserId;",
+                            new { UserId = oldParentUserId.Value }, transaction: transaction);
+                    }
+                }
+            }
+            else
+            {
+                // Target user with new email DOES NOT EXIST in Users table
+                // Check if old parent user existed and had ONLY this child (Single-child parent email edit / typo correction)
+                if (oldParentUserId.HasValue)
+                {
+                    var oldChildCount = await connection.ExecuteScalarAsync<int>(
+                        "SELECT COUNT(1) FROM ParentStudentMappings WHERE ParentUserId = @ParentUserId;",
+                        new { ParentUserId = oldParentUserId.Value }, transaction: transaction);
+
+                    if (oldChildCount <= 1)
+                    {
+                        // Exactly 1 child -> UPDATE the existing Parent User's Email in place!
+                        // This preserves their password, updates username to new email, and permanently revokes old email login.
+                        const string updateEmailSql = @"
+                            UPDATE Users 
+                            SET Email = @Email,
+                                FullName = COALESCE(@FullName, FullName),
+                                PhoneNumber = COALESCE(@PhoneNumber, PhoneNumber),
+                                UpdatedAt = CURRENT_TIMESTAMP(6)
+                            WHERE UserId = @UserId;";
+
+                        await connection.ExecuteAsync(updateEmailSql, new
+                        {
+                            Email = newParentEmail,
+                            FullName = !string.IsNullOrWhiteSpace(parentFullName) ? parentFullName.Trim() : null,
+                            PhoneNumber = !string.IsNullOrWhiteSpace(parentPhoneNumber) ? parentPhoneNumber.Trim() : null,
+                            UserId = oldParentUserId.Value
+                        }, transaction: transaction);
+
+                        if (!string.IsNullOrWhiteSpace(relationshipType))
+                        {
+                            await connection.ExecuteAsync(
+                                "UPDATE ParentStudentMappings SET RelationshipType = @RelationshipType WHERE StudentId = @StudentId;",
+                                new { RelationshipType = relationshipType.Trim(), StudentId = studentId }, transaction: transaction);
+                        }
+
+                        return;
+                    }
+                }
+
+                // Otherwise (Old parent had multiple children, or this is a brand new parent mapping):
+                // 1. If old parent had multiple children, remove old mapping for this student
+                if (oldParentUserId.HasValue)
+                {
+                    await connection.ExecuteAsync(
+                        "DELETE FROM ParentStudentMappings WHERE ParentUserId = @OldParentUserId AND StudentId = @StudentId;",
+                        new { OldParentUserId = oldParentUserId.Value, StudentId = studentId }, transaction: transaction);
+                }
+
+                // 2. Resolve 'Parent' role
+                var parentRoleId = await connection.ExecuteScalarAsync<int?>(
+                    "SELECT RoleId FROM Roles WHERE RoleName = 'Parent' LIMIT 1;", transaction: transaction) ?? 6;
+
+                // 3. Create new Parent User
+                var tempPassword = SecurePasswordGenerator.Generate(14);
+                var passwordHash = PasswordHasher.HashPassword(tempPassword);
+
+                var insertUserSql = @"
+                    INSERT INTO Users (FullName, Email, PasswordHash, PhoneNumber, RoleId, StudentId, StaffId, AdminId, IsFirstLogin, IsActive, CreatedAt, UpdatedAt)
+                    VALUES (@FullName, @Email, @PasswordHash, @PhoneNumber, @RoleId, NULL, NULL, NULL, 1, 1, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6));
+                    SELECT LAST_INSERT_ID();";
+
+                var newUserId = await connection.ExecuteScalarAsync<int>(insertUserSql, new
+                {
+                    FullName = !string.IsNullOrWhiteSpace(parentFullName) ? parentFullName.Trim() : "Parent / Guardian",
+                    Email = newParentEmail,
+                    PasswordHash = passwordHash,
+                    PhoneNumber = parentPhoneNumber?.Trim() ?? string.Empty,
+                    RoleId = parentRoleId
+                }, transaction: transaction);
+
+                // 4. Insert mapping in ParentStudentMappings
+                const string insertMappingSql = @"
+                    INSERT INTO ParentStudentMappings (ParentUserId, StudentId, RelationshipType, IsPrimaryContact, CreatedAt)
+                    VALUES (@ParentUserId, @StudentId, @RelationshipType, 1, CURRENT_TIMESTAMP(6));";
+
+                await connection.ExecuteAsync(insertMappingSql, new
+                {
+                    ParentUserId = newUserId,
+                    StudentId = studentId,
+                    RelationshipType = string.IsNullOrWhiteSpace(relationshipType) ? "Parent" : relationshipType.Trim()
+                }, transaction: transaction);
+            }
         }
     }
 }

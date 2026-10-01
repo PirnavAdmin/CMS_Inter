@@ -1,0 +1,16 @@
+{
+  "driverName": "Venkat Rao",
+  "employeeId": "PCNT0096",
+  "mobileNumber": "9123456780",
+  "alternateMobileNumber": "",
+  "email": "venkat.driver@college.local",
+  "licenseNumber": "AP-07-2022-0099",
+  "licenseExpiryDate": "2032-05-17",
+  "address": "Brodipet 4th line, Guntur, Andhra Pradesh",
+  "bloodGroup": "",
+  "emergencyContactName": "",
+  "emergencyContactNumber": "",
+  "experienceYears": 7,
+  "assignedVehicleId": null,
+  "status": true
+}

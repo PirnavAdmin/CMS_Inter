@@ -569,17 +569,11 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            // 1. Total Students from StudentAdmissions (fallback to Students)
-            int totalStudents = await _db.StudentAdmissions.AsNoTracking()
-                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
+            // 1. Total Students from Students table
+            int totalStudents = await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
                 .CountAsync(ct);
 
-            if (totalStudents == 0)
-            {
-                totalStudents = await _db.Students.AsNoTracking()
-                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
-                    .CountAsync(ct);
-            }
             summary.TotalStudents = totalStudents;
             summary.Admissions = totalStudents;
 
@@ -640,18 +634,10 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var admissionDates = await _db.StudentAdmissions.AsNoTracking()
-                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
-                .Select(sa => (DateTime?)(sa.AdmissionDate != default ? sa.AdmissionDate : sa.CreatedAt))
+            var admissionDates = await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
                 .ToListAsync(ct);
-
-            if (!admissionDates.Any())
-            {
-                admissionDates = await _db.Students.AsNoTracking()
-                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
-                    .Select(s => (DateTime?)(s.AdmissionDate != default ? s.AdmissionDate : s.CreatedAt))
-                    .ToListAsync(ct);
-            }
 
             var grouped = admissionDates
                 .Where(d => d.HasValue && d.Value.Year > 2000)
@@ -685,18 +671,10 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var genders = await _db.StudentAdmissions.AsNoTracking()
-                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
-                .Select(sa => sa.Gender ?? string.Empty)
+            var genders = await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .Select(s => s.Gender ?? string.Empty)
                 .ToListAsync(ct);
-
-            if (!genders.Any())
-            {
-                genders = await _db.Students.AsNoTracking()
-                    .Where(s => s.IsActive && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
-                    .Select(s => s.Gender ?? string.Empty)
-                    .ToListAsync(ct);
-            }
 
             overview.TotalStudents = genders.Count;
             overview.ActiveStudents = genders.Count;
@@ -745,20 +723,11 @@ public class DashboardRepository : IDashboardRepository
                 .OrderBy(g => g.GroupName)
                 .ToListAsync(ct);
 
-            var studentGroupCounts = await _db.StudentAdmissions.AsNoTracking()
-                .Where(sa => sa.IsActive && (!boardId.HasValue || sa.BoardId == boardId) && (!academicYearId.HasValue || sa.AcademicYearId == academicYearId) && (!campusId.HasValue || sa.CampusId == campusId.Value))
-                .GroupBy(sa => sa.GroupId)
+            var studentGroupCounts = await _db.Students.AsNoTracking()
+                .Where(s => s.IsActive && s.GroupId.HasValue && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
+                .GroupBy(s => s.GroupId!.Value)
                 .Select(g => new { GroupId = g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
-
-            if (!studentGroupCounts.Any())
-            {
-                studentGroupCounts = await _db.Students.AsNoTracking()
-                    .Where(s => s.IsActive && s.GroupId.HasValue && (!boardId.HasValue || s.BoardId == boardId) && (!academicYearId.HasValue || s.AcademicYearId == academicYearId) && (!campusId.HasValue || s.CampusId == campusId.Value))
-                    .GroupBy(s => s.GroupId!.Value)
-                    .Select(g => new { GroupId = g.Key, Count = g.Count() })
-                    .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
-            }
 
             var items = new List<GroupDistributionItemDto>();
             var colors = new[] { "#2563eb", "#7c3aed", "#f59e0b", "#16a34a", "#e11d48", "#0891b2", "#64748b" };
@@ -823,16 +792,44 @@ public class DashboardRepository : IDashboardRepository
 
             var attendances = await attendancesQuery.ToListAsync(ct);
 
-            int total = attendances.Count;
+            var groupedAttendances = attendances
+                .GroupBy(a => a.StudentId)
+                .Select(g => new
+                {
+                    StudentId = g.Key,
+                    MStatus = g.Where(x => (int?)x.Session == 1 || x.Session == null || (int?)x.Session == 0).Select(x => (byte?)x.Status).FirstOrDefault(),
+                    AStatus = g.Where(x => (int?)x.Session == 2 || x.Session == null || (int?)x.Session == 0).Select(x => (byte?)x.Status).FirstOrDefault()
+                }).ToList();
+
+            var studentsQuery = _db.Students.AsNoTracking().Where(s => s.IsActive);
+            if (boardId.HasValue) studentsQuery = studentsQuery.Where(s => s.BoardId == boardId.Value);
+            if (academicYearId.HasValue) studentsQuery = studentsQuery.Where(s => s.AcademicYearId == academicYearId.Value);
+            if (campusId.HasValue) studentsQuery = studentsQuery.Where(s => s.CampusId == campusId.Value);
+            
+            int total = await studentsQuery.CountAsync(ct);
             summary.TotalStudents = total;
 
-            int present = attendances.Count(a => (byte)a.Status == 1);
-            int halfDay = attendances.Count(a => (byte)a.Status == 3 || (byte)a.Status == 4);
-            int absent = attendances.Count(a => (byte)a.Status == 2);
+            int present = groupedAttendances.Count(x => 
+                (x.MStatus == 1 && x.AStatus == 1) || 
+                (x.MStatus == 1 && x.AStatus == null) || 
+                (x.MStatus == null && x.AStatus == 1)
+            );
+
+            int halfDay = groupedAttendances.Count(x => 
+                (x.MStatus == 1 && x.AStatus == 2) || 
+                (x.MStatus == 2 && x.AStatus == 1) || 
+                (x.MStatus == 3 || x.MStatus == 4 || x.AStatus == 3 || x.AStatus == 4)
+            );
+
+            int absent = groupedAttendances.Count(x => 
+                (x.MStatus == 2 && x.AStatus == 2) || 
+                (x.MStatus == 2 && x.AStatus == null) || 
+                (x.MStatus == null && x.AStatus == 2)
+            );
 
             summary.Present = present;
             summary.HalfDay = halfDay;
-            summary.Absent = absent;
+            summary.Absent = Math.Max(0, total - present - halfDay);
 
             var latestTime = attendances.OrderByDescending(a => a.UpdatedAt ?? a.CreatedAt).Select(a => (DateTime?)(a.UpdatedAt ?? a.CreatedAt)).FirstOrDefault();
             summary.LastUpdatedTime = latestTime;

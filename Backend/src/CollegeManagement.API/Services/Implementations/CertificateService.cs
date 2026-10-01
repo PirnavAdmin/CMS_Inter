@@ -52,9 +52,11 @@ public class CertificateService : ICertificateService
 
     public async Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
         int? campusId = null,
+        int? boardId = null,
+        int? academicYearId = null,
         CancellationToken ct = default)
     {
-        return await _repository.GetStudentsDropdownAsync(campusId, ct);
+        return await _repository.GetStudentsDropdownAsync(campusId, boardId, academicYearId, ct);
     }
 
     public async Task<CertificateResponseDto?> GenerateAsync(

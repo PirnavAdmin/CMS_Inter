@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -10,23 +10,13 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./StudentManagementPage.css";
 
 export const pageConfig = { title: "Student Management", rows: [], fields: [] };
+const STUDENT_PAGE_SIZE = 10;
 const list = (payload) => {
   const data = payload?.data ?? payload?.Data ?? payload;
   if (Array.isArray(data)) return data;
   return data?.data ?? data?.Data ?? data?.items ?? data?.Items ?? data?.results ?? data?.Results ?? data?.$values ?? [];
 };
 const value = (record, ...keys) => keys.map((key) => record?.[key]).find((item) => item != null && item !== "");
-const normalizedName = (item) => String(item ?? "").trim().replace(/\s+/g, " ").toLowerCase();
-const hasAssignedValue = (item) => item != null && String(item).trim() !== "" && String(item).trim() !== "—";
-const isAdmissionApproved = (admission) => {
-  const approval = value(admission, "isApproved", "IsApproved", "approved", "Approved", "approvalStatus", "ApprovalStatus");
-  const status = String(value(admission, "status", "Status", "admissionStatus", "AdmissionStatus") ?? "").trim().toLowerCase();
-  return approval === true
-    || approval === 1
-    || String(approval).toLowerCase() === "true"
-    || ["approved", "active", "completed"].includes(status);
-};
-const nameFor = (items, id, idKeys, labelKeys) => value(items.find((item) => String(value(item, ...idKeys)) === String(id)), ...labelKeys) ?? "";
 const saveDownload = (data, filename) => {
   const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
   const link = document.createElement("a");
@@ -61,6 +51,8 @@ export default function StudentManagementPage() {
     status: "",
   });
   const [students, setStudents] = useState([]);
+  const [studentTotalCount, setStudentTotalCount] = useState(0);
+  const [studentTotalPages, setStudentTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -84,18 +76,48 @@ export default function StudentManagementPage() {
   const [groupOptions, setGroupOptions] = useState([]);
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
+  const [page, setPage] = useState(restoredState?.page ?? 1);
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
   useEffect(() => {
     const timer = window.setTimeout(() => { restoringFilters.current = false; }, 0);
     return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError("");
+    if (!selectedCampusId || !selectedBoardId || !selectedAcademicYearId) {
+      setStudents([]);
+      setStudentTotalCount(0);
+      setStudentTotalPages(1);
+      setLoading(false);
+      return () => { active = false; };
+    }
     apiClient
-      .get(apiEndpoints.students.getAll)
+      .get(apiEndpoints.students.list, {
+        params: {
+          ...(debouncedQuery ? { search: debouncedQuery } : {}),
+          boardId: selectedBoardId,
+          academicYearId: selectedAcademicYearId,
+          ...(filters.level ? { academicLevelId: filters.level } : {}),
+          ...(filters.group ? { groupId: filters.group } : {}),
+          ...(filters.programme ? { programId: filters.programme } : {}),
+          ...(filters.section ? { sectionId: filters.section } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          campusId: selectedCampusId,
+          pageNumber: page,
+          pageSize: STUDENT_PAGE_SIZE,
+        },
+      })
       .then(({ data }) => {
-        const source = Array.isArray(data)
-          ? data
-          : data?.data || data?.items || data?.results || [];
+        const payload = data?.data ?? data?.Data ?? data ?? {};
+        const source = Array.isArray(payload)
+          ? payload
+          : payload.items ?? payload.Items ?? payload.results ?? payload.Results ?? [];
         const mapped = source.map((x, index) => ({
           ...x,
           id: x.studentId ?? x.id ?? index,
@@ -109,75 +131,32 @@ export default function StudentManagementPage() {
           programme: x.programmeName ?? x.programName ?? x.programme ?? x.program ?? "",
           section: value(x, "sectionName", "SectionName", "section", "Section", "allocatedSectionName", "AllocatedSectionName", "assignedSectionName", "AssignedSectionName") ?? "",
           roll: value(x, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll", "Roll") ?? "",
+          mobile: x.mobileNumber ?? x.MobileNumber ?? x.mobile ?? "",
           status: x.status ?? x.studentStatus ?? "Pending assignment",
         }));
-        return Promise.allSettled([
-          apiClient.get(apiEndpoints.admissions.getAll), apiClient.get(apiEndpoints.academicYears.list),
-          apiClient.get(apiEndpoints.academicLevels.list), apiClient.get(apiEndpoints.groups.list),
-          apiClient.get(apiEndpoints.programs.list), apiClient.get(apiEndpoints.sections.list), apiClient.get(apiEndpoints.boards.list),
-        ]).then((responses) => {
-          const [admissions, years, levels, groups, programs, sections, boards] = responses.map((response) =>
-            response.status === "fulfilled" ? list(response.value.data) : [],
-          );
-          const byNo = new Map(admissions.map((item) => [String(value(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim(), item]));
-          const byStudentId = new Map(admissions.map((item) => [String(value(item, "studentId", "StudentId") ?? ""), item]));
-          const admissionName = (item) => value(item, "studentName", "StudentName", "name", "Name", "fullName", "FullName")
-            ?? [value(item, "firstName", "FirstName"), value(item, "lastName", "LastName")].filter(Boolean).join(" ");
-          const byName = new Map(admissions.map((item) => [normalizedName(admissionName(item)), item]));
-          const enriched = mapped.map((student) => {
-            const admission = byStudentId.get(String(student.studentId ?? ""))
-              ?? byNo.get(String(student.admissionNo ?? "").trim())
-              ?? byName.get(normalizedName(student.name));
-            const yearId = value(student, "academicYearId", "AcademicYearId") ?? value(admission, "academicYearId", "AcademicYearId");
-            const boardId = value(student, "boardId", "BoardId") ?? value(admission, "boardId", "BoardId");
-            const campusId = value(student, "campusId", "CampusId") ?? value(admission, "campusId", "CampusId");
-            const levelId = value(student, "academicLevelId", "AcademicLevelId") ?? value(admission, "academicLevelId", "AcademicLevelId");
-            const groupId = value(student, "groupId", "GroupId") ?? value(admission, "groupId", "GroupId");
-            const programId = value(student, "programId", "ProgramId", "programmeId", "ProgrammeId") ?? value(admission, "programId", "ProgramId", "programmeId", "ProgrammeId");
-            const sectionId = value(student, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId")
-              ?? value(admission, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId")
-              ?? value(admission?.section ?? admission?.Section, "sectionId", "SectionId", "id", "Id");
-            const section = student.section || value(admission, "sectionName", "SectionName", "allocatedSectionName", "AllocatedSectionName", "assignedSectionName", "AssignedSectionName") || value(admission?.section ?? admission?.Section, "sectionName", "SectionName", "name", "Name") || nameFor(sections, sectionId, ["sectionId", "SectionId", "id"], ["sectionName", "SectionName", "name"]);
-            const roll = student.roll || value(admission, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll");
-            const admissionApproved = isAdmissionApproved(admission);
-            const hasSection = hasAssignedValue(sectionId) || hasAssignedValue(section);
-            const hasRollNumber = hasAssignedValue(roll);
-            return {
-              ...student,
-              boardId,
-              campusId,
-              academicYearId: yearId,
-              academicLevelId: levelId,
-              groupId,
-              programId,
-              sectionId,
-              board: student.board || value(admission, "boardName", "BoardName") || nameFor(boards, boardId, ["boardId", "BoardId", "id", "Id"], ["boardName", "BoardName", "name", "Name"]),
-              academicYear: student.academicYear || value(admission, "academicYearName", "AcademicYearName") || nameFor(years, yearId, ["academicYearId", "AcademicYearId", "id"], ["academicYearName", "AcademicYearName", "name"]),
-              level: student.level || value(admission, "academicLevelName", "AcademicLevelName") || nameFor(levels, levelId, ["academicLevelId", "AcademicLevelId", "id"], ["levelName", "LevelName", "academicLevelName", "AcademicLevelName", "name"]),
-              group: student.group || value(admission, "groupName", "GroupName") || nameFor(groups, groupId, ["groupId", "GroupId", "id"], ["groupName", "GroupName", "name"]),
-              programme: student.programme || value(admission, "programName", "ProgramName", "programmeName", "ProgrammeName") || nameFor(programs, programId, ["programId", "ProgramId", "programmeId", "ProgrammeId", "id"], ["programName", "ProgramName", "programmeName", "ProgrammeName", "name"]),
-              section,
-              roll,
-              mobile: student.mobileNumber ?? student.mobile ?? "",
-              admissionApproved,
-              hasSection,
-              hasRollNumber,
-              isEligibleForStudentManagement: admissionApproved && hasSection && hasRollNumber,
-            };
-          });
-          const visibleStudents = enriched.filter((student) => student.isEligibleForStudentManagement
-            && (!selectedCampusId || student.campusId == null || String(student.campusId) === String(selectedCampusId)));
-          if (active) setStudents(visibleStudents);
-        });
+        if (!active) return;
+        setStudents(mapped);
+        setStudentTotalCount(Number(payload.totalCount ?? payload.TotalCount ?? mapped.length));
+        setStudentTotalPages(Math.max(1, Number(payload.totalPages ?? payload.TotalPages ?? 1)));
       })
-      .catch((e) => active && setError(getApiErrorMessage(e)))
+      .catch((e) => {
+        if (!active) return;
+        setStudents([]);
+        setStudentTotalCount(0);
+        setStudentTotalPages(1);
+        setError(getApiErrorMessage(e));
+      })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [reloadKey, selectedCampusId]);
+  }, [debouncedQuery, filters.level, filters.group, filters.programme, filters.section, filters.status, page, reloadKey, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
-    if (!restoringFilters.current) setFilters({ level: "", group: "", programme: "", section: "", status: "" });
+    if (!restoringFilters.current) {
+      setQuery("");
+      setFilters({ level: "", group: "", programme: "", section: "", status: "" });
+      setPage(1);
+    }
     setLevelOptions([]); setGroupOptions([]); setProgrammeOptions([]); setSectionOptions([]);
     if (!selectedBoardId) return undefined;
     let active = true;
@@ -267,31 +246,15 @@ export default function StudentManagementPage() {
       .catch(() => active && setCredentialSections([]));
     return () => { active = false; };
   }, [credentialFilters.group, credentialFilters.level, credentialFilters.program, selectedBoardId, selectedAcademicYearId]);
-  const rows = useMemo(
-    () =>
-      students.filter(
-        (student) =>
-          `${student.name} ${student.studentId} ${student.admissionNo} ${student.roll || ""} ${student.mobile}`
-            .toLowerCase()
-            .includes(query.toLowerCase()) &&
-          (!selectedBoardId || String(student.boardId ?? "") === String(selectedBoardId)) &&
-          (!selectedAcademicYearId || String(student.academicYearId ?? "") === String(selectedAcademicYearId)) &&
-          (!selectedCampusId || student.campusId == null || String(student.campusId) === String(selectedCampusId)) &&
-          (!filters.level || String(student.academicLevelId ?? "") === String(filters.level)) &&
-          (!filters.group || String(student.groupId ?? "") === String(filters.group)) &&
-          (!filters.programme || String(student.programId ?? "") === String(filters.programme)) &&
-          (!filters.section || String(student.sectionId ?? "") === String(filters.section)) &&
-          (!filters.status || String(student.status || "") === filters.status),
-      ),
-    [students, query, filters, selectedCampusId, selectedBoardId, selectedAcademicYearId],
-  );
-  const [page, setPage] = useState(restoredState?.page ?? 1);
-  const pageSize = 5;
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const rows = students;
+  const pageSize = STUDENT_PAGE_SIZE;
+  const totalPages = studentTotalPages;
   const currentPage = Math.min(page, totalPages);
-  const pageRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const pageRows = rows;
+  useEffect(() => {
+    if (page > studentTotalPages) setPage(studentTotalPages);
+  }, [page, studentTotalPages]);
   useEffect(() => { if (!restoringFilters.current) setPage(1); }, [query, filters.level, filters.group, filters.programme, filters.section, filters.status, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
-  const values = (key) => [...new Set(students.map((student) => student[key]).filter(Boolean))];
   const updateFilter = (key, selectedValue) => {
     setFilters((current) => ({
       ...current,
@@ -445,7 +408,6 @@ export default function StudentManagementPage() {
             ["Group", "group", groupOptions, !filters.level],
             ["Programme", "programme", programmeOptions, !filters.group],
             ["Section", "section", sectionOptions, !filters.programme],
-            ["Status", "status", values("status").map((item) => ({ value: item, label: item })), false],
           ].map(([label, key, options, disabled]) => (
             <label className="cms-field" key={key}>
               <span>{label}</span>
@@ -508,7 +470,7 @@ export default function StudentManagementPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10"><div className="cms-empty">Loading approved students...</div></td></tr>
+                Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={10} />)
               ) : pageRows.length ? (
                 pageRows.map((s) => (
                   <tr key={s.id} onClick={() => setSelectedStudentId(String(s.id))}>
@@ -578,7 +540,7 @@ export default function StudentManagementPage() {
         </div>
         {!loading && <footer className="student-management-pagination">
           <span>
-            Showing {rows.length ? (currentPage - 1) * pageSize + 1 : 0}-{Math.min(currentPage * pageSize, rows.length)} of {rows.length} students
+            Showing {rows.length ? (currentPage - 1) * pageSize + 1 : 0}-{rows.length ? Math.min((currentPage - 1) * pageSize + rows.length, studentTotalCount) : 0} of {studentTotalCount} students
           </span>
           <div className="student-management-pagination-actions">
             <button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button>

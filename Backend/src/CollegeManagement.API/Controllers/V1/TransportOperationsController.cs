@@ -24,6 +24,7 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpGet("trips")]
         [AllowAnonymous]
+        [ProducesResponseType(typeof(VehicleTripsResponseDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetTrips(
             [FromQuery] long? routeId,
             [FromQuery] long? vehicleId,
@@ -196,29 +197,34 @@ namespace CollegeManagement.API.Controllers.V1
                     },
                     commandType: CommandType.StoredProcedure)).ToList();
 
+                if (assignments == null || !assignments.Any())
+                {
+                    return Ok(new { success = true, data = new List<GpsVehicleTrackingDto>() });
+                }
+
                 var stops = (await c.QueryAsync<dynamic>(
                     "sp_GetPickupPoints",
-                    new { p_RouteId = (long?)null, p_Search = "", p_Status = (byte?)null },
+                    new { p_RouteId = (long?)null, p_Search = "", p_Status = (byte?)null, p_CampusId = (int?)null },
                     commandType: CommandType.StoredProcedure)).ToList();
 
                 var list = assignments.Select(a =>
                 {
-                    long rId = (long)a.RouteId;
+                    long rId = a.RouteId != null ? Convert.ToInt64(a.RouteId) : 0L;
                     var routeStops = stops
-                        .Where(s => (long)s.RouteId == rId)
+                        .Where(s => s.RouteId != null && Convert.ToInt64(s.RouteId) == rId)
                         .Select(s => new RouteStopDto
                         {
-                            StopId = (long)s.PickupPointId,
-                            StopName = (string)(s.StopName ?? ""),
-                            DistanceKm = Convert.ToDecimal(s.DistanceKm ?? 5),
-                            ScheduledTime = s.PickupTime != null ? ((TimeSpan)s.PickupTime).ToString(@"hh\:mm") : "07:30 AM"
+                            StopId = s.PickupPointId != null ? Convert.ToInt64(s.PickupPointId) : 0L,
+                            StopName = (string)(s.StopName ?? s.PickupPointName ?? ""),
+                            DistanceKm = s.DistanceKm != null ? Convert.ToDecimal(s.DistanceKm) : (s.DistanceFromStart != null ? Convert.ToDecimal(s.DistanceFromStart) : 5m),
+                            ScheduledTime = s.PickupTime != null ? (s.PickupTime is TimeSpan ts ? ts.ToString(@"hh\:mm") : Convert.ToString(s.PickupTime)) : "07:30 AM"
                         }).ToList();
 
                     var currentStopName = routeStops.FirstOrDefault()?.StopName ?? "Campus";
 
                     return new GpsVehicleTrackingDto
                     {
-                        VehicleId = (long)a.VehicleId,
+                        VehicleId = a.VehicleId != null ? Convert.ToInt64(a.VehicleId) : 0L,
                         VehicleNumber = (string)(a.VehicleNumber ?? ""),
                         VehicleName = (string)(a.VehicleNumber ?? ""),
                         RouteName = (string)(a.RouteName ?? ""),
@@ -240,7 +246,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { success = false, message = "Failed to retrieve GPS tracking data", error = ex.Message });
+                return StatusCode(500, new { success = false, message = "Failed to retrieve GPS tracking data", errors = new { } });
             }
         }
     }

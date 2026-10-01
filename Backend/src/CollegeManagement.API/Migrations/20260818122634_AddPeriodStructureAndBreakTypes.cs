@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 
@@ -419,7 +419,7 @@ namespace CollegeManagement.API.Migrations
                 .Annotation("MySql:CharSet", "utf8mb4");
 
             migrationBuilder.AddColumn<string>(
-                name: "GuardianEmail",
+                name: "ParentGuardianEmail",
                 table: "Students",
                 type: "varchar(150)",
                 maxLength: 150,
@@ -1105,7 +1105,7 @@ namespace CollegeManagement.API.Migrations
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     GuardianMobile = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    GuardianEmail = table.Column<string>(type: "varchar(150)", maxLength: 150, nullable: true)
+                    ParentGuardianEmail = table.Column<string>(type: "varchar(150)", maxLength: 150, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     AnnualIncome = table.Column<decimal>(type: "decimal(65,30)", nullable: true),
                     Address = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true)
@@ -2562,7 +2562,7 @@ namespace CollegeManagement.API.Migrations
                 table: "Students");
 
             migrationBuilder.DropColumn(
-                name: "GuardianEmail",
+                name: "ParentGuardianEmail",
                 table: "Students");
 
             migrationBuilder.DropColumn(
@@ -3142,3 +3142,4 @@ namespace CollegeManagement.API.Migrations
         }
     }
 }
+

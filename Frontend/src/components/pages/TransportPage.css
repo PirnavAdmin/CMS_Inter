@@ -288,6 +288,109 @@
   background: var(--cms-surface);
 }
 
+/* Report sub-tabs scroll inside their own viewport; the page itself never widens. */
+.cms-transport-report-tabs-nav {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  margin-top: -10px;
+}
+
+.cms-transport-report-tabs-scroll {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-inline: contain;
+}
+
+.cms-transport-report-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.cms-transport-report-tabs-scroll .cms-transport-tab {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+
+.cms-transport-report-tabs-scroll .cms-transport-tab.is-active {
+  border-color: var(--cms-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
+
+.cms-transport-report-tabs-arrow {
+  position: relative;
+  z-index: 2;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--cms-border);
+  border-radius: 50%;
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  box-shadow: var(--cms-shadow);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+
+.cms-transport-report-tabs-arrow:hover:not(:disabled) {
+  border-color: var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary);
+}
+
+.cms-transport-report-tabs-arrow.is-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cms-transport-report-tabs-arrow:focus-visible {
+  outline: 2px solid var(--cms-primary);
+  outline-offset: 2px;
+}
+
+/* Required markers are scoped to Transport forms and stay attached to their labels. */
+.cms-transport-form-modal .cms-field > label {
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.cms-transport-form-modal .cms-field > label .req,
+.cms-transport-form-modal .required-star,
+.cms-transport-add-driver-modal .required-star,
+.cms-transport-add-attendant-modal .required-star {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  color: #dc2626 !important;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cms-transport-add-driver-modal .cms-field > span:first-child,
+.cms-transport-add-attendant-modal .cms-field > span:first-child {
+  display: inline;
+  color: var(--cms-text);
+  white-space: normal;
+}
+
 /* Pickup Points form only: a balanced three-column modal without affecting other Transport forms. */
 .cms-modal.cms-transport-pickup-modal {
   width: min(720px, calc(100vw - 32px));
@@ -327,10 +430,6 @@
   line-height: 1.3;
 }
 
-.cms-transport-pickup-modal .cms-field label .req {
-  color: var(--cms-danger);
-}
-
 .cms-transport-pickup-modal .cms-field input,
 .cms-transport-pickup-modal .cms-field select {
   box-sizing: border-box;
@@ -347,6 +446,93 @@
 
 .cms-transport-pickup-modal .cms-modal-foot .cms-btn {
   min-width: 104px;
+}
+
+/* Vehicle form only: compact three-column Add/Edit modal. */
+.cms-modal.cms-transport-vehicle-modal {
+  width: min(680px, calc(100vw - 32px));
+  max-width: 680px;
+  max-height: calc(100vh - 32px);
+}
+
+.cms-transport-vehicle-modal .cms-modal-head {
+  min-height: 62px;
+  padding: 15px 22px;
+  align-items: center;
+}
+
+.cms-transport-vehicle-modal .cms-modal-body {
+  padding: 20px 22px;
+}
+
+.cms-transport-vehicle-modal .cms-form-grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 16px;
+  align-items: start;
+}
+
+.cms-transport-vehicle-modal .cms-field {
+  min-width: 0;
+}
+
+.cms-transport-vehicle-modal .cms-field input:not([type="checkbox"]),
+.cms-transport-vehicle-modal .cms-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  height: 42px;
+}
+
+.cms-transport-vehicle-modal .cms-field:has(input[type="checkbox"]) {
+  gap: 10px;
+}
+
+.cms-transport-vehicle-modal .cms-field:has(input[type="checkbox"]) .cms-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cms-text);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.cms-transport-vehicle-modal .cms-check input[type="checkbox"] {
+  appearance: auto;
+  box-sizing: border-box;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0;
+  padding: 0;
+  border: initial;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  accent-color: var(--cms-primary);
+  cursor: pointer;
+}
+
+.cms-transport-vehicle-modal .cms-check > span {
+  margin: 0;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.cms-transport-vehicle-modal .cms-modal-foot {
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+}
+
+.cms-transport-vehicle-modal .cms-modal-foot .cms-btn {
+  min-width: 88px;
 }
 
 .cms-transport-toolbar-actions {
@@ -492,10 +678,22 @@
   white-space: nowrap;
 }
 
-.cms-transport-table th:last-child,
-.cms-transport-table td:last-child {
+.cms-transport-table.has-actions th:last-child,
+.cms-transport-table.has-actions td:last-child {
   width: 126px;
   min-width: 126px;
+}
+
+.cms-transport-report-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.cms-transport-report-table th,
+.cms-transport-report-table td {
+  width: auto;
+  white-space: normal;
+  vertical-align: middle;
 }
 
 /* Driver data is kept directly below its matching header at desktop widths. */
@@ -693,6 +891,13 @@
   padding: 6px 0;
 }
 
+.cms-transport-occupancy {
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+}
+
 .cms-transport-occupancy > div > span {
   display: flex;
   align-items: center;
@@ -717,6 +922,10 @@
 .cms-transport-route-distribution {
   display: grid;
   gap: 10px;
+  max-height: 390px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
 }
 
 .cms-transport-route-distribution > div {
@@ -967,6 +1176,237 @@
 
   .cms-transport-status-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Transport-only dark theme: higher contrast without changing shared CMS surfaces. */
+[data-theme="dark"] .cms-content:has(> .cms-transport-page) {
+  background: linear-gradient(135deg, #0c1912 0%, #102319 54%, #0d1c14 100%);
+}
+[data-theme="dark"] .cms-content:has(> .cms-transport-page) > .cms-page-head h1,
+[data-theme="dark"] .cms-content:has(> .cms-transport-page) > .cms-page-head h2 {
+  color: #f5faf7;
+}
+[data-theme="dark"] .cms-content:has(> .cms-transport-page) > .cms-page-head p {
+  color: #bdcbc3;
+}
+[data-theme="dark"] .cms-transport-page {
+  border-radius: 14px;
+  padding: 2px;
+  background: #0d1b14;
+  color: #f1f7f3;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-card {
+  border-color: #294536;
+  background: #122219;
+  box-shadow: 0 8px 20px rgba(3, 12, 8, 0.24);
+}
+
+[data-theme="dark"] .cms-transport-page .cms-card-head {
+  border-color: #294536;
+  background: #14271c;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-card-head h2,
+[data-theme="dark"] .cms-transport-page .cms-card-head strong,
+[data-theme="dark"] .cms-transport-page .cms-strong,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat strong,
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric strong,
+[data-theme="dark"] .cms-transport-page .cms-transport-trip strong,
+[data-theme="dark"] .cms-transport-page .cms-transport-route-distribution strong {
+  color: #f5faf7;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-card-head p,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat small,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat em,
+[data-theme="dark"] .cms-transport-page .cms-transport-trip small,
+[data-theme="dark"] .cms-transport-page .cms-transport-route-distribution small,
+[data-theme="dark"] .cms-transport-page .cms-transport-empty,
+[data-theme="dark"] .cms-transport-page .cms-transport-pagination,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter {
+  color: #b9c9c0;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tabs {
+  border-color: #355744;
+  background: #102018;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tab {
+  color: #bdccc3;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tab:hover {
+  background: #1b3526;
+  color: #f4f9f6;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tab.is-active {
+  background: linear-gradient(135deg, #789600, #9abd08);
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(125, 157, 0, 0.24);
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-tabs.is-compact .cms-transport-tab.is-active {
+  border-color: #789934;
+  background: #293d16;
+  color: #d9f48d;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-stat {
+  border-color: #38543f;
+  background: #17301d;
+  box-shadow: 0 7px 16px rgba(2, 12, 7, 0.22);
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(1) { border-color: #587520; background: linear-gradient(135deg, #1b381b, #243f18); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(2) { border-color: #167e58; background: linear-gradient(135deg, #103b2a, #12472f); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(3) { border-color: #8a7217; background: linear-gradient(135deg, #383612, #493d12); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(4) { border-color: #694095; background: linear-gradient(135deg, #2f2141, #39244e); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(5) { border-color: #078967; background: linear-gradient(135deg, #0a3f30, #07523b); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(6) { border-color: #a16317; background: linear-gradient(135deg, #483311, #5b3d0e); }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(7),
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(8) { border-color: #9d3434; background: linear-gradient(135deg, #3c1d1d, #4c2020); }
+
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-icon {
+  background: #526d0c;
+  color: #edff9e;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.28);
+}
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(2) .cms-transport-stat-icon,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(5) .cms-transport-stat-icon { background: #007a55; color: #baffdf; }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(3) .cms-transport-stat-icon { background: #7b6500; color: #fff3a3; }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(4) .cms-transport-stat-icon { background: #66369b; color: #f0dcff; }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(6) .cms-transport-stat-icon { background: #b45f00; color: #fff1cf; }
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(7) .cms-transport-stat-icon,
+[data-theme="dark"] .cms-transport-page .cms-transport-stat-grid .cms-transport-stat:nth-child(8) .cms-transport-stat-icon { background: #a51f2b; color: #ffe5e7; }
+
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric {
+  border-color: #3c5146;
+  background: #27342e;
+}
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric span { color: #d4ded8; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(1) { border-color: #72c49d; background: #b9f2d5; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(1) span,
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(1) strong { color: #075934; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(2) { border-color: #07865d; background: #07583e; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(3) { border-color: #74aee5; background: #b9ddfb; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(3) span,
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(3) strong { color: #094e86; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(4) { border-color: #a9780a; background: #6a4c05; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(5) { border-color: #4a5b53; background: #293630; }
+[data-theme="dark"] .cms-transport-page .cms-transport-status-metric:nth-child(6) { border-color: #a43b3b; background: #572424; }
+
+[data-theme="dark"] .cms-transport-page .cms-transport-search,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter select,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter input {
+  border-color: #3a5948;
+  background: #172920;
+  color: #eef6f1;
+}
+[data-theme="dark"] .cms-transport-page .cms-transport-search:focus-within,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter select:focus,
+[data-theme="dark"] .cms-transport-page .cms-transport-filter input:focus {
+  border-color: #91ad2a;
+  box-shadow: 0 0 0 3px rgba(145, 173, 42, 0.16);
+  outline: 0;
+}
+[data-theme="dark"] .cms-transport-page input::placeholder { color: #91a399; }
+[data-theme="dark"] .cms-transport-page select option { background: #172920; color: #eef6f1; }
+
+[data-theme="dark"] .cms-transport-page .cms-table-wrap {
+  border-color: #304c3c;
+  background: #122219;
+}
+[data-theme="dark"] .cms-transport-page .cms-table thead,
+[data-theme="dark"] .cms-transport-page .cms-table th { background: #1c3024; color: #d6e1da; }
+[data-theme="dark"] .cms-transport-page .cms-table td { border-color: #294536; color: #e6eee9; background: #122219; }
+[data-theme="dark"] .cms-transport-page .cms-table tbody tr:hover td { background: #193024; }
+
+[data-theme="dark"] .cms-transport-page .cms-btn-ghost,
+[data-theme="dark"] .cms-transport-page .cms-action-btn,
+[data-theme="dark"] .cms-transport-page .cms-transport-details-btn {
+  border-color: #42614f;
+  background: #172a20;
+  color: #dce8e1;
+}
+[data-theme="dark"] .cms-transport-page .cms-btn-ghost:hover,
+[data-theme="dark"] .cms-transport-page .cms-action-btn:hover,
+[data-theme="dark"] .cms-transport-page .cms-transport-details-btn:hover {
+  border-color: #91ad2a;
+  background: #294017;
+  color: #edffad;
+}
+
+[data-theme="dark"] .cms-transport-page .cms-transport-trip,
+[data-theme="dark"] .cms-transport-page .cms-transport-route-distribution > div,
+[data-theme="dark"] .cms-transport-page .cms-transport-gps-card,
+[data-theme="dark"] .cms-transport-page .cms-transport-info-grid span {
+  border-color: #304c3c;
+  background: #172a20;
+}
+[data-theme="dark"] .cms-transport-page .cms-transport-trip:hover,
+[data-theme="dark"] .cms-transport-page .cms-transport-route-distribution > div:hover { border-color: #698834; background: #20391f; }
+[data-theme="dark"] .cms-transport-page .cms-transport-progress { background: #293d32; }
+[data-theme="dark"] .cms-transport-page .cms-transport-warning { border-color: #a06c18; background: #49350f; color: #fff4d4; }
+[data-theme="dark"] .cms-transport-page .cms-transport-warning em { background: #7a4b08; color: #ffe2a3; }
+
+[data-theme="dark"] .cms-modal.cms-transport-form-modal,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal,
+[data-theme="dark"] .cms-modal.cms-transport-detail-modal,
+[data-theme="dark"] .cms-modal.cms-transport-trip-detail-modal {
+  border-color: #345342;
+  background: #13241b;
+  color: #edf5f0;
+}
+[data-theme="dark"] .cms-modal.cms-transport-form-modal .cms-modal-head,
+[data-theme="dark"] .cms-modal.cms-transport-form-modal .cms-modal-foot,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal .cms-modal-head,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal .cms-modal-foot,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal .cms-modal-head,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal .cms-modal-foot,
+[data-theme="dark"] .cms-modal.cms-transport-detail-modal .cms-modal-head,
+[data-theme="dark"] .cms-modal.cms-transport-trip-detail-modal .cms-modal-head {
+  border-color: #304c3c;
+  background: #172a20;
+}
+[data-theme="dark"] .cms-modal.cms-transport-form-modal input,
+[data-theme="dark"] .cms-modal.cms-transport-form-modal select,
+[data-theme="dark"] .cms-modal.cms-transport-form-modal textarea,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal input,
+[data-theme="dark"] .cms-modal.cms-transport-add-driver-modal select,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal input,
+[data-theme="dark"] .cms-modal.cms-transport-add-attendant-modal select {
+  border-color: #3b5b49;
+  background: #102018;
+  color: #eef6f1;
+}
+
+@media (max-width: 900px) {
+  .cms-transport-vehicle-modal .cms-form-grid.cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .cms-modal.cms-transport-vehicle-modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .cms-transport-vehicle-modal .cms-modal-head,
+  .cms-transport-vehicle-modal .cms-modal-body,
+  .cms-transport-vehicle-modal .cms-modal-foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .cms-transport-vehicle-modal .cms-form-grid.cols-3 {
+    grid-template-columns: 1fr;
   }
 }
 

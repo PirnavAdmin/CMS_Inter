@@ -122,14 +122,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
         }
 
-        public async Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode, int? campusId = null)
+        public async Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode, int? campusId = null, string? baseSeriesCode = null)
         {
             try
             {
                 var conn = await GetOpenConnectionAsync();
                 return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
                     "sp_GenerateNextNumberSeries",
-                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId },
+                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId, p_BaseSeriesCode = baseSeriesCode?.Trim() },
                     commandType: CommandType.StoredProcedure);
             }
             catch
@@ -147,6 +147,29 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
 
                 return existing;
+            }
+        }
+
+        public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null, string? board = null, string? academicYear = null)
+        {
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                
+                var maxSeq = await conn.ExecuteScalarAsync<int?>(
+                    "sp_GetMaxSequenceForBaseSeries",
+                    new { p_BaseCode = baseSeriesCode.Trim(), p_CampusId = campusId, p_Board = board, p_AcademicYear = academicYear },
+                    commandType: CommandType.StoredProcedure);
+                      
+                return maxSeq ?? 0;
+            }
+            catch
+            {
+                var max = await _context.Set<NumberSeriesConfiguration>()
+                    .Where(n => (n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
+                             && (n.CampusId == campusId || n.CampusId == null))
+                    .MaxAsync(n => (int?)n.CurrentSequence);
+                return max ?? 0;
             }
         }
     }

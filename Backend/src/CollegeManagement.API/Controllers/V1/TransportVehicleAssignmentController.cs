@@ -78,8 +78,7 @@ namespace CollegeManagement.API.Controllers
                         VehicleId = dto.VehicleId > 0 ? dto.VehicleId : 0,
                         DriverId = dto.DriverId > 0 ? dto.DriverId : 0,
                         Shift = dto.Shift ?? "Morning",
-                        Status = dto.Status,
-                        StatusText = dto.Status ? "Active" : "Inactive"
+                        Status = dto.Status
                     }
                 });
             }
@@ -147,7 +146,6 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
-        [HttpPost("{id}/reassign")]
         [HttpPut("{id}/reassign")]
         public async Task<IActionResult> Reassign(
             string id,

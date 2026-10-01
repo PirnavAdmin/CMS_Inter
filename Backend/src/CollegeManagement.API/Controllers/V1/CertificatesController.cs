@@ -132,9 +132,11 @@ public class CertificatesController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<StudentCertificateDropdownDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetStudentsDropdown(
         [FromQuery] int? campusId = null,
+        [FromQuery] int? boardId = null,
+        [FromQuery] int? academicYearId = null,
         CancellationToken ct = default)
     {
-        var students = await _service.GetStudentsDropdownAsync(campusId, ct);
+        var students = await _service.GetStudentsDropdownAsync(campusId, boardId, academicYearId, ct);
         return Ok(students);
     }
 

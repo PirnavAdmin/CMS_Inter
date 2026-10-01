@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Bus, ClipboardList, GraduationCap, Mail, MapPin, Pencil, School, User, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import { SkeletonPage, StatusBadge } from "@/components/common/Ui.jsx";
@@ -10,7 +10,20 @@ import { env } from "@/config/env.js";
 import "./StudentManagementPage.css";
 
 const ViewDetails = ({ items }) => <div className="student-profile-read-grid">{items.map(([key, value]) => <div className="student-profile-read-field" key={key}><span>{key}</span><strong>{value || "—"}</strong></div>)}</div>;
-const ViewSection = ({ title, children, className = "" }) => <section className={`cms-card student-profile-view-section ${className}`}><h2>{title}</h2>{children}</section>;
+const sectionIcons = {
+  "Personal Information": User,
+  "Contact Information": Mail,
+  "Admission Details": ClipboardList,
+  "Academic Placement": GraduationCap,
+  "Previous Education": School,
+  Address: MapPin,
+  "Parent Details": Users,
+  "Student Type & Residential Allocation": Bus,
+};
+const ViewSection = ({ title, children, className = "" }) => {
+  const Icon = sectionIcons[title];
+  return <section className={`cms-card student-profile-view-section ${className}`}><header className="student-profile-view-section-head">{Icon ? <span className="student-profile-view-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="student-profile-view-section-body">{children}</div></section>;
+};
 const read = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value != null && value !== "");
 const formatDisplayDate = (value) => {
   if (!value) return value;
@@ -78,12 +91,16 @@ export default function StudentProfilePage({ id }) {
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
       const admissionNo = String(read(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim();
       const studentId = String(read(record, "studentId", "StudentId", "id", "Id") ?? id);
-      const [admissionsResult, sectionsResult] = await Promise.allSettled([
+      const [studentsResult, admissionsResult, sectionsResult] = await Promise.allSettled([
+        apiClient.get(apiEndpoints.students.getAll),
         apiClient.get(apiEndpoints.admissions.getAll),
         apiClient.get(apiEndpoints.sections.list),
       ]);
+      const studentRows = studentsResult.status === "fulfilled" ? rows(studentsResult.value.data) : [];
       const admissionRows = admissionsResult.status === "fulfilled" ? rows(admissionsResult.value.data) : [];
       const sectionRows = sectionsResult.status === "fulfilled" ? rows(sectionsResult.value.data) : [];
+      const studentSummary = studentRows.find((item) => String(read(item, "studentId", "StudentId", "id", "Id") ?? "") === studentId
+        || String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === admissionNo);
       const admissionSummary = admissionRows.find((item) => String(read(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim() === admissionNo || String(read(item, "studentId", "StudentId") ?? "") === studentId);
       const admissionId = read(admissionSummary, "admissionId", "AdmissionId", "studentAdmissionId", "StudentAdmissionId", "id", "Id");
       let admission = admissionSummary;
@@ -96,6 +113,9 @@ export default function StudentProfilePage({ id }) {
       // Do not let null/empty values in one API response erase populated
       // values returned by the other (notably sectionId and admissionType).
       const source = { ...record };
+      Object.entries(studentSummary || {}).forEach(([key, value]) => {
+        if ((source[key] == null || source[key] === "") && value != null && value !== "") source[key] = value;
+      });
       Object.entries(admission || {}).forEach(([key, value]) => {
         if (value != null && value !== "") source[key] = value;
       });
@@ -156,11 +176,10 @@ export default function StudentProfilePage({ id }) {
       <ViewSection title="Academic Placement"><ViewDetails items={[["Board", read(student, "boardName", "BoardName", "board")], ["Academic Year", student.academicYear], ["Academic Level", student.level], ["Group", student.group], ["Program", student.programme], ["Section", student.section], ["Roll No", student.roll], ["Medium", read(student, "medium", "Medium")], ["Second Language", read(student, "secondLanguage", "SecondLanguage")]]}/></ViewSection>
       <ViewSection title="Previous Education"><ViewDetails items={[["Previous School", read(student, "previousSchool", "PreviousSchool")], ["Previous Board", read(student, "previousBoard", "PreviousBoard")], ["Previous Year of Passing", read(student, "previousYearOfPassing", "PreviousYearOfPassing")], ["Previous Hall Ticket Number", read(student, "previousHallTicketNumber", "PreviousHallTicketNumber", "hallTicketNumber")], ["Previous Percentage / Marks", read(student, "previousPercentage", "PreviousPercentage", "previousMarks", "PreviousMarks")]]}/></ViewSection>
       <ViewSection title="Address"><ViewDetails items={[["Address / House No", read(student, "address", "Address", "addressLine1", "AddressLine1", "houseNo", "HouseNo")], ["Street / Village", read(student, "street", "Street", "village", "Village", "addressLine2", "AddressLine2")], ["City / Town", read(student, "city", "City", "town", "Town")], ["District", read(student, "district", "District")], ["State", read(student, "state", "State")], ["Pincode", read(student, "pincode", "Pincode", "pinCode", "PinCode")]]}/></ViewSection>
-      <ViewSection title="Father Details"><ViewDetails items={[["Father Name", read(student, "fatherName", "FatherName")], ["Occupation", read(student, "fatherOccupation", "FatherOccupation")], ["Mobile Number", read(student, "fatherMobile", "FatherMobile")], ["Email", read(student, "fatherEmail", "FatherEmail")]]}/></ViewSection>
-      <ViewSection title="Mother Details"><ViewDetails items={[["Mother Name", read(student, "motherName", "MotherName")], ["Occupation", read(student, "motherOccupation", "MotherOccupation")], ["Mobile Number", read(student, "motherMobile", "MotherMobile")], ["Email", read(student, "motherEmail", "MotherEmail")]]}/></ViewSection>
-      <ViewSection title="Guardian Details"><ViewDetails items={[["Guardian Name", read(student, "guardianName", "GuardianName")], ["Mobile Number", read(student, "guardianMobile", "GuardianMobile")], ["Email", read(student, "guardianEmail", "GuardianEmail")]]}/></ViewSection>
+      <ViewSection title="Parent Details" className="student-profile-parent-section"><ViewDetails items={[["Father Name", read(student, "fatherName", "FatherName")], ["Father Occupation", read(student, "fatherOccupation", "FatherOccupation")], ["Father Mobile", read(student, "fatherMobile", "FatherMobile")], ["Mother Name", read(student, "motherName", "MotherName")], ["Mother Occupation", read(student, "motherOccupation", "MotherOccupation")], ["Mother Mobile", read(student, "motherMobile", "MotherMobile")], ["Guardian Name", read(student, "guardianName", "GuardianName")], ["Guardian Mobile", read(student, "guardianMobile", "GuardianMobile")], ["Parent/Guardian Email", read(student, "parentParentGuardianEmail", "ParentParentGuardianEmail", "parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail")]]}/></ViewSection>
       <ViewSection title="Student Type & Residential Allocation"><ViewDetails items={[["Student Type", allocation.studentType], ["School Transport Facility Required?", allocation.transportRequired], ...(allocation.studentType === "Non-Residential" && allocation.transportRequired === "Yes" ? [["Bus Type", allocation.busType], ["Route", allocation.route], ["Pickup Point", allocation.pickupPoint]] : []), ...(allocation.studentType === "Residential" ? [["Hostel Block", allocation.hostelBlock], ["Room Type", allocation.hostelRoom]] : [])]}/></ViewSection>
     </>}
     </div>
   </DashboardLayout>;
 }
+

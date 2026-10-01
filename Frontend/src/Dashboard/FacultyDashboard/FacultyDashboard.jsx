@@ -11,12 +11,8 @@ import {
   ChevronDown, CheckCircle2, Send, Paperclip, CalendarClock,
   ExternalLink, UserX,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
-import { useAcademicContext } from "@/context/AcademicContext.jsx";
-import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
-import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
-import { apiEndpoints } from "@/api/apiEndpoints.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import staffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -35,7 +31,20 @@ import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
 import "@/components/layout/DashboardLayout.css";
 import "@/cms.css";
-import "./facultydashboard.css";
+import "./FacultyDashboard.css";
+import { facultyMockData, mockPermissions, MOCK_TT_DAYS, MOCK_ATT_STUDENTS, MOCK_REIMB } from "./data/facultyMockData.js";
+import FacultyDashboardHome from "./pages/FacultyDashboardHome.jsx";
+import FacultyProfile from "./pages/FacultyProfile.jsx";
+import FacultyTimetable from "./pages/FacultyTimetable.jsx";
+import FacultyClasses from "./pages/FacultyClasses.jsx";
+import FacultyStudentAttendance from "./pages/FacultyStudentAttendance.jsx";
+import FacultyMarks from "./pages/FacultyMarks.jsx";
+import FacultyExamDuties from "./pages/FacultyExamDuties.jsx";
+import FacultyMyAttendance from "./pages/FacultyMyAttendance.jsx";
+import FacultyLeave from "./pages/FacultyLeave.jsx";
+import FacultyPayslips from "./pages/FacultyPayslips.jsx";
+import FacultyHolidays from "./pages/FacultyHolidays.jsx";
+
 
 const generatedSidebarIcons = {
   staffAttendance: { src: managementIconsSprite, position: "50% 0%" },
@@ -94,192 +103,20 @@ const evaluationKey = (item) => `${item.examinationId}:${item.sectionId}:${item.
 // ─────────────────────────────────────────────────────────────
 // MOCK DATA FALLBACKS
 // ─────────────────────────────────────────────────────────────
-const mockStaff = {
-  id: 1, employeeId: "P345", firstName: "Devendra Kumar", middleName: "", lastName: "Gummadi",
-  fullName: "Devendra Kumar Gummadi", role: "Staff", staffType: "Teaching",
-  department: "IT", designation: "Associate Software Engineer", board: "BIEAP",
-  academicYear: "2025-2026", dateOfJoining: "2026-04-01", gender: "Male",
-  dob: "2003-04-29", bloodGroup: "O-", maritalStatus: "Single", nationality: "Indian",
-  religion: "Hindu", motherTongue: "Telugu", mobile: "9951604989", altMobile: "",
-  email: "gummadi.devendrakumar@pirnav.com", personalEmail: "gummadi.devendrakumar@gmail.com", status: "Active",
-  houseNumber: "15-18-387", street: "Brindavan Gardens", city: "Guntur", district: "Guntur",
-  state: "Andhra Pradesh", country: "India", pin: "522007",
-  address: "15-18-387, Brindavan Gardens",
-  employmentType: "Full Time", subjectsTaught: "Computer Science 1, Computer Science 2",
-  bankName: "State Bank of India", accountHolder: "Devendra Kumar Gummadi",
-  accountNumber: "38920194823482", accountMasked: "XXXXXX3482", ifsc: "SBIN0001234",
-  branch: "Guntur Main Branch", accountType: "Salary Account",
-  pfNumber: "200982349812", uanNumber: "200982349812", esiNumber: "",
-  aadhaar: "243440489147", pan: "EHKPG8558N", photoUrl: "",
-  experience: [
-    { id: 1, institution: "PIRNAV Software Solutions", designation: "Associate Software Engineer", fromDate: "2024-06-10", toDate: "Present", isCurrent: true, subjectsTeached: "Computer Science 1", totalExp: "1 Year", status: "Active" },
-  ],
-  documents: [
-    { id: "doc-1", name: "Aadhaar Card Copy", type: "Aadhaar Card Copy", format: "PDF", size: "1.2 MB", date: "2026-04-01", status: "Verified" },
-    { id: "doc-2", name: "PAN Card Copy", type: "PAN Card Copy", format: "PDF", size: "840 KB", date: "2026-04-01", status: "Verified" },
-  ],
-};
 
-const MOCK_TT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MOCK_TT_SLOTS = [
-  {
-    time: "09:00–10:00 AM",
-    Mon: { sub: "Mathematics I-A", code: "MATH101", cls: "1st Year - Section A", group: "MPC", sectionId: "1", room: "Room 203", floor: "2nd Floor", block: "Main Academic Block" },
-    Tue: null,
-    Wed: { sub: "Mathematics II-A", code: "MATH201", cls: "2nd Year - Section B", group: "MPC", sectionId: "2", room: "Room 205", floor: "2nd Floor", block: "Main Academic Block" },
-    Thu: { sub: "Mathematics I-A", code: "MATH101", cls: "1st Year - Section A", group: "MPC", sectionId: "1", room: "Room 203", floor: "2nd Floor", block: "Main Academic Block" },
-    Fri: null,
-    Sat: { sub: "Mathematics II-A", code: "MATH201", cls: "2nd Year - Section B", group: "MPC", sectionId: "2", room: "Room 205", floor: "2nd Floor", block: "Main Academic Block" }
-  },
-  {
-    time: "10:00–11:00 AM",
-    Mon: null,
-    Tue: { sub: "Mathematics I-A", code: "MATH101", cls: "1st Year - Section A", group: "MPC", sectionId: "1", room: "Room 203", floor: "2nd Floor", block: "Main Academic Block" },
-    Wed: null,
-    Thu: { sub: "Commercial Maths", code: "CM101", cls: "1st Year - Section A", group: "MEC", sectionId: "3", room: "Room 104", floor: "1st Floor", block: "Commerce Block" },
-    Fri: { sub: "Mathematics I-A", code: "MATH101", cls: "1st Year - Section A", group: "MPC", sectionId: "1", room: "Room 203", floor: "2nd Floor", block: "Main Academic Block" },
-    Sat: null
-  },
-  {
-    time: "11:15–12:15 PM",
-    Mon: { sub: "Mathematics II-A", code: "MATH201", cls: "2nd Year - Section B", group: "MPC", sectionId: "2", room: "Room 205", floor: "2nd Floor", block: "Main Academic Block" },
-    Tue: { sub: "Commercial Maths", code: "CM101", cls: "1st Year - Section A", group: "MEC", sectionId: "3", room: "Room 104", floor: "1st Floor", block: "Commerce Block" },
-    Wed: { sub: "Mathematics I-A", code: "MATH101", cls: "1st Year - Section A", group: "MPC", sectionId: "1", room: "Room 203", floor: "2nd Floor", block: "Main Academic Block" },
-    Thu: null,
-    Fri: { sub: "Mathematics II-A", code: "MATH201", cls: "2nd Year - Section B", group: "MPC", sectionId: "2", room: "Room 205", floor: "2nd Floor", block: "Main Academic Block" },
-    Sat: null
-  },
-  {
-    time: "02:00–03:00 PM",
-    Mon: null,
-    Tue: { sub: "Mathematics II-A", code: "MATH201", cls: "2nd Year - Section B", group: "MPC", sectionId: "2", room: "Room 205", floor: "2nd Floor", block: "Main Academic Block" },
-    Wed: { sub: "Commercial Maths", code: "CM101", cls: "1st Year - Section A", group: "MEC", sectionId: "3", room: "Room 104", floor: "1st Floor", block: "Commerce Block" },
-    Thu: null,
-    Fri: null,
-    Sat: null
-  },
-  {
-    time: "03:00–04:00 PM",
-    Mon: { sub: "Tutorial Doubt Clearing", code: "MATH-TUT", cls: "1st Year - Section A", group: "MPC", sectionId: "1", room: "Room 203", floor: "2nd Floor", block: "Main Academic Block" },
-    Tue: null,
-    Wed: null,
-    Thu: null,
-    Fri: null,
-    Sat: null
-  },
-];
 
-const MOCK_ATT_STUDENTS = [
-  { studentId: 1, rollNo: "25MPC001", admissionNo: "ADM2025001", name: "Aarav Sharma", morningStatus: "Present", afternoonStatus: "Present", totalClasses: 48, presentCount: 45, attendancePct: 93.8, remarks: "" },
-  { studentId: 2, rollNo: "25MPC002", admissionNo: "ADM2025002", name: "Ananya Reddy", morningStatus: "Present", afternoonStatus: "Present", totalClasses: 48, presentCount: 47, attendancePct: 97.9, remarks: "" },
-  { studentId: 3, rollNo: "25MPC003", admissionNo: "ADM2025003", name: "Bhavya Rao", morningStatus: "Absent", afternoonStatus: "Absent", totalClasses: 48, presentCount: 34, attendancePct: 70.8, remarks: "Medical" },
-  { studentId: 4, rollNo: "25MPC004", admissionNo: "ADM2025004", name: "Devendra Verma", morningStatus: "Present", afternoonStatus: "Present", totalClasses: 48, presentCount: 44, attendancePct: 91.7, remarks: "" },
-  { studentId: 5, rollNo: "25MPC005", admissionNo: "ADM2025005", name: "Gautam Krishna", morningStatus: "Half Day", afternoonStatus: "Absent", totalClasses: 48, presentCount: 32, attendancePct: 66.7, remarks: "Sick" },
-  { studentId: 6, rollNo: "25MPC006", admissionNo: "ADM2025006", name: "Ishita Nair", morningStatus: "Present", afternoonStatus: "Present", totalClasses: 48, presentCount: 46, attendancePct: 95.8, remarks: "" },
-];
 
-const MOCK_PAYSLIPS = [
-  { id: 258, month: "January 2026", year: 2026, ctc: 399996, grossSalary: 33333, totalDeductions: 2470, netSalary: 30863, basicPay: 18000, hra: 7200, da: 3600, specialAllowance: 4533, pf: 2160, pt: 200, tds: 110, generatedOn: "26 Jan 2026", status: "Paid" },
-  { id: 257, month: "December 2025", year: 2025, ctc: 399996, grossSalary: 33333, totalDeductions: 2470, netSalary: 30863, basicPay: 18000, hra: 7200, da: 3600, specialAllowance: 4533, pf: 2160, pt: 200, tds: 110, generatedOn: "28 Dec 2025", status: "Paid" },
-  { id: 256, month: "November 2025", year: 2025, ctc: 399996, grossSalary: 33333, totalDeductions: 2470, netSalary: 30863, basicPay: 18000, hra: 7200, da: 3600, specialAllowance: 4533, pf: 2160, pt: 200, tds: 110, generatedOn: "29 Nov 2025", status: "Paid" },
-  { id: 255, month: "October 2025", year: 2025, ctc: 399996, grossSalary: 33333, totalDeductions: 2470, netSalary: 30863, basicPay: 18000, hra: 7200, da: 3600, specialAllowance: 4533, pf: 2160, pt: 200, tds: 110, generatedOn: "30 Oct 2025", status: "Paid" },
-];
 
-const MOCK_LEAVES = [
-  { id: 1, type: "Casual Leave (CL)", fromDate: "2025-05-14", toDate: "2025-05-14", totalDays: 1, reason: "Personal family emergency", appliedOn: "12 May 2025", status: "Approved", approvedBy: "Principal Office" },
-  { id: 2, type: "Sick Leave (SL)", fromDate: "2025-04-02", toDate: "2025-04-03", totalDays: 2, reason: "Viral fever", appliedOn: "01 Apr 2025", status: "Approved", approvedBy: "HOD Mathematics" },
-];
 
-const MOCK_DUTIES = [
-  {
-    id: 1,
-    category: "board",
-    examName: "BIEAP IPE Board Theory Examination 2026",
-    examCode: "BIEAP-IPE-2026",
-    dutyType: "Invigilator (Hall Superintendent)",
-    subject: "Mathematics Paper I-A",
-    date: "25 Sep 2026",
-    session: "Morning Session",
-    startTime: "09:00 AM",
-    endTime: "12:00 PM",
-    venue: "Main Block — Hall 204 (2nd Floor)",
-    reportingTime: "08:15 AM (Mandatory 45 mins prior)",
-    candidates: "30 Candidates (HT: 2601001 – 2601030)",
-    status: "Upcoming",
-    sops: [
-      "Collect sealed Question Paper packets from Chief Superintendent room.",
-      "Verify Student Hall Tickets and prohibit mobile phones/smart watches.",
-      "Cross-verify candidate signature on Nominal Roll & OMR Barcode.",
-      "Hand over signed absentee statement within 30 minutes of start.",
-    ],
-  },
-  {
-    id: 2,
-    category: "practical",
-    examName: "BIEAP Intermediate Practical Examination 2026",
-    examCode: "PRAC-PHY-2026",
-    dutyType: "External Practical Examiner",
-    subject: "Physics Practical Lab - Batch 01",
-    date: "28 Sep 2026",
-    session: "Morning Session",
-    startTime: "09:00 AM",
-    endTime: "12:00 PM",
-    venue: "Physics Central Lab — Room 102",
-    reportingTime: "08:30 AM",
-    candidates: "25 Candidates",
-    status: "Upcoming",
-    sops: [
-      "Verify laboratory apparatus calibration and experiment chits.",
-      "Conduct viva-voce and evaluate student lab records/observations.",
-      "Enter practical marks directly on BIEAP Confidential portal.",
-    ],
-  },
-  {
-    id: 3,
-    category: "internal",
-    examName: "College Pre-Final Examination 2026",
-    examCode: "PRE-FINAL-2026",
-    dutyType: "Chief Invigilator",
-    subject: "MPC & BiPC Common Session",
-    date: "02 Oct 2026",
-    session: "Afternoon Session",
-    startTime: "02:00 PM",
-    endTime: "05:00 PM",
-    venue: "Academic Block — Auditorium Hall A",
-    reportingTime: "01:15 PM",
-    candidates: "60 Students",
-    status: "Upcoming",
-    sops: [
-      "Oversee hall invigilators and manage extra main answer booklets.",
-      "Maintain exam decorum and check for unauthorized paper slips.",
-    ],
-  },
-  {
-    id: 4,
-    category: "internal",
-    examName: "Unit Test II Central Evaluation Camp",
-    examCode: "UT-II-EVAL",
-    dutyType: "Answer Script Evaluator",
-    subject: "Mathematics II-A (Calculus & Vectors)",
-    date: "15 Sep 2026",
-    session: "Full Day Evaluation Camp",
-    startTime: "10:00 AM",
-    endTime: "04:30 PM",
-    venue: "Central Evaluation Cell — Room 305",
-    reportingTime: "09:45 AM",
-    candidates: "90 Answer Scripts",
-    status: "Completed",
-    sops: [
-      "Follow scheme of valuation and sample answer keys strictly.",
-      "Total marks re-verification before bundle closure.",
-    ],
-  },
-];
 
-const MOCK_REIMB = [
-  { id: 1, claimId: "CLM250501", type: "Books & Journals", claimed: 1800, approved: 1800, date: "05 May 2025", status: "Approved", proofName: "Receipt_BookStore.pdf" },
-  { id: 2, claimId: "CLM250412", type: "Academic Conference", claimed: 3500, approved: 3500, date: "12 Apr 2025", status: "Approved", proofName: "Ticket_Conference.pdf" },
-];
+
+
+
+
+
+
+
+
 
 // ─────────────────────────────────────────────────────────────
 // SIDEBAR CONFIG — Core Modules for Staff Portal (3D Assets)
@@ -295,6 +132,7 @@ const NAV_ITEMS = [
   { id: "leave", label: "Leave Management", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
   { id: "salary", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll, group: "HR & FINANCE" },
   { id: "reimbursements", label: "Reimbursements", icon: feeManagementIcon, group: "HR & FINANCE" },
+  { id: "holidays", label: "Holidays", icon: Calendar, group: "HR & FINANCE" },
 ];
 
 const STAFF_SEARCH_INDEX = [
@@ -325,21 +163,20 @@ const STATUS_BADGE = {
   "NOT STARTED": "cms-badge-inactive", REJECTED: "cms-badge-danger",
 };
 
-export default function StaffDashboard() {
+export default function FacultyDashboard() {
   const navigate = useNavigate();
-  const {
-    selectedBoard,
-    setSelectedBoard,
-    selectedAcademicYear,
-    setSelectedAcademicYear,
-    boards = [],
-    academicYears = [],
-    boardsLoading = false,
-    academicYearsLoading = false,
-  } = useAcademicContext();
+  const location = useLocation();
+  const routeModule = location.pathname.replace(/^\/faculty-dashboard\/?/, "").split("/")[0] || "dashboard";
+  const pathToModule = { "": "dashboard", dashboard: "dashboard", profile: "profile", timetable: "timetable", classes: "classes", attendance: "attendance", marks: "marks", "exam-duties": "examduties", "my-attendance": "myattendance", leave: "leave", payslips: "salary", holidays: "holidays", reimbursements: "reimbursements" };
+  const moduleToPath = { dashboard: "", profile: "profile", timetable: "timetable", classes: "classes", attendance: "attendance", marks: "marks", examduties: "exam-duties", myattendance: "my-attendance", leave: "leave", salary: "payslips", holidays: "holidays", reimbursements: "reimbursements" };
+  const activeModule = pathToModule[routeModule] || "dashboard";
+  const setActiveModule = (module) => navigate("/faculty-dashboard" + (moduleToPath[module] ? "/" + moduleToPath[module] : ""));
+  const boards = facultyMockData.boards, academicYears = facultyMockData.academicYears;
+  const boardsLoading = false, academicYearsLoading = false;
+  const [selectedBoard, setSelectedBoard] = useState(boards[0]);
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState(academicYears[0]);
 
   // Navigation State
-  const [activeModule, setActiveModule] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [profileDropOpen, setProfileDropOpen] = useState(false);
 
@@ -356,9 +193,10 @@ export default function StaffDashboard() {
   const profileDropRef = useRef(null);
 
   const searchSuggestions = useMemo(() => {
+    const searchIndex = [...STAFF_SEARCH_INDEX, ...facultyMockData.searchIndex];
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return STAFF_SEARCH_INDEX.slice(0, 8);
-    return STAFF_SEARCH_INDEX.filter((item) =>
+    if (!q) return searchIndex.slice(0, 8);
+    return searchIndex.filter((item) =>
       item.label.toLowerCase().includes(q) ||
       item.group.toLowerCase().includes(q) ||
       (item.keywords && item.keywords.toLowerCase().includes(q))
@@ -414,210 +252,15 @@ export default function StaffDashboard() {
 
   const persistStaffProfile = (data) => {
     try {
-      const key = getStaffStorageKey(data) || getStaffStorageKey(getAuthUser());
+      const key = getStaffStorageKey(data);
       if (key) {
         localStorage.setItem(key, JSON.stringify(data));
       }
     } catch {}
   };
 
-  // Staff Profile Data (Safe Name Extraction & Clean Initial State)
-  const [profileData, setProfileData] = useState(() => {
-    try {
-      const auth = getAuthUser();
-      const rawEmail = auth?.email;
-      const authEmail = Array.isArray(rawEmail)
-        ? String(rawEmail[0] || "").toLowerCase().trim()
-        : String(rawEmail || "").toLowerCase().trim();
-      const currentId = auth?.employeeId || (auth?.staffId ? `STAFF${auth.staffId}` : "");
-      const authStaffId = auth?.staffId ? String(auth.staffId) : "";
-      const savedKey = getStaffStorageKey(auth);
-
-      // Clean up legacy non-namespaced cache to avoid cross-user data leakage
-      try {
-        localStorage.removeItem("staff_profile_data");
-        sessionStorage.removeItem("staff_profile_data");
-      } catch {}
-
-      if (savedKey) {
-        const saved = localStorage.getItem(savedKey);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed) {
-            const parsedEmailRaw = parsed?.email;
-            const parsedEmail = Array.isArray(parsedEmailRaw)
-              ? String(parsedEmailRaw[0] || "").toLowerCase().trim()
-              : String(parsedEmailRaw || "").toLowerCase().trim();
-            const parsedId = parsed?.id || parsed?.staffId ? String(parsed.id || parsed.staffId) : "";
-            const isOwner = (authEmail && parsedEmail === authEmail) || (authStaffId && parsedId === authStaffId);
-            if (isOwner) {
-              return {
-                ...parsed,
-                email: parsedEmail,
-              };
-            }
-          }
-        }
-      }
-
-      if (auth) {
-        const full = String(auth.fullName || auth.name || "").trim();
-        const parts = full.split(/\s+/);
-        const fName = auth.firstName || parts[0] || "Staff";
-        const lName = auth.lastName || parts.slice(1).join(" ") || "";
-        return {
-          id: auth.staffId || null,
-          employeeId: auth.employeeId || currentId || "",
-          fullName: full || `${fName} ${lName}`.trim() || "Staff Member",
-          firstName: fName,
-          middleName: auth.middleName || "",
-          lastName: lName,
-          role: auth.role || "Faculty",
-          staffType: auth.staffType || "Teaching",
-          department: auth.department || "",
-          designation: auth.designation || "Faculty",
-          board: auth.board || "BIEAP",
-          academicYear: auth.academicYear || "2026-2027",
-          dateOfJoining: auth.dateOfJoining || new Date().toISOString().split("T")[0],
-          gender: auth.gender || "Male",
-          dob: auth.dob || "",
-          bloodGroup: "",
-          maritalStatus: "",
-          mobile: String(auth.mobile || auth.phoneNumber || "").trim(),
-          email: authEmail,
-          aadhaar: "",
-          pan: "",
-          photoUrl: "",
-          houseNumber: "",
-          street: "",
-          city: "",
-          district: "",
-          state: "",
-          country: "India",
-          pin: "",
-          address: "",
-          bankName: "",
-          accountHolder: "",
-          accountNumber: "",
-          ifsc: "",
-          branch: "",
-          accountType: "Salary Account",
-          pfNumber: "",
-          uanNumber: "",
-          experience: [],
-          documents: [],
-        };
-      }
-    } catch (e) {
-      console.error("Failed to initialize profileData:", e);
-    }
-    return mockStaff;
-  });
-
-  // Live Staff Profile Loader from Backend
-  useEffect(() => {
-    const auth = getAuthUser();
-    // CRITICAL: auth.staffId is the staff table ID! auth.id is Users.UserId!
-    // NEVER use auth.id to query /api/v1/staff/{id} because UserId 1 is NOT Staff 1!
-    const staffId = auth?.staffId || null;
-    const rawEmail = auth?.email;
-    const authEmail = Array.isArray(rawEmail)
-      ? String(rawEmail[0] || "").toLowerCase().trim()
-      : String(rawEmail || "").toLowerCase().trim();
-    const employeeId = auth?.employeeId || null;
-
-    if (!staffId && !authEmail && !employeeId) return;
-
-    let isMounted = true;
-
-    const fetchLiveProfile = async () => {
-      try {
-        let staffRecord = null;
-        if (staffId) {
-          try {
-            const res = await apiClient.get(apiEndpoints.faculty.getById(staffId));
-            staffRecord = res?.data?.data || res?.data || res;
-          } catch {}
-        }
-        if (!staffRecord && employeeId) {
-          try {
-            const res = await apiClient.get(apiEndpoints.faculty.getByEmployeeId(employeeId));
-            staffRecord = res?.data?.data || res?.data || res;
-          } catch {}
-        }
-        if (!staffRecord && authEmail) {
-          try {
-            const res = await apiClient.get(apiEndpoints.faculty.getAll);
-            const list = unwrapRecords(res);
-            staffRecord = list.find((s) => {
-              const sEmail = String(s.email || "").toLowerCase().trim();
-              return sEmail && sEmail === authEmail;
-            });
-          } catch {}
-        }
-
-        if (!isMounted || !staffRecord) return;
-
-        const full = (staffRecord.fullName || `${staffRecord.firstName || ""} ${staffRecord.lastName || ""}`).trim();
-        const parts = full.split(/\s+/);
-        const fName = staffRecord.firstName || parts[0] || "Staff";
-        const lName = staffRecord.lastName || parts.slice(1).join(" ") || "";
-        const sEmailRaw = staffRecord.email || authEmail;
-        const sEmail = Array.isArray(sEmailRaw)
-          ? String(sEmailRaw[0] || "").trim()
-          : String(sEmailRaw || "").trim();
-
-        setProfileData((prev) => {
-          const updated = {
-            ...prev,
-            id: staffRecord.id || staffRecord.staffId || prev.id,
-            employeeId: staffRecord.employeeId || prev.employeeId,
-            fullName: full || prev.fullName,
-            firstName: fName,
-            middleName: staffRecord.middleName || prev.middleName || "",
-            lastName: lName,
-            email: sEmail,
-            mobile: String(staffRecord.mobile || staffRecord.alternateMobile || prev.mobile || "").trim(),
-            designation: staffRecord.designation || prev.designation,
-            department: staffRecord.department || prev.department,
-            staffType: staffRecord.staffType || staffRecord.facultyType || prev.staffType,
-            gender: staffRecord.gender || prev.gender,
-            dob: staffRecord.dateOfBirth ? staffRecord.dateOfBirth.split("T")[0] : prev.dob,
-            aadhaar: staffRecord.aadhaar || prev.aadhaar,
-            pan: staffRecord.pan || staffRecord.panNumber || prev.pan,
-            bloodGroup: staffRecord.bloodGroup || prev.bloodGroup,
-            maritalStatus: staffRecord.maritalStatus || prev.maritalStatus,
-            dateOfJoining: staffRecord.dateOfJoining ? staffRecord.dateOfJoining.split("T")[0] : (staffRecord.joiningDate ? staffRecord.joiningDate.split("T")[0] : prev.dateOfJoining),
-            qualification: staffRecord.qualification || staffRecord.highestQualification || prev.qualification,
-            houseNumber: staffRecord.currentAddress || staffRecord.address || prev.houseNumber,
-            city: staffRecord.city || prev.city,
-            district: staffRecord.district || prev.district,
-            state: staffRecord.state || prev.state,
-            pin: staffRecord.pin || staffRecord.pincode || prev.pin,
-            bankName: staffRecord.bankName || staffRecord.bankDetails?.bankName || prev.bankName,
-            accountHolder: staffRecord.accountHolder || staffRecord.accountHolderName || staffRecord.bankDetails?.accountHolderName || prev.accountHolder,
-            accountNumber: staffRecord.accountNumber || staffRecord.bankDetails?.accountNumber || prev.accountNumber,
-            ifsc: staffRecord.ifsc || staffRecord.ifscCode || staffRecord.bankDetails?.ifscCode || prev.ifsc,
-            branch: staffRecord.branch || staffRecord.branchName || staffRecord.bankDetails?.branch || prev.branch,
-            accountType: staffRecord.accountType || staffRecord.bankDetails?.accountType || prev.accountType,
-            photoUrl: staffRecord.photoUrl || staffRecord.photoPath || prev.photoUrl,
-            experience: (Array.isArray(staffRecord.experienceList) && staffRecord.experienceList.length) ? staffRecord.experienceList : (prev.experience || []),
-            documents: (Array.isArray(staffRecord.documentsList) && staffRecord.documentsList.length) ? staffRecord.documentsList : (prev.documents || []),
-          };
-          persistStaffProfile(updated);
-          return updated;
-        });
-      } catch (err) {
-        console.error("Failed to load live staff profile:", err);
-      }
-    };
-
-    fetchLiveProfile();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // The demo identity is kept local and comes from facultyMockData.
+  const [profileData, setProfileData] = useState(facultyMockData.user);
 
   // Profile Wizard Steps (1 to 6)
   const [profileStep, setProfileStep] = useState(1);
@@ -637,23 +280,8 @@ export default function StaffDashboard() {
     "Computer Science 1", "Computer Science 2",
   ]);
 
-  useEffect(() => {
-    apiClient
-      .get(apiEndpoints.subjects?.getAll || "/api/v1/subjects")
-      .catch(() => apiClient.get("/api/v1/subjects"))
-      .then((res) => {
-        const records = unwrapRecords(res);
-        if (records && records.length > 0) {
-          const names = records
-            .map((s) => s.subjectName || s.name || s.subjectCode)
-            .filter(Boolean);
-          if (names.length > 0) {
-            setAvailableSubjects(Array.from(new Set(names)));
-          }
-        }
-      })
-      .catch(() => {});
-  }, []);
+  // Subject options are local mock data.
+  useEffect(() => setAvailableSubjects(facultyMockData.subjects), []);
 
   // Clean blank experience form state
   const [newExp, setNewExp] = useState({
@@ -721,29 +349,7 @@ export default function StaffDashboard() {
         }));
       }
 
-      // Online lookup from Indian Postal PIN API
-      setIsFetchingPin(true);
-      fetch(`https://api.postalpincode.in/pincode/${clean}`)
-        .then((res) => res.json())
-        .then((data) => {
-          setIsFetchingPin(false);
-          if (Array.isArray(data) && data[0]?.Status === "Success" && data[0]?.PostOffice?.length) {
-            const po = data[0].PostOffice[0];
-            setProfileData((prev) => ({
-              ...prev,
-              pin: clean,
-              pincode: clean,
-              district: po.District || prev.district,
-              state: po.State || prev.state,
-              country: po.Country || "India",
-              city: prev.city || po.Name || po.Block || prev.city,
-            }));
-            notify(`Address details auto-filled for PIN ${clean}`);
-          }
-        })
-        .catch(() => {
-          setIsFetchingPin(false);
-        });
+      setIsFetchingPin(false);
     }
   };
 
@@ -1309,7 +915,7 @@ export default function StaffDashboard() {
   // ─────────────────────────────────────────────────────────────
   // TIMETABLE & MERGED CLASS DRAWER
   // ─────────────────────────────────────────────────────────────
-  const [timetable, setTimetable] = useState(MOCK_TT_SLOTS);
+  const [timetable, setTimetable] = useState(facultyMockData.timetable);
   const [selectedClassSlot, setSelectedClassSlot] = useState(null);
 
   // ─────────────────────────────────────────────────────────────
@@ -1324,7 +930,7 @@ export default function StaffDashboard() {
   const [attGroup, setAttGroup] = useState("");
   const [attProgram, setAttProgram] = useState("");
   const [attSection, setAttSection] = useState("");
-  const [attStudents, setAttStudents] = useState(MOCK_ATT_STUDENTS);
+  const [attStudents, setAttStudents] = useState(facultyMockData.students);
   const [attDirty, setAttDirty] = useState(false);
   const [attSaving, setAttSaving] = useState(false);
 
@@ -1346,18 +952,6 @@ export default function StaffDashboard() {
     { code: "CO", name: "Compensatory Off (CO)" },
   ]);
 
-  useEffect(() => {
-    apiClient.get("/api/v1/leave-categories").then((res) => {
-      const list = unwrapRecords(res);
-      if (list.length) {
-        setLeaveCategories(list.map((c) => ({
-          code: c.categoryCode || c.code || "LEAVE",
-          name: `${c.categoryName || c.name} (${c.categoryCode || c.code || ""})`.replace(" ()", ""),
-        })));
-      }
-    }).catch(() => {});
-  }, []);
-
   const toggleSessionStatus = (studentId, session, status) => {
     setAttStudents((prev) =>
       prev.map((s) => (s.studentId === studentId ? { ...s, [`${session}Status`]: status } : s))
@@ -1375,24 +969,7 @@ export default function StaffDashboard() {
 
   const saveAttendance = async () => {
     setAttSaving(true);
-    try {
-      await apiClient.post(apiEndpoints.attendance.studentAdminBulk || "/api/v1/attendance/student/admin/bulk", {
-        attendanceDate: attDate,
-        sectionId: Number(attSection || "1"),
-        students: attStudents.map((s) => ({
-          studentId: s.studentId,
-          morningStatus: s.morningStatus === "Present" ? 1 : s.morningStatus === "Half Day" ? 4 : 2,
-          afternoonStatus: s.afternoonStatus === "Present" ? 1 : s.afternoonStatus === "Half Day" ? 4 : 2,
-          remarks: s.remarks || "",
-        })),
-      }).catch(() => {});
-      setAttDirty(false);
-      notify("Student attendance saved successfully!");
-    } catch (err) {
-      notify(getApiErrorMessage(err), "error");
-    } finally {
-      setAttSaving(false);
-    }
+    window.setTimeout(() => { setAttDirty(false); setAttSaving(false); notify("Student attendance saved successfully!"); }, 250);
   };
 
   const handleExportAttendanceSheet = () => {
@@ -1461,163 +1038,45 @@ export default function StaffDashboard() {
     notify(`Attendance slip downloaded for ${student.name}.`);
   };
 
-  // Load Active Boards on Mount for Student Attendance
+  // Local mock academic hierarchy for attendance filters.
   useEffect(() => {
-    apiClient.get(apiEndpoints.boards.active).catch(() => apiClient.get(apiEndpoints.boards.list))
-      .then((res) => {
-        const list = unwrapRecords(res).map((b) => ({
-          id: normalizeId(b.boardId ?? b.id),
-          name: b.boardName ?? b.name,
-          code: b.boardCode ?? b.code,
-          isActive: b.isActive !== false,
-        })).filter((b) => b.isActive);
-        setAttBoards(list);
-        if (list.length) {
-          setAttBoard(list[0].id);
-        }
-      }).catch(() => {});
+    setAttBoards(facultyMockData.boards); setAttYears(facultyMockData.academicYears);
+    setAttLevels(facultyMockData.levels); setAttGroups(facultyMockData.groups);
+    setAttPrograms(facultyMockData.programs); setAttSections(facultyMockData.sections);
+    setAttBoard(facultyMockData.boards[0]?.id || ""); setAttYear(facultyMockData.academicYears[0]?.id || "");
+    setAttLevel(facultyMockData.levels[0]?.id || ""); setAttGroup(facultyMockData.groups[0]?.id || "");
+    setAttProgram(facultyMockData.programs[0]?.id || ""); setAttSection(facultyMockData.sections[0]?.id || "1");
   }, []);
 
-  // Cascading Academic Context for Student Attendance
-  useEffect(() => {
-    if (!attBoard) return;
-    apiClient.get(apiEndpoints.academicYears.active, { params: { boardId: attBoard, isActive: true } })
-      .catch(() => apiClient.get(apiEndpoints.academicYears.getAll))
-      .then((res) => {
-        const list = unwrapRecords(res).map((y) => ({
-          id: normalizeId(y.academicYearId ?? y.id),
-          name: y.academicYearName ?? y.name,
-          boardId: normalizeId(y.boardId),
-          isActive: y.isActive !== false && y.status !== false && y.status !== "Inactive" && !String(y.name || "").includes("2028") && !String(y.name || "").includes("2029"),
-        })).filter((y) => y.isActive && (!y.boardId || eq(y.boardId, attBoard)));
-        setAttYears(list);
-        if (list.length) {
-          const matchContext = selectedAcademicYear && list.find((y) => eq(y.id, selectedAcademicYear.id));
-          setAttYear(matchContext ? matchContext.id : list[0].id);
-        }
-      }).catch(() => setAttYears([]));
-
-    apiClient.get(`/api/v1/academic-levels?boardId=${attBoard}`)
-      .catch(() => apiClient.get("/api/v1/academic-levels"))
-      .then((res) => {
-        const list = unwrapRecords(res).map((l) => ({
-          id: normalizeId(l.academicLevelId ?? l.id),
-          name: l.levelName ?? l.name,
-          isActive: l.isActive !== false,
-        })).filter((l) => l.isActive);
-        setAttLevels(list);
-        if (list.length) setAttLevel(list[0].id);
-      }).catch(() => setAttLevels([]));
-
-    apiClient.get(apiEndpoints.groups.list, { params: { boardId: attBoard, isActive: true } })
-      .catch(() => apiClient.get(apiEndpoints.groups.getByBoard(attBoard), { params: { isActive: true } }))
-      .then((res) => {
-        const list = unwrapRecords(res).map((g) => ({
-          id: normalizeId(g.groupId ?? g.id),
-          name: g.groupName ?? g.name,
-          isActive: g.isActive !== false,
-        })).filter((g) => g.isActive);
-        setAttGroups(list);
-        if (list.length) setAttGroup(list[0].id);
-      }).catch(() => setAttGroups([]));
-  }, [attBoard]);
-
-  useEffect(() => {
-    if (!attGroup) { setAttPrograms([]); return; }
-    apiClient.get(apiEndpoints.groups.getPrograms(attGroup))
-      .catch(() => apiClient.get(apiEndpoints.groups.programs(attGroup)))
-      .then((res) => {
-        const list = unwrapRecords(res).map((p) => ({
-          id: normalizeId(p.programId ?? p.id),
-          name: p.programName ?? p.name,
-          isActive: p.isActive !== false,
-        })).filter((p) => p.isActive);
-        setAttPrograms(list);
-        if (list.length) setAttProgram(list[0].id);
-      }).catch(() => setAttPrograms([]));
-  }, [attGroup]);
-
-  useEffect(() => {
-    if (!attBoard || !attGroup) { setAttSections([]); return; }
-    const params = {
-      BoardId: attBoard,
-      GroupId: attGroup,
-      IsActive: true,
-    };
-    if (attYear) params.AcademicYearId = attYear;
-    if (attLevel) params.AcademicLevelId = attLevel;
-    if (attProgram) params.ProgramId = attProgram;
-
-    apiClient.get(apiEndpoints.sections.list, { params })
-      .catch(() => apiClient.get(apiEndpoints.sections.getAll, { params }))
-      .then((res) => {
-        const list = unwrapRecords(res).map((s) => ({
-          id: normalizeId(s.sectionId ?? s.id),
-          name: s.sectionName ?? s.name,
-          isActive: s.isActive !== false,
-        })).filter((s) => s.isActive);
-        setAttSections(list);
-        if (list.length) setAttSection(list[0].id);
-      }).catch(() => setAttSections([]));
-  }, [attBoard, attYear, attLevel, attGroup, attProgram]);
-
-
-
-  // ─────────────────────────────────────────────────────────────
   // SALARY & PAYSLIPS (Mirrored from Pirnav HRMS UserPayslip)
   // ─────────────────────────────────────────────────────────────
-  const [payslipList, setPayslipList] = useState(MOCK_PAYSLIPS);
+  const [payslipList, setPayslipList] = useState(facultyMockData.payslips);
+  const [payslipYear, setPayslipYear] = useState("all");
   const [viewingPayslip, setViewingPayslip] = useState(null);
 
   // ─────────────────────────────────────────────────────────────
   // LEAVE MANAGEMENT
   // ─────────────────────────────────────────────────────────────
-  const [leaveList, setLeaveList] = useState(MOCK_LEAVES);
+  const [leaveList, setLeaveList] = useState(facultyMockData.leaveRequests);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
     type: "Casual Leave (CL)", fromDate: "", toDate: "", reason: ""
   });
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
+  const leavePreviewDays = leaveForm.fromDate && leaveForm.toDate && new Date(leaveForm.toDate) >= new Date(leaveForm.fromDate) ? Math.floor((new Date(leaveForm.toDate)-new Date(leaveForm.fromDate))/86400000)+1 : 0;
+  const affectedClassCount = (() => { if (!leavePreviewDays) return 0; let count=0; const dayNames=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]; for(let offset=0;offset<leavePreviewDays;offset++){const date=new Date(leaveForm.fromDate);date.setDate(date.getDate()+offset);count+=facultyMockData.timetable.filter((slot)=>slot[dayNames[date.getDay()]]).length;} return count; })();
 
   const applyLeave = async () => {
-    if (!leaveForm.fromDate || !leaveForm.toDate || !leaveForm.reason.trim()) {
-      return notify("Please complete all required fields.", "error");
-    }
+    if (!leaveForm.fromDate || !leaveForm.toDate || !leaveForm.reason.trim()) return notify("Please complete all required fields.", "error");
     setLeaveSubmitting(true);
-    const start = new Date(leaveForm.fromDate);
-    const end = new Date(leaveForm.toDate);
-    const days = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
-
-    try {
-      await apiClient.post(apiEndpoints.staffAttendance.leave || "/api/v1/staff-attendance/leave", {
-        staffId: profileData.id,
-        leaveType: leaveForm.type,
-        startDate: leaveForm.fromDate,
-        endDate: leaveForm.toDate,
-        reason: leaveForm.reason,
-      }).catch(() => {});
-
-      const newLeave = {
-        id: Date.now(),
-        type: leaveForm.type,
-        fromDate: leaveForm.fromDate,
-        toDate: leaveForm.toDate,
-        totalDays: days,
-        reason: leaveForm.reason,
-        appliedOn: new Date().toLocaleDateString("en-GB"),
-        status: "Pending",
-        approvedBy: "Principal Office",
-      };
-      setLeaveList((p) => [newLeave, ...p]);
-      setShowLeaveModal(false);
-      setLeaveForm({ type: "Casual Leave (CL)", fromDate: "", toDate: "", reason: "" });
-      notify("Leave application submitted successfully!");
-    } finally {
-      setLeaveSubmitting(false);
-    }
+    const start = new Date(leaveForm.fromDate), end = new Date(leaveForm.toDate);
+    const days = Math.max(1, Math.round((end - start) / 86400000) + 1);
+    const newLeave = { id: Date.now(), type: leaveForm.type, fromDate: leaveForm.fromDate, toDate: leaveForm.toDate, totalDays: days, reason: leaveForm.reason, appliedOn: new Date().toLocaleDateString("en-GB"), status: "Pending", approvedBy: "Principal Office" };
+    setLeaveList((items) => [newLeave, ...items]); setShowLeaveModal(false);
+    setLeaveForm({ type: "Casual Leave (CL)", fromDate: "", toDate: "", reason: "" });
+    setLeaveSubmitting(false); notify("Leave application submitted successfully!");
   };
 
-  // ─────────────────────────────────────────────────────────────
   // REIMBURSEMENTS (With Proof Upload)
   // ─────────────────────────────────────────────────────────────
   const [reimbList, setReimbList] = useState(MOCK_REIMB);
@@ -1653,13 +1112,11 @@ export default function StaffDashboard() {
   // ─────────────────────────────────────────────────────────────
   // EXAM DUTIES
   // ─────────────────────────────────────────────────────────────
-  const [dutiesList, setDutiesList] = useState(MOCK_DUTIES);
+  const [dutiesList, setDutiesList] = useState(facultyMockData.examDuties);
+  const [examDutyTab, setExamDutyTab] = useState("all");
 
   // Logout
-  const handleLogout = () => {
-    clearAuthSession();
-    navigate("/login", { replace: true });
-  };
+  const handleLogout = () => navigate("/login", { replace: true });
 
   const initials = `${profileData.firstName?.[0] || profileData.fullName?.[0] || "S"}${profileData.lastName?.[0] || ""}`.toUpperCase();
 
@@ -2212,13 +1669,8 @@ export default function StaffDashboard() {
     </div>
   );
 
-  // 4. MARKS ENTRY & EVALUATION (1:1 Admin Replica via embedded MarksEntryPage)
-  const renderMarks = () => (
-    <MarksEntryPage embedded={true} />
-  );
-
-  // 5. EXAM DUTIES (Intermediate College Public & Internal Exams)
-  const [examDutyTab, setExamDutyTab] = useState("all");
+  // Reuse the established admin Marks Entry workspace in embedded mode.
+  const renderMarks = () => <MarksEntryPage key="faculty-marks-entry" embedded={true} />;
 
   const renderExamDuties = () => {
     const filteredDuties = dutiesList.filter((d) => {
@@ -2564,7 +2016,7 @@ export default function StaffDashboard() {
         {/* Attendance Regularization Modal */}
         {showRegularizeModal && (
           <div className="cms-overlay" onClick={(e) => e.target === e.currentTarget && setShowRegularizeModal(false)}>
-            <div className="cms-modal sm">
+            <div className="cms-modal sm faculty-regularization-modal">
               <div className="cms-modal-head">
                 <div>
                   <h3 style={{ margin: 0, fontSize: 16 }}>Request Attendance Regularization</h3>
@@ -2688,7 +2140,7 @@ export default function StaffDashboard() {
                 <th>Reason</th>
                 <th>Applied On</th>
                 <th>Status</th>
-                <th>Approver</th>
+                <th>Approver</th><th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -2701,7 +2153,7 @@ export default function StaffDashboard() {
                   <td>{l.reason}</td>
                   <td style={{ color: "var(--cms-muted)" }}>{l.appliedOn}</td>
                   <td><span className={`cms-badge ${STATUS_BADGE[l.status]}`}>{l.status}</span></td>
-                  <td>{l.approvedBy}</td>
+                  <td>{l.approvedBy}</td><td>{l.status === "Pending" ? <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setLeaveList((items) => items.map((item) => item.id === l.id ? { ...item, status: "Cancelled" } : item))}>Cancel</button> : <span style={{color:"var(--cms-muted)"}}>--</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -2740,6 +2192,7 @@ export default function StaffDashboard() {
                   <textarea rows={3} value={leaveForm.reason} placeholder="State reason clearly..." onChange={(e) => setLeaveForm({ ...leaveForm, reason: e.target.value })} />
                 </div>
               </div>
+              {leavePreviewDays > 0 && <p style={{fontSize:12,color:"var(--cms-muted)",marginTop:12}}>Calculated leave: {leavePreviewDays} day(s) ? Affected timetable classes: {affectedClassCount}</p>}
             </div>
             <div className="cms-modal-foot">
               <button className="cms-btn cms-btn-ghost" onClick={() => setShowLeaveModal(false)}>Cancel</button>
@@ -2755,7 +2208,8 @@ export default function StaffDashboard() {
 
   // 7. SALARY & PAYSLIPS (Mirrored from Pirnav HRMS UserPayslip)
   const renderSalary = () => {
-    const current = payslipList[0];
+    const filteredPayslips = payslipList.filter((item) => payslipYear === "all" || String(item.year) === payslipYear);
+    const current = filteredPayslips[0];
     const fmt = (v) => `₹${Number(v || 0).toLocaleString("en-IN")}`;
     return (
       <div className="payslip-container">
@@ -2767,7 +2221,7 @@ export default function StaffDashboard() {
           </div>
           <div className="header-badge">
             <Wallet size={15} />
-            <span>{payslipList.length} Records</span>
+            <span>{filteredPayslips.length} Records</span><select aria-label="Filter payslips by year" value={payslipYear} onChange={(event)=>setPayslipYear(event.target.value)}><option value="all">All years</option>{Array.from(new Set(payslipList.map((item)=>String(item.year)))).sort((a,b)=>b.localeCompare(a)).map((year)=><option key={year}>{year}</option>)}</select>
           </div>
         </div>
 
@@ -2822,7 +2276,7 @@ export default function StaffDashboard() {
           </div>
 
           <div>
-            {payslipList.slice(1).map((p) => (
+            {filteredPayslips.slice(1).map((p) => (
               <div key={p.id} className="past-item">
                 <div className="past-left">
                   <div style={{ background: "var(--cms-primary-soft)", padding: 8, borderRadius: 8, color: "var(--cms-primary)" }}>
@@ -2966,14 +2420,14 @@ export default function StaffDashboard() {
       {/* New Claim Modal */}
       {showReimbModal && (
         <div className="cms-overlay" onClick={(e) => e.target === e.currentTarget && setShowReimbModal(false)}>
-          <div className="cms-modal sm">
+          <div className="cms-modal sm faculty-reimbursement-modal">
             <div className="cms-modal-head">
               <h3>New Reimbursement Claim</h3>
               <button className="cms-icon-btn" onClick={() => setShowReimbModal(false)}><X size={16} /></button>
             </div>
             <div className="cms-modal-body">
-              <div className="cms-form-grid">
-                <div className="cms-field full">
+              <div className="cms-form-grid faculty-reimbursement-form">
+                <div className="cms-field">
                   <label>Claim Category <span className="req">*</span></label>
                   <select value={reimbForm.type} onChange={(e) => setReimbForm({ ...reimbForm, type: e.target.value })}>
                     {["Books & Journals", "Academic Conference", "Travel & Field Trip", "Medical Expense", "Stationery & Supplies", "Other"].map((t) => <option key={t}>{t}</option>)}
@@ -3054,9 +2508,76 @@ export default function StaffDashboard() {
     { id: 6, title: "Preview", subtitle: "Review & Confirmation" },
   ];
 
-  const handleSaveAndNext = () => {
+  const handleSaveAndNext = async () => {
     if (isEditingProfile) {
       persistStaffProfile(profileData);
+      
+      try {
+        let sectionName = "";
+        let payload = {};
+        
+        switch (profileStep) {
+          case 1:
+            sectionName = "Personal";
+            payload.Personal = {
+              firstName: profileData.firstName,
+              middleName: profileData.middleName,
+              lastName: profileData.lastName,
+              gender: profileData.gender,
+              dateOfBirth: profileData.dob || null,
+              maritalStatus: profileData.maritalStatus,
+              aadhaar: profileData.aadhaar,
+              panNumber: profileData.pan,
+              bloodGroup: profileData.bloodGroup,
+            };
+            break;
+          case 2:
+            sectionName = "Bank";
+            payload.Bank = {
+              bankName: profileData.bankName,
+              accountHolderName: profileData.accountHolder,
+              accountNumber: profileData.accountNumber,
+              ifscCode: profileData.ifsc,
+              branch: profileData.branch,
+              accountType: profileData.accountType
+            };
+            break;
+          case 3:
+            sectionName = "Address";
+            payload.Address = {
+              currentAddress: profileData.houseNumber,
+              city: profileData.city,
+              district: profileData.district,
+              state: profileData.state,
+              pincode: profileData.pin,
+              country: profileData.country
+            };
+            break;
+          case 4:
+            sectionName = "Experience";
+            payload.Experience = (profileData.experience || []).map(e => ({
+              institutionName: e.institution,
+              designation: e.designation,
+              fromDate: e.fromDate || null,
+              toDate: e.toDate || null,
+              subjectsTaught: e.subjectsTeached
+            }));
+            break;
+          case 5:
+            sectionName = "Documents";
+            break;
+        }
+
+        if (sectionName && profileData.id) {
+            await apiClient.put(apiEndpoints.faculty.saveProfileDraft(profileData.id), {
+               sectionName,
+               ...payload
+            });
+        }
+      } catch (e) {
+         console.error("Failed to save profile section:", e);
+      }
+
       notify(`Step ${profileStep} (${PROFILE_STEPS[profileStep - 1].title}) updated!`);
     }
     if (profileStep < 6) {
@@ -3070,9 +2591,13 @@ export default function StaffDashboard() {
     }
   };
 
-  const handleFinalProfileSave = () => {
+  const handleFinalProfileSave = async () => {
     setIsSavingProfile(true);
-    setTimeout(() => {
+    
+    try {
+      if (profileData.id) {
+        await apiClient.post(apiEndpoints.faculty.submitProfile(profileData.id));
+      }
       persistStaffProfile(profileData);
       try {
         localStorage.setItem("staff_profile_submitted", "true");
@@ -3080,7 +2605,11 @@ export default function StaffDashboard() {
       setIsSavingProfile(false);
       setIsEditingProfile(false);
       notify("Complete staff profile updated and verified successfully!");
-    }, 400);
+    } catch (e) {
+      console.error("Failed to submit profile:", e);
+      notify("Failed to submit profile to server", "error");
+      setIsSavingProfile(false);
+    }
   };
 
   const renderProfile = () => (
@@ -3888,7 +3417,7 @@ export default function StaffDashboard() {
                         type="button"
                         className="cms-btn cms-btn-primary"
                         disabled={!isEditingProfile}
-                        onClick={() => {
+                        onClick={async () => {
                           if (!isEditingProfile) {
                             notify("Please click 'Edit' in the top right corner to upload documents.", "warning");
                             return;
@@ -3897,22 +3426,40 @@ export default function StaffDashboard() {
                             notify("Please select a file to upload.", "error");
                             return;
                           }
-                          const docRecord = {
-                            id: `doc-${Date.now()}`,
-                            name: newDoc.title.trim() || newDoc.type,
-                            type: newDoc.type,
-                            format: newDoc.file.name.split('.').pop().toUpperCase(),
-                            size: `${(newDoc.file.size / 1024).toFixed(1)} KB`,
-                            date: new Date().toISOString().split("T")[0],
-                            status: "Uploaded",
-                            url: URL.createObjectURL(newDoc.file),
-                          };
-                          const updatedDocs = [...(profileData.documents || []), docRecord];
-                          setProfileData({ ...profileData, documents: updatedDocs });
-                          persistStaffProfile({ ...profileData, documents: updatedDocs });
-                          setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
-                          if (docFileRef.current) docFileRef.current.value = "";
-                          notify("Document uploaded successfully!");
+                          if (!profileData.id) {
+                            notify("Please save basic profile first.", "error");
+                            return;
+                          }
+                          
+                          try {
+                            const formData = new FormData();
+                            formData.append("file", newDoc.file);
+                            formData.append("documentType", newDoc.type);
+                            
+                            await apiClient.post(apiEndpoints.faculty.uploadDocument(profileData.id), formData, {
+                              headers: { 'Content-Type': 'multipart/form-data' }
+                            });
+                            
+                            const docRecord = {
+                              id: `doc-${Date.now()}`,
+                              name: newDoc.title.trim() || newDoc.type,
+                              type: newDoc.type,
+                              format: newDoc.file.name.split('.').pop().toUpperCase(),
+                              size: `${(newDoc.file.size / 1024).toFixed(1)} KB`,
+                              date: new Date().toISOString().split("T")[0],
+                              status: "Uploaded",
+                              url: URL.createObjectURL(newDoc.file),
+                            };
+                            const updatedDocs = [...(profileData.documents || []), docRecord];
+                            setProfileData({ ...profileData, documents: updatedDocs });
+                            persistStaffProfile({ ...profileData, documents: updatedDocs });
+                            setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
+                            if (docFileRef.current) docFileRef.current.value = "";
+                            notify("Document uploaded successfully!");
+                          } catch (e) {
+                            console.error(e);
+                            notify("Failed to upload document to server.", "error");
+                          }
                         }}
                       >
                         <UploadCloud size={14} /> Upload Document
@@ -4453,18 +4000,28 @@ export default function StaffDashboard() {
     </div>
   );
 
+  const renderClasses = () => (
+    <div><div className="cms-page-head"><div><h1>My Classes</h1><p>Classes assigned for Academic Year 2026-27.</p></div></div><div className="cms-card"><div className="cms-card-head"><h2>Assigned Classes</h2></div><div className="cms-card-body"><div className="cms-table-wrap"><table className="cms-table"><thead><tr><th>Class</th><th>Subject</th><th>Code</th><th>Room</th></tr></thead><tbody>{facultyMockData.timetable.flatMap((slot) => MOCK_TT_DAYS.map((day) => slot[day] && ({...slot[day],time:slot.time})).filter(Boolean)).filter((entry,index,all)=>all.findIndex((row)=>row.cls===entry.cls&&row.sub===entry.sub)===index).map((entry)=><tr key={entry.code+entry.cls}><td>{entry.cls}</td><td>{entry.sub}</td><td>{entry.code}</td><td>{entry.room}</td></tr>)}</tbody></table></div></div></div></div>
+  );
+  const renderHolidays = () => (
+    <div><div className="cms-page-head"><div><h1>Holidays</h1><p>Academic calendar holidays.</p></div></div><div className="cms-card"><div className="cms-card-head"><h2>Upcoming Holidays</h2></div><div className="cms-card-body"><div className="cms-table-wrap"><table className="cms-table"><thead><tr><th>Date</th><th>Holiday</th><th>Type</th></tr></thead><tbody>{facultyMockData.holidays.map((holiday)=><tr key={holiday.date}><td>{holiday.date}</td><td>{holiday.name}</td><td>{holiday.type}</td></tr>)}</tbody></table></div></div></div></div>
+  );
+
   const moduleMap = {
-    dashboard: renderDashboard,
-    timetable: renderTimetable,
-    attendance: renderAttendance,
-    marks: renderMarks,
-    examduties: renderExamDuties,
-    myattendance: renderMyAttendance,
-    leave: renderLeave,
-    salary: renderSalary,
-    reimbursements: renderReimbursements,
-    profile: renderProfile,
+    dashboard: [FacultyDashboardHome, renderDashboard],
+    profile: [FacultyProfile, renderProfile],
+    timetable: [FacultyTimetable, renderTimetable],
+    classes: [FacultyClasses, renderClasses],
+    attendance: [FacultyStudentAttendance, renderAttendance],
+    marks: [FacultyMarks, renderMarks],
+    examduties: [FacultyExamDuties, renderExamDuties],
+    myattendance: [FacultyMyAttendance, renderMyAttendance],
+    leave: [FacultyLeave, renderLeave],
+    salary: [FacultyPayslips, renderSalary],
+    holidays: [FacultyHolidays, renderHolidays],
+    reimbursements: [FacultyPayslips, renderReimbursements],
   };
+  const [ActivePage, renderActivePage] = moduleMap[activeModule] || moduleMap.dashboard;
 
   const navGroups = ["MAIN", "ACADEMICS", "HR & FINANCE"];
 
@@ -4478,7 +4035,8 @@ export default function StaffDashboard() {
 
         <nav className="cms-nav">
           {navGroups.map((grp) => {
-            const items = NAV_ITEMS.filter((n) => n.group === grp);
+            const permissionByModule = { dashboard:"VIEW_DASHBOARD", profile:"VIEW_PROFILE", timetable:"VIEW_TIMETABLE", attendance:"MARK_ATTENDANCE", marks:"ENTER_MARKS", examduties:"VIEW_EXAM_DUTIES", myattendance:"VIEW_SELF_ATTENDANCE", leave:"APPLY_LEAVE", salary:"VIEW_PAYSLIPS", reimbursements:"VIEW_PAYSLIPS", holidays:"VIEW_HOLIDAYS", classes:"VIEW_CLASSES" };
+            const items = NAV_ITEMS.filter((n) => n.group === grp && mockPermissions.includes(permissionByModule[n.id]));
             if (!items.length) return null;
             return (
               <div key={grp}>
@@ -4739,7 +4297,7 @@ export default function StaffDashboard() {
 
         {/* Content Body */}
         <div className="cms-content">
-          {(moduleMap[activeModule] || renderDashboard)()}
+          <ActivePage>{renderActivePage()}</ActivePage>
         </div>
       </main>
 

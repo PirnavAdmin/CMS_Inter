@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
@@ -9,7 +9,7 @@ import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
-import { useCampusContext } from "@/context/CampusContext.jsx";
+import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
@@ -17,6 +17,7 @@ import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import boardAcademicYearIcon from "@/assets/sidebar-3d/board-academic-year.png";
 import subjectsIcon from "@/assets/sidebar-3d/subjects.png";
 import timetableIcon from "@/assets/sidebar-3d/timetable.png";
+import transportBusIcon from "@/assets/sidebar-3d/transport-bus.png";
 import marksEvaluationIcon from "@/assets/sidebar-3d/marks-evaluation.png";
 import resultsIcon from "@/assets/sidebar-3d/results.png";
 import promotionIcon from "@/assets/sidebar-3d/promotion.png";
@@ -138,7 +139,7 @@ export const menu = [
       { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon },
       { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon },
       { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon },
-      { to: "/dashboard/transport", label: "Transport", icon: timetableIcon },
+      { to: "/dashboard/transport", label: "Transport", icon: transportBusIcon },
     ],
   },
   {
@@ -220,6 +221,12 @@ export const parentMenu = [
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
+const EMPTY_CAMPUS_CONTEXT = Object.freeze({
+  campuses: [],
+  activeCampuses: [],
+  selectedCampus: null,
+  setSelectedCampus: () => undefined,
+});
 const MOCK_NOTIFICATIONS = [];
 const PARENT_NOTIFICATIONS = [
   { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
@@ -383,7 +390,8 @@ export default function DashboardLayout({
     setSelectedBoard,
     setSelectedAcademicYear,
   } = useAcademicContext();
-  const { campuses, activeCampuses, selectedCampus, setSelectedCampus } = useCampusContext();
+  const campusContext = useContext(CampusContext) || EMPTY_CAMPUS_CONTEXT;
+  const { campuses, activeCampuses, selectedCampus, setSelectedCampus } = campusContext;
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);

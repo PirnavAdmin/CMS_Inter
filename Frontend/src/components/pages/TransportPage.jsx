@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
@@ -6,6 +6,8 @@ import {
   Bus,
   CalendarClock,
   CheckCircle,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Edit3,
   Eye,
@@ -24,7 +26,7 @@ import {
   Wrench,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { ConfirmDialog, FormModal, Modal, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import { ConfirmDialog, FormModal, Modal, SkeletonTable, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import apiEndpoints from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -61,8 +63,24 @@ const reportTabs = [
   { id: "driver-reports", label: "Driver Reports" },
   { id: "route-reports", label: "Route Reports" },
   { id: "student-transport-reports", label: "Student Transport Reports" },
+  { id: "pickup-wise-reports", label: "Pickup-wise Reports" },
+  { id: "seat-occupancy-reports", label: "Seat Occupancy" },
   { id: "maintenance-reports", label: "Maintenance Reports" },
+  { id: "monthly-cost-reports", label: "Monthly Cost" },
 ];
+
+const reportDefinitions = {
+  "transport-dashboard-report": { endpoint: apiEndpoints.transport.reports.dashboard, type: "dashboard", filename: "transport-dashboard" },
+  "trip-reports": { endpoint: apiEndpoints.transport.reports.trips, type: "trips", filename: "transport-trips" },
+  "vehicle-reports": { endpoint: apiEndpoints.transport.reports.vehicles, type: "vehicles", filename: "transport-vehicles" },
+  "driver-reports": { endpoint: apiEndpoints.transport.reports.drivers, type: "drivers", filename: "transport-drivers" },
+  "route-reports": { endpoint: apiEndpoints.transport.reports.routes, type: "routes", filename: "transport-routes" },
+  "student-transport-reports": { endpoint: apiEndpoints.transport.reports.students, type: "students", filename: "transport-students" },
+  "pickup-wise-reports": { endpoint: apiEndpoints.transport.reports.pickupWise, type: "pickup-wise", filename: "transport-pickup-wise" },
+  "seat-occupancy-reports": { endpoint: apiEndpoints.transport.reports.seatOccupancy, type: "seat-occupancy", filename: "transport-seat-occupancy" },
+  "maintenance-reports": { endpoint: apiEndpoints.transport.reports.maintenance, type: "maintenance", filename: "transport-maintenance" },
+  "monthly-cost-reports": { endpoint: apiEndpoints.transport.reports.monthlyCost, type: "monthly-cost", filename: "transport-monthly-cost" },
+};
 
 const currency = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -71,7 +89,8 @@ const currency = new Intl.NumberFormat("en-IN", {
 });
 
 const TABLE_PAGE_SIZE = 5;
-const today = new Date("2026-09-15T00:00:00");
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 
 function formatCurrency(value) {
   return currency.format(Number(value) || 0);
@@ -97,6 +116,19 @@ function makeId(prefix, rows) {
   return `${prefix}-${String(rows.length + 1).padStart(3, "0")}`;
 }
 
+function getStudentTransportAssignmentId(record = {}) {
+  const id = record.studentTransportAssignmentId
+    ?? record.StudentTransportAssignmentId
+    ?? record.studentAssignmentId
+    ?? record.StudentAssignmentId
+    ?? record.assignmentId
+    ?? record.AssignmentId
+    ?? record.id
+    ?? record.Id;
+
+  return id === undefined || id === null || String(id).trim() === "" ? null : id;
+}
+
 function exportRows(filename, rows, columns) {
   const header = columns.map((column) => column.label).join(",");
   const body = rows.map((row) =>
@@ -116,6 +148,32 @@ function exportRows(filename, rows, columns) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+async function downloadTransportFile(endpoint, filename, params = {}) {
+  const response = await apiClient.get(endpoint, { params, responseType: "blob" });
+  const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function reportColumnsFromRows(rows, fallback) {
+  if (!rows.length) return fallback;
+  const keys = Object.keys(rows[0]).filter((key) => {
+    const value = rows[0][key];
+    return value == null || ["string", "number", "boolean"].includes(typeof value);
+  }).slice(0, 9);
+  if (!keys.length) return fallback;
+  return keys.map((key) => ({
+    key,
+    label: key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
+  }));
 }
 
 function TransportTabs({ tabs, active, onChange, compact = false }) {
@@ -147,7 +205,7 @@ function StatCard({ icon: Icon, label, value, hint, tone = "blue" }) {
   );
 }
 
-function Toolbar({ query, onQuery, filters, onAdd, onExport, onPrint, addLabel = "Add Record", className = "" }) {
+function Toolbar({ query, onQuery, filters, onAdd, onExport, onPdfExport, onPrint, addLabel = "Add Record", className = "" }) {
   return (
     <div className={`cms-transport-toolbar ${className}`.trim()}>
       <label className="cms-transport-search">
@@ -157,8 +215,13 @@ function Toolbar({ query, onQuery, filters, onAdd, onExport, onPrint, addLabel =
       {filters ? <div className="cms-transport-filters">{filters}</div> : null}
       <div className="cms-transport-toolbar-actions">
         {onPrint ? (
-          <button type="button" className="cms-btn cms-btn-ghost" title="Print / PDF Export" onClick={onPrint}>
-            <Printer size={16} /> Print / PDF
+          <button type="button" className="cms-btn cms-btn-ghost" title="Print report" onClick={onPrint}>
+            <Printer size={16} /> Print
+          </button>
+        ) : null}
+        {onPdfExport ? (
+          <button type="button" className="cms-btn cms-btn-ghost" title="Export report to PDF" onClick={onPdfExport}>
+            <Download size={16} /> Export PDF
           </button>
         ) : null}
         {onExport ? (
@@ -192,11 +255,14 @@ function TableSection({
   onDelete,
   onView,
   onPrint,
+  onExport,
+  onPdfExport,
   addLabel,
   toolbarClassName,
   tableClassName,
 }) {
   const [page, setPage] = useState(1);
+  const hasRowActions = Boolean(onView || onEdit || onDelete);
   const filterKey = JSON.stringify(filterValues);
   const visibleRows = rows.filter((row) => textMatch(row, query)).filter((row) => (rowFilter ? rowFilter(row) : true));
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / TABLE_PAGE_SIZE));
@@ -249,37 +315,38 @@ function TableSection({
           filters={filterControls}
           addLabel={addLabel}
           onAdd={onAdd}
-          onExport={() => exportRows(`${title.toLowerCase().replace(/\s+/g, "-")}.csv`, visibleRows, columns)}
+          onExport={onExport || (() => exportRows(`${title.toLowerCase().replace(/\s+/g, "-")}.csv`, visibleRows, columns))}
           onPrint={onPrint || (() => window.print())}
+          onPdfExport={onPdfExport}
           className={toolbarClassName}
         />
         <div className="cms-table-wrap">
-          <table className={`cms-table cms-transport-table ${tableClassName || ""}`.trim()}>
+          <table className={`cms-table cms-transport-table ${hasRowActions ? "has-actions" : ""} ${tableClassName || ""}`.trim()}>
             <thead>
               <tr>
                 {columns.map((column) => <th key={column.key}>{column.label}</th>)}
-                <th>Actions</th>
+                {hasRowActions ? <th>Actions</th> : null}
               </tr>
             </thead>
             <tbody>
-              {paginatedRows.length ? paginatedRows.map((row) => (
-                <tr key={row.id}>
+              {paginatedRows.length ? paginatedRows.map((row, rowIndex) => (
+                <tr key={`${row.id ?? "transport-row"}-${(currentPage - 1) * TABLE_PAGE_SIZE + rowIndex}`}>
                   {columns.map((column) => (
                     <td key={column.key} className={column.strong ? "cms-strong" : ""}>
                       {column.badge ? <StatusBadge value={row[column.key]} /> : column.currency ? formatCurrency(row[column.key]) : column.value ? column.value(row) : row[column.key]}
                     </td>
                   ))}
-                  <td>
+                  {hasRowActions ? <td>
                     <div className="cms-transport-actions">
                       {onView ? <button type="button" className="cms-action-btn" title="View details" onClick={() => onView(row)}><Eye size={15} /></button> : null}
                       {onEdit ? <button type="button" className="cms-action-btn" title="Edit" onClick={() => onEdit(row)}><Edit3 size={15} /></button> : null}
                       {onDelete ? <button type="button" className="cms-action-btn danger" title="Delete" onClick={() => onDelete(row)}><Trash2 size={15} /></button> : null}
                     </div>
-                  </td>
+                  </td> : null}
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={columns.length + 1} className="cms-transport-empty">No records found.</td>
+                  <td colSpan={columns.length + (hasRowActions ? 1 : 0)} className="cms-transport-empty">No records found.</td>
                 </tr>
               )}
             </tbody>
@@ -351,22 +418,22 @@ function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
     >
       <div className="cms-form-grid cols-3 cms-transport-add-driver-form">
         <label className="cms-field full">
-          <span>Select Driver from Non-Teaching Staff <b>*</b></span>
+          <span>Select Driver from Non-Teaching Staff <span className="required-star">*</span></span>
           <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaffDriver(event.target.value)}>
             <option value="">Select Driver</option>
             {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driver.driverName} ({driver.employeeId})</option>)}
           </select>
         </label>
         <label className="cms-field">
-          <span>Driver Full Name <b>*</b></span>
+          <span>Driver Full Name <span className="required-star">*</span></span>
           <input value={values.driverName} readOnly />
         </label>
         <label className="cms-field">
-          <span>Employee ID <b>*</b></span>
+          <span>Employee ID <span className="required-star">*</span></span>
           <input value={values.employeeId} readOnly />
         </label>
         <label className="cms-field">
-          <span>Mobile Number <b>*</b></span>
+          <span>Mobile Number <span className="required-star">*</span></span>
           <input value={values.mobileNumber} readOnly />
         </label>
         <label className="cms-field">
@@ -374,7 +441,7 @@ function AddDriverModal({ drivers, isSaving, onCancel, onSave }) {
           <input value={values.email} readOnly />
         </label>
         <label className="cms-field">
-          <span>Commercial License No <b>*</b></span>
+          <span>Commercial License No <span className="required-star">*</span></span>
           <input value={values.licenseNumber} disabled={isSaving} onChange={(event) => update("licenseNumber", event.target.value)} />
         </label>
         <label className="cms-field">
@@ -425,21 +492,22 @@ function AddAttendantModal({ staff, isSaving, onCancel, onSave }) {
   return (
     <Modal
       title="Add Bus Attendant"
+      className="cms-transport-add-attendant-modal"
       onClose={isSaving ? () => {} : onCancel}
       footer={<><button type="button" className="cms-btn cms-btn-ghost" disabled={isSaving} onClick={onCancel}>Cancel</button><button type="button" className="cms-btn cms-btn-primary" disabled={isSaving} onClick={submit}>{isSaving ? <span className="cms-transport-action-loading"><i aria-hidden="true" />Adding...</span> : "Save"}</button></>}
     >
       <div className="cms-form-grid cols-3">
         <label className="cms-field full">
-          <span>Select Non-Teaching Staff <b>*</b></span>
+          <span>Select Non-Teaching Staff <span className="required-star">*</span></span>
           <select value={values.staffId} disabled={isSaving} onChange={(event) => selectStaff(event.target.value)}>
             <option value="">Select Non-Teaching Staff</option>
             {staff.map((member) => <option key={member.id} value={member.id}>{member.name} ({member.employeeId})</option>)}
           </select>
         </label>
-        <label className="cms-field"><span>Employee ID <b>*</b></span><input value={values.employeeId} readOnly /></label>
-        <label className="cms-field"><span>Attendant Name <b>*</b></span><input value={values.attendantName} readOnly /></label>
-        <label className="cms-field"><span>Mobile Number <b>*</b></span><input value={values.mobileNumber} readOnly /></label>
-        <label className="cms-field"><span>Gender <b>*</b></span><input value={values.gender} readOnly /></label>
+        <label className="cms-field"><span>Employee ID <span className="required-star">*</span></span><input value={values.employeeId} readOnly /></label>
+        <label className="cms-field"><span>Attendant Name <span className="required-star">*</span></span><input value={values.attendantName} readOnly /></label>
+        <label className="cms-field"><span>Mobile Number <span className="required-star">*</span></span><input value={values.mobileNumber} readOnly /></label>
+        <label className="cms-field"><span>Gender <span className="required-star">*</span></span><input value={values.gender} readOnly /></label>
         <label className="cms-field"><span>Status</span><select value={values.status} disabled={isSaving} onChange={(event) => setValues((current) => ({ ...current, status: event.target.value }))}><option value="Active">Active</option><option value="On Leave">On Leave</option><option value="Inactive">Inactive</option></select></label>
         {error ? <p className="cms-error">{error}</p> : null}
       </div>
@@ -480,12 +548,172 @@ function TransportDetailTable({ row }) {
 function extractList(data) {
   if (!data) return [];
   if (Array.isArray(data)) return data;
-  if (Array.isArray(data.items)) return data.items;
-  if (Array.isArray(data.Items)) return data.Items;
+  const listKeys = [
+    "items", "Items", "records", "Records", "results", "Results", "trips", "vehicles",
+    "drivers", "routes", "students", "pickupPoints", "assignments", "maintenance",
+  ];
+  for (const key of listKeys) {
+    if (Array.isArray(data[key])) return data[key];
+  }
   if (Array.isArray(data.data)) return data.data;
-  if (Array.isArray(data.data?.items)) return data.data.items;
-  if (Array.isArray(data.data?.Items)) return data.data.Items;
+  if (data.data && typeof data.data === "object") {
+    for (const key of listKeys) {
+      if (Array.isArray(data.data[key])) return data.data[key];
+    }
+  }
   return [];
+}
+
+function ReportTabsNavigation({ tabs, active, onChange }) {
+  const scrollRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = () => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+    setCanScrollLeft(element.scrollLeft > 2);
+    setCanScrollRight(element.scrollLeft < maxScrollLeft - 2);
+  };
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return undefined;
+
+    updateScrollState();
+    const resizeObserver = new ResizeObserver(updateScrollState);
+    resizeObserver.observe(element);
+    window.addEventListener("resize", updateScrollState);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateScrollState);
+    };
+  }, []);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    const activeTab = element?.querySelector(`[data-report-tab="${active}"]`);
+    if (!element || !activeTab) return;
+
+    const left = activeTab.offsetLeft;
+    const right = left + activeTab.offsetWidth;
+    if (left < element.scrollLeft) {
+      element.scrollTo({ left: left - 8, behavior: "smooth" });
+    } else if (right > element.scrollLeft + element.clientWidth) {
+      element.scrollTo({ left: right - element.clientWidth + 8, behavior: "smooth" });
+    }
+    window.setTimeout(updateScrollState, 350);
+  }, [active]);
+
+  const scrollTabs = (direction) => {
+    const element = scrollRef.current;
+    if (!element) return;
+    element.scrollBy({ left: direction * Math.max(220, element.clientWidth * 0.7), behavior: "smooth" });
+  };
+
+  const handleWheel = (event) => {
+    const element = scrollRef.current;
+    if (!element || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return;
+    const maxScrollLeft = element.scrollWidth - element.clientWidth;
+    const canMove = (event.deltaY < 0 && element.scrollLeft > 0)
+      || (event.deltaY > 0 && element.scrollLeft < maxScrollLeft);
+    if (!canMove) return;
+    event.preventDefault();
+    element.scrollLeft += event.deltaY;
+  };
+
+  return (
+    <nav className="cms-transport-report-tabs-nav" aria-label="Transport report sections">
+      <button
+        type="button"
+        className={`cms-transport-report-tabs-arrow is-left ${canScrollLeft ? "" : "is-hidden"}`}
+        title="Scroll report tabs left"
+        aria-label="Scroll report tabs left"
+        disabled={!canScrollLeft}
+        onClick={() => scrollTabs(-1)}
+      >
+        <ChevronLeft size={17} />
+      </button>
+      <div ref={scrollRef} className="cms-transport-report-tabs-scroll" onScroll={updateScrollState} onWheel={handleWheel}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            data-report-tab={tab.id}
+            className={`cms-transport-tab ${active === tab.id ? "is-active" : ""}`}
+            onClick={() => onChange(tab.id)}
+          >
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+      <button
+        type="button"
+        className={`cms-transport-report-tabs-arrow is-right ${canScrollRight ? "" : "is-hidden"}`}
+        title="Scroll report tabs right"
+        aria-label="Scroll report tabs right"
+        disabled={!canScrollRight}
+        onClick={() => scrollTabs(1)}
+      >
+        <ChevronRight size={17} />
+      </button>
+    </nav>
+  );
+}
+
+function unwrapReportPayload(payload) {
+  let value = payload;
+  for (let depth = 0; depth < 3; depth += 1) {
+    const nested = value?.data ?? value?.Data ?? value?.result ?? value?.Result;
+    if (!nested || nested === value) break;
+    value = nested;
+  }
+  return value;
+}
+
+function reportRowsFromPayload(payload) {
+  const value = unwrapReportPayload(payload);
+  const knownRows = extractList(value);
+  if (knownRows.length || Array.isArray(value)) return knownRows;
+  if (!value || typeof value !== "object") return [];
+
+  const nestedRows = Object.values(value).find(Array.isArray);
+  if (nestedRows) return nestedRows;
+
+  return Object.entries(value)
+    .filter(([key, item]) => !["success", "message", "statusCode", "timestamp"].includes(key) && (item == null || ["string", "number", "boolean"].includes(typeof item)))
+    .map(([key, item]) => ({
+      id: `report-metric-${key}`,
+      name: key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/^./, (letter) => letter.toUpperCase()),
+      value: item ?? "-",
+    }));
+}
+
+function readReportMetric(payload, keys, fallback) {
+  const value = unwrapReportPayload(payload);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+  const key = keys.find((candidate) => value[candidate] !== undefined && value[candidate] !== null);
+  return key ? value[key] : fallback;
+}
+
+function normalizeMaintenanceStatus(item) {
+  const completionFlag = item?.statusBool
+    ?? item?.StatusBool
+    ?? item?.isCompleted
+    ?? item?.IsCompleted;
+  if (completionFlag !== undefined && completionFlag !== null) {
+    return completionFlag === true || completionFlag === 1 || String(completionFlag).toLowerCase() === "true"
+      ? "Completed"
+      : "Scheduled";
+  }
+
+  const status = item?.status ?? item?.Status;
+  if (typeof status === "boolean" || status === 0 || status === 1 || /^(true|false)$/i.test(String(status))) {
+    return status === true || status === 1 || String(status).toLowerCase() === "true" ? "Completed" : "Scheduled";
+  }
+  return status || "Scheduled";
 }
 
 function readDepartmentSpecific(staff) {
@@ -580,7 +808,8 @@ export default function TransportPage() {
     attendants: "All",
   });
   const [reportFilters, setReportFilters] = useState({ route: "All", vehicle: "All", status: "All" });
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState({ message: "", type: "success" });
+  const lastErrorToastRef = useRef({ message: "", time: 0 });
   const [formConfig, setFormConfig] = useState(null);
   const [isAddDriverOpen, setIsAddDriverOpen] = useState(false);
   const [isAddAttendantOpen, setIsAddAttendantOpen] = useState(false);
@@ -603,11 +832,21 @@ export default function TransportPage() {
   const [maintenance, setMaintenance] = useState([]);
   const [gpsSnapshots, setGpsSnapshots] = useState([]);
   const [dashboardMetrics, setDashboardMetrics] = useState(null);
+  const [reportApiRows, setReportApiRows] = useState({});
+  const [reportApiPayloads, setReportApiPayloads] = useState({});
+  const [reportLoading, setReportLoading] = useState(false);
+
+  const showToast = (message, type = "success") => setToast({ message, type });
+  const showErrorToast = (message) => {
+    const normalizedMessage = String(message || "An unexpected server error occurred.");
+    const now = Date.now();
+    if (lastErrorToastRef.current.message === normalizedMessage && now - lastErrorToastRef.current.time < 3000) return;
+    lastErrorToastRef.current = { message: normalizedMessage, time: now };
+    showToast(normalizedMessage, "error");
+  };
 
   const fetchTransportData = async () => {
     setIsLoading(true);
-    setRoutes([]); setPickupPoints([]); setVehicles([]); setDrivers([]); setAttendants([]);
-    setVehicleAssignments([]); setStudentAssignments([]); setTrips([]); setMaintenance([]); setGpsSnapshots([]); setDashboardMetrics(null);
     const scoped = (items) => items.filter((item) => {
       const campusId = item?.campusId ?? item?.CampusId;
       const boardId = item?.boardId ?? item?.BoardId;
@@ -624,8 +863,10 @@ export default function TransportPage() {
       const [
         routesRes,
         pickupsRes,
+        pickupLookupsRes,
         vehiclesRes,
         staffRes,
+        driversRes,
         attendantsRes,
         assignmentsRes,
         tripsRes,
@@ -635,9 +876,17 @@ export default function TransportPage() {
         dashboardRes,
       ] = await Promise.allSettled([
         apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+        apiClient.get(apiEndpoints.transport.pickupPoints, {
+          params: {
+            CampusId: selectedCampusId,
+            PageNumber: 1,
+            PageSize: 1000,
+          },
+        }),
+        apiClient.get(apiEndpoints.transport.lookups.pickupPoints),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
         apiClient.get(driverListUrl),
+        apiClient.get(`${apiEndpoints.transport.drivers}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.attendants}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
         apiClient.get(apiEndpoints.transport.trips),
@@ -646,6 +895,15 @@ export default function TransportPage() {
         apiClient.get(`${apiEndpoints.transport.studentAssignments}?PageNumber=1&PageSize=1000`),
         apiClient.get(apiEndpoints.transport.dashboard),
       ]);
+
+      const failedRequests = [
+        routesRes, pickupsRes, pickupLookupsRes, vehiclesRes, staffRes, driversRes, attendantsRes,
+        assignmentsRes, tripsRes, gpsRes, maintenanceRes, studentRes, dashboardRes,
+      ].filter((result) => result.status === "rejected");
+      if (failedRequests.length) {
+        const reason = getApiErrorMessage(failedRequests[0].reason) || "Unable to refresh transport data.";
+        showErrorToast(`${reason} Showing the currently loaded transport data where available.`);
+      }
 
       if (import.meta.env.DEV) {
         if (staffRes.status === "fulfilled") {
@@ -697,21 +955,26 @@ export default function TransportPage() {
         );
       }
 
-      if (pickupsRes.status === "fulfilled" && pickupsRes.value?.data) {
-        const items = scoped(extractList(pickupsRes.value.data));
+      if ((pickupsRes.status === "fulfilled" && pickupsRes.value?.data) || (pickupLookupsRes.status === "fulfilled" && pickupLookupsRes.value?.data)) {
+        const detailedItems = pickupsRes.status === "fulfilled" ? scoped(extractList(pickupsRes.value.data)) : [];
+        const detailedIds = new Set(detailedItems.map((point) => String(point.pickupPointId || point.id)));
+        const lookupItems = pickupLookupsRes.status === "fulfilled"
+          ? extractList(pickupLookupsRes.value.data).filter((point) => !detailedIds.has(String(point.pickupPointId || point.id)))
+          : [];
+        const items = [...detailedItems, ...lookupItems];
         setPickupPoints(
           items.map((p) => ({
             id: p.pickupPointId || p.id,
-            routeId: p.routeId,
-            routeName: p.routeName || "",
+            routeId: p.routeId ?? p.RouteId ?? "",
+            routeName: p.routeName || p.RouteName || "-",
             pickupName: p.pickupPointName || p.stopName || p.pickupName || "",
             landmark: p.landmark || p.stopAddress || "",
             sequenceNumber: p.sequenceNo || p.sequenceNumber || p.stopOrder || 1,
-            pickupTime: p.pickupTime ? String(p.pickupTime).substring(0, 5) : "07:30",
-            dropTime: p.dropTime ? String(p.dropTime).substring(0, 5) : "16:15",
+            pickupTime: p.pickupTime ? String(p.pickupTime).substring(0, 5) : "",
+            dropTime: p.dropTime ? String(p.dropTime).substring(0, 5) : "",
             distanceKm: Number(p.distanceFromStart || p.distanceFromSchool || p.distanceKm || 0),
             monthlyFee: Number(p.monthlyFee || 0),
-            status: p.status === true || p.status === 1 || p.status === "Active" ? "Active" : "Inactive",
+            status: p.status == null || p.status === true || p.status === 1 || p.status === "Active" ? "Active" : "Inactive",
           }))
         );
       }
@@ -795,6 +1058,34 @@ export default function TransportPage() {
         );
       }
 
+      if (driversRes.status === "fulfilled" && driversRes.value?.data) {
+        const items = scoped(extractList(driversRes.value.data));
+        if (items.length) {
+          setDrivers(items.map((driver) => {
+            const transportDriverId = Number(driver.driverId) > 0 ? driver.driverId : null;
+            const driverApiId = transportDriverId
+              || driver.licenceNumber
+              || driver.licenseNumber
+              || driver.employeeId
+              || driver.id;
+            return {
+              id: driverApiId,
+              transportDriverId,
+              driverApiId,
+              driverName: driver.driverName || driver.fullName || driver.name || "",
+              employeeId: driver.employeeId || driver.driverCode || "",
+              mobileNumber: driver.mobileNumber || driver.mobile || driver.phone || "",
+              email: driver.email || "",
+              licenseNumber: driver.licenceNumber || driver.licenseNumber || "",
+              licenseExpiryDate: String(driver.licenceExpiry || driver.licenseExpiryDate || "").split("T")[0],
+              address: driver.address || "",
+              experience: Number(driver.experience || driver.experienceYears || 0),
+              status: driver.status === true || driver.status === 1 || /^active$/i.test(String(driver.status || "")) ? "Active" : "Inactive",
+            };
+          }));
+        }
+      }
+
       if (assignmentsRes.status === "fulfilled" && assignmentsRes.value?.data) {
         const items = scoped(extractList(assignmentsRes.value.data));
         setVehicleAssignments(
@@ -875,7 +1166,7 @@ export default function TransportPage() {
             cost: Number(m.cost || 0),
             vendor: m.vendorCenter || m.vendor || "",
             nextDueDate: m.nextServiceDue ? String(m.nextServiceDue).split("T")[0] : (m.nextDueDate ? String(m.nextDueDate).split("T")[0] : ""),
-            status: m.status || (m.statusBool ? "Completed" : "Scheduled"),
+            status: normalizeMaintenanceStatus(m),
             notes: m.remarks || m.notes || "",
           }))
         );
@@ -885,14 +1176,14 @@ export default function TransportPage() {
         const items = scoped(extractList(studentRes.value.data));
         setStudentAssignments(
           items.map((s) => ({
-            id: s.assignmentId || s.id,
+            id: getStudentTransportAssignmentId(s),
             studentName: s.studentName || "Student",
             admissionNo: s.admissionNo || "",
             routeId: s.routeId,
             routeName: s.routeName || "",
             pickupPointName: s.pickupPointName || s.pickupPoint || "",
-            vehicleNumber: s.vehicleNumber || "Unassigned",
-            vehicleId: s.vehicleId || 1,
+            vehicleNumber: s.vehicleNumber || s.VehicleNumber || s.assignedVehicleNumber || s.vehicle?.vehicleNumber || "Unassigned",
+            vehicleId: s.vehicleId ?? s.VehicleId ?? s.assignedVehicleId ?? s.AssignedVehicleId ?? s.vehicle?.vehicleId ?? s.vehicle?.id ?? s.vehicleAssignment?.vehicleId ?? "",
             feePlan: s.feePlan || "Annual",
             monthlyFee: Number(s.monthlyFee || 1200),
             annualFee: Number(s.annualFee || (s.monthlyFee ? s.monthlyFee * 10 : 12000)),
@@ -906,6 +1197,7 @@ export default function TransportPage() {
       }
     } catch (err) {
       console.error("Error fetching transport data:", err);
+      showErrorToast(`${getApiErrorMessage(err) || "Unable to refresh transport data."} Showing the currently loaded transport data where available.`);
     } finally {
       setIsLoading(false);
     }
@@ -914,6 +1206,43 @@ export default function TransportPage() {
   useEffect(() => {
     fetchTransportData();
   }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
+
+  useEffect(() => {
+    if (activeSection !== "reports" || activeReportTab === "trip-reports") return undefined;
+    const definition = reportDefinitions[activeReportTab];
+    if (!definition) return undefined;
+    let active = true;
+    const params = {
+      campusId: selectedCampusId || undefined,
+      boardId: selectedBoardId || undefined,
+      academicYearId: selectedAcademicYearId || undefined,
+      routeId: reportFilters.route !== "All" ? reportFilters.route : undefined,
+      vehicleId: reportFilters.vehicle !== "All" ? reportFilters.vehicle : undefined,
+      status: reportFilters.status !== "All" ? reportFilters.status : undefined,
+    };
+    setReportLoading(true);
+    apiClient.get(definition.endpoint, { params })
+      .then((response) => {
+        if (!active) return;
+        setReportApiPayloads((current) => ({ ...current, [activeReportTab]: response.data }));
+        setReportApiRows((current) => ({ ...current, [activeReportTab]: reportRowsFromPayload(response.data) }));
+      })
+      .catch((error) => {
+        if (!active) return;
+        showErrorToast(`${getApiErrorMessage(error) || "Unable to load this transport report."} Showing the currently loaded transport data where available.`);
+      })
+      .finally(() => active && setReportLoading(false));
+    return () => { active = false; };
+  }, [
+    activeSection,
+    activeReportTab,
+    selectedCampusId,
+    selectedBoardId,
+    selectedAcademicYearId,
+    reportFilters.route,
+    reportFilters.vehicle,
+    reportFilters.status,
+  ]);
 
   const routeOptions = routes.map((route) => ({ value: route.id, label: route.routeName }));
   const vehicleOptions = vehicles.map((vehicle) => ({ value: vehicle.id, label: vehicle.vehicleNumber }));
@@ -959,6 +1288,7 @@ export default function TransportPage() {
       completedTrips: trips.filter((trip) => trip.status === "Completed").length,
       expiringDocs: dashboardMetrics?.expiringVehicleDocuments ?? expiringDocs.length,
       expiringLicenses: dashboardMetrics?.expiringDriverLicenses ?? expiringLicenses.length,
+      expiringLicenseDrivers: expiringLicenses,
       utilization: totalCapacity ? Math.round((totalAssigned / totalCapacity) * 100) : 0,
     };
   })();
@@ -1023,8 +1353,117 @@ export default function TransportPage() {
           studentsPresent: record.studentsPresent ?? "",
           status: record.status || "",
         }
-      : record;
+      : key === "studentAssignments" && record
+        ? {
+            ...record,
+            routeId: record.routeId ?? routes.find((route) => route.routeName === record.routeName)?.id ?? "",
+            vehicleId: record.vehicleId || (
+              vehicles.find((vehicle) => String(vehicle.vehicleNumber).trim().toLowerCase() === String(record.vehicleNumber || "").trim().toLowerCase())?.id
+              ?? ""
+            ),
+          }
+        : record;
     setFormConfig({ key, title, fields, record: formRecord });
+  };
+
+  const openEditForm = async (key, title, fields, record) => {
+    if (key === "pickupPoints") {
+      const pickupPointId = Number(String(record.id).replace(/[^\d]/g, "")) || record.id;
+      try {
+        const response = await apiClient.get(apiEndpoints.transport.pickupPointById(pickupPointId));
+        const payload = response.data?.data ?? response.data ?? {};
+        const detail = payload.pickupPoint ?? payload.PickupPoint ?? payload;
+        const routeName = detail.routeName ?? detail.RouteName ?? record.routeName;
+        const routeId = detail.routeId
+          ?? detail.RouteId
+          ?? record.routeId
+          ?? routes.find((route) => String(route.routeName).trim().toLowerCase() === String(routeName || "").trim().toLowerCase())?.id
+          ?? "";
+        const rawStatus = detail.status ?? detail.Status ?? detail.isActive ?? detail.IsActive;
+
+        openForm(key, title, fields, {
+          ...record,
+          id: record.id,
+          routeId,
+          routeName,
+          pickupName: detail.pickupPointName ?? detail.PickupPointName ?? detail.pickupName ?? detail.PickupName ?? detail.stopName ?? record.pickupName,
+          landmark: detail.landmark ?? detail.Landmark ?? detail.stopAddress ?? record.landmark,
+          sequenceNumber: detail.sequenceNo ?? detail.SequenceNo ?? detail.sequenceNumber ?? detail.SequenceNumber ?? detail.stopOrder ?? record.sequenceNumber,
+          pickupTime: toTimeInputValue(detail.pickupTime ?? detail.PickupTime ?? detail.morningPickupTime ?? detail.MorningPickupTime ?? record.pickupTime),
+          dropTime: toTimeInputValue(detail.dropTime ?? detail.DropTime ?? detail.eveningDropTime ?? detail.EveningDropTime ?? record.dropTime),
+          distanceKm: detail.distanceFromStart ?? detail.DistanceFromStart ?? detail.distanceFromSchool ?? detail.DistanceFromSchool ?? detail.distanceKm ?? record.distanceKm,
+          monthlyFee: detail.monthlyFee ?? detail.MonthlyFee ?? detail.monthlyFare ?? detail.MonthlyFare ?? record.monthlyFee,
+          status: rawStatus === true || rawStatus === 1 || rawStatus === "Active" ? "Active" : rawStatus === false || rawStatus === 0 || rawStatus === "Inactive" ? "Inactive" : record.status,
+        });
+      } catch (error) {
+        openForm(key, title, fields, {
+          ...record,
+          pickupTime: toTimeInputValue(record.pickupTime),
+          dropTime: toTimeInputValue(record.dropTime),
+        });
+        showErrorToast(`Latest pickup-point details unavailable: ${getApiErrorMessage(error)}`);
+      }
+      return;
+    }
+
+    if (key !== "studentAssignments") {
+      openForm(key, title, fields, record);
+      return;
+    }
+
+    const assignmentId = getStudentTransportAssignmentId(record);
+    if (assignmentId === null) {
+      openForm(key, title, fields, record);
+      showErrorToast("Student Transport assignment ID is unavailable. Refresh the list and try again.");
+      return;
+    }
+    try {
+      const response = await apiClient.get(apiEndpoints.transport.studentAssignmentById(assignmentId));
+      const payload = response.data?.data ?? response.data ?? {};
+      const detail = payload.studentAssignment ?? payload.assignment ?? payload;
+      const linkedAssignmentId = detail.vehicleAssignmentId ?? detail.VehicleAssignmentId ?? detail.vehicleAssignment?.assignmentId;
+      const linkedVehicleId = vehicleAssignments.find((assignment) => String(assignment.id) === String(linkedAssignmentId))?.vehicleId;
+      const vehicleId = [
+        detail.vehicleId,
+        detail.VehicleId,
+        detail.assignedVehicleId,
+        detail.AssignedVehicleId,
+        detail.vehicle?.vehicleId,
+        detail.vehicle?.id,
+        detail.vehicleAssignment?.vehicleId,
+        linkedVehicleId,
+        record.vehicleId,
+      ].find((value) => value !== undefined && value !== null && String(value).trim() !== "");
+      const vehicleNumber = detail.vehicleNumber
+        ?? detail.VehicleNumber
+        ?? detail.assignedVehicleNumber
+        ?? detail.vehicle?.vehicleNumber
+        ?? record.vehicleNumber;
+      const resolvedVehicleId = vehicleId
+        ?? vehicles.find((vehicle) => String(vehicle.vehicleNumber).trim().toLowerCase() === String(vehicleNumber || "").trim().toLowerCase())?.id
+        ?? "";
+
+      openForm(key, title, fields, {
+        ...record,
+        ...detail,
+        id: record.id,
+        studentName: detail.studentName ?? detail.StudentName ?? record.studentName,
+        admissionNo: detail.admissionNo ?? detail.AdmissionNo ?? detail.admissionNumber ?? record.admissionNo,
+        routeId: detail.routeId ?? detail.RouteId ?? record.routeId,
+        pickupPointName: detail.pickupPointName ?? detail.PickupPointName ?? detail.pickupPoint ?? record.pickupPointName,
+        vehicleId: resolvedVehicleId,
+        vehicleNumber,
+        monthlyFee: detail.monthlyFee ?? detail.MonthlyFee ?? record.monthlyFee,
+        status: detail.status === true || detail.status === 1 || detail.Status === true || detail.Status === 1
+          ? "Active"
+          : typeof (detail.status ?? detail.Status) === "string"
+            ? (detail.status ?? detail.Status)
+            : record.status,
+      });
+    } catch (error) {
+      openForm(key, title, fields, record);
+      showErrorToast(`Latest student transport details unavailable: ${getApiErrorMessage(error)}`);
+    }
   };
 
   const saveForm = async (values) => {
@@ -1071,6 +1510,22 @@ export default function TransportPage() {
         if (isEdit) {
           await apiClient.put(apiEndpoints.transport.pickupPointById(numericId), payload);
         } else {
+          const normalizedPickupName = String(payload.pickupPointName || "").trim().toLowerCase();
+          let existingPickupPoints = pickupPoints;
+          if (!existingPickupPoints.some((point) => String(point.routeId) === String(payload.routeId) && String(point.pickupName || "").trim().toLowerCase() === normalizedPickupName)) {
+            const existingResponse = await apiClient.get(`${apiEndpoints.transport.lookups.pickupPoints}?routeId=${encodeURIComponent(payload.routeId)}`);
+            existingPickupPoints = extractList(existingResponse.data).map((point) => ({
+              routeId: point.routeId ?? point.RouteId ?? payload.routeId,
+              pickupName: point.pickupPointName ?? point.PickupPointName ?? point.stopName ?? point.pickupName,
+            }));
+          }
+          const duplicateExists = existingPickupPoints.some((point) =>
+            String(point.routeId) === String(payload.routeId)
+            && String(point.pickupName || "").trim().toLowerCase() === normalizedPickupName
+          );
+          if (duplicateExists) {
+            throw new Error("Pickup point already exists for this route.");
+          }
           await apiClient.post(apiEndpoints.transport.pickupPoints, payload);
         }
       } else if (key === "vehicles") {
@@ -1096,29 +1551,42 @@ export default function TransportPage() {
         }
       } else if (key === "drivers") {
         if (isEdit) {
-          const staffRecord = driverStaffRecords[String(record.id)];
-          if (!staffRecord) throw new Error("The staff driver record could not be found. Refresh the list and try again.");
-
-          const departmentSpecific = {
-            ...readDepartmentSpecific(staffRecord),
-            licenseNumber: values.licenseNumber,
-            licenseExpiry: values.licenseExpiryDate || null,
-          };
-          const payload = {
-            ...staffRecord,
-            fullName: values.driverName,
-            employeeId: values.employeeId,
-            mobile: values.mobileNumber,
-            email: values.email || "",
-            currentAddress: values.address || "",
-            status: values.status,
-            drivingLicenseNumber: values.licenseNumber,
-            drivingLicenseExpiryDate: values.licenseExpiryDate || null,
-            licenseExpiryDate: values.licenseExpiryDate || null,
-            departmentSpecific,
-            departmentSpecificJson: JSON.stringify(departmentSpecific),
-          };
-          await apiClient.put(apiEndpoints.faculty.update(record.id), payload);
+          const staffRecord = driverStaffRecords[String(record.id)]
+            ?? Object.values(driverStaffRecords).find((staff) => String(staff.employeeId || staff.empId || "").trim().toLowerCase()
+              === String(record.employeeId || values.employeeId || "").trim().toLowerCase());
+          if (staffRecord) {
+            const departmentSpecific = {
+              ...readDepartmentSpecific(staffRecord),
+              licenseNumber: values.licenseNumber,
+              licenseExpiry: values.licenseExpiryDate || null,
+            };
+            await apiClient.put(apiEndpoints.faculty.update(record.id), {
+              ...staffRecord,
+              fullName: values.driverName,
+              employeeId: values.employeeId,
+              mobile: values.mobileNumber,
+              email: values.email || "",
+              currentAddress: values.address || "",
+              status: values.status,
+              drivingLicenseNumber: values.licenseNumber,
+              drivingLicenseExpiryDate: values.licenseExpiryDate || null,
+              licenseExpiryDate: values.licenseExpiryDate || null,
+              departmentSpecific,
+              departmentSpecificJson: JSON.stringify(departmentSpecific),
+            });
+          } else {
+            const driverApiId = record.transportDriverId || record.driverApiId || record.licenseNumber || record.employeeId || record.id;
+            await apiClient.put(apiEndpoints.transport.driverById(driverApiId), {
+              driverName: values.driverName,
+              employeeId: values.employeeId,
+              mobileNumber: values.mobileNumber,
+              email: values.email || "",
+              licenceNumber: values.licenseNumber,
+              licenceExpiry: values.licenseExpiryDate || null,
+              address: values.address || "",
+              status: values.status === "Active",
+            });
+          }
         } else {
           throw new Error("Drivers are managed in Non-Teaching Staff. Create new drivers under Staff (Role: Driver).");
         }
@@ -1148,7 +1616,7 @@ export default function TransportPage() {
           status: values.status === "Active",
         };
         if (isEdit) {
-          await apiClient.put(apiEndpoints.transport.vehicleAssignmentById(numericId), payload);
+          await apiClient.put(apiEndpoints.transport.reassignVehicleAssignment(numericId), payload);
         } else {
           await apiClient.post(apiEndpoints.transport.vehicleAssignments, payload);
         }
@@ -1197,18 +1665,26 @@ export default function TransportPage() {
           status: values.status === "Completed",
         };
         if (isEdit) {
-          await apiClient.put(apiEndpoints.transport.maintenanceById(numericId), payload);
+          await apiClient.put(apiEndpoints.transport.maintenanceById(record.id), payload);
         } else {
           await apiClient.post(apiEndpoints.transport.maintenance, payload);
         }
       }
 
       await fetchTransportData();
+      if (key === "maintenance" && isEdit) {
+        setMaintenance((current) => current.map((item) => (
+          String(item.id) === String(record.id)
+            ? { ...item, status: values.status }
+            : item
+        )));
+      }
       setFormConfig(null);
-      setToast(isEdit ? "Transport record updated successfully." : "Transport record added successfully.");
+      showToast(isEdit ? "Transport record updated successfully." : "Transport record added successfully.");
     } catch (err) {
       console.error("API error saving transport record:", err);
-      setToast(`Error saving record: ${getApiErrorMessage(err)}`);
+      const backendDetails = err?.response?.data?.details ?? err?.response?.data?.Details;
+      showErrorToast(`Error saving record: ${backendDetails || getApiErrorMessage(err)}`);
     } finally {
       setIsFormSubmitting(false);
     }
@@ -1233,7 +1709,7 @@ export default function TransportPage() {
       if (import.meta.env.DEV) console.log("Transport Driver API Response:", response?.data, response?.status);
       setIsAddDriverOpen(false);
       await fetchTransportData();
-      setToast("Transport driver added successfully.");
+      showToast("Transport driver added successfully.");
     } catch (err) {
       console.error("Transport Driver API Error:", {
         url: apiEndpoints.transport.drivers,
@@ -1242,7 +1718,7 @@ export default function TransportPage() {
         response: err?.response?.data,
         error: err,
       });
-      setToast(`Error adding driver: ${getApiErrorMessage(err)}`);
+      showErrorToast(`Error adding driver: ${getApiErrorMessage(err)}`);
     } finally {
       setIsFormSubmitting(false);
     }
@@ -1262,10 +1738,10 @@ export default function TransportPage() {
       await apiClient.post(apiEndpoints.transport.attendants, payload);
       setIsAddAttendantOpen(false);
       await fetchTransportData();
-      setToast("Bus attendant added successfully.");
+      showToast("Bus attendant added successfully.");
     } catch (err) {
       console.error("API error saving transport attendant:", err);
-      setToast(`Error adding attendant: ${getApiErrorMessage(err)}`);
+      showErrorToast(`Error adding attendant: ${getApiErrorMessage(err)}`);
     } finally {
       setIsFormSubmitting(false);
     }
@@ -1275,10 +1751,63 @@ export default function TransportPage() {
     setDeleteConfig({ key, row, label });
   };
 
+  const openRecordDetails = async (key, row, title) => {
+    if (key === "trips") {
+      setDetailConfig({ title, row: getTripDetailRow(row) });
+      return;
+    }
+    const id = key === "studentAssignments"
+      ? getStudentTransportAssignmentId(row)
+      : key === "drivers"
+      ? row.transportDriverId || row.driverApiId || row.licenseNumber || row.employeeId || row.id
+      : Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
+    const detailEndpoints = {
+      routes: apiEndpoints.transport.routeById,
+      pickupPoints: apiEndpoints.transport.pickupPointById,
+      vehicles: apiEndpoints.transport.vehicleById,
+      drivers: apiEndpoints.transport.driverById,
+      attendants: apiEndpoints.transport.attendantById,
+      vehicleAssignments: apiEndpoints.transport.vehicleAssignmentById,
+      studentAssignments: apiEndpoints.transport.studentAssignmentById,
+      maintenance: apiEndpoints.transport.maintenanceById,
+    };
+    const endpointFactory = detailEndpoints[key];
+    if (!endpointFactory) {
+      setDetailConfig({ title, row });
+      return;
+    }
+    if (id === null || id === undefined || String(id).trim() === "") {
+      setDetailConfig({ title, row });
+      showErrorToast("Student Transport assignment ID is unavailable. Refresh the list and try again.");
+      return;
+    }
+    try {
+      const requests = [apiClient.get(endpointFactory(id))];
+      if (key === "drivers") requests.push(apiClient.get(apiEndpoints.transport.driverDocuments(id)));
+      const responses = await Promise.allSettled(requests);
+      const detailResponse = responses[0].status === "fulfilled" ? responses[0].value.data : null;
+      const detail = detailResponse?.data ?? detailResponse;
+      const documents = key === "drivers" && responses[1]?.status === "fulfilled" ? extractList(responses[1].value.data) : [];
+      setDetailConfig({ title, row: { ...row, ...(detail && typeof detail === "object" ? detail : {}), ...(key === "drivers" ? { documentCount: documents.length } : {}) } });
+    } catch (error) {
+      setDetailConfig({ title, row });
+      showErrorToast(`Latest details unavailable: ${getApiErrorMessage(error)}`);
+    }
+  };
+
   const confirmDelete = async () => {
     if (isDeleteSubmitting || !deleteConfig) return;
     const { key, row } = deleteConfig;
-    const numericId = Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
+    const numericId = key === "studentAssignments"
+      ? getStudentTransportAssignmentId(row)
+      : key === "drivers"
+      ? row.transportDriverId || row.driverApiId || row.licenseNumber || row.employeeId || row.id
+      : Number(String(row.id).replace(/[^\d]/g, "")) || row.id;
+
+    if (numericId === null || numericId === undefined || String(numericId).trim() === "") {
+      showErrorToast("Student Transport assignment ID is unavailable. Refresh the list and try again.");
+      return;
+    }
 
     setIsDeleteSubmitting(true);
     try {
@@ -1306,17 +1835,17 @@ export default function TransportPage() {
       if (key === "studentAssignments") {
         const refreshedAssignments = await apiClient.get(`${apiEndpoints.transport.studentAssignments}?PageNumber=1&PageSize=1000`);
         const recordStillExists = extractList(refreshedAssignments.data)
-          .some((assignment) => String(assignment.assignmentId || assignment.id) === String(numericId));
+          .some((assignment) => String(getStudentTransportAssignmentId(assignment)) === String(numericId));
         if (recordStillExists) {
           throw new Error("The backend reported success, but the Student Transport assignment was not deleted.");
         }
       }
       await fetchTransportData();
       setDeleteConfig(null);
-      setToast("Transport record deleted successfully.");
+      showToast("Transport record deleted successfully.");
     } catch (err) {
       console.error("API error deleting transport record:", err);
-      setToast(`Error deleting record: ${getApiErrorMessage(err)}`);
+      showErrorToast(`Error deleting record: ${getApiErrorMessage(err)}`);
     } finally {
       setIsDeleteSubmitting(false);
     }
@@ -1473,8 +2002,8 @@ export default function TransportPage() {
         { key: "pickupName", label: "Pickup", strong: true },
         { key: "routeId", label: "Route", value: (row) => findRoute(row.routeId)?.routeName || row.routeName || "-" },
         { key: "sequenceNumber", label: "Seq" },
-        { key: "pickupTime", label: "Pickup" },
-        { key: "dropTime", label: "Drop" },
+        { key: "pickupTime", label: "Pickup", value: (row) => row.pickupTime || "-" },
+        { key: "dropTime", label: "Drop", value: (row) => row.dropTime || "-" },
         { key: "distanceKm", label: "Distance", value: (row) => `${row.distanceKm} km` },
         { key: "status", label: "Status", badge: true },
       ],
@@ -1549,7 +2078,6 @@ export default function TransportPage() {
       subtitle: "Manage student route allocations, pickup stops and transport fee plans.",
       rows: studentAssignments,
       fields: studentAssignmentFields,
-      addLabel: "Allot Transport",
       columns: studentTransportReportColumns,
     },
     trips: {
@@ -1702,8 +2230,20 @@ export default function TransportPage() {
     };
   };
 
-  const openTripDetails = (trip) => {
-    setDetailConfig({ title: "Trip Details", row: getTripDetailRow(trip) });
+  const openTripDetails = async (trip) => {
+    const fallback = getTripDetailRow(trip);
+    if (!trip.assignmentId) {
+      setDetailConfig({ title: "Trip Details", row: fallback });
+      return;
+    }
+    try {
+      const response = await apiClient.get(apiEndpoints.transport.dashboardOperations(trip.assignmentId));
+      const details = response.data?.data ?? response.data;
+      setDetailConfig({ title: "Trip Details", row: details && typeof details === "object" ? { ...fallback, ...details } : fallback });
+    } catch (error) {
+      setDetailConfig({ title: "Trip Details", row: fallback });
+      showErrorToast(`Live operation details unavailable: ${getApiErrorMessage(error)}`);
+    }
   };
 
   const transportStatusMetrics = [
@@ -1743,9 +2283,9 @@ export default function TransportPage() {
         }
         rowFilter={isTripsTable ? filterTripRow : isSetupFilterTable ? (row) => filterSetupRow(key, row) : undefined}
         onAdd={key === "drivers" ? () => setIsAddDriverOpen(true) : key === "attendants" ? () => setIsAddAttendantOpen(true) : config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
-        onEdit={config.fields ? (row) => openForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
+        onEdit={config.fields ? (row) => openEditForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
-        onView={(row) => setDetailConfig({ title: config.title, row })}
+        onView={(row) => openRecordDetails(key, row, config.title)}
         toolbarClassName={key === "vehicles" ? "cms-transport-vehicle-toolbar" : undefined}
         tableClassName={key === "drivers" ? "cms-transport-driver-table" : undefined}
       />
@@ -1768,7 +2308,9 @@ export default function TransportPage() {
       {(summary.expiringDocs || summary.expiringLicenses) ? (
         <div className="cms-transport-warning">
           <AlertTriangle size={18} />
-          <span><strong>Regulatory Compliance Warning</strong> {summary.expiringDocs} vehicle document(s) and {summary.expiringLicenses} driver license(s) expiring soon.</span>
+          <span><strong>Regulatory Compliance Warning</strong> {summary.expiringDocs} vehicle document(s) and {summary.expiringLicenses} driver license(s) expiring soon.
+            {summary.expiringLicenseDrivers.length ? ` Drivers: ${summary.expiringLicenseDrivers.map((driver) => `${driver.driverName} (${driver.licenseExpiryDate})`).join(", ")}.` : ""}
+          </span>
           <em>Action Required</em>
         </div>
       ) : null}
@@ -1906,7 +2448,12 @@ export default function TransportPage() {
   const renderReports = () => {
     const totalTransportRevenue = studentAssignments.reduce((total, item) => total + (Number(item.annualFee) || 0), 0);
     const activeMaintenanceCost = maintenance.reduce((total, item) => total + (Number(item.cost) || 0), 0);
-    const reportRows = activeReportTab === "student-transport-reports"
+    const dashboardReportPayload = reportApiPayloads["transport-dashboard-report"];
+    const dashboardAnnualFee = readReportMetric(dashboardReportPayload, ["annualTransportFee", "totalTransportRevenue", "totalRevenue", "annualFee"], totalTransportRevenue);
+    const dashboardMaintenanceCost = readReportMetric(dashboardReportPayload, ["maintenanceCost", "totalMaintenanceCost", "activeMaintenanceCost"], activeMaintenanceCost);
+    const dashboardFleetCapacity = readReportMetric(dashboardReportPayload, ["fleetCapacity", "totalFleetCapacity", "totalSeats"], vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0));
+    const dashboardStaffCount = readReportMetric(dashboardReportPayload, ["driversAndAttendants", "transportStaff", "totalStaff"], drivers.length + attendants.length);
+    const localReportRows = activeReportTab === "student-transport-reports"
       ? studentAssignments
       : activeReportTab === "route-reports"
         ? routes
@@ -1918,8 +2465,129 @@ export default function TransportPage() {
             ? maintenance
             : activeReportTab === "trip-reports"
               ? trips
-              : vehicleAssignments;
-    const reportColumns = activeReportTab === "student-transport-reports"
+              : activeReportTab === "transport-dashboard-report"
+                ? vehicleAssignments
+                : [];
+    const hasApiReport = Object.prototype.hasOwnProperty.call(reportApiRows, activeReportTab);
+    const rawReportRows = activeReportTab === "driver-reports"
+      ? drivers.filter((driver) => String(driver.driverName || "").trim())
+      : activeReportTab === "trip-reports"
+        ? trips
+      : hasApiReport ? reportApiRows[activeReportTab] : localReportRows;
+    const reportRows = activeReportTab === "vehicle-reports"
+      ? rawReportRows.map((row) => {
+          const vehicle = vehicles.find((item) =>
+            (row.vehicleId != null && String(item.id) === String(row.vehicleId))
+            || (row.vehicleNumber && item.vehicleNumber === row.vehicleNumber)
+            || (row.registrationNumber && item.registrationNumber === row.registrationNumber));
+          const assignment = vehicleAssignments.find((item) =>
+            (item.status === "Active" || item.status === true)
+            && ((vehicle?.id != null && String(item.vehicleId) === String(vehicle.id))
+              || (row.vehicleId != null && String(item.vehicleId) === String(row.vehicleId))
+              || (row.vehicleNumber && item.vehicleNumber === row.vehicleNumber)))
+            ?? vehicleAssignments.find((item) =>
+              (vehicle?.id != null && String(item.vehicleId) === String(vehicle.id))
+              || (row.vehicleId != null && String(item.vehicleId) === String(row.vehicleId))
+              || (row.vehicleNumber && item.vehicleNumber === row.vehicleNumber));
+          const routeName = assignment?.routeName || findRoute(assignment?.routeId)?.routeName;
+          const driverName = assignment?.driverName || findDriver(assignment?.driverId)?.driverName;
+          const attendantName = assignment?.attendantName || findAttendant(assignment?.attendantId)?.attendantName;
+          const assignedStudents = studentAssignments.filter((student) =>
+            (vehicle?.id != null && String(student.vehicleId) === String(vehicle.id))
+            || (row.vehicleId != null && String(student.vehicleId) === String(row.vehicleId))
+            || (row.vehicleNumber && student.vehicleNumber === row.vehicleNumber)).length;
+          return {
+            ...row,
+            assignedStudents,
+            assignedRoute: routeName || "-",
+            assignedDriver: driverName || "-",
+            busAttendant: attendantName && attendantName !== "Unassigned" ? attendantName : "-",
+          };
+        })
+      : activeReportTab === "driver-reports"
+        ? rawReportRows.map((row) => {
+            const driver = drivers.find((item) =>
+              (row.driverId != null && (String(item.id) === String(row.driverId) || String(item.transportDriverId) === String(row.driverId)))
+              || (row.driverName && item.driverName === row.driverName)
+              || (row.licenseNumber && item.licenseNumber === row.licenseNumber)
+              || (row.mobileNumber && item.mobileNumber === row.mobileNumber));
+            const assignment = vehicleAssignments.find((item) =>
+              (item.status === "Active" || item.status === true)
+              && ((driver?.id != null && String(item.driverId) === String(driver.id))
+                || (driver?.transportDriverId != null && String(item.driverId) === String(driver.transportDriverId))
+                || (row.driverId != null && String(item.driverId) === String(row.driverId))
+                || (row.driverName && item.driverName === row.driverName)))
+              ?? vehicleAssignments.find((item) =>
+                (driver?.id != null && String(item.driverId) === String(driver.id))
+                || (driver?.transportDriverId != null && String(item.driverId) === String(driver.transportDriverId))
+                || (row.driverId != null && String(item.driverId) === String(row.driverId))
+                || (row.driverName && item.driverName === row.driverName));
+            const vehicleNumber = assignment?.vehicleNumber || findVehicle(assignment?.vehicleId)?.vehicleNumber;
+            const routeName = assignment?.routeName || findRoute(assignment?.routeId)?.routeName;
+            const attendantName = assignment?.attendantName || findAttendant(assignment?.attendantId)?.attendantName;
+            return {
+              ...row,
+              currentBus: vehicleNumber || "-",
+              currentRoute: routeName || "-",
+              busAttendant: attendantName && attendantName !== "Unassigned" ? attendantName : "-",
+              assignmentStatus: assignment?.status || (assignment ? "Active" : "Unassigned"),
+              experienceYears: driver?.experience ?? row.experienceYears ?? 0,
+            };
+          })
+        : activeReportTab === "route-reports"
+          ? rawReportRows.map((row) => {
+              const route = routes.find((item) =>
+                (row.routeId != null && String(item.id) === String(row.routeId))
+                || (row.routeCode && item.routeCode === row.routeCode)
+                || (row.routeName && item.routeName === row.routeName));
+              const assignments = vehicleAssignments.filter((item) =>
+                (route?.id != null && String(item.routeId) === String(route.id))
+                || (row.routeId != null && String(item.routeId) === String(row.routeId))
+                || (row.routeName && item.routeName === row.routeName));
+              const activeAssignments = assignments.filter((item) => item.status === "Active" || item.status === true);
+              const applicableAssignments = activeAssignments.length ? activeAssignments : assignments;
+              const assignedBuses = [...new Set(applicableAssignments.map((item) =>
+                item.vehicleNumber || findVehicle(item.vehicleId)?.vehicleNumber).filter(Boolean))];
+              const assignedDrivers = [...new Set(applicableAssignments.map((item) =>
+                item.driverName || findDriver(item.driverId)?.driverName).filter(Boolean))];
+              return {
+                ...row,
+                assignedBus: assignedBuses.join(", ") || "-",
+                assignedDriver: assignedDrivers.join(", ") || "-",
+              };
+            })
+      : activeReportTab === "pickup-wise-reports"
+        ? rawReportRows.map((row) => {
+            const pickupPointId = row.pickupPointId ?? row.PickupPointId ?? row.pickupId ?? row.PickupId;
+            const pickupPoint = pickupPoints.find((point) =>
+              String(point.id) === String(pickupPointId)
+              || String(point.pickupPointId) === String(pickupPointId)
+              || String(point.pickupId) === String(pickupPointId));
+            return {
+              ...row,
+              pickupPointName: row.pickupPointName
+                || row.PickupPointName
+                || row.pickupName
+                || row.PickupName
+                || pickupPoint?.pickupName
+                || pickupPoint?.pickupPointName
+                || pickupPoint?.name
+                || "-",
+            };
+          })
+      : activeReportTab === "seat-occupancy-reports"
+        ? rawReportRows.map((row) => {
+            const vehicle = vehicles.find((item) =>
+              (row.vehicleId != null && String(item.id) === String(row.vehicleId))
+              || (row.VehicleId != null && String(item.id) === String(row.VehicleId))
+              || (row.vehicleNumber && String(item.vehicleNumber) === String(row.vehicleNumber)));
+            return {
+              ...row,
+              vehicleName: vehicle?.vehicleType || row.vehicleName || row.VehicleName || "-",
+            };
+          })
+      : rawReportRows;
+    const fallbackReportColumns = activeReportTab === "student-transport-reports"
       ? studentTransportReportColumns
       : activeReportTab === "route-reports"
         ? tableConfigs.routes.columns
@@ -1931,7 +2599,24 @@ export default function TransportPage() {
             ? tableConfigs.maintenance.columns
             : activeReportTab === "trip-reports"
               ? tableConfigs.trips.columns
-              : tableConfigs.vehicleAssignments.columns;
+              : activeReportTab === "transport-dashboard-report"
+                ? tableConfigs.vehicleAssignments.columns
+                : [{ key: "name", label: "Report Item" }, { key: "value", label: "Value" }];
+    const excludedReportColumnKeys = activeReportTab === "student-transport-reports"
+      ? new Set(["assignmentid", "id"])
+      : activeReportTab === "pickup-wise-reports"
+      ? new Set(["pickuppointid", "pickupid"])
+      : activeReportTab === "seat-occupancy-reports"
+      ? new Set(["vehicleid"])
+      : activeReportTab === "maintenance-reports"
+        ? new Set(["maintenanceid", "id"])
+        : new Set();
+    const reportColumns = (activeReportTab === "trip-reports"
+      ? tableConfigs.trips.columns
+      : activeReportTab === "driver-reports"
+      ? tableConfigs.drivers.columns.filter((column) => !["id", "transportDriverId", "driverApiId"].includes(column.key))
+      : hasApiReport ? reportColumnsFromRows(reportRows, fallbackReportColumns) : fallbackReportColumns)
+      .filter((column) => !excludedReportColumnKeys.has(String(column.key).replace(/[_-]/g, "").toLowerCase()));
     const filterOption = (value, label) => ({ value, label });
     const routeFilterOptions = [
       filterOption("All", "All Routes"),
@@ -1975,6 +2660,15 @@ export default function TransportPage() {
         { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
         { name: "status", label: "Status Filter", options: statusFilterOptions },
       ],
+      "pickup-wise-reports": [
+        { name: "route", label: "Route Filter", options: routeFilterOptions },
+      ],
+      "seat-occupancy-reports": [
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+      ],
+      "monthly-cost-reports": [
+        { name: "vehicle", label: "Vehicle Filter", options: vehicleFilterOptions },
+      ],
     };
     const matchesReportRoute = (row) => {
       if (reportFilters.route === "All") return true;
@@ -2013,10 +2707,22 @@ export default function TransportPage() {
       );
     };
     const needsCompactReportToolbar = activeReportTab === "trip-reports" || activeReportTab === "student-transport-reports";
+    const activeReportDefinition = reportDefinitions[activeReportTab];
+    const reportRequestParams = {
+      reportType: activeReportDefinition?.type,
+      campusId: selectedCampusId || undefined,
+      boardId: selectedBoardId || undefined,
+      academicYearId: selectedAcademicYearId || undefined,
+      routeId: reportFilters.route !== "All" ? reportFilters.route : undefined,
+      vehicleId: reportFilters.vehicle !== "All" ? reportFilters.vehicle : undefined,
+      status: reportFilters.status !== "All" ? reportFilters.status : undefined,
+      search: query.trim() || undefined,
+    };
+    const reportFilename = activeReportDefinition?.filename || "transport-report";
 
     return (
       <div className="cms-transport-stack">
-        <TransportTabs
+        <ReportTabsNavigation
           tabs={reportTabs}
           active={activeReportTab}
           onChange={(tab) => {
@@ -2024,17 +2730,17 @@ export default function TransportPage() {
             setQuery("");
             setReportFilters({ route: "All", vehicle: "All", status: "All" });
           }}
-          compact
         />
         {activeReportTab === "transport-dashboard-report" ? (
           <div className="cms-transport-stat-grid">
-            <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(totalTransportRevenue)} hint="from active assignments" tone="green" />
-            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(activeMaintenanceCost)} hint="logged fleet service costs" tone="amber" />
-            <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(vehicles.reduce((total, vehicle) => total + Number(vehicle.capacity || 0), 0))} hint="total seats" tone="blue" />
-            <StatCard icon={UserCheck} label="Drivers & Attendants" value={drivers.length + attendants.length} hint="staff profiles" tone="violet" />
+            <StatCard icon={IndianRupee} label="Annual Transport Fee" value={formatCurrency(dashboardAnnualFee)} hint="from active assignments" tone="green" />
+            <StatCard icon={Wrench} label="Maintenance Cost" value={formatCurrency(dashboardMaintenanceCost)} hint="logged fleet service costs" tone="amber" />
+            <StatCard icon={Bus} label="Fleet Capacity" value={formatNumber(dashboardFleetCapacity)} hint="total seats" tone="blue" />
+            <StatCard icon={UserCheck} label="Drivers & Attendants" value={formatNumber(dashboardStaffCount)} hint="staff profiles" tone="violet" />
           </div>
         ) : null}
-        <TableSection
+        {reportLoading ? <SkeletonTable columns={6} rows={5} /> : null}
+        {!reportLoading ? <TableSection
           title="Transport Report"
           subtitle="Live transport report data derived from fleet records."
           rows={reportRows}
@@ -2046,8 +2752,20 @@ export default function TransportPage() {
           onFilterChange={(name, value) => setReportFilters((current) => ({ ...current, [name]: value }))}
           rowFilter={filterReportRow}
           toolbarClassName={`cms-transport-report-toolbar${needsCompactReportToolbar ? " cms-transport-report-toolbar-compact" : ""}`}
-          onExport={() => exportRows("transport-report.csv", reportRows.filter((row) => textMatch(row, query)), reportColumns)}
-        />
+          tableClassName="cms-transport-report-table"
+          onPrint={async () => {
+            try { await downloadTransportFile(apiEndpoints.transport.reports.print, `${reportFilename}.pdf`, reportRequestParams); }
+            catch (error) { showErrorToast(`Unable to print report: ${getApiErrorMessage(error)}`); }
+          }}
+          onPdfExport={async () => {
+            try { await downloadTransportFile(apiEndpoints.transport.reports.exportPdf, `${reportFilename}.pdf`, reportRequestParams); }
+            catch (error) { showErrorToast(`Unable to export PDF: ${getApiErrorMessage(error)}`); }
+          }}
+          onExport={async () => {
+            try { await downloadTransportFile(apiEndpoints.transport.reports.exportCsv, `${reportFilename}.csv`, reportRequestParams); }
+            catch (error) { showErrorToast(`Unable to export CSV: ${getApiErrorMessage(error)}`); }
+          }}
+        /> : null}
       </div>
     );
   };
@@ -2115,7 +2833,11 @@ export default function TransportPage() {
           fields={formConfig.fields}
           initial={formConfig.record || {}}
           columns={formConfig.key === "routes" ? 2 : 3}
-          className={formConfig.key === "pickupPoints" ? "cms-transport-pickup-modal" : ""}
+          className={formConfig.key === "pickupPoints"
+            ? "cms-transport-form-modal cms-transport-pickup-modal"
+            : formConfig.key === "vehicles"
+              ? "cms-transport-form-modal cms-transport-vehicle-modal"
+              : "cms-transport-form-modal"}
           onCancel={() => { if (!isFormSubmitting) setFormConfig(null); }}
           onSave={saveForm}
           awaitSave
@@ -2164,7 +2886,11 @@ export default function TransportPage() {
         />
       ) : null}
 
-      <Toast message={toast} onClose={() => setToast("")} />
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast({ message: "", type: "success" })}
+      />
     </DashboardLayout>
   );
 }

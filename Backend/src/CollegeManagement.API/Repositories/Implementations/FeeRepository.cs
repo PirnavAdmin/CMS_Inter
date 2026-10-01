@@ -44,12 +44,18 @@ public class FeeRepository : IFeeRepository
     }
 
 
-    public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync()
+    public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         using var c = Connection();
 
         return await c.QueryAsync<FeeTypeResponse>(
             "sp_GetFeeTypes",
+            new
+            {
+                p_CampusId = campusId,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
+            },
             commandType: CommandType.StoredProcedure);
     }
 
@@ -435,13 +441,18 @@ public class FeeRepository : IFeeRepository
     }
 
 
-    public async Task<IEnumerable<ScholarshipResponse>>
-        GetScholarshipsAsync()
+    public async Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         using var c = Connection();
 
         return await c.QueryAsync<ScholarshipResponse>(
             "sp_GetScholarships",
+            new
+            {
+                p_CampusId = campusId,
+                p_BoardId = boardId,
+                p_AcademicYearId = academicYearId
+            },
             commandType: CommandType.StoredProcedure);
     }
 
@@ -650,7 +661,8 @@ public class FeeRepository : IFeeRepository
         int? sectionId = null,
         string? paymentPlan = null,
         string? status = null,
-        string? search = null)
+        string? search = null,
+        int? boardId = null)
     {
         try
         {
@@ -729,7 +741,8 @@ public class FeeRepository : IFeeRepository
                     p_SectionId = sectionId,
                     p_PaymentPlan = paymentPlan,
                     p_Status = status,
-                    p_Search = search
+                    p_Search = search,
+                    p_BoardId = boardId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -1037,7 +1050,7 @@ public class FeeRepository : IFeeRepository
     // =========================================================
 
     public async Task<IEnumerable<FeeCollectionResponse>>
-        GetFeeCollectionAsync(int? campusId = null, string? search = null)
+        GetFeeCollectionAsync(int? campusId = null, string? search = null, int? boardId = null, int? academicYearId = null)
     {
         try
         {
@@ -1056,6 +1069,14 @@ public class FeeRepository : IFeeRepository
             if (campusId.HasValue && campusId.Value > 0)
             {
                 query = query.Where(sf => sf.Student.CampusId == campusId.Value);
+            }
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                query = query.Where(sf => sf.Student.BoardId == boardId.Value);
+            }
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+            {
+                query = query.Where(sf => sf.Student.AcademicYearId == academicYearId.Value);
             }
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -1092,7 +1113,9 @@ public class FeeRepository : IFeeRepository
                 new
                 {
                     p_CampusId = campusId,
-                    p_Search = search
+                    p_Search = search,
+                    p_BoardId = boardId,
+                    p_AcademicYearId = academicYearId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -1100,7 +1123,7 @@ public class FeeRepository : IFeeRepository
 
 
     public async Task<IEnumerable<FeeDueResponse>>
-        GetDueAsync(int? campusId = null)
+        GetDueAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         try
         {
@@ -1122,6 +1145,14 @@ public class FeeRepository : IFeeRepository
             if (campusId.HasValue && campusId.Value > 0)
             {
                 query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.CampusId == campusId.Value);
+            }
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.BoardId == boardId.Value);
+            }
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+            {
+                query = query.Where(i => i.FeePaymentPlan.StudentFee.Student.AcademicYearId == academicYearId.Value);
             }
 
             var list = await query.ToListAsync();
@@ -1148,7 +1179,11 @@ public class FeeRepository : IFeeRepository
 
             return await c.QueryAsync<FeeDueResponse>(
                 "sp_GetDueFees",
-                new { p_CampusId = campusId },
+                new { 
+                    p_CampusId = campusId,
+                    p_BoardId = boardId,
+                    p_AcademicYearId = academicYearId
+                },
                 commandType: CommandType.StoredProcedure);
         }
     }
@@ -1159,7 +1194,7 @@ public class FeeRepository : IFeeRepository
     // =========================================================
 
     public async Task<FeeDashboardResponse>
-        GetDashboardAsync(int? campusId = null)
+        GetDashboardAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         try
         {
@@ -1168,7 +1203,11 @@ public class FeeRepository : IFeeRepository
             using var multi =
                 await c.QueryMultipleAsync(
                     "sp_GetFeeDashboard",
-                    new { p_CampusId = campusId },
+                    new { 
+                        p_CampusId = campusId,
+                        p_BoardId = boardId,
+                        p_AcademicYearId = academicYearId 
+                    },
                     commandType: CommandType.StoredProcedure);
 
             var r =

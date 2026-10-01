@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Users,
@@ -28,6 +28,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import * as numberSeriesApi from "@/api/numberSeriesApi.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import {
   readNumberSeriesSettings,
   writeNumberSeriesSettings,
@@ -47,7 +49,6 @@ const SERIES_ICONS = {
   "non-teaching-staff-id": UserCheck,
   "admission-no": GraduationCap,
   "exam-code": FileText,
-  "certificate-number": Award,
   "receipt-no": Receipt,
 };
 
@@ -55,6 +56,11 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const navigate = useNavigate();
   const { seriesId, id } = useParams();
   const activeId = seriesId || id;
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const { selectedBoardId, selectedAcademicYearId } = useAcademicContext();
+  const activeCampusId = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
+  const activeBoardId = selectedBoardId;
+  const activeAYId = selectedAcademicYearId;
 
   const [seriesList, setSeriesList] = useState(() =>
     readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem)
@@ -64,10 +70,15 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const [toast, setToast] = useState(null);
   const [previewModalSeries, setPreviewModalSeries] = useState(null);
 
-  const fetchSeries = async () => {
+  const fetchSeries = useCallback(async () => {
     setLoading(true);
+    let data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
     try {
-      const serverData = await numberSeriesApi.getNumberSeriesList();
+      const serverData = await numberSeriesApi.getNumberSeriesList(
+        activeCampusId,
+        activeBoardId,
+        activeAYId,
+      );
       const items = Array.isArray(serverData) ? serverData : serverData?.items || serverData?.data || [];
       if (Array.isArray(items) && items.length > 0) {
         const normalized = items.filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
@@ -80,22 +91,20 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           if (s.slug) map.set(s.slug, s);
         });
         const merged = Array.from(new Set(map.values())).filter((s) => !isSeriesRemoved(s));
-        setSeriesList(merged);
+        data = merged;
         writeNumberSeriesSettings(merged);
-        return;
       }
     } catch (err) {
       console.warn("GET /api/v1/settings/number-series fallback:", err?.message || err);
     } finally {
       setLoading(false);
     }
-    const data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
     setSeriesList(data);
-  };
+  }, [activeCampusId, activeBoardId, activeAYId]);
 
   useEffect(() => {
     fetchSeries();
-  }, []);
+  }, [fetchSeries]);
 
   const activeSeries = useMemo(() => {
     if (!activeId) return null;
@@ -121,7 +130,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     let savedData = null;
 
     try {
-      savedData = await numberSeriesApi.updateNumberSeries(code, updatedSeries);
+      savedData = await numberSeriesApi.updateNumberSeries(code, updatedSeries, activeCampusId);
     } catch (err) {
       console.warn("PUT /api/v1/settings/number-series/{seriesCode} fallback:", err?.message || err);
     }
@@ -328,7 +337,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
 
                 <div className="ns-card-example-box">
                   <span className="ns-card-example-lbl">Current / Next Example:</span>
-                  <div className="ns-card-example-val">{series.currentExample || nextVal}</div>
+                  <div className="ns-card-example-val">{series.livePreview || series.currentExample || nextVal}</div>
                 </div>
 
                 <p className="ns-card-desc">{series.description}</p>
@@ -773,6 +782,7 @@ function RenderTableRow({ seriesId, row, index }) {
 // ======================================================================
 function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
   const navigate = useNavigate();
+  const { selectedCampusId } = useCampusContext();
 
   const [formState, setFormState] = useState({
     prefix: series.prefix || "",
@@ -815,6 +825,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
           pattern: formState.format,
           numberLength: formState.numberLength,
           prefix: formState.prefix,
+          campusId: selectedCampusId,
         });
         if (typeof res === "string" && res.trim()) {
           setApiPreview(res.trim());
@@ -824,7 +835,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
       }
     }, 200);
     return () => clearTimeout(timer);
-  }, [formState.format, formState.numberLength, formState.prefix, series, liveValidation.valid]);
+  }, [formState.format, formState.numberLength, formState.prefix, series, selectedCampusId, liveValidation.valid]);
 
   const livePreviewVal = apiPreview || localLivePreviewVal;
 

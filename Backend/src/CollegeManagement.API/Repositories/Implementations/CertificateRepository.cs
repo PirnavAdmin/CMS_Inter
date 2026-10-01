@@ -742,6 +742,8 @@ public class CertificateRepository : ICertificateRepository
     // =========================================================
     public async Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
         int? campusId = null,
+        int? boardId = null,
+        int? academicYearId = null,
         CancellationToken ct = default)
     {
         using var connection = _database.CreateConnection();
@@ -750,6 +752,8 @@ public class CertificateRepository : ICertificateRepository
         {
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", campusId, DbType.Int32);
+            parameters.Add("p_BoardId", boardId, DbType.Int32);
+            parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
 
             var list = await connection.QueryAsync<StudentCertificateDropdownDto>(new CommandDefinition(
                 "sp_GetStudentsForCertificateDropdown",
@@ -935,7 +939,7 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_MoveCertificateStatus",
                 parameters,
                 commandType: CommandType.StoredProcedure,
@@ -961,11 +965,12 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_BulkReviewCertificates",
                 parameters,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
+            return (int)affected;
         }
         catch
         {
@@ -984,11 +989,12 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_BulkApproveCertificates",
                 parameters,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
+            return (int)affected;
         }
         catch
         {
@@ -1007,11 +1013,12 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            return await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_BulkIssueCertificates",
                 parameters,
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct));
+            return (int)affected;
         }
         catch
         {
@@ -1032,7 +1039,7 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_CancelCertificate",
                 parameters,
                 commandType: CommandType.StoredProcedure,
@@ -1060,7 +1067,7 @@ public class CertificateRepository : ICertificateRepository
 
         try
         {
-            var affected = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            var affected = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
                 "sp_DeleteCertificate",
                 parameters,
                 commandType: CommandType.StoredProcedure,

@@ -27,9 +27,9 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAllFineRules()
+        public async Task<IActionResult> GetAllFineRules([FromQuery] int? campusId, [FromQuery] int? boardId, [FromQuery] int? academicYearId)
         {
-            var result = await _fineRuleService.GetAllAsync();
+            var result = await _fineRuleService.GetAllAsync(campusId, boardId, academicYearId);
             return Ok(new { success = true, data = result });
         }
 

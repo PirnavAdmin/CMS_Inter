@@ -94,7 +94,6 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
-        [HttpGet("bus-attendants")]
         [HttpGet("attendants")]
         public async Task<IActionResult> GetAttendants()
         {

@@ -1,15 +1,6 @@
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import {
-  ACTIONS,
-  ALL_PERMISSION_MODULES,
-  ROLE_MEMBER_FALLBACK,
-  ROLE_SEEDS,
-  USER_ASSIGNMENT_FALLBACK,
-} from "./rolesPermissions.constants.js";
-import { normalizePermissionPayload } from "./permissionUtils.jsx";
-
-const STORAGE_KEY = "cms-rbac-fallback-state-v1";
+import { normalizePermissionPayload, normalizeRoleCode } from "./permissionUtils.jsx";
 
 const rbacEndpoints = {
   roles: apiEndpoints.roles?.cards || apiEndpoints.roles?.list || "/api/v1/roles/cards",
@@ -32,38 +23,25 @@ const rbacEndpoints = {
 
 const ROLE_CODE_TO_ID = {
   SUPER_ADMIN: 1,
-  "super-admin": 1,
   ADMIN: 2,
-  admin: 2,
   HOD: 3,
-  hod: 3,
   FACULTY: 4,
-  faculty: 4,
   STUDENT: 5,
-  student: 5,
   PARENT: 6,
-  parent: 6,
   ACCOUNTS: 7,
-  accounts: 7,
   EXAMINATION_CELL: 8,
-  "examination-cell": 8,
   LIBRARIAN: 9,
-  librarian: 9,
   HOSTEL_WARDEN: 10,
-  "hostel-warden": 10,
   PLACEMENT_OFFICER: 11,
-  "placement-officer": 11,
   BUS_DRIVER: 12,
-  "bus-driver": 12,
 };
 
 const resolveRoleId = (id) => {
   if (id !== undefined && id !== null && !isNaN(Number(id))) return Number(id);
-  if (ROLE_CODE_TO_ID[id]) return ROLE_CODE_TO_ID[id];
+  const normalizedCode = normalizeRoleCode(id);
+  if (ROLE_CODE_TO_ID[normalizedCode]) return ROLE_CODE_TO_ID[normalizedCode];
   return id;
 };
-
-const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const normalizeApiArray = (payload) => {
   const data = payload?.data ?? payload;
@@ -79,176 +57,67 @@ const normalizeApiArray = (payload) => {
 const normalizeRole = (role) => {
   const name = role?.name || role?.roleName || role?.Name || role?.RoleName || "";
   const code = role?.code || role?.roleCode || role?.Code || role?.RoleCode || name;
-  const seed = ROLE_SEEDS.find((item) => item.code === String(code).toUpperCase().replace(/[^A-Z0-9]+/g, "_"));
+  const assignedUserCount = role?.assignedUserCount
+    ?? role?.AssignedUserCount
+    ?? role?.assignedUsersCount
+    ?? role?.userCount
+    ?? role?.UserCount
+    ?? role?.memberCount
+    ?? role?.MemberCount
+    ?? role?.count;
   return {
-    id: String(role?.id ?? role?.roleId ?? role?.Id ?? seed?.id ?? code),
-    code: seed?.code || String(code).toUpperCase().replace(/[^A-Z0-9]+/g, "_"),
-    name: seed?.name || name,
-    description: role?.description || role?.Description || seed?.description || "",
-    isSystemRole: role?.isSystemRole ?? role?.IsSystemRole ?? seed?.isSystemRole ?? true,
-    isProtected: role?.isProtected ?? role?.IsProtected ?? seed?.isProtected ?? false,
-    assignedUserCount: role?.assignedUserCount ?? role?.AssignedUserCount ?? seed?.assignedUserCount ?? 0,
-    icon: seed?.icon,
-    discoveredFrom: seed?.discoveredFrom,
+    id: String(role?.id ?? role?.roleId ?? role?.Id ?? code),
+    code: normalizeRoleCode(code),
+    name,
+    description: role?.description || role?.Description || "",
+    isSystemRole: role?.isSystemRole ?? role?.IsSystemRole ?? false,
+    isProtected: role?.isProtected ?? role?.IsProtected ?? false,
+    assignedUserCount: assignedUserCount == null ? null : Number(assignedUserCount),
   };
 };
 
-const defaultRolePermissions = (roleCode) => {
-  if (roleCode === "SUPER_ADMIN" || roleCode === "ADMIN") {
-    return ALL_PERMISSION_MODULES.map((module) => ({ module: module.id, actions: module.availableActions }));
-  }
-
-  const byRole = {
-    HOD: ["dashboard", "group-management", "subject-management", "section-room", "timetable", "student-management", "attendance", "staff-management", "staff-attendance", "staff-leave-management", "examination", "marks-evaluation", "results", "reports-analytics"],
-    FACULTY: ["dashboard", "subject-management", "timetable", "student-management", "attendance", "staff-leave-management", "examination", "marks-evaluation", "results"],
-    STUDENT: ["dashboard", "attendance", "examination", "marks-evaluation", "results", "certificates"],
-    PARENT: ["dashboard", "attendance", "results", "fee-management", "certificates"],
-    ACCOUNTS: ["dashboard", "fee-management", "payroll", "reports-analytics"],
-    EXAMINATION_CELL: ["dashboard", "examination", "marks-evaluation", "results", "reports-analytics"],
-    LIBRARIAN: ["dashboard", "library", "reports-analytics"],
-    HOSTEL_WARDEN: ["dashboard", "hostel-management", "attendance", "reports-analytics"],
-    PLACEMENT_OFFICER: ["dashboard", "placement", "student-management", "reports-analytics"],
-    BUS_DRIVER: ["dashboard", "transport"],
-    OFFICE_STAFF: ["dashboard", "student-admission", "student-management", "certificates", "settings"],
-    ADMISSION_STAFF: ["dashboard", "student-admission", "student-management", "section-allocation", "reports-analytics"],
-    TRANSPORT_MANAGER: ["dashboard", "transport", "reports-analytics"],
-    LAB_ASSISTANT: ["dashboard", "subject-management", "timetable"],
-  };
-
-  const modules = byRole[roleCode] || ["dashboard"];
-  return ALL_PERMISSION_MODULES.filter((module) => modules.includes(module.id)).map((module) => ({
-    module: module.id,
-    actions: module.availableActions.filter((action) => {
-      if (roleCode === "BUS_DRIVER") return [ACTIONS.VIEW].includes(action);
-      if (roleCode === "STUDENT" || roleCode === "PARENT") return [ACTIONS.VIEW, ACTIONS.DOWNLOAD, ACTIONS.EXPORT].includes(action);
-      if (roleCode === "FACULTY") return ![ACTIONS.DELETE, ACTIONS.ASSIGN_PERMISSIONS, ACTIONS.ASSIGN_USERS].includes(action);
-      return ![ACTIONS.DELETE, ACTIONS.ASSIGN_PERMISSIONS, ACTIONS.ASSIGN_USERS].includes(action);
-    }),
-  }));
+const apiResult = (data) => ({ data, meta: { source: "api" } });
+const apiError = (error, defaultMessage) => new Error(getApiErrorMessage(error) || defaultMessage);
+const endpointRequired = (endpoint, label) => {
+  if (!endpoint) throw new Error(`${label} API is not configured.`);
 };
-
-const initialState = () => ({
-  roles: ROLE_SEEDS.map((role) => ({
-    ...role,
-    icon: undefined,
-  })),
-  modules: clone(ALL_PERMISSION_MODULES).map((module) => ({ ...module, icon: undefined })),
-  rolePermissions: ROLE_SEEDS.reduce((acc, role) => {
-    acc[role.id] = defaultRolePermissions(role.code);
-    return acc;
-  }, {}),
-  userPermissions: {},
-  roleMembers: clone(ROLE_MEMBER_FALLBACK),
-  userAssignments: clone(USER_ASSIGNMENT_FALLBACK),
-});
-
-const mergeFallbackState = (state) => {
-  const seedRolesByCode = new Map(ROLE_SEEDS.map((role) => [role.code, role]));
-  const rolesByCode = new Map((state.roles || []).map((role) => [role.code, role]));
-  const memberIds = new Set((state.roleMembers || []).map((member) => member.id));
-
-  return {
-    ...state,
-    roles: [
-      ...ROLE_SEEDS.map((seed) => ({
-        ...seed,
-        icon: undefined,
-        ...(rolesByCode.get(seed.code) || {}),
-        assignedUserCount: seed.assignedUserCount,
-      })),
-      ...(state.roles || []).filter((role) => !seedRolesByCode.has(role.code)),
-    ],
-    roleMembers: [
-      ...(state.roleMembers || []),
-      ...clone(ROLE_MEMBER_FALLBACK).filter((member) => !memberIds.has(member.id)),
-    ],
-  };
+const notifyRolesUpdated = () => {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("roles-updated"));
 };
-
-const readFallbackState = () => {
-  if (typeof window === "undefined") return initialState();
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY) || window.sessionStorage.getItem(STORAGE_KEY);
-    return stored ? mergeFallbackState({ ...initialState(), ...JSON.parse(stored) }) : initialState();
-  } catch {
-    return initialState();
-  }
-};
-
-const writeFallbackState = (state) => {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // Fallback state is best-effort only.
-  }
-};
-
-const withFallbackNotice = (data, usingFallback = true, error = null) => ({
-  data,
-  meta: {
-    usingFallback,
-    errorMessage: error ? getApiErrorMessage(error) : "",
-  },
-});
 
 export async function getRoles(filters = {}) {
-  if (rbacEndpoints.roles) {
-    try {
-      const params = {};
-      if (filters?.campusId) params.campusId = filters.campusId;
-      if (filters?.boardId) params.boardId = filters.boardId;
-      if (filters?.academicYearId) params.academicYearId = filters.academicYearId;
+  endpointRequired(rbacEndpoints.roles, "Roles");
+  const params = {};
+  if (filters?.campusId) params.campusId = filters.campusId;
+  if (filters?.boardId) params.boardId = filters.boardId;
+  if (filters?.academicYearId) params.academicYearId = filters.academicYearId;
 
-      const response = await apiClient.get(rbacEndpoints.roles, {
-        params: Object.keys(params).length ? params : undefined,
-        skipGlobalLoader: true,
-      });
-      const apiRoles = normalizeApiArray(response.data).map(normalizeRole).filter((role) => role.name);
-      if (apiRoles.length) {
-        const seedsByCode = new Map(ROLE_SEEDS.map((role) => [role.code, role]));
-        const merged = ROLE_SEEDS.map((seed) => apiRoles.find((role) => role.code === seed.code) || seed);
-        apiRoles.forEach((role) => {
-          if (!seedsByCode.has(role.code)) merged.push(role);
-        });
-        return withFallbackNotice(merged, false);
-      }
-    } catch (error) {
-      return withFallbackNotice(ROLE_SEEDS, true, error);
-    }
+  try {
+    const response = await apiClient.get(rbacEndpoints.roles, {
+      params: Object.keys(params).length ? params : undefined,
+      skipGlobalLoader: true,
+    });
+    return apiResult(normalizeApiArray(response.data).map(normalizeRole).filter((role) => role.name));
+  } catch (error) {
+    throw apiError(error, "Unable to load roles.");
   }
-  return withFallbackNotice(ROLE_SEEDS);
 }
 
 export async function getRoleById(roleId) {
   const roles = await getRoles();
-  return withFallbackNotice(roles.data.find((role) => String(role.id) === String(roleId)) || null, roles.meta.usingFallback);
+  return apiResult(roles.data.find((role) => String(role.id) === String(roleId)) || null);
 }
 
 export async function createRole(payload) {
-  if (rbacEndpoints.createRole) {
-    try {
-      const response = await apiClient.post(rbacEndpoints.createRole, payload);
-      const role = normalizeRole(response.data?.data || response.data);
-      return withFallbackNotice(role, false);
-    } catch (error) {
-      throw new Error(getApiErrorMessage(error) || "Unable to create role.");
-    }
+  endpointRequired(rbacEndpoints.createRole, "Create role");
+  try {
+    const response = await apiClient.post(rbacEndpoints.createRole, payload);
+    const role = normalizeRole(response.data?.data || response.data);
+    notifyRolesUpdated();
+    return apiResult(role);
+  } catch (error) {
+    throw apiError(error, "Unable to create role.");
   }
-  const state = readFallbackState();
-  const id = String(Date.now());
-  const role = {
-    id,
-    code: String(payload.code || payload.name || "").toUpperCase().replace(/[^A-Z0-9]+/g, "_"),
-    name: payload.name || "",
-    description: payload.description || "",
-    isSystemRole: false,
-    isProtected: false,
-    assignedUserCount: 0,
-  };
-  state.roles.push(role);
-  writeFallbackState(state);
-  return withFallbackNotice(role);
 }
 
 export async function updateRole(roleId, payload) {
@@ -260,19 +129,13 @@ export async function updateRole(roleId, payload) {
         : `${rbacEndpoints.updateRole}/${numericRoleId}`;
       const response = await apiClient.put(endpoint, payload);
       const role = normalizeRole(response.data?.data || response.data);
-      return withFallbackNotice(role, false);
+      notifyRolesUpdated();
+      return apiResult(role);
     } catch (error) {
       throw new Error(getApiErrorMessage(error) || "Unable to update role.");
     }
   }
-  const state = readFallbackState();
-  const index = state.roles.findIndex((r) => String(r.id) === String(roleId));
-  if (index !== -1) {
-    state.roles[index] = { ...state.roles[index], ...payload };
-    writeFallbackState(state);
-    return withFallbackNotice(state.roles[index]);
-  }
-  throw new Error("Role not found.");
+  throw new Error("Update role API is not configured or the role ID is invalid.");
 }
 
 export async function deleteRole(roleId) {
@@ -283,31 +146,26 @@ export async function deleteRole(roleId) {
         ? rbacEndpoints.deleteRole(numericRoleId)
         : `${rbacEndpoints.deleteRole}/${numericRoleId}`;
       await apiClient.delete(endpoint);
-      return withFallbackNotice(true, false);
+      notifyRolesUpdated();
+      return apiResult(true);
     } catch (error) {
       throw new Error(getApiErrorMessage(error) || "Unable to delete role.");
     }
   }
-  const state = readFallbackState();
-  state.roles = state.roles.filter((r) => String(r.id) !== String(roleId));
-  writeFallbackState(state);
-  return withFallbackNotice(true);
+  throw new Error("Delete role API is not configured or the role ID is invalid.");
 }
 
 export async function getModulesAndPermissions() {
-  if (rbacEndpoints.modules) {
-    try {
-      const response = await apiClient.get(rbacEndpoints.modules, { skipGlobalLoader: true });
-      const modules = normalizeApiArray(response.data);
-      if (modules.length) return withFallbackNotice(modules, false);
-    } catch (error) {
-      return withFallbackNotice(ALL_PERMISSION_MODULES, true, error);
-    }
+  endpointRequired(rbacEndpoints.modules, "Permission modules");
+  try {
+    const response = await apiClient.get(rbacEndpoints.modules, { skipGlobalLoader: true });
+    return apiResult(normalizeApiArray(response.data));
+  } catch (error) {
+    throw apiError(error, "Unable to load permission modules.");
   }
-  return withFallbackNotice(ALL_PERMISSION_MODULES);
 }
 
-export async function getRolePermissions(roleId, roleCode) {
+export async function getRolePermissions(roleId) {
   const numericRoleId = resolveRoleId(roleId);
   if (rbacEndpoints.rolePermissions && numericRoleId) {
     try {
@@ -316,14 +174,12 @@ export async function getRolePermissions(roleId, roleCode) {
         : `${rbacEndpoints.rolePermissions}/${numericRoleId}/permissions`;
       const response = await apiClient.get(endpoint, { skipGlobalLoader: true });
       const permissions = normalizeApiArray(response.data);
-      if (permissions.length) return withFallbackNotice(normalizePermissionPayload(permissions), false);
+      return apiResult(normalizePermissionPayload(permissions));
     } catch (error) {
-      return withFallbackNotice(normalizePermissionPayload(defaultRolePermissions(roleCode)), true, error);
+      throw apiError(error, "Unable to load role permissions.");
     }
   }
-  const state = readFallbackState();
-  const permissions = state.rolePermissions[roleId] || defaultRolePermissions(roleCode);
-  return withFallbackNotice(normalizePermissionPayload(permissions));
+  throw new Error("Role permissions API is not configured or the role ID is invalid.");
 }
 
 export async function updateRolePermissions(roleId, payload) {
@@ -334,51 +190,36 @@ export async function updateRolePermissions(roleId, payload) {
       const endpoint = typeof rbacEndpoints.updateRolePermissions === "function"
         ? rbacEndpoints.updateRolePermissions(numericRoleId)
         : `${rbacEndpoints.updateRolePermissions}/${numericRoleId}/permissions`;
-      const response = await apiClient.put(endpoint, { roleId: numericRoleId, permissions: normalized });
-      const permissions = normalizeApiArray(response.data);
-      return withFallbackNotice(normalizePermissionPayload(permissions.length ? permissions : normalized), false);
+      await apiClient.put(endpoint, { roleId: numericRoleId, permissions: normalized });
+      return getRolePermissions(numericRoleId);
     } catch (error) {
-      const state = readFallbackState();
-      state.rolePermissions[roleId] = normalized;
-      writeFallbackState(state);
-      return withFallbackNotice(normalized, true, error);
+      throw apiError(error, "Unable to save role permissions.");
     }
   }
-  const state = readFallbackState();
-  state.rolePermissions[roleId] = normalized;
-  writeFallbackState(state);
-  return withFallbackNotice(normalized);
+  throw new Error("Role permissions API is not configured or the role ID is invalid.");
 }
 
 export async function getRoleMembers(roleId, roleCode, filters = {}) {
-  const numericRoleId = resolveRoleId(roleId);
+  const numericRoleId = resolveRoleId(roleId ?? roleCode);
   if (rbacEndpoints.roleMembers && numericRoleId) {
     try {
       const endpoint = typeof rbacEndpoints.roleMembers === "function"
-        ? rbacEndpoints.roleMembers(numericRoleId, roleCode)
+        ? rbacEndpoints.roleMembers(numericRoleId)
         : `${rbacEndpoints.roleMembers}/${numericRoleId}/members`;
-
-      const params = {};
-      if (filters?.campusId) params.campusId = filters.campusId;
-      if (filters?.boardId) params.boardId = filters.boardId;
-      if (filters?.academicYearId) params.academicYearId = filters.academicYearId;
-
       const response = await apiClient.get(endpoint, {
-        params: Object.keys(params).length ? params : undefined,
+        params: filters && Object.keys(filters).length ? filters : undefined,
         skipGlobalLoader: true,
       });
-      const members = normalizeApiArray(response.data);
-      return withFallbackNotice(members, false);
+      const members = normalizeApiArray(response.data).map(normalizeUserAssignment);
+      return apiResult(members);
     } catch (error) {
-      return withFallbackNotice([], true, error);
+      throw apiError(error, "Unable to load role members.");
     }
   }
-  const state = readFallbackState();
-  const members = (state.roleMembers || []).filter((member) => (member.roleCodes || []).includes(roleCode));
-  return withFallbackNotice(members);
+  throw new Error("Role members API is not configured or the role ID is invalid.");
 }
 
-export async function getUserPermissions(userId, roleCode) {
+export async function getUserPermissions(userId) {
   if (rbacEndpoints.userPermissions && userId) {
     try {
       const endpoint = typeof rbacEndpoints.userPermissions === "function"
@@ -386,14 +227,12 @@ export async function getUserPermissions(userId, roleCode) {
         : `${rbacEndpoints.userPermissions}/${userId}/permissions`;
       const response = await apiClient.get(endpoint, { skipGlobalLoader: true });
       const permissions = normalizeApiArray(response.data);
-      if (permissions.length) return withFallbackNotice(normalizePermissionPayload(permissions), false);
+      return apiResult(normalizePermissionPayload(permissions));
     } catch (error) {
-      return withFallbackNotice(normalizePermissionPayload(defaultRolePermissions(roleCode)), true, error);
+      throw apiError(error, "Unable to load user permissions.");
     }
   }
-  const state = readFallbackState();
-  const permissions = state.userPermissions?.[userId] || defaultRolePermissions(roleCode);
-  return withFallbackNotice(normalizePermissionPayload(permissions));
+  throw new Error("User permissions API is not configured or the user ID is missing.");
 }
 
 export async function getUserRoleDetails(userId) {
@@ -404,15 +243,12 @@ export async function getUserRoleDetails(userId) {
         : `${rbacEndpoints.userDetails}/${userId}/details`;
       const response = await apiClient.get(endpoint, { skipGlobalLoader: true });
       const data = response.data?.data ?? response.data;
-      if (data) return withFallbackNotice(data, false);
+      return apiResult(data || null);
     } catch (error) {
-      // Fallback
+      throw apiError(error, "Unable to load user details.");
     }
   }
-
-  const state = readFallbackState();
-  const user = (state.userAssignments || []).find((item) => String(item.id) === String(userId));
-  return withFallbackNotice(user || null);
+  throw new Error("User details API is not configured or the user ID is missing.");
 }
 
 export async function updateUserPermissions(userId, payload) {
@@ -422,34 +258,44 @@ export async function updateUserPermissions(userId, payload) {
       const endpoint = typeof rbacEndpoints.updateUserPermissions === "function"
         ? rbacEndpoints.updateUserPermissions(userId)
         : `${rbacEndpoints.updateUserPermissions}/${userId}/permissions`;
-      const response = await apiClient.put(endpoint, { userId, permissions: normalized });
-      const permissions = normalizeApiArray(response.data);
-      return withFallbackNotice(normalizePermissionPayload(permissions.length ? permissions : normalized), false);
+      await apiClient.put(endpoint, { userId, permissions: normalized });
+      return getUserPermissions(userId);
     } catch (error) {
-      const state = readFallbackState();
-      state.userPermissions = state.userPermissions || {};
-      state.userPermissions[userId] = normalized;
-      writeFallbackState(state);
-      return withFallbackNotice(normalized, true, error);
+      throw apiError(error, "Unable to save user permissions.");
     }
   }
-  const state = readFallbackState();
-  state.userPermissions = state.userPermissions || {};
-  state.userPermissions[userId] = normalized;
-  writeFallbackState(state);
-  return withFallbackNotice(normalized);
+  throw new Error("User permissions API is not configured or the user ID is missing.");
 }
 
-const normalizeUserAssignment = (u) => ({
-  id: String(u.userId || u.id),
-  userId: u.userCode || u.userId || u.id,
-  name: u.name || "",
-  userType: u.userType || "",
-  department: u.department || "",
-  designation: u.designation || "",
-  roleCodes: u.roleCodes || (u.roleCode ? [u.roleCode] : []),
-  status: u.status || "Active",
-});
+const normalizeUserAssignment = (u = {}) => {
+  const id = u.userId ?? u.UserId ?? u.id ?? u.Id;
+  const userCode = u.userCode
+    ?? u.UserCode
+    ?? u.employeeId
+    ?? u.EmployeeId
+    ?? (id == null ? "" : String(id));
+  const roleCode = u.roleCode ?? u.RoleCode ?? u.roleName ?? u.RoleName ?? "";
+  const roleCodes = Array.isArray(u.roleCodes)
+    ? u.roleCodes
+    : Array.isArray(u.RoleCodes)
+      ? u.RoleCodes
+      : roleCode
+        ? [roleCode]
+        : [];
+
+  return {
+    ...u,
+    id: id == null ? "" : String(id),
+    userId: userCode,
+    userCode,
+    name: u.name ?? u.Name ?? u.fullName ?? u.FullName ?? "",
+    userType: u.userType ?? u.UserType ?? "",
+    department: u.department ?? u.Department ?? "",
+    designation: u.designation ?? u.Designation ?? "",
+    roleCodes: roleCodes.map(normalizeRoleCode).filter(Boolean),
+    status: u.status ?? u.Status ?? "Active",
+  };
+};
 
 export async function getUserRoleAssignments(params = {}) {
   if (rbacEndpoints.userAssignments) {
@@ -472,34 +318,17 @@ export async function getUserRoleAssignments(params = {}) {
       const data = response.data?.data ?? response.data;
       const rawItems = data?.items || (Array.isArray(data) ? data : []);
       const items = rawItems.map(normalizeUserAssignment);
-      if (items.length) {
-        return withFallbackNotice({
-          items,
-          page: data?.pageNumber || data?.page || 1,
-          pageSize: data?.pageSize || 8,
-          total: data?.totalCount || data?.total || items.length,
-        }, false);
-      }
+      return apiResult({
+        items,
+        page: data?.pageNumber || data?.page || 1,
+        pageSize: data?.pageSize || params.pageSize || 8,
+        total: data?.totalCount ?? data?.total ?? items.length,
+      });
     } catch (error) {
-      // fallback
+      throw apiError(error, "Unable to load user role assignments.");
     }
   }
-  const state = readFallbackState();
-  const page = Math.max(1, Number(params.page) || 1);
-  const pageSize = Math.max(1, Number(params.pageSize) || 8);
-  const query = String(params.search || "").trim().toLowerCase();
-  const filtered = query
-    ? state.userAssignments.filter((user) =>
-        [user.name, user.userId, user.userType, user.department, user.designation, ...(user.roleCodes || [])]
-          .some((value) => String(value || "").toLowerCase().includes(query)))
-    : state.userAssignments;
-  const start = (page - 1) * pageSize;
-  return withFallbackNotice({
-    items: filtered.slice(start, start + pageSize),
-    page,
-    pageSize,
-    total: filtered.length,
-  });
+  throw new Error("User role assignments API is not configured.");
 }
 
 export async function assignRoleToUser(userId, roleCode, roleId = null) {
@@ -510,19 +339,12 @@ export async function assignRoleToUser(userId, roleCode, roleId = null) {
         ? rbacEndpoints.assignRoleToUser(userId)
         : `${rbacEndpoints.assignRoleToUser}/${userId}/assign`;
       await apiClient.post(endpoint, { roleCode, roleId: roleId || resolveRoleId(roleCode) });
-      return withFallbackNotice({ userId, roleCode }, false);
+      return apiResult({ userId, roleCode });
     } catch (error) {
-      // fallback
+      throw apiError(error, "Unable to assign role.");
     }
   }
-  const state = readFallbackState();
-  const index = state.userAssignments.findIndex((user) => String(user.id) === String(userId));
-  if (index === -1) throw new Error("User assignment was not found.");
-  const roleCodes = new Set(state.userAssignments[index].roleCodes || []);
-  roleCodes.add(roleCode);
-  state.userAssignments[index] = { ...state.userAssignments[index], roleCodes: [...roleCodes] };
-  writeFallbackState(state);
-  return withFallbackNotice(state.userAssignments[index]);
+  throw new Error("Assign role API is not configured.");
 }
 
 export async function removeRoleFromUser(userId, roleCode) {
@@ -532,20 +354,12 @@ export async function removeRoleFromUser(userId, roleCode) {
         ? rbacEndpoints.removeRoleFromUser(userId)
         : `${rbacEndpoints.removeRoleFromUser}/${userId}/remove`;
       await apiClient.delete(endpoint, { params: { roleCode } });
-      return withFallbackNotice({ userId, roleCode }, false);
+      return apiResult({ userId, roleCode });
     } catch (error) {
-      // fallback
+      throw apiError(error, "Unable to remove role.");
     }
   }
-  const state = readFallbackState();
-  const index = state.userAssignments.findIndex((user) => String(user.id) === String(userId));
-  if (index === -1) throw new Error("User assignment was not found.");
-  state.userAssignments[index] = {
-    ...state.userAssignments[index],
-    roleCodes: (state.userAssignments[index].roleCodes || []).filter((code) => code !== roleCode),
-  };
-  writeFallbackState(state);
-  return withFallbackNotice(state.userAssignments[index]);
+  throw new Error("Remove role API is not configured.");
 }
 
 export async function getCurrentUserPermissions() {
@@ -553,13 +367,12 @@ export async function getCurrentUserPermissions() {
     try {
       const response = await apiClient.get(rbacEndpoints.currentUserPermissions, { skipGlobalLoader: true });
       const permissions = normalizeApiArray(response.data);
-      if (permissions.length) return withFallbackNotice(normalizePermissionPayload(permissions), false);
+      return apiResult(normalizePermissionPayload(permissions));
     } catch (error) {
-      // fallback
+      throw apiError(error, "Unable to load current user permissions.");
     }
   }
-  const state = readFallbackState();
-  return withFallbackNotice(state.rolePermissions.admin || defaultRolePermissions("ADMIN"));
+  throw new Error("Current user permissions API is not configured.");
 }
 
 export const rolesPermissionsApiConfig = rbacEndpoints;

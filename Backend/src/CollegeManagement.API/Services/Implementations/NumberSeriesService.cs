@@ -58,26 +58,29 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync(int? campusId = null)
+        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync(int? campusId = null, string? board = null, string? academicYear = null)
         {
             var entities = await _repository.GetAllAsync(campusId);
             var dtos = new List<NumberSeriesResponseDto>();
 
+            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear };
+
             foreach (var entity in entities)
             {
-                dtos.Add(MapToDto(entity));
+                dtos.Add(await MapToDtoAsync(entity, contextDto, campusId));
             }
 
             return dtos;
         }
 
-        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug, int? campusId = null)
+        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug, int? campusId = null, string? board = null, string? academicYear = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
             var entity = await _repository.GetByCodeAsync(code, campusId);
             if (entity == null) return null;
 
-            return MapToDto(entity);
+            var context = (board != null || academicYear != null) ? new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear } : null;
+            return await MapToDtoAsync(entity, context, campusId);
         }
 
         public async Task<NumberSeriesResponseDto?> UpdateSeriesAsync(string seriesCodeOrSlug, UpdateNumberSeriesDto dto, int? campusId = null)
@@ -97,13 +100,30 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (updated == null) return null;
 
-            return MapToDto(updated);
+            return await MapToDtoAsync(updated, null, campusId);
         }
 
         public async Task<GenerateNumberSeriesResponseDto?> GenerateNextNumberAsync(string seriesCodeOrSlug, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GenerateNextSequenceAsync(code, campusId);
+            var actualCode = code;
+
+            var contextParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(context?.Board))
+            {
+                contextParts.Add($"B:{context.Board.Trim().ToUpperInvariant()}");
+            }
+            if (!string.IsNullOrWhiteSpace(context?.AcademicYear))
+            {
+                contextParts.Add($"AY:{context.AcademicYear.Trim().ToUpperInvariant()}");
+            }
+
+            if (contextParts.Count > 0)
+            {
+                actualCode = $"{code}|{string.Join("_", contextParts)}";
+            }
+
+            var entity = await _repository.GenerateNextSequenceAsync(actualCode, campusId, baseSeriesCode: code);
             if (entity == null) return null;
 
             var generatedNumber = NumberSeriesPatternEvaluator.Evaluate(
@@ -124,51 +144,125 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null, int? campusId = null)
+        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null, int? campusId = null, string? board = null, string? academicYear = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
-            var entity = await _repository.GetByCodeAsync(code, campusId);
+            var actualCode = code;
 
-            var activePattern = pattern ?? entity?.FormatPattern ?? "{PREFIX}{SEQ}";
-            var activeLength = numberLength ?? entity?.NumberLength ?? 4;
-            var activePrefix = prefix ?? entity?.Prefix ?? "";
-            var curSeq = entity?.CurrentSequence ?? 0;
-            var startNum = entity?.StartNumber ?? 1;
+            var contextParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(board))
+            {
+                contextParts.Add($"B:{board.Trim().ToUpperInvariant()}");
+            }
+            if (!string.IsNullOrWhiteSpace(academicYear))
+            {
+                contextParts.Add($"AY:{academicYear.Trim().ToUpperInvariant()}");
+            }
+
+            if (contextParts.Count > 0)
+            {
+                actualCode = $"{code}|{string.Join("_", contextParts)}";
+            }
+
+            // Fallback to base code if specific entity is not found just to get settings, but we primarily want the current sequence of the specific context
+            var specificEntity = await _repository.GetByCodeAsync(actualCode, campusId);
+            var baseEntity = (actualCode == code) ? specificEntity : await _repository.GetByCodeAsync(code, campusId);
+            
+            var activeEntity = specificEntity ?? baseEntity;
+
+            var activePattern = pattern ?? activeEntity?.FormatPattern ?? "{PREFIX}{SEQ}";
+            var activeLength = numberLength ?? activeEntity?.NumberLength ?? 4;
+            var activePrefix = prefix ?? activeEntity?.Prefix ?? "";
+            
+            // If specific entity exists, use its sequence. If not, the sequence is 0.
+            var curSeq = specificEntity?.CurrentSequence ?? 0;
+            
+            // If specificEntity is actually a global fallback, reset curSeq
+            if (specificEntity != null && campusId.HasValue && specificEntity.CampusId != campusId)
+            {
+                curSeq = specificEntity.StartNumber > 0 ? specificEntity.StartNumber - 1 : 0;
+            }
+            
+            // If we are previewing the base series itself, get the absolute max across all its sub-series
+            if (actualCode == code)
+            {
+                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(code, campusId, board, academicYear);
+                curSeq = Math.Max(curSeq, maxSeq);
+            }
+
+            var startNum = baseEntity?.StartNumber ?? 1;
 
             var nextSeq = curSeq < startNum ? startNum : curSeq + 1;
+
+            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear };
 
             return NumberSeriesPatternEvaluator.Evaluate(
                 pattern: activePattern,
                 sequenceNumber: nextSeq,
                 numberLength: activeLength,
                 prefix: activePrefix,
-                context: null,
+                context: contextDto,
                 referenceDate: DateTime.Now,
                 isPreview: true);
         }
 
-        private NumberSeriesResponseDto MapToDto(NumberSeriesConfiguration entity)
+        private async Task<NumberSeriesResponseDto> MapToDtoAsync(NumberSeriesConfiguration entity, GenerateNumberSeriesRequestDto? context = null, int? campusId = null)
         {
-            var nextSeq = entity.CurrentSequence < entity.StartNumber
+            var curSeq = entity.CurrentSequence;
+            
+            // If the entity we are using as base is from a different campus (global fallback), 
+            // the sequence for the requested campus should not inherit the global one directly 
+            // unless we're just rendering a preview. But to show the correct preview (e.g. 1 instead of 99)
+            // we should reset to 0 if it's a cross-campus fallback.
+            if (campusId.HasValue && entity.CampusId != campusId)
+            {
+                curSeq = entity.StartNumber > 0 ? entity.StartNumber - 1 : 0;
+            }
+            
+            if (context != null && (!string.IsNullOrWhiteSpace(context.Board) || !string.IsNullOrWhiteSpace(context.AcademicYear)))
+            {
+                var contextParts = new List<string>();
+                if (!string.IsNullOrWhiteSpace(context.Board)) contextParts.Add($"B:{context.Board.Trim().ToUpperInvariant()}");
+                if (!string.IsNullOrWhiteSpace(context.AcademicYear)) contextParts.Add($"AY:{context.AcademicYear.Trim().ToUpperInvariant()}");
+                
+                var actualCode = $"{entity.SeriesCode}|{string.Join("_", contextParts)}";
+                var subEntity = await _repository.GetByCodeAsync(actualCode, campusId);
+                
+                if (subEntity != null)
+                {
+                    curSeq = subEntity.CurrentSequence;
+                }
+                else
+                {
+                    curSeq = entity.StartNumber > 0 ? entity.StartNumber - 1 : 0;
+                }
+            }
+            else if (!entity.SeriesCode.Contains("|"))
+            {
+                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode, campusId, context?.Board, context?.AcademicYear);
+                curSeq = Math.Max(curSeq, maxSeq);
+            }
+
+            var nextSeq = curSeq < entity.StartNumber
                 ? entity.StartNumber
-                : entity.CurrentSequence + 1;
+                : curSeq + 1;
 
             var livePreview = NumberSeriesPatternEvaluator.Evaluate(
                 pattern: entity.FormatPattern,
                 sequenceNumber: nextSeq,
                 numberLength: entity.NumberLength,
                 prefix: entity.Prefix,
-                context: null,
+                context: context,
                 referenceDate: DateTime.Now,
                 isPreview: true);
 
-            var curSeqToUse = entity.CurrentSequence > 0 ? entity.CurrentSequence : entity.StartNumber;
+            var curSeqToUse = curSeq > 0 ? curSeq : entity.StartNumber;
             var currentExample = NumberSeriesPatternEvaluator.Evaluate(
                 pattern: entity.FormatPattern,
                 sequenceNumber: curSeqToUse,
                 numberLength: entity.NumberLength,
                 prefix: entity.Prefix,
-                context: null,
+                context: context,
                 referenceDate: DateTime.Now,
                 isPreview: true);
 
@@ -182,7 +276,7 @@ namespace CollegeManagement.API.Services.Implementations
                 FormatPattern = entity.FormatPattern,
                 NumberLength = entity.NumberLength,
                 StartNumber = entity.StartNumber,
-                CurrentSequence = entity.CurrentSequence,
+                CurrentSequence = curSeq,
                 Description = entity.Description,
                 IsActive = entity.IsActive,
                 LivePreview = livePreview,

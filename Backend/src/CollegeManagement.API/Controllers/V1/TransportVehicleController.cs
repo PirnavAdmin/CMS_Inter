@@ -109,7 +109,8 @@ namespace CollegeManagement.API.Controllers
                     PollutionExpiry = dto.PollutionExpiry,
                     FitnessExpiry = dto.FitnessExpiry,
                     Capacity = dto.Capacity > 0 ? dto.Capacity : 0,
-                    Status = dto.Status
+                    Status = dto.Status,
+                    CampusId = dto.CampusId
                 };
 
                 var newId = await _service.CreateAsync(createDto, null);

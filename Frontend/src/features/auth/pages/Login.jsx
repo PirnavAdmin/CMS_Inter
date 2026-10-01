@@ -95,7 +95,9 @@ export default function Login() {
         userRole.includes("parent") ||
         result.roleType === "parent";
 
-      if (isFacultyOrStaff) {
+      if (result.user.isAdmin || userRole.includes("admin")) {
+        navigate("/dashboard", { replace: true });
+      } else if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
       } else if (isParent) {
         navigate("/parent-dashboard", { replace: true });

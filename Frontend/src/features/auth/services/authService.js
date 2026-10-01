@@ -321,7 +321,13 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     throw new Error("Authentication failed because the server returned an invalid user response.");
   }
   const normalizedRole = String(role).trim().toLowerCase();
-  const isAdmin = normalizedRole === "admin" || normalizedRole === "super admin";
+  const adminFlag = data.IsAdmin ?? data.isAdmin ?? payload.IsAdmin ?? payload.isAdmin;
+  const isAdmin =
+    adminFlag === true ||
+    adminFlag === 1 ||
+    String(adminFlag || "").trim().toLowerCase() === "true" ||
+    Boolean(data.AdminId || data.adminId || payload.AdminId || payload.adminId) ||
+    normalizedRole.includes("admin");
   if (expectedAccountType === "admin" && !isAdmin) {
     throw new Error("Authentication failed because the server returned an invalid admin response.");
   }
