@@ -90,11 +90,17 @@ export default function Login() {
         userRole.includes("teacher") ||
         userRole.includes("staff") ||
         userRole.includes("lecturer");
+      const isParent =
+        userRole === "parent" ||
+        userRole.includes("parent") ||
+        result.roleType === "parent";
 
       if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
+      } else if (isParent) {
+        navigate("/parent-dashboard", { replace: true });
       } else if (userRole.includes("driver")) {
         navigate("/driver", { replace: true });
       } else {
