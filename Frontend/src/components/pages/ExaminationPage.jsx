@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { generateNextNumber } from "@/api/numberSeriesApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
@@ -3860,24 +3861,23 @@ export default function ExaminationPage() {
           const targetCampus = Number(effectiveCampusId) || 1;
 
           const generateNextExamCode = async () => {
+            const bName = nameOf(campusBoards.length > 0 ? campusBoards : boards, newRecord.boardId, "");
+            const ayName = nameOf(academicYears, newRecord.yearId || newRecord.academicYearId, "");
+            
             const genPayload = {
-              board: "",
+              board: bName !== "—" ? bName : "",
               dept: "",
               type: "",
               staff: "",
               desig: "",
               cert: "",
-              academicYear: "",
+              academicYear: ayName !== "—" ? ayName : "",
               group: "",
               section: "",
               level: "",
               exam: "",
             };
-            const response = await apiClient.post(
-              `/api/v1/settings/number-series/EXAM_CODE/generate-next?campusId=${targetCampus}`,
-              genPayload,
-            );
-            const result = response?.data?.data ?? response?.data;
+            const result = await generateNextNumber("EXAM_CODE", genPayload, targetCampus);
             const generated = result?.generatedNumber ?? result?.generatedCode ?? result?.code;
             if (!generated || String(generated) === "0000") {
               throw new Error("The number-series service did not return a generated examination code.");
@@ -5706,53 +5706,7 @@ function ExamForm({
 
   const [examCodePreview, setExamCodePreview] = useState("");
 
-  useEffect(() => {
-    if (existing) {
-      setExamCodePreview("");
-      return;
-    }
-    let active = true;
-    const targetCampus = Number(campusId) || 1;
-    // Clear the previous campus' cached code before requesting the new preview.
-    setExamCodePreview("");
-    setForm((prev) => ({ ...prev, code: "" }));
-    const loadPreview = async () => {
-      try {
-        let res;
-        try {
-          res = await apiClient.get(`/api/v1/settings/number-series/EXAM_CODE?campusId=${targetCampus}`);
-        } catch {
-          res = await apiClient.get(`/api/v1/number-series/EXAM_CODE?campusId=${targetCampus}`);
-        }
-        if (!active) return;
-        const body = res?.data?.data ?? res?.data;
-        const seriesData = body?.data ?? body;
-        // Prefer the server's live preview. Only derive a code when the endpoint
-        // supplies its sequence and format, avoiding a stale hard-coded series.
-        let preview = seriesData?.livePreview ?? seriesData?.nextCode ?? seriesData?.preview;
-        if (!preview && (seriesData?.currentSequence != null || seriesData?.startNumber != null) && seriesData?.formatPattern) {
-          const sequence = Number(seriesData.currentSequence ?? seriesData.startNumber) + 1;
-          const length = Number(seriesData.numberLength) || 4;
-          const year = new Date().getFullYear();
-          preview = String(seriesData.formatPattern)
-            .replace(/{YEAR}/g, String(year))
-            .replace(/{YYYY}/g, String(year))
-            .replace(/{SEQ}/g, String(sequence).padStart(length, "0"));
-        }
-        if (preview && String(preview) !== "0000") {
-          const code = String(preview);
-          setExamCodePreview(code);
-          setForm((prev) => ({ ...prev, code }));
-        }
-      } catch {
-        // Keep the code empty when number-series lookup fails; save retries it.
-      }
-    };
-    loadPreview();
-    return () => {
-      active = false;
-    };
-  }, [existing, campusId]);
+
 
   const [form, setForm] = useState(() =>
     existing
@@ -5800,6 +5754,57 @@ function ExamForm({
         status: "DRAFT",
       },
   );
+
+  useEffect(() => {
+    if (existing) {
+      setExamCodePreview("");
+      return;
+    }
+    let active = true;
+    const targetCampus = Number(campusId) || 1;
+    const bName = nameOf(boards, form.boardId, "");
+    const ayName = nameOf(academicYears, form.yearId, "");
+    const bQuery = bName && bName !== "—" ? `&board=${encodeURIComponent(bName)}` : "";
+    const ayQuery = ayName && ayName !== "—" ? `&academicYear=${encodeURIComponent(ayName)}` : "";
+    
+    // Clear the previous campus' cached code before requesting the new preview.
+    setExamCodePreview("");
+    setForm((prev) => ({ ...prev, code: "" }));
+    const loadPreview = async () => {
+      try {
+        let res;
+        try {
+          res = await apiClient.get(`/api/v1/settings/number-series/EXAM_CODE?campusId=${targetCampus}${bQuery}${ayQuery}`);
+        } catch {
+          res = await apiClient.get(`/api/v1/number-series/EXAM_CODE?campusId=${targetCampus}${bQuery}${ayQuery}`);
+        }
+        if (!active) return;
+        const body = res?.data?.data ?? res?.data;
+        const seriesData = body?.data ?? body;
+        let preview = seriesData?.livePreview ?? seriesData?.nextCode ?? seriesData?.preview;
+        if (!preview && (seriesData?.currentSequence != null || seriesData?.startNumber != null) && seriesData?.formatPattern) {
+          const sequence = Number(seriesData.currentSequence ?? seriesData.startNumber) + 1;
+          const length = Number(seriesData.numberLength) || 4;
+          const year = new Date().getFullYear();
+          preview = String(seriesData.formatPattern)
+            .replace(/{YEAR}/g, String(year))
+            .replace(/{YYYY}/g, String(year))
+            .replace(/{SEQ}/g, String(sequence).padStart(length, "0"));
+        }
+        if (preview && String(preview) !== "0000") {
+          const code = String(preview);
+          setExamCodePreview(code);
+          setForm((prev) => ({ ...prev, code }));
+        }
+      } catch {
+        // Keep the code empty when number-series lookup fails; save retries it.
+      }
+    };
+    loadPreview();
+    return () => {
+      active = false;
+    };
+  }, [existing, campusId, form.boardId, form.yearId, boards, academicYears]);
 
   useEffect(() => {
     if (existing) return;
@@ -6699,9 +6704,17 @@ function ExamForm({
           const targetCampus = Number(campusId) || 1;
           let previewRes;
           try {
-            previewRes = await apiClient.get(`/api/v1/settings/number-series/EXAM_CODE?campusId=${targetCampus}&_=${Date.now()}`);
+            const bName = nameOf(boards, form.boardId, "");
+            const ayName = nameOf(academicYears, form.yearId, "");
+            const bQuery = bName && bName !== "—" ? `&board=${encodeURIComponent(bName)}` : "";
+            const ayQuery = ayName && ayName !== "—" ? `&academicYear=${encodeURIComponent(ayName)}` : "";
+            previewRes = await apiClient.get(`/api/v1/settings/number-series/EXAM_CODE?campusId=${targetCampus}${bQuery}${ayQuery}&_=${Date.now()}`);
           } catch {
-            previewRes = await apiClient.get(`/api/v1/number-series/EXAM_CODE?campusId=${targetCampus}&_=${Date.now()}`);
+            const bName = nameOf(boards, form.boardId, "");
+            const ayName = nameOf(academicYears, form.yearId, "");
+            const bQuery = bName && bName !== "—" ? `&board=${encodeURIComponent(bName)}` : "";
+            const ayQuery = ayName && ayName !== "—" ? `&academicYear=${encodeURIComponent(ayName)}` : "";
+            previewRes = await apiClient.get(`/api/v1/number-series/EXAM_CODE?campusId=${targetCampus}${bQuery}${ayQuery}&_=${Date.now()}`);
           }
           const body = previewRes?.data?.data ?? previewRes?.data;
           const seriesData = body?.data ?? body;

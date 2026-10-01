@@ -40,14 +40,8 @@ namespace CollegeManagement.API.Dtos.Transport.Operations
         [JsonPropertyName("vehicleNumber")]
         public string VehicleNumber { get; set; } = string.Empty;
 
-        [JsonPropertyName("busNumber")]
-        public string BusNumber => VehicleNumber;
-
         [JsonPropertyName("registrationNumber")]
         public string RegistrationNumber { get; set; } = string.Empty;
-
-        [JsonPropertyName("regNumber")]
-        public string RegNumber => RegistrationNumber;
 
         [JsonPropertyName("routeId")]
         public long RouteId { get; set; }
@@ -76,32 +70,17 @@ namespace CollegeManagement.API.Dtos.Transport.Operations
         [JsonPropertyName("studentsCount")]
         public int StudentsCount { get; set; } = 0;
 
-        [JsonPropertyName("assignedStudents")]
-        public int AssignedStudents => StudentsCount;
-
         [JsonPropertyName("capacity")]
         public int Capacity { get; set; } = 50;
-
-        [JsonPropertyName("vehicleCapacity")]
-        public int VehicleCapacity => Capacity;
 
         [JsonPropertyName("morningTripTime")]
         public string MorningTripTime { get; set; } = "07:00 AM";
 
-        [JsonPropertyName("morningTrip")]
-        public string MorningTrip => MorningTripTime;
-
         [JsonPropertyName("eveningTripTime")]
         public string EveningTripTime { get; set; } = "03:45 PM";
 
-        [JsonPropertyName("eveningTrip")]
-        public string EveningTrip => EveningTripTime;
-
         [JsonPropertyName("status")]
         public string Status { get; set; } = "Completed";
-
-        [JsonPropertyName("tripStatus")]
-        public string TripStatus => Status;
 
         [JsonPropertyName("gpsStatus")]
         public string GpsStatus { get; set; } = "GPS Offline";

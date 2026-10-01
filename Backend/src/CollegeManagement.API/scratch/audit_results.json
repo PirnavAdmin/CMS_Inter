@@ -1,0 +1,814 @@
+[
+  {
+    "id": 1,
+    "path": "/api/v1/transport/routes",
+    "method": "GET",
+    "sp": "sp_GetTransportRoutes",
+    "desc": "Get all routes (paged)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 2,
+    "path": "/api/v1/transport/routes?campusId=1",
+    "method": "GET",
+    "sp": "sp_GetTransportRoutes",
+    "desc": "Get routes filtered by campusId=1",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 3,
+    "path": "/api/v1/transport/routes/12",
+    "method": "GET",
+    "sp": "sp_GetTransportRouteById",
+    "desc": "Get route by numeric ID (12)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "id",
+      "routeId",
+      "routeCode",
+      "routeName",
+      "startLocation",
+      "routeStart",
+      "endLocation",
+      "routeEnd",
+      "distanceKm",
+      "totalDistanceKm",
+      "estimatedDurationMinutes",
+      "estimatedTimeMinutes",
+      "estimatedDurationText",
+      "description",
+      "totalPickupPoints",
+      "pickupPointCount",
+      "assignedBus",
+      "assignedVehicleNumber",
+      "assignedDriver",
+      "assignedDriverName",
+      "pickupPointSequenceText",
+      "minRangeKm",
+      "minRange",
+      "nonAcBaseFare",
+      "nonAcRateAddlKm",
+      "nonAcRatePerKm",
+      "acBaseFare",
+      "acRateAddlKm",
+      "acRatePerKm",
+      "status",
+      "statusText",
+      "isActive",
+      "createdAt",
+      "updatedAt",
+      "campusId",
+      "campusName"
+    ]
+  },
+  {
+    "id": 4,
+    "path": "/api/v1/transport/routes/MDHPR_1",
+    "method": "GET",
+    "sp": "sp_GetTransportRoutes",
+    "desc": "Get route by route code (MDHPR_1)",
+    "status": 404,
+    "passed": false,
+    "sampleData": [
+      "success",
+      "message"
+    ]
+  },
+  {
+    "id": 5,
+    "path": "/api/v1/transport/vehicles",
+    "method": "GET",
+    "sp": "sp_GetTransportVehicles",
+    "desc": "Get all vehicles (paged)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 6,
+    "path": "/api/v1/transport/vehicles?campusId=1",
+    "method": "GET",
+    "sp": "sp_GetTransportVehicles",
+    "desc": "Get vehicles filtered by campusId=1",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 7,
+    "path": "/api/v1/transport/vehicles/24",
+    "method": "GET",
+    "sp": "sp_GetTransportVehiclesById",
+    "desc": "Get vehicle by ID (24)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "id",
+      "vehicleId",
+      "vehicleNumber",
+      "registrationNumber",
+      "vehicleName",
+      "vehicleType",
+      "capacity",
+      "isAC",
+      "chassisNumber",
+      "engineNumber",
+      "gpsDeviceId",
+      "manufacturer",
+      "model",
+      "insuranceNumber",
+      "insuranceExpiry",
+      "pollutionExpiry",
+      "fitnessExpiry",
+      "status",
+      "statusText",
+      "createdAt",
+      "campusId",
+      "campusName"
+    ]
+  },
+  {
+    "id": 8,
+    "path": "/api/v1/transport/drivers",
+    "method": "GET",
+    "sp": "sp_GetTransportDrivers",
+    "desc": "Get all drivers",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 9,
+    "path": "/api/v1/transport/drivers?campusId=1",
+    "method": "GET",
+    "sp": "sp_GetTransportDrivers",
+    "desc": "Get drivers filtered by campusId=1",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 10,
+    "path": "/api/v1/transport/drivers/1062",
+    "method": "GET",
+    "sp": "sp_GetTransportDriversById",
+    "desc": "Get driver by ID (1062)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "id",
+      "driverId",
+      "staffId",
+      "employeeId",
+      "driverName",
+      "mobileNumber",
+      "alternateMobileNumber",
+      "email",
+      "licenseNumber",
+      "licenseExpiryDate",
+      "address",
+      "bloodGroup",
+      "emergencyContactName",
+      "emergencyContactNumber",
+      "experienceYears",
+      "assignedVehicleId",
+      "assignedVehicleNumber",
+      "status",
+      "createdAt",
+      "campusId",
+      "campusName"
+    ]
+  },
+  {
+    "id": 11,
+    "path": "/api/v1/transport/drivers/1062/documents",
+    "method": "GET",
+    "sp": "EF Core DriverDocuments",
+    "desc": "Get driver verification documents",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data"
+    ]
+  },
+  {
+    "id": 12,
+    "path": "/api/v1/transport/attendants",
+    "method": "GET",
+    "sp": "sp_GetTransportAttendants",
+    "desc": "Get all bus attendants",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 13,
+    "path": "/api/v1/transport/attendants/1",
+    "method": "GET",
+    "sp": "sp_GetTransportAttendantById",
+    "desc": "Get attendant by ID (1)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "id",
+      "attendantId",
+      "staffId",
+      "employeeId",
+      "attendantName",
+      "mobileNumber",
+      "alternateMobileNumber",
+      "gender",
+      "branchName",
+      "address",
+      "bloodGroup",
+      "emergencyContactName",
+      "emergencyContactNumber",
+      "assignedVehicleId",
+      "assignedVehicleNumber",
+      "status",
+      "createdAt"
+    ]
+  },
+  {
+    "id": 14,
+    "path": "/api/v1/transport/vehicle-assignments",
+    "method": "GET",
+    "sp": "sp_GetTransportVehicleAssignments",
+    "desc": "Get vehicle assignments",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 15,
+    "path": "/api/v1/transport/vehicle-assignments/1",
+    "method": "GET",
+    "sp": "sp_GetTransportVehicleAssignmentById",
+    "desc": "Get vehicle assignment by ID (1)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "assignmentId",
+      "id",
+      "routeId",
+      "routeName",
+      "route",
+      "vehicleId",
+      "vehicleNumber",
+      "busNumber",
+      "vehicle",
+      "vehicleName",
+      "vehicleCapacity",
+      "capacity",
+      "driverId",
+      "driverName",
+      "driver",
+      "driverMobile",
+      "attendantId",
+      "attendantName",
+      "busAttendant",
+      "attendant",
+      "assignedStudents",
+      "studentCount",
+      "branchName",
+      "branch",
+      "academicYear",
+      "morningTripTime",
+      "morningTrip",
+      "eveningTripTime",
+      "eveningTrip",
+      "assignmentDate",
+      "effectiveFrom",
+      "effectiveDate",
+      "effectiveTo",
+      "assignmentPeriod",
+      "shift",
+      "remarks",
+      "status",
+      "statusText",
+      "createdAt"
+    ]
+  },
+  {
+    "id": 16,
+    "path": "/api/v1/transport/student-assignments",
+    "method": "GET",
+    "sp": "sp_GetStudentTransportAssignments",
+    "desc": "Get student transport assignments",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 17,
+    "path": "/api/v1/transport/student-assignments/14",
+    "method": "GET",
+    "sp": "sp_GetStudentTransportAssignmentById",
+    "desc": "Get student assignment by ID (14)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "studentTransportAssignmentId",
+      "assignmentId",
+      "id",
+      "studentId",
+      "studentName",
+      "admissionNo",
+      "routeId",
+      "routeName",
+      "pickupPointId",
+      "pickupPointName",
+      "monthlyFee",
+      "annualFee",
+      "vehicleAssignmentId",
+      "vehicleNumber",
+      "driverName",
+      "effectiveFrom",
+      "effectiveTo",
+      "transportType",
+      "remarks",
+      "status",
+      "statusText",
+      "createdBy",
+      "updatedBy",
+      "createdAt",
+      "updatedAt"
+    ]
+  },
+  {
+    "id": 18,
+    "path": "/api/v1/transport/pickup-points",
+    "method": "GET",
+    "sp": "sp_GetPickupPoints",
+    "desc": "Get all pickup points",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "items",
+      "pageNumber",
+      "pageSize",
+      "totalCount",
+      "totalPages",
+      "hasPreviousPage",
+      "hasNextPage"
+    ]
+  },
+  {
+    "id": 19,
+    "path": "/api/v1/transport/pickup-points/1",
+    "method": "GET",
+    "sp": "sp_GetPickupPointById",
+    "desc": "Get pickup point by ID (1)",
+    "status": 404,
+    "passed": false,
+    "sampleData": [
+      "type",
+      "title",
+      "status",
+      "traceId"
+    ]
+  },
+  {
+    "id": 20,
+    "path": "/api/v1/transport/operations/trips",
+    "method": "GET",
+    "sp": "sp_GetTransportTrips",
+    "desc": "Get recorded vehicle trips",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data"
+    ]
+  },
+  {
+    "id": 21,
+    "path": "/api/v1/transport/operations/gps",
+    "method": "GET",
+    "sp": "sp_GetTransportVehicleAssignments + stops",
+    "desc": "Get live GPS tracking data",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data"
+    ]
+  },
+  {
+    "id": 22,
+    "path": "/api/v1/transport/maintenance",
+    "method": "GET",
+    "sp": "sp_GetVehicleMaintenances",
+    "desc": "Get maintenance logs",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "totalCount",
+      "data"
+    ]
+  },
+  {
+    "id": 23,
+    "path": "/api/v1/transport/maintenance/1",
+    "method": "GET",
+    "sp": "sp_GetVehicleMaintenanceById",
+    "desc": "Get maintenance log by ID (1)",
+    "status": 404,
+    "passed": false,
+    "sampleData": [
+      "success",
+      "message"
+    ]
+  },
+  {
+    "id": 24,
+    "path": "/api/v1/transport/maintenance/lookup",
+    "method": "GET",
+    "sp": "Lookup lists",
+    "desc": "Get maintenance category lookup",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data"
+    ]
+  },
+  {
+    "id": 25,
+    "path": "/api/v1/transport/lookups/routes",
+    "method": "GET",
+    "sp": "sp_GetTransportRouteLookup",
+    "desc": "Routes dropdown lookup",
+    "status": 200,
+    "passed": true,
+    "sampleData": "Array[0]"
+  },
+  {
+    "id": 26,
+    "path": "/api/v1/transport/lookups/vehicles",
+    "method": "GET",
+    "sp": "sp_GetTransportVehicles",
+    "desc": "Vehicles dropdown lookup",
+    "status": 200,
+    "passed": true,
+    "sampleData": "Array[4]"
+  },
+  {
+    "id": 27,
+    "path": "/api/v1/transport/lookups/drivers",
+    "method": "GET",
+    "sp": "sp_GetTransportDrivers",
+    "desc": "Drivers dropdown lookup",
+    "status": 200,
+    "passed": true,
+    "sampleData": "Array[2]"
+  },
+  {
+    "id": 28,
+    "path": "/api/v1/transport/lookups/attendants",
+    "method": "GET",
+    "sp": "sp_GetTransportAttendants",
+    "desc": "Attendants dropdown lookup",
+    "status": 200,
+    "passed": true,
+    "sampleData": "Array[1]"
+  },
+  {
+    "id": 29,
+    "path": "/api/v1/transport/lookups/pickup-points?routeId=1",
+    "method": "GET",
+    "sp": "sp_GetPickupPoints",
+    "desc": "Pickup points dropdown lookup",
+    "status": 200,
+    "passed": true,
+    "sampleData": "Array[1]"
+  },
+  {
+    "id": 30,
+    "path": "/api/v1/transport/lookups/vehicle-assignments",
+    "method": "GET",
+    "sp": "sp_GetTransportVehicleAssignments",
+    "desc": "Vehicle assignments lookup",
+    "status": 200,
+    "passed": true,
+    "sampleData": "Array[5]"
+  },
+  {
+    "id": 31,
+    "path": "/api/v1/transport/lookups/student-assignments",
+    "method": "GET",
+    "sp": "sp_GetStudentTransportAssignments",
+    "desc": "Student assignments lookup",
+    "status": 200,
+    "passed": true,
+    "sampleData": "Array[1]"
+  },
+  {
+    "id": 32,
+    "path": "/api/v1/transport/student/options",
+    "method": "GET",
+    "sp": "In-memory static",
+    "desc": "Student transport academic year options",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data"
+    ]
+  },
+  {
+    "id": 33,
+    "path": "/api/v1/transport/student/details?studentId=854",
+    "method": "GET",
+    "sp": "sp_GetStudentTransportDetails",
+    "desc": "Student transport details for ID 854",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data"
+    ]
+  },
+  {
+    "id": 34,
+    "path": "/api/v1/transport/dashboard",
+    "method": "GET",
+    "sp": "sp_GetTransportDashboard (multi-set)",
+    "desc": "Transport KPI Dashboard",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data"
+    ]
+  },
+  {
+    "id": 35,
+    "path": "/api/v1/transport/dashboard/operations/1",
+    "method": "GET",
+    "sp": "sp_GetTransportOperationDetails",
+    "desc": "Assignment Operation Details (1)",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data"
+    ]
+  },
+  {
+    "id": 36,
+    "path": "/api/v1/transport/reports/dashboard",
+    "method": "GET",
+    "sp": "sp_GetTransportDashboard",
+    "desc": "Reports dashboard metrics",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "message",
+      "summary",
+      "data",
+      "metrics",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 37,
+    "path": "/api/v1/transport/reports/routes",
+    "method": "GET",
+    "sp": "sp_GetTransportReports(route-reports)",
+    "desc": "Routes utilization report",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "message",
+      "data",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 38,
+    "path": "/api/v1/transport/reports/vehicles",
+    "method": "GET",
+    "sp": "sp_GetTransportReports(vehicle-reports)",
+    "desc": "Fleet vehicle report",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "message",
+      "data",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 39,
+    "path": "/api/v1/transport/reports/drivers",
+    "method": "GET",
+    "sp": "sp_GetTransportReports(driver-reports)",
+    "desc": "Driver duty report",
+    "status": 500,
+    "passed": false,
+    "sampleData": [
+      "success",
+      "message",
+      "error"
+    ]
+  },
+  {
+    "id": 40,
+    "path": "/api/v1/transport/reports/students",
+    "method": "GET",
+    "sp": "sp_GetTransportReports(student-transport-reports)",
+    "desc": "Student transport subscription report",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "message",
+      "data",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 41,
+    "path": "/api/v1/transport/reports/trips",
+    "method": "GET",
+    "sp": "sp_GetTransportReports(trip-reports)",
+    "desc": "Trip operations report",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "message",
+      "data",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 42,
+    "path": "/api/v1/transport/reports/maintenance",
+    "method": "GET",
+    "sp": "sp_GetTransportReports(maintenance-reports)",
+    "desc": "Fleet maintenance cost report",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 43,
+    "path": "/api/v1/transport/reports/seat-occupancy",
+    "method": "GET",
+    "sp": "sp_GetTransportReports(vehicle-occupancy)",
+    "desc": "Seat occupancy report",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 44,
+    "path": "/api/v1/transport/reports/pickup-wise",
+    "method": "GET",
+    "sp": "sp_GetPickupPoints + students",
+    "desc": "Pickup-wise passenger load report",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 45,
+    "path": "/api/v1/transport/reports/monthly-cost",
+    "method": "GET",
+    "sp": "sp_GetVehicleMaintenances costs",
+    "desc": "Monthly transport expenditure report",
+    "status": 200,
+    "passed": true,
+    "sampleData": [
+      "success",
+      "data",
+      "totalCount"
+    ]
+  },
+  {
+    "id": 46,
+    "path": "/api/v1/transport/reports/export/csv?reportType=routes",
+    "method": "GET",
+    "sp": "Export Service",
+    "desc": "Export report to CSV",
+    "status": 200,
+    "passed": true,
+    "sampleData": "text"
+  },
+  {
+    "id": 47,
+    "path": "/api/v1/transport/reports/export/pdf?reportType=routes",
+    "method": "GET",
+    "sp": "Export Service",
+    "desc": "Export report to PDF",
+    "status": 200,
+    "passed": true,
+    "sampleData": "text"
+  },
+  {
+    "id": 48,
+    "path": "/api/v1/transport/reports/print?reportType=routes",
+    "method": "GET",
+    "sp": "Print Service",
+    "desc": "Print formatted report",
+    "status": 200,
+    "passed": true,
+    "sampleData": "text"
+  }
+]

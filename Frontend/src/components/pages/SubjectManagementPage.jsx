@@ -612,20 +612,20 @@ export default function SubjectManagementPage() {
 
 function Select({ label, value, options, onChange, placeholder, disabled = false }) { return <label className="subject-master-field"><span>{label}</span><select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}><option value="">{placeholder || "Select " + label}</option>{options.map((option) => typeof option === "string" ? <option key={option} value={option}>{option}</option> : <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>; }
 function GroupCombobox({ value, options, onChange, disabled }) {
-  const [open, setOpen] = useState(false), [query, setQuery] = useState(value), [active, setActive] = useState(0);
+  const [isGroupDropdownOpen, setIsGroupDropdownOpen] = useState(false), [query, setQuery] = useState(""), [active, setActive] = useState(0);
   const root = useRef(null);
   const selected = options.find((group) => group.value === String(value));
   const matches = options.filter((group) => group.label.toLowerCase().includes(query.trim().toLowerCase()));
-  useEffect(() => { setQuery(selected?.label || ""); }, [selected?.label, value]);
-  useEffect(() => { const close = (event) => { if (!root.current?.contains(event.target)) { setOpen(false); setQuery(selected?.label || ""); } }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, [selected?.label]);
-  const choose = (group) => { onChange(group.value); setQuery(group.label); setOpen(false); setActive(0); };
+  useEffect(() => { setQuery(""); }, [selected?.label, value]);
+  useEffect(() => { const close = (event) => { if (!root.current?.contains(event.target)) { setIsGroupDropdownOpen(false); setQuery(""); } }; document.addEventListener("pointerdown", close); return () => document.removeEventListener("pointerdown", close); }, []);
+  const choose = (group) => { onChange(group.value); setQuery(""); setIsGroupDropdownOpen(false); setActive(0); };
   const keyDown = (event) => {
-    if (event.key === "ArrowDown") { event.preventDefault(); setOpen(true); setActive((index) => Math.min(index + 1, matches.length - 1)); }
-    else if (event.key === "ArrowUp") { event.preventDefault(); setOpen(true); setActive((index) => Math.max(index - 1, 0)); }
-    else if (event.key === "Enter" && open && matches[active]) { event.preventDefault(); choose(matches[active]); }
-    else if (event.key === "Escape") setOpen(false);
+    if (event.key === "ArrowDown") { event.preventDefault(); setIsGroupDropdownOpen(true); setActive((index) => Math.min(index + 1, matches.length - 1)); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setIsGroupDropdownOpen(true); setActive((index) => Math.max(index - 1, 0)); }
+    else if (event.key === "Enter" && isGroupDropdownOpen && matches[active]) { event.preventDefault(); choose(matches[active]); }
+    else if (event.key === "Escape") setIsGroupDropdownOpen(false);
   };
-  return <div className="subject-combobox subject-group-combobox" ref={root}><label className="subject-master-field"><span>Group</span><div className="subject-group-input"><Search3DIcon className="subject-group-search-icon" size={17} aria-hidden="true" /><input role="combobox" aria-expanded={open} aria-controls="group-options" aria-autocomplete="list" value={query} disabled={disabled} placeholder="Search or select group..." onFocus={() => setOpen(true)} onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(0); }} onKeyDown={keyDown} /><ChevronDown className="subject-group-chevron" size={17} aria-hidden="true" /></div></label>{open && !disabled && <div id="group-options" className="subject-combobox-options" role="listbox">{matches.length ? matches.map((group, index) => <button key={group.value} type="button" role="option" aria-selected={group.value === value} className={index === active ? "is-active" : ""} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(group)}><strong>{group.label}</strong></button>) : <div className="subject-combobox-empty">No groups found.</div>}</div>}</div>;
+  return <div className="subject-combobox subject-group-combobox" ref={root}><label className="subject-master-field"><span>Group</span><div className="subject-group-input"><Search3DIcon className="subject-group-search-icon" size={17} aria-hidden="true" /><input role="combobox" aria-expanded={isGroupDropdownOpen} aria-controls="group-options" aria-autocomplete="list" value={isGroupDropdownOpen ? query : selected?.label || ""} disabled={disabled} placeholder="Search or select group..." onFocus={() => setIsGroupDropdownOpen(true)} onChange={(event) => { setQuery(event.target.value); setIsGroupDropdownOpen(true); setActive(0); }} onKeyDown={keyDown} /><button type="button" className="subject-group-chevron-button" aria-label={isGroupDropdownOpen ? "Close groups" : "Open groups"} aria-expanded={isGroupDropdownOpen} disabled={disabled} onMouseDown={(event) => event.preventDefault()} onClick={() => { setIsGroupDropdownOpen((open) => !open); setQuery(""); setActive(0); }}><ChevronDown className="subject-group-chevron" size={17} aria-hidden="true" /></button></div></label>{isGroupDropdownOpen && !disabled && <div id="group-options" className="subject-combobox-options" role="listbox">{matches.length ? matches.map((group, index) => <button key={group.value} type="button" role="option" aria-selected={group.value === value} className={index === active ? "is-active" : ""} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(group)}><strong>{group.label}</strong></button>) : <div className="subject-combobox-empty">No groups found.</div>}</div>}</div>;
 }
 function SubjectCombobox({ options, value, onChange, newName, onNewName, onSearch }) {
   const [open, setOpen] = useState(false), [query, setQuery] = useState(""), [active, setActive] = useState(0);

@@ -2508,9 +2508,76 @@ export default function FacultyDashboard() {
     { id: 6, title: "Preview", subtitle: "Review & Confirmation" },
   ];
 
-  const handleSaveAndNext = () => {
+  const handleSaveAndNext = async () => {
     if (isEditingProfile) {
       persistStaffProfile(profileData);
+      
+      try {
+        let sectionName = "";
+        let payload = {};
+        
+        switch (profileStep) {
+          case 1:
+            sectionName = "Personal";
+            payload.Personal = {
+              firstName: profileData.firstName,
+              middleName: profileData.middleName,
+              lastName: profileData.lastName,
+              gender: profileData.gender,
+              dateOfBirth: profileData.dob || null,
+              maritalStatus: profileData.maritalStatus,
+              aadhaar: profileData.aadhaar,
+              panNumber: profileData.pan,
+              bloodGroup: profileData.bloodGroup,
+            };
+            break;
+          case 2:
+            sectionName = "Bank";
+            payload.Bank = {
+              bankName: profileData.bankName,
+              accountHolderName: profileData.accountHolder,
+              accountNumber: profileData.accountNumber,
+              ifscCode: profileData.ifsc,
+              branch: profileData.branch,
+              accountType: profileData.accountType
+            };
+            break;
+          case 3:
+            sectionName = "Address";
+            payload.Address = {
+              currentAddress: profileData.houseNumber,
+              city: profileData.city,
+              district: profileData.district,
+              state: profileData.state,
+              pincode: profileData.pin,
+              country: profileData.country
+            };
+            break;
+          case 4:
+            sectionName = "Experience";
+            payload.Experience = (profileData.experience || []).map(e => ({
+              institutionName: e.institution,
+              designation: e.designation,
+              fromDate: e.fromDate || null,
+              toDate: e.toDate || null,
+              subjectsTaught: e.subjectsTeached
+            }));
+            break;
+          case 5:
+            sectionName = "Documents";
+            break;
+        }
+
+        if (sectionName && profileData.id) {
+            await apiClient.put(apiEndpoints.faculty.saveProfileDraft(profileData.id), {
+               sectionName,
+               ...payload
+            });
+        }
+      } catch (e) {
+         console.error("Failed to save profile section:", e);
+      }
+
       notify(`Step ${profileStep} (${PROFILE_STEPS[profileStep - 1].title}) updated!`);
     }
     if (profileStep < 6) {
@@ -2524,9 +2591,13 @@ export default function FacultyDashboard() {
     }
   };
 
-  const handleFinalProfileSave = () => {
+  const handleFinalProfileSave = async () => {
     setIsSavingProfile(true);
-    setTimeout(() => {
+    
+    try {
+      if (profileData.id) {
+        await apiClient.post(apiEndpoints.faculty.submitProfile(profileData.id));
+      }
       persistStaffProfile(profileData);
       try {
         localStorage.setItem("staff_profile_submitted", "true");
@@ -2534,7 +2605,11 @@ export default function FacultyDashboard() {
       setIsSavingProfile(false);
       setIsEditingProfile(false);
       notify("Complete staff profile updated and verified successfully!");
-    }, 400);
+    } catch (e) {
+      console.error("Failed to submit profile:", e);
+      notify("Failed to submit profile to server", "error");
+      setIsSavingProfile(false);
+    }
   };
 
   const renderProfile = () => (
@@ -3342,7 +3417,7 @@ export default function FacultyDashboard() {
                         type="button"
                         className="cms-btn cms-btn-primary"
                         disabled={!isEditingProfile}
-                        onClick={() => {
+                        onClick={async () => {
                           if (!isEditingProfile) {
                             notify("Please click 'Edit' in the top right corner to upload documents.", "warning");
                             return;
@@ -3351,22 +3426,40 @@ export default function FacultyDashboard() {
                             notify("Please select a file to upload.", "error");
                             return;
                           }
-                          const docRecord = {
-                            id: `doc-${Date.now()}`,
-                            name: newDoc.title.trim() || newDoc.type,
-                            type: newDoc.type,
-                            format: newDoc.file.name.split('.').pop().toUpperCase(),
-                            size: `${(newDoc.file.size / 1024).toFixed(1)} KB`,
-                            date: new Date().toISOString().split("T")[0],
-                            status: "Uploaded",
-                            url: URL.createObjectURL(newDoc.file),
-                          };
-                          const updatedDocs = [...(profileData.documents || []), docRecord];
-                          setProfileData({ ...profileData, documents: updatedDocs });
-                          persistStaffProfile({ ...profileData, documents: updatedDocs });
-                          setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
-                          if (docFileRef.current) docFileRef.current.value = "";
-                          notify("Document uploaded successfully!");
+                          if (!profileData.id) {
+                            notify("Please save basic profile first.", "error");
+                            return;
+                          }
+                          
+                          try {
+                            const formData = new FormData();
+                            formData.append("file", newDoc.file);
+                            formData.append("documentType", newDoc.type);
+                            
+                            await apiClient.post(apiEndpoints.faculty.uploadDocument(profileData.id), formData, {
+                              headers: { 'Content-Type': 'multipart/form-data' }
+                            });
+                            
+                            const docRecord = {
+                              id: `doc-${Date.now()}`,
+                              name: newDoc.title.trim() || newDoc.type,
+                              type: newDoc.type,
+                              format: newDoc.file.name.split('.').pop().toUpperCase(),
+                              size: `${(newDoc.file.size / 1024).toFixed(1)} KB`,
+                              date: new Date().toISOString().split("T")[0],
+                              status: "Uploaded",
+                              url: URL.createObjectURL(newDoc.file),
+                            };
+                            const updatedDocs = [...(profileData.documents || []), docRecord];
+                            setProfileData({ ...profileData, documents: updatedDocs });
+                            persistStaffProfile({ ...profileData, documents: updatedDocs });
+                            setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
+                            if (docFileRef.current) docFileRef.current.value = "";
+                            notify("Document uploaded successfully!");
+                          } catch (e) {
+                            console.error(e);
+                            notify("Failed to upload document to server.", "error");
+                          }
                         }}
                       >
                         <UploadCloud size={14} /> Upload Document

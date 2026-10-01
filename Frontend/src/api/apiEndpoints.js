@@ -29,6 +29,7 @@ export const apiEndpoints = {
     dropdown: "/api/v1/staff/dropdown",
     getById: (id) => `/api/v1/staff/${id}`,
     getByToken: (token) => `/api/v1/staff/token/${token}`,
+    getProfileByIdentifier: (identifier) => `/api/v1/staff/profile/${encodeURIComponent(identifier)}`,
     create: "/api/v1/staff",
     update: (id) => `/api/v1/staff/${id}`,
     delete: (id) => `/api/v1/staff/${id}`,

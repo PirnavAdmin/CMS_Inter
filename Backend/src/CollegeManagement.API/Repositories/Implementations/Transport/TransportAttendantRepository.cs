@@ -52,9 +52,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 "sp_CreateTransportAttendants",
                 new
                 {
+                    p_StaffId = dto.StaffId,
                     p_EmployeeId = dto.EmployeeId?.Trim(),
-                    p_AttendantName = dto.AttendantName.Trim(),
-                    p_MobileNumber = dto.MobileNumber.Trim(),
+                    p_AttendantName = dto.AttendantName?.Trim() ?? string.Empty,
+                    p_MobileNumber = dto.MobileNumber?.Trim() ?? string.Empty,
                     p_Gender = dto.Gender?.Trim(),
                     p_BranchName = dto.BranchCampus?.Trim(),
                     p_AlternateMobileNumber = dto.AlternateMobileNumber?.Trim(),
@@ -79,9 +80,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 new
                 {
                     p_Id = attendantId,
+                    p_StaffId = dto.StaffId,
                     p_EmployeeId = dto.EmployeeId?.Trim(),
-                    p_AttendantName = dto.AttendantName.Trim(),
-                    p_MobileNumber = dto.MobileNumber.Trim(),
+                    p_AttendantName = dto.AttendantName?.Trim() ?? string.Empty,
+                    p_MobileNumber = dto.MobileNumber?.Trim() ?? string.Empty,
                     p_Gender = dto.Gender?.Trim(),
                     p_BranchName = dto.BranchCampus?.Trim(),
                     p_AlternateMobileNumber = dto.AlternateMobileNumber?.Trim(),
@@ -104,7 +106,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             using var c = Connection();
             var rows = await c.ExecuteAsync(
                 "sp_DeleteTransportAttendants",
-                new { p_Id = attendantId },
+                new { p_Id = attendantId, p_UpdatedBy = userId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }

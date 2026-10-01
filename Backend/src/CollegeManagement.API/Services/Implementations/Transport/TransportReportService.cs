@@ -141,7 +141,7 @@ namespace CollegeManagement.API.Services.Implementations
                 sb.AppendLine("<table><thead><tr><th>Admission No</th><th>Student Name</th><th>Class</th><th>Route Name</th><th>Pickup Point</th><th>Assigned Bus</th><th>Driver Name</th><th>Status</th></tr></thead><tbody>");
                 foreach (var s in students)
                 {
-                    sb.AppendLine($"<tr><td><strong>{s.AdmissionNo}</strong></td><td>{s.StudentName}</td><td>{s.ClassSection}</td><td>{s.RouteName}</td><td>{s.PickupPoint}</td><td>{s.AssignedBus}</td><td>{s.DriverName}</td><td><span class='badge'>{s.Status}</span></td></tr>");
+                    sb.AppendLine($"<tr><td><strong>{s.AdmissionNo}</strong></td><td>{s.StudentName}</td><td>{s.ClassSection}</td><td>{s.RouteName}</td><td>{s.PickupPoint}</td><td>{s.VehicleNumber}</td><td>{s.DriverName}</td><td><span class='badge'>{s.Status}</span></td></tr>");
                 }
                 sb.AppendLine("</tbody></table>");
             }
@@ -235,7 +235,7 @@ namespace CollegeManagement.API.Services.Implementations
                 sb.AppendLine("Admission No,Student Name,Class,Route Name,Pickup Point,Assigned Bus,Driver Name,Status");
                 foreach (var x in data)
                 {
-                    sb.AppendLine($"\"{x.AdmissionNo}\",\"{x.StudentName}\",\"{x.ClassSection}\",\"{x.RouteName}\",\"{x.PickupPoint}\",\"{x.AssignedBus}\",\"{x.DriverName}\",\"{x.Status}\"");
+                    sb.AppendLine($"\"{x.AdmissionNo}\",\"{x.StudentName}\",\"{x.ClassSection}\",\"{x.RouteName}\",\"{x.PickupPoint}\",\"{x.VehicleNumber}\",\"{x.DriverName}\",\"{x.Status}\"");
                 }
             }
             else if (reportType.Contains("maintenance"))

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using CollegeManagement.API.Common;
+using CollegeManagement.API.Helpers;
 
 namespace CollegeManagement.API.Dtos.Transport.PickupPoint
 {
@@ -12,10 +13,13 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
         [JsonPropertyName("routeId")]
         public long RouteId { get; set; } = 1;
 
+        [JsonPropertyName("campusId")]
+        public long? CampusId { get; set; }
+
         [JsonPropertyName("pickupPointName")]
         public string PickupPointName
         {
-            get => !string.IsNullOrWhiteSpace(_pickupPointName) ? _pickupPointName : "Pickup Point";
+            get => _pickupPointName;
             set => _pickupPointName = value ?? string.Empty;
         }
 
@@ -40,6 +44,7 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
         }
 
         [JsonPropertyName("pickupTime")]
+        [JsonConverter(typeof(TimeSpanJsonConverter))]
         public TimeSpan PickupTime
         {
             get => _pickupTime;
@@ -63,6 +68,7 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
         private decimal _monthlyFee = 1200;
 
         [JsonPropertyName("dropTime")]
+        [JsonConverter(typeof(TimeSpanJsonConverter))]
         public TimeSpan DropTime
         {
             get => _dropTime;

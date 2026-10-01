@@ -891,6 +891,13 @@
   padding: 6px 0;
 }
 
+.cms-transport-occupancy {
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+}
+
 .cms-transport-occupancy > div > span {
   display: flex;
   align-items: center;
@@ -915,6 +922,10 @@
 .cms-transport-route-distribution {
   display: grid;
   gap: 10px;
+  max-height: 390px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
 }
 
 .cms-transport-route-distribution > div {

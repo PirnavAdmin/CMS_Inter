@@ -191,6 +191,7 @@ const slotSubjectName = (slot, subjects) =>
 const slotFacultyName = (slot) => pick(slot, "facultyName", "FacultyName", "staffName", "StaffName") ?? pick(slot?.faculty, "facultyName", "FacultyName", "staffName", "StaffName", "fullName", "FullName", "name", "Name") ?? "Unassigned";
 const slotRoomName = (slot) => pick(slot, "roomName", "RoomName", "roomCode", "RoomCode") ?? pick(slot?.room, "roomName", "RoomName", "roomCode", "RoomCode", "name", "Name") ?? "—";
 const slotSectionId = (slot) => pick(slot, "sectionId", "SectionId") ?? pick(slot?.section ?? slot?.Section, "sectionId", "SectionId", "id", "Id");
+const slotCampusId = (slot) => pick(slot, "campusId", "CampusId") ?? pick(slot?.campus ?? slot?.Campus, "campusId", "CampusId", "id", "Id");
 const periodNumber = (period) => pick(period?.raw ?? period, "periodNumber", "PeriodNumber", "number", "Number");
 const isBreakPeriod = (period) => {
   const raw = period?.raw ?? period;
@@ -1855,9 +1856,14 @@ function Draft({ initial, notify }) {
     try {
       const r = await apiClient.get(apiEndpoints.timetable.getBySection(value.sectionId), {
         params: {
-          academicYearId: value.academicYearId,
-          campusId: value.campusId,
-          ...(publishedFilter === "true" || publishedFilter === "false" ? { isPublished: publishedFilter } : {}),
+          CampusId: Number(value.campusId),
+          BoardId: Number(value.boardId),
+          AcademicYearId: Number(value.academicYearId),
+          AcademicLevelId: Number(value.academicLevelId),
+          GroupId: Number(value.groupId),
+          ProgramId: Number(value.programId),
+          SectionId: Number(value.sectionId),
+          ...(publishedFilter === "true" || publishedFilter === "false" ? { IsPublished: publishedFilter } : {}),
         },
       });
       let fetchedSlots = list(r.data);
@@ -1878,9 +1884,14 @@ function Draft({ initial, notify }) {
         });
         fetchedSlots = list(fallback.data);
       }
+      fetchedSlots = fetchedSlots.filter((slot) => {
+        const campusId = slotCampusId(slot);
+        return campusId == null || String(campusId) === String(value.campusId);
+      });
       const generatedSlotsHaveSections = generatedSlots.some((slot) => slotSectionId(slot) != null);
       const responseSlots = generatedSlots.filter(
-        (slot) => !generatedSlotsHaveSections || String(slotSectionId(slot)) === String(value.sectionId),
+        (slot) => (slotCampusId(slot) == null || String(slotCampusId(slot)) === String(value.campusId))
+          && (!generatedSlotsHaveSections || String(slotSectionId(slot)) === String(value.sectionId)),
       );
       const currentSlots = fetchedSlots.length ? fetchedSlots : responseSlots;
       setSlots(currentSlots);

@@ -277,7 +277,11 @@ DELIMITER ;
 -- ----------------------------------------------------------------------------------------------------
 DROP PROCEDURE IF EXISTS `sp_GetStudentsForCertificateDropdown`;
 DELIMITER //
-CREATE PROCEDURE `sp_GetStudentsForCertificateDropdown`()
+CREATE PROCEDURE `sp_GetStudentsForCertificateDropdown`(
+    IN p_CampusId INT,
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT
+)
 BEGIN
     SELECT 
         StudentId, AdmissionNo, RollNo, StudentName, GroupName, AcademicYear, AcademicLevel, Section
@@ -297,6 +301,9 @@ BEGIN
         LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = s.AcademicYearId
         LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = s.AcademicLevelId
         LEFT JOIN `Sections` sec ON sec.SectionId = s.SectionId
+        WHERE (p_CampusId IS NULL OR s.CampusId = p_CampusId)
+          AND (p_BoardId IS NULL OR s.BoardId = p_BoardId)
+          AND (p_AcademicYearId IS NULL OR s.AcademicYearId = p_AcademicYearId)
 
         UNION ALL
 
@@ -314,6 +321,9 @@ BEGIN
         LEFT JOIN `Groups` g ON g.GroupId = sa.GroupId
         LEFT JOIN `AcademicYears` ay ON ay.AcademicYearId = sa.AcademicYearId
         WHERE NOT EXISTS (SELECT 1 FROM `Students` s2 WHERE s2.AdmissionNo = sa.AdmissionNo AND sa.AdmissionNo IS NOT NULL AND sa.AdmissionNo <> '')
+          AND (p_CampusId IS NULL OR sa.CampusId = p_CampusId)
+          AND (p_BoardId IS NULL OR sa.BoardId = p_BoardId)
+          AND (p_AcademicYearId IS NULL OR sa.AcademicYearId = p_AcademicYearId)
     ) combined
     WHERE IsActive = 1
     ORDER BY StudentName ASC;

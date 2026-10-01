@@ -20,6 +20,16 @@ namespace CollegeManagement.API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] PickupPointFilterDto filter)
         {
+            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "CampusId is required and must be greater than zero.",
+                    errors = new { campusId = new[] { "CampusId is required and must be greater than zero." } }
+                });
+            }
+
             var result = await _service.GetAllAsync(filter);
             return Ok(result);
         }
@@ -36,16 +46,70 @@ namespace CollegeManagement.API.Controllers
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreatePickupPointDto dto)
         {
-            var id = await _service.CreateAsync(dto, null);
-            var result = await _service.GetByIdAsync(id);
-
-            return Ok(new
+            if (dto == null)
             {
-                success = true,
-                message = "Pickup Point created successfully.",
-                data = result
-            });
+                return BadRequest(new { success = false, message = "Request body is required." });
+            }
+
+            if (dto.RouteId <= 0)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "RouteId is required and must be greater than zero.",
+                    errors = new { routeId = new[] { "RouteId is required and must be greater than zero." } }
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.PickupPointName))
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Pickup point name is required.",
+                    errors = new { pickupPointName = new[] { "Pickup point name is required." } }
+                });
+            }
+
+            try
+            {
+                var id = await _service.CreateAsync(dto, null);
+                var result = await _service.GetByIdAsync(id);
+
+                return StatusCode(StatusCodes.Status201Created, new
+                {
+                    success = true,
+                    message = "Pickup Point created successfully.",
+                    data = result
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                if (ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Conflict(new
+                    {
+                        success = false,
+                        message = ex.Message
+                    });
+                }
+
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
         }
+
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
