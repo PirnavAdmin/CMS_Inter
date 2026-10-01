@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { generateNextNumber } from "@/api/numberSeriesApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "../layout/DashboardLayout.jsx";
@@ -3876,11 +3877,7 @@ export default function ExaminationPage() {
               level: "",
               exam: "",
             };
-            const response = await apiClient.post(
-              `/api/v1/settings/number-series/EXAM_CODE/generate-next?campusId=${targetCampus}`,
-              genPayload,
-            );
-            const result = response?.data?.data ?? response?.data;
+            const result = await generateNextNumber("EXAM_CODE", genPayload, targetCampus);
             const generated = result?.generatedNumber ?? result?.generatedCode ?? result?.code;
             if (!generated || String(generated) === "0000") {
               throw new Error("The number-series service did not return a generated examination code.");

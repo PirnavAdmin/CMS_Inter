@@ -31,7 +31,7 @@ const EMPTY_HISTORY_FILTERS = {
   groupId: "", programId: "", section: "", studentId: "", search: "", promotionStatus: "", fromDate: "", toDate: "",
 };
 
-const PROMOTION_STUDENT_PAGE_SIZE = 10;
+const PROMOTION_STUDENT_PAGE_SIZE = 5;
 
 const read = (item, ...keys) => {
   const key = keys.find((candidate) => item?.[candidate] !== undefined && item?.[candidate] !== null);
@@ -577,7 +577,7 @@ export default function PromotionPage({ screen = "promotion" }) {
     return students.filter((student) => {
       const matchesSearch = !query || `${student.name} ${student.admissionNo} ${student.id}`.toLowerCase().includes(query);
       return matchesSearch && (!eligibilityFilter || student.eligibility === eligibilityFilter);
-    });
+    }).slice(0, PROMOTION_STUDENT_PAGE_SIZE);
   }, [eligibilityFilter, search, students]);
 
   const selectedStudents = useMemo(() => students.filter((student) => selectedIds.includes(student.id) && isEligible(student)), [selectedIds, students]);
@@ -1050,12 +1050,12 @@ export default function PromotionPage({ screen = "promotion" }) {
                     </tbody>
                     </table>
                   </div>
-                  <footer className="promotion-pagination">
+                  <footer className="promotion-pagination student-management-pagination">
                   <span>
                     Showing {students.length ? (studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + 1 : 0}-
                     {students.length ? Math.min((studentsPage - 1) * PROMOTION_STUDENT_PAGE_SIZE + students.length, studentsTotalCount) : 0} of {studentsTotalCount} students
                   </span>
-                  <div>
+                  <div className="student-management-pagination-actions">
                     <button
                       type="button"
                       className="cms-btn cms-btn-ghost"
