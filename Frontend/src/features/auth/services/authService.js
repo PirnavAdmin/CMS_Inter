@@ -225,12 +225,68 @@ export function findParentAccount(input) {
   const val = String(input || "").trim().toLowerCase();
   const digits = val.replace(/\D/g, "");
 
-  // Parent A (parent-001 - Suresh Kumar)
+  // Parent C (parent-003 - Mahesh Reddy)
+  if (
+    val === "parent3" ||
+    val === "parent-c" ||
+    val === "parent-003" ||
+    val === "par-2026-003" ||
+    val.includes("parent3") ||
+    val.includes("mahesh") ||
+    val === "parent3@cms.com" ||
+    val === "mahesh.r@example.com" ||
+    digits === "9876543212"
+  ) {
+    return {
+      id: "parent-003",
+      name: "Mahesh Reddy",
+      email: val.includes("@") ? val : "parent3@cms.com",
+      role: "parent",
+      isAdmin: false,
+      mobile: "9876543212",
+      relation: "Father",
+      studentId: "stu-004",
+      studentName: "Arjun Reddy",
+    };
+  }
+
+  // Parent B (parent-002 - Ramesh Sharma)
+  if (
+    val === "parent2" ||
+    val === "parent-b" ||
+    val === "parent-002" ||
+    val === "par-2026-002" ||
+    val.includes("parent2") ||
+    val.includes("ramesh") ||
+    val === "parent2@cms.com" ||
+    val === "ramesh.s@example.com" ||
+    digits === "9876543211"
+  ) {
+    return {
+      id: "parent-002",
+      name: "Ramesh Sharma",
+      email: val.includes("@") ? val : "parent2@cms.com",
+      role: "parent",
+      isAdmin: false,
+      mobile: "9876543211",
+      relation: "Father",
+      studentId: "stu-003",
+      studentName: "Priya Sharma",
+    };
+  }
+
+  // Parent A (parent-001 - Suresh Kumar) - default parent account
   if (
     val === "parent" ||
     val === "parent1" ||
     val === "parent-a" ||
+    val === "parent-001" ||
+    val === "par-2026-001" ||
+    val.includes("parent") ||
+    val.includes("suresh") ||
+    val.includes("srinivas") ||
     val === "parent@cms.com" ||
+    val === "parent1@cms.com" ||
     val === "parent@pirnav.edu.in" ||
     val === "suresh.k@example.com" ||
     digits === "9876543210"
@@ -245,48 +301,6 @@ export function findParentAccount(input) {
       relation: "Father",
       studentId: "stu-001",
       studentName: "Rahul Kumar",
-    };
-  }
-
-  // Parent B (parent-002 - Ramesh Sharma)
-  if (
-    val === "parent2" ||
-    val === "parent-b" ||
-    val === "parent2@cms.com" ||
-    val === "ramesh.s@example.com" ||
-    digits === "9876543211"
-  ) {
-    return {
-      id: "parent-002",
-      name: "Ramesh Sharma",
-      email: val.includes("@") ? val : "ramesh.s@example.com",
-      role: "parent",
-      isAdmin: false,
-      mobile: "9876543211",
-      relation: "Father",
-      studentId: "stu-003",
-      studentName: "Priya Sharma",
-    };
-  }
-
-  // Parent C (parent-003 - Mahesh Reddy)
-  if (
-    val === "parent3" ||
-    val === "parent-c" ||
-    val === "parent3@cms.com" ||
-    val === "mahesh.r@example.com" ||
-    digits === "9876543212"
-  ) {
-    return {
-      id: "parent-003",
-      name: "Mahesh Reddy",
-      email: val.includes("@") ? val : "mahesh.r@example.com",
-      role: "parent",
-      isAdmin: false,
-      mobile: "9876543212",
-      relation: "Father",
-      studentId: "stu-004",
-      studentName: "Arjun Reddy",
     };
   }
 

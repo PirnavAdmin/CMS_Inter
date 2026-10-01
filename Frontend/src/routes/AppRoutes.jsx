@@ -305,7 +305,9 @@ export default function AppRoutes() {
         <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />
       </Route>
 
-      <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
+      <Route element={<ProtectedRoute requireStudent />}>
+        <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
+      </Route>
 
       {/* Parent Portal Module Routes */}
       <Route element={<ProtectedRoute requireParent />}>
