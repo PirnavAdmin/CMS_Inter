@@ -88,7 +88,7 @@ export async function updateNumberSeries(seriesCode, configData, campusId) {
  * 4. POST /api/v1/settings/number-series/{seriesCode}/generate-next (or /api/v1/number-series/{seriesCode}/generate-next)
  * Executes thread-safe atomic sequence increment and returns the newly generated sequence ID.
  */
-export async function generateNextNumber(seriesCode, context = {}) {
+export async function generateNextNumber(seriesCode, context = {}, campusId) {
   if (!seriesCode) throw new Error("seriesCode is required");
   const payload = {
     board: context.board ?? "",
@@ -104,12 +104,16 @@ export async function generateNextNumber(seriesCode, context = {}) {
     exam: context.exam ?? "",
   };
 
+  const params = {};
+  if (campusId !== undefined && campusId !== null && campusId !== "") params.campusId = campusId;
+  const requestConfig = { params };
+
   try {
-    const response = await apiClient.post(apiEndpoints.numberSeries.generateNext(seriesCode), payload);
+    const response = await apiClient.post(apiEndpoints.numberSeries.generateNext(seriesCode), payload, requestConfig);
     return response.data;
   } catch (err) {
     try {
-      const fallbackRes = await apiClient.post(`/api/v1/number-series/${encodeURIComponent(seriesCode)}/generate-next`, payload);
+      const fallbackRes = await apiClient.post(`/api/v1/number-series/${encodeURIComponent(seriesCode)}/generate-next`, payload, requestConfig);
       return fallbackRes.data;
     } catch {
       throw err;
