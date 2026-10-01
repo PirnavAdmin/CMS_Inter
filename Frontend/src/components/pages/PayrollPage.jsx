@@ -414,7 +414,12 @@ export default function PayrollPage({ mode = "payroll" }) {
     const assignments = Array.isArray(store?.assignments) ? store.assignments : [];
     const structures = Array.isArray(store?.structures) ? store.structures : [];
     const summary = store?.apiSummary || {};
-    const totalStaff = Number(getPayrollField(summary, "totalEmployees") ?? assignments.length);
+    const assignedStaffIds = new Set(assignments
+      .map((assignment) => assignment.rawStaffId ?? assignment.staffId)
+      .filter((staffId) => staffId != null && String(staffId).trim() !== "")
+      .map(String));
+    const assignedStaffCount = assignedStaffIds.size || assignments.length;
+    const totalStaff = assignedStaffCount || Number(getPayrollField(summary, "totalEmployees") ?? 0);
     const teachingAssigned = assignments.filter((a) => a.staffType === "Teaching" && a.status === "Active").length;
     const nonTeachingAssigned = assignments.filter((a) => a.staffType === "Non-Teaching" && a.status === "Active").length;
     const pendingAssigned = assignments.filter((a) => a.status === "Pending").length;
@@ -1116,15 +1121,39 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
 // ----------------------------------------------------------------------
 function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDeleteStructure }) {
   const [filterType, setFilterType] = useState("All");
+  const [departmentLookup, setDepartmentLookup] = useState([]);
+  const [designationLookup, setDesignationLookup] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      apiClient.get(apiEndpoints.departments.getAll, { skipGlobalLoader: true }),
+      apiClient.get(apiEndpoints.designations.getAll, { skipGlobalLoader: true }),
+    ]).then(([departments, designations]) => {
+      if (!active) return;
+      if (departments.status === "fulfilled") setDepartmentLookup(getPayrollList(departments.value));
+      if (designations.status === "fulfilled") setDesignationLookup(getPayrollList(designations.value));
+    });
+    return () => { active = false; };
+  }, []);
 
   const filtered = useMemo(() => {
     const list = Array.isArray(store?.structures) ? store.structures : [];
-    return list.filter((s) => {
+    const withLookupNames = list.map((structure) => {
+      const department = departmentLookup.find((item) => String(getPayrollField(item, "departmentId", "id")) === String(structure.departmentId));
+      const designation = designationLookup.find((item) => String(getPayrollField(item, "designationId", "roleId", "id")) === String(structure.designationId));
+      return {
+        ...structure,
+        department: structure.department || getPayrollField(department, "departmentName", "name") || "",
+        designation: structure.designation || getPayrollField(designation, "designationName", "roleName", "designation", "role", "name") || "",
+      };
+    });
+    return withLookupNames.filter((s) => {
       if (!s || typeof s !== "object") return false;
       if (filterType !== "All" && s.staffType !== filterType) return false;
       return true;
     });
-  }, [store?.structures, filterType]);
+  }, [store?.structures, filterType, departmentLookup, designationLookup]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>

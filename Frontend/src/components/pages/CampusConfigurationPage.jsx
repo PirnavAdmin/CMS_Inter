@@ -53,7 +53,9 @@ export default function CampusConfigurationPage() {
 
   // Combine and deduplicate available boards with IDs
   const availableBoards = useMemo(() => {
-    const combined = [...(contextBoards || []), ...FALLBACK_BOARDS];
+    // AcademicContext supplies the active master boards. Only use the local
+    // fallback list when no master boards have been loaded (for offline/demo use).
+    const combined = contextBoards?.length ? contextBoards : FALLBACK_BOARDS;
     const map = new Map();
     combined.forEach((b, idx) => {
       const name = b.name || b.boardName || b.code;
