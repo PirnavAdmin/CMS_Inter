@@ -3609,6 +3609,8 @@ export default function AdmissionPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const campusId = Number(selectedCampusValue);
+    const hasValidCampusId = Number.isFinite(campusId) && campusId > 0;
     const loadAllocationMasterData = async () => {
       setAllocationMasterStatus({ loading: true, error: "", failed: [] });
       const [
@@ -3622,7 +3624,11 @@ export default function AdmissionPage() {
         hostelFeesResult,
       ] = await Promise.allSettled([
         apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+        hasValidCampusId
+          ? apiClient.get(apiEndpoints.transport.pickupPoints, {
+            params: { CampusId: campusId, PageNumber: 1, PageSize: 1000 },
+          })
+          : Promise.resolve({ skipped: true }),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
         hostelApi.getHostelBlocks(),
@@ -3635,7 +3641,7 @@ export default function AdmissionPage() {
         routes: routesResult.status === "fulfilled"
           ? getCollection(routesResult.value.data).map(normalizeTransportRouteOption).filter(Boolean)
           : [],
-        pickupPoints: pickupPointsResult.status === "fulfilled"
+        pickupPoints: pickupPointsResult.status === "fulfilled" && !pickupPointsResult.value?.skipped
           ? getCollection(pickupPointsResult.value.data).map(normalizeTransportPickupOption).filter(Boolean)
           : [],
         vehicles: vehiclesResult.status === "fulfilled"
@@ -3660,7 +3666,7 @@ export default function AdmissionPage() {
       setAllocationMasterData(nextData);
       const failed = [
         routesResult.status === "rejected" ? "routes" : "",
-        pickupPointsResult.status === "rejected" ? "pickup points" : "",
+        pickupPointsResult.status === "rejected" || pickupPointsResult.value?.skipped ? "pickup points" : "",
         vehiclesResult.status === "rejected" ? "vehicles" : "",
         vehicleAssignmentsResult.status === "rejected" ? "vehicle assignments" : "",
         hostelBlocksResult.status === "rejected" ? "hostel blocks" : "",
@@ -3691,7 +3697,7 @@ export default function AdmissionPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedCampusValue]);
 
   useEffect(() => {
     if (viewMode !== "form" || editingAdmissionId || values.admissionDate) return;
