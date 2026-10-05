@@ -48,13 +48,23 @@ import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import * as hostelApi from "@/api/hostelApi.js";
 import "./HostelPage.css";
+import hostelManagementIcon from "@/assets/sidebar-3d/hostel-management.svg";
+import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
+import hostelSetupIcon from "@/assets/settings-3d/board-academic-year.png";
+import studentManagementIcon from "@/assets/dashboard-3d/total-students.png";
+import hostelReportsIcon from "@/assets/sidebar-3d/reports-analytics.png";
+import hostelCapacityIcon from "@/assets/dashboard-3d/total-sections.png";
+import hostelOccupancyIcon from "@/assets/sidebar-3d/holiday-management.svg";
+import hostelResidentsIcon from "@/assets/dashboard-3d/teaching-staff.png";
+import hostelVacantBedsIcon from "@/assets/dashboard-3d/create-section.png";
+import hostelWardensIcon from "@/assets/sidebar-3d/certificates.png";
 
 // ── Tab Configurations (4 Major Tabs with Subtabs matching Transport Reference) ──
 const majorTabs = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "setup", label: "Hostel Master Setup", icon: Building2 },
-  { id: "students", label: "Student Management", icon: Users },
-  { id: "reports", label: "Reports", icon: BarChart3 },
+  { id: "dashboard", label: "Dashboard", icon: dashboardIcon },
+  { id: "setup", label: "Hostel Master Setup", icon: hostelSetupIcon },
+  { id: "students", label: "Student Management", icon: studentManagementIcon },
+  { id: "reports", label: "Reports", icon: hostelReportsIcon },
 ];
 
 const setupSubtabs = [
@@ -1681,7 +1691,7 @@ export default function HostelPage() {
         <div className="cms-dash-header-row">
           <div>
             <div className="cms-dash-header-title">
-              <Building2 size={24} style={{ color: "var(--cms-primary)" }} />
+              <img className="cms-hostel-dashboard-icon" src={hostelManagementIcon} alt="" aria-hidden="true" />
               <span>Hostel Management Dashboard</span>
             </div>
             <p className="cms-dash-header-sub">
@@ -1707,7 +1717,7 @@ export default function HostelPage() {
           {/* Card 1: TOTAL HOSTELS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Building2 size={20} />
+              <img className="cms-hostel-kpi-3d-icon" src={hostelManagementIcon} alt="" aria-hidden="true" />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -1724,7 +1734,7 @@ export default function HostelPage() {
           {/* Card 2: TOTAL CAPACITY */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <BedDouble size={20} />
+              <img className="cms-hostel-kpi-3d-icon" src={hostelCapacityIcon} alt="" aria-hidden="true" />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -1741,7 +1751,7 @@ export default function HostelPage() {
           {/* Card 3: OCCUPANCY RATE */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <Clock size={20} />
+              <img className="cms-hostel-kpi-3d-icon" src={hostelOccupancyIcon} alt="" aria-hidden="true" />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -1758,7 +1768,7 @@ export default function HostelPage() {
           {/* Card 4: OCCUPIED BEDS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
-              <Users size={20} />
+              <img className="cms-hostel-kpi-3d-icon" src={hostelResidentsIcon} alt="" aria-hidden="true" />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -1775,7 +1785,7 @@ export default function HostelPage() {
           {/* Card 5: VACANT BEDS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-green-soft)", color: "var(--cms-green)" }}>
-              <Home size={20} />
+              <img className="cms-hostel-kpi-3d-icon" src={hostelVacantBedsIcon} alt="" aria-hidden="true" />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -1792,7 +1802,7 @@ export default function HostelPage() {
           {/* Card 6: HOSTELLERS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <UserCheck size={20} />
+              <img className="cms-hostel-kpi-3d-icon" src={studentManagementIcon} alt="" aria-hidden="true" />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -1828,7 +1838,7 @@ export default function HostelPage() {
           {/* Card 8: ACTIVE WARDENS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-red-soft)", color: "var(--cms-red)" }}>
-              <ShieldCheck size={20} />
+              <img className="cms-hostel-kpi-3d-icon" src={hostelWardensIcon} alt="" aria-hidden="true" />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -5476,8 +5486,8 @@ export default function HostelPage() {
   // ═════════════════════════════════════════════════════════════════════
   return (
     <DashboardLayout
-      title="Hostel Management"
-      subtitle="Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
+      title={null}
+      subtitle={null}
       breadcrumb={["Hostel Management"]}
     >
       <div className="cms-hostel-page">
@@ -5505,7 +5515,7 @@ export default function HostelPage() {
                   setSearchQuery("");
                 }}
               >
-                <Icon size={16} />
+                <img className="cms-hostel-tab-icon" src={Icon} alt="" aria-hidden="true" />
                 <span>{tab.label}</span>
               </button>
             );

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="shield" x1="13" y1="9" x2="51" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#C4D8FF"/><stop offset="1" stop-color="#5D83DB"/></linearGradient>
+    <linearGradient id="check" x1="24" y1="24" x2="42" y2="43" gradientUnits="userSpaceOnUse"><stop stop-color="#FFF3B1"/><stop offset="1" stop-color="#E3A32D"/></linearGradient>
+    <filter id="shadow" x="5" y="5" width="55" height="58" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#26334A" flood-opacity=".3"/></filter>
+  </defs>
+  <g filter="url(#shadow)" stroke="#33476C" stroke-linejoin="round" stroke-width="2.4">
+    <path d="m32 8 20 8v14c0 12-8 20-20 27-12-7-20-15-20-27V16l20-8Z" fill="url(#shield)"/>
+    <path d="m32 15 13 5v10c0 8-5 14-13 19-8-5-13-11-13-19V20l13-5Z" fill="#EDF3FF"/>
+    <path d="m23 32 6 6 12-13" stroke="url(#check)" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+    <path d="M32 8V3M10 17l-4-2M54 17l4-2" stroke="#E9B849" stroke-linecap="round" stroke-width="3"/>
+  </g>
+</svg>

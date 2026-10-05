@@ -35,6 +35,9 @@ import settingsBoardAcademicYearIcon from "@/assets/settings-3d/board-academic-y
 import settingsNumberSeriesIcon from "@/assets/settings-3d/number-series.png";
 import settingsTemplatesIcon from "@/assets/settings-3d/templates.png";
 import settingsAuditLogsIcon from "@/assets/settings-3d/audit-logs.png";
+import hostelManagementIcon from "@/assets/sidebar-3d/hostel-management.svg";
+import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
+import rolesPermissionsIcon from "@/assets/sidebar-3d/roles-permissions.svg";
 import navbarMenuIcon from "@/assets/navbar-3d/menu.png";
 import navbarSearchIcon from "@/assets/navbar-3d/search.png";
 import navbarBoardIcon from "@/assets/navbar-3d/board.png";
@@ -176,7 +179,7 @@ export const menu = [
   {
     section: "Hostel Management",
     items: [
-      { to: "/hostel", label: "Hostel Management", icon: Building2 },
+      { to: "/hostel", label: "Hostel Management", icon: hostelManagementIcon },
     ],
   },
   {
@@ -187,8 +190,8 @@ export const menu = [
         label: "Settings",
         icon: boardAcademicYearIcon,
         children: [
-          { to: "/dashboard/settings", label: "General Settings", icon: Settings },
-          { to: "/dashboard/settings/roles-permissions", label: "Roles & Permissions", icon: ShieldCheck },
+          { to: "/dashboard/settings", label: "General Settings", icon: generalSettingsIcon },
+          { to: "/dashboard/settings/roles-permissions", label: "Roles & Permissions", icon: rolesPermissionsIcon },
         ],
       },
     ],
@@ -414,7 +417,7 @@ export default function DashboardLayout({
   const pathname = location.pathname;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname), [pathname]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title) ?? pageMenuItem?.icon;
-  const pageTitleNode = <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>;
+  const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
 
   const navbarCampuses = useMemo(() => {
     if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
