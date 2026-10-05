@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="panel" x1="15" y1="10" x2="49" y2="55" gradientUnits="userSpaceOnUse"><stop stop-color="#BDF2E2"/><stop offset="1" stop-color="#48B99B"/></linearGradient>
+    <linearGradient id="knob" x1="24" y1="19" x2="42" y2="45" gradientUnits="userSpaceOnUse"><stop stop-color="#FFF6C9"/><stop offset="1" stop-color="#E6A83D"/></linearGradient>
+    <filter id="shadow" x="5" y="5" width="54" height="57" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#23453C" flood-opacity=".3"/></filter>
+  </defs>
+  <g filter="url(#shadow)" stroke="#24564B" stroke-linejoin="round" stroke-width="2.4">
+    <path d="m32 8 19 7v15c0 11-7.4 19.5-19 26C20.4 49.5 13 41 13 30V15l19-7Z" fill="url(#panel)"/>
+    <path d="m32 15 12 4v11c0 7-4.2 12.6-12 17-7.8-4.4-12-10-12-17V19l12-4Z" fill="#E9FFF7"/>
+    <path d="M32 21v4M32 39v4M22 32h4M38 32h4M24.9 24.9l2.8 2.8M36.3 36.3l2.8 2.8M39.1 24.9l-2.8 2.8M27.7 36.3l-2.8 2.8" stroke="#2F9F86" stroke-linecap="round" stroke-width="3"/>
+    <circle cx="32" cy="32" r="8" fill="url(#knob)"/>
+    <circle cx="32" cy="32" r="3" fill="#FFF9E3"/>
+  </g>
+</svg>

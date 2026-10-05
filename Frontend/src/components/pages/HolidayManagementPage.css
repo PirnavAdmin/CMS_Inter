@@ -2,6 +2,7 @@
 .holiday-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
 .holiday-stat { display: grid; grid-template-columns: 39px minmax(0, 1fr); align-items: center; gap: 11px; min-height: 82px; padding: 13px; border: 1px solid var(--cms-border); border-left: 3px solid var(--holiday-accent); border-radius: 11px; background: var(--holiday-surface); }
 .holiday-stat > span { display: grid; width: 39px; height: 39px; place-items: center; border-radius: 10px; color: var(--holiday-accent); background: var(--holiday-icon-surface); }
+.holiday-stat > span img { width: 30px; height: 30px; object-fit: contain; }
 .holiday-stat > div { display: grid; gap: 4px; }
 .holiday-stat small, .holiday-detail-grid small { color: var(--cms-muted); font-size: 11px; font-weight: 700; }
 .holiday-stat strong { color: var(--cms-text); font-size: 22px; line-height: 1; }
