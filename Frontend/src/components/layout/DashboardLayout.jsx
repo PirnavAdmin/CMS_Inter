@@ -230,6 +230,43 @@ export const parentMenu = [
   },
 ];
 
+export const principalMenu = [
+  {
+    section: "Overview",
+    items: [{ to: "/principal-dashboard", label: "Dashboard", icon: dashboardIcon }],
+  },
+  {
+    section: "Academic Management",
+    items: [
+      { to: "/dashboard/students", label: "Students", icon: studentsIcon },
+      { to: "/dashboard/staff", label: "Staff", icon: staffIcon },
+      { to: "/dashboard/attendance/student", label: "Student Attendance", icon: attendanceIcon },
+      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
+      { to: "/dashboard/sections", label: "Classes & Sections", icon: sectionsIcon },
+      { to: "/dashboard/subjects", label: "Subjects", icon: subjectsIcon },
+      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
+    ],
+  },
+  {
+    section: "Assessment",
+    items: [
+      { to: "/dashboard/examinations", label: "Examinations", icon: examinationIcon },
+      { to: "/dashboard/results", label: "Results", icon: resultsIcon },
+      { to: "/dashboard/marks-entry", label: "Assignments & Marks", icon: marksEvaluationIcon },
+    ],
+  },
+  {
+    section: "Administration",
+    items: [
+      { to: "/dashboard/admission", label: "Admissions", icon: generatedSidebarIcons.admission },
+      { to: "/dashboard/fee-structure", label: "Fees", icon: feeManagementIcon },
+      { to: "/dashboard/leave-management", label: "Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/dashboard/reports", label: "Reports", icon: reportsAnalyticsIcon },
+      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
+    ],
+  },
+];
+
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
@@ -275,6 +312,10 @@ const createSearchIndex = (items) => items.flatMap((g) =>
     { to: item.to, label: item.label, section: g.section },
     ...(item.children || []).map((c) => ({ to: c.to, label: c.label, section: item.label })),
   ]),
+);
+
+const principalSearchIndex = principalMenu.flatMap((g) =>
+  g.items.map((item) => ({ to: item.to, label: item.label, section: g.section })),
 );
 
 const searchIndex = createSearchIndex(menu);
@@ -324,7 +365,8 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  sourceMenu.forEach((group) => {
+  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : pathname.startsWith("/principal-dashboard") ? principalMenu : menu;
+  activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
       (item.children || []).forEach((child) => {
@@ -372,6 +414,11 @@ const uniqueBreadcrumbLabels = (labels, currentTitle) => {
 
 function readUser() {
   return getAuthUser();
+}
+
+function isPrincipalRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "principal" || normalized.includes("principal");
 }
 
 function initials(name = "CMS Admin") {
@@ -432,8 +479,9 @@ export default function DashboardLayout({
   const pathname = location.pathname;
   const user = readUser();
   const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const activeMenu = menuOverride || (isParent ? parentMenu : menu);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : searchIndex);
+  const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
+  const activeMenu = menuOverride || (isParent ? parentMenu : isPrincipal ? principalMenu : menu);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
   const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
   const canManageAcademicContext = !isParent && !menuOverride;

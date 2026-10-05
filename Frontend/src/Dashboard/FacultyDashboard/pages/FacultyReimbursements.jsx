@@ -3,6 +3,8 @@ import { Plus, Paperclip, Upload, Trash2, X, Loader2, AlertCircle, CheckCircle2 
 import "../styles/FacultyReimbursements.css";
 import { MOCK_REIMB } from "../data/facultyMockData.js";
 
+import { useFacultySafe } from "../FacultyContext.jsx";
+
 const STATUS_BADGE = {
   Approved: "cms-badge-active",
   Active: "cms-badge-active",
@@ -11,6 +13,7 @@ const STATUS_BADGE = {
 };
 
 export default function FacultyReimbursements() {
+  const context = useFacultySafe();
   const [reimbList, setReimbList] = useState(MOCK_REIMB);
   const [showReimbModal, setShowReimbModal] = useState(false);
   const [reimbForm, setReimbForm] = useState({ type: "Books & Journals", amount: "", desc: "", file: null });
@@ -19,8 +22,12 @@ export default function FacultyReimbursements() {
   const reimbFileInputRef = useRef(null);
 
   const notify = (text, type = "success") => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 3500);
+    if (context?.notify) {
+      context.notify(text, type);
+    } else {
+      setToast({ text, type });
+      setTimeout(() => setToast(null), 3500);
+    }
   };
 
   const submitReimbursement = () => {

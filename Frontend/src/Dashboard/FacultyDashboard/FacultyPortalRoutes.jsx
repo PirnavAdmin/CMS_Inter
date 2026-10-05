@@ -2,6 +2,7 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import FacultyDashboard from "./FacultyDashboard.jsx";
 import { PermissionProvider, useFacultyPermissions } from "./PermissionContext.jsx";
+import { FacultyProvider } from "./FacultyContext.jsx";
 
 import FacultyDashboardHome from "./pages/FacultyDashboardHome.jsx";
 import FacultyProfile from "./pages/FacultyProfile.jsx";
@@ -61,7 +62,9 @@ export function FacultyPortalContent() {
 export default function FacultyPortalRoutes() {
   return (
     <PermissionProvider>
-      <FacultyPortalContent />
+      <FacultyProvider>
+        <FacultyPortalContent />
+      </FacultyProvider>
     </PermissionProvider>
   );
 }

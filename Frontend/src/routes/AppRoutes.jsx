@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/components/pages/LandingPage.jsx";
 import DashboardPage from "@/components/pages/DashboardPage.jsx";
+import PrincipalDashboard from "@/Dashboard/PrincipalDashboard/PrincipalDashboard.jsx";
 import ListPage from "@/components/pages/ListPage.jsx";
 import FormPage from "@/components/pages/FormPage.jsx";
 import BoardManagementPage, { pageConfig as boardManagementConfig } from "@/components/pages/BoardManagementPage.jsx";
@@ -119,6 +120,10 @@ export default function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/verify-otp" element={<VerifyOTP />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+
+      <Route element={<ProtectedRoute requirePrincipal />}>
+        <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
+      </Route>
 
       <Route element={<ProtectedRoute requireAdmin />}>
         <Route path="/dashboard" element={<DashboardPage />} />

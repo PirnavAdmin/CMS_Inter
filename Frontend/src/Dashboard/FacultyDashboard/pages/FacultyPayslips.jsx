@@ -3,16 +3,23 @@ import { Wallet, Calendar, Eye, Download, CalendarClock, X, Printer, AlertCircle
 import "../styles/FacultyPayslips.css";
 import { facultyMockData } from "../data/facultyMockData.js";
 
+import { useFacultySafe } from "../FacultyContext.jsx";
+
 export default function FacultyPayslips() {
+  const context = useFacultySafe();
   const [payslipList] = useState(facultyMockData.payslips);
   const [payslipYear, setPayslipYear] = useState("all");
   const [viewingPayslip, setViewingPayslip] = useState(null);
   const [toast, setToast] = useState(null);
-  const profileData = facultyMockData.user;
+  const profileData = context?.profileData || facultyMockData.user;
 
   const notify = (text, type = "success") => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 3500);
+    if (context?.notify) {
+      context.notify(text, type);
+    } else {
+      setToast({ text, type });
+      setTimeout(() => setToast(null), 3500);
+    }
   };
 
   const filteredPayslips = payslipList.filter((item) => payslipYear === "all" || String(item.year) === payslipYear);

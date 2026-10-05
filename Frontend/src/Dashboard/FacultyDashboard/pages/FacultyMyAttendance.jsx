@@ -2,7 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Clock, LogOut, Calendar, CheckCircle2, Briefcase, Award, X, AlertCircle } from "lucide-react";
 import "../styles/FacultyMyAttendance.css";
 
+import { useFacultySafe } from "../FacultyContext.jsx";
+
 export default function FacultyMyAttendance() {
+  const context = useFacultySafe();
   const [liveClock, setLiveClock] = useState(() =>
     new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
   );
@@ -14,7 +17,7 @@ export default function FacultyMyAttendance() {
     return () => clearInterval(timer);
   }, []);
 
-  const [punchState, setPunchState] = useState(() => {
+  const [localPunchState, setLocalPunchState] = useState(() => {
     try {
       const saved = localStorage.getItem("staff_punch_state");
       if (saved) return JSON.parse(saved);
@@ -22,11 +25,29 @@ export default function FacultyMyAttendance() {
     return { isPunchedIn: true, inTime: "08:45 AM", outTime: null, hoursWorked: "4 hrs 32 mins" };
   });
 
+  const punchState = context?.punchState || localPunchState;
+  const setPunchState = (updater) => {
+    if (typeof updater === "function") {
+      setLocalPunchState((prev) => {
+        const next = updater(prev);
+        if (context?.setPunchState) context.setPunchState(next);
+        return next;
+      });
+    } else {
+      setLocalPunchState(updater);
+      if (context?.setPunchState) context.setPunchState(updater);
+    }
+  };
+
   const [toast, setToast] = useState(null);
 
   const notify = (text, type = "success") => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 3500);
+    if (context?.notify) {
+      context.notify(text, type);
+    } else {
+      setToast({ text, type });
+      setTimeout(() => setToast(null), 3500);
+    }
   };
 
   const handlePunchIn = () => {

@@ -81,6 +81,7 @@ export default function Login() {
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
       const userRole = String(result.user.role || "").toLowerCase();
+      const isPrincipal = userRole === "principal" || userRole.includes("principal");
       const isFacultyOrStaff =
         userRole === "faculty" ||
         userRole === "teacher" ||
@@ -98,6 +99,8 @@ export default function Login() {
 
       if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
+      } else if (isPrincipal) {
+        navigate("/principal-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
       } else if (isParent) {
