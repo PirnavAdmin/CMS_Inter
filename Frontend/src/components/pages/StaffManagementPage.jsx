@@ -2426,11 +2426,15 @@ function Dashboard({ records = [] }) {
   // Dashboard stats are global aggregates; use campus-scoped staff records when a campus is selected.
   const hasStats = !selectedCampus && stats !== null && stats !== undefined;
 
-  const totalCount = loading ? "—" : (hasStats ? (stats.totalStaff ?? stats.totalCount ?? 0) : (safeRecords.filter((r) => !r?.status || r?.status === "Active").length || 0));
-  const teachingCount = loading ? "—" : (hasStats ? (stats.teachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Teaching").length || 0));
-  const nonTeachingCount = loading ? "—" : (hasStats ? (stats.nonTeachingStaff ?? 0) : (safeRecords.filter((r) => (!r?.status || r?.status === "Active") && r?.staffType === "Non-Teaching").length || 0));
-  const completedCount = loading ? "—" : (hasStats ? (stats.completedProfiles ?? stats.completed ?? 0) : (safeRecords.filter((r) => r?.profileStatus === "Completed").length || 0));
-  const pendingCount = loading ? "—" : (hasStats ? (stats.pendingProfileCompletion ?? stats.pending ?? 0) : (typeof totalCount === "number" ? Math.max(0, totalCount - completedCount) : 0));
+  const totalCount = loading ? "—" : safeRecords.filter((r) => !r?.status || r?.status === "Active").length;
+  const teachingCount = loading ? "—" : safeRecords.filter((r) => {
+    if (r?.status && r.status !== "Active") return false;
+    const s = String(r?.staffType || "").toLowerCase();
+    return s.includes("teach") && !s.includes("non");
+  }).length;
+  const nonTeachingCount = loading ? "—" : (typeof totalCount === "number" && typeof teachingCount === "number" ? Math.max(0, totalCount - teachingCount) : 0);
+  const completedCount = loading ? "—" : safeRecords.filter((r) => r?.profileStatus === "Completed").length;
+  const pendingCount = loading ? "—" : (typeof totalCount === "number" ? Math.max(0, totalCount - completedCount) : 0);
   const pct = typeof totalCount === "number" && totalCount > 0 && typeof completedCount === "number" ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
@@ -2508,7 +2512,6 @@ function Dashboard({ records = [] }) {
             {[
               ["Add Teaching Staff", "/dashboard/staff/add-teaching"],
               ["Add Non-Teaching Staff", "/dashboard/staff/add-non-teaching"],
-              ["Credentials Generator", "modal:credentials"],
               ["Send Profile Link", "/dashboard/staff/pending?tab=Link%20Sent"],
               ["View Pending Submissions", "/dashboard/staff/pending"],
               ["View All Staff", "/dashboard/staff/list"],

@@ -2238,7 +2238,6 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         setEvalApplied(false);
         setEvalConfigs([]);
         setEvalStudents([]);
-        setEvaluations([]);
         setSelectedEvaluation(null);
         setSelectedStudent(null);
         setEvalSubTab("evaluation");

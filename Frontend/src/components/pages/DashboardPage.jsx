@@ -391,7 +391,7 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 1. GET /api/v1/dashboard/summary
+  // 1. GET /api/v1/dashboard/summary & GET /api/v1/staff
   const fetchSummary = useCallback(async () => {
     const seq = ++summarySeq.current;
     setSummaryState((prev) => ({ ...prev, loading: true, error: null }));
@@ -402,9 +402,50 @@ export default function DashboardPage() {
         ...(campusId ? { campusId } : {}),
         date: todayDate,
       };
-      const res = await apiClient.get(DASHBOARD_API.summary, { params });
+      
+      const staffParams = {
+        BoardId: boardId || undefined,
+        CampusId: campusId || undefined,
+        PageNumber: 1,
+        PageSize: 10000
+      };
+      
+      const [res, staffRes] = await Promise.all([
+        apiClient.get(DASHBOARD_API.summary, { params }),
+        apiClient.get("/api/v1/staff", { params: staffParams }).catch(() => ({ data: { items: [] } }))
+      ]);
+
       if (summarySeq.current === seq) {
-        setSummaryState({ loading: false, error: null, data: unwrap(res.data) });
+        const summaryData = unwrap(res.data) || {};
+        
+        let staffRecords = [];
+        if (staffRes?.data?.items && Array.isArray(staffRes.data.items)) {
+          staffRecords = staffRes.data.items;
+        } else if (staffRes?.data?.data && Array.isArray(staffRes.data.data)) {
+          staffRecords = staffRes.data.data;
+        } else if (Array.isArray(staffRes?.data)) {
+          staffRecords = staffRes.data;
+        }
+        
+        // Exact logic from StaffManagementPage
+        const totalCount = staffRecords.filter((r) => !r?.status || r?.status === "Active").length;
+        const teachingCount = staffRecords.filter((r) => {
+          if (r?.status && r.status !== "Active") return false;
+          const s = String(r?.staffType || "").toLowerCase();
+          return s.includes("teach") && !s.includes("non");
+        }).length;
+        const nonTeachingCount = Math.max(0, totalCount - teachingCount);
+
+        // Merge teaching/non-teaching staff counts from staff endpoint to override dashboard summary
+        const mergedData = {
+          ...summaryData,
+          teachingStaff: teachingCount,
+          teachingStaffCount: teachingCount,
+          nonTeachingStaff: nonTeachingCount,
+          nonTeachingStaffCount: nonTeachingCount,
+        };
+
+        setSummaryState({ loading: false, error: null, data: mergedData });
       }
     } catch (err) {
       if (summarySeq.current === seq) {
@@ -478,7 +519,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId]);
 
-  // 4. GET /api/v1/dashboard/students-attendance-today
+  // 4. GET /api/v1/attendance/admin/students
   const fetchStudentAttendance = useCallback(async () => {
     const seq = ++studentAttSeq.current;
     setStudentAttState((prev) => ({ ...prev, loading: true, error: null }));
@@ -498,42 +539,83 @@ export default function DashboardPage() {
         ...(academicYearId ? { academicYearId } : {}),
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
-        viewBy: viewByVal,
+        date: todayDate,
       };
-      const res = await apiClient.get(DASHBOARD_API.studentsAttendanceToday, { params });
+
+      const res = await apiClient.get("/api/v1/attendance/admin/students", { params });
+
       if (studentAttSeq.current === seq) {
-        const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated || unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime;
-        const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
-        let formattedTime = "Not marked today";
-        if (serverTime && serverTime !== "Not marked today") {
-          if (typeof serverTime === "string") {
-            if (serverTime.includes("T") || (serverTime.includes("-") && serverTime.includes(":"))) {
-              const d = new Date(serverTime);
-              formattedTime = !isNaN(d.getTime())
-                ? d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
-                : serverTime;
-            } else if (serverTime !== "Today") {
-              formattedTime = serverTime;
-            } else if (presentCount > 0) {
-              formattedTime = "Today";
-            }
-          } else {
-            formattedTime = String(serverTime);
-          }
-        } else if (presentCount > 0) {
-          formattedTime = "Today";
+        const payload = res.data?.data || res.data || [];
+        const rows = Array.isArray(payload) ? payload : [];
+
+        const STUDENT_LABEL = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
+        const studentStatus = (v) => STUDENT_LABEL[v] ?? (v === "Half-Day" ? "Half Day" : v) ?? "—";
+        const getVal = (o, ...keys) => keys.map((k) => o?.[k]).find((v) => v !== undefined && v !== null);
+        const studentSessionStatus = (row, session) => studentStatus(getVal(row, `${session}Status`, `${session}AttendanceStatus`, `${session}SessionStatus`, session, `${session}Attendance`));
+
+        const processedRows = rows.map(r => {
+          const m = studentSessionStatus(r, "morning");
+          const a = studentSessionStatus(r, "afternoon");
+          let finalStatus = "—";
+          if (m === "Present" && a === "Present") finalStatus = "Present";
+          else if (m === "Half Day" || a === "Half Day") finalStatus = "Half Day";
+          else if ((m === "Present" && a === "Absent") || (a === "Present" && m === "Absent")) finalStatus = "Half Day";
+          else if (m === "Present" || a === "Present") finalStatus = "Present";
+          else if (m === "Absent" || a === "Absent") finalStatus = "Absent";
+          else if (m === "Holiday" || a === "Holiday") finalStatus = "Holiday";
+          return { ...r, finalStatus };
+        }).filter(r => r.finalStatus !== "—" && r.finalStatus !== "Holiday");
+
+        const presentCount = processedRows.filter(r => r.finalStatus === "Present").length;
+        const absentCount = processedRows.filter(r => r.finalStatus === "Absent").length;
+        const halfDayCount = processedRows.filter(r => r.finalStatus === "Half Day").length;
+        const totalCount = processedRows.length;
+        const percentage = totalCount ? Math.round(((presentCount + 0.5 * halfDayCount) * 100) / totalCount) : 0;
+
+        let breakdownList = [];
+        if (viewByVal !== "Overall") {
+          const groupMap = {};
+          processedRows.forEach(r => {
+            let key = "Unknown";
+            if (viewByVal === "Academic Level") key = getVal(r, "levelName", "academicLevelName") || "Unknown";
+            if (viewByVal === "Group") key = getVal(r, "groupName") || "Unknown";
+            if (viewByVal === "Section") key = getVal(r, "sectionName") || "Unknown";
+            
+            if (!groupMap[key]) groupMap[key] = { name: key, total: 0, present: 0, absent: 0, halfDay: 0 };
+            groupMap[key].total++;
+            if (r.finalStatus === "Present") groupMap[key].present++;
+            if (r.finalStatus === "Absent") groupMap[key].absent++;
+            if (r.finalStatus === "Half Day") groupMap[key].halfDay++;
+          });
+          
+          breakdownList = Object.values(groupMap).map(g => ({
+            ...g,
+            percentage: g.total ? Math.round(((g.present + 0.5 * g.halfDay) * 100) / g.total) : 0
+          }));
         }
-        setStudentAttState({ loading: false, error: null, data: unwrapped, timestamp: formattedTime });
+
+        setStudentAttState({
+          loading: false,
+          error: null,
+          data: {
+            total: totalCount,
+            present: presentCount,
+            absent: absentCount,
+            halfDay: halfDayCount,
+            percentage: percentage,
+            breakdownList: breakdownList
+          },
+          timestamp: "Today"
+        });
       }
     } catch (err) {
       if (studentAttSeq.current === seq) {
         setStudentAttState((prev) => ({ ...prev, loading: false, error: getApiErrorMessage(err, "Failed to load student attendance"), data: null }));
       }
     }
-  }, [campusId, boardId, academicYearId, studentView]);
+  }, [campusId, boardId, academicYearId, studentView, todayDate]);
 
-  // 5. GET /api/v1/dashboard/staff-attendance-today (Do NOT send academicYearId)
+  // 5. POST /api/v1/staff-attendance/load
   const fetchStaffAttendance = useCallback(async () => {
     const seq = ++staffAttSeq.current;
     setStaffAttState((prev) => ({ ...prev, loading: true, error: null }));
@@ -547,37 +629,58 @@ export default function DashboardPage() {
               ? "Non-Teaching Staff"
               : staffType || "All Staff";
 
-      const params = {
+      const typeParam = staffTypeVal === "Teaching Staff" ? 1 : staffTypeVal === "Non-Teaching Staff" ? 2 : undefined;
+
+      const payload = {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
-        staffType: staffTypeVal,
+        ...(typeParam ? { staffType: typeParam } : {}),
         date: todayDate,
       };
-      const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
+
+      const res = await apiClient.post("/api/v1/staff-attendance/load", payload);
+
       if (staffAttSeq.current === seq) {
-        const unwrapped = unwrap(res.data);
-        const serverTime = unwrapped?.lastUpdated || unwrapped?.LastUpdated || unwrapped?.lastUpdatedTime || unwrapped?.LastUpdatedTime;
-        const presentCount = Number(unwrapped?.present ?? unwrapped?.presentCount ?? 0);
-        let formattedTime = "Not marked today";
-        if (serverTime && serverTime !== "Not marked today") {
-          if (typeof serverTime === "string") {
-            if (serverTime.includes("T") || (serverTime.includes("-") && serverTime.includes(":"))) {
-              const d = new Date(serverTime);
-              formattedTime = !isNaN(d.getTime())
-                ? d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })
-                : serverTime;
-            } else if (serverTime !== "Today") {
-              formattedTime = serverTime;
-            } else if (presentCount > 0) {
-              formattedTime = "Today";
-            }
-          } else {
-            formattedTime = String(serverTime);
-          }
-        } else if (presentCount > 0) {
-          formattedTime = "Today";
-        }
-        setStaffAttState({ loading: false, error: null, data: unwrapped, timestamp: formattedTime });
+        const resData = res.data?.data || res.data || [];
+        const rows = Array.isArray(resData) ? resData : [];
+
+        const STAFF_LABEL = { 1: "Present", 2: "Absent", 3: "Late", 4: "Leave", 5: "Holiday" };
+        const staffStatus = (v) => STAFF_LABEL[v] ?? v ?? "—";
+
+        let presentCount = 0;
+        let absentCount = 0;
+        let lateCount = 0;
+        let onLeaveCount = 0;
+
+        const validRows = rows.filter(r => {
+           const st = staffStatus(r.status);
+           return st !== "Holiday" && st !== "—";
+        });
+
+        validRows.forEach(r => {
+           const st = staffStatus(r.status);
+           if (st === "Present") presentCount++;
+           else if (st === "Absent") absentCount++;
+           else if (st === "Late") lateCount++;
+           else if (st === "Leave") onLeaveCount++;
+        });
+
+        const totalCount = validRows.length;
+        const percentage = totalCount ? Math.round(((presentCount + 0.5 * lateCount) * 100) / totalCount) : 0;
+
+        setStaffAttState({
+          loading: false,
+          error: null,
+          data: {
+            total: totalCount,
+            present: presentCount,
+            absent: absentCount,
+            late: lateCount,
+            onLeave: onLeaveCount,
+            percentage: percentage
+          },
+          timestamp: "Today"
+        });
       }
     } catch (err) {
       if (staffAttSeq.current === seq) {
@@ -916,15 +1019,25 @@ export default function DashboardPage() {
   // Auto-scroll Students Overview chart to the far right (present month & latest 4 months in view) on data load
   useEffect(() => {
     if (overviewChartData.length > 5) {
-      // Use setInterval to aggressively push scroll to the right for 2 seconds after data loads
+      const scrollToEnd = () => {
+        if (chartScrollRef.current) {
+          const maxScroll = chartScrollRef.current.scrollWidth - chartScrollRef.current.clientWidth;
+          if (maxScroll > 0) {
+            chartScrollRef.current.scrollLeft = maxScroll + 1000; // force it all the way
+          }
+        }
+      };
+
+      // Execute immediately and also re-try a few times to allow Recharts to finish rendering
+      scrollToEnd();
+      
       let attempts = 0;
       const interval = setInterval(() => {
-        if (chartScrollRef.current) {
-          chartScrollRef.current.scrollLeft = 999999; // Brute force scroll to end
-        }
+        scrollToEnd();
         attempts++;
-        if (attempts > 20) clearInterval(interval); // 20 * 100ms = 2.0s
+        if (attempts > 30) clearInterval(interval); // 30 * 100ms = 3.0s
       }, 100);
+
       return () => clearInterval(interval);
     }
   }, [overviewChartData]);
@@ -972,16 +1085,26 @@ export default function DashboardPage() {
   // Student Attendance Normalized Values
   const studentAttData = useMemo(() => {
     const data = studentAttState.data || {};
-    const total = metric(data, ["total", "totalStudents", "totalCount"]);
-    const present = metric(data, ["present", "presentCount"]);
-    const absent = metric(data, ["absent", "absentCount"]);
-    const halfDay = metric(data, ["halfDay", "halfDayCount", "halfDays", "late", "lateCount"]);
-    const percentage = metric(data, ["percentage", "attendancePercentage"]);
+    const total = Number(metric(data, ["total", "totalStudents", "totalCount"]) ?? 0);
+    const present = Number(metric(data, ["present", "presentCount"]) ?? 0);
+    let absent = metric(data, ["absent", "absentCount"]);
+    const halfDay = Number(metric(data, ["halfDay", "halfDayCount", "halfDays", "late", "lateCount"]) ?? 0);
+    let percentage = metric(data, ["percentage", "attendancePercentage"]);
+
+    if ((absent === undefined || absent === null || (present === 0 && Number(absent) === 0 && halfDay === 0) || (present + Number(absent) + halfDay < total)) && total > 0) {
+      absent = Math.max(0, total - present - halfDay);
+    } else {
+      absent = Number(absent ?? 0);
+    }
+
+    if (percentage === undefined || percentage === null || percentage === 0) {
+      percentage = total > 0 ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1)) : 0;
+    }
 
     const chartData = [
-      { name: "Present", value: present ?? 0, color: "#22a447" },
-      { name: "Absent", value: absent ?? 0, color: "#ef4444" },
-      { name: "Half-day", value: halfDay ?? 0, color: "#f59e0b" },
+      { name: "Present", value: present, color: "#22a447" },
+      { name: "Absent", value: absent, color: "#ef4444" },
+      { name: "Half-day", value: halfDay, color: "#f59e0b" },
     ];
 
     const breakdownList = data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
@@ -992,21 +1115,23 @@ export default function DashboardPage() {
   // Staff Attendance Normalized Values
   const staffAttData = useMemo(() => {
     const data = staffAttState.data || {};
-    const total = metric(data, ["total", "totalStaff", "totalCount"]);
-    const present = metric(data, ["present", "presentCount"]) ?? 0;
+    const total = Number(metric(data, ["total", "totalStaff", "totalCount"]) ?? 0);
+    const present = Number(metric(data, ["present", "presentCount"]) ?? 0);
     let absent = metric(data, ["absent", "absentCount"]);
-    const late = metric(data, ["late", "lateCount"]) ?? 0;
-    const onLeave = metric(data, ["onLeave", "onLeaveCount", "leaveCount"]) ?? 0;
-    const percentage = metric(data, ["percentage", "attendancePercentage"]) ?? 0;
+    const late = Number(metric(data, ["late", "lateCount"]) ?? 0);
+    const onLeave = Number(metric(data, ["onLeave", "onLeaveCount", "leaveCount"]) ?? 0);
+    let percentage = metric(data, ["percentage", "attendancePercentage"]);
     const teachingCount = metric(data, ["teachingCount", "teachingStaffCount"]);
     const nonTeachingCount = metric(data, ["nonTeachingCount", "nonTeachingStaffCount"]);
 
-    const numTotal = Number(total ?? 0);
-    // When attendance is not marked today (all 0s) or absent is missing, calculate absent = total - present - late - onLeave
-    if ((absent === undefined || absent === null || (present === 0 && absent === 0 && late === 0 && onLeave === 0)) && numTotal > 0) {
-      absent = Math.max(0, numTotal - present - late - onLeave);
+    if ((absent === undefined || absent === null || (present === 0 && Number(absent) === 0 && late === 0 && onLeave === 0) || (present + Number(absent) + late + onLeave < total)) && total > 0) {
+      absent = Math.max(0, total - present - late - onLeave);
     } else {
       absent = Number(absent ?? 0);
+    }
+
+    if (percentage === undefined || percentage === null || percentage === 0) {
+      percentage = total > 0 ? Number((((present + 0.5 * late) / total) * 100).toFixed(1)) : 0;
     }
 
     const chartData = [
@@ -1437,9 +1562,7 @@ export default function DashboardPage() {
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">
-                  <span className="dashboard-footer-time">
-                    <Clock size={13} /> Last updated: {studentAttState.timestamp}
-                  </span>
+
                   <Link to={`/dashboard/attendance/student?view=details&viewBy=${studentView}`} className="dashboard-footer-btn">
                     View Attendance Details <ChevronRight size={14} />
                   </Link>
@@ -1573,9 +1696,7 @@ export default function DashboardPage() {
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">
-                  <span className="dashboard-footer-time">
-                    <Clock size={13} /> Last updated: {staffAttState.timestamp}
-                  </span>
+
                   <Link to="/dashboard/attendance/staff" className="dashboard-footer-btn">
                     View Staff Attendance <ChevronRight size={14} />
                   </Link>

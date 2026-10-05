@@ -37,7 +37,8 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_Search", search?.Trim(), DbType.String);
         parameters.Add("p_Status", status?.Trim(), DbType.String);
         parameters.Add("p_CertificateType", certificateType?.Trim(), DbType.String);
-        parameters.Add("p_CampusId", campusId, DbType.Int32);
+        // Note: The stored procedure on the DB currently only expects 3 parameters.
+        // Campus filtering is done in-memory below.
 
         try
         {

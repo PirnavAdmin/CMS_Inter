@@ -1408,6 +1408,7 @@ export default function DepartmentManagementPage() {
                   <tr>
                     <th>Designation Code</th>
                     <th>Designation Name</th>
+                    <th>Department</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
@@ -1424,6 +1425,11 @@ export default function DepartmentManagementPage() {
                         <td>
                           <strong>{item.name}</strong>
                           <small>{item.staffType}</small>
+                        </td>
+                        <td>
+                          <span className="master-text-secondary">
+                            {item.departmentName || "All Departments"}
+                          </span>
                         </td>
                         <td>
                           <StatusBadge value={item.status} />
