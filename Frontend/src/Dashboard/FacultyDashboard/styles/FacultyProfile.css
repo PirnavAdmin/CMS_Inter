@@ -204,6 +204,439 @@
   display: none !important;
 }
 
+/* Popover Dropdown matching Reference Image 2 / Legacy Fallback */
+.sp-avatar-popover-menu {
+  position: absolute !important;
+  top: calc(100% + 8px) !important;
+  left: 0 !important;
+  z-index: 9999 !important;
+  min-width: 180px !important;
+  background: var(--cms-surface, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e2e8f0) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
+  padding: 6px !important;
+  animation: spPopoverScale 0.16s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  transform-origin: top left !important;
+}
+
+@keyframes spPopoverScale {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Compact Profile Photo Action Modal (Matching Reference Image) */
+.sp-photo-action-modal {
+  background: var(--cms-surface, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e2e8f0) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+  width: 100% !important;
+  max-width: 320px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  animation: spModalScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.sp-photo-action-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 12px 16px 10px !important;
+  border-bottom: 1px solid var(--cms-border, #f1f5f9) !important;
+}
+
+.sp-photo-action-header-title {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: var(--cms-text, #0f172a) !important;
+}
+
+.sp-photo-action-preview {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px 16px 14px !important;
+  background: var(--cms-subtle, #f8fafc) !important;
+}
+
+.sp-photo-action-avatar {
+  width: 82px !important;
+  height: 82px !important;
+  border-radius: 50% !important;
+  border: 3px solid var(--cms-primary, #6F8400) !important;
+  box-shadow: 0 4px 14px rgba(111, 132, 0, 0.22) !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: var(--cms-surface, #ffffff) !important;
+  margin-bottom: 8px !important;
+}
+
+.sp-photo-action-avatar img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.sp-photo-action-name {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: var(--cms-text, #0f172a) !important;
+  text-align: center !important;
+}
+
+.sp-photo-action-subtitle {
+  font-size: 11.5px !important;
+  color: var(--cms-muted, #64748b) !important;
+  text-align: center !important;
+  margin-top: 2px !important;
+}
+
+.sp-photo-action-menu {
+  padding: 8px 10px 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  background: var(--cms-surface, #ffffff) !important;
+}
+
+.sp-photo-action-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+  padding: 10px 12px !important;
+  border: none !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: var(--cms-text, #1e293b) !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: background 0.14s ease, color 0.14s ease !important;
+  text-align: left !important;
+  box-sizing: border-box !important;
+}
+
+.sp-photo-action-item:hover:not(.disabled) {
+  background: var(--cms-subtle, #f1f5f9) !important;
+  color: var(--cms-primary, #6F8400) !important;
+}
+
+.sp-photo-action-item.disabled {
+  opacity: 0.42 !important;
+  cursor: not-allowed !important;
+}
+
+.sp-photo-action-icon-wrap {
+  display: grid !important;
+  place-items: center !important;
+  width: 22px !important;
+  height: 22px !important;
+  color: var(--cms-text-secondary, #475569) !important;
+  flex-shrink: 0 !important;
+  transition: color 0.14s ease !important;
+}
+
+.sp-photo-action-item:hover:not(.disabled) .sp-photo-action-icon-wrap {
+  color: var(--cms-primary, #6F8400) !important;
+}
+
+.sp-photo-action-divider {
+  height: 1px !important;
+  background: var(--cms-border, #e2e8f0) !important;
+  margin: 5px 6px !important;
+}
+
+.sp-photo-action-item.danger {
+  color: #dc2626 !important;
+}
+
+.sp-photo-action-item.danger .sp-photo-action-icon-wrap {
+  color: #dc2626 !important;
+}
+
+.sp-photo-action-item.danger:hover:not(.disabled) {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+
+.sp-photo-action-item.danger:hover:not(.disabled) .sp-photo-action-icon-wrap {
+  color: #b91c1c !important;
+}
+
+/* Modals: View, Camera, Crop */
+.sp-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(4px) !important;
+  z-index: 99999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  animation: spModalFade 0.18s ease-out !important;
+}
+
+@keyframes spModalFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sp-photo-view-modal {
+  background: var(--cms-surface, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e2e8f0) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.25) !important;
+  width: 100% !important;
+  max-width: 320px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  animation: spModalScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.sp-camera-modal,
+.sp-crop-modal {
+  background: var(--cms-surface, #ffffff) !important;
+  border: 1px solid var(--cms-border, #e2e8f0) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.25) !important;
+  width: 100% !important;
+  max-width: 440px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  animation: spModalScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@keyframes spModalScale {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.sp-modal-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 18px !important;
+  border-bottom: 1px solid var(--cms-border, #e2e8f0) !important;
+}
+
+.sp-photo-view-modal .sp-modal-header {
+  padding: 10px 14px !important;
+}
+
+.sp-modal-title {
+  margin: 0 !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: var(--cms-text, #0f172a) !important;
+}
+
+.sp-photo-view-modal .sp-modal-title {
+  font-size: 14px !important;
+}
+
+.sp-modal-close-btn {
+  display: grid !important;
+  place-items: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--cms-muted, #64748b) !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition: background 0.15s ease, color 0.15s ease !important;
+}
+
+.sp-modal-close-btn:hover {
+  background: var(--cms-subtle, #f1f5f9) !important;
+  color: var(--cms-text, #0f172a) !important;
+}
+
+.sp-photo-view-body {
+  padding: 14px 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: var(--cms-subtle, #f8fafc) !important;
+}
+
+.sp-photo-view-img {
+  width: 210px !important;
+  height: 210px !important;
+  max-width: 100% !important;
+  max-height: 210px !important;
+  border-radius: 16px !important;
+  object-fit: cover !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08) !important;
+  border: 2px solid var(--cms-border, #e2e8f0) !important;
+  display: block !important;
+}
+
+.sp-modal-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  padding: 12px 18px !important;
+  border-top: 1px solid var(--cms-border, #e2e8f0) !important;
+  background: var(--cms-surface, #ffffff) !important;
+}
+
+.sp-photo-view-modal .sp-modal-footer {
+  padding: 10px 14px !important;
+  gap: 8px !important;
+}
+
+.sp-photo-view-modal .sp-modal-footer .cms-btn {
+  font-size: 13px !important;
+  padding: 5px 12px !important;
+  height: 32px !important;
+}
+
+/* Camera Modal styles */
+.sp-camera-body {
+  position: relative !important;
+  background: #0f172a !important;
+  min-height: 320px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+}
+
+.sp-camera-viewport {
+  position: relative !important;
+  width: 100% !important;
+  height: 320px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.sp-camera-video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  transform: scaleX(-1) !important;
+}
+
+.sp-camera-guide-box {
+  position: absolute !important;
+  width: 220px !important;
+  height: 220px !important;
+  border: 2px dashed rgba(255, 255, 255, 0.8) !important;
+  border-radius: 20px !important;
+  pointer-events: none !important;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4) !important;
+}
+
+.sp-camera-loading,
+.sp-camera-error {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #f8fafc !important;
+  gap: 10px !important;
+  padding: 24px !important;
+  text-align: center !important;
+}
+
+/* Crop Modal styles */
+.sp-crop-body {
+  padding: 16px 18px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  background: var(--cms-surface, #ffffff) !important;
+}
+
+.sp-crop-instructions {
+  margin: 0 0 12px !important;
+  font-size: 12px !important;
+  color: var(--cms-muted, #64748b) !important;
+  text-align: center !important;
+}
+
+.sp-crop-canvas-wrapper {
+  position: relative !important;
+  width: 300px !important;
+  height: 300px !important;
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12) !important;
+  cursor: grab !important;
+  background: #0f172a !important;
+}
+
+.sp-crop-canvas-wrapper:active {
+  cursor: grabbing !important;
+}
+
+.sp-crop-canvas {
+  display: block !important;
+  width: 300px !important;
+  height: 300px !important;
+}
+
+.sp-crop-controls {
+  width: 100% !important;
+  max-width: 300px !important;
+  margin-top: 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+.sp-crop-zoom-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+.sp-crop-slider {
+  flex: 1 1 auto !important;
+  accent-color: var(--cms-primary, #6F8400) !important;
+  cursor: pointer !important;
+}
+
+.sp-crop-control-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 5px 12px !important;
+  border: 1px solid var(--cms-border, #cbd5e1) !important;
+  border-radius: 7px !important;
+  background: var(--cms-subtle, #f8fafc) !important;
+  color: var(--cms-text, #1e293b) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.sp-crop-control-btn:hover {
+  background: var(--cms-primary-soft, #f7f9ee) !important;
+  color: var(--cms-primary, #6F8400) !important;
+  border-color: var(--cms-primary, #6F8400) !important;
+}
+
 /* Single Line Metadata - Vertically Center Aligned with Avatar */
 .sp-profile-meta-single-line {
   display: flex !important;

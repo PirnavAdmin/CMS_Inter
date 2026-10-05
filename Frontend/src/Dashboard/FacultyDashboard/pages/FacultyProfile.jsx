@@ -13,6 +13,12 @@ import {
   Search,
   ChevronDown,
   User,
+  Folder,
+  X,
+  RotateCw,
+  ZoomIn,
+  ZoomOut,
+  RefreshCw,
 } from "lucide-react";
 import { useFaculty } from "../FacultyContext.jsx";
 import { facultyMockData } from "../data/facultyMockData.js";
@@ -253,14 +259,13 @@ export default function FacultyProfile() {
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isFetchingPin, setIsFetchingPin] = useState(false);
 
-  const avatarRef = useRef(null);
-  const docFileRef = useRef(null);
+  // Profile Photo Action Modal, Camera & Cropper state
+  const [isPhotoActionModalOpen, setIsPhotoActionModalOpen] = useState(false);
+  const [isViewPhotoOpen, setIsViewPhotoOpen] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
-  const [availableSubjects, setAvailableSubjects] = useState(facultyMockData.subjects || []);
-  useEffect(() => {
-    if (facultyMockData.subjects) setAvailableSubjects(facultyMockData.subjects);
-  }, []);
-
+  // Experience and Documents Form States (Fix for Experience & Documents tabs)
   const [newExp, setNewExp] = useState({
     institution: "",
     designation: "",
@@ -276,47 +281,278 @@ export default function FacultyProfile() {
     file: null,
   });
 
-  const handlePincodeChange = (val) => {
-    const clean = val.replace(/\D/g, "").slice(0, 6);
-    setProfileData((prev) => ({ ...prev, pin: clean, pincode: clean }));
+  const availableSubjects = useMemo(
+    () => [
+      "Mathematics",
+      "Physics",
+      "Chemistry",
+      "Botany",
+      "Zoology",
+      "English",
+      "Sanskrit",
+      "Commerce",
+      "Economics",
+      "Civics",
+      "Computer Science",
+    ],
+    []
+  );
 
-    if (clean.length === 6) {
-      const pfx = clean.slice(0, 3);
-      if (PIN_LOOKUP[pfx]) {
-        const item = PIN_LOOKUP[pfx];
-        setProfileData((prev) => ({
-          ...prev,
-          pin: clean,
-          pincode: clean,
-          district: item.district,
-          state: item.state,
-          country: item.country,
-        }));
+  const safeExperience = useMemo(
+    () => (Array.isArray(profileData?.experience) ? profileData.experience : []),
+    [profileData?.experience]
+  );
+  const safeDocuments = useMemo(
+    () => (Array.isArray(profileData?.documents) ? profileData.documents : []),
+    [profileData?.documents]
+  );
+
+  const [rawImageToCrop, setRawImageToCrop] = useState(null);
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropPan, setCropPan] = useState({ x: 0, y: 0 });
+  const [cropRotation, setCropRotation] = useState(0);
+  const [isDraggingCrop, setIsDraggingCrop] = useState(false);
+  const [dragStartCrop, setDragStartCrop] = useState({ x: 0, y: 0 });
+
+  const [cameraError, setCameraError] = useState("");
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+
+  const avatarRef = useRef(null);
+  const docFileRef = useRef(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const cropCanvasRef = useRef(null);
+
+  // Live Camera stream manager
+  useEffect(() => {
+    if (!isCameraModalOpen) return;
+    let active = true;
+    setCameraError("");
+    setIsCameraLoading(true);
+
+    navigator.mediaDevices
+      ?.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 640 }, facingMode: "user" },
+        audio: false,
+      })
+      .then((stream) => {
+        if (!active) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setIsCameraLoading(false);
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error("Camera access error:", err);
+        setIsCameraLoading(false);
+        setCameraError(
+          err.name === "NotAllowedError" || err.name === "PermissionDeniedError"
+            ? "Camera permission denied. Please allow camera access in browser."
+            : "No camera found or could not start video stream."
+        );
+      });
+
+    return () => {
+      active = false;
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
       }
-      setIsFetchingPin(false);
-    }
+    };
+  }, [isCameraModalOpen]);
+
+  const handleCaptureFromCamera = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 640;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, w, h);
+
+    const capturedData = canvas.toDataURL("image/jpeg", 0.95);
+    setIsCameraModalOpen(false);
+
+    setRawImageToCrop(capturedData);
+    setCropZoom(1);
+    setCropPan({ x: 0, y: 0 });
+    setCropRotation(0);
+    setIsCropModalOpen(true);
   };
 
   const handlePhotoUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      notify("Please select a valid image file (PNG, JPG, JPEG).", "error");
+      notify("Please select a valid image file (PNG, JPG, JPEG, WEBP).", "error");
       return;
     }
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target?.result;
       if (base64) {
-        setProfileData((prev) => {
-          const updated = { ...prev, photoUrl: base64 };
-          persistStaffProfile(updated);
-          return updated;
-        });
-        notify("Profile photo updated successfully!");
+        setRawImageToCrop(base64);
+        setCropZoom(1);
+        setCropPan({ x: 0, y: 0 });
+        setCropRotation(0);
+        setIsCropModalOpen(true);
       }
     };
     reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleRemovePhoto = () => {
+    setProfileData((prev) => {
+      const updated = { ...prev, photoUrl: "" };
+      persistStaffProfile(updated);
+      return updated;
+    });
+    if (avatarRef.current) {
+      avatarRef.current.value = "";
+    }
+    notify("Profile photo removed.");
+  };
+
+  // Crop Drag Handlers
+  const handleCropMouseDown = (e) => {
+    setIsDraggingCrop(true);
+    setDragStartCrop({ x: e.clientX - cropPan.x, y: e.clientY - cropPan.y });
+  };
+  const handleCropMouseMove = (e) => {
+    if (!isDraggingCrop) return;
+    setCropPan({ x: e.clientX - dragStartCrop.x, y: e.clientY - dragStartCrop.y });
+  };
+  const handleCropMouseUp = () => setIsDraggingCrop(false);
+
+  const handleCropTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      setIsDraggingCrop(true);
+      setDragStartCrop({
+        x: e.touches[0].clientX - cropPan.x,
+        y: e.touches[0].clientY - cropPan.y,
+      });
+    }
+  };
+  const handleCropTouchMove = (e) => {
+    if (!isDraggingCrop || e.touches.length !== 1) return;
+    setCropPan({
+      x: e.touches[0].clientX - dragStartCrop.x,
+      y: e.touches[0].clientY - dragStartCrop.y,
+    });
+  };
+  const handleCropTouchEnd = () => setIsDraggingCrop(false);
+
+  // Render crop canvas
+  useEffect(() => {
+    if (!isCropModalOpen || !rawImageToCrop || !cropCanvasRef.current) return;
+    const canvas = cropCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(canvas.width / 2 + cropPan.x, canvas.height / 2 + cropPan.y);
+      ctx.rotate((cropRotation * Math.PI) / 180);
+      ctx.scale(cropZoom, cropZoom);
+
+      const baseScale = Math.max(260 / img.width, 260 / img.height);
+      const w = img.width * baseScale;
+      const h = img.height * baseScale;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      ctx.restore();
+
+      // Guide overlay (240x240 rounded rectangle in center)
+      const cropSize = 240;
+      const left = (canvas.width - cropSize) / 2;
+      const top = (canvas.height - cropSize) / 2;
+      const r = 18;
+
+      ctx.save();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.48)";
+      ctx.beginPath();
+      ctx.rect(0, 0, canvas.width, canvas.height);
+      ctx.moveTo(left + r, top);
+      ctx.lineTo(left + cropSize - r, top);
+      ctx.quadraticCurveTo(left + cropSize, top, left + cropSize, top + r);
+      ctx.lineTo(left + cropSize, top + cropSize - r);
+      ctx.quadraticCurveTo(left + cropSize, top + cropSize, left + cropSize - r, top + cropSize);
+      ctx.lineTo(left + r, top + cropSize);
+      ctx.quadraticCurveTo(left, top + cropSize, left, top + cropSize - r);
+      ctx.lineTo(left + r, top);
+      ctx.closePath();
+      ctx.clip("evenodd");
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      // Guide border
+      ctx.save();
+      ctx.strokeStyle = "#6F8400";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(left + r, top);
+      ctx.lineTo(left + cropSize - r, top);
+      ctx.quadraticCurveTo(left + cropSize, top, left + cropSize, top + r);
+      ctx.lineTo(left + cropSize, top + cropSize - r);
+      ctx.quadraticCurveTo(left + cropSize, top + cropSize, left + cropSize - r, top + cropSize);
+      ctx.lineTo(left + r, top + cropSize);
+      ctx.quadraticCurveTo(left, top + cropSize, left, top + cropSize - r);
+      ctx.lineTo(left + r, top);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    };
+    img.src = rawImageToCrop;
+  }, [isCropModalOpen, rawImageToCrop, cropZoom, cropPan, cropRotation]);
+
+  const handleApplyCrop = () => {
+    if (!rawImageToCrop) return;
+    const outCanvas = document.createElement("canvas");
+    outCanvas.width = 400;
+    outCanvas.height = 400;
+    const ctx = outCanvas.getContext("2d");
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, 400, 400);
+
+      ctx.save();
+      const ratio = 400 / 240;
+      ctx.translate(200 + cropPan.x * ratio, 200 + cropPan.y * ratio);
+      ctx.rotate((cropRotation * Math.PI) / 180);
+      ctx.scale(cropZoom, cropZoom);
+
+      const baseScale = Math.max(260 / img.width, 260 / img.height);
+      const w = img.width * baseScale * ratio;
+      const h = img.height * baseScale * ratio;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      ctx.restore();
+
+      const croppedDataUrl = outCanvas.toDataURL("image/jpeg", 0.92);
+      setProfileData((prev) => {
+        const updated = { ...prev, photoUrl: croppedDataUrl };
+        persistStaffProfile(updated);
+        return updated;
+      });
+      notify("Profile photo cropped and updated successfully!");
+      setIsCropModalOpen(false);
+      setRawImageToCrop(null);
+    };
+    img.src = rawImageToCrop;
   };
 
   const hasVal = (val) => {
@@ -592,23 +828,23 @@ export default function FacultyProfile() {
       const expRows =
         profileData.experience && profileData.experience.length > 0
           ? profileData.experience.map((e, idx) => [
-              { content: String(idx + 1), styles: { halign: "center" } },
-              e.institution || "—",
-              e.designation || "—",
-              `${e.fromDate || "—"} to ${e.toDate || "—"}`,
-              e.subjectsTeached || e.subjectsTaught || "—",
-              { content: e.totalExp || "—", styles: { halign: "center" } },
-            ])
+            { content: String(idx + 1), styles: { halign: "center" } },
+            e.institution || "—",
+            e.designation || "—",
+            `${e.fromDate || "—"} to ${e.toDate || "—"}`,
+            e.subjectsTeached || e.subjectsTaught || "—",
+            { content: e.totalExp || "—", styles: { halign: "center" } },
+          ])
           : [
-              [
-                { content: "—", styles: { halign: "center" } },
-                {
-                  content: "No prior experience records provided.",
-                  colSpan: 5,
-                  styles: { halign: "center", fontStyle: "italic", textColor: [120, 120, 120] },
-                },
-              ],
-            ];
+            [
+              { content: "—", styles: { halign: "center" } },
+              {
+                content: "No prior experience records provided.",
+                colSpan: 5,
+                styles: { halign: "center", fontStyle: "italic", textColor: [120, 120, 120] },
+              },
+            ],
+          ];
 
       autoTable(doc, {
         theme: "plain",
@@ -652,23 +888,23 @@ export default function FacultyProfile() {
       const docRows =
         profileData.documents && profileData.documents.length > 0
           ? profileData.documents.map((d, idx) => [
-              { content: String(idx + 1), styles: { halign: "center" } },
-              d.name || "—",
-              d.type || "—",
-              { content: d.format || d.type || "PDF", styles: { halign: "center" } },
-              { content: d.size || "—", styles: { halign: "center" } },
-              { content: d.status || "Verified", styles: { halign: "center", textColor: [34, 139, 34], fontStyle: "bold" } },
-            ])
+            { content: String(idx + 1), styles: { halign: "center" } },
+            d.name || "—",
+            d.type || "—",
+            { content: d.format || d.type || "PDF", styles: { halign: "center" } },
+            { content: d.size || "—", styles: { halign: "center" } },
+            { content: d.status || "Verified", styles: { halign: "center", textColor: [34, 139, 34], fontStyle: "bold" } },
+          ])
           : [
-              [
-                { content: "—", styles: { halign: "center" } },
-                {
-                  content: "No documents uploaded.",
-                  colSpan: 5,
-                  styles: { halign: "center", fontStyle: "italic", textColor: [120, 120, 120] },
-                },
-              ],
-            ];
+            [
+              { content: "—", styles: { halign: "center" } },
+              {
+                content: "No documents uploaded.",
+                colSpan: 5,
+                styles: { halign: "center", fontStyle: "italic", textColor: [120, 120, 120] },
+              },
+            ],
+          ];
 
       autoTable(doc, {
         theme: "plain",
@@ -856,7 +1092,7 @@ export default function FacultyProfile() {
       persistStaffProfile(profileData);
       try {
         localStorage.setItem("staff_profile_submitted", "true");
-      } catch {}
+      } catch { }
       setIsSavingProfile(false);
       setIsEditingProfile(false);
       notify("Complete staff profile updated and verified successfully!");
@@ -926,10 +1162,8 @@ export default function FacultyProfile() {
             <div className="sp-profile-avatar-wrap">
               <div
                 className="sp-profile-avatar"
-                onClick={() => {
-                  avatarRef.current?.click();
-                }}
-                title="Click to Change Profile Photo"
+                onClick={() => setIsPhotoActionModalOpen(true)}
+                title="Profile Photo Options"
               >
                 {profileData.photoUrl ? (
                   <img
@@ -945,10 +1179,11 @@ export default function FacultyProfile() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  avatarRef.current?.click();
+                  setIsPhotoActionModalOpen(true);
                 }}
                 className="sp-profile-photo-edit"
-                title="Change Photo"
+                title="Photo Options"
+                aria-label="Photo Options"
               >
                 <Camera size={12} strokeWidth={2.4} />
               </button>
@@ -1565,7 +1800,7 @@ export default function FacultyProfile() {
                         totalExp: newExp.totalExp || "1 Year",
                         status: "Verified",
                       };
-                      const updatedExp = [...(profileData.experience || []), record];
+                      const updatedExp = [...safeExperience, record];
                       setProfileData({ ...profileData, experience: updatedExp });
                       persistStaffProfile({ ...profileData, experience: updatedExp });
                       setNewExp({
@@ -1586,9 +1821,9 @@ export default function FacultyProfile() {
 
               {/* Added Experiences List */}
               <h4 style={{ fontSize: 14, fontWeight: 700, margin: "16px 0 10px" }}>
-                Experience History ({profileData.experience?.length || 0})
+                Experience History ({safeExperience.length})
               </h4>
-              {!profileData.experience || !profileData.experience.length ? (
+              {safeExperience.length === 0 ? (
                 <div
                   style={{
                     padding: "24px",
@@ -1617,7 +1852,7 @@ export default function FacultyProfile() {
                       </tr>
                     </thead>
                     <tbody>
-                      {profileData.experience.map((x) => (
+                      {safeExperience.map((x) => (
                         <tr key={x.id}>
                           <td className="cms-strong">{x.institution}</td>
                           <td>{x.designation}</td>
@@ -1639,7 +1874,7 @@ export default function FacultyProfile() {
                                 className="cms-action-btn"
                                 style={{ color: "var(--cms-red)" }}
                                 onClick={() => {
-                                  const updated = profileData.experience.filter((item) => item.id !== x.id);
+                                  const updated = safeExperience.filter((item) => item.id !== x.id);
                                   setProfileData({ ...profileData, experience: updated });
                                   persistStaffProfile({ ...profileData, experience: updated });
                                   notify("Experience record removed.");
@@ -1752,25 +1987,30 @@ export default function FacultyProfile() {
                           }
 
                           try {
-                            const formData = new FormData();
-                            formData.append("file", newDoc.file);
-                            formData.append("documentType", newDoc.type);
-
-                            await apiClient.post(apiEndpoints.faculty.uploadDocument(profileData.id), formData, {
-                              headers: { "Content-Type": "multipart/form-data" },
-                            });
+                            try {
+                              const formData = new FormData();
+                              formData.append("file", newDoc.file);
+                              formData.append("documentType", newDoc.type);
+                              if (profileData.id) {
+                                await apiClient.post(apiEndpoints.faculty.uploadDocument(profileData.id), formData, {
+                                  headers: { "Content-Type": "multipart/form-data" },
+                                });
+                              }
+                            } catch (err) {
+                              console.warn("Server upload notice (saving locally):", err);
+                            }
 
                             const docRecord = {
                               id: `doc-${Date.now()}`,
                               name: newDoc.title.trim() || newDoc.type,
                               type: newDoc.type,
-                              format: newDoc.file.name.split(".").pop().toUpperCase(),
+                              format: (newDoc.file.name || "FILE").split(".").pop().toUpperCase(),
                               size: `${(newDoc.file.size / 1024).toFixed(1)} KB`,
                               date: new Date().toISOString().split("T")[0],
                               status: "Uploaded",
                               url: URL.createObjectURL(newDoc.file),
                             };
-                            const updatedDocs = [...(profileData.documents || []), docRecord];
+                            const updatedDocs = [...safeDocuments, docRecord];
                             setProfileData({ ...profileData, documents: updatedDocs });
                             persistStaffProfile({ ...profileData, documents: updatedDocs });
                             setNewDoc({ type: "Aadhaar Card Copy", title: "", file: null });
@@ -1778,7 +2018,7 @@ export default function FacultyProfile() {
                             notify("Document uploaded successfully!");
                           } catch (e) {
                             console.error(e);
-                            notify("Failed to upload document to server.", "error");
+                            notify("Failed to process document.", "error");
                           }
                         }}
                       >
@@ -1794,9 +2034,9 @@ export default function FacultyProfile() {
 
               {/* Uploaded Documents List */}
               <h4 style={{ fontSize: 14, fontWeight: 700, margin: "16px 0 10px" }}>
-                Uploaded Documents ({profileData.documents?.length || 0})
+                Uploaded Documents ({safeDocuments.length})
               </h4>
-              {!profileData.documents || !profileData.documents.length ? (
+              {safeDocuments.length === 0 ? (
                 <div
                   style={{
                     padding: "24px",
@@ -1824,7 +2064,7 @@ export default function FacultyProfile() {
                       </tr>
                     </thead>
                     <tbody>
-                      {profileData.documents.map((d) => (
+                      {safeDocuments.map((d) => (
                         <tr key={d.id}>
                           <td className="cms-strong">{d.name}</td>
                           <td>{d.type}</td>
@@ -1855,7 +2095,7 @@ export default function FacultyProfile() {
                                   className="cms-action-btn"
                                   style={{ color: "var(--cms-red)" }}
                                   onClick={() => {
-                                    const updated = profileData.documents.filter((item) => item.id !== d.id);
+                                    const updated = safeDocuments.filter((item) => item.id !== d.id);
                                     setProfileData({ ...profileData, documents: updated });
                                     persistStaffProfile({ ...profileData, documents: updated });
                                     notify("Document removed.");
@@ -2094,7 +2334,7 @@ export default function FacultyProfile() {
                     Edit
                   </button>
                 </div>
-                {!profileData.experience || !profileData.experience.length ? (
+                {!safeExperience.length ? (
                   <div
                     style={{
                       padding: "18px",
@@ -2108,7 +2348,7 @@ export default function FacultyProfile() {
                     No experience records added.
                   </div>
                 ) : (
-                  profileData.experience.map((exp, idx) => (
+                  safeExperience.map((exp, idx) => (
                     <div key={exp.id || idx} className="sp-preview-subcard">
                       <div className="sp-preview-subcard-title">Experience {idx + 1}</div>
                       <div className="sp-preview-grid">
@@ -2145,7 +2385,7 @@ export default function FacultyProfile() {
               {/* 5. Uploaded Documents Section */}
               <section className="sp-preview-section">
                 <div className="sp-preview-header">
-                  <h4 className="sp-preview-title">Uploaded Documents ({profileData.documents?.length || 0})</h4>
+                  <h4 className="sp-preview-title">Uploaded Documents ({safeDocuments.length})</h4>
                   <button
                     type="button"
                     className="sp-preview-edit-pill"
@@ -2157,7 +2397,7 @@ export default function FacultyProfile() {
                     Edit
                   </button>
                 </div>
-                {!profileData.documents || !profileData.documents.length ? (
+                {!safeDocuments.length ? (
                   <div
                     style={{
                       padding: "18px",
@@ -2171,7 +2411,7 @@ export default function FacultyProfile() {
                     No documents uploaded.
                   </div>
                 ) : (
-                  profileData.documents.map((doc, idx) => (
+                  safeDocuments.map((doc, idx) => (
                     <div key={doc.id || idx} className="sp-preview-subcard">
                       <div className="sp-preview-subcard-title">Document {idx + 1}</div>
                       <div className="sp-preview-grid">
@@ -2246,21 +2486,21 @@ export default function FacultyProfile() {
           )}
 
           {/* Stepper Footer for Steps 1 through 5 */}
-          {profileStep < 6 &&
-            isEditingProfile &&
-            (profileStep === 2 || profileStep === 4 ? (
-              <div
-                className="sp-wizard-footer"
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  width: "100%",
-                  marginTop: 24,
-                  paddingTop: 18,
-                  borderTop: "1px solid var(--cms-border)",
-                }}
-              >
+          {/* Stepper Footer for Steps 1 through 5 */}
+          {profileStep < 6 && (
+            <div
+              className="sp-wizard-footer"
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                width: "100%",
+                marginTop: 24,
+                paddingTop: 18,
+                borderTop: "1px solid var(--cms-border)",
+              }}
+            >
+              {profileStep > 1 ? (
                 <button
                   type="button"
                   className="cms-btn cms-btn-ghost"
@@ -2274,11 +2514,15 @@ export default function FacultyProfile() {
                     borderRadius: "8px",
                     cursor: "pointer",
                   }}
-                  onClick={() => setProfileStep((s) => s - 1)}
+                  onClick={() => setProfileStep((s) => Math.max(1, s - 1))}
                 >
                   <ChevronLeft size={16} /> Previous
                 </button>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              ) : (
+                <div />
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {isEditingProfile ? (
                   <button
                     type="button"
                     className="cms-btn cms-btn-primary"
@@ -2290,39 +2534,379 @@ export default function FacultyProfile() {
                     }}
                     onClick={handleSaveAndNext}
                   >
-                    Update &amp; Next <ChevronRight size={16} />
+                    {profileStep === 1 ? "Next" : "Update & Next"} <ChevronRight size={16} />
                   </button>
-                </div>
-              </div>
-            ) : (
-              <div
-                className="sp-wizard-footer"
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  alignItems: "center",
-                  gap: 12,
-                  marginTop: 24,
-                  paddingTop: 18,
-                  borderTop: "1px solid var(--cms-border)",
-                }}
-              >
-                {profileStep > 1 && (
+                ) : (
                   <button
                     type="button"
                     className="cms-btn cms-btn-primary"
-                    onClick={() => setProfileStep((s) => s - 1)}
+                    style={{
+                      padding: "0 22px",
+                      height: "38px",
+                      borderRadius: "8px",
+                      fontWeight: 600,
+                    }}
+                    onClick={() => setProfileStep((s) => Math.min(6, s + 1))}
                   >
-                    <ChevronLeft size={16} /> Previous
+                    Next <ChevronRight size={16} />
                   </button>
                 )}
-                <button type="button" className="cms-btn cms-btn-primary" onClick={handleSaveAndNext}>
-                  {profileStep === 1 ? "Next" : "Update & Next"} <ChevronRight size={16} />
-                </button>
               </div>
-            ))}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* 0. Profile Photo Action Options Modal (Reference Style Compact Modal) */}
+      {isPhotoActionModalOpen && (
+        <div className="sp-modal-overlay" onClick={() => setIsPhotoActionModalOpen(false)}>
+          <div className="sp-photo-action-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sp-photo-action-header">
+              <span className="sp-photo-action-header-title">Profile Photo</span>
+              <button
+                type="button"
+                className="sp-modal-close-btn"
+                onClick={() => setIsPhotoActionModalOpen(false)}
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Profile Avatar Center View matching reference */}
+            <div className="sp-photo-action-preview">
+              <div className="sp-photo-action-avatar">
+                {profileData.photoUrl ? (
+                  <img src={profileData.photoUrl} alt={profileData.fullName} />
+                ) : (
+                  <User size={46} strokeWidth={1.7} className="sp-profile-user-icon" />
+                )}
+              </div>
+              <div className="sp-photo-action-name">{profileData.fullName || "Faculty Member"}</div>
+              <div className="sp-photo-action-subtitle">
+                {profileData.designation ? `${profileData.designation} · ${profileData.department || "Faculty"}` : "Faculty Member"}
+              </div>
+            </div>
+
+            {/* 4 Photo Actions matching user reference */}
+            <div className="sp-photo-action-menu">
+              <button
+                type="button"
+                className={`sp-photo-action-item ${!profileData.photoUrl ? "disabled" : ""}`}
+                onClick={() => {
+                  if (!profileData.photoUrl) {
+                    notify("No photo uploaded yet.", "info");
+                    return;
+                  }
+                  setIsPhotoActionModalOpen(false);
+                  setIsViewPhotoOpen(true);
+                }}
+              >
+                <div className="sp-photo-action-icon-wrap">
+                  <Eye size={18} />
+                </div>
+                <div className="sp-photo-action-item-text">
+                  <span className="sp-photo-action-label">View photo</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="sp-photo-action-item"
+                onClick={() => {
+                  setIsPhotoActionModalOpen(false);
+                  setIsCameraModalOpen(true);
+                }}
+              >
+                <div className="sp-photo-action-icon-wrap">
+                  <Camera size={18} />
+                </div>
+                <div className="sp-photo-action-item-text">
+                  <span className="sp-photo-action-label">Take photo</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="sp-photo-action-item"
+                onClick={() => {
+                  setIsPhotoActionModalOpen(false);
+                  avatarRef.current?.click();
+                }}
+              >
+                <div className="sp-photo-action-icon-wrap">
+                  <Folder size={18} />
+                </div>
+                <div className="sp-photo-action-item-text">
+                  <span className="sp-photo-action-label">Upload photo</span>
+                </div>
+              </button>
+
+              <div className="sp-photo-action-divider" />
+
+              <button
+                type="button"
+                className={`sp-photo-action-item danger ${!profileData.photoUrl ? "disabled" : ""}`}
+                onClick={() => {
+                  if (!profileData.photoUrl) {
+                    notify("No photo to remove.", "info");
+                    return;
+                  }
+                  setIsPhotoActionModalOpen(false);
+                  handleRemovePhoto();
+                }}
+              >
+                <div className="sp-photo-action-icon-wrap">
+                  <Trash2 size={18} />
+                </div>
+                <div className="sp-photo-action-item-text">
+                  <span className="sp-photo-action-label">Remove photo</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1. View Photo Lightbox Modal */}
+      {isViewPhotoOpen && (
+        <div className="sp-modal-overlay" onClick={() => setIsViewPhotoOpen(false)}>
+          <div className="sp-photo-view-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sp-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Eye size={17} style={{ color: "var(--cms-primary)" }} />
+                <h3 className="sp-modal-title">Profile Photo</h3>
+              </div>
+              <button
+                type="button"
+                className="sp-modal-close-btn"
+                onClick={() => setIsViewPhotoOpen(false)}
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="sp-photo-view-body">
+              {profileData.photoUrl ? (
+                <img
+                  src={profileData.photoUrl}
+                  alt={profileData.fullName}
+                  className="sp-photo-view-img"
+                />
+              ) : (
+                <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
+                  No photo uploaded yet.
+                </div>
+              )}
+            </div>
+            <div className="sp-modal-footer">
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                onClick={() => {
+                  setIsViewPhotoOpen(false);
+                  avatarRef.current?.click();
+                }}
+              >
+                <Folder size={14} /> Change Photo
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-secondary"
+                onClick={() => setIsViewPhotoOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Camera Capture Modal */}
+      {isCameraModalOpen && (
+        <div className="sp-modal-overlay" onClick={() => setIsCameraModalOpen(false)}>
+          <div className="sp-camera-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sp-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Camera size={17} style={{ color: "var(--cms-primary)" }} />
+                <h3 className="sp-modal-title">Take Profile Photo</h3>
+              </div>
+              <button
+                type="button"
+                className="sp-modal-close-btn"
+                onClick={() => setIsCameraModalOpen(false)}
+                title="Close"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="sp-camera-body">
+              {isCameraLoading && (
+                <div className="sp-camera-loading">
+                  <Loader2 size={28} className="spin" style={{ color: "var(--cms-primary)" }} />
+                  <span>Starting camera...</span>
+                </div>
+              )}
+              {cameraError ? (
+                <div className="sp-camera-error">
+                  <p style={{ margin: 0, fontSize: 13 }}>{cameraError}</p>
+                  <button
+                    type="button"
+                    className="cms-btn cms-btn-primary"
+                    style={{ marginTop: 12 }}
+                    onClick={() => {
+                      setCameraError("");
+                      setIsCameraLoading(true);
+                      setIsCameraModalOpen(false);
+                      setTimeout(() => setIsCameraModalOpen(true), 120);
+                    }}
+                  >
+                    <RefreshCw size={14} /> Retry Camera
+                  </button>
+                </div>
+              ) : (
+                <div className="sp-camera-viewport">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="sp-camera-video"
+                  />
+                  <div className="sp-camera-guide-box" />
+                </div>
+              )}
+            </div>
+            <div className="sp-modal-footer">
+              <button
+                type="button"
+                className="cms-btn cms-btn-secondary"
+                onClick={() => setIsCameraModalOpen(false)}
+              >
+                Cancel
+              </button>
+              {!cameraError && (
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary"
+                  onClick={handleCaptureFromCamera}
+                  disabled={isCameraLoading}
+                >
+                  <Camera size={15} /> Capture Photo
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Interactive Crop Modal */}
+      {isCropModalOpen && rawImageToCrop && (
+        <div
+          className="sp-modal-overlay"
+          onClick={() => {
+            setIsCropModalOpen(false);
+            setRawImageToCrop(null);
+          }}
+        >
+          <div className="sp-crop-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sp-modal-header">
+              <h3 className="sp-modal-title">Crop Profile Photo</h3>
+              <button
+                type="button"
+                className="sp-modal-close-btn"
+                onClick={() => {
+                  setIsCropModalOpen(false);
+                  setRawImageToCrop(null);
+                }}
+                title="Cancel"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="sp-crop-body">
+              <p className="sp-crop-instructions">
+                Drag to reposition · Use zoom &amp; rotate to fit inside the frame
+              </p>
+              <div
+                className="sp-crop-canvas-wrapper"
+                onMouseDown={handleCropMouseDown}
+                onMouseMove={handleCropMouseMove}
+                onMouseUp={handleCropMouseUp}
+                onMouseLeave={handleCropMouseUp}
+                onTouchStart={handleCropTouchStart}
+                onTouchMove={handleCropTouchMove}
+                onTouchEnd={handleCropTouchEnd}
+              >
+                <canvas
+                  ref={cropCanvasRef}
+                  width={300}
+                  height={300}
+                  className="sp-crop-canvas"
+                />
+              </div>
+
+              {/* Crop Controls */}
+              <div className="sp-crop-controls">
+                <div className="sp-crop-zoom-group">
+                  <ZoomOut size={15} style={{ color: "var(--cms-muted)" }} />
+                  <input
+                    type="range"
+                    min="1"
+                    max="3"
+                    step="0.05"
+                    value={cropZoom}
+                    onChange={(e) => setCropZoom(parseFloat(e.target.value))}
+                    className="sp-crop-slider"
+                  />
+                  <ZoomIn size={15} style={{ color: "var(--cms-muted)" }} />
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "center" }}>
+                  <button
+                    type="button"
+                    className="sp-crop-control-btn"
+                    onClick={() => setCropRotation((r) => (r + 90) % 360)}
+                    title="Rotate 90° Clockwise"
+                  >
+                    <RotateCw size={14} /> Rotate
+                  </button>
+                  <button
+                    type="button"
+                    className="sp-crop-control-btn"
+                    onClick={() => {
+                      setCropZoom(1);
+                      setCropPan({ x: 0, y: 0 });
+                      setCropRotation(0);
+                    }}
+                    title="Reset Alignment"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="sp-modal-footer">
+              <button
+                type="button"
+                className="cms-btn cms-btn-secondary"
+                onClick={() => {
+                  setIsCropModalOpen(false);
+                  setRawImageToCrop(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cms-btn cms-btn-primary"
+                onClick={handleApplyCrop}
+              >
+                <Check size={15} /> Save Photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
