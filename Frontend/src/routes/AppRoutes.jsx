@@ -46,6 +46,7 @@ import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
+import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx";
 import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
 import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
@@ -309,6 +310,10 @@ export default function AppRoutes() {
 
       <Route element={<ProtectedRoute requireStudent />}>
         <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
+      </Route>
+
+      <Route element={<ProtectedRoute requireAccountant />}>
+        <Route path="/accountant-dashboard/*" element={<AccountantPortalRoutes />} />
       </Route>
 
       {/* Parent Portal Module Routes */}
