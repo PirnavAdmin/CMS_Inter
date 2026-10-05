@@ -1,2 +1,12 @@
 import React from "react";
-export default function FacultyMarks({ children }) { return <>{children}</>; }
+import MarksEntryPage from "@/components/pages/MarksEntryPage.jsx";
+import "../styles/FacultyMarks.css";
+
+export default function FacultyMarks() {
+  return (
+    <div className="cms-marks-entry-embedded">
+      <MarksEntryPage key="faculty-marks-entry" embedded={true} />
+    </div>
+  );
+}
+

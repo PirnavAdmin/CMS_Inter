@@ -101,6 +101,16 @@ namespace CollegeManagement.API.Helpers
                 claims.Add(new Claim("StaffId", user.StaffId.Value.ToString()));
             }
 
+            if (!string.IsNullOrWhiteSpace(user.Designation))
+            {
+                claims.Add(new Claim("Designation", user.Designation));
+            }
+
+            if (!string.IsNullOrWhiteSpace(user.EmployeeId))
+            {
+                claims.Add(new Claim("EmployeeId", user.EmployeeId));
+            }
+
             if (user.AdminId.HasValue && user.AdminId.Value > 0)
             {
                 claims.Add(new Claim("AdminId", user.AdminId.Value.ToString()));
@@ -167,6 +177,16 @@ namespace CollegeManagement.API.Helpers
                 return id;
 
             return null;
+        }
+
+        public string? GetDesignation(ClaimsPrincipal? principal)
+        {
+            return principal?.FindFirst("Designation")?.Value;
+        }
+
+        public string? GetEmployeeId(ClaimsPrincipal? principal)
+        {
+            return principal?.FindFirst("EmployeeId")?.Value;
         }
 
         public string? GetRole(ClaimsPrincipal? principal)

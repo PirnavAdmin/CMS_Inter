@@ -316,24 +316,6 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     throw new Error("Authentication failed because the server did not return an access token.");
   }
 
-  const role = data.Role || data.role || payload.Role || payload.role;
-  if (!role) {
-    throw new Error("Authentication failed because the server returned an invalid user response.");
-  }
-  const normalizedRole = String(role).trim().toLowerCase();
-  const adminFlag = data.IsAdmin ?? data.isAdmin ?? payload.IsAdmin ?? payload.isAdmin;
-  const isAdmin =
-    adminFlag === true ||
-    adminFlag === 1 ||
-    String(adminFlag || "").trim().toLowerCase() === "true" ||
-    Boolean(data.AdminId || data.adminId || payload.AdminId || payload.adminId) ||
-    normalizedRole.includes("admin");
-  if (expectedAccountType === "admin" && !isAdmin) {
-    throw new Error("Authentication failed because the server returned an invalid admin response.");
-  }
-  const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
-  const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
-
   let jwtClaims = {};
   try {
     const parts = token.split(".");
@@ -349,8 +331,44 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     }
   } catch {}
 
+  const jwtRole =
+    jwtClaims.Role ||
+    jwtClaims.role ||
+    jwtClaims.roles ||
+    jwtClaims["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
+    jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"];
+  const role = data.Role || data.role || payload.Role || payload.role || jwtRole;
+  if (!role) {
+    throw new Error("Authentication failed because the server returned an invalid user response.");
+  }
+  const normalizedRole = String(Array.isArray(role) ? role[0] : role).trim().toLowerCase();
+  const adminFlag = data.IsAdmin ?? data.isAdmin ?? payload.IsAdmin ?? payload.isAdmin;
+  const isAdmin =
+    adminFlag === true ||
+    adminFlag === 1 ||
+    String(adminFlag || "").trim().toLowerCase() === "true" ||
+    Boolean(data.AdminId || data.adminId || payload.AdminId || payload.adminId) ||
+    normalizedRole.includes("admin");
+  if (expectedAccountType === "admin" && !isAdmin) {
+    throw new Error("Authentication failed because the server returned an invalid admin response.");
+  }
+  const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
+  const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
+
   const staffId = data.StaffId || data.staffId || payload.StaffId || payload.staffId || jwtClaims.StaffId || jwtClaims.staffId || null;
   const employeeId = data.EmployeeId || data.employeeId || payload.EmployeeId || payload.employeeId || jwtClaims.EmployeeId || jwtClaims.employeeId || null;
+  const designation =
+    data.Designation ||
+    data.designation ||
+    data.DesignationName ||
+    data.designationName ||
+    payload.Designation ||
+    payload.designation ||
+    jwtClaims.Designation ||
+    jwtClaims.designation ||
+    jwtClaims.DesignationName ||
+    jwtClaims.designationName ||
+    "";
   const userName = data.Name || data.name || data.fullName || payload.Name || payload.name || payload.fullName || jwtClaims.unique_name || jwtClaims.name || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || "Staff Member";
 
   const rawEmail = data.Email || data.email || payload.Email || payload.email || jwtClaims.email || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || enteredEmail;
@@ -362,7 +380,8 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     name: userName,
     fullName: userName,
     email: userEmail,
-    role,
+    role: Array.isArray(role) ? role[0] : role,
+    designation,
     isAdmin,
   };
 

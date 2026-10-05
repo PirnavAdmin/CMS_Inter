@@ -1,0 +1,78 @@
+/* Student Attendance Styles */
+.sp-att-views-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--cms-border);
+  padding-bottom: 12px;
+}
+.sp-att-view-btn {
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--cms-text);
+  transition: all 0.15s;
+}
+.sp-att-view-btn.active {
+  background: var(--cms-primary);
+  color: #fff;
+  border-color: var(--cms-primary);
+}
+.sp-session-toggle {
+  display: inline-flex;
+  gap: 4px;
+}
+.sp-session-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--cms-border);
+  background: var(--cms-surface);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sp-session-btn.present { background: var(--cms-green-soft); color: var(--cms-green); border-color: var(--cms-green); }
+.sp-session-btn.absent { background: var(--cms-red-soft); color: var(--cms-red); border-color: var(--cms-red); }
+.sp-session-btn.halfday { background: var(--cms-amber-soft); color: var(--cms-amber); border-color: var(--cms-amber); }
+
+.cms-btn-bulk-present {
+  background: #EAF4DC !important;
+  color: #3B5A10 !important;
+  border: 1px solid #C4D9A0 !important;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cms-btn-bulk-present:hover {
+  background: #d8eabf !important;
+  transform: translateY(-1px);
+}
+.cms-btn-bulk-absent {
+  background: #FEE4E2 !important;
+  color: #B42318 !important;
+  border: 1px solid #FECDCA !important;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cms-btn-bulk-absent:hover {
+  background: #fcd0cc !important;
+  transform: translateY(-1px);
+}
