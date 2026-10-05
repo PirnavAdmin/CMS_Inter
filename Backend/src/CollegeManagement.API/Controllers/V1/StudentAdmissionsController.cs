@@ -312,7 +312,11 @@ namespace CollegeManagement.API.Controllers.V1
         {
             if (!campusId.HasValue || campusId <= 0)
             {
-                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                if (request?.CampusId.HasValue == true && request.CampusId > 0)
+                {
+                    campusId = request.CampusId.Value;
+                }
+                else if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
                     int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
                 {
                     campusId = cId;
@@ -560,6 +564,7 @@ namespace CollegeManagement.API.Controllers.V1
 
     public class GenerateAdmissionNumberRequestDto
     {
+        public int? CampusId { get; set; }
         public int? BoardId { get; set; }
         public int? AcademicYearId { get; set; }
     }

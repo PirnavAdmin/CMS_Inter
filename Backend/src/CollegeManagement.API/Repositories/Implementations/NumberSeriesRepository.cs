@@ -58,19 +58,8 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<NumberSeriesConfiguration?> GetByCodeAsync(string seriesCode, int? campusId = null)
         {
-            try
-            {
-                var conn = await GetOpenConnectionAsync();
-                return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
-                    "sp_GetNumberSeriesByCode",
-                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId },
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                return await _context.Set<NumberSeriesConfiguration>().AsNoTracking()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
-            }
+            return await _context.Set<NumberSeriesConfiguration>().AsNoTracking()
+                .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
         }
 
         public async Task<NumberSeriesConfiguration?> UpdateByCodeAsync(
@@ -82,95 +71,48 @@ namespace CollegeManagement.API.Repositories.Implementations
             string? description,
             int? campusId = null)
         {
-            try
+            var existing = await _context.Set<NumberSeriesConfiguration>()
+                .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
+
+            if (existing != null)
             {
-                var conn = await GetOpenConnectionAsync();
-                await conn.ExecuteAsync(
-                    "sp_UpdateNumberSeriesByCode",
-                    new
-                    {
-                        p_SeriesCode = seriesCode.Trim(),
-                        p_Prefix = prefix,
-                        p_FormatPattern = formatPattern,
-                        p_NumberLength = numberLength,
-                        p_StartNumber = startNumber,
-                        p_Description = description,
-                        p_CampusId = campusId
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-                return await GetByCodeAsync(seriesCode, campusId);
+                existing.Prefix = prefix;
+                existing.FormatPattern = formatPattern;
+                existing.NumberLength = numberLength;
+                existing.StartNumber = startNumber;
+                existing.Description = description;
+                existing.UpdatedAt = DateTime.UtcNow;
+                existing.CampusId = campusId;
+                await _context.SaveChangesAsync();
             }
-            catch
-            {
-                var existing = await _context.Set<NumberSeriesConfiguration>()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
 
-                if (existing != null)
-                {
-                    existing.Prefix = prefix;
-                    existing.FormatPattern = formatPattern;
-                    existing.NumberLength = numberLength;
-                    existing.StartNumber = startNumber;
-                    existing.Description = description;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    existing.CampusId = campusId;
-                    await _context.SaveChangesAsync();
-                }
-
-                return existing;
-            }
+            return existing;
         }
 
         public async Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode, int? campusId = null, string? baseSeriesCode = null)
         {
-            try
-            {
-                var conn = await GetOpenConnectionAsync();
-                return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
-                    "sp_GenerateNextNumberSeries",
-                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId, p_BaseSeriesCode = baseSeriesCode?.Trim() },
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                var existing = await _context.Set<NumberSeriesConfiguration>()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
+            var existing = await _context.Set<NumberSeriesConfiguration>()
+                .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
 
-                if (existing != null)
-                {
-                    existing.CurrentSequence = existing.CurrentSequence < existing.StartNumber
-                        ? existing.StartNumber
-                        : existing.CurrentSequence + 1;
-                    existing.UpdatedAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
-                }
-
-                return existing;
+            if (existing != null)
+            {
+                existing.CurrentSequence = existing.CurrentSequence < existing.StartNumber
+                    ? existing.StartNumber
+                    : existing.CurrentSequence + 1;
+                existing.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
             }
+
+            return existing;
         }
 
         public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null, string? board = null, string? academicYear = null)
         {
-            try
-            {
-                var conn = await GetOpenConnectionAsync();
-                
-                var maxSeq = await conn.ExecuteScalarAsync<int?>(
-                    "sp_GetMaxSequenceForBaseSeries",
-                    new { p_BaseCode = baseSeriesCode.Trim(), p_CampusId = campusId, p_Board = board, p_AcademicYear = academicYear },
-                    commandType: CommandType.StoredProcedure);
-                      
-                return maxSeq ?? 0;
-            }
-            catch
-            {
-                var max = await _context.Set<NumberSeriesConfiguration>()
-                    .Where(n => (n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
-                             && (n.CampusId == campusId || n.CampusId == null))
-                    .MaxAsync(n => (int?)n.CurrentSequence);
-                return max ?? 0;
-            }
+            var max = await _context.Set<NumberSeriesConfiguration>()
+                .Where(n => (n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
+                         && (n.CampusId == campusId || n.CampusId == null))
+                .MaxAsync(n => (int?)n.CurrentSequence);
+            return max ?? 0;
         }
     }
 }

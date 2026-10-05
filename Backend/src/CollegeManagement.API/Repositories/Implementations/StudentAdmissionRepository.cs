@@ -234,6 +234,16 @@ namespace CollegeManagement.API.Repositories.Implementations
                 result.AdmissionNo = request.AdmissionNo.Trim();
             }
 
+            // Save CampusId explicitly, since the legacy stored procedure does not take it as a parameter
+            if (result.AdmissionId > 0 && request.CampusId.HasValue)
+            {
+                await connection.ExecuteAsync(
+                    "UPDATE `StudentAdmissions` SET `CampusId` = @CampusId WHERE `AdmissionId` = @AdmId",
+                    new { CampusId = request.CampusId.Value, AdmId = result.AdmissionId });
+                
+                result.CampusId = request.CampusId.Value;
+            }
+
             if (result.AdmissionId > 0)
             {
                 string? hostelBlock = request.HostelBlock;

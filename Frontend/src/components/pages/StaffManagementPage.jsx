@@ -634,11 +634,11 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
   if (targetCode && recordBoardCode && recordBoardCode !== "—") {
     if (recordBoardCode === targetCode) return true;
     if ((targetCode.includes("TSBIE") || targetCode.includes("TGBIE") || targetCode.includes("TELANGANA")) &&
-        (recordBoardCode.includes("TSBIE") || recordBoardCode.includes("TGBIE") || recordBoardCode.includes("TELANGANA"))) {
+      (recordBoardCode.includes("TSBIE") || recordBoardCode.includes("TGBIE") || recordBoardCode.includes("TELANGANA"))) {
       return true;
     }
     if ((targetCode.includes("BIEAP") || targetCode.includes("ANDHRA") || targetCode.includes("AP")) &&
-        (recordBoardCode.includes("BIEAP") || recordBoardCode.includes("ANDHRA") || recordBoardCode.includes("AP"))) {
+      (recordBoardCode.includes("BIEAP") || recordBoardCode.includes("ANDHRA") || recordBoardCode.includes("AP"))) {
       return true;
     }
     if (targetCode.includes("CBSE") && recordBoardCode.includes("CBSE")) return true;
@@ -983,7 +983,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             setOpen(true);
             try {
               e.target.select();
-            } catch {}
+            } catch { }
           }}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -1344,19 +1344,19 @@ function useStaffTypeOptions(staffType) {
           .map((d) =>
             typeof d === "object"
               ? {
-                  name: d.name || d.designationName,
-                  designationName: d.name || d.designationName,
-                  departmentName: d.departmentName || d.department || "",
-                  departmentId: d.departmentId || null,
-                  staffType: d.staffType || d.StaffType,
-                }
+                name: d.name || d.designationName,
+                designationName: d.name || d.designationName,
+                departmentName: d.departmentName || d.department || "",
+                departmentId: d.departmentId || null,
+                staffType: d.staffType || d.StaffType,
+              }
               : {
-                  name: String(d),
-                  designationName: String(d),
-                  departmentName: "",
-                  departmentId: null,
-                  staffType: apiStaffType,
-                }
+                name: String(d),
+                designationName: String(d),
+                departmentName: "",
+                departmentId: null,
+                staffType: apiStaffType,
+              }
           )
           .filter(Boolean);
       } catch (e) {
@@ -1690,16 +1690,16 @@ function Field({
     if (name !== "board") return options;
     const activeBoardsList = Array.isArray(boards)
       ? boards.filter((b) => {
-          if (!b) return false;
-          if (b.status !== undefined && b.status !== null) {
-            const st = String(b.status).trim().toLowerCase();
-            if (st === "inactive" || st === "disabled" || b.status === false || b.status === 0) return false;
-          }
-          if (b.isActive !== undefined && b.isActive !== null && (b.isActive === false || b.isActive === 0)) {
-            return false;
-          }
-          return true;
-        })
+        if (!b) return false;
+        if (b.status !== undefined && b.status !== null) {
+          const st = String(b.status).trim().toLowerCase();
+          if (st === "inactive" || st === "disabled" || b.status === false || b.status === 0) return false;
+        }
+        if (b.isActive !== undefined && b.isActive !== null && (b.isActive === false || b.isActive === 0)) {
+          return false;
+        }
+        return true;
+      })
       : [];
 
     const names = activeBoardsList
@@ -1739,12 +1739,10 @@ function Field({
       const currentDept = String(safeValues.department || "").trim();
       const currentDeptNorm = currentDept.toLowerCase().replace(/[-_\s&]/g, "");
 
-      // If we have live designations from API:
-      if (Array.isArray(designationOptions) && designationOptions.length > 0) {
-        const liveDesigs = designationOptions.filter(Boolean);
-
-        if (currentDept) {
-          // Strictly return live designations assigned to this department in the database
+      if (currentDept) {
+        // 1. Try to find matching designations for this department from the API
+        if (Array.isArray(designationOptions) && designationOptions.length > 0) {
+          const liveDesigs = designationOptions.filter(Boolean);
           const deptMatching = liveDesigs
             .filter((d) => {
               if (!d) return false;
@@ -1759,12 +1757,7 @@ function Field({
           }
         }
 
-        // If no department is selected or no specific mapping, return all live designations for this staffType from DB
-        return Array.from(new Set(liveDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean)));
-      }
-
-      // Fallback ONLY when API returned no designations (e.g. network offline):
-      if (currentDept) {
+        // 2. If no matching designations found in API for this department, fallback to static map
         const activeMap = isTeaching ? teachingDesignationMap : nonTeachingDesignationMap;
         for (const [deptKey, desigs] of Object.entries(activeMap)) {
           const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
@@ -1772,6 +1765,14 @@ function Field({
             return Array.isArray(desigs) ? desigs : [];
           }
         }
+
+        // 3. If no department match in both API and static map, return empty array to prevent showing unrelated designations
+        return [];
+      }
+
+      // If NO department is selected, return all available designations (API or fallback)
+      if (Array.isArray(designationOptions) && designationOptions.length > 0) {
+        return Array.from(new Set(designationOptions.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean)));
       }
 
       const fallbackList = Array.isArray(options) && options.length > 0
@@ -1793,7 +1794,7 @@ function Field({
     if (name === "board") {
       const match = Array.isArray(boards) ? boards.find((b) =>
         b && (String(b.name || b.boardName || b.code || "").trim().toLowerCase() === String(value).trim().toLowerCase()
-        || String(b.code || "").trim().toLowerCase() === String(value).trim().toLowerCase())
+          || String(b.code || "").trim().toLowerCase() === String(value).trim().toLowerCase())
       ) : null;
       boardCodeVal = match?.code || match?.boardCode || (value && value.length <= 10 && !value.includes(" ") ? value.toUpperCase() : "");
       boardIdVal = match?.id || match?.boardId || undefined;
@@ -1818,11 +1819,11 @@ function Field({
         if (name === "role") {
           const matchedRole = Array.isArray(roleOptions)
             ? roleOptions.find((r) => {
-                if (typeof r === "object") {
-                  return (r.roleName || r.name) === value || String(r.roleId || r.id) === String(value);
-                }
-                return r === value;
-              })
+              if (typeof r === "object") {
+                return (r.roleName || r.name) === value || String(r.roleId || r.id) === String(value);
+              }
+              return r === value;
+            })
             : null;
           const roleIdVal = typeof matchedRole === "object" ? (matchedRole?.roleId || matchedRole?.id) : undefined;
           return {
@@ -1889,7 +1890,7 @@ function Field({
       let previewUrl = "";
       try {
         previewUrl = URL.createObjectURL(file);
-      } catch {}
+      } catch { }
       setLocalFile(file);
       setLocalPreviewUrl(previewUrl);
 
@@ -1911,10 +1912,10 @@ function Field({
                   }));
                 }
               }
-            } catch {}
+            } catch { }
           };
           reader.readAsArrayBuffer(file);
-        } catch {}
+        } catch { }
       }
 
       if (typeof setValues === "function") {
@@ -2239,7 +2240,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
     try {
       const raw = localStorage.getItem("pjc-credential-settings");
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch { }
     return {
       facultyEmailFormat: "{empid}@gmail.com",
       defaultPassword: "Pirnav@123",
@@ -2261,7 +2262,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
     try {
       localStorage.setItem("pjc-credential-settings", JSON.stringify(settings));
       window.dispatchEvent(new CustomEvent("credential-settings-updated", { detail: settings }));
-    } catch {}
+    } catch { }
     if (onSave) onSave(settings);
     onClose();
   };
@@ -3065,13 +3066,13 @@ function StaffList({ records = [], setRecords, forced }) {
         const updated = [...newRecordsToAdd, ...(Array.isArray(prev) ? prev : [])];
         try {
           sessionStorage.setItem(STORE, JSON.stringify(updated));
-        } catch {}
+        } catch { }
         return updated;
       });
 
       try {
         window.dispatchEvent(new CustomEvent("staff-records-updated"));
-      } catch {}
+      } catch { }
 
       setImportModalState((prev) => ({ ...prev, isOpen: false }));
       setToast(`Successfully imported ${importedCount} ${importModalState.staffType || "staff"} record(s)!`);
@@ -3781,7 +3782,7 @@ function TeachingForm({ records, setRecords, existing }) {
           try {
             const nextId = await resolveNextStaffEmployeeId("Teaching", records, selectedCampus);
             if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
-          } catch {}
+          } catch { }
         }
         if (lower.includes("email")) nextErrors.email = errMsg;
         if (lower.includes("mobile")) nextErrors.mobile = errMsg;
@@ -4113,7 +4114,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
           try {
             const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records, selectedCampus);
             if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
-          } catch {}
+          } catch { }
         }
         if (lower.includes("aadhaar") || lower.includes("pan") || lower.includes("name")) {
           if (lower.includes("aadhaar")) nextErrors.aadhaar = errMsg;
@@ -4230,7 +4231,7 @@ function SendLink({ record, update, activity }) {
     try {
       const raw = localStorage.getItem("pjc-credential-settings");
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch { }
     return {
       facultyEmailFormat: "{empid}@gmail.com",
       defaultPassword: "Pirnav@123",
@@ -4581,7 +4582,7 @@ function Pending({ records = [], setRecords, activity }) {
           if (norm.employeeId) map.set(String(norm.employeeId).trim().toLowerCase(), { ...(map.get(key) || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 });
         });
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // 3. API items
     if (Array.isArray(apiItems)) {
@@ -5503,7 +5504,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                       <strong>
                         {key === "allocatedSubjects" || key === "subjects" ? (
                           Array.isArray(record[key] || record.allocatedSubjects || record.subjects) &&
-                          (record[key] || record.allocatedSubjects || record.subjects).length > 0 ? (
+                            (record[key] || record.allocatedSubjects || record.subjects).length > 0 ? (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
                               {(record[key] || record.allocatedSubjects || record.subjects).map((sub, i) => (
                                 <span key={i} className="subject-pill" style={{ padding: "2px 8px", fontSize: "10px" }}>
@@ -5618,7 +5619,7 @@ export default function StaffManagementPage() {
             setRecords(listItems);
           }
         }
-      } catch (err) {}
+      } catch (err) { }
     }
     loadInit();
     return () => { isMounted = false; };
@@ -5650,7 +5651,7 @@ export default function StaffManagementPage() {
         try {
           const raw = localStorage.getItem(`pjc_submitted_faculty_${id}`) || (apiData?.employeeId ? localStorage.getItem(`pjc_submitted_faculty_${apiData.employeeId}`) : null);
           if (raw) localSubmitted = JSON.parse(raw);
-        } catch (e) {}
+        } catch (e) { }
 
         const finalData = localSubmitted ? { ...(apiData || {}), ...localSubmitted } : apiData;
         if (isMounted && finalData) {

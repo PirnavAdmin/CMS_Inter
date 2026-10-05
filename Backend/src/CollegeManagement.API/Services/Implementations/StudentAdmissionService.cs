@@ -186,13 +186,7 @@ namespace CollegeManagement.API.Services.Implementations
                 AcademicYear = academicYearId?.ToString()
             };
             
-            // Auto-sync sequence to actual count BEFORE generating if context is fully specified
-            if (campusId.HasValue && boardId.HasValue && academicYearId.HasValue)
-            {
-                int actualCount = await _repository.GetActualAdmissionCountAsync(campusId.Value, boardId.Value, academicYearId.Value);
-                await _repository.SyncAdmissionSequenceAsync(campusId.Value, boardId.Value, academicYearId.Value, actualCount);
-            }
-            
+            // Generate next number purely from the NumberSeriesSequences table for global continuity
             var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
             
             if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
