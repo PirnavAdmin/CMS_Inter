@@ -16,9 +16,40 @@
 [data-theme="dark"] .cms-progress { background: var(--cms-subtle); }
 .student-management-filter-row { padding:18px 26px 8px; }
 .student-management-search-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 26px 10px; }
-.student-management-search-row .cms-card-body.student-management-toolbar { display:flex; align-items:center; flex:0 1 430px; min-width:300px; padding:0; }
-.student-management-search { display:flex; align-items:center; gap:10px; width:100%; border:1px solid var(--cms-border); border-radius:10px; padding:0 13px; color:var(--cms-muted); }
-.student-management-search input { width:100%; border:0; outline:0; padding:12px 0; background:transparent; color:var(--cms-text); font:inherit; }
+.student-management-search-row .cms-card-body.student-management-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 360px;
+  min-width: 360px;
+  padding: 0;
+}
+.student-management-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 360px;
+  max-width: 360px;
+  height: 40px;
+  border: 1px solid var(--cms-border);
+  border-radius: 10px;
+  padding: 0 13px;
+  color: var(--cms-muted);
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.student-management-search input {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--cms-text);
+  font: inherit;
+}
 .student-management-filters {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -14,6 +14,7 @@ import {
   IndianRupee,
   MapPin,
   Plus,
+  RotateCcw,
   School,
   Search,
   User,
@@ -2197,16 +2198,16 @@ function StudentPhotoPreview({ src, label = "Student photo", emptyLabel = "Uploa
   );
 }
 
-function AdmissionPreview({ sections, values, errors, onEdit, feeNode, photoPreviewUrl }) {
+function AdmissionPreview({ sections, values, errors, onEdit, feeNode, photoPreviewUrl, readOnly = false }) {
   return (
     <div className="cms-admission-preview">
       {sections.map((section, index) => (
         <section key={section.title} className="cms-preview-section">
           <div className="cms-preview-head">
             <h3>{section.title}</h3>
-            <button type="button" className="cms-btn cms-btn-ghost cms-preview-edit" onClick={() => onEdit(index)}>
+            {!readOnly ? <button type="button" className="cms-btn cms-btn-ghost cms-preview-edit" onClick={() => onEdit(index)}>
               <Edit3 size={14} /> Edit
-            </button>
+            </button> : null}
           </div>
           {section.custom === "fee" ? (
             <div className="cms-preview-fee">{feeNode}</div>
@@ -2233,7 +2234,7 @@ function AdmissionPreview({ sections, values, errors, onEdit, feeNode, photoPrev
   );
 }
 
-function AdmissionFormSections({ sections, values, errors, onChange, onFileChange, onFileRemove, inputRefs, photoPreviewUrl }) {
+function AdmissionFormSections({ sections, values, errors, onChange, onFileChange, onFileRemove, inputRefs, photoPreviewUrl, readOnly = false }) {
   return (
     <div className="cms-admission-form-sections">
       {sections.map((section) => {
@@ -2261,7 +2262,7 @@ function AdmissionFormSections({ sections, values, errors, onChange, onFileChang
               {visibleFields.map((field) => (
                 <AdmissionField
                   key={field.name}
-                  field={{ ...field, required: field.required || (typeof field.requiredWhen === "function" && field.requiredWhen(values)) }}
+                  field={{ ...field, required: field.required || (typeof field.requiredWhen === "function" && field.requiredWhen(values)), disabled: readOnly || field.disabled }}
                   value={values[field.name]}
                   error={errors[field.name]}
                   onChange={onChange}
@@ -2281,6 +2282,151 @@ function AdmissionFormSections({ sections, values, errors, onChange, onFileChang
 
 function AdmissionField({ field, value, error, onChange, onFileChange, onFileRemove, inputRef, previewUrl = "" }) {
   const fieldStyle = field.gridColumn || field.gridRow ? { gridColumn: field.gridColumn, gridRow: field.gridRow, minWidth: 0 } : undefined;
+  if (field.type === "campusSearch") {
+    const normalizedOptions = (field.options || []).map((option, index) => (
+      option && typeof option === "object"
+        ? {
+          value: option.value,
+          label: option.label ?? option.value,
+          disabled: Boolean(option.disabled),
+          searchText: option.searchText ?? `${option.label ?? option.value ?? ""} ${option.code ?? ""}`.toLowerCase(),
+          key: option.key ?? `${option.value}-${index}`,
+        }
+        : {
+          value: option,
+          label: option,
+          disabled: false,
+          searchText: String(option ?? "").toLowerCase(),
+          key: `${option}-${index}`,
+        }
+    ));
+    const selectableOptions = normalizedOptions.filter((option) => !option.disabled);
+    const selectOption = (option) => {
+      if (!option || option.disabled) return;
+      onChange(field.name, option.value);
+      field.onClose?.();
+    };
+    return (
+      <div
+        className={`cms-field ${field.full ? "full" : ""} ${error ? "has-error" : ""}`}
+        style={{ ...fieldStyle, position: "relative", zIndex: field.open ? 60 : "auto" }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            field.onClose?.();
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            field.onClose?.();
+            return;
+          }
+          if (event.key === "Enter" && field.open && event.target?.id === `f-${field.name}-search`) {
+            event.preventDefault();
+            selectOption(selectableOptions[0]);
+          }
+        }}
+      >
+        <label htmlFor={`f-${field.name}`}>
+          {field.label} {field.required ? <span className="req">*</span> : null}
+        </label>
+        <div style={{ position: "relative" }}>
+          <input
+            id={`f-${field.name}`}
+            ref={inputRef}
+            value={field.displayValue ?? ""}
+            placeholder={field.placeholder || `Select ${field.label}`}
+            autoComplete="off"
+            readOnly
+            disabled={field.disabled}
+            aria-haspopup="listbox"
+            aria-expanded={Boolean(field.open)}
+            aria-controls={`f-${field.name}-listbox`}
+            onFocus={field.onOpen}
+            onClick={field.onOpen}
+          />
+          <ChevronDown
+            size={16}
+            aria-hidden="true"
+            style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "#6f7a63", pointerEvents: "none" }}
+          />
+        </div>
+        {field.open && !field.disabled ? (
+          <div
+            id={`f-${field.name}-listbox`}
+            role="listbox"
+            aria-label="Campus results"
+            style={{
+              position: "absolute",
+              zIndex: 1000,
+              left: 0,
+              right: 0,
+              top: "calc(100% + 4px)",
+              maxHeight: 218,
+              overflowY: "auto",
+              background: "#fff",
+              border: "1px solid rgba(111, 128, 50, 0.25)",
+              borderRadius: 12,
+              boxShadow: "0 14px 30px rgba(24, 36, 20, 0.14)",
+              padding: 6,
+            }}
+          >
+            <div style={{ position: "sticky", top: 0, zIndex: 1, background: "#fff", paddingBottom: 6 }}>
+              <input
+                id={`f-${field.name}-search`}
+                value={field.searchValue ?? ""}
+                placeholder="Search campus..."
+                autoComplete="off"
+                aria-label="Search campuses"
+                onMouseDown={(event) => event.stopPropagation()}
+                onChange={(event) => field.onSearchChange?.(event.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: 34,
+                  border: "1px solid rgba(111, 128, 50, 0.25)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  font: "inherit",
+                  outline: "none",
+                }}
+              />
+            </div>
+            <div>
+              {normalizedOptions.length ? (
+                normalizedOptions.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    role="option"
+                    aria-selected={String(option.value) === String(value ?? "")}
+                    disabled={option.disabled}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectOption(option)}
+                    style={{
+                      width: "100%",
+                      border: 0,
+                      background: String(option.value) === String(value ?? "") ? "rgba(111, 143, 0, 0.12)" : "transparent",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      cursor: option.disabled ? "not-allowed" : "pointer",
+                      color: option.disabled ? "#8a927f" : "#1f2b1d",
+                      font: "inherit",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))
+              ) : (
+                <div style={{ padding: "10px 12px", color: "#6f7a63" }}>No campuses found</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {error ? <span className="cms-error">{error}</span> : null}
+      </div>
+    );
+  }
+
   if (field.type === "staffSearch") {
     const displayValue = field.displayValue ?? value ?? "";
     return (
@@ -2295,6 +2441,7 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             value={displayValue}
             placeholder={field.placeholder || "Search employee by name or ID..."}
             autoComplete="off"
+            disabled={field.disabled}
             onFocus={field.onFocus}
             onBlur={field.onBlur}
             onChange={(event) => onChange(field.name, { kind: "search", value: event.target.value })}
@@ -2305,7 +2452,7 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "#6f7a63", pointerEvents: "none" }}
           />
         </div>
-        {field.open ? (
+        {field.open && !field.disabled ? (
           <div
             role="listbox"
             aria-label="Admitted By employee results"
@@ -2471,9 +2618,10 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             type="file"
             className="cms-admission-photo-input"
             accept="image/*"
+            disabled={field.disabled}
             onChange={(event) => onFileChange(field, event.target.files?.[0] || null)}
           />
-          {fileName || hasPhoto ? (
+          {(fileName || hasPhoto) && !field.disabled ? (
             <button type="button" className="cms-file-remove" onClick={() => onFileRemove(field.name)} aria-label={`Remove ${field.label}`}>
               <X size={14} />
             </button>
@@ -2536,7 +2684,7 @@ function FacilityFeesTable({ feeItems }) {
   );
 }
 
-function FeeItemsTable({ feeItems, errors, onChange }) {
+function FeeItemsTable({ feeItems, errors, onChange, readOnly = false }) {
   const updateItem = (id, patch) => {
     onChange("feeItems", feeItems.map((item) => {
       if (item.id !== id) return item;
@@ -2562,7 +2710,7 @@ function FeeItemsTable({ feeItems, errors, onChange }) {
                 <input
                   type="checkbox"
                   checked={item.selected}
-                  disabled={item.required}
+                  disabled={item.required || readOnly}
                   aria-label={`Apply ${item.type}`}
                   onChange={(event) => updateItem(item.id, { selected: event.target.checked })}
                 />
@@ -2588,14 +2736,14 @@ function FeeItemsTable({ feeItems, errors, onChange }) {
   );
 }
 
-function ConcessionPanel({ fee, values, errors, onChange, scholarships }) {
+function ConcessionPanel({ fee, values, errors, onChange, scholarships, readOnly = false }) {
   const scholarshipOptions = scholarships.map((item) => ({ value: item.id, label: item.name }));
   return (
     <section className="cms-fee-block">
       <h3>Scholarship / Concession</h3>
       <div className="cms-form-grid cols-3">
         <Field
-          field={{ name: "scholarshipId", label: "Scholarship", type: "select", options: scholarshipOptions }}
+          field={{ name: "scholarshipId", label: "Scholarship", type: "select", options: scholarshipOptions, disabled: readOnly }}
           value={values.scholarshipId}
           error={errors.scholarshipId}
           onChange={onChange}
@@ -2681,7 +2829,7 @@ function InstallmentScheduleTable({ schedule, editable, onChange }) {
   );
 }
 
-function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, onPlanChange, onInstallmentCountChange, scholarships = [], feeStructureLoading, feeStructureError }) {
+function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, onPlanChange, onInstallmentCountChange, scholarships = [], feeStructureLoading, feeStructureError, readOnly = false }) {
   const hasStructure = fee.feeItems.length > 0;
   const isInstallment = values.paymentPlan === "Installment Payment";
   const schedule = fee.schedule;
@@ -2710,12 +2858,12 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
         <>
           <section className="cms-fee-block">
             <h3>Applicable Fee Structure</h3>
-            <FeeItemsTable feeItems={fee.feeItems} errors={errors} onChange={onChange} />
+            <FeeItemsTable feeItems={fee.feeItems} errors={errors} onChange={onChange} readOnly={readOnly} />
           </section>
 
           <FacilityFeesTable feeItems={fee.facilityFeeItems} />
 
-          <ConcessionPanel fee={fee} values={values} errors={errors} onChange={onChange} scholarships={scholarships} />
+          <ConcessionPanel fee={fee} values={values} errors={errors} onChange={onChange} scholarships={scholarships} readOnly={readOnly} />
 
           <section className="cms-fee-block">
             <h3>Course Fee Payment Plan</h3>
@@ -2725,6 +2873,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
                   type="button"
                   key={plan}
                   className={`cms-fee-plan ${values.paymentPlan === plan ? "is-active" : ""}`}
+                  disabled={readOnly}
                   onClick={() => onPlanChange(plan)}
                   aria-pressed={values.paymentPlan === plan}
                 >
@@ -2748,13 +2897,14 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
                   <select
                     id="f-installmentCount"
                     value={String(values.installmentCount || DEFAULT_INSTALLMENT_COUNT)}
+                    disabled={readOnly}
                     onChange={(event) => onInstallmentCountChange(Number(event.target.value))}
                   >
                     {INSTALLMENT_COUNTS.map((count) => <option key={count} value={String(count)}>{count} Course Fee Schedules</option>)}
                   </select>
                 </div>
               </div>
-              <InstallmentScheduleTable schedule={schedule} editable onChange={onInstallmentChange} />
+              <InstallmentScheduleTable schedule={schedule} editable={!readOnly} onChange={onInstallmentChange} />
               {errors.installments ? <span className="cms-error">{errors.installments}</span> : null}
             </section>
           ) : (
@@ -2900,7 +3050,11 @@ export default function AdmissionPage() {
   const [admittedByStaffLoaded, setAdmittedByStaffLoaded] = useState(false);
   const [admittedByStaffError, setAdmittedByStaffError] = useState("");
   const [admittedByDropdownOpen, setAdmittedByDropdownOpen] = useState(false);
+  const [campusDropdownOpen, setCampusDropdownOpen] = useState(false);
+  const [campusSearch, setCampusSearch] = useState("");
   const [editingAdmissionId, setEditingAdmissionId] = useState("");
+  const [readOnlyAdmission, setReadOnlyAdmission] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [feeSelection, setFeeSelection] = useState(initialDraft.feeSelection);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
@@ -2988,10 +3142,20 @@ export default function AdmissionPage() {
         return {
           value: String(value),
           label: code ? `${name || code} (${code})` : name || String(value),
+          searchText: `${name} ${code} ${value}`.toLowerCase(),
         };
       })
       .filter(Boolean)
   ), [campuses]);
+  const selectedCampusLabel = useMemo(() => (
+    campusOptions.find((option) => String(option.value) === String(values.campus ?? ""))?.label
+    || (!isPlaceholderOption(values.campus) ? String(values.campus || "") : "")
+  ), [campusOptions, values.campus]);
+  const filteredCampusOptions = useMemo(() => {
+    const query = String(campusSearch || "").trim().toLowerCase();
+    if (!query) return campusOptions;
+    return campusOptions.filter((option) => option.searchText.includes(query));
+  }, [campusOptions, campusSearch]);
   const selectedCampusValue = selectedCampusId || selectedCampus?.campusId || selectedCampus?.id || "";
   const admissionListParams = useMemo(() => (
     selectedCampusValue ? { campusId: selectedCampusValue } : {}
@@ -3313,7 +3477,21 @@ export default function AdmissionPage() {
     if (field.name === "campus") {
       return {
         ...field,
-        options: campusOptions.length ? campusOptions : [{ value: "__no_campuses", label: "No campuses available", disabled: true }],
+        type: "campusSearch",
+        displayValue: selectedCampusLabel,
+        searchValue: campusSearch,
+        options: campusOptions.length ? filteredCampusOptions : [{ value: "__no_campuses", label: "No campuses available", disabled: true }],
+        placeholder: "Select Campus",
+        open: campusDropdownOpen,
+        onOpen: () => {
+          setCampusSearch("");
+          setCampusDropdownOpen(true);
+        },
+        onClose: () => setCampusDropdownOpen(false),
+        onSearchChange: (nextSearch) => {
+          setCampusSearch(nextSearch);
+          setCampusDropdownOpen(true);
+        },
       };
     }
     if (field.name === "board" && boardOptions?.length) return { ...field, options: boardOptions };
@@ -4871,7 +5049,9 @@ export default function AdmissionPage() {
     suppressPersistRef.current = true;
     clearAdmissionDraft();
     committedAdmissionRef.current = null;
+    setReadOnlyAdmission(false);
     setValues({});
+    setPhotoPreviewUrl("");
     setFeeSelection([]);
     feeSelectionInitializedRef.current = false;
     Object.values(fileInputRefs.current).forEach((input) => {
@@ -4879,6 +5059,47 @@ export default function AdmissionPage() {
     });
     setStep(0);
     window.setTimeout(() => { suppressPersistRef.current = false; }, 0);
+  };
+
+  const formHasEnteredData = () => {
+    const serializableValues = toSerializableAdmissionValues(values);
+    return Object.entries(serializableValues).some(([key, value]) => {
+      if (["campus", "board", "year", "admissionDate", "status"].includes(key)) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      if (value && typeof value === "object") return Object.keys(value).length > 0;
+      return String(value ?? "").trim() !== "";
+    }) || feeSelection.length > 0;
+  };
+
+  const clearAdmissionForm = () => {
+    suppressPersistRef.current = true;
+    clearAdmissionDraft();
+    committedAdmissionRef.current = null;
+    setEditingAdmissionId("");
+    setReadOnlyAdmission(false);
+    setValues(newAdmissionValues(applyNewAdmissionAcademicDefaults({})));
+    setPhotoPreviewUrl("");
+    setErrors({});
+    setAdmissionNumberError("");
+    setAdmittedByDropdownOpen(false);
+    setFeeSelection([]);
+    setFeeStructureError("");
+    feeSelectionInitializedRef.current = false;
+    Object.values(fileInputRefs.current).forEach((input) => {
+      if (input) input.value = "";
+    });
+    setStep(0);
+    setClearConfirmOpen(false);
+    window.setTimeout(() => { suppressPersistRef.current = false; }, 0);
+  };
+
+  const requestClearAdmissionForm = () => {
+    if (readOnlyAdmission) return;
+    if (formHasEnteredData()) {
+      setClearConfirmOpen(true);
+      return;
+    }
+    clearAdmissionForm();
   };
 
   const backOrCancel = () => {
@@ -4899,10 +5120,11 @@ export default function AdmissionPage() {
     setStep(nextStep);
   };
 
-  const openAdmissionForm = ({ formValues = {}, targetStep = 0, selection = [], admissionId = "" } = {}) => {
+  const openAdmissionForm = ({ formValues = {}, targetStep = 0, selection = [], admissionId = "", readOnly = false } = {}) => {
     suppressPersistRef.current = false;
     setAdmissionNumberError("");
     setEditingAdmissionId(admissionId ? String(admissionId) : "");
+    setReadOnlyAdmission(Boolean(readOnly));
     committedAdmissionRef.current = admissionId
       ? { admissionId: String(admissionId), admissionNo: formValues.admissionNo || "" }
       : null;
@@ -4923,6 +5145,7 @@ export default function AdmissionPage() {
       formValues: draftValues,
       targetStep: draft.step || 0,
       selection: draft.feeSelection || [],
+      readOnly: false,
     });
   };
 
@@ -4993,11 +5216,14 @@ export default function AdmissionPage() {
           }
         }
       }
+      const loadedStatus = normalizeAdmissionStatus(detailRow.status || record.status);
+      const isLoadedApprovedAdmission = loadedStatus === "Approved";
       openAdmissionForm({
         formValues,
-        targetStep,
+        targetStep: isLoadedApprovedAdmission ? PREVIEW_STEP_INDEX : targetStep,
         selection: persistedSelection.length ? persistedSelection : null,
         admissionId,
+        readOnly: isLoadedApprovedAdmission,
       });
     } catch (err) {
       setToast(getApiErrorMessage(err));
@@ -5008,6 +5234,7 @@ export default function AdmissionPage() {
 
   const returnToAdmissions = () => {
     if (!editingAdmissionId) persistAdmissionDraft({ currentStep: step, formData: values, feeSelection });
+    setReadOnlyAdmission(false);
     setViewMode("list");
     setPage(1);
     refreshAdmissions();
@@ -5263,6 +5490,9 @@ export default function AdmissionPage() {
       : "";
     let submitValues = normalizeAdmissionMobileState({
       ...values,
+      campus: values.campus || selectedCampusValue,
+      board: values.board || selectedContextBoardValue,
+      year: values.year || selectedContextYearValue,
       studentMobileNumber: studentMobileValue(values) || visibleMobile,
     });
 
@@ -5457,7 +5687,9 @@ export default function AdmissionPage() {
               <tbody>
                 {listLoading ? (
                   Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
-                ) : pagedAdmissions.length ? pagedAdmissions.map((row) => (
+                ) : pagedAdmissions.length ? pagedAdmissions.map((row) => {
+                  const isApprovedAdmission = normalizeAdmissionStatus(row.status) === "Approved";
+                  return (
                   <tr key={`${row.source}-${row.id}`}>
                     <td className="cms-strong">{row.admissionNo}</td>
                     <td>{row.studentName}</td>
@@ -5469,20 +5701,20 @@ export default function AdmissionPage() {
                     <td><span className={`cms-badge ${admissionStatusClass(row.status)}`}>{row.status}</span></td>
                     <td>
                       <div className="cms-actions cms-admission-actions">
-                        <button type="button" className="cms-action-btn view" title="View / edit admission" aria-label="View or edit admission" disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row)}>
+                        <button type="button" className="cms-action-btn view" title={isApprovedAdmission ? "View admission" : "View / edit admission"} aria-label={isApprovedAdmission ? "View admission" : "View or edit admission"} disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row)}>
                           <Eye size={15} />
                         </button>
-                        {row.status === "Pending" ? (
+                        {!isApprovedAdmission && row.status === "Pending" ? (
                           <button type="button" className="cms-action-btn edit" title="Verify admission" aria-label="Verify admission" disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row, allSteps.length - 1)}>
                             <BadgeCheck size={15} />
                           </button>
                         ) : null}
-                        {row.status === "Verified" ? (
+                        {!isApprovedAdmission && row.status === "Verified" ? (
                           <button type="button" className="cms-action-btn edit" title="Approve admission" aria-label="Approve admission" disabled={actionBusy === `Approved-${row.id}`} onClick={() => setApproveTarget(row)}>
                             <Check size={15} />
                           </button>
                         ) : null}
-                        {row.status === "Pending" || row.status === "Verified" ? (
+                        {!isApprovedAdmission && (row.status === "Pending" || row.status === "Verified") ? (
                           <button type="button" className="cms-action-btn danger" title="Reject admission" aria-label="Reject admission" disabled={actionBusy === `Rejected-${row.id}`} onClick={() => setRejectTarget(row)}>
                             <X size={15} />
                           </button>
@@ -5490,7 +5722,8 @@ export default function AdmissionPage() {
                       </div>
                     </td>
                   </tr>
-                )) : (
+                );
+                }) : (
                   <tr><td colSpan={9}><div className="cms-empty">No admissions found.</div></td></tr>
                 )}
               </tbody>
@@ -5586,6 +5819,17 @@ export default function AdmissionPage() {
           <button type="button" className="cms-btn cms-btn-ghost" onClick={returnToAdmissions}>
             Back to Admissions
           </button>
+          {!readOnlyAdmission ? (
+            <button
+              type="button"
+              className="cms-admission-clear-btn"
+              title="Clear Form"
+              aria-label="Clear Form"
+              onClick={requestClearAdmissionForm}
+            >
+              <RotateCcw size={15} />
+            </button>
+          ) : null}
         </div>
       )}
     >
@@ -5602,6 +5846,7 @@ export default function AdmissionPage() {
               onEdit={editPreviewStep}
               feeNode={<FeePreview fee={fee} values={values} />}
               photoPreviewUrl={photoPreviewUrl}
+              readOnly={readOnlyAdmission}
             />
           ) : isFeeStep ? (
             <div className="cms-admission-form-sections cms-admission-fee-form">
@@ -5623,6 +5868,7 @@ export default function AdmissionPage() {
                     scholarships={scholarships}
                     feeStructureLoading={feeStructureLoading}
                     feeStructureError={feeStructureError}
+                    readOnly={readOnlyAdmission}
                   />
                 </div>
               </section>
@@ -5637,6 +5883,7 @@ export default function AdmissionPage() {
               onFileRemove={removeFileValue}
               inputRefs={fileInputRefs}
               photoPreviewUrl={photoPreviewUrl}
+              readOnly={readOnlyAdmission}
             />
           ) : (
             <div
@@ -5646,7 +5893,7 @@ export default function AdmissionPage() {
               {visibleCurrentFields.map((f) => (
                 <AdmissionField
                   key={f.name}
-                  field={{ ...f, required: f.required || (typeof f.requiredWhen === "function" && f.requiredWhen(values)) }}
+                  field={{ ...f, required: f.required || (typeof f.requiredWhen === "function" && f.requiredWhen(values)), disabled: readOnlyAdmission || f.disabled }}
                   value={values[f.name]}
                   error={errors[f.name]}
                   onChange={setValue}
@@ -5668,11 +5915,11 @@ export default function AdmissionPage() {
               <Download size={14} /> Download
             </button>
           ) : null}
-          {!isPreview ? (
+          {!readOnlyAdmission && !isPreview ? (
             <button className="cms-btn cms-btn-primary" onClick={next} disabled={admissionNumberLoading || (!editingAdmissionId && (!values.admissionNo || admissionNumberError))}>
               {admissionNumberLoading ? "Generating Number..." : step === steps.length - 1 ? "Preview" : "Save & Continue"}
             </button>
-          ) : (
+          ) : !readOnlyAdmission ? (
             <button
               className="cms-btn cms-btn-primary"
               onClick={canVerifyPreviewAdmission ? () => verifyAdmission(previewVerifyRecord) : submit}
@@ -5686,9 +5933,25 @@ export default function AdmissionPage() {
                 ? (actionBusy === `Verified-${editingAdmissionId}` ? "Verifying..." : "Verify Admission")
                 : (saving ? "Submitting..." : "Submit Admission")}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
+
+      {clearConfirmOpen ? (
+        <Modal
+          title="Clear Form"
+          size="sm"
+          onClose={() => setClearConfirmOpen(false)}
+          footer={(
+            <>
+              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setClearConfirmOpen(false)}>Cancel</button>
+              <button type="button" className="cms-btn cms-btn-danger" onClick={clearAdmissionForm}>Clear</button>
+            </>
+          )}
+        >
+          <p style={{ margin: 0, color: "var(--cms-muted)" }}>Clear all entered information?</p>
+        </Modal>
+      ) : null}
 
       <Toast message={toast} onClose={() => setToast("")} />
     </DashboardLayout>

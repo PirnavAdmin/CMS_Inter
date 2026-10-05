@@ -2704,7 +2704,7 @@ function SalaryStructureDetailsScreen({ id, store, navigate, setModal, setToast 
   );
 }
 
-function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selectedId, onSelect }) {
+function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selectedId, onSelect, error }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -2727,7 +2727,7 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
     <div className="salary-form-group">
       <label>{label}</label>
       <div
-        className="salary-search-picker"
+        className={`salary-search-picker ${error ? "has-error" : ""}`}
         onBlur={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget)) {
             setOpen(false);
@@ -2748,6 +2748,8 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
               setQuery(e.target.value);
               setOpen(true);
             }}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? "assign-staff-error" : undefined}
           />
         </div>
         {open ? (
@@ -2778,6 +2780,7 @@ function SearchableStaffPicker({ label = "Select Staff *", staffList = [], selec
           </div>
         ) : null}
       </div>
+      {error ? <span className="salary-field-error" id="assign-staff-error" role="alert">{error}</span> : null}
     </div>
   );
 }
@@ -2826,6 +2829,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
   const [ifscCode, setIfscCode] = useState(existingAssignment?.ifscCode || "");
   const [panNumber, setPanNumber] = useState(existingAssignment?.panNumber || "");
   const [uanNumber, setUanNumber] = useState(existingAssignment?.uanNumber || "");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     if (!existingAssignment) return;
@@ -2850,8 +2854,30 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
 
   const handleSaveAssignment = async (e) => {
     e.preventDefault();
-    if (!chosenStaff || !chosenStruct || !paymentMode) {
-      setToast("Select a staff member, salary structure, and payment mode.");
+    const errors = {};
+    const cleanBankName = bankName.trim();
+    const cleanAccountNumber = accountNumber.trim();
+    const cleanIfsc = ifscCode.trim().toUpperCase();
+    const cleanPan = panNumber.trim().toUpperCase();
+    const cleanUan = uanNumber.trim();
+
+    if (!chosenStaff) errors.staff = `Select a ${assignmentStaffType.toLowerCase()} staff member.`;
+    if (!chosenStruct) errors.structure = "Select a salary structure.";
+    if (!paymentMode) errors.paymentMode = "Select a payment mode.";
+    if (cleanBankName && !/^[A-Za-z][A-Za-z .&'-]{1,99}$/.test(cleanBankName)) errors.bankName = "Enter a valid bank name.";
+    if (cleanAccountNumber && !/^\d{6,18}$/.test(cleanAccountNumber)) errors.accountNumber = "Account number must contain 6 to 18 digits.";
+    if (cleanIfsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(cleanIfsc)) errors.ifscCode = "Enter a valid 11-character IFSC code.";
+    if (cleanPan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(cleanPan)) errors.panNumber = "Enter a valid PAN (for example, ABCDE1234F).";
+    if (cleanUan && !/^\d{12}$/.test(cleanUan)) errors.uanNumber = "UAN / PF number must contain 12 digits.";
+
+    // Bank details are optional as a group; once any is supplied, require a complete set.
+    if (cleanBankName || cleanAccountNumber || cleanIfsc) {
+      if (!cleanBankName) errors.bankName = "Enter the bank name when providing bank details.";
+      if (!cleanAccountNumber) errors.accountNumber = "Enter the account number when providing bank details.";
+      if (!cleanIfsc) errors.ifscCode = "Enter the IFSC code when providing bank details.";
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
       return;
     }
 
@@ -2952,12 +2978,13 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
                   label={`Select ${assignmentStaffType} Staff *`}
                   staffList={staffList}
                   selectedId={selectedStaffId}
-                  onSelect={setSelectedStaffId}
+                  onSelect={(value) => { setSelectedStaffId(value); setFieldErrors((prev) => ({ ...prev, staff: "" })); }}
+                  error={fieldErrors.staff}
                 />
 
                 <div className="salary-form-group">
                   <label>Select Salary Structure *</label>
-                  <select required value={selectedStructId} onChange={(e) => setSelectedStructId(e.target.value)}>
+                  <select required value={selectedStructId} aria-invalid={Boolean(fieldErrors.structure)} onChange={(e) => { setSelectedStructId(e.target.value); setFieldErrors((prev) => ({ ...prev, structure: "" })); }}>
                     <option value="">Select salary structure</option>
                     {store.structures.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -2965,39 +2992,46 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
                       </option>
                     ))}
                   </select>
+                  {fieldErrors.structure ? <span className="salary-field-error" role="alert">{fieldErrors.structure}</span> : null}
                 </div>
               </div>
 
               <div className="salary-form-section-title">Step 2 — Bank & Payment Details</div>
               <div className="salary-form-grid-3">
                 <div className="salary-form-group">
-                  <label>Payment Mode</label>
-                  <select required value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)}>
+                  <label>Payment Mode *</label>
+                  <select required value={paymentMode} aria-invalid={Boolean(fieldErrors.paymentMode)} onChange={(e) => { setPaymentMode(e.target.value); setFieldErrors((prev) => ({ ...prev, paymentMode: "" })); }}>
                     <option value="">Select payment mode</option>
                     <option value="Bank Transfer">Bank Transfer</option>
                     <option value="Cheque">Cheque</option>
                     <option value="Cash">Cash</option>
                   </select>
+                  {fieldErrors.paymentMode ? <span className="salary-field-error" role="alert">{fieldErrors.paymentMode}</span> : null}
                 </div>
                 <div className="salary-form-group">
                   <label>Bank Name</label>
-                  <input type="text" placeholder="Enter bank name" value={bankName} onChange={(e) => setBankName(e.target.value)} />
+                  <input type="text" placeholder="Enter bank name" value={bankName} aria-invalid={Boolean(fieldErrors.bankName)} onChange={(e) => { setBankName(e.target.value); setFieldErrors((prev) => ({ ...prev, bankName: "" })); }} />
+                  {fieldErrors.bankName ? <span className="salary-field-error" role="alert">{fieldErrors.bankName}</span> : null}
                 </div>
                 <div className="salary-form-group">
                   <label>Account Number</label>
-                  <input type="text" placeholder="Enter account number" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} />
+                  <input type="text" inputMode="numeric" placeholder="Enter account number" value={accountNumber} aria-invalid={Boolean(fieldErrors.accountNumber)} onChange={(e) => { setAccountNumber(e.target.value); setFieldErrors((prev) => ({ ...prev, accountNumber: "" })); }} />
+                  {fieldErrors.accountNumber ? <span className="salary-field-error" role="alert">{fieldErrors.accountNumber}</span> : null}
                 </div>
                 <div className="salary-form-group">
                   <label>IFSC Code</label>
-                  <input type="text" placeholder="Enter IFSC code" value={ifscCode} onChange={(e) => setIfscCode(e.target.value)} />
+                  <input type="text" maxLength={11} placeholder="Enter IFSC code" value={ifscCode} aria-invalid={Boolean(fieldErrors.ifscCode)} onChange={(e) => { setIfscCode(e.target.value.toUpperCase()); setFieldErrors((prev) => ({ ...prev, ifscCode: "" })); }} />
+                  {fieldErrors.ifscCode ? <span className="salary-field-error" role="alert">{fieldErrors.ifscCode}</span> : null}
                 </div>
                 <div className="salary-form-group">
                   <label>PAN Number</label>
-                  <input type="text" placeholder="Enter PAN number" value={panNumber} onChange={(e) => setPanNumber(e.target.value)} />
+                  <input type="text" maxLength={10} placeholder="Enter PAN number" value={panNumber} aria-invalid={Boolean(fieldErrors.panNumber)} onChange={(e) => { setPanNumber(e.target.value.toUpperCase()); setFieldErrors((prev) => ({ ...prev, panNumber: "" })); }} />
+                  {fieldErrors.panNumber ? <span className="salary-field-error" role="alert">{fieldErrors.panNumber}</span> : null}
                 </div>
                 <div className="salary-form-group">
                   <label>UAN / PF Number</label>
-                  <input type="text" placeholder="Enter UAN / PF number" value={uanNumber} onChange={(e) => setUanNumber(e.target.value)} />
+                  <input type="text" inputMode="numeric" maxLength={12} placeholder="Enter UAN / PF number" value={uanNumber} aria-invalid={Boolean(fieldErrors.uanNumber)} onChange={(e) => { setUanNumber(e.target.value); setFieldErrors((prev) => ({ ...prev, uanNumber: "" })); }} />
+                  {fieldErrors.uanNumber ? <span className="salary-field-error" role="alert">{fieldErrors.uanNumber}</span> : null}
                 </div>
               </div>
 

@@ -366,6 +366,18 @@
   min-width: 0;
 }
 
+.salary-field-error {
+  color: #b42318;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.salary-form-group :is(input, select, textarea)[aria-invalid="true"],
+.salary-search-picker.has-error .salary-search-input-wrap input {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.12) !important;
+}
+
 .salary-search-input-wrap {
   position: relative;
   display: block;

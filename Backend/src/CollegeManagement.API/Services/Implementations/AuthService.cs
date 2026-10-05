@@ -214,6 +214,19 @@ namespace CollegeManagement.API.Services.Implementations
                 user.LastLogin = now;
 
                 // Issue standardized JWT via Phase 6A helper
+                
+                // Issue standardized JWT via Phase 6A helper
+                if (user.StaffId.HasValue && user.StaffId.Value > 0)
+                {
+                    var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        "SELECT Designation, EmployeeId FROM Staffs WHERE Id = @Id", 
+                        new { Id = user.StaffId.Value });
+                    if (staffInfo != null)
+                    {
+                        user.Designation = staffInfo.Designation;
+                        user.EmployeeId = staffInfo.EmployeeId;
+                    }
+                }
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
 
                 return new AuthResult
@@ -227,6 +240,8 @@ namespace CollegeManagement.API.Services.Implementations
                     StaffId = user.StaffId,
                     StudentId = user.StudentId,
                     AdminId = user.AdminId,
+                    Designation = user.Designation,
+                    EmployeeId = user.EmployeeId,
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty
                 };
             }
@@ -1082,7 +1097,21 @@ namespace CollegeManagement.API.Services.Implementations
                 user.Role = await _userRepository.GetRoleByIdAsync(user.RoleId, connection) ?? null!;
             }
 
+            
             var canonicalRoleName = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? "User";
+            
+            if (user.StaffId.HasValue && user.StaffId.Value > 0)
+            {
+                var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                    "SELECT Designation, EmployeeId FROM Staffs WHERE Id = @Id", 
+                    new { Id = user.StaffId.Value });
+                if (staffInfo != null)
+                {
+                    user.Designation = staffInfo.Designation;
+                    user.EmployeeId = staffInfo.EmployeeId;
+                }
+            }
+
             var newToken = await _jwtTokenHelper.GenerateTokenAsync(user);
 
             _logger.LogInformation("Successfully refreshed JWT access token for UserId {UserId} ({Email})", user.UserId, user.Email);
@@ -1094,7 +1123,9 @@ namespace CollegeManagement.API.Services.Implementations
                 AccessToken = newToken,
                 UserId = user.UserId,
                 Name = user.FullName,
-                Role = canonicalRoleName
+                Role = canonicalRoleName,
+                Designation = user.Designation,
+                EmployeeId = user.EmployeeId
             };
         }
     }

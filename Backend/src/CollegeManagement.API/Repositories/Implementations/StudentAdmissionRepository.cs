@@ -521,12 +521,20 @@ namespace CollegeManagement.API.Repositories.Implementations
                 result.BedId = request.BedId ?? result.BedId;
                 result.HostelBed = hostelBed ?? result.HostelBed;
                 result.HallTicketNumber = request.HallTicketNumber ?? result.HallTicketNumber;
-            }
-
-            if (result != null)
-            {
                 result.FeeStructureId ??= request.FeeStructureId;
                 result.PaymentPlan ??= request.PaymentPlan;
+
+                // Sync changes to linked Students and Users records if this admission has already been approved/created
+                await SyncApprovedStudentFromAdmissionAsync(
+                    connection,
+                    admissionId,
+                    request,
+                    studentPhoto,
+                    busRoute,
+                    pickupPoint,
+                    hostelBlock,
+                    hostelRoom,
+                    hostelBed);
             }
 
             return result;
@@ -801,6 +809,189 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             return totalAllocated;
+        }
+
+        // =========================================================
+        // SYNC APPROVED STUDENT & USER FROM ADMISSION
+        // =========================================================
+        private async Task SyncApprovedStudentFromAdmissionAsync(
+            IDbConnection connection,
+            int admissionId,
+            UpdateStudentAdmissionRequest request,
+            string? studentPhoto,
+            string? busRoute,
+            string? pickupPoint,
+            string? hostelBlock,
+            string? hostelRoom,
+            string? hostelBed)
+        {
+            // 1. Check if an approved/created student exists for this admission
+            var student = await connection.QueryFirstOrDefaultAsync<Student>(
+                "SELECT StudentId, StudentName, Email FROM Students WHERE AdmissionId = @AdmissionId LIMIT 1;",
+                new { AdmissionId = admissionId });
+
+            if (student == null)
+            {
+                return;
+            }
+
+            // 2. Build StudentName from FirstName and LastName
+            string? studentName = null;
+            if (!string.IsNullOrWhiteSpace(request.FirstName))
+            {
+                studentName = $"{request.FirstName.Trim()} {request.LastName?.Trim()}".Trim();
+            }
+
+            // 3. Build Address from HouseDoorNumber and StreetVillage
+            string? address = null;
+            if (!string.IsNullOrWhiteSpace(request.HouseDoorNumber) || !string.IsNullOrWhiteSpace(request.StreetVillage))
+            {
+                address = string.Join(", ", new[] { request.HouseDoorNumber?.Trim(), request.StreetVillage?.Trim() }
+                    .Where(s => !string.IsNullOrWhiteSpace(s)));
+            }
+
+            // 4. Update Students table
+            const string updateStudentSql = @"
+                UPDATE Students
+                SET
+                    StudentName = COALESCE(@StudentName, StudentName),
+                    Photo = COALESCE(@Photo, Photo),
+                    Gender = COALESCE(@Gender, Gender),
+                    DateOfBirth = COALESCE(@DateOfBirth, DateOfBirth),
+                    BloodGroup = COALESCE(@BloodGroup, BloodGroup),
+                    Email = COALESCE(@Email, Email),
+                    MobileNumber = COALESCE(@MobileNumber, MobileNumber),
+                    AadhaarNumber = COALESCE(@AadhaarNumber, AadhaarNumber),
+                    Nationality = COALESCE(@Nationality, Nationality),
+                    Religion = COALESCE(@Religion, Religion),
+                    Category = COALESCE(@Category, Category),
+                    Address = COALESCE(@Address, Address),
+                    City = COALESCE(@City, City),
+                    District = COALESCE(@District, District),
+                    State = COALESCE(@State, State),
+                    Pincode = COALESCE(@Pincode, Pincode),
+                    BoardId = COALESCE(@BoardId, BoardId),
+                    AcademicYearId = COALESCE(@AcademicYearId, AcademicYearId),
+                    AcademicLevelId = COALESCE(@AcademicLevelId, AcademicLevelId),
+                    GroupId = COALESCE(@GroupId, GroupId),
+                    ProgramId = COALESCE(@ProgramId, ProgramId),
+                    Medium = COALESCE(@Medium, Medium),
+                    SecondLanguage = COALESCE(@SecondLanguage, SecondLanguage),
+                    PreviousSchool = COALESCE(@PreviousSchool, PreviousSchool),
+                    PreviousBoard = COALESCE(@PreviousBoard, PreviousBoard),
+                    PreviousYearOfPassing = COALESCE(@PreviousYearOfPassing, PreviousYearOfPassing),
+                    PreviousPercentage = COALESCE(@PreviousPercentage, PreviousPercentage),
+                    PreviousHallTicketNumber = COALESCE(@HallTicketNumber, PreviousHallTicketNumber),
+                    FatherName = COALESCE(@FatherName, FatherName),
+                    FatherOccupation = COALESCE(@FatherOccupation, FatherOccupation),
+                    FatherMobile = COALESCE(@FatherMobile, FatherMobile),
+                    MotherName = COALESCE(@MotherName, MotherName),
+                    MotherOccupation = COALESCE(@MotherOccupation, MotherOccupation),
+                    MotherMobile = COALESCE(@MotherMobile, MotherMobile),
+                    GuardianName = COALESCE(@GuardianName, GuardianName),
+                    GuardianMobile = COALESCE(@GuardianMobile, GuardianMobile),
+                    ParentGuardianEmail = COALESCE(@ParentGuardianEmail, ParentGuardianEmail),
+                    AnnualIncome = COALESCE(@AnnualIncome, AnnualIncome),
+                    StudentType = COALESCE(@StudentType, StudentType),
+                    TransportRequired = COALESCE(@TransportRequired, TransportRequired),
+                    BusType = COALESCE(@BusType, BusType),
+                    RouteId = COALESCE(@RouteId, RouteId),
+                    BusRoute = COALESCE(@BusRoute, BusRoute),
+                    PickupPointId = COALESCE(@PickupPointId, PickupPointId),
+                    PickupPoint = COALESCE(@PickupPoint, PickupPoint),
+                    HostelId = COALESCE(@HostelId, HostelId),
+                    HostelBlock = COALESCE(@HostelBlock, HostelBlock),
+                    RoomId = COALESCE(@RoomId, RoomId),
+                    HostelRoom = COALESCE(@HostelRoom, HostelRoom),
+                    BedId = COALESCE(@BedId, BedId),
+                    HostelBed = COALESCE(@HostelBed, HostelBed),
+                    HallTicketNumber = COALESCE(@HallTicketNumber, HallTicketNumber),
+                    CampusId = COALESCE(@CampusId, CampusId),
+                    FeeStructureId = COALESCE(@FeeStructureId, FeeStructureId),
+                    PaymentPlan = COALESCE(@PaymentPlan, PaymentPlan),
+                    ScholarshipStatus = COALESCE(@ScholarshipStatus, ScholarshipStatus),
+                    UpdatedAt = CURRENT_TIMESTAMP(6)
+                WHERE StudentId = @StudentId;";
+
+            await connection.ExecuteAsync(updateStudentSql, new
+            {
+                StudentId = student.StudentId,
+                StudentName = studentName,
+                Photo = studentPhoto,
+                Gender = request.Gender,
+                DateOfBirth = request.DateOfBirth,
+                BloodGroup = request.BloodGroup,
+                Email = request.StudentEmail,
+                MobileNumber = request.StudentMobileNumber,
+                AadhaarNumber = request.AadhaarNumber,
+                Nationality = request.Nationality,
+                Religion = request.Religion,
+                Category = request.Category,
+                Address = address,
+                City = request.City,
+                District = request.District,
+                State = request.State,
+                Pincode = request.Pincode,
+                BoardId = request.BoardId,
+                AcademicYearId = request.AcademicYearId,
+                AcademicLevelId = request.AcademicLevelId,
+                GroupId = request.GroupId,
+                ProgramId = request.ProgramId,
+                Medium = request.Medium,
+                SecondLanguage = request.SecondLanguage,
+                PreviousSchool = request.PreviousSchool,
+                PreviousBoard = request.PreviousBoard,
+                PreviousYearOfPassing = request.PreviousYearOfPassing,
+                PreviousPercentage = request.PreviousPercentage,
+                HallTicketNumber = request.HallTicketNumber,
+                FatherName = request.FatherName,
+                FatherOccupation = request.FatherOccupation,
+                FatherMobile = request.FatherMobile,
+                MotherName = request.MotherName,
+                MotherOccupation = request.MotherOccupation,
+                MotherMobile = request.MotherMobile,
+                GuardianName = request.GuardianName,
+                GuardianMobile = request.GuardianMobile,
+                ParentGuardianEmail = request.ParentGuardianEmail,
+                AnnualIncome = request.AnnualIncome,
+                StudentType = request.StudentType,
+                TransportRequired = request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
+                BusType = request.BusType,
+                RouteId = request.RouteId,
+                BusRoute = busRoute,
+                PickupPointId = request.PickupPointId,
+                PickupPoint = pickupPoint,
+                HostelId = request.HostelId,
+                HostelBlock = hostelBlock,
+                RoomId = request.RoomId,
+                HostelRoom = hostelRoom,
+                BedId = request.BedId,
+                HostelBed = hostelBed,
+                CampusId = request.CampusId,
+                FeeStructureId = request.FeeStructureId,
+                PaymentPlan = request.PaymentPlan,
+                ScholarshipStatus = request.ScholarshipStatus
+            });
+
+            // 5. Update Users table for Student Login / Display Name
+            if (!string.IsNullOrWhiteSpace(studentName) || !string.IsNullOrWhiteSpace(request.StudentEmail) || !string.IsNullOrWhiteSpace(request.StudentMobileNumber))
+            {
+                const string updateUsersSql = @"
+                    UPDATE Users
+                    SET FullName = COALESCE(@FullName, FullName),
+                        Email = COALESCE(@Email, Email),
+                        PhoneNumber = COALESCE(@PhoneNumber, PhoneNumber),
+                        UpdatedAt = CURRENT_TIMESTAMP(6)
+                    WHERE StudentId = @StudentId;";
+
+                await connection.ExecuteAsync(updateUsersSql, new
+                {
+                    FullName = !string.IsNullOrWhiteSpace(studentName) ? studentName.Trim() : null,
+                    Email = !string.IsNullOrWhiteSpace(request.StudentEmail) ? request.StudentEmail.Trim() : null,
+                    PhoneNumber = !string.IsNullOrWhiteSpace(request.StudentMobileNumber) ? request.StudentMobileNumber.Trim() : null,
+                    StudentId = student.StudentId
+                });
+            }
         }
     }
 }

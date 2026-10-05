@@ -81,6 +81,7 @@ export default function Login() {
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
       const userRole = String(result.user.role || "").toLowerCase();
+      const isPrincipal = userRole === "principal" || userRole.includes("principal");
       const isFacultyOrStaff =
         userRole === "faculty" ||
         userRole === "teacher" ||
@@ -94,13 +95,18 @@ export default function Login() {
         userRole === "parent" ||
         userRole.includes("parent") ||
         result.roleType === "parent";
+      const isAccountant = userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier";
 
       if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
+      } else if (isPrincipal) {
+        navigate("/principal-dashboard", { replace: true });
       } else if (isFacultyOrStaff) {
         navigate("/faculty-dashboard", { replace: true });
       } else if (isParent) {
         navigate("/parent-dashboard", { replace: true });
+      } else if (isAccountant) {
+        navigate("/accountant-dashboard", { replace: true });
       } else if (userRole.includes("driver")) {
         navigate("/driver", { replace: true });
       } else {
