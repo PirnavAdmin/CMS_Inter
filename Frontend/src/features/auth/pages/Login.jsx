@@ -94,6 +94,7 @@ export default function Login() {
         userRole === "parent" ||
         userRole.includes("parent") ||
         result.roleType === "parent";
+      const isAccountant = userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier";
 
       if (result.user.isAdmin || userRole.includes("admin")) {
         navigate("/dashboard", { replace: true });
@@ -101,6 +102,8 @@ export default function Login() {
         navigate("/faculty-dashboard", { replace: true });
       } else if (isParent) {
         navigate("/parent-dashboard", { replace: true });
+      } else if (isAccountant) {
+        navigate("/accountant-dashboard", { replace: true });
       } else if (userRole.includes("driver")) {
         navigate("/driver", { replace: true });
       } else {
