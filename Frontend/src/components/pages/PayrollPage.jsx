@@ -2999,7 +2999,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
               <div className="salary-form-section-title">Step 2 — Bank & Payment Details</div>
               <div className="salary-form-grid-3">
                 <div className="salary-form-group">
-                  <label>Payment Mode</label>
+                  <label>Payment Mode *</label>
                   <select required value={paymentMode} aria-invalid={Boolean(fieldErrors.paymentMode)} onChange={(e) => { setPaymentMode(e.target.value); setFieldErrors((prev) => ({ ...prev, paymentMode: "" })); }}>
                     <option value="">Select payment mode</option>
                     <option value="Bank Transfer">Bank Transfer</option>

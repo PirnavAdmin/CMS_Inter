@@ -36,8 +36,6 @@ import settingsNumberSeriesIcon from "@/assets/settings-3d/number-series.png";
 import settingsTemplatesIcon from "@/assets/settings-3d/templates.png";
 import settingsAuditLogsIcon from "@/assets/settings-3d/audit-logs.png";
 import hostelManagementIcon from "@/assets/sidebar-3d/hostel-management.svg";
-import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
-import rolesPermissionsIcon from "@/assets/sidebar-3d/roles-permissions.svg";
 import navbarMenuIcon from "@/assets/navbar-3d/menu.png";
 import navbarSearchIcon from "@/assets/navbar-3d/search.png";
 import navbarBoardIcon from "@/assets/navbar-3d/board.png";
@@ -189,10 +187,6 @@ export const menu = [
         to: "/dashboard/settings",
         label: "Settings",
         icon: boardAcademicYearIcon,
-        children: [
-          { to: "/dashboard/settings", label: "General Settings", icon: generalSettingsIcon },
-          { to: "/dashboard/settings/roles-permissions", label: "Roles & Permissions", icon: rolesPermissionsIcon },
-        ],
       },
     ],
   },

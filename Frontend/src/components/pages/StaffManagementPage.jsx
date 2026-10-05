@@ -423,7 +423,7 @@ export const normalizeStaffRecord = (raw) => {
     staffType: r.staffType || "Teaching",
     role: r.role || r.roleName || personal.role || (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"),
     roleName: r.roleName || r.role || personal.role || (r.staffType === "Non-Teaching" ? "Cleaner" : "Faculty"),
-    roleId: r.roleId || personal.roleId || (r.role === "Faculty" ? 4 : r.role === "HOD" ? 3 : r.role === "Accounts" ? 7 : r.role === "Examination Cell" ? 8 : r.role === "Library" ? 9 : r.role === "Placement Officer" ? 11 : r.role === "Cleaner" ? 13 : r.role === "Driver" ? 12 : r.role === "Hostel Warden" ? 10 : (r.staffType === "Non-Teaching" ? 13 : 4)),
+    roleId: r.roleId || personal.roleId || (r.role === "Faculty" ? 4 : r.role === "HOD" ? 3 : r.role === "Accounts" || r.role === "Accountant" ? 7 : r.role === "Examination Cell" ? 8 : r.role === "Library" ? 9 : r.role === "Placement Officer" ? 11 : r.role === "Cleaner" ? 13 : r.role === "Driver" ? 12 : r.role === "Hostel Warden" ? 10 : (r.staffType === "Non-Teaching" ? 13 : 4)),
     status: r.status || "Active",
     employmentType: r.employmentType || "Full Time",
     dateOfJoining: r.dateOfJoining || r.joiningDate || "—",
@@ -1719,7 +1719,8 @@ function Field({
     if (name === "role") {
       if (Array.isArray(roleOptions) && roleOptions.length > 0) {
         const liveRoleNames = roleOptions.map((r) => (typeof r === "object" ? r.roleName || r.name : String(r))).filter(Boolean);
-        return Array.from(new Set(liveRoleNames));
+        const configuredRoleNames = isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
+        return Array.from(new Set([...liveRoleNames, ...configuredRoleNames]));
       }
       return isTeaching ? TEACHING_ROLE_NAMES : NON_TEACHING_ROLE_NAMES;
     }
@@ -1739,12 +1740,10 @@ function Field({
       const currentDept = String(safeValues.department || "").trim();
       const currentDeptNorm = currentDept.toLowerCase().replace(/[-_\s&]/g, "");
 
-      // If we have live designations from API:
-      if (Array.isArray(designationOptions) && designationOptions.length > 0) {
-        const liveDesigs = designationOptions.filter(Boolean);
-
-        if (currentDept) {
-          // Strictly return live designations assigned to this department in the database
+      if (currentDept) {
+        // Prefer the department-specific mapping supplied by the API.
+        if (Array.isArray(designationOptions) && designationOptions.length > 0) {
+          const liveDesigs = designationOptions.filter(Boolean);
           const deptMatching = liveDesigs
             .filter((d) => {
               if (!d) return false;
@@ -1759,12 +1758,8 @@ function Field({
           }
         }
 
-        // If no department is selected or no specific mapping, return all live designations for this staffType from DB
-        return Array.from(new Set(liveDesigs.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean)));
-      }
-
-      // Fallback ONLY when API returned no designations (e.g. network offline):
-      if (currentDept) {
+        // The API has no designation mapping for this department. Use the local
+        // department map instead of showing unrelated API designations.
         const activeMap = isTeaching ? teachingDesignationMap : nonTeachingDesignationMap;
         for (const [deptKey, desigs] of Object.entries(activeMap)) {
           const keyNorm = deptKey.toLowerCase().replace(/[-_\s&]/g, "");
@@ -1772,6 +1767,13 @@ function Field({
             return Array.isArray(desigs) ? desigs : [];
           }
         }
+
+        return [];
+      }
+
+      // With no department selected, show every available designation.
+      if (Array.isArray(designationOptions) && designationOptions.length > 0) {
+        return Array.from(new Set(designationOptions.map((d) => (typeof d === "object" ? d.name || d.designationName : d)).filter(Boolean)));
       }
 
       const fallbackList = Array.isArray(options) && options.length > 0
@@ -1819,12 +1821,14 @@ function Field({
           const matchedRole = Array.isArray(roleOptions)
             ? roleOptions.find((r) => {
                 if (typeof r === "object") {
-                  return (r.roleName || r.name) === value || String(r.roleId || r.id) === String(value);
+                  const roleName = r.roleName || r.name;
+                  const isAccountantAlias = value === "Accountant" && roleName === "Accounts";
+                  return roleName === value || isAccountantAlias || String(r.roleId || r.id) === String(value);
                 }
                 return r === value;
               })
             : null;
-          const roleIdVal = typeof matchedRole === "object" ? (matchedRole?.roleId || matchedRole?.id) : undefined;
+          const roleIdVal = typeof matchedRole === "object" ? (matchedRole?.roleId || matchedRole?.id) : value === "Accountant" ? 7 : undefined;
           return {
             ...prev,
             role: value,
@@ -4057,7 +4061,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
     const matchedRole = apiRoleObjects.find((r) => (r.roleName || r.name) === values.role);
-    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Cleaner" ? 13 : values.role === "Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
+    const resolvedRoleId = values.roleId || (matchedRole ? (matchedRole.roleId || matchedRole.id) : (values.role === "Accountant" ? 7 : values.role === "Cleaner" ? 13 : values.role === "Driver" || values.role === "Bus Driver" ? 12 : values.role === "Hostel Warden" ? 10 : values.role === "Attendant" ? 14 : 13));
 
     const payload = {
       ...values,
