@@ -43,13 +43,28 @@ import navbarAcademicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
 import "./DashboardLayout.css";
 
-const generatedSidebarIcons = {
+export const generatedSidebarIcons = {
   department: { src: managementIconsSprite, position: "0% 0%" },
   staffAttendance: { src: managementIconsSprite, position: "50% 0%" },
   staffLeave: { src: managementIconsSprite, position: "100% 0%" },
   payroll: { src: managementIconsSprite, position: "0% 100%" },
   admission: { src: managementIconsSprite, position: "50% 100%" },
   groups: { src: managementIconsSprite, position: "100% 100%" },
+};
+
+export const adminIconAssets = {
+  dashboard: dashboardIcon,
+  feeManagement: feeManagementIcon,
+  paymentHistory: feeManagementIcon,
+  payroll: generatedSidebarIcons.payroll,
+  attendanceImpact: generatedSidebarIcons.staffAttendance,
+  financialReports: reportsAnalyticsIcon,
+  profile: studentsIcon,
+  notifications: navbarNotificationsIcon,
+  menu: navbarMenuIcon,
+  search: navbarSearchIcon,
+  board: navbarBoardIcon,
+  academicYear: navbarAcademicYearIcon,
 };
 
 const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
@@ -215,6 +230,43 @@ export const parentMenu = [
   },
 ];
 
+export const principalMenu = [
+  {
+    section: "Overview",
+    items: [{ to: "/principal-dashboard", label: "Dashboard", icon: dashboardIcon }],
+  },
+  {
+    section: "Academic Management",
+    items: [
+      { to: "/dashboard/students", label: "Students", icon: studentsIcon },
+      { to: "/dashboard/staff", label: "Staff", icon: staffIcon },
+      { to: "/dashboard/attendance/student", label: "Student Attendance", icon: attendanceIcon },
+      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
+      { to: "/dashboard/sections", label: "Classes & Sections", icon: sectionsIcon },
+      { to: "/dashboard/subjects", label: "Subjects", icon: subjectsIcon },
+      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
+    ],
+  },
+  {
+    section: "Assessment",
+    items: [
+      { to: "/dashboard/examinations", label: "Examinations", icon: examinationIcon },
+      { to: "/dashboard/results", label: "Results", icon: resultsIcon },
+      { to: "/dashboard/marks-entry", label: "Assignments & Marks", icon: marksEvaluationIcon },
+    ],
+  },
+  {
+    section: "Administration",
+    items: [
+      { to: "/dashboard/admission", label: "Admissions", icon: generatedSidebarIcons.admission },
+      { to: "/dashboard/fee-structure", label: "Fees", icon: feeManagementIcon },
+      { to: "/dashboard/leave-management", label: "Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/dashboard/reports", label: "Reports", icon: reportsAnalyticsIcon },
+      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
+    ],
+  },
+];
+
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
@@ -255,12 +307,18 @@ const notificationRows = (payload) => {
 const notificationStatus = (item = {}) => String(item.status ?? item.Status ?? item.workflowStatus ?? item.WorkflowStatus ?? "").trim().toLowerCase();
 const pendingRowCount = (payload, predicate = (item) => PENDING_STATUSES.has(notificationStatus(item))) => notificationRows(payload).filter(predicate).length;
 
-const searchIndex = menu.flatMap((g) =>
+const createSearchIndex = (items) => items.flatMap((g) =>
   g.items.flatMap((item) => [
     { to: item.to, label: item.label, section: g.section },
     ...(item.children || []).map((c) => ({ to: c.to, label: c.label, section: item.label })),
   ]),
 );
+
+const principalSearchIndex = principalMenu.flatMap((g) =>
+  g.items.map((item) => ({ to: item.to, label: item.label, section: g.section })),
+);
+
+const searchIndex = createSearchIndex(menu);
 
 const parentSearchIndex = [
   ...parentMenu.flatMap((g) =>
@@ -280,7 +338,7 @@ const breadcrumbLinkForLabel = (label) =>
 const normalizeBreadcrumbLabel = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
 const breadcrumbKey = (value) => normalizeBreadcrumbLabel(value).toLowerCase();
 
-const menuBreadcrumbForPath = (pathname) => {
+const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
   let bestMatch = null;
   const consider = (to, labels, icon) => {
     const [path] = to.split("?");
@@ -307,7 +365,7 @@ const menuBreadcrumbForPath = (pathname) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : menu;
+  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : pathname.startsWith("/principal-dashboard") ? principalMenu : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
@@ -320,9 +378,9 @@ const menuBreadcrumbForPath = (pathname) => {
   return bestMatch;
 };
 
-const menuIconForTitle = (title) => {
+const menuIconForTitle = (title, sourceMenu = menu) => {
   const titleKey = breadcrumbKey(title);
-  for (const group of menu) {
+  for (const group of sourceMenu) {
     for (const item of group.items) {
       if (breadcrumbKey(item.label) === titleKey) return item.icon;
       for (const child of item.children || []) {
@@ -358,6 +416,11 @@ function readUser() {
   return getAuthUser();
 }
 
+function isPrincipalRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "principal" || normalized.includes("principal");
+}
+
 function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
@@ -373,6 +436,11 @@ export default function DashboardLayout({
   actions,
   children,
   excludeNotificationSources = EMPTY_NOTIFICATION_SOURCES,
+  menuOverride,
+  searchIndexOverride,
+  profilePath,
+  settingsPath,
+  showSettingsAction = true,
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -409,8 +477,16 @@ export default function DashboardLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
-  const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname), [pathname]);
-  const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title) ?? pageMenuItem?.icon;
+  const user = readUser();
+  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
+  const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
+  const activeMenu = menuOverride || (isParent ? parentMenu : isPrincipal ? principalMenu : menu);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
+  const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
+  const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  const canManageAcademicContext = !isParent && !menuOverride;
+  const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
+  const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
   const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
 
   const navbarCampuses = useMemo(() => {
@@ -423,10 +499,6 @@ export default function DashboardLayout({
     const menuLabels = pageMenuItem?.labels ?? [];
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
-  const user = readUser();
-  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const activeMenu = isParent ? parentMenu : menu;
-  const currentSearchIndex = isParent ? parentSearchIndex : searchIndex;
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
 
   const rawEmail = user?.email;
@@ -527,6 +599,7 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
+    if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
     if (basePath === "/dashboard/settings") {
       return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
@@ -747,7 +820,7 @@ export default function DashboardLayout({
                         })
                       )}
                     </div>
-                    <div className="cms-academic-panel-footer">
+                    {canManageAcademicContext ? <div className="cms-academic-panel-footer">
                       <button
                         type="button"
                         className="cms-academic-manage-btn"
@@ -758,7 +831,7 @@ export default function DashboardLayout({
                       >
                         <Settings size={14} /> Manage Campuses
                       </button>
-                    </div>
+                    </div> : null}
                   </div>
                 )}
               </div>
@@ -834,7 +907,7 @@ export default function DashboardLayout({
                         );
                       })}
                     </div>
-                    <div className="cms-academic-panel-footer">
+                    {canManageAcademicContext ? <div className="cms-academic-panel-footer">
                       <button
                         type="button"
                         className="cms-academic-manage-btn"
@@ -845,7 +918,7 @@ export default function DashboardLayout({
                       >
                         <Settings size={14} /> Manage Boards
                       </button>
-                    </div>
+                    </div> : null}
                   </div>
                 )}
               </div>
@@ -901,7 +974,7 @@ export default function DashboardLayout({
                         );
                       })}
                     </div>
-                    {!isParent && (
+                    {canManageAcademicContext && (
                       <div className="cms-academic-panel-footer">
                         <button
                           type="button"
@@ -987,22 +1060,22 @@ export default function DashboardLayout({
                   onClick={() => {
                     setProfileOpen(false);
                     closeOnMobile();
-                    navigate(isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
+                    navigate(resolvedProfilePath);
                   }}
                 >
                   <User size={15} /> My Profile
                 </button>
-                <button
+                {showSettingsAction && resolvedSettingsPath ? <button
                   type="button"
                   className="cms-dropdown-item"
                   onClick={() => {
                     setProfileOpen(false);
                     closeOnMobile();
-                    navigate(isParent ? "/parent-dashboard/settings" : "/dashboard/settings");
+                    navigate(resolvedSettingsPath);
                   }}
                 >
                   <Settings size={15} /> Settings
-                </button>
+                </button> : null}
                 <button
                   type="button"
                   className="cms-dropdown-item danger"
