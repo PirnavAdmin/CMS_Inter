@@ -2508,8 +2508,24 @@ export default function FacultyDashboard() {
     { id: 6, title: "Preview", subtitle: "Review & Confirmation" },
   ];
 
+  const validateCurrentProfileStep = () => {
+    const requiredByStep = {
+      1: [["firstName", "First name"], ["lastName", "Last name"], ["gender", "Gender"], ["maritalStatus", "Marital status"], ["dob", "Date of birth"], ["mobile", "Phone number"], ["email", "Email"], ["aadhaar", "Aadhaar number"], ["pan", "PAN number"], ["department", "Department"], ["designation", "Designation"], ["dateOfJoining", "Date of joining"]],
+      2: [["bankName", "Bank name"], ["accountHolder", "Account holder name"], ["accountNumber", "Account number"], ["ifsc", "IFSC code"], ["branch", "Branch name"], ["accountType", "Account type"]],
+      3: [["houseNumber", "House number"], ["street", "Street / area"], ["city", "City / village"], ["pin", "Pincode"], ["district", "District"], ["state", "State"], ["country", "Country"]],
+    };
+    const fallbacks = { houseNumber: "address", street: "streetArea", city: "cityVillage", pin: "pincode" };
+    const missing = (requiredByStep[profileStep] || []).filter(([key]) => !String(profileData[key] ?? profileData[fallbacks[key]] ?? "").trim()).map(([, label]) => label);
+    if (missing.length) {
+      notify(`Complete the required fields: ${missing.join(", ")}.`, "error");
+      return false;
+    }
+    return true;
+  };
+
   const handleSaveAndNext = async () => {
     if (isEditingProfile) {
+      if (!validateCurrentProfileStep()) return;
       persistStaffProfile(profileData);
       
       try {
@@ -2585,12 +2601,6 @@ export default function FacultyDashboard() {
     }
   };
 
-  const handleSkip = () => {
-    if (profileStep < 6) {
-      setProfileStep((s) => s + 1);
-    }
-  };
-
   const handleFinalProfileSave = async () => {
     setIsSavingProfile(true);
     
@@ -2615,7 +2625,7 @@ export default function FacultyDashboard() {
   const renderProfile = () => (
     <div>
       {/* Page Header */}
-      <div className="cms-page-head">
+      <div className="cms-page-head sp-profile-page-head">
         <div>
           <h1>My Profile</h1>
           <p>{isEditingProfile ? "You can now edit your profile details" : "Complete your profile step by step"}</p>
@@ -2665,8 +2675,8 @@ export default function FacultyDashboard() {
       </div>
 
       {/* Staff Identity Strip with Instagram-style Profile Photo Edit */}
-      <div className="cms-card" style={{ marginBottom: 18 }}>
-        <div className="cms-card-body" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16 }}>
+      <div className="cms-card sp-profile-summary-card">
+        <div className="cms-card-body sp-profile-summary-body">
           <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
             {/* Instagram-style Avatar with Camera Edit Badge */}
             <div style={{ position: "relative", width: 80, height: 80, flexShrink: 0 }}>
@@ -2713,6 +2723,7 @@ export default function FacultyDashboard() {
                     e.stopPropagation();
                     avatarRef.current?.click();
                   }}
+                  className="sp-profile-photo-edit"
                   title="Change Photo"
                   style={{
                     position: "absolute",
@@ -2740,6 +2751,7 @@ export default function FacultyDashboard() {
                 ref={avatarRef}
                 type="file"
                 accept="image/png, image/jpeg, image/jpg, image/webp"
+                className="sp-profile-photo-input"
                 style={{ display: "none" }}
                 onChange={handlePhotoUpload}
               />
@@ -2764,24 +2776,26 @@ export default function FacultyDashboard() {
           const isActive = profileStep === step.id;
           const isCompleted = profileStep > step.id;
           return (
-            <div
+            <button
+              type="button"
               key={step.id}
               className={`sp-wizard-step ${isActive ? "active" : ""} ${isCompleted ? "completed" : ""}`}
-              style={{ cursor: "default" }}
-              title={`Step ${step.id}: ${step.title}`}
+              onClick={() => !isEditingProfile && setProfileStep(step.id)}
+              disabled={isEditingProfile}
+              title={isEditingProfile ? "Complete the current tab to continue" : `View ${step.title}`}
             >
               <div className="sp-wizard-num">
                 {isCompleted ? <Check size={14} /> : step.id}
               </div>
               <span className="sp-wizard-title">{step.title}</span>
-            </div>
+            </button>
           );
         })}
       </div>
 
       {/* Step Form Card */}
       <div className={`cms-card ${isEditingProfile ? "sp-profile-edit-mode" : "sp-profile-view-mode"}`}>
-        <div className="cms-card-body" style={{ padding: "24px" }}>
+        <div className="cms-card-body sp-profile-form-body">
           {/* STEP 1: PERSONAL INFORMATION */}
           {profileStep === 1 && (
             <div>
@@ -2789,7 +2803,7 @@ export default function FacultyDashboard() {
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Personal Information</h3>
                 <span className="cms-badge cms-badge-info">Step 1 of 6</span>
               </div>
-              <div className="cms-form-grid">
+              <div className="cms-form-grid sp-profile-form-grid">
                 <div className="cms-field">
                   <label>Employee ID <span style={{ color: "var(--cms-red, #dc2626)" }}>*</span></label>
                   <input
@@ -2992,7 +3006,7 @@ export default function FacultyDashboard() {
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Bank Details</h3>
                 <span className="cms-badge cms-badge-info">Step 2 of 6</span>
               </div>
-              <div className="cms-form-grid">
+              <div className="cms-form-grid sp-profile-form-grid">
                 <div className="cms-field">
                   <label>Bank Name</label>
                   <select
@@ -3083,7 +3097,7 @@ export default function FacultyDashboard() {
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Address Information</h3>
                 <span className="cms-badge cms-badge-info">Step 3 of 6</span>
               </div>
-              <div className="cms-form-grid">
+              <div className="cms-form-grid sp-profile-form-grid">
                 <div className="cms-field">
                   <label>House Number <span style={{ color: "var(--cms-red, #dc2626)" }}>*</span></label>
                   <input
@@ -3184,7 +3198,7 @@ export default function FacultyDashboard() {
 
               {/* Blank input form for adding new experience */}
               <div style={{ background: "var(--cms-subtle, #f8f9fa)", padding: "18px", borderRadius: "10px", border: "1px solid var(--cms-border)", marginBottom: "20px" }}>
-                <div className="cms-form-grid">
+                <div className="cms-form-grid sp-profile-form-grid">
                   <div className="cms-field">
                     <label>Institution / College Name</label>
                     <input
@@ -3369,7 +3383,7 @@ export default function FacultyDashboard() {
 
               {/* Upload Form */}
               <div style={{ background: "var(--cms-subtle, #f8f9fa)", padding: "18px", borderRadius: "10px", border: "1px solid var(--cms-border)", marginBottom: "20px" }}>
-                <div className="cms-form-grid">
+                <div className="cms-form-grid sp-profile-form-grid">
                   <div className="cms-field">
                     <label>Document Type <span style={{ color: "var(--cms-red, #dc2626)" }}>*</span></label>
                     <select
@@ -3931,23 +3945,6 @@ export default function FacultyDashboard() {
                   <ChevronLeft size={16} /> Previous
                 </button>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-ghost"
-                    style={{
-                      background: "var(--cms-surface, #ffffff)",
-                      border: "1px solid var(--cms-border, #d1d5db)",
-                      color: "var(--cms-text, #1e293b)",
-                      padding: "0 26px",
-                      height: "38px",
-                      fontWeight: 600,
-                      borderRadius: "8px",
-                      cursor: "pointer",
-                    }}
-                    onClick={handleSkip}
-                  >
-                    Skip
-                  </button>
                   <button
                     type="button"
                     className="cms-btn cms-btn-primary"

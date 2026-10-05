@@ -63,6 +63,13 @@ namespace CollegeManagement.API.Models
 
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        // Domain Metadata
+        [NotMapped]
+        public string? Designation { get; set; }
+
+        [NotMapped]
+        public string? EmployeeId { get; set; }
+
         // Navigation Properties
         public ICollection<UserPermission> UserPermissions { get; set; } = new List<UserPermission>();
     }

@@ -40,12 +40,14 @@ import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPag
 import PayrollPage from "@/components/pages/PayrollPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
+import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
+import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx";
 import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
 import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
@@ -199,6 +201,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/my-profile" element={<AdminProfilePage />} />
         <Route path="/dashboard/settings/campus-configuration" element={<CampusConfigurationPage />} />
         <Route path="/dashboard/settings/campus" element={<CampusConfigurationPage />} />
+        <Route path="/dashboard/settings/audit-logs" element={<AuditLogsPage />} />
         <Route path="/dashboard/settings/roles-permissions" element={<RolesPermissionsPage />} />
         <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
         <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
@@ -312,6 +315,10 @@ export default function AppRoutes() {
 
       <Route element={<ProtectedRoute requireStudent />}>
         <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
+      </Route>
+
+      <Route element={<ProtectedRoute requireAccountant />}>
+        <Route path="/accountant-dashboard/*" element={<AccountantPortalRoutes />} />
       </Route>
 
       {/* Parent Portal Module Routes */}
