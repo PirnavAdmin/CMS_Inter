@@ -10,7 +10,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./StudentManagementPage.css";
 
 export const pageConfig = { title: "Student Management", rows: [], fields: [] };
-const STUDENT_PAGE_SIZE = 10;
+const STUDENT_PAGE_SIZE = 5;
 const list = (payload) => {
   const data = payload?.data ?? payload?.Data ?? payload;
   if (Array.isArray(data)) return data;

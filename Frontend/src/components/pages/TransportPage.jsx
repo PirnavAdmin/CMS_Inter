@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   ArrowRight,
@@ -129,30 +130,23 @@ function getStudentTransportAssignmentId(record = {}) {
   return id === undefined || id === null || String(id).trim() === "" ? null : id;
 }
 
-function exportRows(filename, rows, columns) {
-  const header = columns.map((column) => column.label).join(",");
-  const body = rows.map((row) =>
-    columns
-      .map((column) => {
-        const value = typeof column.value === "function" ? column.value(row) : row[column.key];
-        return `"${String(value ?? "").replace(/"/g, '""')}"`;
-      })
-      .join(","),
-  );
-  const blob = new Blob([[header, ...body].join("\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+function getColumnValue(row, column) {
+  let value = typeof column.value === "function" ? column.value(row) : row[column.key];
+  if (column.currency) value = formatCurrency(value);
+  if (value && typeof value === "object" && value.props) value = value.props.children;
+  if (Array.isArray(value)) value = value.map((item) => item?.props?.children ?? item).join(" ");
+  return value == null ? "" : String(value);
 }
 
-async function downloadTransportFile(endpoint, filename, params = {}) {
-  const response = await apiClient.get(endpoint, { params, responseType: "blob" });
-  const blob = response.data instanceof Blob ? response.data : new Blob([response.data]);
+function exportRows(filename, rows, columns) {
+  const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const header = columns.map((column) => quote(column.label)).join(",");
+  const body = rows.map((row) =>
+    columns
+      .map((column) => quote(getColumnValue(row, column)))
+      .join(","),
+  );
+  const blob = new Blob(["\ufeff", [header, ...body].join("\r\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -160,7 +154,48 @@ async function downloadTransportFile(endpoint, filename, params = {}) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportTablePdf(filename, report) {
+  const [{ jsPDF }, autoTableModule] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  const autoTable = autoTableModule.default || autoTableModule.autoTable;
+  const document = new jsPDF({ orientation: report.columns.length > 6 ? "landscape" : "portrait", unit: "pt", format: "a4" });
+  const pageWidth = document.internal.pageSize.getWidth();
+  document.setFont("helvetica", "bold");
+  document.setFontSize(17);
+  document.text("Pirnav College", pageWidth / 2, 38, { align: "center" });
+  document.setFontSize(13);
+  document.text("Transport Management", pageWidth / 2, 58, { align: "center" });
+  document.setFont("helvetica", "normal");
+  document.setFontSize(11);
+  document.text(`Current Section: ${report.section} / ${report.subsection}`, 40, 82);
+  const filterText = report.filters.map(({ label, value }) => `${label}: ${value}`).filter(Boolean).join("  |  ");
+  if (filterText) document.text(filterText, 40, 99, { maxWidth: pageWidth - 80 });
+  const searchText = report.query.trim() ? `Search: ${report.query.trim()}` : "";
+  if (searchText) document.text(searchText, 40, filterText ? 116 : 99, { maxWidth: pageWidth - 80 });
+  const startY = filterText && searchText ? 132 : filterText || searchText ? 116 : 100;
+  const body = report.rows.length
+    ? report.rows.map((row) => report.columns.map((column) => getColumnValue(row, column)))
+    : [["No records found."]];
+  autoTable(document, {
+    startY,
+    head: [report.rows.length ? report.columns.map((column) => column.label) : ["Records"]],
+    body,
+    styles: { font: "helvetica", fontSize: 8, cellPadding: 5, lineColor: [210, 216, 196], lineWidth: 0.5, textColor: [35, 42, 30] },
+    headStyles: { fillColor: [241, 244, 228], textColor: [44, 54, 31], fontStyle: "bold" },
+    margin: { left: 40, right: 40 },
+  });
+  const pageCount = document.internal.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    document.setPage(page);
+    document.setFontSize(8);
+    document.text(`Matching records: ${report.rows.length}  |  Screen page: ${report.page} of ${report.totalPages}`, 40, document.internal.pageSize.getHeight() - 20);
+  }
+  document.save(filename);
 }
 
 function reportColumnsFromRows(rows, fallback) {
@@ -260,6 +295,9 @@ function TableSection({
   addLabel,
   toolbarClassName,
   tableClassName,
+  printSection = "Transport",
+  printSubsection,
+  exportFilename,
 }) {
   const [page, setPage] = useState(1);
   const hasRowActions = Boolean(onView || onEdit || onDelete);
@@ -268,6 +306,23 @@ function TableSection({
   const totalPages = Math.max(1, Math.ceil(visibleRows.length / TABLE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const paginatedRows = visibleRows.slice((currentPage - 1) * TABLE_PAGE_SIZE, currentPage * TABLE_PAGE_SIZE);
+  const outputContext = {
+    title,
+    subtitle,
+    section: printSection,
+    subsection: printSubsection || title,
+    rows: visibleRows,
+    columns,
+    query,
+    filters: (filters || []).map((filter) => {
+      const selectedValue = filterValues[filter.name] || (filter.type === "date" ? "" : "All");
+      const selectedOption = filter.options?.find((option) => String(typeof option === "object" ? option.value : option) === String(selectedValue));
+      const label = selectedOption && typeof selectedOption === "object" ? selectedOption.label : selectedOption ?? selectedValue;
+      return { label: filter.label, value: label };
+    }),
+    page: currentPage,
+    totalPages,
+  };
 
   useEffect(() => {
     setPage(1);
@@ -315,9 +370,9 @@ function TableSection({
           filters={filterControls}
           addLabel={addLabel}
           onAdd={onAdd}
-          onExport={onExport || (() => exportRows(`${title.toLowerCase().replace(/\s+/g, "-")}.csv`, visibleRows, columns))}
-          onPrint={onPrint || (() => window.print())}
-          onPdfExport={onPdfExport}
+          onExport={onExport || (() => exportRows(exportFilename || `transport-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.csv`, visibleRows, columns))}
+          onPrint={onPrint ? () => onPrint(outputContext) : () => window.print()}
+          onPdfExport={onPdfExport ? () => onPdfExport(outputContext) : undefined}
           className={toolbarClassName}
         />
         <div className="cms-table-wrap">
@@ -835,8 +890,18 @@ export default function TransportPage() {
   const [reportApiRows, setReportApiRows] = useState({});
   const [reportApiPayloads, setReportApiPayloads] = useState({});
   const [reportLoading, setReportLoading] = useState(false);
+  const [printPayload, setPrintPayload] = useState(null);
 
   const showToast = (message, type = "success") => setToast({ message, type });
+  const preparePrint = (report) => {
+    setPrintPayload(report);
+    window.setTimeout(() => window.print(), 80);
+  };
+  const clearPrintPayload = () => setPrintPayload(null);
+  useEffect(() => {
+    window.addEventListener("afterprint", clearPrintPayload);
+    return () => window.removeEventListener("afterprint", clearPrintPayload);
+  }, []);
   const showErrorToast = (message) => {
     const normalizedMessage = String(message || "An unexpected server error occurred.");
     const now = Date.now();
@@ -2282,6 +2347,9 @@ export default function TransportPage() {
               : undefined
         }
         rowFilter={isTripsTable ? filterTripRow : isSetupFilterTable ? (row) => filterSetupRow(key, row) : undefined}
+        printSection={activeSection === "setup" ? "Setup" : "Operations"}
+        printSubsection={setupTabs.concat(operationTabs).find((tab) => tab.id === key)?.label || config.title}
+        onPrint={preparePrint}
         onAdd={key === "drivers" ? () => setIsAddDriverOpen(true) : key === "attendants" ? () => setIsAddAttendantOpen(true) : config.addLabel && config.fields ? () => openForm(key, config.addLabel, config.fields) : undefined}
         onEdit={config.fields ? (row) => openEditForm(key, `Edit ${config.title}`, config.fields, row) : undefined}
         onDelete={(row) => requestDelete(key, row, config.title)}
@@ -2708,16 +2776,6 @@ export default function TransportPage() {
     };
     const needsCompactReportToolbar = activeReportTab === "trip-reports" || activeReportTab === "student-transport-reports";
     const activeReportDefinition = reportDefinitions[activeReportTab];
-    const reportRequestParams = {
-      reportType: activeReportDefinition?.type,
-      campusId: selectedCampusId || undefined,
-      boardId: selectedBoardId || undefined,
-      academicYearId: selectedAcademicYearId || undefined,
-      routeId: reportFilters.route !== "All" ? reportFilters.route : undefined,
-      vehicleId: reportFilters.vehicle !== "All" ? reportFilters.vehicle : undefined,
-      status: reportFilters.status !== "All" ? reportFilters.status : undefined,
-      search: query.trim() || undefined,
-    };
     const reportFilename = activeReportDefinition?.filename || "transport-report";
 
     return (
@@ -2751,19 +2809,15 @@ export default function TransportPage() {
           filterValues={reportFilters}
           onFilterChange={(name, value) => setReportFilters((current) => ({ ...current, [name]: value }))}
           rowFilter={filterReportRow}
+          printSection="Reports"
+          printSubsection={reportTabs.find((tab) => tab.id === activeReportTab)?.label || "Transport Report"}
+          exportFilename={`${reportFilename}.csv`}
+          onPrint={preparePrint}
           toolbarClassName={`cms-transport-report-toolbar${needsCompactReportToolbar ? " cms-transport-report-toolbar-compact" : ""}`}
           tableClassName="cms-transport-report-table"
-          onPrint={async () => {
-            try { await downloadTransportFile(apiEndpoints.transport.reports.print, `${reportFilename}.pdf`, reportRequestParams); }
-            catch (error) { showErrorToast(`Unable to print report: ${getApiErrorMessage(error)}`); }
-          }}
-          onPdfExport={async () => {
-            try { await downloadTransportFile(apiEndpoints.transport.reports.exportPdf, `${reportFilename}.pdf`, reportRequestParams); }
+          onPdfExport={async (report) => {
+            try { await exportTablePdf(`${reportFilename}.pdf`, report); }
             catch (error) { showErrorToast(`Unable to export PDF: ${getApiErrorMessage(error)}`); }
-          }}
-          onExport={async () => {
-            try { await downloadTransportFile(apiEndpoints.transport.reports.exportCsv, `${reportFilename}.csv`, reportRequestParams); }
-            catch (error) { showErrorToast(`Unable to export CSV: ${getApiErrorMessage(error)}`); }
           }}
         /> : null}
       </div>
@@ -2891,6 +2945,31 @@ export default function TransportPage() {
         type={toast.type}
         onClose={() => setToast({ message: "", type: "success" })}
       />
+      {printPayload ? createPortal(
+        <div className="cms-transport-print-root">
+          <header className="cms-transport-print-header">
+            <strong>Pirnav College</strong>
+            <h1>Transport Management</h1>
+            <p>Current Section: {printPayload.section} / {printPayload.subsection}</p>
+            {printPayload.subtitle ? <small>{printPayload.subtitle}</small> : null}
+          </header>
+          <div className="cms-transport-print-meta">
+            {printPayload.query.trim() ? <span>Search: {printPayload.query.trim()}</span> : null}
+            {printPayload.filters.map((filter) => <span key={filter.label}>{filter.label}: {filter.value}</span>)}
+            <span>Matching records: {printPayload.rows.length}</span>
+            <span>Screen page: {printPayload.page} of {printPayload.totalPages}</span>
+          </div>
+          <table>
+            <thead><tr>{printPayload.rows.length ? printPayload.columns.map((column) => <th key={column.key}>{column.label}</th>) : <th>Records</th>}</tr></thead>
+            <tbody>
+              {printPayload.rows.length ? printPayload.rows.map((row, rowIndex) => <tr key={`${row.id ?? "print-row"}-${rowIndex}`}>
+                {printPayload.columns.map((column) => <td key={column.key}>{getColumnValue(row, column)}</td>)}
+              </tr>) : <tr><td>No records found.</td></tr>}
+            </tbody>
+          </table>
+        </div>,
+        document.body,
+      ) : null}
     </DashboardLayout>
   );
 }
