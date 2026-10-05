@@ -3,14 +3,21 @@ import { Download, Check, AlertCircle, CheckCircle2 } from "lucide-react";
 import "../styles/FacultyExamDuties.css";
 import { facultyMockData } from "../data/facultyMockData.js";
 
+import { useFacultySafe } from "../FacultyContext.jsx";
+
 export default function FacultyExamDuties() {
+  const context = useFacultySafe();
   const [dutiesList] = useState(facultyMockData.examDuties);
   const [examDutyTab, setExamDutyTab] = useState("all");
   const [toast, setToast] = useState(null);
 
   const notify = (text, type = "success") => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 3500);
+    if (context?.notify) {
+      context.notify(text, type);
+    } else {
+      setToast({ text, type });
+      setTimeout(() => setToast(null), 3500);
+    }
   };
 
   const filteredDuties = dutiesList.filter((d) => {

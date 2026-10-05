@@ -3,6 +3,8 @@ import { Plus, Calendar, X, Loader2, AlertCircle, CheckCircle2 } from "lucide-re
 import "../styles/FacultyLeave.css";
 import { facultyMockData } from "../data/facultyMockData.js";
 
+import { useFacultySafe } from "../FacultyContext.jsx";
+
 const STATUS_BADGE = {
   Approved: "cms-badge-active",
   Active: "cms-badge-active",
@@ -12,6 +14,7 @@ const STATUS_BADGE = {
 };
 
 export default function FacultyLeave() {
+  const context = useFacultySafe();
   const [leaveList, setLeaveList] = useState(facultyMockData.leaveRequests);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveForm, setLeaveForm] = useState({
@@ -33,8 +36,12 @@ export default function FacultyLeave() {
   ]);
 
   const notify = (text, type = "success") => {
-    setToast({ text, type });
-    setTimeout(() => setToast(null), 3500);
+    if (context?.notify) {
+      context.notify(text, type);
+    } else {
+      setToast({ text, type });
+      setTimeout(() => setToast(null), 3500);
+    }
   };
 
   const leavePreviewDays =
