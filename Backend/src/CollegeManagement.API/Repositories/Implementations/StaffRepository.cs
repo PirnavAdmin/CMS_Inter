@@ -229,7 +229,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     st.Equals("Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
                     st.Equals("Non Teaching", StringComparison.OrdinalIgnoreCase))
                 {
-                    query = query.Where(s => s.StaffType == "Non-Teaching" || s.StaffType == "NonTeaching" || s.StaffType == "Non Teaching");
+                    query = query.Where(s => s.StaffType != "Teaching" && s.StaffType != null && s.StaffType != "");
                 }
                 else if (st.Equals("Teaching", StringComparison.OrdinalIgnoreCase))
                 {

@@ -830,7 +830,20 @@ function AuthoritativePayrollScreen({
             navigate={navigate}
             setToast={setToast}
             handleHoldToggle={handleHoldToggle}
-            onPreviewPayslip={(asgn) => setViewingPayslip(asgn)}
+            onPreviewPayslip={(asgn) => {
+              const payslips = Array.isArray(store.payslips) ? store.payslips : [];
+              const latestPayslip = payslips
+                .filter((p) => p.staffId === asgn.staffId)
+                .sort((a, b) => {
+                  if (a.year !== b.year) return Number(b.year) - Number(a.year);
+                  return Number(b.month) - Number(a.month);
+                })[0];
+              if (latestPayslip) {
+                setViewingPayslip(latestPayslip);
+              } else {
+                setToast("No generated payslip exists for this employee yet.");
+              }
+            }}
           />
         )}
 
@@ -1968,6 +1981,7 @@ function InteractivePayslipModal({ record, onClose, setToast }) {
 
   return (
     <div className="payroll-modal-overlay" onClick={onClose}>
+      <style>{"@page { size: auto; margin: 0mm; }"}</style>
       <div className="payroll-modal-container" onClick={(e) => e.stopPropagation()}>
         <div className="payroll-modal-header">
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>

@@ -668,4 +668,58 @@
   border-bottom-right-radius: 12px;
 }
 
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
+@media print {
+  body {
+    overflow: hidden !important;
+    height: 100% !important;
+  }
+  body * {
+    visibility: hidden !important;
+  }
+  .payroll-modal-overlay {
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    background: transparent !important;
+  }
+  .payroll-modal-container {
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+    border: none !important;
+  }
+  .payroll-modal-body, .payslip-paper, .payslip-paper * {
+    visibility: visible !important;
+  }
+  .payslip-paper {
+    position: relative !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+  .payroll-modal-header,
+  .payroll-modal-footer {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
 
