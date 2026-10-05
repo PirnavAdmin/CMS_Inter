@@ -479,8 +479,9 @@ export default function DashboardLayout({
   const pathname = location.pathname;
   const user = readUser();
   const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const activeMenu = menuOverride || (isParent ? parentMenu : menu);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : searchIndex);
+  const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
+  const activeMenu = menuOverride || (isParent ? parentMenu : isPrincipal ? principalMenu : menu);
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
   const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
   const canManageAcademicContext = !isParent && !menuOverride;
@@ -498,11 +499,6 @@ export default function DashboardLayout({
     const menuLabels = pageMenuItem?.labels ?? [];
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
-  const user = readUser();
-  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
-  const activeMenu = isParent ? parentMenu : isPrincipal ? principalMenu : menu;
-  const currentSearchIndex = isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : searchIndex;
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
 
   const rawEmail = user?.email;
