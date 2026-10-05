@@ -215,6 +215,43 @@ export const parentMenu = [
   },
 ];
 
+export const principalMenu = [
+  {
+    section: "Overview",
+    items: [{ to: "/principal-dashboard", label: "Dashboard", icon: dashboardIcon }],
+  },
+  {
+    section: "Academic Management",
+    items: [
+      { to: "/dashboard/students", label: "Students", icon: studentsIcon },
+      { to: "/dashboard/staff", label: "Staff", icon: staffIcon },
+      { to: "/dashboard/attendance/student", label: "Student Attendance", icon: attendanceIcon },
+      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
+      { to: "/dashboard/sections", label: "Classes & Sections", icon: sectionsIcon },
+      { to: "/dashboard/subjects", label: "Subjects", icon: subjectsIcon },
+      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
+    ],
+  },
+  {
+    section: "Assessment",
+    items: [
+      { to: "/dashboard/examinations", label: "Examinations", icon: examinationIcon },
+      { to: "/dashboard/results", label: "Results", icon: resultsIcon },
+      { to: "/dashboard/marks-entry", label: "Assignments & Marks", icon: marksEvaluationIcon },
+    ],
+  },
+  {
+    section: "Administration",
+    items: [
+      { to: "/dashboard/admission", label: "Admissions", icon: generatedSidebarIcons.admission },
+      { to: "/dashboard/fee-structure", label: "Fees", icon: feeManagementIcon },
+      { to: "/dashboard/leave-management", label: "Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/dashboard/reports", label: "Reports", icon: reportsAnalyticsIcon },
+      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
+    ],
+  },
+];
+
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
@@ -262,6 +299,10 @@ const searchIndex = menu.flatMap((g) =>
   ]),
 );
 
+const principalSearchIndex = principalMenu.flatMap((g) =>
+  g.items.map((item) => ({ to: item.to, label: item.label, section: g.section })),
+);
+
 const parentSearchIndex = [
   ...parentMenu.flatMap((g) =>
     g.items.flatMap((item) => [
@@ -307,7 +348,7 @@ const menuBreadcrumbForPath = (pathname) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : menu;
+  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : pathname.startsWith("/principal-dashboard") ? principalMenu : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
@@ -356,6 +397,11 @@ const uniqueBreadcrumbLabels = (labels, currentTitle) => {
 
 function readUser() {
   return getAuthUser();
+}
+
+function isPrincipalRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "principal" || normalized.includes("principal");
 }
 
 function initials(name = "CMS Admin") {
@@ -425,8 +471,9 @@ export default function DashboardLayout({
   }, [breadcrumb, pageMenuItem, title]);
   const user = readUser();
   const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const activeMenu = isParent ? parentMenu : menu;
-  const currentSearchIndex = isParent ? parentSearchIndex : searchIndex;
+  const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
+  const activeMenu = isParent ? parentMenu : isPrincipal ? principalMenu : menu;
+  const currentSearchIndex = isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : searchIndex;
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
 
   const rawEmail = user?.email;
