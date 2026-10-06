@@ -21,7 +21,9 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
 
         // Academic Relations
-        public int? CampusId { get; set; } = 1; public int? AdmittedById { get; set; }
+        public int? CampusId { get; set; } = 1; 
+        public int? SourceCampusId { get; set; }
+        public int? AdmittedById { get; set; }
 
         [Required]
         public int BoardId { get; set; }
@@ -105,8 +107,7 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         // Other
         public decimal? AnnualIncome { get; set; }
         // ADD THIS
-        [Required]
-        public int FeeStructureId { get; set; }
+        public int? FeeStructureId { get; set; }
         public string? PaymentPlan { get; set; }
 
         public string? ScholarshipStatus { get; set; }

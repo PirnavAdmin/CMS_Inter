@@ -1,4 +1,4 @@
-using CollegeManagement.API.Data;
+﻿using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
@@ -68,13 +68,14 @@ namespace CollegeManagement.API.Repositories.Implementations
                 catch
                 {
                     const string sql = @"
-                        SELECT sa.*, b.BoardName, ay.AcademicYearName, g.GroupName, c.CampusName, CONCAT(st.FirstName, ' ', st.LastName) AS AdmittedByName
+                        SELECT sa.*, b.BoardName, ay.AcademicYearName, g.GroupName, c.CampusName, sc.CampusName AS SourceCampusName, CONCAT(st.FirstName, ' ', st.LastName) AS AdmittedByName
                         FROM StudentAdmissions sa
                         LEFT JOIN Boards b ON sa.BoardId = b.BoardId
                         LEFT JOIN AcademicYears ay ON sa.AcademicYearId = ay.AcademicYearId
                         LEFT JOIN `Groups` g ON sa.GroupId = g.GroupId
                         LEFT JOIN Staffs st ON sa.AdmittedById = st.Id
                         LEFT JOIN Campuses c ON sa.CampusId = c.CampusId
+                        LEFT JOIN Campuses sc ON sa.SourceCampusId = sc.CampusId
                         WHERE sa.IsActive = 1
                           AND (@CampusId IS NULL OR @CampusId = 0 OR sa.CampusId = @CampusId)
                         ORDER BY sa.AdmissionId DESC";
@@ -228,8 +229,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             if (result.AdmissionId > 0 && !string.IsNullOrWhiteSpace(request.AdmissionNo))
             {
                 await connection.ExecuteAsync(
-                    "UPDATE `StudentAdmissions` SET `AdmissionNo` = @AdmNo WHERE `AdmissionId` = @AdmId",
-                    new { AdmNo = request.AdmissionNo.Trim(), AdmId = result.AdmissionId });
+                    "UPDATE `StudentAdmissions` SET `AdmissionNo` = @AdmNo, `CampusId` = @CampusId, `SourceCampusId` = @SourceCampusId WHERE `AdmissionId` = @AdmId",
+                    new { AdmNo = request.AdmissionNo?.Trim(), CampusId = request.CampusId, SourceCampusId = (request as dynamic).SourceCampusId, AdmId = result.AdmissionId });
                 
                 result.AdmissionNo = request.AdmissionNo.Trim();
             }
@@ -566,6 +567,22 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         // APPROVE ADMISSION
         // =========================================================
+        public async Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks)
+        {
+            var connection = _context.Database.GetDbConnection();
+            string sql = "UPDATE StudentAdmissions SET Status = 'Request Approved', Remarks = @Remarks, UpdatedAt = UTC_TIMESTAMP() WHERE AdmissionId = @AdmissionId";
+            int rows = await connection.ExecuteAsync(sql, new { AdmissionId = admissionId, Remarks = remarks });
+            return rows > 0;
+        }
+
+        public async Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks)
+        {
+            var connection = _context.Database.GetDbConnection();
+            string sql = "UPDATE StudentAdmissions SET Status = 'Request Rejected', Remarks = @Remarks, UpdatedAt = UTC_TIMESTAMP() WHERE AdmissionId = @AdmissionId";
+            int rows = await connection.ExecuteAsync(sql, new { AdmissionId = admissionId, Remarks = remarks });
+            return rows > 0;
+        }
+
         public async Task<bool> ApproveAsync(
             ApproveStudentAdmissionRequest request,
             string? passwordHash = null,
@@ -995,4 +1012,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
     }
 }
+
+
+
 

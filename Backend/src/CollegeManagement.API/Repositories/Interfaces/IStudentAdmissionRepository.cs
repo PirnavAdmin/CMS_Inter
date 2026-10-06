@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Models;
 
@@ -62,6 +62,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> VerifyAsync(
             VerifyStudentAdmissionRequest request);
 
+        Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks);
+        Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks);
         Task<bool> ApproveAsync(
             ApproveStudentAdmissionRequest request,
             string? passwordHash = null,
@@ -92,3 +94,4 @@ namespace CollegeManagement.API.Repositories.Interfaces
             BulkRollNumberAllocationRequest request);
     }
 }
+
