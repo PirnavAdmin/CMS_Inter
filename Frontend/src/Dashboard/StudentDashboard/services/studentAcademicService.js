@@ -1,7 +1,76 @@
 import apiClient from "@/api/axios.js";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
+import { env } from "@/config/env.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
 
 const getPayload = (payload) => payload?.data ?? payload?.Data ?? payload;
+
+// Same facility-rate source used by Student Management; read only this student's allocation.
+export const getStudentTransportFacilityFee = async (studentId) => {
+  const response = await apiClient.get(apiEndpoints.students.getById(studentId), { skipGlobalLoader: true });
+  const record = getPayload(response.data) || {};
+  const student = record.student ?? record.Student ?? record;
+  const allocation = student.allocation ?? student.Allocation ?? student.residentialAllocation ?? {};
+  const transport = student.transport ?? student.Transport ?? student.transportDetails ?? {};
+  const sources = [student, record, allocation, transport, student.route ?? student.Route ?? transport.route ?? transport.Route, student.pickupPoint ?? student.PickupPoint ?? transport.pickupPoint ?? transport.PickupPoint].filter((row) => row && typeof row === "object");
+  const read = (...keys) => sources.flatMap((row) => keys.map((key) => row[key])).find((value) => value != null && value !== "") ?? "";
+  const type = String(read("studentType", "StudentType", "residentialType", "ResidentialType", "isResidential", "IsResidential")).toLowerCase();
+  if (!["non-residential", "non residential", "day scholar", "dayscholar", "false", "1", "0"].includes(type)
+    || !/^(yes|true|1)$/i.test(String(read("transportRequired", "TransportRequired", "isTransportRequired", "IsTransportRequired")))) return null;
+  const pickup = read("pickupPointId", "PickupPointId", "pickupPoint", "PickupPoint", "pickupPointName", "PickupPointName");
+  const route = read("routeId", "RouteId", "busRouteId", "BusRouteId", "busRoute", "BusRoute", "routeName", "RouteName", "busRouteName", "BusRouteName");
+  const campus = read("campusId", "CampusId");
+  const result = await apiClient.get(apiEndpoints.transport.pickupPoints, { params: { ...(campus ? { CampusId: campus } : {}), PageNumber: 1, PageSize: 1000 }, skipGlobalLoader: true });
+  const payload = getPayload(result.data);
+  const points = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? payload?.$values ?? payload?.data ?? payload?.Data ?? payload?.results ?? payload?.Results ?? [];
+  const matches = (selected, ...values) => Boolean(selected) && values.some((value) => String(value ?? "").trim().toLowerCase() === String(selected).trim().toLowerCase());
+  const point = points.find((row) => ![false, 0, "false", "0", "inactive", "disabled"].includes(typeof (row.isActive ?? row.IsActive ?? row.status ?? row.Status) === "string" ? String(row.isActive ?? row.IsActive ?? row.status ?? row.Status).toLowerCase() : row.isActive ?? row.IsActive ?? row.status ?? row.Status)
+    && matches(pickup, row.pickupPointId, row.PickupPointId, row.stopName, row.StopName, row.pickupPointName, row.PickupPointName)
+    && (!route || !(row.routeId ?? row.RouteId ?? row.routeName ?? row.RouteName) || matches(route, row.routeId, row.RouteId, row.routeName, row.RouteName)));
+  if (!point) return null;
+  const value = point.monthlyFee ?? point.MonthlyFee ?? point.fare ?? point.Fare;
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return null;
+  return { amount: Number(value), plan: "Monthly", detail: point.stopName ?? point.StopName ?? point.pickupPointName ?? point.PickupPointName ?? "" };
+};
+
+export const withTransportFacilityFee = (summary, facility) => facility ? { ...summary, configured: true, monthlyFee: facility.amount, plan: facility.plan, detail: facility.detail,
+  ...(!summary.assigned ? { amount: facility.amount, status: "Monthly rate · payment status unavailable" } : {}),
+} : summary;
+
+export const getStudentTransportFeeSummary = (detailsPayload, historyPayload) => {
+  const details = getPayload(detailsPayload) || {};
+  const read = (row, key) => row?.[key] ?? row?.[key[0].toUpperCase() + key.slice(1)];
+  const number = (row, ...keys) => {
+    for (const key of keys) {
+      const value = read(row, key);
+      if (value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value))) return Number(value);
+    }
+    return null;
+  };
+  const isTransport = (value) => /\btransport\b|\bbus\s*(?:fee|fare)\b/i.test(String(value || ""));
+  const rows = [read(details, "components"), read(details, "breakdown"), read(details, "feeBreakdown")].find((value) => Array.isArray(value) && value.length) || [];
+  const transport = Array.isArray(rows) ? rows.filter((row) => isTransport(read(row, "feeTypeName") || read(row, "feeType") || read(row, "name"))) : [];
+  if (!transport.length) return { assigned: false, amount: null, paid: null, due: null, status: "Not Assigned" };
+  const sum = (keys) => {
+    const values = transport.map((row) => number(row, ...keys));
+    return values.every((value) => value !== null) ? values.reduce((total, value) => total + value, 0) : null;
+  };
+  const amount = sum(["payableAmount", "payable", "amount", "feeAmount"]);
+  let paid = sum(["paidAmount", "paid", "amountPaid"]);
+  let due = sum(["balanceAmount", "balance", "dueAmount", "outstandingBalance"]);
+  const totalPaid = number(details, "totalPaid", "paidAmount");
+  const accountDue = number(details, "outstandingBalance", "balanceAmount", "balance");
+  if (paid === null && totalPaid === 0) paid = 0;
+  if (paid === null && accountDue === 0 && amount !== null) paid = amount;
+  const history = getPayload(historyPayload);
+  const payments = Array.isArray(history) ? history : read(details, "paymentHistory") || [];
+  const identified = payments.filter((row) => isTransport(read(row, "feeTypeName") || read(row, "feeType") || read(row, "paymentType")) && !/fail|cancel|refund|pending/i.test(String(read(row, "status") || "")));
+  if (paid === null && identified.length && identified.every((row) => number(row, "amount", "paidAmount") !== null)) paid = identified.reduce((total, row) => total + number(row, "amount", "paidAmount"), 0);
+  if (due === null && amount !== null && paid !== null) due = Math.max(amount - paid, 0);
+  if (paid === null && amount !== null && due !== null) paid = Math.max(amount - due, 0);
+  const status = due === 0 ? "Paid" : paid === 0 && due > 0 ? "Unpaid" : paid > 0 && due > 0 ? "Partially Paid" : "Payment status unavailable";
+  return { assigned: true, amount, paid, due, status };
+};
 
 export const getCurrentStudent = async () => {
   const response = await apiClient.get(studentApiEndpoints.profile.me);
@@ -77,11 +146,49 @@ export const uploadCurrentStudentPhoto = (file) => {
   return apiClient.post(studentApiEndpoints.profile.photo, data);
 };
 
+export const removeCurrentStudentPhoto = () => apiClient.delete(studentApiEndpoints.profile.removePhoto);
+
+export const getCurrentStudentPhotoFile = async (path, signal) => {
+  const base = new URL(env.apiBaseUrl, window.location.origin);
+  const url = new URL(path, `${base.origin}/`);
+  if (!["http:", "https:"].includes(url.protocol) || url.origin !== base.origin
+    || !url.pathname.startsWith("/uploads/")) throw new Error("The profile photo URL is unavailable.");
+  const response = await apiClient.get(url.href, { responseType: "blob", signal, skipGlobalLoader: true });
+  if (!response.data.type.startsWith("image/")) throw new Error("The photo server did not return an image.");
+  return response.data;
+};
+
 export const uploadCurrentStudentDocument = (documentType, file) => {
   const data = new FormData();
   data.append("documentType", documentType);
   data.append("file", file);
   return apiClient.post(studentApiEndpoints.profile.documents, data);
+};
+
+// Resolve only backend file paths returned by the current student's profile.
+export const getStudentDocumentUrl = (path) => {
+  if (typeof path !== "string" || !path.trim()) return "";
+  try {
+    const base = new URL(env.apiBaseUrl, window.location.origin);
+    const url = new URL(path, `${base.origin}/`);
+    return ["http:", "https:"].includes(url.protocol) && url.origin === base.origin
+      && url.pathname.startsWith("/uploads/student-documents/") ? url.href : "";
+  } catch { return ""; }
+};
+
+export const getCurrentStudentDocumentFile = async (path) => {
+  const url = getStudentDocumentUrl(path);
+  if (!url) throw new Error("This document does not have an available file URL.");
+  try {
+    const response = await apiClient.get(url, { responseType: "blob" });
+    if (response.data.type.includes("text/html")) throw new Error("The document server returned a page instead of a file.");
+    return response.data;
+  } catch (error) {
+    if (error.response?.data instanceof Blob) {
+      try { error.response.data = JSON.parse(await error.response.data.text()); } catch { /* Keep the original HTTP error. */ }
+    }
+    throw error;
+  }
 };
 
 export const changeCurrentStudentPassword = (data) => apiClient.post(studentApiEndpoints.profile.changePassword, data);

@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { Bus, Clock3, MapPin, UserRound } from "lucide-react";
+import { Bus, Clock3, MapPin, UserRound, IndianRupee, WalletCards, Receipt } from "lucide-react";
+import { Link } from "react-router-dom";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import StudentSummaryCard from "../components/StudentSummaryCard.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { SkeletonPage } from "@/components/common/Ui.jsx";
 import StudentCard from "../components/StudentCard.jsx";
@@ -8,7 +11,7 @@ import StudentPageHeader from "../components/StudentPageHeader.jsx";
 import StudentStatusBadge from "../components/StudentStatusBadge.jsx";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 import studentApiEndpoints from "../api/studentApiEndpoints.js";
-import { getStudentAllocationProfile } from "../services/studentAcademicService.js";
+import { getStudentAllocationProfile, getStudentTransportFeeSummary, getStudentTransportFacilityFee, withTransportFacilityFee } from "../services/studentAcademicService.js";
 
 const unwrap = (data) => data?.data?.data ?? data?.data ?? data?.Data ?? data ?? {};
 const read = (row, ...keys) => keys.map((key) => row?.[key]).find((value) => value != null && value !== "");
@@ -30,18 +33,33 @@ export default function StudentTransport() {
   const [allocationProfile, setAllocationProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [transportFee, setTransportFee] = useState(null);
+  const [feeError, setFeeError] = useState("");
   useEffect(() => {
     let active = true;
     const load = async () => {
       if (!student?.studentId) return;
-      setLoading(true); setError("");
+      setLoading(true); setError(""); setFeeError(""); setTransportFee(null);
       try {
-        const [transportResult, hostelResult, profileResult] = await Promise.allSettled([
+        const [transportResult, hostelResult, profileResult, feeResult, historyResult, facilityResult] = await Promise.allSettled([
           apiClient.get(studentApiEndpoints.transport.studentDetails, { params: { studentId: student.studentId, academicYear: student.academicYearName } }),
           apiClient.get(studentApiEndpoints.hostel.studentAllocations, { params: { studentId: student.studentId, status: "Active" } }),
           getStudentAllocationProfile(student),
+          apiClient.get(apiEndpoints.fee.studentFeeDetailsByStudent(student.studentId)),
+          apiClient.get(apiEndpoints.fee.getHistory(student.studentId)),
+          getStudentTransportFacilityFee(student.studentId),
         ]);
         if (!active) return;
+        if (feeResult.status === "fulfilled") {
+          setTransportFee(withTransportFacilityFee(getStudentTransportFeeSummary(feeResult.value.data, historyResult.status === "fulfilled" ? historyResult.value.data : null), facilityResult.status === "fulfilled" ? facilityResult.value : null));
+          if (historyResult.status === "rejected") setFeeError(`Payment history could not be checked. ${getApiErrorMessage(historyResult.reason)}`);
+        } else if (feeResult.reason?.response?.status === 404) {
+          setTransportFee(withTransportFacilityFee({ assigned: false, amount: null, paid: null, due: null, status: "Not Assigned" }, facilityResult.status === "fulfilled" ? facilityResult.value : null));
+        } else {
+          setTransportFee(withTransportFacilityFee({ assigned: false, amount: null, paid: null, due: null, status: "Payment status unavailable" }, facilityResult.status === "fulfilled" ? facilityResult.value : null));
+          setFeeError(getApiErrorMessage(feeResult.reason));
+        }
+        if (facilityResult.status === "rejected") setFeeError(`Transport rate could not be loaded. ${getApiErrorMessage(facilityResult.reason)}`);
         const transportData = transportResult.status === "fulfilled" ? unwrap(transportResult.value.data) : null;
         const transport = Array.isArray(transportData) ? transportData[0] : transportData?.transport ?? transportData?.Transport ?? transportData?.assignment ?? transportData?.Assignment ?? transportData;
         const hostel = hostelResult.status === "fulfilled" ? rows(hostelResult.value.data).find((item) => String(read(item, "studentId", "StudentId")) === String(student.studentId) && hasHostel(item)) : null;
@@ -94,6 +112,11 @@ export default function StudentTransport() {
     {profileError || error ? <div className="sp-api-state is-error">{profileError || error}</div> : null}
     <StudentCard title="Transport Allocation" action={allocation ? <StudentStatusBadge value={status}/> : null}>
       {transportNotRequired ? <StudentEmptyState icon={Bus} title="Transport not required" text={hosteller ? "Your active hostel allocation means college transport is not required." : "Your student record indicates that school transport is not required."}/> : showTransportDetails ? <><div className="sp-service-hero"><span><Bus size={30}/></span><div><h2>{read(allocation, "routeName", "RouteName", "route", "Route") || read(profile, "routeName", "RouteName", "busRouteName", "BusRouteName") || read(profileRoute, "routeName", "RouteName", "name", "Name") || "Assigned Route"}</h2><p>{read(allocation, "routeCode", "RouteCode") || read(profileRoute, "routeCode", "RouteCode") || ""}{read(allocation, "vehicleNumber", "VehicleNumber") ? ` · ${read(allocation, "vehicleNumber", "VehicleNumber")}` : ""}</p></div></div><div className="sp-detail-grid">{details.map(([label, value, Icon]) => <div key={label}><Icon size={17}/><span>{label}</span><strong>{value}</strong></div>)}</div></> : error ? null : <StudentEmptyState icon={Bus} title="No Transport Allocation" text="No active transport allocation was found for your student record."/>}
+    </StudentCard>
+    <StudentCard title="Transport Fee Summary" action={<Link className="sp-text-link" to="/student-dashboard/fees">Fee details &amp; receipts</Link>}>
+      {transportFee?.configured ? <p className="sp-muted">{transportFee.detail} · {transportFee.plan} rate: ₹{transportFee.monthlyFee.toLocaleString("en-IN")}</p> : null}
+      {feeError ? <p className="sp-transport-fee-error" role="alert">{feeError}</p> : null}
+      {transportFee?.assigned || transportFee?.configured ? <><div className="sp-summary-grid four"><StudentSummaryCard icon={IndianRupee} label={transportFee.assigned ? "Total Transport Fee" : "Monthly Transport Fee"} value={transportFee.amount === null ? "—" : `₹${transportFee.amount.toLocaleString("en-IN")}`}/><StudentSummaryCard icon={WalletCards} label="Paid" tone="blue" value={transportFee.paid === null ? "—" : `₹${transportFee.paid.toLocaleString("en-IN")}`}/><StudentSummaryCard icon={Receipt} label="Due" tone="red" value={transportFee.due === null ? "—" : `₹${transportFee.due.toLocaleString("en-IN")}`}/><div className="sp-transport-fee-payment"><small>Payment Status</small><strong>{transportFee.status?.includes("unavailable") ? "Not available" : transportFee.status}</strong></div></div>{transportFee.status?.includes("unavailable") ? <p className="sp-muted">Transport payment details are unavailable.</p> : null}</> : transportFee ? <StudentEmptyState icon={Receipt} title="Not Assigned" text="No transport fee has been assigned in your student fee account."/> : <p className="sp-muted">Transport fee details could not be loaded.</p>}
     </StudentCard>
   </div>;
 }

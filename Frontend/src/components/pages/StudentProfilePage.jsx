@@ -1,3 +1,4 @@
+import StudentFeeTab from "./StudentFeeTab.jsx";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ArrowLeft, Bus, ClipboardList, GraduationCap, Mail, MapPin, Pencil, School, User, Users } from "lucide-react";
@@ -81,11 +82,14 @@ const resolvePhotoUrl = (value, version) => {
 };
 
 export default function StudentProfilePage({ id }) {
+  const [activeTab, setActiveTab] = useState("overview");
   const location = useLocation();
   const returnState = location.state?.studentManagement;
   const [student, setStudent] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [photoFailed, setPhotoFailed] = useState(false), [photoObjectUrl, setPhotoObjectUrl] = useState(""), [editMode, setEditMode] = useState(false), [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError("");
     apiClient.get(apiEndpoints.students.getById(id)).then(async ({ data }) => {
       const record = data?.data ?? data?.Data ?? data;
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
@@ -119,6 +123,10 @@ export default function StudentProfilePage({ id }) {
       Object.entries(admission || {}).forEach(([key, value]) => {
         if (value != null && value !== "") source[key] = value;
       });
+      // Admission is historical; select the current student allocation as a whole
+      // so cleared facility fields cannot be repopulated from the admission.
+      const currentAllocation = [record.student ?? record.Student ?? record.profile ?? record.Profile, record, studentSummary, admission]
+        .filter(Boolean).map(residentialAllocation).find((item) => item.studentType);
       const sectionValue = read(source, "section", "Section", "allocatedSection", "AllocatedSection", "assignedSection", "AssignedSection", "sectionDetails", "SectionDetails");
       const sectionId = read(source, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId") ?? read(sectionValue, "sectionId", "SectionId", "id", "Id");
       let sectionRecord = sectionRows.find((item) => String(read(item, "sectionId", "SectionId", "id", "Id")) === String(sectionId));
@@ -133,7 +141,7 @@ export default function StudentProfilePage({ id }) {
       try { uploadedPhoto = sessionStorage.getItem(`cms_student_photo_${studentId}`) ?? ""; } catch { /* Storage may be unavailable. */ }
       if (active) {
         setPhotoFailed(false);
-        setStudent({ ...source, id: studentId, studentId, name: read(source, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Student", admissionNo: admissionNo || "—", roll: read(record, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll") ?? "", photo: uploadedPhoto || read(source, "photo", "Photo", "photoPath", "PhotoPath", "photoUrl", "PhotoUrl", "profilePhoto", "ProfilePhoto", "profilePhotoUrl", "ProfilePhotoUrl"), photoVersion: Date.now(), academicYear: read(source, "academicYearName", "AcademicYearName", "academicYear", "AcademicYear"), level: read(source, "academicLevelName", "AcademicLevelName", "academicLevel", "AcademicLevel", "levelName", "LevelName"), group: read(source, "groupName", "GroupName", "group", "Group"), programme: read(source, "programmeName", "ProgrammeName", "programName", "ProgramName", "programme", "Programme"), section: sectionName, admissionType: read(source, "admissionType", "AdmissionType", "admissionTypeName", "AdmissionTypeName", "admissionCategory", "AdmissionCategory", "admissionQuota", "AdmissionQuota", "quota", "Quota", "admissionMode", "AdmissionMode", "type", "Type"), status: read(record, "status", "Status", "studentStatus", "StudentStatus") ?? "Pending assignment" });
+        setStudent({ ...source, currentAllocation, id: studentId, studentId, name: read(source, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Student", admissionNo: admissionNo || "—", roll: read(record, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll") ?? "", photo: uploadedPhoto || read(source, "photo", "Photo", "photoPath", "PhotoPath", "photoUrl", "PhotoUrl", "profilePhoto", "ProfilePhoto", "profilePhotoUrl", "ProfilePhotoUrl"), photoVersion: Date.now(), academicYear: read(source, "academicYearName", "AcademicYearName", "academicYear", "AcademicYear"), level: read(source, "academicLevelName", "AcademicLevelName", "academicLevel", "AcademicLevel", "levelName", "LevelName"), group: read(source, "groupName", "GroupName", "group", "Group"), programme: read(source, "programmeName", "ProgrammeName", "programName", "ProgramName", "programme", "Programme"), section: sectionName, admissionType: read(source, "admissionType", "AdmissionType", "admissionTypeName", "AdmissionTypeName", "admissionCategory", "AdmissionCategory", "admissionQuota", "AdmissionQuota", "quota", "Quota", "admissionMode", "AdmissionMode", "type", "Type"), status: read(record, "status", "Status", "studentStatus", "StudentStatus") ?? "Pending assignment" });
       }
     }).catch((e) => active && setError(getApiErrorMessage(e))).finally(() => active && setLoading(false));
     return () => { active = false; };
@@ -164,12 +172,13 @@ export default function StudentProfilePage({ id }) {
   if (loading) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><SkeletonPage /></DashboardLayout>;
   if (!student) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{error || "Student record was not found."}</div></div></DashboardLayout>;
   const initials = student.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
-  const allocation = residentialAllocation(student);
+  const allocation = student.currentAllocation || residentialAllocation(student);
   const finishEditing = async () => { setEditMode(false); setRefreshKey((value) => value + 1); };
-  return <DashboardLayout title={student.name} subtitle={`Admission No: ${student.admissionNo} · Roll No: ${student.roll || "Not assigned"}`} breadcrumb={["People", "Students"]} backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>} actions={!editMode ? <button type="button" className="cms-btn cms-btn-primary" onClick={() => setEditMode(true)}><Pencil size={15} /> Edit Profile</button> : null}>
+  return <DashboardLayout title={student.name} subtitle={`Admission No: ${student.admissionNo} · Roll No: ${student.roll || "Not assigned"}`} breadcrumb={["People", "Students"]} backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>} actions={!editMode ? <button type="button" className="cms-btn cms-btn-primary" onClick={() => { setActiveTab("overview"); setEditMode(true); }}><Pencil size={15} /> Edit Profile</button> : null}>
     <div className="student-management-profile-page">
-    <section className="cms-card student-profile-summary"><div><span>Student ID</span><strong>{student.studentId}</strong></div><div><span>Admission No</span><strong>{student.admissionNo}</strong></div><div><span>Roll No</span><strong>{student.roll || "Not assigned"}</strong></div><div><span>Status</span><StatusBadge value={student.status}/></div></section>
-    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} /></div> : <>
+    <section className="cms-card student-profile-summary"><div><span>Admission No</span><strong>{student.admissionNo}</strong></div><div><span>Roll No</span><strong>{student.roll || "Not assigned"}</strong></div><div><span>Status</span><StatusBadge value={student.status}/></div></section>
+    {!editMode ? <div className="student-profile-tabs" role="tablist" aria-label="Student profile"><button id="student-overview-tab" type="button" role="tab" aria-selected={activeTab === "overview"} aria-controls="student-overview-panel" className={`cms-btn ${activeTab === "overview" ? "cms-btn-primary" : "cms-btn-secondary"}`} onClick={() => setActiveTab("overview")}>Student Details</button><button id="student-fee-tab" type="button" role="tab" aria-selected={activeTab === "fee"} aria-controls="student-fee-panel" className={`cms-btn ${activeTab === "fee" ? "cms-btn-primary" : "cms-btn-secondary"}`} onClick={() => setActiveTab("fee")}>Fee</button></div> : null}
+    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} /></div> : activeTab === "fee" ? <StudentFeeTab key={student.studentId} student={student} /> : <div className="student-profile-overview" role="tabpanel" id="student-overview-panel" aria-labelledby="student-overview-tab">
       <ViewSection title="Personal Information" className="student-profile-personal-section"><div className="student-profile-personal-layout"><div className="student-profile-view-photo">{photoObjectUrl && !photoFailed ? <img src={photoObjectUrl} alt={`${student.name}'s profile`} onError={() => setPhotoFailed(true)} /> : initials}</div><ViewDetails items={[["Student Name", student.name], ["Gender", read(student, "gender", "Gender")], ["Date of Birth", formatDisplayDate(read(student, "dateOfBirth", "DateOfBirth", "dob"))], ["Blood Group", read(student, "bloodGroup", "BloodGroup")], ["Nationality", read(student, "nationality", "Nationality")], ["Religion", read(student, "religion", "Religion")], ["Category", read(student, "category", "Category")], ["Aadhaar Number", read(student, "aadhaarNumber", "AadhaarNumber")]]}/></div></ViewSection>
       <ViewSection title="Contact Information"><ViewDetails items={[["Email", read(student, "studentEmail", "email", "Email")], ["Mobile Number", read(student, "studentMobileNumber", "mobileNumber", "mobile", "MobileNumber")]]}/></ViewSection>
       <ViewSection title="Admission Details"><ViewDetails items={[["Admission No", student.admissionNo], ["Admission Date", formatDisplayDate(read(student, "admissionDate", "AdmissionDate"))], ["Admission Type", student.admissionType], ["Campus", read(student, "campusName", "CampusName", "campus", "Campus")]]}/></ViewSection>
@@ -178,7 +187,7 @@ export default function StudentProfilePage({ id }) {
       <ViewSection title="Address"><ViewDetails items={[["Address / House No", read(student, "address", "Address", "addressLine1", "AddressLine1", "houseNo", "HouseNo")], ["Street / Village", read(student, "street", "Street", "village", "Village", "addressLine2", "AddressLine2")], ["City / Town", read(student, "city", "City", "town", "Town")], ["District", read(student, "district", "District")], ["State", read(student, "state", "State")], ["Pincode", read(student, "pincode", "Pincode", "pinCode", "PinCode")]]}/></ViewSection>
       <ViewSection title="Parent Details" className="student-profile-parent-section"><ViewDetails items={[["Father Name", read(student, "fatherName", "FatherName")], ["Father Occupation", read(student, "fatherOccupation", "FatherOccupation")], ["Father Mobile", read(student, "fatherMobile", "FatherMobile")], ["Mother Name", read(student, "motherName", "MotherName")], ["Mother Occupation", read(student, "motherOccupation", "MotherOccupation")], ["Mother Mobile", read(student, "motherMobile", "MotherMobile")], ["Guardian Name", read(student, "guardianName", "GuardianName")], ["Guardian Mobile", read(student, "guardianMobile", "GuardianMobile")], ["Parent/Guardian Email", read(student, "parentParentGuardianEmail", "ParentParentGuardianEmail", "parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail")]]}/></ViewSection>
       <ViewSection title="Student Type & Residential Allocation"><ViewDetails items={[["Student Type", allocation.studentType], ["School Transport Facility Required?", allocation.transportRequired], ...(allocation.studentType === "Non-Residential" && allocation.transportRequired === "Yes" ? [["Bus Type", allocation.busType], ["Route", allocation.route], ["Pickup Point", allocation.pickupPoint]] : []), ...(allocation.studentType === "Residential" ? [["Hostel Block", allocation.hostelBlock], ["Room Type", allocation.hostelRoom]] : [])]}/></ViewSection>
-    </>}
+    </div>}
     </div>
   </DashboardLayout>;
 }

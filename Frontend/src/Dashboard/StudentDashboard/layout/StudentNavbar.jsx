@@ -14,7 +14,8 @@ import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 export default function StudentNavbar({ onMenu }) {
   const navigate = useNavigate();
   const { selectedBoard, selectedAcademicYear } = useAcademicContext();
-  const { profile } = useStudentProfile();
+  const { profile, photoUrl } = useStudentProfile();
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState("");
   const [dark, setDark] = useState(() => document.documentElement.dataset.theme === "dark");
   const [profileOpen, setProfileOpen] = useState(false);
   const menuRef = useRef(null);
@@ -77,7 +78,7 @@ export default function StudentNavbar({ onMenu }) {
         </button>
         <div className="sp-profile-menu" ref={menuRef}>
           <button onClick={() => setProfileOpen((value) => !value)}>
-            <span className="sp-avatar">{initials}</span>
+            <span className="sp-avatar">{photoUrl && failedPhotoUrl !== photoUrl ? <img className="sp-navbar-photo" src={photoUrl} alt="" onError={() => setFailedPhotoUrl(photoUrl)}/> : initials}</span>
             <span><strong>{studentName}</strong><small>Roll No: {profile?.rollNo || "Not Assigned"}</small></span>
             <ChevronDown size={15} />
           </button>

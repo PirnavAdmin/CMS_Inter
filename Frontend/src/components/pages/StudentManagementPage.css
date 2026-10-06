@@ -160,7 +160,7 @@
 .cms-content:has(> .student-management-profile-page) .cms-page-head { align-items: flex-end; flex-wrap: nowrap; margin-bottom: 16px; }
 .cms-content:has(> .student-management-profile-page) .cms-page-heading-with-back { width: auto; flex: 1 1 auto; }
 .cms-content:has(> .student-management-profile-page) .cms-page-head > div:last-child:not(.cms-page-heading-with-back) { flex: 0 0 auto; align-self: flex-end; margin-left: auto; }
-.student-profile-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 12px 18px; }
+.student-profile-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding: 12px 18px; }
 .student-profile-summary > div { display: grid; gap: 4px; min-width: 0; padding: 3px 18px; border-right: 1px solid var(--cms-border); }
 .student-profile-summary > div:first-child { padding-left: 0; }
 .student-profile-summary > div:last-child { padding-right: 0; border-right: 0; }
@@ -190,12 +190,83 @@
 @media (max-width: 640px) {
   .cms-content:has(> .student-management-profile-page) .cms-page-head { flex-wrap: wrap; }
   .cms-content:has(> .student-management-profile-page) .cms-page-head > div:last-child:not(.cms-page-heading-with-back) { width: 100%; justify-content: flex-end; }
-  .student-profile-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .student-profile-summary { grid-template-columns: 1fr; }
   .student-profile-summary > div { padding: 8px 10px; border-right: 0; border-bottom: 1px solid var(--cms-border); }
-  .student-profile-summary > div:nth-last-child(-n+2) { border-bottom: 0; }
+  .student-profile-summary > div:last-child { border-bottom: 0; }
   .student-profile-personal-layout { grid-template-columns: 1fr; }
   .student-profile-read-grid { grid-template-columns: 1fr; }
   .student-management-profile-editor .student-profile-section:nth-of-type(2) .student-profile-form-grid { grid-template-columns: 1fr; }
   .student-management-profile-editor .student-profile-section:nth-of-type(2) .cms-field:nth-child(2),
   .student-management-profile-editor .student-profile-section:nth-of-type(2) .cms-field:first-child { grid-column: 1; grid-row: auto; }
 }
+
+.student-profile-tabs { display: flex; gap: 8px; }
+.student-profile-overview { display: grid; gap: 12px; }
+.student-profile-overview > .cms-card { margin: 0; }
+.student-profile-fee .cms-fee-context { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.student-profile-fee .cms-fee-table {
+  width: 100%;
+  min-width: 700px;
+  table-layout: fixed;
+}
+
+.student-profile-fee .cms-fee-table th,
+.student-profile-fee .cms-fee-table td {
+  box-sizing: border-box;
+  height: 48px;
+  padding: 12px 8px;
+  vertical-align: middle;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+/* Applicable Fee Structure has 7 columns */
+.student-profile-fee .cms-fee-table th,
+.student-profile-fee .cms-fee-table td {
+  width: calc(100% / 7);
+}
+
+.student-profile-fee .cms-fee-table th.num,
+.student-profile-fee .cms-fee-table td.num {
+  text-align: center !important;
+  font-variant-numeric: tabular-nums;
+}
+.student-profile-fee .cms-fee-table th,
+.student-profile-fee .cms-fee-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.student-profile-fee .cms-fee-table th.num,
+.student-profile-fee .cms-fee-table td.num {
+  text-align: center;
+}
+.student-profile-fee .student-profile-fee-schedule {
+  width: 100%;
+  table-layout: fixed;
+}
+
+
+.student-profile-fee .student-profile-fee-schedule {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.student-profile-fee .student-profile-fee-schedule th,
+.student-profile-fee .student-profile-fee-schedule td {
+  width: calc(100% / 6);
+  box-sizing: border-box;
+  height: 48px;
+  padding: 12px 8px;
+  vertical-align: middle;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.student-profile-fee .student-profile-fee-schedule th.num,
+.student-profile-fee .student-profile-fee-schedule td.num {
+  text-align: center !important;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 900px) { .student-profile-fee .cms-fee-context { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .student-profile-fee .cms-fee-context { grid-template-columns: 1fr; } }
