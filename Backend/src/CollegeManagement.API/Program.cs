@@ -45,6 +45,7 @@ Dapper.SqlMapper.AddTypeHandler(new NullableTimeOnlyTypeHandler());
 #endregion
 
 #region Controllers & JSON
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers(options =>
     {
         options.Filters.Add<CollegeManagement.API.Filters.GlobalIsolationFilter>();
@@ -128,6 +129,7 @@ builder.Services.AddScoped<IAcademicYearRepository, AcademicYearRepository>();
 builder.Services.AddScoped<IBoardRepository, BoardRepository>();
 builder.Services.AddScoped<ICampusRepository, CampusRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IAuditLoggingService, AuditLoggingService>();
 builder.Services.AddScoped<IDesignationRepository, DesignationRepository>();
 builder.Services.AddScoped<IStaffRepository, StaffRepository>();
 builder.Services.AddScoped<IStaffSubjectAllocationRepository, StaffSubjectAllocationRepository>();

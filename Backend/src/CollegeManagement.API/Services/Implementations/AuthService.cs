@@ -24,6 +24,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IConfiguration _configuration;
         private readonly AppDbContext _context;
         private readonly IEmailService? _emailService;
+        private readonly IAuditLoggingService _auditService;
 
         public class VerifiedResetContext
         {
@@ -57,6 +58,7 @@ namespace CollegeManagement.API.Services.Implementations
             ILogger<AuthService> logger,
             IConfiguration configuration,
             AppDbContext context,
+            IAuditLoggingService auditService,
             IEmailService? emailService = null)
         {
             _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
@@ -65,6 +67,7 @@ namespace CollegeManagement.API.Services.Implementations
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
             _context = context ?? throw new ArgumentNullException(nameof(context));
+            _auditService = auditService;
             _emailService = emailService;
         }
 
@@ -174,6 +177,15 @@ namespace CollegeManagement.API.Services.Implementations
 
                     if (!selfHealed)
                     {
+                        await _auditService.LogAsync(
+                            action: "Failed login attempt",
+                            module: "Authentication",
+                            target: normalizedEmail,
+                            severity: "Warning",
+                            status: "Failed",
+                            details: "Invalid password provided during login."
+                        );
+
                         return new AuthResult
                         {
                             Status = false,
@@ -241,6 +253,15 @@ namespace CollegeManagement.API.Services.Implementations
                     assignedBoardIds = boards.ToList();
                 }
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
+
+                await _auditService.LogAsync(
+                    action: "User logged in",
+                    module: "Authentication",
+                    target: user.Email,
+                    severity: "Info",
+                    status: "Success",
+                    details: $"Successful login for {user.Email}"
+                );
 
                 return new AuthResult
                 {
