@@ -449,6 +449,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="academicLevelId">Academic Level ID.</param>
         /// <param name="groupId">Group ID.</param>
         /// <param name="examId">Examination ID.</param>
+        /// <param name="campusId">Campus ID.</param>
         /// <response code="200">Returns detailed result analysis.</response>
         [HttpGet("analysis")]
         [ProducesResponseType(typeof(ResultAnalysisDto), StatusCodes.Status200OK)]

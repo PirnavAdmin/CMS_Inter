@@ -11,10 +11,12 @@ namespace CollegeManagement.API.Repositories.Implementations;
 public class FeeRepository : IFeeRepository
 {
     private readonly AppDbContext _db;
+    private readonly CollegeManagement.API.Services.Interfaces.INumberSeriesService _numberSeriesService;
 
-    public FeeRepository(AppDbContext db)
+    public FeeRepository(AppDbContext db, CollegeManagement.API.Services.Interfaces.INumberSeriesService numberSeriesService)
     {
         _db = db;
+        _numberSeriesService = numberSeriesService;
     }
 
     private IDbConnection Connection()
@@ -961,7 +963,27 @@ public class FeeRepository : IFeeRepository
             _db.FeePayments.Add(payment);
             await _db.SaveChangesAsync();
 
-            payment.ReceiptNumber = $"FEE-{paymentDate:yyyyMMdd}-{payment.FeePaymentId:D6}";
+            string finalReceiptNo = request.ReceiptNumber?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(finalReceiptNo))
+            {
+                var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
+                { 
+                    Board = studentFee.Student?.BoardId?.ToString(),
+                    AcademicYear = studentFee.Student?.AcademicYearId?.ToString()
+                };
+                
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, studentFee.Student?.CampusId ?? 1);
+                if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+                {
+                    finalReceiptNo = generatedDto.GeneratedNumber;
+                }
+                else
+                {
+                    finalReceiptNo = $"FEE-{paymentDate:yyyyMMdd}-{payment.FeePaymentId:D6}";
+                }
+            }
+
+            payment.ReceiptNumber = finalReceiptNo;
             
             var receipt = new FeeReceipt
             {

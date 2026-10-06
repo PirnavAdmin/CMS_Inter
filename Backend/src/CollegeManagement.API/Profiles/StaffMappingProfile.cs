@@ -61,7 +61,11 @@ namespace CollegeManagement.API.Profiles
                 .ForMember(dest => dest.DepartmentSpecific, opt => opt.MapFrom(src => DeserializeDictionary(src.DepartmentSpecificJson)))
                 .ForMember(dest => dest.AllocatedSubjects, opt => opt.MapFrom(src => src.StaffSubjectAllocations != null
                     ? src.StaffSubjectAllocations.Select(a => a.Subject != null ? a.Subject.SubjectName : string.Empty).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList()
-                    : new List<string>()));
+                    : new List<string>()))
+                .ForMember(dest => dest.AssignedCampusIds, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => a.CampusId).ToList() : new List<int>()))
+                .ForMember(dest => dest.AssignedCampuses, opt => opt.MapFrom(src => src.StaffCampusAssignments != null ? src.StaffCampusAssignments.Select(a => new { id = a.CampusId, name = a.Campus != null ? a.Campus.CampusName : "", code = a.Campus != null ? a.Campus.CampusCode : "" }).Cast<object>().ToList() : new List<object>()))
+                .ForMember(dest => dest.AssignedBoardIds, opt => opt.MapFrom(src => src.StaffBoardAssignments != null ? src.StaffBoardAssignments.Select(a => a.BoardId).ToList() : new List<int>()))
+                .ForMember(dest => dest.AssignedBoards, opt => opt.MapFrom(src => src.StaffBoardAssignments != null ? src.StaffBoardAssignments.Select(a => new { id = a.BoardId, name = a.Board != null ? a.Board.BoardName : "", code = a.Board != null ? a.Board.BoardCode : "" }).Cast<object>().ToList() : new List<object>()));
 
             // Staff Entity -> StaffProfileFullDto
             CreateMap<Staff, StaffProfileFullDto>()
