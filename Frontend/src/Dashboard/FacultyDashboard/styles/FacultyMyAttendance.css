@@ -128,3 +128,358 @@
   gap: 12px;
   margin-top: 18px;
 }
+
+/* Attendance History Card & Filter Tabs (Matching Screenshot 2) */
+.sp-attendance-history-card {
+  border-radius: 16px;
+  overflow: hidden;
+  margin-top: 18px;
+}
+
+.sp-attendance-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+[data-theme="dark"] .sp-attendance-card-head,
+.dark-theme .sp-attendance-card-head {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.sp-att-cal-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(6, 182, 212, 0.12);
+  color: #06b6d4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .sp-att-cal-icon,
+.dark-theme .sp-att-cal-icon {
+  background: rgba(6, 182, 212, 0.18) !important;
+  color: #22d3ee !important;
+}
+
+.sp-att-filter-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--cms-subtle, #f1f4e2);
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--cms-border, #e6e7de);
+}
+
+[data-theme="dark"] .sp-att-filter-tabs,
+.dark-theme .sp-att-filter-tabs {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.sp-att-filter-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--cms-muted, #7b8275);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.sp-att-filter-btn:hover {
+  color: var(--cms-text, #171a17);
+}
+
+[data-theme="dark"] .sp-att-filter-btn,
+.dark-theme .sp-att-filter-btn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .sp-att-filter-btn:hover,
+.dark-theme .sp-att-filter-btn:hover {
+  color: #ffffff !important;
+}
+
+.sp-att-filter-btn.active {
+  background: var(--cms-primary, #6f8400);
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] .sp-att-filter-btn.active,
+.dark-theme .sp-att-filter-btn.active {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Attendance Table */
+.sp-attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sp-attendance-table th {
+  padding: 13px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--cms-muted, #7b8275);
+  letter-spacing: 0.35px;
+  border-bottom: 1.5px solid var(--cms-border, #e6e7de);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sp-attendance-table td {
+  padding: 13px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .sp-attendance-table th,
+.dark-theme .sp-attendance-table th {
+  color: #8f9789 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .sp-attendance-table td,
+.dark-theme .sp-attendance-table td {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.sp-attendance-table tbody tr:hover td {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+[data-theme="dark"] .sp-attendance-table tbody tr:hover td,
+.dark-theme .sp-attendance-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.sp-day-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cms-text, #171a17);
+}
+
+.sp-day-date {
+  font-size: 11.5px;
+  color: var(--cms-muted, #7b8275);
+  margin-top: 2px;
+}
+
+[data-theme="dark"] .sp-day-name,
+.dark-theme .sp-day-name {
+  color: #f2f3ee !important;
+}
+
+[data-theme="dark"] .sp-day-date,
+.dark-theme .sp-day-date {
+  color: #94a3b8 !important;
+}
+
+.sp-shift-text {
+  font-size: 12.5px;
+  color: var(--cms-muted, #7b8275);
+}
+
+[data-theme="dark"] .sp-shift-text,
+.dark-theme .sp-shift-text {
+  color: #aab5a2 !important;
+}
+
+.sp-time-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text, #171a17);
+}
+
+.sp-time-text.highlight {
+  color: var(--cms-primary, #6f8400);
+}
+
+[data-theme="dark"] .sp-time-text,
+.dark-theme .sp-time-text {
+  color: #f2f3ee !important;
+}
+
+[data-theme="dark"] .sp-time-text.highlight,
+.dark-theme .sp-time-text.highlight {
+  color: #4ade80 !important;
+}
+
+.sp-hours-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text, #171a17);
+}
+
+[data-theme="dark"] .sp-hours-text,
+.dark-theme .sp-hours-text {
+  color: #f2f3ee !important;
+}
+
+.sp-device-text {
+  font-size: 12px;
+  color: var(--cms-muted, #7b8275);
+}
+
+[data-theme="dark"] .sp-device-text,
+.dark-theme .sp-device-text {
+  color: #94a3b8 !important;
+}
+
+/* Status capsule pills matching Screenshot 2 */
+.sp-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 16px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap !important;
+  box-sizing: border-box;
+  min-width: 80px;
+  transition: all 0.15s ease;
+}
+
+.sp-status-badge.present {
+  background: #eaf7ec;
+  color: #1e7e34;
+  border: 1px solid #bce6c4;
+}
+
+.sp-status-badge.empty {
+  background: transparent;
+  color: var(--cms-muted, #7b8275);
+  border: 1px dashed var(--cms-border, #d1d5db);
+}
+
+.sp-status-badge.late {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.sp-status-badge.half-day {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.sp-status-badge.leave {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.sp-status-badge.absent {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.sp-status-badge.holiday {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+/* Dark theme status badges matching Screenshot 2 */
+[data-theme="dark"] .sp-status-badge.present,
+.dark-theme .sp-status-badge.present {
+  background: rgba(34, 197, 94, 0.12) !important;
+  color: #22c55e !important;
+  border: 1px solid rgba(34, 197, 94, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.empty,
+.dark-theme .sp-status-badge.empty {
+  background: transparent !important;
+  color: #64748b !important;
+  border: 1px dashed rgba(255, 255, 255, 0.2) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.late,
+.dark-theme .sp-status-badge.late {
+  background: rgba(245, 158, 11, 0.14) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.half-day,
+.dark-theme .sp-status-badge.half-day {
+  background: rgba(234, 88, 12, 0.14) !important;
+  color: #fb923c !important;
+  border: 1px solid rgba(234, 88, 12, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.leave,
+.dark-theme .sp-status-badge.leave {
+  background: rgba(239, 68, 68, 0.14) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.absent,
+.dark-theme .sp-status-badge.absent {
+  background: rgba(239, 68, 68, 0.16) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.4) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.holiday,
+.dark-theme .sp-status-badge.holiday {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+}
+
+/* Regularize button in attendance logs */
+.sp-regularize-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--cms-border, #e6e7de);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sp-regularize-btn:hover {
+  background: var(--cms-bg, #f7f8ef);
+  border-color: var(--cms-primary, #6f8400);
+  color: var(--cms-primary, #6f8400);
+}
+
+[data-theme="dark"] .sp-regularize-btn,
+.dark-theme .sp-regularize-btn {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #f2f3ee !important;
+}
+
+[data-theme="dark"] .sp-regularize-btn:hover,
+.dark-theme .sp-regularize-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+
