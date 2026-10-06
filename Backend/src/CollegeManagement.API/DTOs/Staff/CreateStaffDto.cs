@@ -139,6 +139,8 @@ namespace CollegeManagement.API.DTOs.Staff
 
         public List<int>? AssignedBoardIds { get; set; } = new();
 
+        public string? CampusBoardAssignmentsJson { get; set; }
+
         public DateTime? JoiningDate { get; set; }
 
         public DateTime? DateOfJoining

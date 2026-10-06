@@ -62,6 +62,7 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? CampusName { get; set; }
         public List<int> AssignedCampusIds { get; set; } = new();
         public List<object> AssignedCampuses { get; set; } = new();
+        public string? CampusBoardAssignmentsJson { get; set; }
 
         public int? BoardId { get; set; }
         public string? BoardCode { get; set; }
