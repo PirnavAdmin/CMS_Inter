@@ -204,7 +204,6 @@ namespace CollegeManagement.API.Models.Staff
         public string? BankDetailsJson { get; set; }
         public string? EmergencyContactJson { get; set; }
         public string? DepartmentSpecificJson { get; set; }
-        public string? CampusBoardAssignmentsJson { get; set; }
 
         [NotMapped]
         public string? CustomFieldsJson
