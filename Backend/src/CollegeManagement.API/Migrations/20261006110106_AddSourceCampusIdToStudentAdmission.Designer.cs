@@ -4,6 +4,7 @@ using CollegeManagement.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CollegeManagement.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006110106_AddSourceCampusIdToStudentAdmission")]
+    partial class AddSourceCampusIdToStudentAdmission
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3531,74 +3534,6 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("Staff", (string)null);
                 });
 
-            modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffBoardAssignment", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BoardId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<int>("StaffId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BoardId");
-
-                    b.HasIndex("StaffId", "BoardId")
-                        .IsUnique();
-
-                    b.ToTable("StaffBoardAssignments", (string)null);
-                });
-
-            modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffCampusAssignment", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CampusId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<int>("StaffId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CampusId");
-
-                    b.HasIndex("StaffId", "CampusId")
-                        .IsUnique();
-
-                    b.ToTable("StaffCampusAssignments", (string)null);
-                });
-
             modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffSubjectAllocation", b =>
                 {
                     b.Property<int>("Id")
@@ -7085,44 +7020,6 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("DesignationRef");
                 });
 
-            modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffBoardAssignment", b =>
-                {
-                    b.HasOne("CollegeManagement.API.Models.Board", "Board")
-                        .WithMany()
-                        .HasForeignKey("BoardId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
-                        .WithMany("StaffBoardAssignments")
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Board");
-
-                    b.Navigation("Staff");
-                });
-
-            modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffCampusAssignment", b =>
-                {
-                    b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
-                        .WithMany()
-                        .HasForeignKey("CampusId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
-                        .WithMany("StaffCampusAssignments")
-                        .HasForeignKey("StaffId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Campus");
-
-                    b.Navigation("Staff");
-                });
-
             modelBuilder.Entity("CollegeManagement.API.Models.Staff.StaffSubjectAllocation", b =>
                 {
                     b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
@@ -8015,10 +7912,6 @@ namespace CollegeManagement.API.Migrations
 
             modelBuilder.Entity("CollegeManagement.API.Models.Staff.Staff", b =>
                 {
-                    b.Navigation("StaffBoardAssignments");
-
-                    b.Navigation("StaffCampusAssignments");
-
                     b.Navigation("StaffSubjectAllocations");
                 });
 

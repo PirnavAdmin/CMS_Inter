@@ -145,6 +145,9 @@ namespace CollegeManagement.API.Models.Staff
         [ForeignKey(nameof(BoardId))]
         public virtual Board? BoardRef { get; set; }
 
+        public virtual ICollection<StaffCampusAssignment> StaffCampusAssignments { get; set; } = new List<StaffCampusAssignment>();
+        public virtual ICollection<StaffBoardAssignment> StaffBoardAssignments { get; set; } = new List<StaffBoardAssignment>();
+
         [NotMapped]
         public string? BoardName { get; set; }
 

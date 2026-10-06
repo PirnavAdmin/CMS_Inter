@@ -14,6 +14,10 @@ namespace CollegeManagement.API.DTOs.Students.Responses
         public string? Nationality { get; set; }
         public string? Religion { get; set; }
 
+        // Campus
+        public int? CampusId { get; set; }
+        public string? CampusName { get; set; }
+
         // Admission
         public string AdmissionNo { get; set; } = string.Empty;
         public DateTime AdmissionDate { get; set; }

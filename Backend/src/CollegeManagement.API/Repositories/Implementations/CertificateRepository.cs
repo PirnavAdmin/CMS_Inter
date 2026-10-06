@@ -365,23 +365,23 @@ public class CertificateRepository : ICertificateRepository
             {
                 if (templateCode.Contains("BONAFIDE", StringComparison.OrdinalIgnoreCase) || certType.Contains("Bonafide", StringComparison.OrdinalIgnoreCase) || templateCode == "BC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}}, Section {{section}} during the academic year {{academic_year}}.";
                 }
                 else if (templateCode.Contains("STUDY", StringComparison.OrdinalIgnoreCase) || certType.Contains("Study", StringComparison.OrdinalIgnoreCase) || templateCode == "SC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group (Section {{section}}) and appeared for the Intermediate Public Examination conducted by the {{board_name}}.";
                 }
                 else if (templateCode.Contains("CONDUCT", StringComparison.OrdinalIgnoreCase) || certType.Contains("Conduct", StringComparison.OrdinalIgnoreCase) || templateCode == "CC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has been a student of this college during the academic year(s) {{academic_year}}.\nTo the best of our knowledge and records, his/her conduct and character have been Good.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has been a student of this college during the academic year(s) {{academic_year}} (Section {{section}}).\nTo the best of our knowledge and records, his/her conduct and character have been Good.";
                 }
                 else if (templateCode.Contains("TRANSFER", StringComparison.OrdinalIgnoreCase) || certType.Contains("Transfer", StringComparison.OrdinalIgnoreCase) || templateCode == "TC")
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} in {{group_name}} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. All dues to the college have been cleared ({{dues_cleared}}).\nWe wish him/her all the best for his/her future endeavours.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} in {{group_name}} Group (Section {{section}}).\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. All dues to the college have been cleared ({{dues_cleared}}).\nWe wish him/her all the best for his/her future endeavours.";
                 }
                 else
                 {
-                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} is studying in {{academic_level}} ({{group_name}}) for the Academic Year {{academic_year}}.";
+                    rawBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} is studying in {{academic_level}} ({{group_name}}) for the Academic Year {{academic_year}} (Section {{section}}).";
                 }
             }
 
@@ -414,13 +414,6 @@ public class CertificateRepository : ICertificateRepository
                 ["MotherName"] = motherName,
                 ["mother"] = motherName,
                 ["Mother Name"] = motherName,
-
-                ["student_id"] = studentIdStr,
-                ["studentId"] = studentIdStr,
-                ["StudentId"] = studentIdStr,
-                ["id"] = studentIdStr,
-                ["ID"] = studentIdStr,
-                ["Student ID"] = studentIdStr,
 
                 ["admission_no"] = admissionNo,
                 ["admissionNo"] = admissionNo,
@@ -790,6 +783,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_Purpose", request.Purpose.Trim(), DbType.String);
         parameters.Add("p_RequestDate", requestDate, DbType.DateTime);
         parameters.Add("p_Remarks", request.Remarks?.Trim(), DbType.String);
+        parameters.Add("p_CertificateNo", request.CertificateNo?.Trim(), DbType.String);
 
         try
         {

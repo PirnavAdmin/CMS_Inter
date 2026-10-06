@@ -244,7 +244,7 @@ namespace CollegeManagement.API.Controllers.V1
 
                 return Ok(new { success = true, data = list });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return StatusCode(500, new { success = false, message = "Failed to retrieve GPS tracking data", errors = new { } });
             }

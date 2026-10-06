@@ -5,16 +5,24 @@ using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Certificate;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Services;
 
 public class CertificateService : ICertificateService
 {
     private readonly ICertificateRepository _repository;
+    private readonly CollegeManagement.API.Data.AppDbContext _context;
+    private readonly INumberSeriesService _numberSeriesService;
 
-    public CertificateService(ICertificateRepository repository)
+    public CertificateService(
+        ICertificateRepository repository, 
+        CollegeManagement.API.Data.AppDbContext context, 
+        INumberSeriesService numberSeriesService)
     {
         _repository = repository;
+        _context = context;
+        _numberSeriesService = numberSeriesService;
     }
 
     public async Task<IReadOnlyList<CertificateResponseDto>> GetAllAsync(
@@ -73,6 +81,24 @@ public class CertificateService : ICertificateService
 
         if (string.IsNullOrWhiteSpace(request.Purpose))
             throw new ArgumentException("Purpose is required.");
+
+        var student = await _context.Students
+            .FirstOrDefaultAsync(s => s.AdmissionNo == request.AdmissionNo, ct);
+
+        if (student != null && string.IsNullOrWhiteSpace(request.CertificateNo))
+        {
+            var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
+            { 
+                Board = student.BoardId?.ToString(),
+                AcademicYear = student.AcademicYearId?.ToString()
+            };
+            
+            var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("CERTIFICATE_NO", reqDto, student.CampusId ?? 1);
+            if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+            {
+                request.CertificateNo = generatedDto.GeneratedNumber;
+            }
+        }
 
         return await _repository.GenerateAsync(request, ct);
     }

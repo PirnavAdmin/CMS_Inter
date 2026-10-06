@@ -108,20 +108,9 @@ namespace CollegeManagement.API.Services.Implementations
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
             var actualCode = code;
 
-            var contextParts = new List<string>();
-            if (!string.IsNullOrWhiteSpace(context?.Board))
-            {
-                contextParts.Add($"B:{context.Board.Trim().ToUpperInvariant()}");
-            }
-            if (!string.IsNullOrWhiteSpace(context?.AcademicYear))
-            {
-                contextParts.Add($"AY:{context.AcademicYear.Trim().ToUpperInvariant()}");
-            }
-
-            if (contextParts.Count > 0)
-            {
-                actualCode = $"{code}|{string.Join("_", contextParts)}";
-            }
+            // Note: We deliberately do NOT split the series code by Board or Academic Year here.
+            // This ensures that the sequence number is continuous globally per campus.
+            // Formatting tokens like {BOARD} and {AY} are still evaluated by NumberSeriesPatternEvaluator.
 
             var entity = await _repository.GenerateNextSequenceAsync(actualCode, campusId, baseSeriesCode: code);
             if (entity == null) return null;
@@ -149,20 +138,7 @@ namespace CollegeManagement.API.Services.Implementations
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
             var actualCode = code;
 
-            var contextParts = new List<string>();
-            if (!string.IsNullOrWhiteSpace(board))
-            {
-                contextParts.Add($"B:{board.Trim().ToUpperInvariant()}");
-            }
-            if (!string.IsNullOrWhiteSpace(academicYear))
-            {
-                contextParts.Add($"AY:{academicYear.Trim().ToUpperInvariant()}");
-            }
-
-            if (contextParts.Count > 0)
-            {
-                actualCode = $"{code}|{string.Join("_", contextParts)}";
-            }
+            // Do not split series code by Board/AY to maintain global campus sequence
 
             // Fallback to base code if specific entity is not found just to get settings, but we primarily want the current sequence of the specific context
             var specificEntity = await _repository.GetByCodeAsync(actualCode, campusId);
@@ -219,25 +195,9 @@ namespace CollegeManagement.API.Services.Implementations
                 curSeq = entity.StartNumber > 0 ? entity.StartNumber - 1 : 0;
             }
             
-            if (context != null && (!string.IsNullOrWhiteSpace(context.Board) || !string.IsNullOrWhiteSpace(context.AcademicYear)))
-            {
-                var contextParts = new List<string>();
-                if (!string.IsNullOrWhiteSpace(context.Board)) contextParts.Add($"B:{context.Board.Trim().ToUpperInvariant()}");
-                if (!string.IsNullOrWhiteSpace(context.AcademicYear)) contextParts.Add($"AY:{context.AcademicYear.Trim().ToUpperInvariant()}");
-                
-                var actualCode = $"{entity.SeriesCode}|{string.Join("_", contextParts)}";
-                var subEntity = await _repository.GetByCodeAsync(actualCode, campusId);
-                
-                if (subEntity != null)
-                {
-                    curSeq = subEntity.CurrentSequence;
-                }
-                else
-                {
-                    curSeq = entity.StartNumber > 0 ? entity.StartNumber - 1 : 0;
-                }
-            }
-            else if (!entity.SeriesCode.Contains("|"))
+            // We no longer split sequence by Board or AcademicYear.
+            // The sequence is continuous globally for the campus.
+            // Formatting will still use Board/AY if present in the pattern.
             {
                 var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode, campusId, context?.Board, context?.AcademicYear);
                 curSeq = Math.Max(curSeq, maxSeq);

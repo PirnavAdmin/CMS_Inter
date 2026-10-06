@@ -31,6 +31,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
+                .Include(s => s.StaffCampusAssignments)
+                    .ThenInclude(sca => sca.Campus)
+                .Include(s => s.StaffBoardAssignments)
+                    .ThenInclude(sba => sba.Board)
                 .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
         }
 
@@ -43,6 +47,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
+                .Include(s => s.StaffCampusAssignments)
+                    .ThenInclude(sca => sca.Campus)
+                .Include(s => s.StaffBoardAssignments)
+                    .ThenInclude(sba => sba.Board)
                 .FirstOrDefaultAsync(s => s.EmployeeId == employeeId.Trim() && !s.IsDeleted);
         }
 
