@@ -100,7 +100,7 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         // Other
         public decimal? AnnualIncome { get; set; }
-        public int FeeStructureId { get; set; }
+        public int? FeeStructureId { get; set; }
         public string? PaymentPlan { get; set; }
         public string? ScholarshipStatus { get; set; }
 

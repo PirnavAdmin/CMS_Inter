@@ -26,6 +26,7 @@ import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import * as hostelApi from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import AdmissionRequests from "@/components/pages/AdmissionRequests.jsx";
 import { Field, Modal, Skeleton, SkeletonButton, SkeletonInput, SkeletonRow, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -3017,6 +3018,7 @@ export default function AdmissionPage() {
   const [values, setValues] = useState(initialDraft.values);
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
+  const [requestsOpen, setRequestsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [admissions, setAdmissions] = useState([]);
   const [listLoading, setListLoading] = useState(false);
@@ -3157,6 +3159,11 @@ export default function AdmissionPage() {
     return campusOptions.filter((option) => option.searchText.includes(query));
   }, [campusOptions, campusSearch]);
   const selectedCampusValue = selectedCampusId || selectedCampus?.campusId || selectedCampus?.id || "";
+  const isCrossCampusAdmission = Boolean(
+    selectedCampusValue
+    && values.campus
+    && String(selectedCampusValue).trim() !== String(values.campus).trim()
+  );
   const admissionListParams = useMemo(() => (
     selectedCampusValue ? { campusId: selectedCampusValue } : {}
   ), [selectedCampusValue]);
@@ -5600,6 +5607,22 @@ export default function AdmissionPage() {
     setSaving(false);
   };
 
+  const handlePreviewPrimaryAction = () => {
+    if (canVerifyPreviewAdmission) {
+      verifyAdmission(previewVerifyRecord);
+      return;
+    }
+    if (isCrossCampusAdmission) {
+      setToast("Selected campus is different from your current campus. Request admission is UI-only for now.");
+      return;
+    }
+    submit();
+  };
+
+  if (requestsOpen) {
+    return <AdmissionRequests campusOptions={campusOptions} currentCampusId={selectedCampusValue} onClose={() => setRequestsOpen(false)} />;
+  }
+
   if (viewMode === "list") {
     return (
       <DashboardLayout
@@ -5607,9 +5630,14 @@ export default function AdmissionPage() {
         subtitle="Manage student admission applications and admissions."
         breadcrumb={["People"]}
         actions={(
-          <button type="button" className="cms-btn cms-btn-primary" onClick={addNewAdmission}>
-            <Plus size={15} /> Add New Admission
-          </button>
+          <div className="cms-admission-form-actions">
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRequestsOpen(true)}>
+              <ClipboardList size={15} /> Admission Requests
+            </button>
+            <button type="button" className="cms-btn cms-btn-primary" onClick={addNewAdmission}>
+              <Plus size={15} /> Add New Admission
+            </button>
+          </div>
         )}
       >
         <div className="cms-card cms-admission-list-card">
@@ -5798,6 +5826,9 @@ export default function AdmissionPage() {
       breadcrumb={["People"]}
       actions={(
         <div className="cms-admission-form-actions">
+          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRequestsOpen(true)}>
+            <ClipboardList size={15} /> Admission Requests
+          </button>
           <div className="cms-admission-main-tabs" role="tablist" aria-label="Admission form steps">
             {admissionMainTabs.map((tab) => {
               const TabIcon = tab.icon;
@@ -5922,7 +5953,7 @@ export default function AdmissionPage() {
           ) : !readOnlyAdmission ? (
             <button
               className="cms-btn cms-btn-primary"
-              onClick={canVerifyPreviewAdmission ? () => verifyAdmission(previewVerifyRecord) : submit}
+              onClick={handlePreviewPrimaryAction}
               disabled={
                 canVerifyPreviewAdmission
                   ? actionBusy === `Verified-${editingAdmissionId}`
@@ -5931,7 +5962,7 @@ export default function AdmissionPage() {
             >
               {canVerifyPreviewAdmission
                 ? (actionBusy === `Verified-${editingAdmissionId}` ? "Verifying..." : "Verify Admission")
-                : (saving ? "Submitting..." : "Submit Admission")}
+                : (saving ? "Submitting..." : isCrossCampusAdmission ? "Request Admission" : "Submit Admission")}
             </button>
           ) : null}
         </div>
