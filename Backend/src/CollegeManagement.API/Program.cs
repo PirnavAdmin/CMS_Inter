@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Text;
 using System.Reflection;
 using Asp.Versioning;
@@ -323,6 +323,19 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ClockSkew = TimeSpan.Zero
     };
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 #endregion
 
@@ -519,8 +532,13 @@ app.Use(async (context, next) =>
 
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
 app.Run();
+
+
+
+
 
