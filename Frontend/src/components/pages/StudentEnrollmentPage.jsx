@@ -232,7 +232,7 @@ const validate = (form) => {
   return errors;
 };
 
-export default function StudentEnrollmentPage({ id, embedded = false, onCancel, onSaved }) {
+export default function StudentEnrollmentPage({ id, embedded = false, onCancel, onSaved, onValidationError, onBusyChange }) {
   const navigate = useNavigate();
   const { campuses, selectedCampusId } = useCampusContext();
   const redirectTimer = useRef(null);
@@ -265,6 +265,10 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     } catch (error) { setLoadError(getApiErrorMessage(error) || "Unable to load the student profile."); }
     finally { setLoading(false); }
   }, [id]);
+  useEffect(() => {
+    onBusyChange?.(saving);
+    return () => onBusyChange?.(false);
+  }, [saving, onBusyChange]);
   useEffect(() => { loadStudent(); }, [loadStudent]);
   // Fetch saved photos through the authenticated API client, as the profile view does.
   useEffect(() => {
@@ -492,6 +496,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
     setTouched(Object.fromEntries(fieldKeys.map((key) => [key, true]))); setErrors(nextErrors);
     const firstInvalid = fieldKeys.find((key) => nextErrors[key]);
     if (firstInvalid) {
+      onValidationError?.();
       window.requestAnimationFrame(() => document.querySelector(".student-profile-edit .cms-field.is-invalid input, .student-profile-edit .cms-field.is-invalid select, .student-profile-edit .cms-field.is-invalid textarea")?.focus());
       return;
     }
@@ -564,7 +569,7 @@ export default function StudentEnrollmentPage({ id, embedded = false, onCancel, 
 }
 
 const profileSectionIcons = { "Admission Details": ClipboardList, "Personal Information": User, "Contact Information": Mail, "Academic Placement": GraduationCap, "Student Type & Residential Allocation": Bus, "Previous Education": School, Address: MapPin, "Parent Details": Users };
-function ProfileSection({ title, children }) { const Icon = profileSectionIcons[title]; return <section className="student-profile-section"><header className="student-profile-section-head">{Icon ? <span className="student-profile-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
+function ProfileSection({ title, children }) { const Icon = profileSectionIcons[title]; return <section data-profile-section={({ "Admission Details": "academic", "Personal Information": "personal", "Contact Information": "contact", "Academic Placement": "academic", "Student Type & Residential Allocation": "transport", "Previous Education": "academic", Address: "contact", "Parent Details": "parent" })[title]} className="student-profile-section"><header className="student-profile-section-head">{Icon ? <span className="student-profile-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="cms-form-grid student-profile-form-grid">{children}</div></section>; }
 function Field({ label, required = false, error, className = "", children, onBlur }) { return <label className={`cms-field ${className}${error ? " is-invalid" : ""}`} onBlur={onBlur}><span>{label}{required ? <> <span className="req">*</span></> : null}</span>{children}{error ? <small className="cms-field-error">{error}</small> : null}</label>; }
 function SelectField({ label, value, onChange, options, placeholder, disabled = false, required = false, error, onBlur }) {
   const selected = String(value ?? "");
