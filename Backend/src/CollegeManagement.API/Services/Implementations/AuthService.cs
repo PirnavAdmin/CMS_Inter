@@ -228,6 +228,9 @@ namespace CollegeManagement.API.Services.Implementations
                 // Issue standardized JWT via Phase 6A helper
                 
                 // Issue standardized JWT via Phase 6A helper
+                var assignedCampusIds = new List<int>();
+                var assignedBoardIds = new List<int>();
+                
                 if (user.StaffId.HasValue && user.StaffId.Value > 0)
                 {
                     var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
@@ -238,6 +241,16 @@ namespace CollegeManagement.API.Services.Implementations
                         user.Designation = staffInfo.Designation;
                         user.EmployeeId = staffInfo.EmployeeId;
                     }
+                    
+                    var campuses = await connection.QueryAsync<int>(
+                        "SELECT CampusId FROM StaffCampusAssignments WHERE StaffId = @Id",
+                        new { Id = user.StaffId.Value });
+                    assignedCampusIds = campuses.ToList();
+                    
+                    var boards = await connection.QueryAsync<int>(
+                        "SELECT BoardId FROM StaffBoardAssignments WHERE StaffId = @Id",
+                        new { Id = user.StaffId.Value });
+                    assignedBoardIds = boards.ToList();
                 }
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
 
@@ -263,7 +276,9 @@ namespace CollegeManagement.API.Services.Implementations
                     AdminId = user.AdminId,
                     Designation = user.Designation,
                     EmployeeId = user.EmployeeId,
-                    Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty
+                    Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
+                    AssignedCampusIds = assignedCampusIds,
+                    AssignedBoardIds = assignedBoardIds
                 };
             }
 

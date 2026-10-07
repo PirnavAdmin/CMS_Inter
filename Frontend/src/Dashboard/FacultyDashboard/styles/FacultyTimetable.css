@@ -1,40 +1,393 @@
-/* Faculty Timetable Styles */
-.sp-tt-table { width: 100%; border-collapse: collapse; min-width: 700px; }
-.sp-tt-table th {
-  background: var(--cms-primary, #6F8400);
-  color: #fff;
-  padding: 10px 14px;
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  text-align: center;
-  border: 1px solid rgba(255,255,255,0.15);
+/* Faculty Timetable - Compact, Professional, Theme-Based Layout */
+
+.faculty-tt-container {
+  display: flex;
+  flex-direction: column;
 }
-.sp-tt-table td {
-  padding: 8px 10px;
+
+.faculty-tt-head {
+  margin-bottom: 10px !important;
+}
+
+.faculty-tt-head h1 {
+  font-size: 19px !important;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--cms-text, #10203c);
+  margin: 0;
+}
+
+.faculty-tt-head p {
+  font-size: 12px !important;
+  color: var(--cms-muted, #7B8275);
+  margin: 3px 0 0 !important;
+}
+
+.faculty-tt-card {
+  background: var(--cms-surface, #ffffff);
   border: 1px solid var(--cms-border, #e4e8f0);
-  vertical-align: middle;
-  font-size: 12px;
+  border-radius: var(--cms-radius, 12px);
+  box-shadow: 0 1px 3px rgba(16, 32, 60, 0.04), 0 4px 12px rgba(16, 32, 60, 0.03);
+  overflow: hidden;
 }
-.sp-tt-table .time-col { background: var(--cms-bg, #f4f6fb); font-weight: 600; font-size: 11.5px; color: var(--cms-muted); white-space: nowrap; }
+
+.faculty-tt-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* High-specificity overrides against global table styles */
+#root .cms-content table.sp-tt-table,
+.sp-tt-table {
+  width: 100% !important;
+  min-width: 680px;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+  background: var(--cms-surface, #ffffff);
+  margin: 0;
+}
+
+#root .cms-content table.sp-tt-table thead th,
+.sp-tt-table thead th,
+.sp-tt-table th {
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 5px 8px !important;
+  background: var(--cms-primary-soft, #F1F4E2) !important;
+  color: var(--cms-primary-dark, #566900) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  text-transform: uppercase !important;
+  text-align: center !important;
+  border: 1px solid var(--cms-border, #e4e8f0) !important;
+  border-bottom: 1.5px solid rgba(111, 132, 0, 0.3) !important;
+  white-space: nowrap !important;
+  line-height: 1.2 !important;
+}
+
+#root .cms-content table.sp-tt-table thead th.faculty-tt-th-time,
+.sp-tt-table th:first-child {
+  width: 115px !important;
+  text-align: center !important;
+}
+
+#root .cms-content table.sp-tt-table thead th:not(:first-child),
+.sp-tt-table th:not(:first-child) {
+  width: calc((100% - 115px) / 6) !important;
+}
+
+#root .cms-content table.sp-tt-table tbody td,
+.sp-tt-table tbody td,
+.sp-tt-table td {
+  min-height: unset !important;
+  height: auto !important;
+  padding: 3px 4px !important;
+  border: 1px solid var(--cms-border, #e4e8f0) !important;
+  vertical-align: middle !important;
+  background: var(--cms-surface, #ffffff) !important;
+  line-height: 1.2 !important;
+}
+
+#root .cms-content table.sp-tt-table tbody td.time-col,
+.sp-tt-table .time-col {
+  background: #f8faf6 !important;
+  color: var(--cms-text, #10203c) !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  letter-spacing: -0.2px !important;
+  padding: 4px 6px !important;
+  border-right: 1.5px solid var(--cms-border, #e4e8f0) !important;
+}
+
+#root .cms-content table.sp-tt-table tbody tr:hover,
+.sp-tt-table tbody tr:hover {
+  background: transparent !important;
+}
+
+/* Compact, Executive Theme-Based Slot Box */
 .sp-tt-cell {
   background: var(--cms-primary-soft, #F1F4E2);
-  border-radius: 8px;
-  padding: 8px 10px;
-  text-align: center;
+  border: 1px solid rgba(111, 132, 0, 0.22);
+  border-left: 3px solid var(--cms-primary, #6F8400);
+  border-radius: 6px;
+  padding: 3px 6px;
+  text-align: left;
   cursor: pointer;
-  transition: all 0.15s;
-  border: 1px solid transparent;
+  transition: all 0.15s ease-in-out;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 44px;
 }
-.sp-tt-cell:hover {
-  border-color: var(--cms-primary, #6F8400);
-  transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(111, 132, 0, 0.18);
-}
-.sp-tt-cell strong { display: block; font-size: 12px; color: var(--cms-primary-dark, #566900); }
-.sp-tt-cell span { font-size: 10.5px; color: var(--cms-muted); }
-.sp-tt-free { text-align: center; color: var(--cms-border); font-size: 11px; }
 
-/* Class Details Drawer on Timetable Click */
+.sp-tt-cell:hover {
+  background: #e9f0d0;
+  border-color: var(--cms-primary, #6F8400);
+  border-left: 3px solid var(--cms-primary-dark, #566900);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(111, 132, 0, 0.16);
+}
+
+.sp-tt-sub {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--cms-primary-dark, #566900);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-tt-cls {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--cms-text, #10203c);
+  opacity: 0.82;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.sp-tt-room {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--cms-muted, #7B8275);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-tt-free {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 44px;
+  text-align: center;
+  color: var(--cms-muted, #7B8275);
+  opacity: 0.3;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.sp-tt-free:hover {
+  background: rgba(111, 132, 0, 0.04);
+}
+
+/* Modal Details Theming */
+.faculty-tt-modal-banner {
+  background: var(--cms-primary-soft, #f1f4e2);
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  border: 1px solid var(--cms-primary-border, #c7d7fe);
+}
+
+.faculty-tt-modal-banner-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--cms-primary-dark, #566900);
+  margin-top: 6px;
+}
+
+.faculty-tt-modal-banner-desc {
+  font-size: 12px;
+  color: var(--cms-muted, #7b8275);
+  margin-top: 3px;
+}
+
+.faculty-tt-modal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.faculty-tt-modal-field {
+  padding: 10px 12px;
+  border: 1px solid var(--cms-border, #e4e8f0);
+  border-radius: 8px;
+  background: var(--cms-surface, #ffffff);
+}
+
+.faculty-tt-modal-field-label {
+  font-size: 11px;
+  color: var(--cms-muted, #7b8275);
+}
+
+.faculty-tt-modal-field-val {
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 2px;
+  color: var(--cms-text, #10203c);
+}
+
+/* =========================================================
+   DARK THEME OVERRIDES (Faculty Timetable)
+   ========================================================= */
+[data-theme="dark"] .faculty-tt-head h1,
+.dark-theme .faculty-tt-head h1 {
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .faculty-tt-head p,
+.dark-theme .faculty-tt-head p {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .faculty-tt-card,
+.dark-theme .faculty-tt-card {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2b3028) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+}
+
+[data-theme="dark"] #root .cms-content table.sp-tt-table,
+.dark-theme #root .cms-content table.sp-tt-table,
+[data-theme="dark"] .sp-tt-table,
+.dark-theme .sp-tt-table {
+  background: var(--cms-surface, #171a17) !important;
+}
+
+[data-theme="dark"] #root .cms-content table.sp-tt-table thead th,
+.dark-theme #root .cms-content table.sp-tt-table thead th,
+[data-theme="dark"] .sp-tt-table thead th,
+.dark-theme .sp-tt-table thead th,
+[data-theme="dark"] .sp-tt-table th,
+.dark-theme .sp-tt-table th {
+  background: rgba(135, 157, 25, 0.16) !important;
+  color: #d9eda3 !important;
+  border-color: var(--cms-border, #2b3028) !important;
+  border-bottom: 1.5px solid rgba(135, 157, 25, 0.45) !important;
+}
+
+[data-theme="dark"] #root .cms-content table.sp-tt-table tbody td,
+.dark-theme #root .cms-content table.sp-tt-table tbody td,
+[data-theme="dark"] .sp-tt-table tbody td,
+.dark-theme .sp-tt-table tbody td,
+[data-theme="dark"] .sp-tt-table td,
+.dark-theme .sp-tt-table td {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2b3028) !important;
+}
+
+[data-theme="dark"] #root .cms-content table.sp-tt-table tbody td.time-col,
+.dark-theme #root .cms-content table.sp-tt-table tbody td.time-col,
+[data-theme="dark"] .sp-tt-table .time-col,
+.dark-theme .sp-tt-table .time-col {
+  background: rgba(255, 255, 255, 0.035) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+  border-color: var(--cms-border, #2b3028) !important;
+  border-right: 1.5px solid var(--cms-border, #2b3028) !important;
+}
+
+[data-theme="dark"] .sp-tt-cell,
+.dark-theme .sp-tt-cell {
+  background: rgba(135, 157, 25, 0.12) !important;
+  border: 1px solid rgba(135, 157, 25, 0.28) !important;
+  border-left: 3px solid var(--cms-primary, #879d19) !important;
+}
+
+[data-theme="dark"] .sp-tt-cell:hover,
+.dark-theme .sp-tt-cell:hover {
+  background: rgba(135, 157, 25, 0.22) !important;
+  border-color: var(--cms-primary, #879d19) !important;
+  border-left: 3px solid #b6d944 !important;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="dark"] .sp-tt-sub,
+.dark-theme .sp-tt-sub {
+  color: #e2f5a8 !important;
+}
+
+[data-theme="dark"] .sp-tt-cls,
+.dark-theme .sp-tt-cls {
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .sp-tt-room,
+.dark-theme .sp-tt-room {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .sp-tt-free,
+.dark-theme .sp-tt-free {
+  color: var(--cms-muted, #697562) !important;
+  opacity: 0.4;
+}
+
+[data-theme="dark"] .sp-tt-free:hover,
+.dark-theme .sp-tt-free:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Dark Theme Modal */
+[data-theme="dark"] .sp-class-modal-card,
+.dark-theme .sp-class-modal-card {
+  background: var(--cms-surface, #171a17) !important;
+  border: 1px solid var(--cms-border, #2b3028) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.55) !important;
+}
+
+[data-theme="dark"] .sp-class-modal-card .cms-modal-head,
+.dark-theme .sp-class-modal-card .cms-modal-head {
+  border-bottom: 1px solid var(--cms-border, #2b3028) !important;
+}
+
+[data-theme="dark"] .sp-class-modal-card .cms-modal-head h3,
+.dark-theme .sp-class-modal-card .cms-modal-head h3 {
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .faculty-tt-modal-banner,
+.dark-theme .faculty-tt-modal-banner {
+  background: rgba(135, 157, 25, 0.14) !important;
+  border-color: rgba(135, 157, 25, 0.35) !important;
+}
+
+[data-theme="dark"] .faculty-tt-modal-banner-title,
+.dark-theme .faculty-tt-modal-banner-title {
+  color: #d9eda3 !important;
+}
+
+[data-theme="dark"] .faculty-tt-modal-banner-desc,
+.dark-theme .faculty-tt-modal-banner-desc {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .faculty-tt-modal-field,
+.dark-theme .faculty-tt-modal-field {
+  background: #1c221a !important;
+  border-color: var(--cms-border, #2e3828) !important;
+}
+
+[data-theme="dark"] .faculty-tt-modal-field-label,
+.dark-theme .faculty-tt-modal-field-label {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+[data-theme="dark"] .faculty-tt-modal-field-val,
+.dark-theme .faculty-tt-modal-field-val {
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+/* Modal and Drawer Support */
 .sp-drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -44,20 +397,39 @@
   justify-content: flex-end;
   animation: fadeIn 0.2s ease;
 }
+
 .sp-drawer {
   width: 440px;
   max-width: 90vw;
   background: #fff;
   height: 100%;
-  box-shadow: -8px 0 32px rgba(0,0,0,0.15);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
   animation: slideLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
-@keyframes slideLeft {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+
+[data-theme="dark"] .sp-drawer,
+.dark-theme .sp-drawer {
+  background: #171a17 !important;
+  color: #f2f3ee !important;
 }
+
+[data-theme="dark"] .sp-drawer-head,
+.dark-theme .sp-drawer-head {
+  border-bottom: 1px solid #2b3028 !important;
+}
+
+@keyframes slideLeft {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
 .sp-drawer-head {
   padding: 18px 22px;
   border-bottom: 1px solid var(--cms-border);
@@ -65,6 +437,7 @@
   align-items: center;
   justify-content: space-between;
 }
+
 .sp-drawer-body {
   padding: 22px;
   overflow-y: auto;

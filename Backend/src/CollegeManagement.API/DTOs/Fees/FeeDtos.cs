@@ -294,6 +294,7 @@ public class CreateFeePaymentRequest
     [StringLength(100)] public string? TransactionReference { get; set; }
     [StringLength(500)] public string? Note { get; set; }
     public int? CollectedBy { get; set; }
+    public string? ReceiptNumber { get; set; }
 }
 
 public class FeePaymentResponse

@@ -525,6 +525,12 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
     const startNumber = Math.max(1, Number(settings.startNumber) || 1);
     let maxSequence = startNumber - 1;
 
+    // Respect the database-tracked current sequence if available
+    const dbSequence = settings.currentSequence ?? settings.CurrentSequence;
+    if (dbSequence != null && !isNaN(dbSequence)) {
+      maxSequence = Math.max(maxSequence, Number(dbSequence));
+    }
+
     for (const record of staffRecords) {
       const employeeId = String(record?.employeeId ?? record?.EmployeeId ?? record?.employeeID ?? "").trim();
       if (!employeeId.toUpperCase().startsWith(configuredPrefix.toUpperCase())) continue;
@@ -634,11 +640,11 @@ export const isStaffMatchingBoard = (staffRecord, selectedBoard, boardsList = []
   if (targetCode && recordBoardCode && recordBoardCode !== "—") {
     if (recordBoardCode === targetCode) return true;
     if ((targetCode.includes("TSBIE") || targetCode.includes("TGBIE") || targetCode.includes("TELANGANA")) &&
-        (recordBoardCode.includes("TSBIE") || recordBoardCode.includes("TGBIE") || recordBoardCode.includes("TELANGANA"))) {
+      (recordBoardCode.includes("TSBIE") || recordBoardCode.includes("TGBIE") || recordBoardCode.includes("TELANGANA"))) {
       return true;
     }
     if ((targetCode.includes("BIEAP") || targetCode.includes("ANDHRA") || targetCode.includes("AP")) &&
-        (recordBoardCode.includes("BIEAP") || recordBoardCode.includes("ANDHRA") || recordBoardCode.includes("AP"))) {
+      (recordBoardCode.includes("BIEAP") || recordBoardCode.includes("ANDHRA") || recordBoardCode.includes("AP"))) {
       return true;
     }
     if (targetCode.includes("CBSE") && recordBoardCode.includes("CBSE")) return true;
@@ -983,7 +989,7 @@ function SearchSelectInput({ label = "", opts = [], value = "", onChange, hasErr
             setOpen(true);
             try {
               e.target.select();
-            } catch {}
+            } catch { }
           }}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -1179,7 +1185,7 @@ function SubjectAllocationInput({ staffId = null, department = "", value = [], o
               }}
               title={`Remove ${sub}`}
             >
-              ×
+              Ã—
             </button>
           </span>
         ))}
@@ -1253,7 +1259,7 @@ function getCampusDisplayName(c) {
 }
 
 function getBoardsForCampus(campusObj, allBoardsList = []) {
-  if (!campusObj) return allBoardsList;
+  if (!campusObj || (!campusObj.id && !campusObj.campusId && !campusObj.code)) return [];
   const aff = campusObj.affiliatedBoards || campusObj.AffiliatedBoards;
   if (Array.isArray(aff) && aff.length > 0) {
     return aff.map((b) => {
@@ -1438,7 +1444,7 @@ function PrincipalMultiSelectInput({
                 }}
                 title={"Remove " + itemLabel}
               >
-                ×
+                Ã—
               </button>
             </span>
           );
@@ -1568,7 +1574,8 @@ function PrincipalMultiSelectInput({
   );
 }
 
-function PrincipalCampusBoardAssignment({
+
+export function PrincipalCampusBoardAssignment({
   values,
   setValues,
   campuses = [],
@@ -1577,406 +1584,242 @@ function PrincipalCampusBoardAssignment({
   setErrors,
 }) {
   const campusList = useMemo(() => {
-    if (Array.isArray(campuses) && campuses.length > 0) {
-      return campuses;
-    }
+    if (Array.isArray(campuses) && campuses.length > 0) return campuses;
     return [
-      {
-        id: 1,
-        campusId: 1,
-        name: "Main Campus (HQ)",
-        campusName: "Main Campus (HQ)",
-        code: "MAIN",
-        campusCode: "MAIN",
-        affiliatedBoards: [
-          { boardId: 1, boardCode: "BIEAP", boardName: "Board of Intermediate Education, Andhra Pradesh" },
-          { boardId: 2, boardCode: "CBSE", boardName: "Central Board of Secondary Education" },
-        ],
-        boards: [
-          "Board of Intermediate Education, Andhra Pradesh",
-          "Central Board of Secondary Education",
-        ],
-      },
-      {
-        id: 2,
-        campusId: 2,
-        name: "North Branch",
-        campusName: "North Branch",
-        code: "NORTH",
-        campusCode: "NORTH",
-        affiliatedBoards: [
-          { boardId: 1, boardCode: "BIEAP", boardName: "Board of Intermediate Education, Andhra Pradesh" },
-          { boardId: 3, boardCode: "TSBIE", boardName: "Telangana Board of Intermediate Education" },
-        ],
-        boards: [
-          "Board of Intermediate Education, Andhra Pradesh",
-          "Telangana Board of Intermediate Education",
-        ],
-      },
-      {
-        id: 3,
-        campusId: 3,
-        name: "South Campus",
-        campusName: "South Campus",
-        code: "SOUTH",
-        campusCode: "SOUTH",
-        affiliatedBoards: [
-          { boardId: 2, boardCode: "CBSE", boardName: "Central Board of Secondary Education" },
-          { boardId: 4, boardCode: "CISCE", boardName: "Council for the Indian School Certificate Examinations" },
-        ],
-        boards: [
-          "Central Board of Secondary Education",
-          "Council for the Indian School Certificate Examinations",
-        ],
-      },
+      { id: 1, campusId: 1, name: "Main Campus (HQ)", campusName: "Main Campus (HQ)", code: "MAIN", affiliatedBoards: [{ boardId: 1, boardCode: "BIEAP", boardName: "Board of Intermediate Education, Andhra Pradesh" }, { boardId: 2, boardCode: "CBSE", boardName: "Central Board of Secondary Education" }] },
+      { id: 2, campusId: 2, name: "North Branch", campusName: "North Branch", code: "NORTH", affiliatedBoards: [{ boardId: 1, boardCode: "BIEAP", boardName: "Board of Intermediate Education, Andhra Pradesh" }, { boardId: 3, boardCode: "TSBIE", boardName: "Telangana Board of Intermediate Education" }] },
+      { id: 3, campusId: 3, name: "South Campus", campusName: "South Campus", code: "SOUTH", affiliatedBoards: [{ boardId: 2, boardCode: "CBSE", boardName: "Central Board of Secondary Education" }, { boardId: 4, boardCode: "CISCE", boardName: "Council for the Indian School Certificate Examinations" }] }
     ];
   }, [campuses]);
 
   const boardsList = useMemo(() => {
-    if (Array.isArray(allBoards) && allBoards.length > 0) {
-      return allBoards;
-    }
+    if (Array.isArray(allBoards) && allBoards.length > 0) return allBoards;
     return [
-      { id: 1, boardId: 1, code: "BIEAP", boardCode: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh", boardName: "Board of Intermediate Education, Andhra Pradesh" },
-      { id: 2, boardId: 2, code: "CBSE", boardCode: "CBSE", name: "Central Board of Secondary Education", boardName: "Central Board of Secondary Education" },
-      { id: 3, boardId: 3, code: "TSBIE", boardCode: "TSBIE", name: "Telangana Board of Intermediate Education", boardName: "Telangana Board of Intermediate Education" },
-      { id: 4, boardId: 4, code: "CISCE", boardCode: "CISCE", name: "Council for the Indian School Certificate Examinations", boardName: "Council for the Indian School Certificate Examinations" },
+      { id: 1, boardId: 1, code: "BIEAP", name: "Board of Intermediate Education, Andhra Pradesh", boardName: "Board of Intermediate Education, Andhra Pradesh" },
+      { id: 2, boardId: 2, code: "CBSE", name: "Central Board of Secondary Education", boardName: "Central Board of Secondary Education" },
+      { id: 3, boardId: 3, code: "TSBIE", name: "Telangana Board of Intermediate Education", boardName: "Telangana Board of Intermediate Education" },
+      { id: 4, boardId: 4, code: "CISCE", name: "Council for the Indian School Certificate Examinations", boardName: "Council for the Indian School Certificate Examinations" }
     ];
   }, [allBoards]);
 
-  // Selected Campuses
-  const selectedCampuses = useMemo(() => {
-    if (Array.isArray(values.assignedCampuses) && values.assignedCampuses.length > 0) {
-      return values.assignedCampuses.map((c) => {
-        if (typeof c === "object") return c;
-        const targetK = String(c).trim().toLowerCase();
-        const match = campusList.find((cl) => getCampusSafeKey(cl) === targetK || String(cl.name || cl.campusName).toLowerCase() === targetK);
-        return match || { id: c, name: c, campusName: c };
+  // Initial State Load
+  const [assignments, setAssignments] = useState(() => {
+    try {
+      if (values.campusBoardAssignmentsJson) {
+        const parsed = JSON.parse(values.campusBoardAssignmentsJson);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+
+    // Legacy fallback
+    if (values.assignedCampuses && values.assignedCampuses.length > 0) {
+      return values.assignedCampuses.map(c => {
+        const cObj = campusList.find(cl => getCampusSafeKey(cl) === getCampusSafeKey(c)) || c;
+        return {
+          id: Date.now() + Math.random(),
+          campusId: cObj.id || cObj.campusId,
+          campusName: cObj.name || cObj.campusName,
+          boardIds: values.assignedBoardIds || [],
+          boardNames: values.assignedBoards || []
+        };
       });
     }
-    if (values.campusName || values.campusId) {
-      const targetId = values.campusId != null ? String(values.campusId) : "";
-      const targetName = values.campusName ? String(values.campusName).toLowerCase() : "";
-      const match = campusList.find((cl) => (targetId && String(cl.id || cl.campusId) === targetId) || (targetName && String(cl.name || cl.campusName).toLowerCase() === targetName));
-      if (match) return [match];
-    }
-    return [campusList[0]].filter(Boolean);
-  }, [values.assignedCampuses, values.campusName, values.campusId, campusList]);
 
-  // Combined affiliated boards for ALL selected campuses
-  const availableBoardsForSelectedCampuses = useMemo(() => {
-    if (selectedCampuses.length === 0) {
-      return boardsList;
+    return [{ id: Date.now(), campusId: null, campusName: "", boardIds: [], boardNames: [] }];
+  });
+
+  // Sync to Form Values
+  useEffect(() => {
+    const jsonStr = JSON.stringify(assignments);
+    if (values.campusBoardAssignmentsJson !== jsonStr) {
+      const allCampuses = assignments.filter(a => a.campusName).map(a => a.campusName);
+      const allCampusIds = assignments.filter(a => a.campusId).map(a => Number(a.campusId));
+      const allBoards = [...new Set(assignments.flatMap(a => a.boardNames))];
+      const allBoardIds = [...new Set(assignments.flatMap(a => a.boardIds).map(Number))];
+      
+      setValues(prev => ({
+        ...prev,
+        campusBoardAssignmentsJson: jsonStr,
+        assignedCampuses: allCampuses,
+        assignedCampusIds: allCampusIds,
+        assignedBoards: allBoards,
+        assignedBoardIds: allBoardIds,
+        campusId: allCampusIds[0] || prev.campusId,
+        campusName: allCampuses[0] || prev.campusName,
+        boardId: allBoardIds[0] || prev.boardId,
+        boardName: allBoards[0] || prev.boardName
+      }));
     }
-    const combinedMap = new Map();
-    selectedCampuses.forEach((c) => {
-      const fullCampusObj = campusList.find(
-        (cl) => getCampusSafeKey(cl) === getCampusSafeKey(c) || String(cl.name || cl.campusName).toLowerCase() === String(c.name || c.campusName).toLowerCase()
-      ) || c;
-      const cBoards = getBoardsForCampus(fullCampusObj, boardsList);
-      cBoards.forEach((b) => {
-        const key = String(b.name || b.boardName || b.id || b.boardId);
-        if (!combinedMap.has(key)) {
-          combinedMap.set(key, b);
+  }, [assignments, setValues, values.campusBoardAssignmentsJson]);
+
+  const addAssignmentRow = () => {
+    setAssignments(prev => [...prev, { id: Date.now(), campusId: null, campusName: "", boardIds: [], boardNames: [] }]);
+  };
+
+  const removeAssignmentRow = (id) => {
+    if (assignments.length <= 1) return;
+    setAssignments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const updateCampus = (id, campusObj) => {
+    setAssignments(prev => prev.map(a => {
+      if (a.id === id) {
+        return {
+          ...a,
+          campusId: campusObj.id || campusObj.campusId,
+          campusName: campusObj.name || campusObj.campusName,
+          // Reset boards when campus changes
+          boardIds: [],
+          boardNames: []
+        };
+      }
+      return a;
+    }));
+  };
+
+  const toggleBoard = (id, boardObj) => {
+    if (!boardObj) return;
+    setAssignments(prev => prev.map(a => {
+      if (a.id === id) {
+        const isString = typeof boardObj === 'string';
+        let bName = isString ? boardObj : (boardObj.name || boardObj.boardName || boardObj.label || boardObj.value);
+        bName = bName ? String(bName).trim() : "";
+        let bId = isString ? null : (boardObj.id || boardObj.boardId || boardObj.value);
+        if (bId) bId = Number(bId);
+
+        if (!bName) return a; // Invalid object
+
+        let isSelected = false;
+        if (bId && a.boardIds.includes(bId)) {
+          isSelected = true;
+        } else {
+          const nameLower = bName.toLowerCase();
+          isSelected = a.boardNames.some(b => String(b).trim().toLowerCase() === nameLower);
         }
-      });
-    });
-    return Array.from(combinedMap.values());
-  }, [selectedCampuses, campusList, boardsList]);
 
-  // Selected Boards
-  const selectedBoards = useMemo(() => {
-    if (Array.isArray(values.assignedBoards) && values.assignedBoards.length > 0) {
-      return values.assignedBoards;
-    }
-    if (Array.isArray(values.boards) && values.boards.length > 0) {
-      return values.boards;
-    }
-    if (values.boardName || values.board) {
-      return [values.boardName || values.board];
-    }
-    if (availableBoardsForSelectedCampuses.length > 0) {
-      return [availableBoardsForSelectedCampuses[0].name || availableBoardsForSelectedCampuses[0].boardName];
-    }
-    return [];
-  }, [values.assignedBoards, values.boards, values.boardName, values.board, availableBoardsForSelectedCampuses]);
+        let newBoardNames = [];
+        let newBoardIds = [];
 
-  // Toggle Campus in the single Assign Campus field
-  const handleToggleCampus = (campusObj) => {
-    const targetKey = getCampusSafeKey(campusObj);
-    const targetName = String(campusObj.name || campusObj.campusName || "").trim().toLowerCase();
+        if (isSelected) {
+          // Remove it
+          const nameLower = bName.toLowerCase();
+          newBoardNames = a.boardNames.filter(b => String(b).trim().toLowerCase() !== nameLower);
+          if (bId) {
+            newBoardIds = a.boardIds.filter(bid => Number(bid) !== Number(bId));
+          } else {
+            newBoardIds = [...a.boardIds];
+          }
+        } else {
+          // Add it
+          newBoardNames = [...a.boardNames, bName];
+          newBoardIds = bId ? [...new Set([...a.boardIds, bId])] : [...a.boardIds];
+        }
 
-    const isAlreadySelected = selectedCampuses.some(
-      (c) => (targetKey && getCampusSafeKey(c) === targetKey) ||
-             (targetName && String(c.name || c.campusName || "").trim().toLowerCase() === targetName)
-    );
-
-    let nextCampuses;
-    if (isAlreadySelected) {
-      if (selectedCampuses.length <= 1) return;
-      nextCampuses = selectedCampuses.filter(
-        (c) => !((targetKey && getCampusSafeKey(c) === targetKey) ||
-                 (targetName && String(c.name || c.campusName || "").trim().toLowerCase() === targetName))
-      );
-    } else {
-      nextCampuses = [...selectedCampuses, campusObj];
-    }
-
-    // Recalculate available boards for the next campuses
-    const nextBoardsMap = new Map();
-    nextCampuses.forEach((c) => {
-      const fullCampusObj = campusList.find(
-        (cl) => getCampusSafeKey(cl) === getCampusSafeKey(c) || String(cl.name || cl.campusName).toLowerCase() === String(c.name || c.campusName).toLowerCase()
-      ) || c;
-      const cBoards = getBoardsForCampus(fullCampusObj, boardsList);
-      cBoards.forEach((b) => {
-        nextBoardsMap.set(String(b.name || b.boardName), b);
-      });
-    });
-
-    // Retain selected boards that are still available
-    const nextSelectedBoards = selectedBoards.filter((bName) => nextBoardsMap.has(String(bName)));
-    if (nextSelectedBoards.length === 0 && nextBoardsMap.size > 0) {
-      const firstAvailableBoard = Array.from(nextBoardsMap.values())[0];
-      nextSelectedBoards.push(firstAvailableBoard.name || firstAvailableBoard.boardName);
-    }
-
-    const primaryCampus = nextCampuses[0] || {};
-    const primaryBoardName = nextSelectedBoards[0] || "";
-    const primaryBoardObj = nextBoardsMap.get(primaryBoardName) || availableBoardsForSelectedCampuses.find(
-      (b) => (b.name || b.boardName) === primaryBoardName
-    );
-
-    setValues((prev) => ({
-      ...prev,
-      assignedCampuses: nextCampuses,
-      assignedCampusNames: nextCampuses.map((c) => c.name || c.campusName),
-      assignedCampusIds: nextCampuses.map((c) => c.id || c.campusId).filter(Boolean),
-      campusId: primaryCampus.id || primaryCampus.campusId,
-      campusName: primaryCampus.name || primaryCampus.campusName,
-      campusCode: primaryCampus.code || primaryCampus.campusCode,
-      assignedBoards: nextSelectedBoards,
-      boards: nextSelectedBoards,
-      board: primaryBoardName,
-      boardName: primaryBoardName,
-      boardCode: primaryBoardObj?.code || primaryBoardObj?.boardCode || "",
-      boardId: primaryBoardObj?.id || primaryBoardObj?.boardId,
+        return {
+          ...a,
+          boardNames: newBoardNames,
+          boardIds: newBoardIds
+        };
+      }
+      return a;
     }));
-  };
-
-  const handleCustomAddCampus = (customName) => {
-    if (!customName || !customName.trim()) return;
-    const cleanName = customName.trim();
-    const newCampus = {
-      id: "campus-custom-" + Date.now(),
-      campusId: "campus-custom-" + Date.now(),
-      name: cleanName,
-      campusName: cleanName,
-      code: cleanName.slice(0, 4).toUpperCase(),
-      campusCode: cleanName.slice(0, 4).toUpperCase(),
-      affiliatedBoards: [],
-      boards: [],
-    };
-    handleToggleCampus(newCampus);
-  };
-
-  const handleRemoveCampus = (campusObj) => {
-    if (selectedCampuses.length <= 1) return;
-    handleToggleCampus(campusObj.raw || campusObj);
-  };
-
-  // Toggle Board in the single Assign Board field
-  const handleToggleBoard = (boardObj) => {
-    const bName = boardObj.name || boardObj.boardName || boardObj.label;
-    const isAlreadySelected = selectedBoards.includes(bName);
-
-    let nextBoards;
-    if (isAlreadySelected) {
-      if (selectedBoards.length <= 1) return;
-      nextBoards = selectedBoards.filter((b) => b !== bName);
-    } else {
-      nextBoards = [...selectedBoards, bName];
-    }
-
-    const primaryBoardName = nextBoards[0] || "";
-    const primaryBoardObj = availableBoardsForSelectedCampuses.find(
-      (b) => (b.name || b.boardName) === primaryBoardName
-    );
-
-    setValues((prev) => ({
-      ...prev,
-      assignedBoards: nextBoards,
-      boards: nextBoards,
-      board: primaryBoardName,
-      boardName: primaryBoardName,
-      boardCode: primaryBoardObj?.code || primaryBoardObj?.boardCode || prev.boardCode,
-      boardId: primaryBoardObj?.id || primaryBoardObj?.boardId || prev.boardId,
-    }));
-  };
-
-  const handleCustomAddBoard = (customBoardName) => {
-    if (!customBoardName || !customBoardName.trim()) return;
-    const cleanName = customBoardName.trim();
-    const newBoard = {
-      id: "board-custom-" + Date.now(),
-      boardId: "board-custom-" + Date.now(),
-      name: cleanName,
-      boardName: cleanName,
-      code: cleanName.slice(0, 5).toUpperCase(),
-      boardCode: cleanName.slice(0, 5).toUpperCase(),
-    };
-    handleToggleBoard(newBoard);
-  };
-
-  const handleRemoveBoard = (bName) => {
-    if (selectedBoards.length <= 1) return;
-    handleToggleBoard({ name: bName, boardName: bName });
   };
 
   return (
-    <>
-      {/* 1 Single Field: Assign Campus (Multi-select inside same field) */}
-      <label className="cms-principal-field">
-        <span>
-          Assign Campus <b className="required-star" style={{ color: "#ef4444", marginLeft: "2px" }}>*</b>
-        </span>
-        <PrincipalMultiSelectInput
-          placeholder="Search or add campus(es)..."
-          options={campusList.map((c) => ({
-            value: getCampusSafeKey(c),
-            label: getCampusDisplayName(c),
-            name: c.name || c.campusName,
-            raw: c,
-          }))}
-          selectedValues={selectedCampuses.map((c) => ({
-            value: getCampusSafeKey(c),
-            label: getCampusDisplayName(c),
-            name: c.name || c.campusName,
-            raw: c,
-          }))}
-          onToggle={handleToggleCampus}
-          onCustomAdd={handleCustomAddCampus}
-          onRemove={handleRemoveCampus}
-          emptyMessage="No campuses found. Type to add custom campus."
-        />
-      </label>
-
-      {/* 1 Single Field: Assign Board (Dynamically affiliated to ALL selected campuses) */}
-      <label className="cms-principal-field">
-        <span>
-          Assign Board <b className="required-star" style={{ color: "#ef4444", marginLeft: "2px" }}>*</b>
-        </span>
-        <PrincipalMultiSelectInput
-          placeholder={availableBoardsForSelectedCampuses.length === 0 ? "Select a campus first..." : "Search or add board(s)..."}
-          options={availableBoardsForSelectedCampuses.map((b) => ({
-            value: String(b.id || b.boardId || b.name || b.boardName),
-            label: (b.name || b.boardName) + (b.code || b.boardCode ? " (" + (b.code || b.boardCode) + ")" : ""),
-            name: b.name || b.boardName,
-            raw: b,
-          }))}
-          selectedValues={selectedBoards.map((bName) => ({
-            value: bName,
-            label: bName,
-            name: bName,
-          }))}
-          onToggle={handleToggleBoard}
-          onCustomAdd={handleCustomAddBoard}
-          onRemove={(item) => handleRemoveBoard(item.name || item.label || item)}
-          emptyMessage="No affiliated boards found for selected campuses. Type to add custom board."
-        />
-      </label>
-
-      {/* Review / Preview Card showing Campus ➔ Board mapping */}
-      {selectedCampuses.length > 0 ? (
-        <div
-          className="principal-review-card is-wide"
-          style={{
-            gridColumn: "1 / -1",
-            marginTop: "8px",
-            marginBottom: "6px",
-            padding: "12px 16px",
-            background: "var(--cms-subtle, #f8fafc)",
-            border: "1px solid var(--cms-primary-border, #cfe7b6)",
-            borderRadius: "9px",
-            boxShadow: "0 2px 6px rgba(43, 55, 26, 0.04)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-              <Building2 size={15} style={{ color: "var(--cms-primary, #355e3b)" }} />
-              <strong style={{ fontSize: "12px", color: "var(--cms-text, #1f2937)" }}>
-                Principal Campus ➔ Board Assignment Preview
-              </strong>
+    <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <strong style={{ fontSize: "13px", color: "var(--cms-text, #1f2937)" }}>Principal Campus & Board Assignments <b style={{ color: "#ef4444" }}>*</b></strong>
+      </div>
+      
+      {assignments.map((assignment, index) => {
+        const selectedCampusObj = campusList.find(c => String(c.id || c.campusId) === String(assignment.campusId)) || {};
+        const availableBoards = getBoardsForCampus(selectedCampusObj, boardsList);
+        
+        return (
+          <div key={assignment.id} style={{ display: "flex", gap: "16px", padding: "12px", background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: "8px", alignItems: "flex-start" }}>
+            {/* Select Campus */}
+            <div className="cms-principal-field" style={{ flex: 1, marginBottom: 0 }}>
+              <label>Select Campus</label>
+              <select 
+                className="cms-input"
+                value={assignment.campusId || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const cObj = campusList.find(c => String(c.id || c.campusId) === val);
+                  if (cObj) updateCampus(assignment.id, cObj);
+                }}
+                style={{ height: "38px", width: "100%", borderRadius: "6px", border: "1px solid #d1d5db", padding: "0 10px" }}
+              >
+                <option value="" disabled>-- Select Campus --</option>
+                {campusList.map(c => (
+                  <option key={getCampusSafeKey(c)} value={c.id || c.campusId}>{getCampusDisplayName(c)}</option>
+                ))}
+              </select>
             </div>
-            <span style={{ fontSize: "10px", color: "var(--cms-primary, #355e3b)", fontWeight: "600", background: "var(--cms-primary-soft, #edf7e2)", padding: "2px 8px", borderRadius: "12px", border: "1px solid var(--cms-primary-border, #cfe7b6)" }}>
-              {selectedCampuses.length} Campus{selectedCampuses.length > 1 ? "es" : ""} Configured
-            </span>
-          </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "8px" }}>
-            {selectedCampuses.map((c, i) => {
-              const fullCampusObj = campusList.find(
-                (cl) => getCampusSafeKey(cl) === getCampusSafeKey(c) || String(cl.name || cl.campusName).toLowerCase() === String(c.name || c.campusName).toLowerCase()
-              ) || c;
-              const cBoards = getBoardsForCampus(fullCampusObj, boardsList);
-              const matchedBoardsForThisCampus = selectedBoards.filter((bName) =>
-                cBoards.some((cb) => (cb.name || cb.boardName) === bName || (cb.code || cb.boardCode) === bName)
-              );
-              const campusDisplayName = getCampusDisplayName(fullCampusObj || c);
+            {/* Select Boards */}
+            <div className="cms-principal-field" style={{ flex: 2, marginBottom: 0 }}>
+              <label>Assign Boards</label>
+              <PrincipalMultiSelectInput
+                placeholder={!assignment.campusId ? "Select a campus first..." : "Select boards..."}
+                options={availableBoards.map((b) => ({
+                  value: String(b.id || b.boardId || b.name || b.boardName),
+                  label: (b.name || b.boardName) + (b.code || b.boardCode ? " (" + (b.code || b.boardCode) + ")" : ""),
+                  name: b.name || b.boardName,
+                  id: b.id || b.boardId,
+                  raw: b,
+                }))}
+                selectedValues={assignment.boardNames.map((bName) => ({
+                  value: bName,
+                  label: bName,
+                  name: bName,
+                }))}
+                onToggle={(b) => toggleBoard(assignment.id, b)}
+                onRemove={(b) => toggleBoard(assignment.id, b)}
+                onCustomAdd={(bName) => toggleBoard(assignment.id, bName)}
+                emptyMessage="No affiliated boards found."
+              />
+            </div>
 
-              return (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "6px",
-                    padding: "9px 12px",
-                    background: "#ffffff",
-                    border: "1px solid var(--cms-border, #e5e7eb)",
-                    borderRadius: "7px",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                    <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--cms-text, #1f2937)" }}>
-                      🏫 {campusDisplayName}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: "10px", color: "var(--cms-muted)", fontWeight: "600" }}>Affiliated Boards:</span>
-                    {matchedBoardsForThisCampus.length > 0 ? (
-                      matchedBoardsForThisCampus.map((bName, bi) => (
-                        <span
-                          key={bi}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "3px",
-                            padding: "1px 6px",
-                            borderRadius: "4px",
-                            background: "var(--cms-primary-soft, #edf7e2)",
-                            color: "var(--cms-primary, #355e3b)",
-                            fontSize: "9.5px",
-                            fontWeight: "600",
-                            border: "1px solid var(--cms-primary-border, #cfe7b6)",
-                          }}
-                        >
-                          📜 {bName}
-                        </span>
-                      ))
-                    ) : (
-                      <span style={{ fontSize: "9.5px", color: "var(--cms-muted)", fontStyle: "italic" }}>
-                        {cBoards.length > 0 ? cBoards.map(b => b.name || b.boardName).join(", ") : "General / All Boards"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {/* Remove Row Button */}
+            {assignments.length > 1 && (
+              <button 
+                type="button" 
+                onClick={() => removeAssignmentRow(assignment.id)}
+                style={{ marginTop: "24px", width: "36px", height: "36px", display: "flex", alignItems: "center", justifyContent: "center", background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: "6px", cursor: "pointer" }}
+                title="Remove Assignment"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
           </div>
-        </div>
-      ) : null}
-    </>
+        );
+      })}
+
+      <button
+        type="button"
+        onClick={addAssignmentRow}
+        style={{
+          alignSelf: "flex-start",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          padding: "8px 12px",
+          background: "#f0fdf4",
+          color: "#166534",
+          border: "1px dashed #bbf7d0",
+          borderRadius: "6px",
+          cursor: "pointer",
+          fontSize: "12px",
+          fontWeight: "600"
+        }}
+      >
+        <Plus size={14} /> Add Another Campus Assignment
+      </button>
+
+      {/* Hidden input to ensure validation works if needed */}
+      <input type="hidden" name="campusBoardAssignmentsJson" value={values.campusBoardAssignmentsJson || ""} />
+    </div>
   );
 }
 
@@ -2088,19 +1931,19 @@ function useStaffTypeOptions(staffType) {
           .map((d) =>
             typeof d === "object"
               ? {
-                  name: d.name || d.designationName,
-                  designationName: d.name || d.designationName,
-                  departmentName: d.departmentName || d.department || "",
-                  departmentId: d.departmentId || null,
-                  staffType: d.staffType || d.StaffType,
-                }
+                name: d.name || d.designationName,
+                designationName: d.name || d.designationName,
+                departmentName: d.departmentName || d.department || "",
+                departmentId: d.departmentId || null,
+                staffType: d.staffType || d.StaffType,
+              }
               : {
-                  name: String(d),
-                  designationName: String(d),
-                  departmentName: "",
-                  departmentId: null,
-                  staffType: apiStaffType,
-                }
+                name: String(d),
+                designationName: String(d),
+                departmentName: "",
+                departmentId: null,
+                staffType: apiStaffType,
+              }
           )
           .filter(Boolean);
       } catch (e) {
@@ -2434,16 +2277,16 @@ function Field({
     if (name !== "board") return options;
     const activeBoardsList = Array.isArray(boards)
       ? boards.filter((b) => {
-          if (!b) return false;
-          if (b.status !== undefined && b.status !== null) {
-            const st = String(b.status).trim().toLowerCase();
-            if (st === "inactive" || st === "disabled" || b.status === false || b.status === 0) return false;
-          }
-          if (b.isActive !== undefined && b.isActive !== null && (b.isActive === false || b.isActive === 0)) {
-            return false;
-          }
-          return true;
-        })
+        if (!b) return false;
+        if (b.status !== undefined && b.status !== null) {
+          const st = String(b.status).trim().toLowerCase();
+          if (st === "inactive" || st === "disabled" || b.status === false || b.status === 0) return false;
+        }
+        if (b.isActive !== undefined && b.isActive !== null && (b.isActive === false || b.isActive === 0)) {
+          return false;
+        }
+        return true;
+      })
       : [];
 
     const names = activeBoardsList
@@ -2512,6 +2355,7 @@ function Field({
           }
         }
 
+        // If no department match in both API and static map, return empty array to prevent showing unrelated designations
         return [];
       }
 
@@ -2539,7 +2383,7 @@ function Field({
     if (name === "board") {
       const match = Array.isArray(boards) ? boards.find((b) =>
         b && (String(b.name || b.boardName || b.code || "").trim().toLowerCase() === String(value).trim().toLowerCase()
-        || String(b.code || "").trim().toLowerCase() === String(value).trim().toLowerCase())
+          || String(b.code || "").trim().toLowerCase() === String(value).trim().toLowerCase())
       ) : null;
       boardCodeVal = match?.code || match?.boardCode || (value && value.length <= 10 && !value.includes(" ") ? value.toUpperCase() : "");
       boardIdVal = match?.id || match?.boardId || undefined;
@@ -2564,13 +2408,13 @@ function Field({
         if (name === "role") {
           const matchedRole = Array.isArray(roleOptions)
             ? roleOptions.find((r) => {
-                if (typeof r === "object") {
-                  const roleName = r.roleName || r.name;
-                  const isAccountantAlias = value === "Accountant" && roleName === "Accounts";
-                  return roleName === value || isAccountantAlias || String(r.roleId || r.id) === String(value);
-                }
-                return r === value;
-              })
+              if (typeof r === "object") {
+                const roleName = r.roleName || r.name;
+                const isAccountantAlias = value === "Accountant" && roleName === "Accounts";
+                return roleName === value || isAccountantAlias || String(r.roleId || r.id) === String(value);
+              }
+              return r === value;
+            })
             : null;
           const roleIdVal = typeof matchedRole === "object" ? (matchedRole?.roleId || matchedRole?.id) : value === "Accountant" ? 7 : undefined;
           return {
@@ -2637,7 +2481,7 @@ function Field({
       let previewUrl = "";
       try {
         previewUrl = URL.createObjectURL(file);
-      } catch {}
+      } catch { }
       setLocalFile(file);
       setLocalPreviewUrl(previewUrl);
 
@@ -2659,10 +2503,10 @@ function Field({
                   }));
                 }
               }
-            } catch {}
+            } catch { }
           };
           reader.readAsArrayBuffer(file);
-        } catch {}
+        } catch { }
       }
 
       if (typeof setValues === "function") {
@@ -2987,7 +2831,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
     try {
       const raw = localStorage.getItem("pjc-credential-settings");
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch { }
     return {
       facultyEmailFormat: "{empid}@gmail.com",
       defaultPassword: "Pirnav@123",
@@ -3009,7 +2853,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
     try {
       localStorage.setItem("pjc-credential-settings", JSON.stringify(settings));
       window.dispatchEvent(new CustomEvent("credential-settings-updated", { detail: settings }));
-    } catch {}
+    } catch { }
     if (onSave) onSave(settings);
     onClose();
   };
@@ -3130,7 +2974,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
 // ----------------------------------------------------------------------
 // SCREEN 1 — DASHBOARD (Connected to GET /api/v1/staff/dashboard-stats)
 // ----------------------------------------------------------------------
-function Dashboard({ records = [] }) {
+function Dashboard({ records = [], loadingRecords = false }) {
   const n = useNavigate();
   const { boards, selectedBoard } = useAcademicContext();
   const { selectedCampus } = useCampusContext();
@@ -3173,16 +3017,17 @@ function Dashboard({ records = [] }) {
 
   // Dashboard stats are global aggregates; use campus-scoped staff records when a campus is selected.
   const hasStats = !selectedCampus && stats !== null && stats !== undefined;
+  const isDataLoading = loading || loadingRecords;
 
-  const totalCount = loading ? "—" : safeRecords.filter((r) => !r?.status || r?.status === "Active").length;
-  const teachingCount = loading ? "—" : safeRecords.filter((r) => {
+  const totalCount = isDataLoading ? "Loading..." : safeRecords.filter((r) => !r?.status || r?.status === "Active").length;
+  const teachingCount = isDataLoading ? "Loading..." : safeRecords.filter((r) => {
     if (r?.status && r.status !== "Active") return false;
     const s = String(r?.staffType || "").toLowerCase();
     return s.includes("teach") && !s.includes("non");
   }).length;
-  const nonTeachingCount = loading ? "—" : (typeof totalCount === "number" && typeof teachingCount === "number" ? Math.max(0, totalCount - teachingCount) : 0);
-  const completedCount = loading ? "—" : safeRecords.filter((r) => r?.profileStatus === "Completed").length;
-  const pendingCount = loading ? "—" : (typeof totalCount === "number" ? Math.max(0, totalCount - completedCount) : 0);
+  const nonTeachingCount = isDataLoading ? "Loading..." : (typeof totalCount === "number" && typeof teachingCount === "number" ? Math.max(0, totalCount - teachingCount) : 0);
+  const completedCount = isDataLoading ? "Loading..." : safeRecords.filter((r) => r?.profileStatus === "Completed").length;
+  const pendingCount = isDataLoading ? "Loading..." : (typeof totalCount === "number" ? Math.max(0, totalCount - completedCount) : 0);
   const pct = typeof totalCount === "number" && totalCount > 0 && typeof completedCount === "number" ? Math.round((completedCount / totalCount) * 100) : 0;
 
   return (
@@ -3813,13 +3658,13 @@ function StaffList({ records = [], setRecords, forced }) {
         const updated = [...newRecordsToAdd, ...(Array.isArray(prev) ? prev : [])];
         try {
           sessionStorage.setItem(STORE, JSON.stringify(updated));
-        } catch {}
+        } catch { }
         return updated;
       });
 
       try {
         window.dispatchEvent(new CustomEvent("staff-records-updated"));
-      } catch {}
+      } catch { }
 
       setImportModalState((prev) => ({ ...prev, isOpen: false }));
       setToast(`Successfully imported ${importedCount} ${importModalState.staffType || "staff"} record(s)!`);
@@ -4530,7 +4375,7 @@ function TeachingForm({ records, setRecords, existing }) {
           try {
             const nextId = await resolveNextStaffEmployeeId("Teaching", records, selectedCampus);
             if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
-          } catch {}
+          } catch { }
         }
         if (lower.includes("email")) nextErrors.email = errMsg;
         if (lower.includes("mobile")) nextErrors.mobile = errMsg;
@@ -4812,7 +4657,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
       }
     }
 
-    // ── Duplicate Driving License Number check ──────────────────────────────
+    // â”€â”€ Duplicate Driving License Number check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (isTransport && values.drivingLicenseNumber) {
       const enteredDL = String(values.drivingLicenseNumber).toUpperCase().replace(/[^A-Z0-9]/g, "");
       const currentId = existing?.id || existing?.employeeId || null;
@@ -4831,7 +4676,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
         return;
       }
     }
-    // ────────────────────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     const fullName = [values.firstName, values.middleName, values.lastName].filter(Boolean).join(" ") || values.employeeId;
     const resolvedCode = values.boardCode || resolveBoardCode({ board: values.board, boardName: values.boardName }, boards);
@@ -4892,7 +4737,7 @@ function NonTeachingForm({ records, setRecords, existing }) {
           try {
             const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records, selectedCampus);
             if (nextId) setValues((v) => ({ ...v, employeeId: nextId }));
-          } catch {}
+          } catch { }
         }
         if (lower.includes("aadhaar") || lower.includes("pan") || lower.includes("name")) {
           if (lower.includes("aadhaar")) nextErrors.aadhaar = errMsg;
@@ -5009,7 +4854,7 @@ function SendLink({ record, update, activity }) {
     try {
       const raw = localStorage.getItem("pjc-credential-settings");
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch { }
     return {
       facultyEmailFormat: "{empid}@gmail.com",
       defaultPassword: "Pirnav@123",
@@ -5360,7 +5205,7 @@ function Pending({ records = [], setRecords, activity }) {
           if (norm.employeeId) map.set(String(norm.employeeId).trim().toLowerCase(), { ...(map.get(key) || {}), ...norm, profileStatus: "Submitted", reviewStatus: "Pending", profileCompletion: 100 });
         });
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // 3. API items
     if (Array.isArray(apiItems)) {
@@ -6176,7 +6021,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       return `XXXX XXXX ${str.slice(-4)}`;
     }
     if (key === "accountNumber" && str.length >= 4) {
-      return `••••••${str.slice(-4)}`;
+      return `â€¢â€¢â€¢â€¢â€¢â€¢${str.slice(-4)}`;
     }
     return str;
   };
@@ -6217,7 +6062,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                       <span style={{ fontSize: "12px", fontWeight: "700", color: "var(--cms-text, #1f2937)" }}>
-                        🏫 {cName}{cCode && !cName.includes("(" + cCode + ")") ? " (" + cCode + ")" : ""}
+                        ðŸ« {cName}{cCode && !cName.includes("(" + cCode + ")") ? " (" + cCode + ")" : ""}
                       </span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "2px" }}>
@@ -6347,7 +6192,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                       <strong>
                         {key === "allocatedSubjects" || key === "subjects" ? (
                           Array.isArray(record[key] || record.allocatedSubjects || record.subjects) &&
-                          (record[key] || record.allocatedSubjects || record.subjects).length > 0 ? (
+                            (record[key] || record.allocatedSubjects || record.subjects).length > 0 ? (
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px" }}>
                               {(record[key] || record.allocatedSubjects || record.subjects).map((sub, i) => (
                                 <span key={i} className="subject-pill" style={{ padding: "2px 8px", fontSize: "10px" }}>
@@ -6407,6 +6252,7 @@ export default function StaffManagementPage() {
   const { selectedCampus } = useCampusContext();
 
   const [records, setRaw] = useState(() => []);
+  const [loadingRecords, setLoadingRecords] = useState(true);
   const [activities, setActivityRaw] = useState(() => []);
   const [toast, setToast] = useState("");
   const [loadedStaff, setLoadedStaff] = useState(null);
@@ -6447,6 +6293,7 @@ export default function StaffManagementPage() {
   useEffect(() => {
     let isMounted = true;
     async function loadInit() {
+      setLoadingRecords(true);
       try {
         const activeBoardId = selectedBoard?.id || selectedBoard?.boardId;
         const activeCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
@@ -6462,7 +6309,10 @@ export default function StaffManagementPage() {
             setRecords(listItems);
           }
         }
-      } catch (err) {}
+      } catch (err) { }
+      finally {
+        if (isMounted) setLoadingRecords(false);
+      }
     }
     loadInit();
     return () => { isMounted = false; };
@@ -6494,7 +6344,7 @@ export default function StaffManagementPage() {
         try {
           const raw = localStorage.getItem(`pjc_submitted_faculty_${id}`) || (apiData?.employeeId ? localStorage.getItem(`pjc_submitted_faculty_${apiData.employeeId}`) : null);
           if (raw) localSubmitted = JSON.parse(raw);
-        } catch (e) {}
+        } catch (e) { }
 
         const finalData = localSubmitted ? { ...(apiData || {}), ...localSubmitted } : apiData;
         if (isMounted && finalData) {
@@ -6521,7 +6371,7 @@ export default function StaffManagementPage() {
 
   let page;
   if (p === "/dashboard/staff" || p === "/dashboard/faculty")
-    page = <Dashboard records={safeRecords} />;
+    page = <Dashboard records={safeRecords} loadingRecords={loadingRecords} />;
   else if (p === "/dashboard/staff/add") page = <TypeSelect />;
   else if (p === "/dashboard/staff/add-teaching")
     page = <TeachingForm records={safeRecords} setRecords={setRecords} />;

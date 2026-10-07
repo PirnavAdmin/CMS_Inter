@@ -86,9 +86,17 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         const map = new Map();
         localList.forEach((s) => map.set(s.id, s));
         normalized.forEach((s) => {
-          map.set(s.id, s);
-          if (s.seriesCode) map.set(s.seriesCode, s);
-          if (s.slug) map.set(s.slug, s);
+          const existing = map.get(s.id) || map.get(s.seriesCode) || map.get(s.slug);
+          const mergedItem = existing ? { ...existing, ...s } : { ...s };
+          
+          // Preserve description from fixed local config if backend doesn't provide one
+          if (!s.description && existing && existing.description) {
+            mergedItem.description = existing.description;
+          }
+          
+          map.set(s.id, mergedItem);
+          if (s.seriesCode) map.set(s.seriesCode, mergedItem);
+          if (s.slug) map.set(s.slug, mergedItem);
         });
         const merged = Array.from(new Set(map.values())).filter((s) => !isSeriesRemoved(s));
         data = merged;
@@ -337,7 +345,15 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
 
                 <div className="ns-card-example-box">
                   <span className="ns-card-example-lbl">Current / Next Example:</span>
-                  <div className="ns-card-example-val">{series.livePreview || series.currentExample || nextVal}</div>
+                  <div className="ns-card-example-val">
+                    {loading ? (
+                      <span style={{ opacity: 0.6, fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                         <RefreshCw size={12} className="spin" /> Loading...
+                      </span>
+                    ) : (
+                      series.livePreview || series.currentExample || nextVal
+                    )}
+                  </div>
                 </div>
 
                 <p className="ns-card-desc">{series.description}</p>

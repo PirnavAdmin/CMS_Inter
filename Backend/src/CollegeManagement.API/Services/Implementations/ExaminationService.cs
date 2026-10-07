@@ -24,19 +24,22 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IMemoryCache _memoryCache;
         private readonly AppDbContext _context;
         private readonly ILogger<ExaminationService> _logger;
+        private readonly INumberSeriesService _numberSeriesService;
 
         public ExaminationService(
             IExaminationRepository examinationRepository,
             IMapper mapper,
             IMemoryCache memoryCache,
             AppDbContext context,
-            ILogger<ExaminationService> logger)
+            ILogger<ExaminationService> logger,
+            INumberSeriesService numberSeriesService)
         {
             _examinationRepository = examinationRepository;
             _mapper = mapper;
             _memoryCache = memoryCache;
             _context = context;
             _logger = logger;
+            _numberSeriesService = numberSeriesService;
         }
 
         private void EvictExamCache(int? examinationId)
@@ -254,11 +257,31 @@ namespace CollegeManagement.API.Services.Implementations
 
             var resolvedAssessmentTypeId = ResolveAssessmentTypeId(request.AssessmentTypeId, request.ExamType, request.ExamCategory);
 
+            var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
+            { 
+                Board = request.BoardId.ToString(),
+                AcademicYear = request.AcademicYearId.ToString()
+            };
+
+            string finalExamCode = request.ExamCode?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(finalExamCode))
+            {
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("EXAM_CODE", reqDto, request.CampusId);
+                if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+                {
+                    finalExamCode = generatedDto.GeneratedNumber;
+                }
+            }
+
             var exam = _mapper.Map<Examination>(request);
             exam.AcademicLevelId = resolvedLevelId;
             exam.GroupId = resolvedGroupId;
             exam.ProgramId = resolvedProgramId;
             exam.AssessmentTypeId = resolvedAssessmentTypeId;
+            if (!string.IsNullOrWhiteSpace(finalExamCode))
+            {
+                exam.ExamCode = finalExamCode;
+            }
 
             var createdExam = await _examinationRepository.CreateExaminationAsync(exam);
 

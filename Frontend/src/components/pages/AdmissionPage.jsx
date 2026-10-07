@@ -2213,21 +2213,21 @@ function AdmissionPreview({ sections, values, errors, onEdit, feeNode, photoPrev
           {section.custom === "fee" ? (
             <div className="cms-preview-fee">{feeNode}</div>
           ) : (
-          <div className="cms-preview-grid">
-            {visibleFieldsFor(section.previewFields ?? section.fields, values).map((field) => {
-              const value = previewFieldValue(field, values);
-              const fieldRequired = field.required || (typeof field.requiredWhen === "function" && field.requiredWhen(values));
-              const missingRequired = fieldRequired && (value === undefined || value === null || String(value).trim() === "");
-              const isPhoto = field.type === "file" && field.name === "photo";
-              return (
-                <div key={field.name} className={`cms-preview-item ${isPhoto ? "cms-preview-photo-item" : ""} ${missingRequired ? "is-missing" : ""}`}>
-                  <span>{field.label}</span>
-                  {isPhoto ? <StudentPhotoPreview src={studentPhotoSource(values, photoPreviewUrl)} emptyLabel="No Photo" /> : <strong>{formatPreviewValue(field, value)}</strong>}
-                  {errors[field.name] || missingRequired ? <small>{errors[field.name] || `${field.label} is required`}</small> : null}
-                </div>
-              );
-            })}
-          </div>
+            <div className="cms-preview-grid">
+              {visibleFieldsFor(section.previewFields ?? section.fields, values).map((field) => {
+                const value = previewFieldValue(field, values);
+                const fieldRequired = field.required || (typeof field.requiredWhen === "function" && field.requiredWhen(values));
+                const missingRequired = fieldRequired && (value === undefined || value === null || String(value).trim() === "");
+                const isPhoto = field.type === "file" && field.name === "photo";
+                return (
+                  <div key={field.name} className={`cms-preview-item ${isPhoto ? "cms-preview-photo-item" : ""} ${missingRequired ? "is-missing" : ""}`}>
+                    <span>{field.label}</span>
+                    {isPhoto ? <StudentPhotoPreview src={studentPhotoSource(values, photoPreviewUrl)} emptyLabel="No Photo" /> : <strong>{formatPreviewValue(field, value)}</strong>}
+                    {errors[field.name] || missingRequired ? <small>{errors[field.name] || `${field.label} is required`}</small> : null}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
       ))}
@@ -2995,7 +2995,7 @@ function FeePreview({ fee, values }) {
       {values.paymentPlan === "Installment Payment" && fee.courseSchedules.length ? (
         <div className="cms-fee-preview-schedule">
           <h4>Course Fee Schedule</h4>
-          <InstallmentScheduleTable schedule={fee.courseSchedules} editable={false} onChange={() => {}} />
+          <InstallmentScheduleTable schedule={fee.courseSchedules} editable={false} onChange={() => { }} />
         </div>
       ) : null}
     </div>
@@ -3203,11 +3203,13 @@ export default function AdmissionPage() {
     const seriesCode = await resolveAdmissionNumberSeriesCode();
     const response = await apiClient.get(
       apiEndpoints.numberSeries.preview(seriesCode),
-      { params: { 
-          campusId: admissionNumberPayload.campusId, 
+      {
+        params: {
+          campusId: admissionNumberPayload.campusId,
           board: admissionNumberPayload.boardId ? String(admissionNumberPayload.boardId) : "",
           academicYear: admissionNumberPayload.academicYearId ? String(admissionNumberPayload.academicYearId) : ""
-      } },
+        }
+      },
     );
     const data = response.data?.data ?? response.data?.Data ?? response.data;
     const admissionNumber = typeof data === "string"
@@ -4141,7 +4143,7 @@ export default function AdmissionPage() {
           })
           .filter(Boolean)
         : [];
-      
+
       const loadedBloodGroups = bloodGroupsResult.status === "fulfilled"
         ? getCollection(bloodGroupsResult.value.data).map(normalizeBloodGroupOption).filter(Boolean)
         : [];
@@ -4687,9 +4689,11 @@ export default function AdmissionPage() {
     const field = fieldByName[name] || {};
     if (isPlaceholderOption(val)) return;
     if (name === "feeItems") {
-      setValues((v) => ({ ...v, feeItems: val, installments: v.paymentPlan === "Installment Payment"
-        ? buildInstallmentSchedule(deriveAdmissionFee({ ...v, feeItems: val }).courseFeePayable, Number(v.installmentCount) || DEFAULT_INSTALLMENT_COUNT, v.admissionDate || todayISO())
-        : v.installments }));
+      setValues((v) => ({
+        ...v, feeItems: val, installments: v.paymentPlan === "Installment Payment"
+          ? buildInstallmentSchedule(deriveAdmissionFee({ ...v, feeItems: val }).courseFeePayable, Number(v.installmentCount) || DEFAULT_INSTALLMENT_COUNT, v.admissionDate || todayISO())
+          : v.installments
+      }));
       setErrors((e) => ({ ...e, feeItems: undefined, installments: undefined }));
       return;
     }
@@ -5108,7 +5112,7 @@ export default function AdmissionPage() {
   const backOrCancel = () => {
     if (step !== 0) {
       const previousStep = isPreview ? FEE_STEP_INDEX : 0;
-      
+
       if (!editingAdmissionId) persistAdmissionDraft({ currentStep: previousStep, formData: values, feeSelection });
       setStep(previousStep);
       return;

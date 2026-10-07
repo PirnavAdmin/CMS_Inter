@@ -1,72 +1,723 @@
-/* Faculty Marks Entry Styles */
-.cms-marks-entry-embedded .cms-tabs-row .cms-tabs button[role="tab"]:nth-of-type(2) {
-  display: none !important;
+/* Faculty Marks Entry Styles — Theme-based and Matching MarksEntryPage exact structure */
+@import "../../../components/pages/MarksEntryPage.css";
+
+/* Middle Context Summary Box (Theme-based support for Light & Dark modes) */
+.cms-context-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 20px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 12px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  margin-bottom: 12px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-.sp-marks-subject-tabs {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
+.cms-context-summary strong,
+.cms-context-summary .cms-context-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--cms-text, #171a17);
 }
-.sp-marks-subject-tab {
-  padding: 7px 14px;
+
+.cms-context-summary span,
+.cms-context-summary .cms-context-subtitle {
+  color: var(--cms-muted, #7b8275);
+  font-size: 0.82rem;
+}
+
+/* Dark mode theme overrides for Middle Context Summary */
+[data-theme="dark"] .cms-context-summary,
+.dark-theme .cms-context-summary,
+:root[data-theme="dark"] .cms-context-summary {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .cms-context-summary strong,
+[data-theme="dark"] .cms-context-summary .cms-context-title,
+.dark-theme .cms-context-summary strong,
+:root[data-theme="dark"] .cms-context-summary strong {
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .cms-context-summary span,
+[data-theme="dark"] .cms-context-summary .cms-context-subtitle,
+.dark-theme .cms-context-summary span {
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+/* Select inputs in Academic Context & Workspace */
+.cms-select-input {
+  width: 100%;
+  height: 35px;
+  padding: 5px 9px;
+  border: 1px solid var(--cms-border, #e6e7de);
   border-radius: 8px;
-  border: 1.5px solid var(--cms-border);
-  background: var(--cms-surface);
-  font-size: 12.5px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  font: inherit;
+  font-size: 0.78rem;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.cms-select-input:focus {
+  border-color: var(--cms-primary, #6f8400);
+}
+
+.cms-select-input:disabled {
+  background: var(--cms-bg, #f7f8ef);
+  color: var(--cms-muted, #7b8275);
+  cursor: not-allowed;
+}
+
+[data-theme="dark"] .cms-select-input,
+.dark-theme .cms-select-input {
+  background: var(--cms-subtle, #182338) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .cms-select-input option,
+.dark-theme .cms-select-input option {
+  background: var(--cms-surface, #171a17) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+/* Numeric input in Marks Entry table */
+.cms-num-input {
+  width: 65px;
+  height: 32px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 6px;
+  text-align: center;
+  font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s;
+  outline: none;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.cms-num-input:focus {
+  border-color: var(--cms-primary, #6f8400);
+  box-shadow: 0 0 0 2px var(--cms-primary-soft, #f1f4e2);
+}
+
+.cms-num-input:disabled {
+  background: var(--cms-bg, #f7f8ef);
+  color: var(--cms-muted, #7b8275);
+  cursor: not-allowed;
+}
+
+[data-theme="dark"] .cms-num-input,
+.dark-theme .cms-num-input {
+  background: var(--cms-subtle, #182338) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .cms-num-input:disabled,
+.dark-theme .cms-num-input:disabled {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--cms-muted, #8f9789) !important;
+}
+
+/* Remarks text input */
+.cms-remarks-input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12.5px;
+  outline: none;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.cms-remarks-input:focus {
+  border-color: var(--cms-primary, #6f8400);
+}
+
+.cms-remarks-input:disabled {
+  background: var(--cms-bg, #f7f8ef);
+  color: var(--cms-muted, #7b8275);
+}
+
+[data-theme="dark"] .cms-remarks-input,
+.dark-theme .cms-remarks-input {
+  background: var(--cms-subtle, #182338) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+/* Status badge pills — Compact, Single-line, Responsive (Matching Image 3) */
+.cms-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.35px;
+  text-transform: uppercase;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  line-height: 1.25;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.cms-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.cms-status-pill.approved {
+  background: #eaf7ec;
+  color: #1e7e34;
+  border: 1px solid #bce6c4;
+}
+
+.cms-status-pill.verified {
+  background: #e8f3fc;
+  color: #1d72b8;
+  border: 1px solid #bde0fe;
+}
+
+.cms-status-pill.submitted {
+  background: #edf2fe;
+  color: #2563eb;
+  border: 1px solid #c7d7fe;
+}
+
+.cms-status-pill.rejected {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.cms-status-pill.draft {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+[data-theme="dark"] .cms-status-pill.approved {
+  background: rgba(46, 125, 50, 0.22) !important;
+  color: #66bb6a !important;
+  border-color: rgba(102, 187, 106, 0.35) !important;
+}
+
+[data-theme="dark"] .cms-status-pill.verified {
+  background: rgba(3, 105, 161, 0.22) !important;
+  color: #38bdf8 !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+
+[data-theme="dark"] .cms-status-pill.submitted {
+  background: rgba(29, 78, 216, 0.22) !important;
+  color: #60a5fa !important;
+  border-color: rgba(96, 165, 250, 0.35) !important;
+}
+
+[data-theme="dark"] .cms-status-pill.rejected {
+  background: rgba(220, 38, 38, 0.22) !important;
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.35) !important;
+}
+
+[data-theme="dark"] .cms-status-pill.draft {
+  background: rgba(183, 129, 3, 0.22) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+
+/* Pagination bar matching screenshots */
+.cms-pagination-footer {
   display: flex;
   align-items: center;
-  gap: 6px;
-}
-.sp-marks-subject-tab.active {
-  background: var(--cms-primary);
-  color: #fff;
-  border-color: var(--cms-primary);
-}
-.sp-marks-subject-tab .tab-status {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.2);
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--cms-surface, #ffffff);
+  border-top: 1px solid var(--cms-border, #e6e7de);
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
 }
 
-.sp-marks-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
+[data-theme="dark"] .cms-pagination-footer,
+.dark-theme .cms-pagination-footer {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
 }
-.sp-marks-stat {
-  background: var(--cms-bg);
-  border: 1px solid var(--cms-border);
-  border-radius: 10px;
-  padding: 10px 14px;
-  text-align: center;
-}
-.sp-marks-stat-val { font-size: 18px; font-weight: 700; }
-.sp-marks-stat-lbl { font-size: 11px; color: var(--cms-muted); margin-top: 2px; }
 
-.sp-marks-input {
-  width: 68px;
-  border: 1.5px solid var(--cms-border);
-  border-radius: 7px;
-  padding: 5px 8px;
+/* Disabled button state */
+.cms-btn:disabled,
+.cms-btn-ghost:disabled,
+.cms-btn-secondary:disabled,
+.cms-btn-primary:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+}
+
+/* Dark mode table borders and cell styling */
+[data-theme="dark"] .cms-table th {
+  color: var(--cms-muted, #8f9789) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+}
+
+[data-theme="dark"] .cms-table td {
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .cms-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Report Tab Table Layout & Alignments */
+.sp-report-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.sp-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.sp-report-table th,
+.sp-report-table td {
+  padding: 12px 14px;
   font-size: 13px;
-  text-align: center;
-  outline: none;
-  transition: border 0.15s, box-shadow 0.15s;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
 }
-.sp-marks-input:focus {
-  border-color: var(--cms-primary);
-  box-shadow: 0 0 0 3px var(--cms-primary-soft);
-}
-.sp-marks-input.error { border-color: var(--cms-red); }
-.sp-marks-input:disabled { background: var(--cms-bg); color: var(--cms-muted); }
 
-.sp-absent-row { background: var(--cms-red-soft) !important; }
-.sp-absent-row:hover { background: #fde8e8 !important; }
+.sp-report-table th {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--cms-muted, #7b8275);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: var(--cms-surface, #ffffff);
+  border-bottom: 1.5px solid var(--cms-border, #e6e7de);
+  white-space: nowrap;
+}
+
+.sp-report-table th:nth-child(5),
+.sp-report-table td:nth-child(5) {
+  min-width: 125px;
+  text-align: center;
+  white-space: nowrap !important;
+}
+
+.sp-report-table th:nth-child(7),
+.sp-report-table td:nth-child(7) {
+  min-width: 130px;
+  text-align: right;
+  white-space: nowrap !important;
+}
+
+[data-theme="dark"] .sp-report-table th {
+  background: var(--cms-surface, #171a17) !important;
+  color: var(--cms-muted, #8f9789) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+}
+
+[data-theme="dark"] .sp-report-table td {
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .sp-report-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Rejection Alert Banner in Marks Entry */
+.sp-rejection-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
+
+[data-theme="dark"] .sp-rejection-banner {
+  background: #3a1d1d !important;
+  border-color: #7f1d1d !important;
+  color: #fca5a5 !important;
+}
+
+/* Stat Cards in Report Tab */
+.sp-report-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sp-stat-card {
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #e6e7de);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+[data-theme="dark"] .sp-stat-card {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+}
+
+.sp-stat-card .label {
+  font-size: 11.5px;
+  color: var(--cms-muted, #7b8275);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.sp-stat-card .val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cms-text, #171a17);
+}
+
+[data-theme="dark"] .sp-stat-card .val {
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+/* Modal Overlay & Base System */
+.sp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(2px);
+}
+
+/* Upload & Import Marks Modal (Matching Image 1) */
+.sp-upload-import-modal {
+  background: var(--cms-surface, #ffffff);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 540px;
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  border: 1px solid var(--cms-border, #e6e7de);
+}
+
+[data-theme="dark"] .sp-upload-import-modal {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+.sp-upload-import-head {
+  padding: 22px 24px 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sp-upload-close-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  background: var(--cms-surface, #ffffff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--cms-text, #171a17);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sp-upload-close-btn:hover {
+  background: var(--cms-bg, #f7f8ef);
+}
+
+[data-theme="dark"] .sp-upload-close-btn {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .sp-upload-close-btn:hover {
+  background: var(--cms-subtle, #182338) !important;
+}
+
+.sp-upload-import-body {
+  padding: 0 24px 20px;
+}
+
+.sp-upload-dropzone {
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  padding: 34px 20px;
+  text-align: center;
+  background: var(--cms-bg, #f7f8ef);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.sp-upload-dropzone:hover {
+  border-color: var(--cms-primary, #6f8400);
+}
+
+[data-theme="dark"] .sp-upload-dropzone {
+  border-color: #3b4b32 !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+[data-theme="dark"] .sp-upload-dropzone:hover {
+  border-color: var(--cms-primary, #879d19) !important;
+}
+
+.sp-upload-import-foot {
+  padding: 16px 24px 22px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: transparent;
+  border-top: 1px solid var(--cms-border, #e6e7de);
+}
+
+[data-theme="dark"] .sp-upload-import-foot {
+  border-color: var(--cms-border, #2c3a52) !important;
+}
+
+/* View Results Modal (Matching Screenshot 2) */
+.sp-results-modal {
+  background: var(--cms-surface, #ffffff);
+  border-radius: 14px;
+  width: 90%;
+  max-width: 680px;
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  border: 1px solid var(--cms-border, #e6e7de);
+}
+
+[data-theme="dark"] .sp-results-modal {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+.sp-results-modal-head {
+  padding: 18px 24px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
+}
+
+[data-theme="dark"] .sp-results-modal-head {
+  border-color: var(--cms-border, #2c3a52) !important;
+}
+
+.sp-results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sp-results-table th {
+  background: #f4f6ec;
+  padding: 10px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--cms-muted, #7b8275);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
+  letter-spacing: 0.3px;
+}
+
+[data-theme="dark"] .sp-results-table th {
+  background: #1e261a !important;
+  color: #aab5a2 !important;
+  border-color: #2c3a52 !important;
+}
+
+.sp-results-table td {
+  padding: 12px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .sp-results-table td {
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .sp-results-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.sp-results-modal-foot {
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  background: #fbfcf9;
+  border-top: 1px solid var(--cms-border, #e6e7de);
+}
+
+[data-theme="dark"] .sp-results-modal-foot {
+  background: #171a17 !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+}
+
+.sp-eye-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--cms-border, #e6e7de);
+  background: var(--cms-surface, #ffffff);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--cms-primary, #6f8400);
+  transition: all 0.15s ease;
+}
+
+.sp-eye-btn:hover {
+  background: var(--cms-bg, #f7f8ef);
+  border-color: var(--cms-primary, #6f8400);
+}
+
+[data-theme="dark"] .sp-eye-btn {
+  background: var(--cms-surface, #171a17) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-primary, #879d19) !important;
+}
+
+[data-theme="dark"] .sp-eye-btn:hover {
+  background: var(--cms-subtle, #182338) !important;
+}
+
+/* Result badge for Passed/Failed in Results Modal (Matching Screenshot 2) */
+.cms-result-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5px 11px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cms-result-badge.pass {
+  background: #eaf7ec;
+  color: #1e7e34;
+  border: 1px solid #bce6c4;
+}
+
+.cms-result-badge.fail {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+[data-theme="dark"] .cms-result-badge.pass {
+  background: rgba(46, 125, 50, 0.22) !important;
+  color: #66bb6a !important;
+  border-color: rgba(102, 187, 106, 0.35) !important;
+}
+
+[data-theme="dark"] .cms-result-badge.fail {
+  background: rgba(220, 38, 38, 0.22) !important;
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.35) !important;
+}
+
+/* Modal Pagination Controls (Matching Screenshot 2) */
+.sp-modal-page-btn {
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--cms-muted, #7b8275);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sp-modal-page-btn:hover:not(:disabled) {
+  color: var(--cms-text, #171a17);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.sp-modal-page-btn.active {
+  background: var(--cms-surface, #ffffff);
+  border: 1px solid var(--cms-border, #d1d5db);
+  color: var(--cms-text, #171a17);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  font-weight: 600;
+}
+
+.sp-modal-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+[data-theme="dark"] .sp-modal-page-btn.active {
+  background: var(--cms-subtle, #182338) !important;
+  border-color: var(--cms-border, #2c3a52) !important;
+  color: var(--cms-text, #f2f3ee) !important;
+}
+
+[data-theme="dark"] .sp-modal-page-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #ffffff !important;
+}
+

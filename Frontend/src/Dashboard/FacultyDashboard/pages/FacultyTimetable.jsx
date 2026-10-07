@@ -11,20 +11,20 @@ export default function FacultyTimetable() {
   const profileData = context?.profileData || facultyMockData.user;
 
   return (
-    <div>
-      <div className="cms-page-head">
+    <div className="faculty-tt-container">
+      <div className="cms-page-head faculty-tt-head">
         <div>
           <h1>My Timetable</h1>
           <p>Click on any period slot to view class syllabus, enrolled students, and attendance.</p>
         </div>
       </div>
 
-      <div className="cms-card">
-        <div className="cms-table-wrap">
-          <table className="sp-tt-table">
+      <div className="cms-card faculty-tt-card">
+        <div className="cms-table-wrap faculty-tt-wrap">
+          <table className="sp-tt-table faculty-tt-table">
             <thead>
               <tr>
-                <th>Time Slot</th>
+                <th className="faculty-tt-th-time">Time Slot</th>
                 {MOCK_TT_DAYS.map((d) => (
                   <th key={d}>{d}</th>
                 ))}
@@ -42,12 +42,11 @@ export default function FacultyTimetable() {
                           <div
                             className="sp-tt-cell"
                             onClick={() => setSelectedClassSlot({ ...item, day: d, time: slot.time })}
+                            title={`${item.sub} · ${item.cls} · ${item.room}`}
                           >
-                            <strong>{item.sub}</strong>
-                            <span>{item.cls}</span>
-                            <span style={{ display: "block", fontSize: 10, color: "var(--cms-muted)" }}>
-                              {item.room}
-                            </span>
+                            <strong className="sp-tt-sub">{item.sub}</strong>
+                            <span className="sp-tt-cls">{item.cls}</span>
+                            <span className="sp-tt-room">{item.room}</span>
                           </div>
                         ) : (
                           <div className="sp-tt-free">—</div>
@@ -68,7 +67,7 @@ export default function FacultyTimetable() {
           <div className="cms-modal sp-class-modal-card" style={{ maxWidth: 500 }} onClick={(e) => e.stopPropagation()}>
             <div className="cms-modal-head">
               <div>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Class & Venue Allocation</h3>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Class & Venue Allocation</h3>
                 <span style={{ fontSize: 12, color: "var(--cms-muted)" }}>
                   {selectedClassSlot.day} · {selectedClassSlot.time}
                 </span>
@@ -77,16 +76,8 @@ export default function FacultyTimetable() {
                 <X size={18} />
               </button>
             </div>
-            <div className="cms-modal-body" style={{ padding: 22 }}>
-              <div
-                style={{
-                  background: "var(--cms-primary-soft)",
-                  padding: "16px 18px",
-                  borderRadius: 12,
-                  marginBottom: 18,
-                  border: "1px solid var(--cms-primary-border)",
-                }}
-              >
+            <div className="cms-modal-body" style={{ padding: 20 }}>
+              <div className="faculty-tt-modal-banner">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span className="cms-badge cms-badge-info" style={{ fontWeight: 800 }}>
                     {selectedClassSlot.code}
@@ -95,95 +86,53 @@ export default function FacultyTimetable() {
                     {selectedClassSlot.group} — {selectedClassSlot.cls}
                   </span>
                 </div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--cms-primary-dark)", marginTop: 8 }}>
+                <div className="faculty-tt-modal-banner-title">
                   {selectedClassSlot.sub}
                 </div>
-                <div style={{ fontSize: 12.5, color: "var(--cms-text-secondary)", marginTop: 4 }}>
+                <div className="faculty-tt-modal-banner-desc">
                   Intermediate / +2 Junior College · Scheduled Lecture
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18 }}>
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    border: "1px solid var(--cms-border)",
-                    borderRadius: 10,
-                    background: "var(--cms-surface)",
-                  }}
-                >
-                  <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>Classroom / Venue</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 3 }}>📍 {selectedClassSlot.room}</div>
+              <div className="faculty-tt-modal-grid">
+                <div className="faculty-tt-modal-field">
+                  <div className="faculty-tt-modal-field-label">Classroom / Venue</div>
+                  <div className="faculty-tt-modal-field-val">📍 {selectedClassSlot.room}</div>
                 </div>
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    border: "1px solid var(--cms-border)",
-                    borderRadius: 10,
-                    background: "var(--cms-surface)",
-                  }}
-                >
-                  <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>Floor Location</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 3 }}>
+                <div className="faculty-tt-modal-field">
+                  <div className="faculty-tt-modal-field-label">Floor Location</div>
+                  <div className="faculty-tt-modal-field-val">
                     🏢 {selectedClassSlot.floor || "2nd Floor"}
                   </div>
                 </div>
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    border: "1px solid var(--cms-border)",
-                    borderRadius: 10,
-                    background: "var(--cms-surface)",
-                  }}
-                >
-                  <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>Block / Building</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 3 }}>
+                <div className="faculty-tt-modal-field">
+                  <div className="faculty-tt-modal-field-label">Block / Building</div>
+                  <div className="faculty-tt-modal-field-val">
                     🏛️ {selectedClassSlot.block || "Main Academic Block"}
                   </div>
                 </div>
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    border: "1px solid var(--cms-border)",
-                    borderRadius: 10,
-                    background: "var(--cms-surface)",
-                  }}
-                >
-                  <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>Academic Group</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 3 }}>
+                <div className="faculty-tt-modal-field">
+                  <div className="faculty-tt-modal-field-label">Academic Group</div>
+                  <div className="faculty-tt-modal-field-val">
                     📚 {selectedClassSlot.group || "MPC"}
                   </div>
                 </div>
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    border: "1px solid var(--cms-border)",
-                    borderRadius: 10,
-                    background: "var(--cms-surface)",
-                  }}
-                >
-                  <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>Faculty In-Charge</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 3 }}>
+                <div className="faculty-tt-modal-field">
+                  <div className="faculty-tt-modal-field-label">Faculty In-Charge</div>
+                  <div className="faculty-tt-modal-field-val">
                     👤 {profileData.fullName} ({profileData.employeeId})
                   </div>
                 </div>
-                <div
-                  style={{
-                    padding: "12px 14px",
-                    border: "1px solid var(--cms-border)",
-                    borderRadius: 10,
-                    background: "var(--cms-surface)",
-                  }}
-                >
-                  <div style={{ fontSize: 11.5, color: "var(--cms-muted)" }}>Room Setup & Capacity</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 3 }}>🪑 Lecture Hall (60 Seater)</div>
+                <div className="faculty-tt-modal-field">
+                  <div className="faculty-tt-modal-field-label">Room Setup & Capacity</div>
+                  <div className="faculty-tt-modal-field-val">🪑 Lecture Hall (60 Seater)</div>
                 </div>
               </div>
 
-              <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+              <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
                 <button
                   className="cms-btn cms-btn-ghost"
-                  style={{ minWidth: 100, justifyContent: "center" }}
+                  style={{ minWidth: 90, justifyContent: "center" }}
                   onClick={() => setSelectedClassSlot(null)}
                 >
                   Close

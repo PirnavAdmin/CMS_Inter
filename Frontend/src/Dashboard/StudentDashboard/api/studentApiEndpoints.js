@@ -3,6 +3,7 @@ const studentApiEndpoints = {
     me: "/api/v1/students/me",
     update: "/api/v1/students/me/profile",
     photo: "/api/v1/students/me/photo",
+    removePhoto: "/api/v1/students/me/photo",
     documents: "/api/v1/students/me/documents",
     changePassword: "/api/v1/students/me/change-password",
   },
