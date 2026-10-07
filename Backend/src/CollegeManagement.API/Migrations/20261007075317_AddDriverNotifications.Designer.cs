@@ -4,6 +4,7 @@ using CollegeManagement.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace CollegeManagement.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261007075317_AddDriverNotifications")]
+    partial class AddDriverNotifications
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3692,64 +3695,6 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("StaffAttendances");
                 });
 
-            modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceRegularization", b =>
-                {
-                    b.Property<int>("RegularizationId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RegularizationId"));
-
-                    b.Property<string>("AdminRemarks")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<DateTime>("AttendanceDate")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("FacultyId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)");
-
-                    b.Property<TimeSpan?>("RequestedInTime")
-                        .HasColumnType("time(6)");
-
-                    b.Property<TimeSpan?>("RequestedOutTime")
-                        .HasColumnType("time(6)");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<int?>("ReviewedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("StaffId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)");
-
-                    b.HasKey("RegularizationId");
-
-                    b.HasIndex("FacultyId");
-
-                    b.HasIndex("StaffId");
-
-                    b.ToTable("StaffAttendanceRegularizations");
-                });
-
             modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceSession", b =>
                 {
                     b.Property<int>("StaffSessionId")
@@ -7256,21 +7201,6 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("Faculty");
 
                     b.Navigation("StaffAttendanceSession");
-                });
-
-            modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceRegularization", b =>
-                {
-                    b.HasOne("CollegeManagement.API.Models.Faculty.Faculty", "Faculty")
-                        .WithMany()
-                        .HasForeignKey("FacultyId");
-
-                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
-                        .WithMany()
-                        .HasForeignKey("StaffId");
-
-                    b.Navigation("Faculty");
-
-                    b.Navigation("Staff");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceSession", b =>

@@ -1,6 +1,6 @@
 .timetable-module { width: 100%; min-width: 0; color: var(--cms-text); }
 .timetable-module, .timetable-module *, .timetable-module *::before, .timetable-module *::after { box-sizing: border-box; }
-.timetable-module .ttm-page { width: min(100%, 1280px); margin: 0 auto; padding: 4px 0 28px; }
+.timetable-module .ttm-page { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 4px 0 28px; }
 .timetable-module .ttm-page-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .timetable-module .ttm-back-link { display: inline-flex; width: fit-content; align-items: center; gap: 6px; margin: 0 0 14px; color: var(--cms-primary); font-size: 13px; font-weight: 700; text-decoration: none; }
 .timetable-module .ttm-back-link:hover { text-decoration: underline; }

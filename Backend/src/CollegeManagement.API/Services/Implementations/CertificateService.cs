@@ -93,10 +93,14 @@ public class CertificateService : ICertificateService
                 AcademicYear = student.AcademicYearId?.ToString()
             };
             
-            var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("CERTIFICATE_NO", reqDto, student.CampusId ?? 1);
+            var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("CERTIFICATE_NUMBER", reqDto, student.CampusId ?? 1);
             if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
             {
                 request.CertificateNo = generatedDto.GeneratedNumber;
+            }
+            else
+            {
+                request.CertificateNo = $"CERT-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString().Substring(0, 5).ToUpper()}";
             }
         }
 

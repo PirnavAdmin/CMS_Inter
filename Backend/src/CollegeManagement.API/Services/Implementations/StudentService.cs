@@ -3,19 +3,21 @@ using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
 using CollegeManagement.API.DTOs.Students.Responses;
 using CollegeManagement.API.Repositories;
+using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Settings;
+
 
 namespace CollegeManagement.API.Services
 {
     public class StudentService : IStudentService
     {
         private readonly IStudentRepository _repository;
-        private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment? _environment;
+        private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment? _environment; private readonly INumberSeriesService _numberSeriesService;
 
-        public StudentService(
-            IStudentRepository repository,
-            Microsoft.AspNetCore.Hosting.IWebHostEnvironment? environment = null)
+        public StudentService(IStudentRepository repository, INumberSeriesService numberSeriesService, Microsoft.AspNetCore.Hosting.IWebHostEnvironment? environment = null)
         {
             _repository = repository;
+            _numberSeriesService = numberSeriesService;
             _environment = environment;
         }
 
@@ -445,4 +447,4 @@ namespace CollegeManagement.API.Services
             return await _repository.UpdateSelfProfileAsync(studentId, request);
         }
     }
-}
+}
