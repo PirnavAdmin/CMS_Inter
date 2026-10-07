@@ -48,6 +48,11 @@ namespace CollegeManagement.API.DTOs.Settings
 
         [MaxLength(500)]
         public string? Description { get; set; }
+
+        public bool? IsActive { get; set; }
+
+        [MaxLength(100)]
+        public string? SeriesName { get; set; }
     }
 
     public class GenerateNumberSeriesRequestDto
@@ -63,6 +68,8 @@ namespace CollegeManagement.API.DTOs.Settings
         public string? Section { get; set; }
         public string? Level { get; set; }
         public string? Exam { get; set; }
+        public string? GroupCode { get; set; }
+        public string? CampusGroupPrefix { get; set; }
     }
 
     public class GenerateNumberSeriesResponseDto

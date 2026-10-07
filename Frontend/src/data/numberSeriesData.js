@@ -1,6 +1,29 @@
 const NUMBER_SERIES_STORAGE_KEY = "pirnav_number_series_settings";
 
 export const FIXED_NUMBER_SERIES = [
+  
+  {
+    id: "student-roll-no",
+    key: "student-roll-no",
+    seriesCode: "ROLL_NO",
+    name: "Student Roll No.",
+    category: "Student Management",
+    description: "Sequence scoped per Campus + Group. Prefix auto-generated from group code (e.g. MPC → MPC-1).",
+    prefix: "",
+    format: "{SEQ}",
+    formatPattern: "{SEQ}",
+    numberLength: 2,
+    startNumber: 1,
+    isActive: true,
+    availablePlaceholders: ["{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}"],
+    sampleFormats: [
+      { format: "{SEQ}", example: "1" },
+      { format: "{PREFIX}{SEQ}", example: "MPC-1" },
+      { format: "{GROUP}-{SEQ}", example: "MPC-01" },
+      { format: "{YYYY}-{GROUP}-{SEQ}", example: "2026-MPC-001" }
+    ],
+    scopeNote: "Sequence resets per Campus + Group combination."
+  },
   {
     id: "teaching-staff-id",
     key: "teaching-staff-id",
@@ -109,24 +132,32 @@ export const FIXED_NUMBER_SERIES = [
 ];
 
 export function normalizeNumberSeriesItem(item = {}) {
-  const code = item.seriesCode || item.slug || item.key || item.id || "";
-  const name = item.seriesName || item.name || code;
-  const format = item.formatPattern || item.format || "{SEQ}";
-  const prefix = item.prefix || "";
-  const numberLength = Number(item.numberLength ?? 4);
-  const startNumber = Number(item.startNumber ?? 1);
-  const currentSequence = Number(item.currentSequence ?? item.currentNumber ?? 0);
-  const allowedTokens = item.availablePlaceholders || item.allowedTokens || ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}"];
-  const sampleFormats = (item.sampleFormats || []).map((sf) => ({
+  const rawCode = item.seriesCode || item.SeriesCode || item.slug || item.key || item.id || "";
+  const code = String(rawCode).toLowerCase().replace(/_/g, '-');
+  const name = item.seriesName || item.SeriesName || item.name || code;
+  const format = item.formatPattern || item.FormatPattern || item.format || "{SEQ}";
+  const prefix = item.prefix || item.Prefix || "";
+  const numberLength = Number(item.numberLength ?? item.NumberLength ?? 4);
+  const startNumber = Number(item.startNumber ?? item.StartNumber ?? 1);
+  const currentSequence = Number(item.currentSequence ?? item.CurrentSequence ?? item.currentNumber ?? 0);
+  const allowedTokens = item.availablePlaceholders || item.AvailablePlaceholders || item.allowedTokens || ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{CAMPUS}", "{AY}", "{BOARD}", "{GROUP}"];
+  const sampleFormatsRaw = item.sampleFormats || item.SampleFormats || [];
+  const sampleFormats = sampleFormatsRaw.map((sf) => ({
     format: sf.pattern || sf.format || "",
     pattern: sf.pattern || sf.format || "",
     example: sf.example || "",
   }));
-  const description = item.description || "";
-  const isActive = item.isActive ?? true;
+  const description = item.description || item.Description || "";
+  const isActive = item.isActive ?? item.IsActive ?? true;
   const dynamicPreview = buildNumberFromFormat(format, currentSequence + 1, numberLength);
-  const currentExample = item.currentExample || dynamicPreview;
-  const livePreview = item.livePreview || dynamicPreview;
+  
+  const currentExample = (item.CurrentSequence !== undefined || item.currentSequence !== undefined) 
+      ? buildNumberFromFormat(format, currentSequence > 0 ? currentSequence : startNumber, numberLength) 
+      : (item.currentExample || dynamicPreview);
+      
+  const livePreview = (item.LivePreview || item.livePreview) 
+      ? (item.LivePreview || item.livePreview) 
+      : dynamicPreview;
 
   return {
     ...item,
@@ -159,33 +190,22 @@ export function isSeriesRemoved(item) {
   if (!item) return false;
   const key = String(item.id || item.key || item.seriesCode || item.slug || "").toLowerCase().trim();
   const name = String(item.name || item.seriesName || "").toLowerCase().trim();
+  
 
-  // Keep teaching-staff-id and non-teaching-staff-id
-  if (key.includes("teaching-staff") || key.includes("non-teaching") || name.includes("teaching staff")) {
-    return false;
-  }
 
-  return (
-    key === "employee-id" ||
-    key === "employee_id" ||
-    key === "employee" ||
-    key === "employeeid" ||
-    key === "roll-no" ||
-    key === "roll_no" ||
-    key === "rollno" ||
-    key === "roll-number" ||
-    key === "student-id" ||
-    key === "student_id" ||
-    key === "studentid" ||
-    key === "section-name" ||
-    key === "section_name" ||
-    key === "sectionname" ||
-    name === "employee id" ||
-    name === "roll no" ||
-    name === "roll no." ||
-    name === "student id" ||
-    name === "section name"
-  );
+  
+  try {
+    const deletedRaw = localStorage.getItem('NumberSeries_Deleted');
+    if (deletedRaw) {
+      const deletedList = JSON.parse(deletedRaw);
+      if (Array.isArray(deletedList) && deletedList.includes(key)) {
+        return true;
+      }
+    }
+  } catch (e) {}
+
+  // No hardcoded exclusions. Use NumberSeries_Deleted from localStorage.
+  return false;
 }
 
 // --- MOCK GENERATED HISTORY DATA FOR EACH FIXED TYPE ---
@@ -266,11 +286,20 @@ export function readNumberSeriesSettings() {
     const cleanParsed = parsed.filter((p) => !isSeriesRemoved(p));
     
     // Map parsed array onto FIXED_NUMBER_SERIES to ensure all valid cards are always present
+    // Map parsed array onto FIXED_NUMBER_SERIES to ensure all valid cards are always present
     const result = FIXED_NUMBER_SERIES.map((fixed) => {
       const found = cleanParsed.find((p) => p.id === fixed.id || p.key === fixed.key);
       if (!found) return fixed;
       return { ...fixed, ...found };
     });
+    
+    // Append any custom series that are not in FIXED_NUMBER_SERIES
+    cleanParsed.forEach((p) => {
+      if (!FIXED_NUMBER_SERIES.some((fixed) => fixed.id === p.id || fixed.key === p.key)) {
+        result.push(p);
+      }
+    });
+    
     return result;
   } catch {
     return FIXED_NUMBER_SERIES;
@@ -487,4 +516,11 @@ export function validateNumberSeries(format, numberLength, currentNumber, allowe
   }
 
   return { valid: true, message: "" };
+}
+
+
+export function autoGenerateRollNoPrefix(groupName) {
+  if (!groupName) return "";
+  const upper = groupName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return upper.length <= 4 ? upper : upper.substring(0, 4);
 }

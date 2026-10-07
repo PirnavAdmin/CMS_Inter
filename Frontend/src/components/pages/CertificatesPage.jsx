@@ -3011,6 +3011,9 @@ export default function CertificatesPage() {
               requestDate: previewData.requestDate || prev.requestDate,
               remarks: prev.remarks !== undefined ? prev.remarks : (previewData.remarks || ""),
               signature: previewData.signature || prev.signature || principalSignatureImg,
+              paragraphOne: previewData.paragraphOne || prev.paragraphOne,
+              paragraphTwo: previewData.paragraphTwo || prev.paragraphTwo,
+              ...(previewData.dataPayload || {})
             };
           });
         }
@@ -3912,9 +3915,9 @@ export default function CertificatesPage() {
                   </div>
 
                   <div className="cert-body-area">
-                    <p className="cert-content-text">{extractCleanCertificateBody(renderTemplateWithRecord(printTemplate.paragraphOne, printPreview)) || printTemplate.paragraphOne}</p>
-                    {printTemplate.paragraphTwo ? (
-                      <p className="cert-purpose-text">{extractCleanCertificateBody(renderTemplateWithRecord(printTemplate.paragraphTwo, printPreview)) || printTemplate.paragraphTwo}</p>
+                    <p className="cert-content-text">{printPreview.paragraphOne || extractCleanCertificateBody(renderTemplateWithRecord(printTemplate.paragraphOne, printPreview)) || printTemplate.paragraphOne}</p>
+                    {printPreview.paragraphTwo || printTemplate.paragraphTwo ? (
+                      <p className="cert-purpose-text">{printPreview.paragraphTwo || extractCleanCertificateBody(renderTemplateWithRecord(printTemplate.paragraphTwo, printPreview)) || printTemplate.paragraphTwo}</p>
                     ) : null}
                     {/* Remarks removed from certificate face */}
                   </div>

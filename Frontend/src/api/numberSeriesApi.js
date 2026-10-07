@@ -5,7 +5,7 @@ import { apiEndpoints } from "./apiEndpoints.js";
  * 1. GET /api/v1/settings/number-series (or /api/v1/number-series)
  * Returns list of configurations for all supported number series.
  */
-export async function getNumberSeriesList(campusId, boardId, academicYearId) {
+export async function getNumberSeriesList(campusId, boardId, academicYearId, includeSubCounters = false) {
   const headers = campusId !== undefined && campusId !== null && campusId !== ""
     ? { "X-Campus-Id": String(campusId) }
     : {};
@@ -13,6 +13,9 @@ export async function getNumberSeriesList(campusId, boardId, academicYearId) {
   if (boardId !== undefined && boardId !== null && boardId !== "") params.board = String(boardId);
   if (academicYearId !== undefined && academicYearId !== null && academicYearId !== "") {
     params.academicYear = String(academicYearId);
+  }
+  if (includeSubCounters) {
+    params.includeSubCounters = true;
   }
   const requestConfig = { headers, params };
 
@@ -65,6 +68,8 @@ export async function updateNumberSeries(seriesCode, configData, campusId) {
     numberLength: Number(configData.numberLength ?? 4),
     startNumber: Number(configData.startNumber ?? 1),
     description: configData.description ?? "",
+    isActive: configData.isActive !== undefined ? configData.isActive : true,
+    seriesName: configData.seriesName || configData.name || "",
   };
 
   try {
@@ -99,6 +104,8 @@ export async function generateNextNumber(seriesCode, context = {}, campusId) {
     cert: context.cert ?? "",
     academicYear: context.academicYear ?? "",
     group: context.group ?? "",
+    groupCode: context.groupCode ?? "",
+    campusGroupPrefix: context.campusGroupPrefix ?? "",
     section: context.section ?? "",
     level: context.level ?? "",
     exam: context.exam ?? "",
