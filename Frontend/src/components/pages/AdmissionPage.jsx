@@ -996,7 +996,7 @@ const admissionMainTabs = [
   { title: "Preview", step: PREVIEW_STEP_INDEX, icon: Eye },
 ];
 const ADMISSION_NUMBER_SERIES_CODE = "ADMISSION_NO";
-const admissionStatusFilterOptions = ["Pending", "Verified", "Approved", "Rejected"];
+const admissionStatusFilterOptions = ["Pending", "Request Approved", "Request Rejected", "Verified", "Approved", "Rejected"];
 
 const stepIcons = {
   Admission: ClipboardList,
@@ -1013,7 +1013,7 @@ const stepIcons = {
   Preview: Eye,
 };
 
-const buildAdmissionFormData = (values) => {
+const buildAdmissionFormData = (values, { includeFee = true } = {}) => {
   const formData = new FormData();
   const houseDoorNumber = values.houseDoorNumber ?? values.address1 ?? "";
   const streetVillage = values.streetVillage ?? values.address2 ?? "";
@@ -1060,7 +1060,7 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "AcademicLevel", values.levelName || values.level);
   appendIfPresent(formData, "GroupId", values.group);
   appendIfPresent(formData, "ProgramId", values.program);
-  appendIfPresent(formData, "FeeStructureId", numericId(values.feeStructureId));
+  if (includeFee) appendIfPresent(formData, "FeeStructureId", numericId(values.feeStructureId));
   const admissionPaymentPlan = toAdmissionPaymentPlan(values.paymentPlan);
   appendIfPresent(formData, "PaymentPlan", admissionPaymentPlan);
   appendIfPresent(formData, "StudentType", values.studentType);
@@ -1069,9 +1069,11 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "PickupPointId", values.pickupPoint);
   appendIfPresent(formData, "HostelId", values.hostelBlock);
   appendIfPresent(formData, "HostelRoom", values.hostelRoomName || values.hostelRoom);
-  selectedFeeStructureComponentIdsFor(values).componentIds.forEach((componentId) => {
-    formData.append("SelectedFeeStructureComponentIds", componentId);
-  });
+  if (includeFee) {
+    selectedFeeStructureComponentIdsFor(values).componentIds.forEach((componentId) => {
+      formData.append("SelectedFeeStructureComponentIds", componentId);
+    });
+  }
   if (import.meta.env.DEV) {
     console.log("Student Admission payment plan payload:", {
       uiPaymentPlan: values.paymentPlan,
@@ -1394,6 +1396,8 @@ const clearAdmissionDraft = () => {
 
 const normalizeAdmissionStatus = (value, fallback = "Pending") => {
   const status = String(value || "").trim().toLowerCase();
+  if (["request approved", "requestapproved", "approved request"].includes(status)) return "Request Approved";
+  if (["request rejected", "requestrejected", "rejected request"].includes(status)) return "Request Rejected";
   if (["approved", "approve", "active", "completed", "complete"].includes(status)) return "Approved";
   if (["rejected", "reject", "inactive", "cancelled", "canceled", "denied"].includes(status)) return "Rejected";
   if (["verified", "verify"].includes(status)) return "Verified";
@@ -1442,6 +1446,8 @@ const isAdmissionVerified = (...sources) => sources.some((source) => {
 
 const admissionStatusClass = (status) => {
   if (status === "Approved") return "cms-badge-active";
+  if (status === "Request Approved") return "cms-badge-info";
+  if (status === "Request Rejected") return "cms-badge-danger";
   if (status === "Verified") return "cms-badge-info";
   if (status === "Rejected") return "cms-badge-danger";
   return "cms-badge-warn";
@@ -1650,6 +1656,10 @@ const normalizeAdmissionRow = (item) => {
   const campusId = readId(item, "campusId", "CampusId") || readId(campus, "campusId", "CampusId", "id", "Id");
   const campusName = readText(item, "campusName", "CampusName")
     || (typeof campus === "string" ? campus : readText(campus, "campusName", "CampusName", "name", "Name", "campusCode", "CampusCode"));
+  const sourceCampus = read(item, "sourceCampus", "SourceCampus");
+  const sourceCampusId = readId(item, "sourceCampusId", "SourceCampusId") || readId(sourceCampus, "campusId", "CampusId", "id", "Id");
+  const sourceCampusName = readText(item, "sourceCampusName", "SourceCampusName")
+    || (typeof sourceCampus === "string" ? sourceCampus : readText(sourceCampus, "campusName", "CampusName", "name", "Name", "campusCode", "CampusCode"));
   const admittedByEmployeeId = readText(item, "admittedByEmployeeId", "AdmittedByEmployeeId", "admittedByEmpId", "AdmittedByEmpId");
   const admittedByEmployeeName = readText(item, "admittedByEmployeeName", "AdmittedByEmployeeName", "admittedByName", "AdmittedByName");
   const studentPhoto = readPhotoUrl(item, student, admission);
@@ -1709,6 +1719,8 @@ const normalizeAdmissionRow = (item) => {
     campusId,
     campus: campusId || campusName,
     campusName,
+    sourceCampusId,
+    sourceCampusName,
     boardId,
     board: boardId || boardName,
     boardName,
@@ -1729,6 +1741,8 @@ const normalizeAdmissionRow = (item) => {
       admissionType: readText(item, "admissionType", "AdmissionType"),
       campus: campusId,
       campusName,
+      sourceCampusId,
+      sourceCampusName,
       board: boardId,
       year: academicYearId,
       firstName,
@@ -2039,6 +2053,7 @@ const selectedFeeStructureComponentIdsFor = (values = {}) => {
 const saveAdmissionFeeSelections = async (admissionId, values) => {
   const numericAdmissionId = numericId(admissionId);
   if (!numericAdmissionId) throw new Error("Admission was saved, but the admission ID was not returned for fee selection.");
+  if (values?.isCrossCampusAdmission) return;
 
   const { selectedItems, missingComponentItems, componentIds } = selectedFeeStructureComponentIdsFor(values);
   if (!selectedItems.length) return;
@@ -2067,6 +2082,7 @@ const saveAdmissionFeeSelections = async (admissionId, values) => {
 
 const feeStepErrors = (values) => {
   const next = {};
+  if (values?.isCrossCampusAdmission) return next;
   const fee = deriveAdmissionFee(values);
   if (!numericId(values.feeStructureId) || !fee.feeItems.length) {
     next.feeStructure = "No fee structure is configured for the selected Academic Year, Group and Program.";
@@ -3168,10 +3184,17 @@ export default function AdmissionPage() {
     selectedCampusValue ? { campusId: selectedCampusValue } : {}
   ), [selectedCampusValue]);
   const admissionNumberPayload = useMemo(() => ({
-    campusId: toNullableNumberId(selectedCampusValue),
-    boardId: toNullableNumberId(selectedContextBoardValue),
-    academicYearId: toNullableNumberId(selectedContextYearValue),
-  }), [selectedCampusValue, selectedContextBoardValue, selectedContextYearValue]);
+    campusId: toNullableNumberId(values.campus || selectedCampusValue),
+    boardId: toNullableNumberId(values.board || selectedContextBoardValue),
+    academicYearId: toNullableNumberId(values.year || selectedContextYearValue),
+  }), [
+    values.campus,
+    values.board,
+    values.year,
+    selectedCampusValue,
+    selectedContextBoardValue,
+    selectedContextYearValue,
+  ]);
   const canRequestAdmissionNumber = Boolean(admissionNumberPayload.campusId && admissionNumberPayload.boardId && admissionNumberPayload.academicYearId);
   const admittedBySelectedLabel = admissionStaffLabel({
     employeeId: values.admittedByEmployeeId,
@@ -4060,6 +4083,10 @@ export default function AdmissionPage() {
   const paymentPlan = values.paymentPlan;
   const installmentCount = values.installmentCount;
   const admissionDate = values.admissionDate;
+  const validationValues = useMemo(() => ({
+    ...values,
+    isCrossCampusAdmission,
+  }), [isCrossCampusAdmission, values]);
 
   // Keeps an explicitly selected installment schedule aligned with the course fee.
   useEffect(() => {
@@ -4987,7 +5014,7 @@ export default function AdmissionPage() {
   const validateStepAt = (stepIndex) => {
     const section = steps[stepIndex];
     if (!section) return {};
-    if (section.custom === "fee") return feeStepErrors(values);
+    if (section.custom === "fee") return feeStepErrors(validationValues);
     return validateFields(section.fields);
   };
 
@@ -5003,7 +5030,7 @@ export default function AdmissionPage() {
   const validateAdmission = () => {
     const next = steps.reduce((all, section) => ({
       ...all,
-      ...(section.custom === "fee" ? feeStepErrors(values) : validateFields(section.fields)),
+      ...(section.custom === "fee" ? feeStepErrors(validationValues) : validateFields(section.fields)),
     }), {});
     setErrors(next);
     if (Object.keys(next).length) focusFirstError(next);
@@ -5016,7 +5043,7 @@ export default function AdmissionPage() {
     let firstInvalidStep = -1;
 
     relevantSteps.forEach((section, index) => {
-      const sectionErrors = section.custom === "fee" ? feeStepErrors(values) : validateFields(section.fields);
+      const sectionErrors = section.custom === "fee" ? feeStepErrors(validationValues) : validateFields(section.fields);
       if (Object.keys(sectionErrors).length && firstInvalidStep === -1) firstInvalidStep = index;
       Object.assign(next, sectionErrors);
     });
@@ -5470,7 +5497,7 @@ export default function AdmissionPage() {
 
   const submit = async () => {
     if (saving || submitInFlightRef.current) return;
-    if (feeStructureLoading) {
+    if (!isCrossCampusAdmission && feeStructureLoading) {
       setToast("Fee structure is being prepared. Please wait.");
       return;
     }
@@ -5501,6 +5528,7 @@ export default function AdmissionPage() {
       board: values.board || selectedContextBoardValue,
       year: values.year || selectedContextYearValue,
       studentMobileNumber: studentMobileValue(values) || visibleMobile,
+      isCrossCampusAdmission,
     });
 
     submitInFlightRef.current = true;
@@ -5522,7 +5550,7 @@ export default function AdmissionPage() {
         ? apiEndpoints.admissions.update(submitAdmissionId)
         : apiEndpoints.admissions.create;
       const method = isUpdate ? "put" : "post";
-      const formData = buildAdmissionFormData(submitValues);
+      const formData = buildAdmissionFormData(submitValues, { includeFee: !isCrossCampusAdmission });
       if (isUpdate) formData.delete("CampusId");
       debugAdmissionSubmitPayload({ endpoint, method, formData, values: submitValues });
       const response = await apiClient[method](endpoint, formData, {
@@ -5598,7 +5626,9 @@ export default function AdmissionPage() {
       return;
     }
 
-    setToast(`Admission ${submittedAdmissionNo} ${isUpdate ? "updated" : "submitted"} successfully.`);
+    setToast(isCrossCampusAdmission
+      ? `Admission request ${submittedAdmissionNo} submitted successfully.`
+      : `Admission ${submittedAdmissionNo} ${isUpdate ? "updated" : "submitted"} successfully.`);
     resetAdmissionDraftState();
     setViewMode("list");
     setPage(1);
@@ -5610,10 +5640,6 @@ export default function AdmissionPage() {
   const handlePreviewPrimaryAction = () => {
     if (canVerifyPreviewAdmission) {
       verifyAdmission(previewVerifyRecord);
-      return;
-    }
-    if (isCrossCampusAdmission) {
-      setToast("Selected campus is different from your current campus. Request admission is UI-only for now.");
       return;
     }
     submit();
@@ -5957,7 +5983,7 @@ export default function AdmissionPage() {
               disabled={
                 canVerifyPreviewAdmission
                   ? actionBusy === `Verified-${editingAdmissionId}`
-                  : saving || feeStructureLoading || admissionNumberLoading || (!editingAdmissionId && (!values.admissionNo || admissionNumberError))
+                : saving || (!isCrossCampusAdmission && feeStructureLoading) || admissionNumberLoading || (!editingAdmissionId && (!values.admissionNo || admissionNumberError))
               }
             >
               {canVerifyPreviewAdmission
