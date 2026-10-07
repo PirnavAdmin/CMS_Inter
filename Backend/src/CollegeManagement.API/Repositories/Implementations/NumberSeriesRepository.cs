@@ -37,11 +37,17 @@ namespace CollegeManagement.API.Repositories.Implementations
             await Task.CompletedTask;
         }
 
-        public async Task<IEnumerable<NumberSeriesConfiguration>> GetAllAsync(int? campusId = null)
+        public async Task<IEnumerable<NumberSeriesConfiguration>> GetAllAsync(int? campusId = null, bool includeSubCounters = false)
         {
-            var configs = await _context.Set<NumberSeriesConfiguration>().AsNoTracking()
-                .Where(n => n.IsActive && !n.SeriesCode.Contains("|") && (n.CampusId == campusId || n.CampusId == null))
-                .ToListAsync();
+            var query = _context.Set<NumberSeriesConfiguration>().AsNoTracking()
+                .Where(n => n.IsActive && (n.CampusId == campusId || n.CampusId == null));
+
+            if (!includeSubCounters)
+            {
+                query = query.Where(n => !n.SeriesCode.Contains("|"));
+            }
+
+            var configs = await query.ToListAsync();
 
             return configs
                 .GroupBy(n => n.SeriesCode)
@@ -65,7 +71,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             int numberLength,
             int startNumber,
             string? description,
-            int? campusId = null)
+            int? campusId = null,
+            bool? isActive = null,
+            string? seriesName = null)
         {
             var existing = await _context.Set<NumberSeriesConfiguration>()
                 .Where(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
@@ -87,7 +95,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                         CurrentSequence = startNumber > 0 ? startNumber - 1 : 0,
                         Description = description,
                         CampusId = campusId,
-                        IsActive = true,
+                        IsActive = isActive ?? true,
+                        SeriesName = string.IsNullOrEmpty(seriesName) ? existing.SeriesName : seriesName,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
                     };
@@ -102,10 +111,34 @@ namespace CollegeManagement.API.Repositories.Implementations
                     existing.NumberLength = numberLength;
                     existing.StartNumber = startNumber;
                     existing.Description = description;
+                    if (isActive.HasValue) existing.IsActive = isActive.Value;
+                    if (!string.IsNullOrEmpty(seriesName)) existing.SeriesName = seriesName;
                     existing.UpdatedAt = DateTime.UtcNow;
                     existing.CampusId = campusId;
                     await _context.SaveChangesAsync();
                 }
+            }
+            else
+            {
+                // UPSERT: Create if not exists
+                var newConfig = new NumberSeriesConfiguration
+                {
+                    SeriesCode = seriesCode.Trim(),
+                    SeriesName = string.IsNullOrEmpty(seriesName) ? seriesCode : seriesName,
+                    Prefix = prefix,
+                    FormatPattern = formatPattern,
+                    NumberLength = numberLength,
+                    StartNumber = startNumber,
+                    CurrentSequence = startNumber > 0 ? startNumber - 1 : 0,
+                    Description = description,
+                    CampusId = campusId,
+                    IsActive = isActive ?? true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Set<NumberSeriesConfiguration>().Add(newConfig);
+                await _context.SaveChangesAsync();
+                return newConfig;
             }
 
             return existing;
@@ -124,15 +157,28 @@ namespace CollegeManagement.API.Repositories.Implementations
                 // we must NOT increment the global fallback. We must create a new sequence counter for this campus.
                 if (campusId.HasValue && existing.CampusId != campusId)
                 {
+                    // Fetch base template for format/prefix/length defaults
+                    var baseTemplate = !string.IsNullOrWhiteSpace(baseSeriesCode)
+                        ? await _context.Set<NumberSeriesConfiguration>()
+                            .Where(n => n.SeriesCode == baseSeriesCode && n.CampusId == null)
+                            .FirstOrDefaultAsync() ?? existing
+                        : existing;
+
+                    // Auto-derive prefix from the subCode (e.g. "ROLL_NO|1|MPC" -> "MPC")
+                    var autoPrefix = seriesCode.Contains("|")
+                        ? seriesCode.Split('|').Last().ToUpperInvariant()
+                        : baseTemplate.Prefix;
+
                     var newConfig = new NumberSeriesConfiguration
                     {
-                        SeriesCode = existing.SeriesCode,
-                        Prefix = existing.Prefix,
-                        FormatPattern = existing.FormatPattern,
-                        NumberLength = existing.NumberLength,
-                        StartNumber = existing.StartNumber,
-                        CurrentSequence = existing.StartNumber, // Initial sequence used!
-                        Description = existing.Description,
+                        SeriesCode = seriesCode,
+                        SeriesName = seriesCode.Contains("|") ? $"Student Roll No. - {autoPrefix}" : existing.SeriesName,
+                        Prefix = autoPrefix,
+                        FormatPattern = baseTemplate.FormatPattern,
+                        NumberLength = baseTemplate.NumberLength,
+                        StartNumber = baseTemplate.StartNumber,
+                        CurrentSequence = baseTemplate.StartNumber, // Initial sequence used!
+                        Description = baseTemplate.Description,
                         CampusId = campusId,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
@@ -158,15 +204,40 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null, string? board = null, string? academicYear = null)
         {
-            // Only consider the EXACT campus match, or NULL if campusId is null
-            // We should NOT blindly max across global fallback if we are specifically asking for a campus, 
-            // unless that campus explicitly has NO rows. But to be safe, get max of ONLY the matching campus.
             var max = await _context.Set<NumberSeriesConfiguration>()
                 .Where(n => (n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
                          && n.CampusId == campusId)
-                .MaxAsync(n => (int?)n.CurrentSequence);
+                .MaxAsync(n => (int?)n.CurrentSequence) ?? 0;
+
+            // Sync with actual Staffs table for Teaching and Non-Teaching Staff IDs
+            var code = baseSeriesCode.Trim().ToUpperInvariant();
+            if (code == "TEACHING_STAFF_ID" || code == "NON_TEACHING_STAFF_ID")
+            {
+                var isTeaching = code == "TEACHING_STAFF_ID";
                 
-            return max ?? 0;
+                // Fetch all Employee IDs in memory for robust parsing
+                var staffIds = await _context.Set<CollegeManagement.API.Models.Staff.Staff>()
+                    .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null 
+                             && (isTeaching ? s.StaffType == "Teaching" : s.StaffType != "Teaching"))
+                    .Select(s => s.EmployeeId)
+                    .ToListAsync();
+                    
+                if (staffIds.Any())
+                {
+                    var actualMax = staffIds
+                        .Select(id => 
+                        {
+                            var numericPart = new string(id.Where(char.IsDigit).ToArray());
+                            return int.TryParse(numericPart, out var val) ? val : 0;
+                        })
+                        .DefaultIfEmpty(0)
+                        .Max();
+                        
+                    max = System.Math.Max(max, actualMax);
+                }
+            }
+                
+            return max;
         }
     }
 }
