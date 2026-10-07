@@ -1248,6 +1248,250 @@ BEGIN
     WHERE s.StudentId = p_StudentId
       AND s.IsActive = 1
     LIMIT 1;
+DROP PROCEDURE IF EXISTS `sp_ChangeStudentSection`//
+CREATE PROCEDURE `sp_ChangeStudentSection`(
+    IN p_StudentId INT,
+    IN p_SectionId INT,
+    IN p_Remarks VARCHAR(1000)
+)
+BEGIN
+    DECLARE v_StuAY INT;
+    DECLARE v_StuAL INT;
+    DECLARE v_StuG INT;
+    DECLARE v_StuP INT;
+    DECLARE v_StuC INT;
+
+    DECLARE v_SecAY INT;
+    DECLARE v_SecAL INT;
+    DECLARE v_SecG INT;
+    DECLARE v_SecP INT;
+    DECLARE v_SecC INT;
+    DECLARE v_SecMaxStrength INT;
+    DECLARE v_SecCurrentCount INT;
+    DECLARE v_NextRollNo INT DEFAULT 1;
+
+    -- 1. Check Student exists
+    SELECT AcademicYearId, AcademicLevelId, GroupId, ProgramId, CampusId
+    INTO v_StuAY, v_StuAL, v_StuG, v_StuP, v_StuC
+    FROM Students
+    WHERE StudentId = p_StudentId AND IsActive = 1
+    LIMIT 1;
+
+    IF v_StuAY IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Student not found or inactive.';
+    END IF;
+
+    -- 2. Check Target Section exists & is active
+    SELECT AcademicYearId, AcademicLevelId, GroupId, ProgramId, CampusId, MaximumStrength
+    INTO v_SecAY, v_SecAL, v_SecG, v_SecP, v_SecC, v_SecMaxStrength
+    FROM Sections
+    WHERE SectionId = p_SectionId AND IsActive = 1
+    LIMIT 1;
+
+    IF v_SecAY IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Target Section not found or inactive.';
+    END IF;
+
+    -- 3. Check Section Context matches Student (AcademicYear, Level, Group, Program, Campus)
+    IF v_SecAY <> v_StuAY OR v_SecAL <> v_StuAL OR v_SecG <> v_StuG OR (v_SecP IS NOT NULL AND v_StuP IS NOT NULL AND v_SecP <> v_StuP) OR (v_SecC IS NOT NULL AND v_StuC IS NOT NULL AND v_SecC <> v_StuC) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Target Section does not match student Academic Year, Level, Group, Program, or Campus.';
+    END IF;
+
+    -- 4. Check Capacity
+    SELECT COUNT(1) INTO v_SecCurrentCount
+    FROM Students
+    WHERE SectionId = p_SectionId AND IsActive = 1 AND StudentId <> p_StudentId;
+
+    IF v_SecMaxStrength IS NOT NULL AND v_SecMaxStrength > 0 AND v_SecCurrentCount >= v_SecMaxStrength THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Target section has reached maximum capacity.';
+    END IF;
+
+    -- 5. Calculate Next Roll Number (Option A: Max + 1 in target section)
+    SELECT COALESCE(MAX(CAST(RollNo AS UNSIGNED)), 0) + 1 INTO v_NextRollNo
+    FROM Students
+    WHERE SectionId = p_SectionId AND IsActive = 1 AND RollNo REGEXP '^[0-9]+$';
+
+    -- 6. Update Student
+    UPDATE Students
+    SET
+        SectionId = p_SectionId,
+        RollNo = CAST(v_NextRollNo AS CHAR),
+        Remarks = COALESCE(p_Remarks, Remarks),
+        UpdatedAt = CURRENT_TIMESTAMP(6)
+    WHERE StudentId = p_StudentId;
+
+    SELECT ROW_COUNT() AS Result;
+END //
+
+DROP PROCEDURE IF EXISTS `sp_ChangeStudentGroup`//
+CREATE PROCEDURE `sp_ChangeStudentGroup`(
+    IN p_StudentId INT,
+    IN p_GroupId INT,
+    IN p_ProgramId INT,
+    IN p_Remarks VARCHAR(1000)
+)
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM Students WHERE StudentId = p_StudentId AND IsActive = 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Student not found or inactive.';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM `Groups` WHERE GroupId = p_GroupId AND IsActive = 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid or inactive Group.';
+    END IF;
+
+    -- Reset SectionId and RollNo when Group or Program changes
+    UPDATE Students
+    SET
+        GroupId = p_GroupId,
+        ProgramId = p_ProgramId,
+        SectionId = NULL,
+        RollNo = NULL,
+        Remarks = COALESCE(p_Remarks, Remarks),
+        UpdatedAt = CURRENT_TIMESTAMP(6)
+    WHERE StudentId = p_StudentId;
+
+    SELECT ROW_COUNT() AS Result;
+END //
+
+DROP PROCEDURE IF EXISTS `sp_UpdateStudent`//
+CREATE PROCEDURE `sp_UpdateStudent`(
+    IN p_StudentId INT,
+    IN p_AdmissionId INT,
+    IN p_AdmissionNo VARCHAR(50),
+    IN p_RollNo VARCHAR(50),
+    IN p_AdmissionDate DATETIME,
+    IN p_AdmissionType VARCHAR(50),
+    IN p_AdmissionQuota VARCHAR(50),
+    IN p_Medium VARCHAR(50),
+    IN p_SecondLanguage VARCHAR(100),
+    IN p_StudentName VARCHAR(150),
+    IN p_Photo VARCHAR(500),
+    IN p_Gender VARCHAR(20),
+    IN p_DateOfBirth DATETIME,
+    IN p_BloodGroup VARCHAR(10),
+    IN p_Email VARCHAR(150),
+    IN p_MobileNumber VARCHAR(20),
+    IN p_AadhaarNumber VARCHAR(20),
+    IN p_Nationality VARCHAR(50),
+    IN p_Religion VARCHAR(50),
+    IN p_Category VARCHAR(50),
+    IN p_Address VARCHAR(500),
+    IN p_City VARCHAR(100),
+    IN p_District VARCHAR(100),
+    IN p_State VARCHAR(100),
+    IN p_Pincode VARCHAR(20),
+    IN p_BoardId INT,
+    IN p_AcademicYearId INT,
+    IN p_AcademicLevelId INT,
+    IN p_GroupId INT,
+    IN p_ProgramId INT,
+    IN p_SectionId INT,
+    IN p_PreviousSchool VARCHAR(200),
+    IN p_PreviousHallTicketNumber VARCHAR(50),
+    IN p_PreviousBoard VARCHAR(100),
+    IN p_PreviousYearOfPassing INT,
+    IN p_PreviousPercentage DECIMAL(5,2),
+    IN p_FatherName VARCHAR(150),
+    IN p_FatherOccupation VARCHAR(100),
+    IN p_FatherMobile VARCHAR(20),
+    IN p_MotherName VARCHAR(150),
+    IN p_MotherOccupation VARCHAR(100),
+    IN p_MotherMobile VARCHAR(20),
+    IN p_GuardianName VARCHAR(150),
+    IN p_GuardianMobile VARCHAR(20),
+    IN p_ParentGuardianEmail VARCHAR(150),
+    IN p_StudentType VARCHAR(50),
+    IN p_TransportRequired INT,
+    IN p_BusType VARCHAR(50),
+    IN p_RouteId INT,
+    IN p_BusRoute VARCHAR(100),
+    IN p_PickupPointId INT,
+    IN p_PickupPoint VARCHAR(100),
+    IN p_HostelId INT,
+    IN p_HostelBlock VARCHAR(50),
+    IN p_RoomId INT,
+    IN p_HostelRoom VARCHAR(50),
+    IN p_BedId INT,
+    IN p_HostelBed VARCHAR(50),
+    IN p_HallTicketNumber VARCHAR(50),
+    IN p_CampusId INT
+)
+BEGIN
+    IF p_SectionId > 0 AND NOT EXISTS (SELECT 1 FROM Sections WHERE SectionId = p_SectionId AND IsActive = 1) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid or inactive SectionId';
+    END IF;
+
+    UPDATE Students
+    SET
+        AdmissionId = COALESCE(p_AdmissionId, AdmissionId),
+        AdmissionNo = COALESCE(NULLIF(TRIM(p_AdmissionNo), ''), AdmissionNo),
+        AdmissionDate = COALESCE(p_AdmissionDate, AdmissionDate),
+        Medium = COALESCE(p_Medium, Medium),
+        SecondLanguage = COALESCE(p_SecondLanguage, SecondLanguage),
+        StudentName = COALESCE(NULLIF(TRIM(p_StudentName), ''), StudentName),
+        Photo = COALESCE(p_Photo, Photo),
+        Gender = COALESCE(p_Gender, Gender),
+        DateOfBirth = COALESCE(p_DateOfBirth, DateOfBirth),
+        BloodGroup = COALESCE(p_BloodGroup, BloodGroup),
+        Email = COALESCE(p_Email, Email),
+        MobileNumber = COALESCE(p_MobileNumber, MobileNumber),
+        AadhaarNumber = CASE
+            WHEN p_AadhaarNumber IS NULL THEN AadhaarNumber
+            WHEN TRIM(p_AadhaarNumber) = '' OR LOWER(TRIM(p_AadhaarNumber)) = 'string' OR LOWER(TRIM(p_AadhaarNumber)) = 'null' THEN NULL
+            ELSE TRIM(p_AadhaarNumber)
+        END,
+        Nationality = COALESCE(p_Nationality, Nationality),
+        Religion = COALESCE(p_Religion, Religion),
+        Category = COALESCE(p_Category, Category),
+        Address = COALESCE(p_Address, Address),
+        City = COALESCE(p_City, City),
+        District = COALESCE(p_District, District),
+        State = COALESCE(p_State, State),
+        Pincode = COALESCE(p_Pincode, Pincode),
+        BoardId = CASE WHEN p_BoardId > 0 THEN p_BoardId ELSE BoardId END,
+        AcademicYearId = CASE WHEN p_AcademicYearId > 0 THEN p_AcademicYearId ELSE AcademicYearId END,
+        AcademicLevelId = CASE WHEN p_AcademicLevelId > 0 THEN p_AcademicLevelId ELSE AcademicLevelId END,
+        GroupId = CASE WHEN p_GroupId > 0 THEN p_GroupId ELSE GroupId END,
+        ProgramId = CASE WHEN p_ProgramId > 0 THEN p_ProgramId ELSE ProgramId END,
+        SectionId = CASE WHEN p_SectionId = 0 THEN NULL WHEN p_SectionId > 0 THEN p_SectionId ELSE SectionId END,
+        RollNo = CASE
+            WHEN p_SectionId = 0 THEN NULL
+            WHEN p_RollNo IS NOT NULL AND TRIM(p_RollNo) <> '' AND LOWER(TRIM(p_RollNo)) <> 'string' THEN TRIM(p_RollNo)
+            ELSE RollNo
+        END,
+        PreviousSchool = COALESCE(p_PreviousSchool, PreviousSchool),
+        PreviousHallTicketNumber = COALESCE(p_HallTicketNumber, p_PreviousHallTicketNumber, PreviousHallTicketNumber),
+        PreviousBoard = COALESCE(p_PreviousBoard, PreviousBoard),
+        PreviousYearOfPassing = COALESCE(p_PreviousYearOfPassing, PreviousYearOfPassing),
+        PreviousPercentage = COALESCE(p_PreviousPercentage, PreviousPercentage),
+        FatherName = COALESCE(p_FatherName, FatherName),
+        FatherOccupation = COALESCE(p_FatherOccupation, FatherOccupation),
+        FatherMobile = COALESCE(p_FatherMobile, FatherMobile),
+        MotherName = COALESCE(p_MotherName, MotherName),
+        MotherOccupation = COALESCE(p_MotherOccupation, MotherOccupation),
+        MotherMobile = COALESCE(p_MotherMobile, MotherMobile),
+        GuardianName = COALESCE(p_GuardianName, GuardianName),
+        GuardianMobile = COALESCE(p_GuardianMobile, GuardianMobile),
+        ParentGuardianEmail = COALESCE(p_ParentGuardianEmail, ParentGuardianEmail),
+        StudentType = COALESCE(p_StudentType, StudentType),
+        TransportRequired = p_TransportRequired,
+        BusType = p_BusType,
+        RouteId = p_RouteId,
+        BusRoute = p_BusRoute,
+        PickupPointId = p_PickupPointId,
+        PickupPoint = p_PickupPoint,
+        HostelId = p_HostelId,
+        HostelBlock = p_HostelBlock,
+        RoomId = p_RoomId,
+        HostelRoom = p_HostelRoom,
+        BedId = p_BedId,
+        HostelBed = p_HostelBed,
+        HallTicketNumber = COALESCE(p_HallTicketNumber, HallTicketNumber),
+        CampusId = CASE WHEN p_CampusId > 0 THEN p_CampusId ELSE CampusId END,
+        UpdatedAt = CURRENT_TIMESTAMP(6)
+    WHERE StudentId = p_StudentId;
+
+    CALL sp_GetStudentById(p_StudentId);
 END //
 
 DELIMITER ;
