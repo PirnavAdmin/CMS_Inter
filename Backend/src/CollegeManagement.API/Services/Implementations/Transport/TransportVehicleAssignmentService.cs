@@ -1,3 +1,6 @@
+﻿using Microsoft.AspNetCore.SignalR;
+using CollegeManagement.API.Hubs;
+using CollegeManagement.API.Models.Transport;
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Common;
 using CollegeManagement.API.Data;
@@ -12,13 +15,16 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly ITransportVehicleAssignmentRepository _repository;
         private readonly AppDbContext _context;
+        private readonly IHubContext<DriverNotificationHub> _hubContext;
 
         public TransportVehicleAssignmentService(
             ITransportVehicleAssignmentRepository repository,
-            AppDbContext context)
+            AppDbContext context,
+            IHubContext<DriverNotificationHub> hubContext)
         {
             _repository = repository;
             _context = context;
+            _hubContext = hubContext;
         }
 
         public async Task<PagedResult<TransportVehicleAssignmentDto>> GetAllAsync(
@@ -106,9 +112,31 @@ namespace CollegeManagement.API.Services.Implementations
             if (conflictingVehicleAssignments.Any() || conflictingDriverAssignments.Any())
             {
                 await _context.SaveChangesAsync();
+                    
             }
 
-            return await _repository.CreateAsync(dto, userId);
+            using var transaction = new System.Transactions.TransactionScope(System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+            var assignmentId = await _repository.CreateAsync(dto, userId);
+            
+            if (assignmentId > 0)
+            {
+                var driver = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(d => d.DriverId == dto.DriverId);
+                if (driver != null)
+                {
+                    _context.DriverNotifications.Add(new DriverNotification
+                    {
+                        StaffId = driver.StaffId ?? 0,
+                        Type = "ASSIGNMENT_CREATED",
+                        Title = "New Vehicle Assigned",
+                        Message = "You have been assigned to a new vehicle and route.",
+                        AssignmentId = assignmentId
+                    });
+                    await _context.SaveChangesAsync();
+                    
+                }
+            }
+            transaction.Complete();
+            return assignmentId;
         }
 
         public async Task<bool> UpdateAsync(
@@ -173,6 +201,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (conflictingVehicleAssignments.Any() || conflictingDriverAssignments.Any())
             {
                 await _context.SaveChangesAsync();
+                    
             }
 
             return await _repository.UpdateAsync(
@@ -277,3 +306,14 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
