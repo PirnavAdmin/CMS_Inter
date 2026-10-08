@@ -324,7 +324,7 @@ public class LiveDbMetricComparator
         // 8. Certificates
         var dbCerts = await conn.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM `certificates`;");
         var certRepo = new CertificateRepository(databaseContext);
-        var certService = new CollegeManagement.API.Services.CertificateService(certRepo);
+        var certService = new CollegeManagement.API.Services.CertificateService(certRepo, null!, null!);
         var allCerts = await certService.GetAllAsync();
         Console.WriteLine($"\n8. Total Certificates:");
         Console.WriteLine($"   DB Count:       {dbCerts}");

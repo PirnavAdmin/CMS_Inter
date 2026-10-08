@@ -8,11 +8,17 @@ namespace CollegeManagement.API.Services.Implementations
         : ISectionRollAllocationService
     {
         private readonly ISectionRollAllocationRepository _repository;
+        private readonly CollegeManagement.API.Services.IGroupService _groupService;
+        private readonly INumberSeriesService _numberSeriesService;
 
         public SectionRollAllocationService(
-            ISectionRollAllocationRepository repository)
+            ISectionRollAllocationRepository repository,
+            CollegeManagement.API.Services.IGroupService groupService,
+            INumberSeriesService numberSeriesService)
         {
             _repository = repository;
+            _groupService = groupService;
+            _numberSeriesService = numberSeriesService;
         }
 
 
@@ -85,8 +91,35 @@ namespace CollegeManagement.API.Services.Implementations
                 request.GroupId,
                 request.ProgramId);
 
-            return await _repository
-                .ConfirmRollNumberAllocationAsync(request);
+            var filter = new SectionRollAllocationFilterRequest
+            {
+                AcademicYearId = request.AcademicYearId,
+                AcademicLevelId = request.AcademicLevelId,
+                GroupId = request.GroupId,
+                ProgramId = request.ProgramId,
+                CampusId = request.CampusId
+            };
+
+            var preview = await _repository.PreviewRollNumberAllocationAsync(filter);
+            if (preview == null || preview.Students.Count == 0) return 0;
+
+            var group = await _groupService.GetByIdAsync(request.GroupId);
+            var groupCode = group?.GroupCode ?? "";
+
+            foreach (var student in preview.Students)
+            {
+                var rollResult = await _numberSeriesService.GenerateNextNumberAsync(
+                    "ROLL_NO",
+                    new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto { GroupCode = groupCode },
+                    request.CampusId);
+
+                if (rollResult != null && !string.IsNullOrEmpty(rollResult.GeneratedNumber))
+                {
+                    student.RollNo = rollResult.GeneratedNumber;
+                }
+            }
+
+            return await _repository.SaveRollNumberAllocationsAsync(preview.Students);
         }
 
 

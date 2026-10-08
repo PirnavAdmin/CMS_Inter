@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Net.Mail;
@@ -29,6 +29,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IWebHostEnvironment _environment;
         private readonly ILogger<StudentAdmissionService> _logger;
         private readonly INumberSeriesService _numberSeriesService;
+        private readonly IAuditLoggingService _auditLoggingService;
 
         public StudentAdmissionService(
             IStudentAdmissionRepository repository,
@@ -38,7 +39,7 @@ namespace CollegeManagement.API.Services.Implementations
             IConfiguration configuration,
             IWebHostEnvironment environment,
             ILogger<StudentAdmissionService> logger,
-            INumberSeriesService numberSeriesService)
+            INumberSeriesService numberSeriesService, IAuditLoggingService auditLoggingService)
         {
             _repository = repository;
             _userProvisioningService = userProvisioningService;
@@ -48,6 +49,7 @@ namespace CollegeManagement.API.Services.Implementations
             _environment = environment;
             _logger = logger;
             _numberSeriesService = numberSeriesService;
+            _auditLoggingService = auditLoggingService;
         }
 
 
@@ -186,13 +188,7 @@ namespace CollegeManagement.API.Services.Implementations
                 AcademicYear = academicYearId?.ToString()
             };
             
-            // Auto-sync sequence to actual count BEFORE generating if context is fully specified
-            if (campusId.HasValue && boardId.HasValue && academicYearId.HasValue)
-            {
-                int actualCount = await _repository.GetActualAdmissionCountAsync(campusId.Value, boardId.Value, academicYearId.Value);
-                await _repository.SyncAdmissionSequenceAsync(campusId.Value, boardId.Value, academicYearId.Value, actualCount);
-            }
-            
+            // Generate next number purely from the NumberSeriesSequences table for global continuity
             var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
             
             if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
@@ -207,6 +203,30 @@ namespace CollegeManagement.API.Services.Implementations
         // =====================================================
         // APPROVE (ATOMIC STUDENT DOMAIN + CENTRALIZED USER PROVISIONING)
         // =====================================================
+
+        public async Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks)
+        {
+            var result = await _repository.ApproveAdmissionRequestAsync(admissionId, remarks);
+            if (result)
+            {
+                var admission = await _repository.GetByIdAsync(admissionId);
+                if (admission != null)
+                    await _auditLoggingService.LogAsync("Request Approved", "Admissions", admission.AdmissionNo, "Info", "Success", remarks);
+            }
+            return result;
+        }
+
+        public async Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks)
+        {
+            var result = await _repository.RejectAdmissionRequestAsync(admissionId, rejectionReason, remarks);
+            if (result)
+            {
+                var admission = await _repository.GetByIdAsync(admissionId);
+                if (admission != null)
+                    await _auditLoggingService.LogAsync("Request Rejected", "Admissions", admission.AdmissionNo, "Warning", "Success", rejectionReason + " - " + remarks);
+            }
+            return result;
+        }
 
         public async Task<bool> ApproveAsync(
             ApproveStudentAdmissionRequest request)
@@ -782,4 +802,8 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+
+
+
+
 

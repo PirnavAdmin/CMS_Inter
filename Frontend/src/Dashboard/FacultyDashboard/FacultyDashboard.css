@@ -1202,6 +1202,112 @@
   -webkit-text-fill-color: var(--cms-text, #0f172a) !important;
 }
 
+/* Compact faculty profile using the shared CMS theme tokens. */
+.sp-profile-page-head {
+  min-height: 42px;
+  margin-bottom: 10px;
+}
+
+.sp-profile-page-head h1 { font-size: 22px; }
+.sp-profile-page-head p { margin-top: 2px; font-size: 13px; }
+
+.sp-profile-summary-card {
+  margin-bottom: 12px;
+  border-color: var(--cms-border) !important;
+  background: var(--cms-surface);
+}
+
+.sp-profile-summary-body {
+  display: flex;
+  align-items: center;
+  min-height: 104px;
+  padding: 14px 20px !important;
+}
+
+.sp-profile-summary-avatar-wrap {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 auto;
+}
+
+.sp-profile-summary-card .sp-profile-avatar {
+  width: 72px !important;
+  height: 72px !important;
+  cursor: default !important;
+  border: 3px solid var(--cms-primary-soft) !important;
+  background: var(--cms-primary) !important;
+  color: var(--cms-surface) !important;
+  box-shadow: var(--cms-shadow) !important;
+}
+
+.sp-profile-summary-meta { margin-left: 16px; }
+.sp-profile-summary-name { color: var(--cms-text); font-size: 19px; font-weight: 800; }
+.sp-profile-summary-role { margin-top: 2px; color: var(--cms-text-secondary); font-size: 13px; }
+.sp-profile-summary-id { margin-top: 2px; color: var(--cms-muted); font-size: 12px; }
+.sp-profile-summary-id strong { color: var(--cms-primary); }
+
+.sp-profile-photo-edit {
+  position: absolute !important;
+  right: -3px !important;
+  bottom: -2px !important;
+  display: grid !important;
+  width: 27px !important;
+  height: 27px !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border: 2px solid var(--cms-surface) !important;
+  border-radius: 50% !important;
+  background: var(--cms-primary) !important;
+  color: var(--cms-surface) !important;
+  cursor: pointer !important;
+}
+
+.sp-profile-photo-input { display: none; }
+
+.sp-wizard-stepper {
+  margin-bottom: 12px;
+  padding: 6px 8px;
+  gap: 4px;
+  background: var(--cms-secondary);
+}
+
+.sp-wizard-step {
+  flex: 1 0 auto;
+  justify-content: center;
+  padding: 7px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--cms-muted);
+}
+
+.sp-wizard-step:not(:disabled):hover { background: var(--cms-hover); }
+.sp-wizard-step:disabled { cursor: default; opacity: 1; }
+.sp-wizard-step.active { background: var(--cms-surface); box-shadow: var(--cms-shadow); }
+.sp-wizard-step.completed .sp-wizard-num { background: var(--cms-green); color: var(--cms-surface); }
+
+.sp-profile-form-body { padding: 16px !important; }
+.sp-profile-form-body .cms-card-head { padding-bottom: 11px !important; margin-bottom: 12px !important; }
+.sp-profile-form-body .cms-card-head h3 { font-size: 15px !important; }
+.sp-profile-form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
+.sp-profile-form-grid .cms-field { gap: 3px; }
+.sp-profile-form-grid .cms-field label { min-height: 17px; font-size: 11.5px; }
+.sp-profile-form-grid input,
+.sp-profile-form-grid select,
+.sp-profile-form-grid textarea { min-height: 36px; padding: 7px 9px; font-size: 12.5px; }
+.sp-profile-form-grid textarea { min-height: 54px; }
+.sp-wizard-footer { margin-top: 14px !important; padding-top: 12px !important; }
+
+@media (max-width: 1100px) {
+  .sp-profile-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .sp-profile-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .sp-wizard-step { justify-content: flex-start; }
+  .sp-profile-page-head { align-items: flex-start; }
+}
+
 /* ---------- Review & Preview Styles (Matching HRMS Screenshots) ---------- */
 .sp-preview-section {
   background: var(--cms-surface, #ffffff);

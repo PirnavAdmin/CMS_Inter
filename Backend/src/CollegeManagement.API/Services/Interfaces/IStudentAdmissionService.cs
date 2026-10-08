@@ -1,4 +1,4 @@
-using CollegeManagement.API.DTOs.StudentAdmission;
+﻿using CollegeManagement.API.DTOs.StudentAdmission;
 
 namespace CollegeManagement.API.Services.Interfaces
 {
@@ -26,6 +26,8 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> VerifyAsync(
             VerifyStudentAdmissionRequest request);
 
+        Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks);
+        Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks);
         Task<bool> ApproveAsync(
             ApproveStudentAdmissionRequest request);
 

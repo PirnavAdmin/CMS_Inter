@@ -51,6 +51,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IUserProvisioningService _userProvisioningService;
         private readonly IUserRepository _userRepository;
         private readonly ILogger<StaffService> _logger;
+        private readonly INumberSeriesService _numberSeriesService;
 
         private const decimal HoursPerClassPeriod = 1.0m;
         private const long MaxPhotoFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -73,7 +74,8 @@ namespace CollegeManagement.API.Services.Implementations
             AppDbContext context,
             IUserProvisioningService userProvisioningService,
             IUserRepository userRepository,
-            ILogger<StaffService> logger)
+            ILogger<StaffService> logger,
+            INumberSeriesService numberSeriesService)
         {
             _staffRepository = staffRepository;
             _allocationRepository = allocationRepository;
@@ -90,6 +92,7 @@ namespace CollegeManagement.API.Services.Implementations
             _userProvisioningService = userProvisioningService;
             _userRepository = userRepository;
             _logger = logger;
+            _numberSeriesService = numberSeriesService;
         }
 
         public async Task<PagedResult<StaffResponseDto>> GetPagedStaffAsync(StaffQueryParams queryParams)
@@ -164,6 +167,14 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<string> GetNextEmployeeIdAsync(string staffType, int campusId = 1)
         {
+            var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+            var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+            var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, campusId);
+            
+            if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+            {
+                return generatedDto.GeneratedNumber;
+            }
             return await _staffRepository.GenerateNextEmployeeIdAsync(staffType, campusId);
         }
 
@@ -180,7 +191,18 @@ namespace CollegeManagement.API.Services.Implementations
             string employeeId = dto.EmployeeId?.Trim() ?? string.Empty;
             if (string.IsNullOrWhiteSpace(employeeId))
             {
-                employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, dto.CampusId ?? 1);
+                var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+                var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, dto.CampusId ?? 1);
+                
+                if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+                {
+                    employeeId = generatedDto.GeneratedNumber;
+                }
+                else
+                {
+                    employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, dto.CampusId ?? 1);
+                }
             }
 
             // Department resolution
@@ -344,6 +366,36 @@ namespace CollegeManagement.API.Services.Implementations
             staff.BoardId = resolvedBoardId;
             staff.BoardName = resolvedBoardName;
             staff.CampusId = dto.CampusId;
+            
+            // Multi-Campus / Multi-Board Assignments
+            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+            {
+                foreach (var cId in dto.AssignedCampusIds.Distinct())
+                {
+                    staff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId });
+                }
+                // Also set the primary CampusId if it's not set
+                if (!staff.CampusId.HasValue) staff.CampusId = dto.AssignedCampusIds.First();
+            }
+            else if (dto.CampusId.HasValue)
+            {
+                staff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = dto.CampusId.Value });
+            }
+
+            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+            {
+                foreach (var bId in dto.AssignedBoardIds.Distinct())
+                {
+                    staff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId });
+                }
+                // Also set primary BoardId if not set
+                if (!staff.BoardId.HasValue) staff.BoardId = dto.AssignedBoardIds.First();
+            }
+            else if (resolvedBoardId.HasValue)
+            {
+                staff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = resolvedBoardId.Value });
+            }
+
             staff.Gender = !string.IsNullOrWhiteSpace(dto.Gender) ? dto.Gender : (!string.IsNullOrWhiteSpace(staff.Gender) ? staff.Gender : "Male");
             staff.DateOfBirth = dto.DateOfBirth.HasValue ? dto.DateOfBirth.Value : (staff.DateOfBirth != default ? staff.DateOfBirth : DateTime.UtcNow.AddYears(-25));
             staff.Qualification = !string.IsNullOrWhiteSpace(dto.Qualification) ? dto.Qualification : (!string.IsNullOrWhiteSpace(staff.Qualification) ? staff.Qualification : "Graduate");
@@ -620,6 +672,39 @@ namespace CollegeManagement.API.Services.Implementations
             if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
             {
                 existingStaff.CampusId = dto.CampusId.Value;
+            }
+
+            // Multi-Campus / Multi-Board Assignments Update
+            if (dto.AssignedCampusIds != null && dto.AssignedCampusIds.Any())
+            {
+                existingStaff.StaffCampusAssignments.Clear();
+                foreach (var cId in dto.AssignedCampusIds.Distinct())
+                {
+                    existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = cId, StaffId = existingStaff.Id });
+                }
+                if (!existingStaff.CampusId.HasValue || existingStaff.CampusId <= 0)
+                    existingStaff.CampusId = dto.AssignedCampusIds.First();
+            }
+            else if (dto.CampusId.HasValue)
+            {
+                existingStaff.StaffCampusAssignments.Clear();
+                existingStaff.StaffCampusAssignments.Add(new StaffCampusAssignment { CampusId = dto.CampusId.Value, StaffId = existingStaff.Id });
+            }
+
+            if (dto.AssignedBoardIds != null && dto.AssignedBoardIds.Any())
+            {
+                existingStaff.StaffBoardAssignments.Clear();
+                foreach (var bId in dto.AssignedBoardIds.Distinct())
+                {
+                    existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = bId, StaffId = existingStaff.Id });
+                }
+                if (!existingStaff.BoardId.HasValue || existingStaff.BoardId <= 0)
+                    existingStaff.BoardId = dto.AssignedBoardIds.First();
+            }
+            else if (resolvedBoardId.HasValue)
+            {
+                existingStaff.StaffBoardAssignments.Clear();
+                existingStaff.StaffBoardAssignments.Add(new StaffBoardAssignment { BoardId = resolvedBoardId.Value, StaffId = existingStaff.Id });
             }
 
             if (dto.JoiningDate.HasValue || dto.DateOfJoining.HasValue)

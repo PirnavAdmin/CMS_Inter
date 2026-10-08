@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Search, Upload } from "lucide-react";
+import { CheckCircle2, Download, Eye, FileText, FileUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -10,13 +10,33 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./StudentManagementPage.css";
 
 export const pageConfig = { title: "Student Management", rows: [], fields: [] };
-const STUDENT_PAGE_SIZE = 10;
+const STUDENT_PAGE_SIZE = 5;
 const list = (payload) => {
   const data = payload?.data ?? payload?.Data ?? payload;
   if (Array.isArray(data)) return data;
   return data?.data ?? data?.Data ?? data?.items ?? data?.Items ?? data?.results ?? data?.Results ?? data?.$values ?? [];
 };
 const value = (record, ...keys) => keys.map((key) => record?.[key]).find((item) => item != null && item !== "");
+const admissionSequence = (record) => {
+  const admission = String(value(record, "admissionNo", "admissionNumber") ?? "");
+  const suffix = admission.match(/(\d+)\s*$/);
+  return suffix ? Number(suffix[1]) : -1;
+};
+const loadStudentsForNumberOrder = async (url, { params }) => {
+  const records = [];
+  const fetchSize = 100;
+  for (let pageNumber = 1; ; pageNumber += 1) {
+    const response = await apiClient.get(url, { params: { ...params, pageNumber, pageSize: fetchSize } });
+    const payload = response.data?.data ?? response.data?.Data ?? response.data ?? {};
+    const batch = list(payload);
+    records.push(...batch);
+    const total = payload.totalCount ?? payload.TotalCount;
+    if (!batch.length || (total != null ? records.length >= Number(total) : batch.length < fetchSize)) break;
+  }
+  records.sort((a, b) => admissionSequence(b) - admissionSequence(a)
+    || Number(b.studentId ?? b.id ?? 0) - Number(a.studentId ?? a.id ?? 0));
+  return { data: { items: records, totalCount: records.length, totalPages: Math.max(1, Math.ceil(records.length / STUDENT_PAGE_SIZE)) } };
+};
 const saveDownload = (data, filename) => {
   const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
   const link = document.createElement("a");
@@ -51,8 +71,8 @@ export default function StudentManagementPage() {
     status: "",
   });
   const [students, setStudents] = useState([]);
-  const [studentTotalCount, setStudentTotalCount] = useState(0);
-  const [studentTotalPages, setStudentTotalPages] = useState(1);
+
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -77,30 +97,24 @@ export default function StudentManagementPage() {
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
   const [page, setPage] = useState(restoredState?.page ?? 1);
-  const [debouncedQuery, setDebouncedQuery] = useState(query);
+
   useEffect(() => {
     const timer = window.setTimeout(() => { restoringFilters.current = false; }, 0);
     return () => window.clearTimeout(timer);
   }, []);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 300);
-    return () => window.clearTimeout(timer);
-  }, [query]);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError("");
     if (!selectedCampusId || !selectedBoardId || !selectedAcademicYearId) {
       setStudents([]);
-      setStudentTotalCount(0);
-      setStudentTotalPages(1);
       setLoading(false);
       return () => { active = false; };
     }
-    apiClient
-      .get(apiEndpoints.students.list, {
+    loadStudentsForNumberOrder(apiEndpoints.students.list, {
         params: {
-          ...(debouncedQuery ? { search: debouncedQuery } : {}),
+
           boardId: selectedBoardId,
           academicYearId: selectedAcademicYearId,
           ...(filters.level ? { academicLevelId: filters.level } : {}),
@@ -109,8 +123,6 @@ export default function StudentManagementPage() {
           ...(filters.section ? { sectionId: filters.section } : {}),
           ...(filters.status ? { status: filters.status } : {}),
           campusId: selectedCampusId,
-          pageNumber: page,
-          pageSize: STUDENT_PAGE_SIZE,
         },
       })
       .then(({ data }) => {
@@ -136,21 +148,17 @@ export default function StudentManagementPage() {
         }));
         if (!active) return;
         setStudents(mapped);
-        setStudentTotalCount(Number(payload.totalCount ?? payload.TotalCount ?? mapped.length));
-        setStudentTotalPages(Math.max(1, Number(payload.totalPages ?? payload.TotalPages ?? 1)));
       })
       .catch((e) => {
         if (!active) return;
         setStudents([]);
-        setStudentTotalCount(0);
-        setStudentTotalPages(1);
         setError(getApiErrorMessage(e));
       })
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [debouncedQuery, filters.level, filters.group, filters.programme, filters.section, filters.status, page, reloadKey, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
+  }, [filters.level, filters.group, filters.programme, filters.section, filters.status, reloadKey, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   useEffect(() => {
     if (!restoringFilters.current) {
       setQuery("");
@@ -246,14 +254,21 @@ export default function StudentManagementPage() {
       .catch(() => active && setCredentialSections([]));
     return () => { active = false; };
   }, [credentialFilters.group, credentialFilters.level, credentialFilters.program, selectedBoardId, selectedAcademicYearId]);
-  const rows = students;
   const pageSize = STUDENT_PAGE_SIZE;
-  const totalPages = studentTotalPages;
+  const matchingStudents = useMemo(() => {
+    const searchText = query.trim().toLowerCase();
+    if (!searchText) return students;
+    return students.filter((student) => [student.name, student.studentId, student.admissionNo, student.roll, student.mobile]
+      .some((field) => String(field ?? "").toLowerCase().includes(searchText)));
+  }, [students, query]);
+  const studentTotalCount = matchingStudents.length;
+  const totalPages = Math.max(1, Math.ceil(studentTotalCount / pageSize));
   const currentPage = Math.min(page, totalPages);
+  const rows = matchingStudents.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const pageRows = rows;
   useEffect(() => {
-    if (page > studentTotalPages) setPage(studentTotalPages);
-  }, [page, studentTotalPages]);
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   useEffect(() => { if (!restoringFilters.current) setPage(1); }, [query, filters.level, filters.group, filters.programme, filters.section, filters.status, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
   const updateFilter = (key, selectedValue) => {
     setFilters((current) => ({
@@ -502,17 +517,6 @@ export default function StudentManagementPage() {
                         <Link to={`/dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
                           <Eye size={16} />
                         </Link>
-                        <button
-                          type="button"
-                          aria-label={`Upload or replace photo for ${s.name}`}
-                          title="Upload / replace photo"
-                          onClick={() => {
-                            setError("");
-                            setFileAction({ kind: "photo", student: s });
-                          }}
-                        >
-                          <ImageUp size={16} />
-                        </button>
                         <button
                           type="button"
                           aria-label={`Upload document for ${s.name}`}

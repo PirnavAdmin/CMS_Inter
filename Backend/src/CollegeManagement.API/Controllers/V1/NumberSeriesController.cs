@@ -32,10 +32,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet]
         [AllowAnonymous]
         [ProducesResponseType(typeof(IEnumerable<NumberSeriesResponseDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null)
+        public async Task<IActionResult> GetAll([FromQuery] int? campusId = null, [FromQuery] string? board = null, [FromQuery] string? academicYear = null, [FromQuery] bool includeSubCounters = false)
         {
             campusId = GetCampusIdFromRequest(campusId);
-            var result = await _numberSeriesService.GetAllSeriesAsync(campusId, board, academicYear);
+            var result = await _numberSeriesService.GetAllSeriesAsync(campusId, board, academicYear, includeSubCounters);
             return Ok(result);
         }
 

@@ -7,7 +7,13 @@ namespace CollegeManagement.API.Services.Implementations;
 public class FeeService : IFeeService
 {
     private readonly IFeeRepository _repo;
-    public FeeService(IFeeRepository repo) => _repo = repo;
+    private readonly INumberSeriesService _numberSeriesService;
+
+    public FeeService(IFeeRepository repo, INumberSeriesService numberSeriesService)
+    {
+        _repo = repo;
+        _numberSeriesService = numberSeriesService;
+    }
 
     private static void Id(int value, string name) { if (value <= 0) throw new ArgumentException($"{name} must be greater than zero."); }
     private static string Text(string? value, string name) { if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException($"{name} is required."); return value.Trim(); }

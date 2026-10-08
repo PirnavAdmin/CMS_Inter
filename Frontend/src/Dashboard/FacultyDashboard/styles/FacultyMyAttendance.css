@@ -1,0 +1,767 @@
+/* Faculty My Attendance Styles */
+.faculty-regularization-modal {
+  width: min(540px, calc(100vw - 32px)) !important;
+  max-width: 540px !important;
+  max-height: calc(100vh - 100px) !important;
+}
+.faculty-regularization-modal .cms-modal-head {
+  padding: 12px 18px;
+}
+.faculty-regularization-modal .cms-modal-head h3 {
+  font-size: 15px !important;
+}
+.faculty-regularization-modal .cms-modal-head span {
+  font-size: 11.5px !important;
+}
+.faculty-regularization-modal .cms-modal-body {
+  padding: 14px 18px;
+}
+.faculty-regularization-modal .cms-form-grid {
+  gap: 9px 12px;
+}
+.faculty-regularization-modal .cms-field {
+  gap: 4px;
+}
+.faculty-regularization-modal .cms-field label {
+  min-height: 17px;
+  font-size: 11px;
+  letter-spacing: 0.045em;
+}
+.faculty-regularization-modal .cms-field input,
+.faculty-regularization-modal .cms-field select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.faculty-regularization-modal .cms-field textarea {
+  min-height: 68px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.faculty-regularization-modal .cms-modal-foot {
+  padding: 10px 18px;
+  gap: 8px;
+}
+.faculty-regularization-modal .cms-modal-foot .cms-btn {
+  min-height: 40px;
+  padding: 9px 15px;
+  font-size: 12.5px;
+}
+
+.sp-attendance-punch-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+  .sp-attendance-punch-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* Base Live Clock Card (Theme-based: Light in light mode, Dark in dark mode) */
+.sp-live-clock-card {
+  background: var(--cms-card-bg, #ffffff) !important;
+  color: var(--cms-text, #10203c) !important;
+  border-radius: 14px !important;
+  padding: 24px 26px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  box-shadow: var(--cms-shadow) !important;
+  border: 1px solid var(--cms-border) !important;
+  transition: all 0.2s ease;
+}
+
+/* Dark mode live clock card */
+[data-theme="dark"] .sp-live-clock-card,
+:root[data-theme="dark"] .sp-live-clock-card,
+.dark-theme .sp-live-clock-card {
+  background: linear-gradient(135deg, #182212 0%, #25331a 100%) !important;
+  color: #ffffff !important;
+  border-color: rgba(111, 132, 0, 0.45) !important;
+  box-shadow: 0 8px 24px rgba(24, 34, 18, 0.25) !important;
+}
+
+.sp-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--cms-primary-soft, #f1f4e2) !important;
+  color: var(--cms-primary, #6f8400) !important;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(111, 132, 0, 0.25) !important;
+}
+
+[data-theme="dark"] .sp-live-badge,
+:root[data-theme="dark"] .sp-live-badge,
+.dark-theme .sp-live-badge {
+  background: rgba(111, 132, 0, 0.28) !important;
+  color: #d7e89a !important;
+  border-color: rgba(111, 132, 0, 0.45) !important;
+}
+
+.sp-live-clock-time {
+  font-size: 40px;
+  font-weight: 800;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 1.5px;
+  color: var(--cms-text, #10203c) !important;
+  margin: 12px 0 6px;
+  text-shadow: none;
+}
+
+[data-theme="dark"] .sp-live-clock-time,
+:root[data-theme="dark"] .sp-live-clock-time,
+.dark-theme .sp-live-clock-time {
+  color: #ffffff !important;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6) !important;
+}
+
+.sp-live-clock-date {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--cms-muted, #7b8275) !important;
+}
+
+[data-theme="dark"] .sp-live-clock-date,
+:root[data-theme="dark"] .sp-live-clock-date,
+.dark-theme .sp-live-clock-date {
+  color: #cbd5b8 !important;
+}
+
+.sp-clock-status-box {
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: var(--cms-surface, #f8faf5) !important;
+  border-radius: 12px;
+  border: 1px solid var(--cms-border) !important;
+}
+
+[data-theme="dark"] .sp-clock-status-box,
+:root[data-theme="dark"] .sp-clock-status-box,
+.dark-theme .sp-clock-status-box {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  backdrop-filter: blur(6px);
+}
+
+.sp-clock-sublabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cms-muted, #7b8275) !important;
+}
+
+[data-theme="dark"] .sp-clock-sublabel,
+:root[data-theme="dark"] .sp-clock-sublabel,
+.dark-theme .sp-clock-sublabel {
+  color: #c4cea1 !important;
+}
+
+/* Biometric Clock Detailed Timings Grid */
+.sp-clock-timings-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  background: var(--cms-card-bg, #ffffff) !important;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border) !important;
+}
+
+[data-theme="dark"] .sp-clock-timings-grid,
+:root[data-theme="dark"] .sp-clock-timings-grid,
+.dark-theme .sp-clock-timings-grid {
+  background: rgba(0, 0, 0, 0.38) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+@media (max-width: 500px) {
+  .sp-clock-timings-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+.sp-clock-timing-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sp-clock-timing-item .label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--cms-muted, #7b8275) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+[data-theme="dark"] .sp-clock-timing-item .label,
+:root[data-theme="dark"] .sp-clock-timing-item .label,
+.dark-theme .sp-clock-timing-item .label {
+  color: #a3b190 !important;
+}
+
+.sp-clock-timing-item .val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c) !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[data-theme="dark"] .sp-clock-timing-item .val,
+:root[data-theme="dark"] .sp-clock-timing-item .val,
+.dark-theme .sp-clock-timing-item .val {
+  color: #ffffff !important;
+}
+
+.sp-clock-timing-item .val.highlight {
+  color: var(--cms-primary, #6f8400) !important;
+}
+
+[data-theme="dark"] .sp-clock-timing-item .val.highlight,
+:root[data-theme="dark"] .sp-clock-timing-item .val.highlight,
+.dark-theme .sp-clock-timing-item .val.highlight {
+  color: #86efac !important;
+}
+
+.sp-shift-timings-val {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cms-text, #10203c) !important;
+}
+
+[data-theme="dark"] .sp-shift-timings-val,
+:root[data-theme="dark"] .sp-shift-timings-val,
+.dark-theme .sp-shift-timings-val {
+  color: #ffffff !important;
+}
+
+/* Punch Status Pill Badges in Clock */
+.sp-punch-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sp-punch-status-badge.in {
+  background: #EAF4DC !important;
+  color: #3B5A10 !important;
+  border: 1px solid #C4D9A0 !important;
+}
+
+[data-theme="dark"] .sp-punch-status-badge.in,
+:root[data-theme="dark"] .sp-punch-status-badge.in,
+.dark-theme .sp-punch-status-badge.in {
+  background: rgba(34, 197, 94, 0.25) !important;
+  color: #86efac !important;
+  border-color: rgba(34, 197, 94, 0.5) !important;
+}
+
+.sp-punch-status-badge.out {
+  background: #FEE4E2 !important;
+  color: #B42318 !important;
+  border: 1px solid #FECDCA !important;
+}
+
+[data-theme="dark"] .sp-punch-status-badge.out,
+:root[data-theme="dark"] .sp-punch-status-badge.out,
+.dark-theme .sp-punch-status-badge.out {
+  background: rgba(239, 68, 68, 0.25) !important;
+  color: #fca5a5 !important;
+  border-color: rgba(239, 68, 68, 0.5) !important;
+}
+
+.sp-punch-status-badge.completed {
+  background: var(--cms-primary-soft, #f1f4e2) !important;
+  color: var(--cms-primary, #6f8400) !important;
+  border: 1px solid rgba(111, 132, 0, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-punch-status-badge.completed,
+:root[data-theme="dark"] .sp-punch-status-badge.completed,
+.dark-theme .sp-punch-status-badge.completed {
+  background: rgba(111, 132, 0, 0.35) !important;
+  color: #d7e89a !important;
+  border-color: rgba(111, 132, 0, 0.55) !important;
+}
+
+.sp-punch-status-badge.pending {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: var(--cms-muted, #7b8275) !important;
+  border: 1px solid var(--cms-border) !important;
+}
+
+[data-theme="dark"] .sp-punch-status-badge.pending,
+:root[data-theme="dark"] .sp-punch-status-badge.pending,
+.dark-theme .sp-punch-status-badge.pending {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #e2e8f0 !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+.sp-punch-form-card {
+  background: var(--cms-card-bg, #ffffff);
+  border: 1px solid var(--cms-border);
+  border-radius: 14px;
+  padding: 22px 24px;
+  box-shadow: var(--cms-shadow);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.sp-punch-actions-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+/* Attendance History Card & Filter Tabs (Matching Screenshot 2) */
+.sp-attendance-history-card {
+  border-radius: 16px;
+  overflow: hidden;
+  margin-top: 18px;
+}
+
+.sp-attendance-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+[data-theme="dark"] .sp-attendance-card-head,
+.dark-theme .sp-attendance-card-head {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.sp-att-cal-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(6, 182, 212, 0.12);
+  color: #06b6d4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .sp-att-cal-icon,
+.dark-theme .sp-att-cal-icon {
+  background: rgba(6, 182, 212, 0.18) !important;
+  color: #22d3ee !important;
+}
+
+.sp-att-filter-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--cms-subtle, #f1f4e2);
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--cms-border, #e6e7de);
+}
+
+[data-theme="dark"] .sp-att-filter-tabs,
+.dark-theme .sp-att-filter-tabs {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.sp-att-filter-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--cms-muted, #7b8275);
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.sp-att-filter-btn:hover {
+  color: var(--cms-text, #171a17);
+}
+
+[data-theme="dark"] .sp-att-filter-btn,
+.dark-theme .sp-att-filter-btn {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .sp-att-filter-btn:hover,
+.dark-theme .sp-att-filter-btn:hover {
+  color: #ffffff !important;
+}
+
+.sp-att-filter-btn.active {
+  background: var(--cms-primary, #6f8400);
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] .sp-att-filter-btn.active,
+.dark-theme .sp-att-filter-btn.active {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Attendance Table */
+.sp-attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sp-attendance-table th {
+  padding: 13px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--cms-muted, #7b8275);
+  letter-spacing: 0.35px;
+  border-bottom: 1.5px solid var(--cms-border, #e6e7de);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sp-attendance-table td {
+  padding: 13px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--cms-border, #e6e7de);
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .sp-attendance-table th,
+.dark-theme .sp-attendance-table th {
+  color: #8f9789 !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+[data-theme="dark"] .sp-attendance-table td,
+.dark-theme .sp-attendance-table td {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.sp-attendance-table tbody tr:hover td {
+  background: rgba(0, 0, 0, 0.015);
+}
+
+[data-theme="dark"] .sp-attendance-table tbody tr:hover td,
+.dark-theme .sp-attendance-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.sp-day-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cms-text, #171a17);
+}
+
+.sp-day-date {
+  font-size: 11.5px;
+  color: var(--cms-muted, #7b8275);
+  margin-top: 2px;
+}
+
+[data-theme="dark"] .sp-day-name,
+.dark-theme .sp-day-name {
+  color: #f2f3ee !important;
+}
+
+[data-theme="dark"] .sp-day-date,
+.dark-theme .sp-day-date {
+  color: #94a3b8 !important;
+}
+
+.sp-shift-text {
+  font-size: 12.5px;
+  color: var(--cms-muted, #7b8275);
+}
+
+[data-theme="dark"] .sp-shift-text,
+.dark-theme .sp-shift-text {
+  color: #aab5a2 !important;
+}
+
+.sp-time-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text, #171a17);
+}
+
+.sp-time-text.highlight {
+  color: var(--cms-primary, #6f8400);
+}
+
+[data-theme="dark"] .sp-time-text,
+.dark-theme .sp-time-text {
+  color: #f2f3ee !important;
+}
+
+[data-theme="dark"] .sp-time-text.highlight,
+.dark-theme .sp-time-text.highlight {
+  color: #4ade80 !important;
+}
+
+.sp-hours-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cms-text, #171a17);
+}
+
+[data-theme="dark"] .sp-hours-text,
+.dark-theme .sp-hours-text {
+  color: #f2f3ee !important;
+}
+
+.sp-device-text {
+  font-size: 12px;
+  color: var(--cms-muted, #7b8275);
+}
+
+[data-theme="dark"] .sp-device-text,
+.dark-theme .sp-device-text {
+  color: #94a3b8 !important;
+}
+
+/* Status capsule pills matching Screenshot 2 */
+.sp-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 16px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap !important;
+  box-sizing: border-box;
+  min-width: 80px;
+  transition: all 0.15s ease;
+}
+
+.sp-status-badge.present {
+  background: #eaf7ec;
+  color: #1e7e34;
+  border: 1px solid #bce6c4;
+}
+
+.sp-status-badge.empty {
+  background: transparent;
+  color: var(--cms-muted, #7b8275);
+  border: 1px dashed var(--cms-border, #d1d5db);
+}
+
+.sp-status-badge.late {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.sp-status-badge.half-day {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.sp-status-badge.leave {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.sp-status-badge.absent {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+.sp-status-badge.holiday {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+/* Dark theme status badges matching Screenshot 2 */
+[data-theme="dark"] .sp-status-badge.present,
+.dark-theme .sp-status-badge.present {
+  background: rgba(34, 197, 94, 0.12) !important;
+  color: #22c55e !important;
+  border: 1px solid rgba(34, 197, 94, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.empty,
+.dark-theme .sp-status-badge.empty {
+  background: transparent !important;
+  color: #64748b !important;
+  border: 1px dashed rgba(255, 255, 255, 0.2) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.late,
+.dark-theme .sp-status-badge.late {
+  background: rgba(245, 158, 11, 0.14) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.half-day,
+.dark-theme .sp-status-badge.half-day {
+  background: rgba(234, 88, 12, 0.14) !important;
+  color: #fb923c !important;
+  border: 1px solid rgba(234, 88, 12, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.leave,
+.dark-theme .sp-status-badge.leave {
+  background: rgba(239, 68, 68, 0.14) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.absent,
+.dark-theme .sp-status-badge.absent {
+  background: rgba(239, 68, 68, 0.16) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.4) !important;
+}
+
+[data-theme="dark"] .sp-status-badge.holiday,
+.dark-theme .sp-status-badge.holiday {
+  background: rgba(148, 163, 184, 0.14) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid rgba(148, 163, 184, 0.35) !important;
+}
+
+/* Regularize button in attendance logs */
+.sp-regularize-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--cms-border, #e6e7de);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #171a17);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sp-regularize-btn:hover {
+  background: var(--cms-bg, #f7f8ef);
+  border-color: var(--cms-primary, #6f8400);
+  color: var(--cms-primary, #6f8400);
+}
+
+[data-theme="dark"] .sp-regularize-btn,
+.dark-theme .sp-regularize-btn {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #f2f3ee !important;
+}
+
+[data-theme="dark"] .sp-regularize-btn:hover,
+:root[data-theme="dark"] .sp-regularize-btn:hover,
+.dark-theme .sp-regularize-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: #38bdf8 !important;
+  color: #38bdf8 !important;
+}
+
+/* Compact Regularization Status Badge (Matching Reference Pill with Dot) */
+.sp-regularize-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.sp-regularize-badge .sp-badge-dot {
+  font-size: 8px;
+  line-height: 1;
+}
+
+.sp-regularize-badge.pending {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.sp-regularize-badge.pending .sp-badge-dot {
+  color: #d97706;
+}
+
+[data-theme="dark"] .sp-regularize-badge.pending,
+:root[data-theme="dark"] .sp-regularize-badge.pending,
+.dark-theme .sp-regularize-badge.pending {
+  background: rgba(245, 158, 11, 0.16) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-regularize-badge.pending .sp-badge-dot,
+:root[data-theme="dark"] .sp-regularize-badge.pending .sp-badge-dot,
+.dark-theme .sp-regularize-badge.pending .sp-badge-dot {
+  color: #f59e0b !important;
+}
+
+.sp-regularize-badge.approved {
+  background: #eaf7ec;
+  color: #1e7e34;
+  border: 1px solid #bce6c4;
+}
+
+.sp-regularize-badge.approved .sp-badge-dot {
+  color: #16a34a;
+}
+
+[data-theme="dark"] .sp-regularize-badge.approved,
+:root[data-theme="dark"] .sp-regularize-badge.approved,
+.dark-theme .sp-regularize-badge.approved {
+  background: rgba(34, 197, 94, 0.14) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.35) !important;
+}
+
+[data-theme="dark"] .sp-regularize-badge.approved .sp-badge-dot,
+:root[data-theme="dark"] .sp-regularize-badge.approved .sp-badge-dot,
+.dark-theme .sp-regularize-badge.approved .sp-badge-dot {
+  color: #22c55e !important;
+}
+
+/* Stat icon tone-red for Absent Days */
+.cms-stat-icon.tone-red {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+[data-theme="dark"] .cms-stat-icon.tone-red,
+:root[data-theme="dark"] .cms-stat-icon.tone-red,
+.dark-theme .cms-stat-icon.tone-red {
+  background: rgba(239, 68, 68, 0.22) !important;
+  color: #f87171 !important;
+}
+
+

@@ -10,8 +10,14 @@ import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./AttendancePage.css";
+import "./AttendanceTimingConfigPage.css";
 
 const STUDENT_STATUSES = ["Present", "Absent", "Half Day"];
+const STUDENT_SESSION_STATUSES = ["Present", "Absent"];
+const dailyStudentStatus = (morning, afternoon) => {
+  if (!STUDENT_SESSION_STATUSES.includes(morning) || !STUDENT_SESSION_STATUSES.includes(afternoon)) return "Select both sessions";
+  return morning === afternoon ? morning : "Half Day";
+};
 const STAFF_STATUSES = ["Present", "Absent", "Leave", "Late"];
 const STUDENT_LABEL = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
 const STAFF_LABEL = { 1: "Present", 2: "Absent", 3: "Late", 4: "Leave", 5: "Holiday" };
@@ -277,7 +283,6 @@ function Screen({ staff = false, say }) {
  const switchView = (newView) => {
    setPage(1);
    setF((old) => ({ ...old, view: newView }));
-   if (loaded) { load(newView); }
  };
 
  useEffect(() => {
@@ -285,9 +290,6 @@ function Screen({ staff = false, say }) {
    if (initialAcademicContext.current === currentAcademicContext) return;
    initialAcademicContext.current = currentAcademicContext;
    if (!staff) setF((old) => ({ ...old, level: "", group: "", program: "", section: "" }));
-   if (loaded) {
-     load();
-   }
  }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId]);
 
  const monthParams = () => {
@@ -357,6 +359,19 @@ function Screen({ staff = false, say }) {
      setBusy(false);
    }
  };
+
+ // Reuse the existing loader for the selected view, date and filters.
+ const dailyLoader = useRef(load);
+ dailyLoader.current = load;
+ const restoredDailyLoad = useRef(Boolean(restoredState?.loaded));
+ useEffect(() => {
+   if (!staff && (!navbarBoardId || !navbarAcademicYearId)) return;
+   if (restoredDailyLoad.current) { restoredDailyLoad.current = false; return; }
+   const timer = window.setTimeout(() => dailyLoader.current(), 200);
+  
+
+ return () => window.clearTimeout(timer);
+ }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.date, f.level, f.group, f.program, f.section, f.department, f.type, f.person, f.view]);
 
  const markAllPresent = () => {
    if (staff) {
@@ -430,6 +445,9 @@ function Screen({ staff = false, say }) {
 
  const save = async () => {
    const r = editing.record;
+   if (!staff && (!STUDENT_SESSION_STATUSES.includes(editing.morning) || !STUDENT_SESSION_STATUSES.includes(editing.afternoon))) {
+     return say("Choose Present or Absent for both sessions.", "error");
+   }
    const changed = staff
      ? editing.status !== staffStatus(r.status) || (editing.inTime || "") !== (get(r, "inTime") || "") || (editing.outTime || "") !== (get(r, "outTime") || "")
      : editing.morning !== studentSessionStatus(r, "morning") || editing.afternoon !== studentSessionStatus(r, "afternoon");
@@ -519,27 +537,7 @@ function Screen({ staff = false, say }) {
  }, [rows]);
  useEffect(() => { setPage((current) => Math.min(current, totalPages)); }, [totalPages]);
 
- return (
-   <>
-     <Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} />
-     <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
-     {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
-     {loaded && (f.view === "Monthly Report" ? (
-     <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
-     ) : !staff && f.view === "Defaulters" ? (
-       <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} onPageChange={setPage} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
-     ) : (
-       <>
-         {activeHoliday && (
-           <div className="att-holiday-banner">
-             <span className="att-holiday-banner-badge">Official Holiday</span>
-             <strong>{activeHoliday.holidayName || activeHoliday.name}</strong>
-             <span>({activeHoliday.holidayType || "General Holiday"}) — Official institution holiday; attendance is optional.</span>
-           </div>
-         )}
-         {staff ? <StaffSummary rows={visible} /> : <StudentSummary rows={visible} />}
-         <section className={`att-card att-table-card ${staff ? "att-staff-table-card" : ""}`}>
-           <div className={`att-student-search att-records-search-toolbar ${staff ? "att-staff-table-toolbar" : ""}`}>
+ const recordsToolbar = (<div className={`att-student-search att-records-search-toolbar ${staff ? "att-staff-table-toolbar" : ""}`}>
              <div className="att-student-search-box">
                <Search3DIcon size={18} />
                <input
@@ -585,7 +583,31 @@ function Screen({ staff = false, say }) {
                  </>
                ) : null}
              </div>
+           </div>);
+
+ return (
+   <>
+     <Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} search={search} onSearchChange={setSearch} switchView={switchView} />
+
+     {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
+     {loaded && (f.view === "Monthly Report" ? (
+     <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
+     ) : !staff && f.view === "Defaulters" ? (
+       <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} onPageChange={setPage} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
+     ) : (
+       <>
+         {activeHoliday && (
+           <div className="att-holiday-banner">
+             <span className="att-holiday-banner-badge">Official Holiday</span>
+             <strong>{activeHoliday.holidayName || activeHoliday.name}</strong>
+             <span>({activeHoliday.holidayType || "General Holiday"}) — Official institution holiday; attendance is optional.</span>
            </div>
+         )}
+         {staff ? <StaffSummary rows={visible} /> : <StudentSummary rows={visible} />}
+         {staff ? <section className="att-card att-staff-record-controls">{recordsToolbar}<StaffAttendanceFilters f={f} update={update} o={options} /></section> : null}
+         {!staff ? <section className="att-card att-student-record-controls">{recordsToolbar}<StudentAttendanceFilters f={f} update={update} o={options} /></section> : null}
+         <section className={`att-card att-table-card ${staff ? "att-staff-table-card" : ""}`}>
+
            <DailyTable
              rows={pagedRows}
              staff={staff}
@@ -617,28 +639,46 @@ function Screen({ staff = false, say }) {
  );
 }
 
-function Filters({ f, update, o, staff, busy, load, exportReport }) {
+function Filters({ f, update, o, staff, busy, load, exportReport, search, onSearchChange, switchView }) {
   const isMonth = f.view === "Monthly Report";
   const label = new Date(`${f.date.slice(0, 7)}-01T00:00:00`)
     .toLocaleDateString("en-US", { month: "long", year: "numeric" })
     .replace(" ", ", ");
-  return <section className="att-card att-filter-card">
-    <div className={`att-filter-grid ${staff ? "att-staff-filter-grid" : "att-student-filter-grid"}`}>
-      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
-      {staff ? <>
-        <Select label="Staff" value={f.person} onChange={update("person")} items={(o.faculty || []).map((item) => ({ id: get(item, "facultyId", "id"), name: `${get(item, "staffName", "name")} (${get(item, "facultyId", "id")})` }))} all="All Staff" />
-        <Select label="Staff Type" value={f.type} onChange={update("type")} items={[{ id: "1", name: "Teaching Staff" }, { id: "2", name: "Non-Teaching Staff" }]} all="All Staff" mutedPlaceholder />
-        <Select label="Department" value={f.department} onChange={update("department")} items={o.departments} all="All Departments" mutedPlaceholder />
-      </> : <>
-        <Select label="Academic Level" value={f.level} onChange={update("level")} items={o.levels} all={o.loadingLevels ? "Loading academic levels..." : "All Academic Levels"} disabled={o.loadingLevels} mutedPlaceholder />
-        <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all={o.loadingGroups ? "Loading groups..." : "All Groups"} disabled={o.loadingGroups} mutedPlaceholder />
-        <Select label="Program" value={f.program} onChange={update("program")} items={o.programs} all={o.loadingPrograms ? "Loading programs..." : "All Programs"} disabled={o.loadingPrograms} mutedPlaceholder />
-        <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all={o.loadingSections ? "Loading sections..." : "All Sections"} disabled={o.loadingSections} mutedPlaceholder />
-      </>}
-      <Select label="Status" value={f.status} onChange={update("status")} items={staff ? STAFF_STATUSES : STUDENT_STATUSES} all="All Status" mutedPlaceholder />
-      <div className="att-filter-action"><button className="cms-btn cms-btn-primary" disabled={busy} onClick={() => load()}>{busy ? "Fetching records…" : "Get Records"}</button>{isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}</div>
+  if (!staff) return <>
+    <div className="att-student-date-card">
+      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label={<>Date <span className="req">*</span></>}><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
+      {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
     </div>
-  </section>;
+    {f.view !== "Attendance" ? <section className="att-card att-student-report-filters"><label className="att-student-top-search"><Search3DIcon size={18} /><input type="search" aria-label="Search students" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search by name, admission no, roll no..." /></label><StudentAttendanceFilters f={f} update={update} o={o} /></section> : null}
+  </>;
+  return <>
+    <div className="att-student-date-card att-staff-date-row">
+      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
+      {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
+    </div>
+    {isMonth ? <section className="att-card att-staff-report-controls"><label className="att-student-top-search"><Search3DIcon size={18} /><input type="search" aria-label="Search staff" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search by staff name or staff ID..." /></label><StaffAttendanceFilters f={f} update={update} o={o} /></section> : null}
+  </>;
+
+}
+
+function StaffAttendanceFilters({ f, update, o }) {
+  return <div className="att-staff-relocated-filters">
+    <Select label="Staff Type" value={f.type} onChange={update("type")} items={[{ id: "1", name: "Teaching" }, { id: "2", name: "Non-Teaching" }]} all="All Staff" />
+    <Select label="Department" value={f.department} onChange={update("department")} items={o.departments} all="All Departments" />
+    <Select label="Status" value={f.status} onChange={update("status")} items={STAFF_STATUSES} all="All Status" />
+  </div>;
+}
+
+function StudentAttendanceFilters({ f, update, o }) {
+  return <div className="att-student-relocated-filters">
+    <Select label="Academic Level" value={f.level} onChange={update("level")} items={o.levels} all="All Academic Levels" disabled={o.loadingLevels} />
+    <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all="All Groups" disabled={o.loadingGroups} />
+    <Select label="Program" value={f.program} onChange={update("program")} items={o.programs} all="All Programs" disabled={o.loadingPrograms} />
+    <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all="All Sections" disabled={o.loadingSections} />
+    <Select label="Status" value={f.status} onChange={update("status")} items={STUDENT_STATUSES} all="All Status" />
+  </div>;
 }
 
 function AttendanceViewSection({ view, update, staff }) {
@@ -649,7 +689,7 @@ function StudentSummary({ rows }) {
   const perStudent = rows.map((r) => {
     const m = studentSessionStatus(r, "morning");
     const a = studentSessionStatus(r, "afternoon");
-    if (m === "Present" && a === "Present") return "Present";
+    if (STUDENT_SESSION_STATUSES.includes(m) && STUDENT_SESSION_STATUSES.includes(a)) return dailyStudentStatus(m, a);
     if (m === "Half Day" || a === "Half Day") return "Half Day";
     if ((m === "Present" && a === "Absent") || (a === "Present" && m === "Absent")) return "Half Day";
     if (m === "Present" || a === "Present") return "Present";
@@ -845,6 +885,7 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
   return (
     <Modal
       title={`Edit ${staff ? "Staff" : "Student"} Attendance`}
+      className={staff ? "" : "att-student-edit-modal"}
       onClose={close}
       footer={
         <>
@@ -878,17 +919,20 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
               <div className="att-time-fields">
                 <Select
                   label="Morning"
-                  value={editing.morning}
+                  value={STUDENT_SESSION_STATUSES.includes(editing.morning) ? editing.morning : ""}
+                  all={STUDENT_SESSION_STATUSES.includes(editing.morning) ? undefined : "Choose session status"}
                   onChange={(e) => setEditing({ ...editing, morning: e.target.value })}
-                  items={STUDENT_STATUSES}
+                  items={STUDENT_SESSION_STATUSES}
                 />
                 <Select
                   label="Afternoon"
-                  value={editing.afternoon}
+                  value={STUDENT_SESSION_STATUSES.includes(editing.afternoon) ? editing.afternoon : ""}
+                  all={STUDENT_SESSION_STATUSES.includes(editing.afternoon) ? undefined : "Choose session status"}
                   onChange={(e) => setEditing({ ...editing, afternoon: e.target.value })}
-                  items={STUDENT_STATUSES}
+                  items={STUDENT_SESSION_STATUSES}
                 />
               </div>
+              <p role="status">Daily Status: <strong>{dailyStudentStatus(editing.morning, editing.afternoon)}</strong></p>
             </div>
             <div className="att-detail-history">
               <b>Period Attendance</b>
@@ -941,14 +985,7 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
   const totalPages = Math.max(1, Math.ceil(rows.length / ATTENDANCE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedRows = rows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
-  return (
-    <section className="att-card att-month-card">
-      <header className="att-month-header">
-        <div>
-          <h3>{staff ? "Staff" : "Student"} Monthly Attendance</h3>
-          <p>{headers.length} days · {rows.length} {staff ? "staff" : "students"}</p>
-        </div>
-        <div className="att-month-legend">
+  const monthlyLegend = (<div className="att-month-legend">
           <span><i className="att-month-p">P</i> Present</span>
           <span><i className="att-month-a">A</i> Absent</span>
           {staff ? (
@@ -961,7 +998,15 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
           )}
           <span><i className="att-month-h">H</i> Holiday</span>
           <span><i className="att-month-off">-</i> Non-working day</span>
+        </div>);
+  return (
+    <section className={`att-card att-month-card${staff ? " att-staff-month-card" : ""}`}>
+      <header className="att-month-header">
+        <div>
+          <h3>{staff ? "Staff" : "Student"} Monthly Attendance</h3>
+          <p>{headers.length} days · {rows.length} {staff ? "staff" : "students"}</p>
         </div>
+        {staff ? monthlyLegend : null}
       </header>
       <div className="att-student-search att-records-search-toolbar att-month-search-toolbar">
         <div className="att-student-search-box">
@@ -973,6 +1018,7 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
             placeholder={staff ? "Search by staff name or staff ID..." : "Search by student name, roll no. or admission no..."}
           />
         </div>
+        {!staff ? monthlyLegend : null}
       </div>
       <div className="att-month-scroll">
         <table className="cms-table att-month-table">
@@ -1096,7 +1142,7 @@ function Defaulters({ rows, totalRows, page, onPageChange, threshold, onThreshol
                   <td>{get(r, "groupName") || "—"}</td>
                   <td>{get(r, "sectionName") || "—"}</td>
                   <td>{attendancePercentage(r)}%</td>
-                  <td>{Math.max(0, normalizedThreshold - attendancePercentage(r))}%</td>
+                  <td>{Math.max(0, normalizedThreshold - attendancePercentage(r)).toFixed(1)}%</td>
                 </tr>
               ))
             ) : (

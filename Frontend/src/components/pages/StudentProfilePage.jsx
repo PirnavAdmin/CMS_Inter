@@ -1,6 +1,7 @@
+import StudentFeeTab from "./StudentFeeTab.jsx";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, Bus, ClipboardList, GraduationCap, Mail, MapPin, Pencil, School, User, Users } from "lucide-react";
+import { ArrowLeft, Bus, ClipboardList, GraduationCap, Eye, IndianRupee, Mail, MapPin, Pencil, School, User, Users } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import StudentEnrollmentPage from "@/components/pages/StudentEnrollmentPage.jsx";
 import { SkeletonPage, StatusBadge } from "@/components/common/Ui.jsx";
@@ -8,6 +9,7 @@ import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { env } from "@/config/env.js";
 import "./StudentManagementPage.css";
+import "./StudentAdmissionPage.css";
 
 const ViewDetails = ({ items }) => <div className="student-profile-read-grid">{items.map(([key, value]) => <div className="student-profile-read-field" key={key}><span>{key}</span><strong>{value || "—"}</strong></div>)}</div>;
 const sectionIcons = {
@@ -20,9 +22,11 @@ const sectionIcons = {
   "Parent Details": Users,
   "Student Type & Residential Allocation": Bus,
 };
+const sectionKey = (title) => ({ "Personal Information": "personal", "Contact Information": "contact", "Admission Details": "academic", "Academic Placement": "academic", "Previous Education": "academic", Address: "contact", "Parent Details": "parent", "Student Type & Residential Allocation": "transport" })[title];
+const profileTabs = [["overview", "Overview", User], ["personal", "Personal Details", User], ["academic", "Academic Details", GraduationCap], ["contact", "Contact & Address", Mail], ["parent", "Parent / Guardian", Users], ["transport", "Transport Details", Bus], ["fee", "Fee", IndianRupee]];
 const ViewSection = ({ title, children, className = "" }) => {
   const Icon = sectionIcons[title];
-  return <section className={`cms-card student-profile-view-section ${className}`}><header className="student-profile-view-section-head">{Icon ? <span className="student-profile-view-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="student-profile-view-section-body">{children}</div></section>;
+  return <section data-profile-section={sectionKey(title)} className={`cms-card student-profile-view-section ${className}`}><header className="student-profile-view-section-head">{Icon ? <span className="student-profile-view-section-icon"><Icon size={17} aria-hidden="true" /></span> : null}<h2>{title}</h2></header><div className="student-profile-view-section-body">{children}</div></section>;
 };
 const read = (record, ...keys) => keys.map((key) => record?.[key]).find((value) => value != null && value !== "");
 const formatDisplayDate = (value) => {
@@ -81,11 +85,15 @@ const resolvePhotoUrl = (value, version) => {
 };
 
 export default function StudentProfilePage({ id }) {
+  const [activeTab, setActiveTab] = useState("overview");
+  const [editorBusy, setEditorBusy] = useState(false);
   const location = useLocation();
   const returnState = location.state?.studentManagement;
   const [student, setStudent] = useState(null), [loading, setLoading] = useState(true), [error, setError] = useState(""), [photoFailed, setPhotoFailed] = useState(false), [photoObjectUrl, setPhotoObjectUrl] = useState(""), [editMode, setEditMode] = useState(false), [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError("");
     apiClient.get(apiEndpoints.students.getById(id)).then(async ({ data }) => {
       const record = data?.data ?? data?.Data ?? data;
       if (!record || typeof record !== "object") throw new Error("Student record was not found.");
@@ -119,6 +127,10 @@ export default function StudentProfilePage({ id }) {
       Object.entries(admission || {}).forEach(([key, value]) => {
         if (value != null && value !== "") source[key] = value;
       });
+      // Admission is historical; select the current student allocation as a whole
+      // so cleared facility fields cannot be repopulated from the admission.
+      const currentAllocation = [record.student ?? record.Student ?? record.profile ?? record.Profile, record, studentSummary, admission]
+        .filter(Boolean).map(residentialAllocation).find((item) => item.studentType);
       const sectionValue = read(source, "section", "Section", "allocatedSection", "AllocatedSection", "assignedSection", "AssignedSection", "sectionDetails", "SectionDetails");
       const sectionId = read(source, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId") ?? read(sectionValue, "sectionId", "SectionId", "id", "Id");
       let sectionRecord = sectionRows.find((item) => String(read(item, "sectionId", "SectionId", "id", "Id")) === String(sectionId));
@@ -133,7 +145,7 @@ export default function StudentProfilePage({ id }) {
       try { uploadedPhoto = sessionStorage.getItem(`cms_student_photo_${studentId}`) ?? ""; } catch { /* Storage may be unavailable. */ }
       if (active) {
         setPhotoFailed(false);
-        setStudent({ ...source, id: studentId, studentId, name: read(source, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Student", admissionNo: admissionNo || "—", roll: read(record, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll") ?? "", photo: uploadedPhoto || read(source, "photo", "Photo", "photoPath", "PhotoPath", "photoUrl", "PhotoUrl", "profilePhoto", "ProfilePhoto", "profilePhotoUrl", "ProfilePhotoUrl"), photoVersion: Date.now(), academicYear: read(source, "academicYearName", "AcademicYearName", "academicYear", "AcademicYear"), level: read(source, "academicLevelName", "AcademicLevelName", "academicLevel", "AcademicLevel", "levelName", "LevelName"), group: read(source, "groupName", "GroupName", "group", "Group"), programme: read(source, "programmeName", "ProgrammeName", "programName", "ProgramName", "programme", "Programme"), section: sectionName, admissionType: read(source, "admissionType", "AdmissionType", "admissionTypeName", "AdmissionTypeName", "admissionCategory", "AdmissionCategory", "admissionQuota", "AdmissionQuota", "quota", "Quota", "admissionMode", "AdmissionMode", "type", "Type"), status: read(record, "status", "Status", "studentStatus", "StudentStatus") ?? "Pending assignment" });
+        setStudent({ ...source, currentAllocation, id: studentId, studentId, name: read(source, "studentName", "StudentName", "fullName", "FullName", "name", "Name") ?? "Student", admissionNo: admissionNo || "—", roll: read(record, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll") ?? "", photo: uploadedPhoto || read(source, "photo", "Photo", "photoPath", "PhotoPath", "photoUrl", "PhotoUrl", "profilePhoto", "ProfilePhoto", "profilePhotoUrl", "ProfilePhotoUrl"), photoVersion: Date.now(), academicYear: read(source, "academicYearName", "AcademicYearName", "academicYear", "AcademicYear"), level: read(source, "academicLevelName", "AcademicLevelName", "academicLevel", "AcademicLevel", "levelName", "LevelName"), group: read(source, "groupName", "GroupName", "group", "Group"), programme: read(source, "programmeName", "ProgrammeName", "programName", "ProgramName", "programme", "Programme"), section: sectionName, admissionType: read(source, "admissionType", "AdmissionType", "admissionTypeName", "AdmissionTypeName", "admissionCategory", "AdmissionCategory", "admissionQuota", "AdmissionQuota", "quota", "Quota", "admissionMode", "AdmissionMode", "type", "Type"), status: read(record, "status", "Status", "studentStatus", "StudentStatus") ?? "Pending assignment" });
       }
     }).catch((e) => active && setError(getApiErrorMessage(e))).finally(() => active && setLoading(false));
     return () => { active = false; };
@@ -164,21 +176,32 @@ export default function StudentProfilePage({ id }) {
   if (loading) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><SkeletonPage /></DashboardLayout>;
   if (!student) return <DashboardLayout title="Student Profile" breadcrumb={["People", "Students"]}><div className="cms-card"><div className="cms-empty">{error || "Student record was not found."}</div></div></DashboardLayout>;
   const initials = student.name.split(" ").map((x) => x[0]).join("").slice(0, 2);
-  const allocation = residentialAllocation(student);
+  const allocation = student.currentAllocation || residentialAllocation(student);
   const finishEditing = async () => { setEditMode(false); setRefreshKey((value) => value + 1); };
-  return <DashboardLayout title={student.name} subtitle={`Admission No: ${student.admissionNo} · Roll No: ${student.roll || "Not assigned"}`} breadcrumb={["People", "Students"]} backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>} actions={!editMode ? <button type="button" className="cms-btn cms-btn-primary" onClick={() => setEditMode(true)}><Pencil size={15} /> Edit Profile</button> : null}>
-    <div className="student-management-profile-page">
-    <section className="cms-card student-profile-summary"><div><span>Student ID</span><strong>{student.studentId}</strong></div><div><span>Admission No</span><strong>{student.admissionNo}</strong></div><div><span>Roll No</span><strong>{student.roll || "Not assigned"}</strong></div><div><span>Status</span><StatusBadge value={student.status}/></div></section>
-    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} /></div> : <>
+  return <DashboardLayout
+    title={<span className="student-profile-title">{student.name}<StatusBadge value={student.status} /></span>}
+    subtitle={<><span className="student-profile-header-admission">Admission No: {student.admissionNo} • Roll No: {student.roll || "Not assigned"}</span><span className="student-profile-header-academic">{[student.academicYear, student.group, student.programme, student.section].filter(Boolean).join(" • ")}</span></>}
+    breadcrumb={["People", "Students"]}
+    backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>}
+    actions={<div className="cms-admission-main-tabs" role="group" aria-label="Student profile mode">
+      <button type="button" className={`cms-admission-main-tab ${!editMode ? "is-active" : ""}`} aria-pressed={!editMode} disabled={editorBusy} onClick={() => setEditMode(false)}><Eye size={15} />View</button>
+      <button type="button" className={`cms-admission-main-tab ${editMode ? "is-active" : ""}`} aria-pressed={editMode} disabled={editorBusy} onClick={() => { if (activeTab === "fee") setActiveTab("overview"); setEditMode(true); }}><Pencil size={15} />Edit</button>
+    </div>}
+  >
+    <div className="student-management-profile-page student-profile-compact" data-active-section={activeTab}>
+      <div className="cms-admission-main-tabs student-profile-section-tabs" role="tablist" aria-label="Student sections">
+        {profileTabs.map(([key, label, Icon]) => <button key={key} id={`student-${key}-tab`} type="button" role="tab" aria-selected={activeTab === key} aria-controls={key === "fee" ? "student-fee-panel" : "student-section-panel"} disabled={editMode && key === "fee"} className={`cms-admission-main-tab ${activeTab === key ? "is-active" : ""}`} onClick={() => setActiveTab(key)}><Icon size={17} />{label}</button>)}
+      </div>
+    {editMode ? <div className="student-management-profile-editor"><StudentEnrollmentPage id={id} embedded onCancel={() => setEditMode(false)} onSaved={finishEditing} onValidationError={() => setActiveTab("overview")} onBusyChange={setEditorBusy} /></div> : activeTab === "fee" ? <StudentFeeTab key={student.studentId} student={student} compactContext /> : <div className="student-profile-overview" role="tabpanel" id="student-section-panel" aria-labelledby={`student-${activeTab}-tab`}>
       <ViewSection title="Personal Information" className="student-profile-personal-section"><div className="student-profile-personal-layout"><div className="student-profile-view-photo">{photoObjectUrl && !photoFailed ? <img src={photoObjectUrl} alt={`${student.name}'s profile`} onError={() => setPhotoFailed(true)} /> : initials}</div><ViewDetails items={[["Student Name", student.name], ["Gender", read(student, "gender", "Gender")], ["Date of Birth", formatDisplayDate(read(student, "dateOfBirth", "DateOfBirth", "dob"))], ["Blood Group", read(student, "bloodGroup", "BloodGroup")], ["Nationality", read(student, "nationality", "Nationality")], ["Religion", read(student, "religion", "Religion")], ["Category", read(student, "category", "Category")], ["Aadhaar Number", read(student, "aadhaarNumber", "AadhaarNumber")]]}/></div></ViewSection>
+      <ViewSection title="Academic Placement"><ViewDetails items={[["Board", read(student, "boardName", "BoardName", "board")], ["Academic Year", student.academicYear], ["Academic Level", student.level], ["Group", student.group], ["Program", student.programme], ["Section", student.section], ["Medium", read(student, "medium", "Medium")], ["Second Language", read(student, "secondLanguage", "SecondLanguage")]]}/></ViewSection>
       <ViewSection title="Contact Information"><ViewDetails items={[["Email", read(student, "studentEmail", "email", "Email")], ["Mobile Number", read(student, "studentMobileNumber", "mobileNumber", "mobile", "MobileNumber")]]}/></ViewSection>
-      <ViewSection title="Admission Details"><ViewDetails items={[["Admission No", student.admissionNo], ["Admission Date", formatDisplayDate(read(student, "admissionDate", "AdmissionDate"))], ["Admission Type", student.admissionType], ["Campus", read(student, "campusName", "CampusName", "campus", "Campus")]]}/></ViewSection>
-      <ViewSection title="Academic Placement"><ViewDetails items={[["Board", read(student, "boardName", "BoardName", "board")], ["Academic Year", student.academicYear], ["Academic Level", student.level], ["Group", student.group], ["Program", student.programme], ["Section", student.section], ["Roll No", student.roll], ["Medium", read(student, "medium", "Medium")], ["Second Language", read(student, "secondLanguage", "SecondLanguage")]]}/></ViewSection>
-      <ViewSection title="Previous Education"><ViewDetails items={[["Previous School", read(student, "previousSchool", "PreviousSchool")], ["Previous Board", read(student, "previousBoard", "PreviousBoard")], ["Previous Year of Passing", read(student, "previousYearOfPassing", "PreviousYearOfPassing")], ["Previous Hall Ticket Number", read(student, "previousHallTicketNumber", "PreviousHallTicketNumber", "hallTicketNumber")], ["Previous Percentage / Marks", read(student, "previousPercentage", "PreviousPercentage", "previousMarks", "PreviousMarks")]]}/></ViewSection>
-      <ViewSection title="Address"><ViewDetails items={[["Address / House No", read(student, "address", "Address", "addressLine1", "AddressLine1", "houseNo", "HouseNo")], ["Street / Village", read(student, "street", "Street", "village", "Village", "addressLine2", "AddressLine2")], ["City / Town", read(student, "city", "City", "town", "Town")], ["District", read(student, "district", "District")], ["State", read(student, "state", "State")], ["Pincode", read(student, "pincode", "Pincode", "pinCode", "PinCode")]]}/></ViewSection>
+      <ViewSection title="Admission Details"><ViewDetails items={[["Admission Date", formatDisplayDate(read(student, "admissionDate", "AdmissionDate"))], ["Admission Type", student.admissionType], ["Campus", read(student, "campusName", "CampusName", "campus", "Campus")]]}/></ViewSection>
       <ViewSection title="Parent Details" className="student-profile-parent-section"><ViewDetails items={[["Father Name", read(student, "fatherName", "FatherName")], ["Father Occupation", read(student, "fatherOccupation", "FatherOccupation")], ["Father Mobile", read(student, "fatherMobile", "FatherMobile")], ["Mother Name", read(student, "motherName", "MotherName")], ["Mother Occupation", read(student, "motherOccupation", "MotherOccupation")], ["Mother Mobile", read(student, "motherMobile", "MotherMobile")], ["Guardian Name", read(student, "guardianName", "GuardianName")], ["Guardian Mobile", read(student, "guardianMobile", "GuardianMobile")], ["Parent/Guardian Email", read(student, "parentParentGuardianEmail", "ParentParentGuardianEmail", "parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail")]]}/></ViewSection>
       <ViewSection title="Student Type & Residential Allocation"><ViewDetails items={[["Student Type", allocation.studentType], ["School Transport Facility Required?", allocation.transportRequired], ...(allocation.studentType === "Non-Residential" && allocation.transportRequired === "Yes" ? [["Bus Type", allocation.busType], ["Route", allocation.route], ["Pickup Point", allocation.pickupPoint]] : []), ...(allocation.studentType === "Residential" ? [["Hostel Block", allocation.hostelBlock], ["Room Type", allocation.hostelRoom]] : [])]}/></ViewSection>
-    </>}
+      <ViewSection title="Address"><ViewDetails items={[["Address / House No", read(student, "address", "Address", "addressLine1", "AddressLine1", "houseNo", "HouseNo")], ["Street / Village", read(student, "street", "Street", "village", "Village", "addressLine2", "AddressLine2")], ["City / Town", read(student, "city", "City", "town", "Town")], ["District", read(student, "district", "District")], ["State", read(student, "state", "State")], ["Pincode", read(student, "pincode", "Pincode", "pinCode", "PinCode")]]}/></ViewSection>
+      <ViewSection title="Previous Education"><ViewDetails items={[["Previous School", read(student, "previousSchool", "PreviousSchool")], ["Previous Board", read(student, "previousBoard", "PreviousBoard")], ["Previous Year of Passing", read(student, "previousYearOfPassing", "PreviousYearOfPassing")], ["Previous Hall Ticket Number", read(student, "previousHallTicketNumber", "PreviousHallTicketNumber", "hallTicketNumber")], ["Previous Percentage / Marks", read(student, "previousPercentage", "PreviousPercentage", "previousMarks", "PreviousMarks")]]}/></ViewSection>
+    </div>}
     </div>
   </DashboardLayout>;
 }

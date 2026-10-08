@@ -1152,22 +1152,104 @@ BEGIN
     SELECT ROW_COUNT() AS AffectedRows;
 END //
 
-DROP PROCEDURE IF EXISTS `sp_GetMaxRollNumber`//
-CREATE PROCEDURE `sp_GetMaxRollNumber`
-(
-    IN p_AcademicYearId INT,
-    IN p_AcademicLevelId INT,
-    IN p_GroupId INT
+DROP PROCEDURE IF EXISTS `sp_GetStudentSelfProfile`//
+CREATE PROCEDURE `sp_GetStudentSelfProfile`(
+    IN p_StudentId INT
 )
 BEGIN
-    SELECT RollNo
-    FROM `Students`
-    WHERE AcademicYearId = p_AcademicYearId
-      AND AcademicLevelId = p_AcademicLevelId
-      AND GroupId = p_GroupId
-      AND RollNo IS NOT NULL
-      AND TRIM(RollNo) <> '';
+    SELECT
+        s.StudentId,
+        s.AdmissionNo,
+        s.RollNo,
+        s.AdmissionDate,
+        s.StudentName,
+        s.Gender,
+        s.DateOfBirth,
+        s.BloodGroup,
+        s.AadhaarNumber,
+        s.Nationality,
+        s.Religion,
+
+        s.CampusId,
+        c.CampusName,
+
+        s.BoardId,
+        b.BoardName,
+        s.AcademicYearId,
+        ay.AcademicYearName,
+        s.AcademicLevelId,
+        al.LevelName AS AcademicLevelName,
+        s.GroupId,
+        g.GroupName,
+        s.ProgramId,
+        p.ProgramName,
+        s.SectionId,
+        sec.SectionName,
+
+        s.MobileNumber,
+        s.Email,
+        s.Address,
+        s.City,
+        s.District,
+        s.State,
+        s.Pincode,
+
+        s.FatherName,
+        s.FatherMobile,
+        s.MotherName,
+        s.MotherMobile,
+        s.GuardianName,
+        s.GuardianMobile,
+        s.ParentGuardianEmail,
+
+        s.PreviousSchool,
+        s.PreviousHallTicketNumber,
+        s.PreviousBoard,
+        s.PreviousYearOfPassing,
+        s.PreviousPercentage,
+
+        s.Photo,
+        s.BirthCertificate,
+        s.TransferCertificate,
+        s.StudyCertificate,
+        s.AadhaarDocument,
+        s.CommunityCertificate,
+        s.IncomeCertificate,
+        s.CasteCertificate,
+        s.TenthCertificate,
+        s.MarksMemo,
+
+        s.IsFirstLogin,
+        s.Status,
+        s.IsActive,
+
+        s.StudentType,
+        s.TransportRequired,
+        s.BusType,
+        s.RouteId,
+        s.BusRoute,
+        s.PickupPointId,
+        s.PickupPoint,
+        s.HostelId,
+        s.HostelBlock,
+        s.RoomId,
+        s.HostelRoom,
+        s.BedId,
+        s.HostelBed,
+        s.HallTicketNumber
+    FROM Students s
+    LEFT JOIN Campuses c ON c.CampusId = s.CampusId
+    LEFT JOIN Boards b ON b.BoardId = s.BoardId
+    LEFT JOIN AcademicYears ay ON ay.AcademicYearId = s.AcademicYearId
+    LEFT JOIN AcademicLevels al ON al.AcademicLevelId = s.AcademicLevelId
+    LEFT JOIN Groups g ON g.GroupId = s.GroupId
+    LEFT JOIN Programs p ON p.ProgramId = s.ProgramId
+    LEFT JOIN Sections sec ON sec.SectionId = s.SectionId
+    WHERE s.StudentId = p_StudentId
+      AND s.IsActive = 1
+    LIMIT 1;
 END //
 
 DELIMITER ;
+
 

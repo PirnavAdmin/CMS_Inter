@@ -37,40 +37,31 @@ namespace CollegeManagement.API.Repositories.Implementations
             await Task.CompletedTask;
         }
 
-        public async Task<IEnumerable<NumberSeriesConfiguration>> GetAllAsync(int? campusId = null)
+        public async Task<IEnumerable<NumberSeriesConfiguration>> GetAllAsync(int? campusId = null, bool includeSubCounters = false)
         {
-            try
+            var query = _context.Set<NumberSeriesConfiguration>().AsNoTracking()
+                .Where(n => n.IsActive && (n.CampusId == campusId || n.CampusId == null));
+
+            if (!includeSubCounters)
             {
-                var conn = await GetOpenConnectionAsync();
-                return await conn.QueryAsync<NumberSeriesConfiguration>(
-                    "sp_GetNumberSeriesConfigurations",
-                    new { p_CampusId = campusId },
-                    commandType: CommandType.StoredProcedure);
+                query = query.Where(n => !n.SeriesCode.Contains("|"));
             }
-            catch
-            {
-                return await _context.Set<NumberSeriesConfiguration>().AsNoTracking()
-                    .Where(n => n.IsActive && (n.CampusId == campusId || n.CampusId == null))
-                    .OrderBy(n => n.Id)
-                    .ToListAsync();
-            }
+
+            var configs = await query.ToListAsync();
+
+            return configs
+                .GroupBy(n => n.SeriesCode)
+                .Select(g => g.OrderByDescending(n => n.CampusId == campusId).First())
+                .OrderBy(n => n.Id)
+                .ToList();
         }
 
         public async Task<NumberSeriesConfiguration?> GetByCodeAsync(string seriesCode, int? campusId = null)
         {
-            try
-            {
-                var conn = await GetOpenConnectionAsync();
-                return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
-                    "sp_GetNumberSeriesByCode",
-                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId },
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                return await _context.Set<NumberSeriesConfiguration>().AsNoTracking()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
-            }
+            return await _context.Set<NumberSeriesConfiguration>().AsNoTracking()
+                .Where(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
+                .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
+                .FirstOrDefaultAsync();
         }
 
         public async Task<NumberSeriesConfiguration?> UpdateByCodeAsync(
@@ -80,64 +71,125 @@ namespace CollegeManagement.API.Repositories.Implementations
             int numberLength,
             int startNumber,
             string? description,
-            int? campusId = null)
+            int? campusId = null,
+            bool? isActive = null,
+            string? seriesName = null)
         {
-            try
+            var existing = await _context.Set<NumberSeriesConfiguration>()
+                .Where(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
+                .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
+                .FirstOrDefaultAsync();
+
+            if (existing != null)
             {
-                var conn = await GetOpenConnectionAsync();
-                await conn.ExecuteAsync(
-                    "sp_UpdateNumberSeriesByCode",
-                    new
+                // If updating for a specific campus but we only found a global fallback, we should clone it
+                if (campusId.HasValue && existing.CampusId != campusId)
+                {
+                    var newConfig = new NumberSeriesConfiguration
                     {
-                        p_SeriesCode = seriesCode.Trim(),
-                        p_Prefix = prefix,
-                        p_FormatPattern = formatPattern,
-                        p_NumberLength = numberLength,
-                        p_StartNumber = startNumber,
-                        p_Description = description,
-                        p_CampusId = campusId
-                    },
-                    commandType: CommandType.StoredProcedure);
-
-                return await GetByCodeAsync(seriesCode, campusId);
-            }
-            catch
-            {
-                var existing = await _context.Set<NumberSeriesConfiguration>()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
-
-                if (existing != null)
+                        SeriesCode = existing.SeriesCode,
+                        Prefix = prefix,
+                        FormatPattern = formatPattern,
+                        NumberLength = numberLength,
+                        StartNumber = startNumber,
+                        CurrentSequence = startNumber > 0 ? startNumber - 1 : 0,
+                        Description = description,
+                        CampusId = campusId,
+                        IsActive = isActive ?? true,
+                        SeriesName = string.IsNullOrEmpty(seriesName) ? existing.SeriesName : seriesName,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    _context.Set<NumberSeriesConfiguration>().Add(newConfig);
+                    await _context.SaveChangesAsync();
+                    return newConfig;
+                }
+                else
                 {
                     existing.Prefix = prefix;
                     existing.FormatPattern = formatPattern;
                     existing.NumberLength = numberLength;
                     existing.StartNumber = startNumber;
                     existing.Description = description;
+                    if (isActive.HasValue) existing.IsActive = isActive.Value;
+                    if (!string.IsNullOrEmpty(seriesName)) existing.SeriesName = seriesName;
                     existing.UpdatedAt = DateTime.UtcNow;
                     existing.CampusId = campusId;
                     await _context.SaveChangesAsync();
                 }
-
-                return existing;
             }
+            else
+            {
+                // UPSERT: Create if not exists
+                var newConfig = new NumberSeriesConfiguration
+                {
+                    SeriesCode = seriesCode.Trim(),
+                    SeriesName = string.IsNullOrEmpty(seriesName) ? seriesCode : seriesName,
+                    Prefix = prefix,
+                    FormatPattern = formatPattern,
+                    NumberLength = numberLength,
+                    StartNumber = startNumber,
+                    CurrentSequence = startNumber > 0 ? startNumber - 1 : 0,
+                    Description = description,
+                    CampusId = campusId,
+                    IsActive = isActive ?? true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                _context.Set<NumberSeriesConfiguration>().Add(newConfig);
+                await _context.SaveChangesAsync();
+                return newConfig;
+            }
+
+            return existing;
         }
 
         public async Task<NumberSeriesConfiguration?> GenerateNextSequenceAsync(string seriesCode, int? campusId = null, string? baseSeriesCode = null)
         {
-            try
-            {
-                var conn = await GetOpenConnectionAsync();
-                return await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
-                    "sp_GenerateNextNumberSeries",
-                    new { p_SeriesCode = seriesCode.Trim(), p_CampusId = campusId, p_BaseSeriesCode = baseSeriesCode?.Trim() },
-                    commandType: CommandType.StoredProcedure);
-            }
-            catch
-            {
-                var existing = await _context.Set<NumberSeriesConfiguration>()
-                    .FirstOrDefaultAsync(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null));
+            var existing = await _context.Set<NumberSeriesConfiguration>()
+                .Where(n => n.SeriesCode == seriesCode.Trim() && (n.CampusId == campusId || n.CampusId == null))
+                .OrderByDescending(n => n.CampusId == campusId ? 1 : 0)
+                .FirstOrDefaultAsync();
 
-                if (existing != null)
+            if (existing != null)
+            {
+                // If we need a sequence for a specific campus but only found the global fallback,
+                // we must NOT increment the global fallback. We must create a new sequence counter for this campus.
+                if (campusId.HasValue && existing.CampusId != campusId)
+                {
+                    // Fetch base template for format/prefix/length defaults
+                    var baseTemplate = !string.IsNullOrWhiteSpace(baseSeriesCode)
+                        ? await _context.Set<NumberSeriesConfiguration>()
+                            .Where(n => n.SeriesCode == baseSeriesCode && n.CampusId == null)
+                            .FirstOrDefaultAsync() ?? existing
+                        : existing;
+
+                    // Auto-derive prefix from the subCode (e.g. "ROLL_NO|1|MPC" -> "MPC")
+                    var autoPrefix = seriesCode.Contains("|")
+                        ? seriesCode.Split('|').Last().ToUpperInvariant()
+                        : baseTemplate.Prefix;
+
+                    var newConfig = new NumberSeriesConfiguration
+                    {
+                        SeriesCode = seriesCode,
+                        SeriesName = seriesCode.Contains("|") ? $"Student Roll No. - {autoPrefix}" : existing.SeriesName,
+                        Prefix = autoPrefix,
+                        FormatPattern = baseTemplate.FormatPattern,
+                        NumberLength = baseTemplate.NumberLength,
+                        StartNumber = baseTemplate.StartNumber,
+                        CurrentSequence = baseTemplate.StartNumber, // Initial sequence used!
+                        Description = baseTemplate.Description,
+                        CampusId = campusId,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    
+                    _context.Set<NumberSeriesConfiguration>().Add(newConfig);
+                    await _context.SaveChangesAsync();
+                    return newConfig;
+                }
+                else
                 {
                     existing.CurrentSequence = existing.CurrentSequence < existing.StartNumber
                         ? existing.StartNumber
@@ -145,32 +197,47 @@ namespace CollegeManagement.API.Repositories.Implementations
                     existing.UpdatedAt = DateTime.UtcNow;
                     await _context.SaveChangesAsync();
                 }
-
-                return existing;
             }
+
+            return existing;
         }
 
         public async Task<int> GetMaxSequenceForBaseSeriesAsync(string baseSeriesCode, int? campusId = null, string? board = null, string? academicYear = null)
         {
-            try
+            var max = await _context.Set<NumberSeriesConfiguration>()
+                .Where(n => (n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
+                         && n.CampusId == campusId)
+                .MaxAsync(n => (int?)n.CurrentSequence) ?? 0;
+
+            // Sync with actual Staffs table for Teaching and Non-Teaching Staff IDs
+            var code = baseSeriesCode.Trim().ToUpperInvariant();
+            if (code == "TEACHING_STAFF_ID" || code == "NON_TEACHING_STAFF_ID")
             {
-                var conn = await GetOpenConnectionAsync();
+                var isTeaching = code == "TEACHING_STAFF_ID";
                 
-                var maxSeq = await conn.ExecuteScalarAsync<int?>(
-                    "sp_GetMaxSequenceForBaseSeries",
-                    new { p_BaseCode = baseSeriesCode.Trim(), p_CampusId = campusId, p_Board = board, p_AcademicYear = academicYear },
-                    commandType: CommandType.StoredProcedure);
-                      
-                return maxSeq ?? 0;
+                // Fetch all Employee IDs in memory for robust parsing
+                var staffIds = await _context.Set<CollegeManagement.API.Models.Staff.Staff>()
+                    .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null 
+                             && (isTeaching ? s.StaffType == "Teaching" : s.StaffType != "Teaching"))
+                    .Select(s => s.EmployeeId)
+                    .ToListAsync();
+                    
+                if (staffIds.Any())
+                {
+                    var actualMax = staffIds
+                        .Select(id => 
+                        {
+                            var numericPart = new string(id.Where(char.IsDigit).ToArray());
+                            return int.TryParse(numericPart, out var val) ? val : 0;
+                        })
+                        .DefaultIfEmpty(0)
+                        .Max();
+                        
+                    max = System.Math.Max(max, actualMax);
+                }
             }
-            catch
-            {
-                var max = await _context.Set<NumberSeriesConfiguration>()
-                    .Where(n => (n.SeriesCode == baseSeriesCode.Trim() || n.SeriesCode.StartsWith(baseSeriesCode.Trim() + "|"))
-                             && (n.CampusId == campusId || n.CampusId == null))
-                    .MaxAsync(n => (int?)n.CurrentSequence);
-                return max ?? 0;
-            }
+                
+            return max;
         }
     }
 }

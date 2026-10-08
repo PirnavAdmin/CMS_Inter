@@ -170,6 +170,28 @@
   background: var(--cms-green-soft);
 }
 
+.cms-admission-clear-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--cms-border);
+  border-radius: 9px;
+  background: var(--cms-surface);
+  color: var(--cms-muted);
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
+}
+
+.cms-admission-clear-btn:hover,
+.cms-admission-clear-btn:focus-visible {
+  border-color: var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary-dark);
+  outline: none;
+  transform: translateY(-1px);
+}
+
 .cms-admission-form-sections {
   display: grid;
   gap: 14px;
@@ -179,7 +201,7 @@
   border: 1px solid var(--cms-border);
   border-radius: 8px;
   background: var(--cms-surface);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .cms-admission-section-head {
