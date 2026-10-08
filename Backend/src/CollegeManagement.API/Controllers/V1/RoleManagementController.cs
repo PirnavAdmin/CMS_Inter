@@ -10,7 +10,7 @@ namespace CollegeManagement.API.Controllers.V1
 {
     [Route("api/v1/roles")]
     [ApiController]
-    [Authorize]
+    [Authorize(Roles = "Super Admin,Admin")]
     public class RoleManagementController : ControllerBase
     {
         private readonly IRoleManagementService _roleManagementService;
@@ -73,49 +73,6 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Retrieves only modules configured/applicable for a specific role.
-        /// </summary>
-        [HttpGet("{roleId:int}/modules")]
-        public async Task<IActionResult> GetRoleModules(int roleId)
-        {
-            try
-            {
-                var modules = await _roleManagementService.GetModulesForRoleAsync(roleId);
-                return Ok(new { success = true, data = modules });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Configures/updates applicable modules for a specific role.
-        /// </summary>
-        [HttpPut("{roleId:int}/modules")]
-        [Authorize(Roles = "Super Admin,Admin")]
-        public async Task<IActionResult> SetRoleModules(int roleId, [FromBody] UpdateRoleModulesRequest request)
-        {
-            try
-            {
-                var success = await _roleManagementService.SetModulesForRoleAsync(roleId, request);
-                return Ok(new { success = true, message = "Role modules configured successfully" });
-            }
-            catch (KeyNotFoundException ex)
-            {
-                return NotFound(new { success = false, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { success = false, message = ex.Message });
-            }
-        }
-
-        /// <summary>
         /// Retrieves a single role by ID.
         /// </summary>
         [HttpGet("{id:int}")]
@@ -131,7 +88,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Creates a new role.
         /// </summary>
         [HttpPost]
-        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> CreateRole([FromBody] CreateRoleRequest request)
         {
             try
@@ -149,7 +105,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Updates an existing role name and description.
         /// </summary>
         [HttpPut("{id:int}")]
-        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> UpdateRole(int id, [FromBody] UpdateRoleRequest request)
         {
             try
@@ -169,7 +124,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Deletes a role (prohibits deleting system roles).
         /// </summary>
         [HttpDelete("{id:int}")]
-        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> DeleteRole(int id)
         {
             try
@@ -220,7 +174,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Accepts both { modules: [...] } and frontend-native { permissions: [...] }.
         /// </summary>
         [HttpPut("{roleId:int}/permissions")]
-        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
         {
             try
@@ -282,7 +235,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Assigns a role to a specific user by roleId or roleCode.
         /// </summary>
         [HttpPost("user-assignments/{userId:int}/assign")]
-        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> AssignUserRole(int userId, [FromBody] AssignUserRoleRequest request)
         {
             try
@@ -305,7 +257,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpDelete("user-assignments/{userId:int}/remove")]
         [HttpPost("user-assignments/{userId:int}/remove")]
-        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> RemoveUserRole(int userId, [FromQuery] string? roleCode = null)
         {
             try
@@ -372,7 +323,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPut("users/{userId:int}/overrides")]
         [HttpPut("users/{userId:int}/permissions")]
-        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> SaveUserPermissionOverrides(int userId, [FromBody] SaveUserPermissionOverridesRequest request)
         {
             try
@@ -395,7 +345,6 @@ namespace CollegeManagement.API.Controllers.V1
         /// Resets all member overrides for a user, reverting to role defaults.
         /// </summary>
         [HttpDelete("users/{userId:int}/overrides/reset")]
-        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> ResetUserPermissionOverrides(int userId)
         {
             try

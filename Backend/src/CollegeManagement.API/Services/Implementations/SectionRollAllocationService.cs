@@ -110,14 +110,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 var rollResult = await _numberSeriesService.GenerateNextNumberAsync(
                     "ROLL_NO",
-                    new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
-                    { 
-                        GroupCode = groupCode,
-                        BoardId = 0,
-                        AcademicYearId = request.AcademicYearId,
-                        GroupId = request.GroupId,
-                        ProgramId = request.ProgramId
-                    },
+                    new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto { GroupCode = groupCode },
                     request.CampusId);
 
                 if (rollResult != null && !string.IsNullOrEmpty(rollResult.GeneratedNumber))

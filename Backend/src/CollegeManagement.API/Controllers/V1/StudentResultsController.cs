@@ -37,6 +37,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet]
         [ProducesResponseType(typeof(IEnumerable<StudentSelfResultDto>), StatusCodes.Status200OK)]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [CollegeManagement.API.Filters.ParentStudentAuthorization]
         public async Task<IActionResult> GetMyResults([FromQuery] int? studentId)
         {
             var effectiveStudentId = studentId ?? GetCurrentStudentId() ?? 1;
@@ -50,6 +52,8 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("{examinationId:int}/memo")]
         [ProducesResponseType(typeof(StudentSelfResultMemoDto), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [CollegeManagement.API.Filters.ParentStudentAuthorization]
         public async Task<IActionResult> GetMyMarksMemo(
             [FromRoute] int examinationId,
             [FromQuery] int? studentId)

@@ -4342,49 +4342,27 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         (!account.paymentPlan || (account.paymentPlan === "Installment Payment" && !account.installments?.length))
         && (account.studentId || account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId)
       ));
-      const studentIdsToFetch = Array.from(new Set(unresolvedAccounts.filter(a => a.studentId).map(a => a.studentId)));
-      const otherAccounts = unresolvedAccounts.filter(a => !a.studentId);
-      
-      const detailEntries = [];
-      
-      if (studentIdsToFetch.length > 0) {
-        try {
-          const bulkResponse = await apiClient.post(apiEndpoints.fee.getBulkStudentFeeDetails, studentIdsToFetch);
-          const bulkData = getObject(bulkResponse.data);
-          
-          unresolvedAccounts.forEach(account => {
-            if (account.studentId && bulkData[account.studentId]) {
-              detailEntries.push({ account, detail: bulkData[account.studentId] });
-            }
-          });
-        } catch (error) {
-          console.error("Bulk fee details fetch failed:", error);
+      const detailRequests = new Map();
+      unresolvedAccounts.forEach((account) => {
+        const endpoint = account.studentId
+          ? apiEndpoints.fee.studentFeeDetailsByStudent(account.studentId)
+          : apiEndpoints.fee.studentFeeDetails(account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId);
+        if (!detailRequests.has(endpoint)) detailRequests.set(endpoint, account);
+      });
+      const detailEntries = await Promise.all(Array.from(detailRequests.entries()).map(async ([endpoint, account]) => {
+        let detailRequest = feeDetailCacheRef.current.get(endpoint);
+        if (!detailRequest) {
+          detailRequest = apiClient.get(endpoint)
+            .then((detailResponse) => getObject(detailResponse.data))
+            .catch(() => {
+              feeDetailCacheRef.current.delete(endpoint);
+              return {};
+            });
+          feeDetailCacheRef.current.set(endpoint, detailRequest);
         }
-      }
-      
-      if (otherAccounts.length > 0) {
-        const detailRequests = new Map();
-        otherAccounts.forEach((account) => {
-          const endpoint = apiEndpoints.fee.studentFeeDetails(account.studentFeeId || account.studentFeeAssignmentId || account.assignmentId);
-          if (!detailRequests.has(endpoint)) detailRequests.set(endpoint, account);
-        });
-        const otherEntries = await Promise.all(Array.from(detailRequests.entries()).map(async ([endpoint, account]) => {
-          let detailRequest = feeDetailCacheRef.current.get(endpoint);
-          if (!detailRequest) {
-            detailRequest = apiClient.get(endpoint)
-              .then((detailResponse) => getObject(detailResponse.data))
-              .catch(() => {
-                feeDetailCacheRef.current.delete(endpoint);
-                return {};
-              });
-            feeDetailCacheRef.current.set(endpoint, detailRequest);
-          }
-          const detail = await detailRequest;
-          return { account, detail };
-        }));
-        detailEntries.push(...otherEntries);
-      }
-
+        const detail = await detailRequest;
+        return { account, detail };
+      }));
       if (accountRequestRef.current[source] !== requestId) return;
       const feeDetailsByStudentId = new Map();
       const feeDetailsByAccountId = new Map();
@@ -4455,28 +4433,12 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     }
     const requestId = paymentHistoryRequestRef.current + 1;
     paymentHistoryRequestRef.current = requestId;
-    
-    const studentIdsToFetch = Array.from(new Set(targets.map(a => a.studentId)));
-    
-    try {
-      const bulkResponse = await apiClient.post(apiEndpoints.fee.getBulkHistory, studentIdsToFetch);
-      if (paymentHistoryRequestRef.current !== requestId) return;
-      
-      const bulkData = getObject(bulkResponse.data);
-      const newExtras = [];
-      
-      targets.forEach(account => {
-        if (bulkData[account.studentId]) {
-          newExtras.push(...normalizeTransactionRows(bulkData[account.studentId], account));
-        }
-      });
-      
-      setPaymentHistoryExtras(newExtras);
-    } catch (error) {
-      if (paymentHistoryRequestRef.current !== requestId) return;
-      console.error("Bulk history fetch failed:", error);
-      setPaymentHistoryExtras([]);
-    }
+    const results = await Promise.allSettled(targets.map((account) => (
+      apiClient.get(apiEndpoints.fee.getHistory(account.studentId))
+        .then((response) => normalizeTransactionRows(getCollection(response.data), account))
+    )));
+    if (paymentHistoryRequestRef.current !== requestId) return;
+    setPaymentHistoryExtras(results.flatMap((result) => (result.status === "fulfilled" ? result.value : [])));
   }, []);
 
   const loadFeeApiData = useCallback(async () => {

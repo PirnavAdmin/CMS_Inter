@@ -1,4 +1,4 @@
-using Asp.Versioning;
+﻿using Asp.Versioning;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -356,10 +356,10 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 request.AdmissionId = id;
 
-                var result =
+                var success =
                     await _service.ApproveAsync(request);
 
-                if (!result.Success)
+                if (!success)
                 {
                     return BadRequest(new
                     {
@@ -373,8 +373,7 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     statusCode = 200,
                     message =
-                        "Student admission approved successfully.",
-                    studentId = result.StudentId
+                        "Student admission approved successfully."
                 });
             }
             catch (ArgumentException ex)

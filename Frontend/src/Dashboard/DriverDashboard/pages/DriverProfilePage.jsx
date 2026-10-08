@@ -20,11 +20,9 @@ import {
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getProfile, updateProfileContact } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../components/common/Ui.jsx";
-import { getDriverIdentity } from "../data/driverIdentity.js";
-import { assignmentProfile } from "../data/driverData.js";
 
 export default function DriverProfilePage() {
-  const [driverProfile, setDriverProfile] = useState(getDriverIdentity);
+  const [driverProfile, setDriverProfile] = useState({});
   const [driverDocuments, setDriverDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -50,8 +48,8 @@ export default function DriverProfilePage() {
       try {
         setLoading(true);
         const res = await getProfile();
-        const data = res.data?.data || res.data || {};
-        const profile = getDriverIdentity(assignmentProfile(data, data.profile || data.driverProfile || {}));
+        const data = res.data || res;
+        const profile = data.profile || data || {};
         setDriverProfile(profile);
         setDriverDocuments(data.documents || data.driverDocuments || []);
         setProfileData({

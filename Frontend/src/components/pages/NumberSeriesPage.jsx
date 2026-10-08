@@ -73,9 +73,6 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const [previewModalSeries, setPreviewModalSeries] = useState(null);
   const [generatingRollNo, setGeneratingRollNo] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState("");
-    const [selectedBoardModal, setSelectedBoardModal] = useState("");
-    const [selectedAYModal, setSelectedAYModal] = useState("");
-    const [selectedProgramModal, setSelectedProgramModal] = useState("");
   const [prefixOverride, setPrefixOverride] = useState("");
   const [availableGroups, setAvailableGroups] = useState([]);
   const [groupCounters, setGroupCounters] = useState([]);
@@ -97,8 +94,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         activeCampusId,
         activeBoardId,
         activeAYId,
-        true, // includeSubCounters
-        selectedCampus?.campusCode || "MC"
+        true // includeSubCounters
       );
       
       const subCounters = Array.isArray(serverData) 
@@ -144,8 +140,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         for (const item of mergedValues) {
           const rawCode = item.seriesCode || item.slug || item.id || "";
           let code = rawCode.toUpperCase().replace(/-/g, '_');
-          if (code === 'EMPLOYEE_ID') continue; // Hide the accidental employee id
-            if (code === 'TEACHING_STAFF_ID') code = 'TEACHING_STAFF_ID';
+          if (code === 'TEACHING_STAFF_ID' || code === 'EMPLOYEE_ID') code = 'TEACHING_STAFF_ID';
           if (code === 'STUDENT_ROLL_NO' || code === 'ROLL_NO') code = 'ROLL_NO';
           if (code === 'ADMISSION_NO') code = 'ADMISSION_NO';
 
@@ -215,16 +210,8 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     if (!selectedGroup) return;
     try {
       const res = await numberSeriesApi.generateNextNumber(
-        "ROLL_NO", 
-        { 
-          boardId: Number(selectedBoardModal) || 0,
-          academicYearId: Number(selectedAYModal) || 0,
-          groupId: 0,
-          programId: Number(selectedProgramModal) || 0,
-          groupCode: selectedGroup, 
-          campusGroupPrefix: prefixOverride || undefined, 
-          campusCode: selectedCampus?.campusCode 
-        },
+        "ROLL_NO",
+        { groupCode: selectedGroup, campusGroupPrefix: prefixOverride || undefined },
         activeCampusId
       );
       handleSequenceGenerated("student-roll-no", res.generatedNumber);
@@ -322,7 +309,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
       );
     }
     return (
-      <NumberSeriesEditView availableGroups={availableGroups}
+      <NumberSeriesEditView
           forceSyncLocal={forceSyncLocal}
           series={activeSeries}
           saving={saving}
@@ -358,14 +345,14 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     }
     return (
       <>
-        <NumberSeriesDetailView availableGroups={availableGroups}
+        <NumberSeriesDetailView
           series={activeSeries}
           onPreviewModal={(s) => setPreviewModalSeries(s)}
           toast={toast}
           setToast={setToast}
         />
         {previewModalSeries && (
-          <PreviewNextModal availableGroups={availableGroups}
+          <PreviewNextModal
             series={previewModalSeries}
             onClose={() => setPreviewModalSeries(null)}
             onSequenceGenerated={handleSequenceGenerated}
@@ -378,7 +365,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
 
   return (
     <>
-      <NumberSeriesDashboardView availableGroups={availableGroups}
+      <NumberSeriesDashboardView
           forceSyncLocal={forceSyncLocal}
           seriesList={seriesList}
           loading={loading}
@@ -388,7 +375,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         setToast={setToast}
       />
       {previewModalSeries && (
-        <PreviewNextModal availableGroups={availableGroups}
+        <PreviewNextModal
           series={previewModalSeries}
           onClose={() => setPreviewModalSeries(null)}
           onSequenceGenerated={handleSequenceGenerated}
@@ -459,7 +446,7 @@ function AddCustomSeriesModal({ onClose, onSave, campus, toast }) {
 // ======================================================================
 // 1. DASHBOARD VIEW (MAIN CARD GRID)
 // ======================================================================
-function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast, availableGroups = [] }) {
+function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast }) {
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingCustom, setSavingCustom] = useState(false);
@@ -585,7 +572,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
         <div className="ns-card-grid">
           {seriesList.map((series) => {
             const IconComponent = SERIES_ICONS[series.id] || Hash;
-            const nextVal = series.livePreview || getNextNumberPreview(series, null, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
+            const nextVal = series.livePreview || getNextNumberPreview(series);
 
             return (
                 <div key={series.id} className="ns-card">
@@ -634,7 +621,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                          <RefreshCw size={12} className="spin" /> Loading...
                       </span>
                     ) : (
-                      loading ? "Loading..." : nextVal
+                      series.livePreview || series.currentExample || nextVal
                     )}
                   </div>
                 </div>
@@ -674,8 +661,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
 // ======================================================================
 // 2. DETAIL VIEW (GENERATED IDS & CONFIGURATION HISTORY)
 // ======================================================================
-function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, availableGroups = [] }) {
-  const { selectedCampus } = useCampusContext();
+function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [pageSize, setPageSize] = useState(5);
@@ -723,7 +709,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
     return filteredHistory.slice(start, start + pageSize);
   }, [filteredHistory, currentPage, pageSize]);
 
-  const nextNumberVal = currentSeries.livePreview || getNextNumberPreview(currentSeries, null, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
+  const nextNumberVal = currentSeries.livePreview || getNextNumberPreview(currentSeries);
 
   return (
     <DashboardLayout
@@ -1080,10 +1066,9 @@ function RenderTableRow({ seriesId, row, index }) {
 // ======================================================================
 // 3. EDIT VIEW (2-COLUMN CONFIGURATION FORM)
 // ======================================================================
-function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, setToast, availableGroups = [] }) {
-  
+function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, setToast }) {
   const navigate = useNavigate();
-  const { selectedCampusId, selectedCampus } = useCampusContext();
+  const { selectedCampusId } = useCampusContext();
 
   const [formState, setFormState] = useState({
     prefix: series.prefix || "",
@@ -1110,7 +1095,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
   const localLivePreviewVal = useMemo(() => {
     if (!liveValidation.valid) return null;
     const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
-    return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
+    return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength);
   }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, liveValidation]);
 
   // Dynamic on-the-fly preview calculation for UI typing via GET /api/v1/settings/number-series/{seriesCode}/preview
@@ -1127,7 +1112,6 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
           numberLength: formState.numberLength,
           prefix: formState.prefix,
           campusId: selectedCampusId,
-          campusCode: selectedCampus?.campusCode,
         });
         if (typeof res === "string" && res.trim()) {
           setApiPreview(res.trim());
@@ -1429,14 +1413,13 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
 // ======================================================================
 // 4. PREVIEW NEXT NUMBER MODAL (NON-MUTATING & TEST GENERATE)
 // ======================================================================
-function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, availableGroups = [] }) {
-    const { selectedCampus } = useCampusContext();
+function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast }) {
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [liveGeneratedNumber, setLiveGeneratedNumber] = useState(null);
   const isInactive = series?.isActive === false;
 
-  const nextVal = liveGeneratedNumber || series.livePreview || getNextNumberPreview(series, null, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
+  const nextVal = liveGeneratedNumber || series.livePreview || getNextNumberPreview(series);
   const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
 
   const handleCopy = () => {
@@ -1461,7 +1444,7 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
       console.warn("POST /api/v1/settings/number-series/{seriesCode}/generate-next fallback:", err?.message || err);
     }
 
-    const simulated = nextGenerated || getNextNumberPreview(series, null, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
+    const simulated = nextGenerated || getNextNumberPreview(series);
     setLiveGeneratedNumber(simulated);
     if (onSequenceGenerated) {
       onSequenceGenerated(code, simulated);

@@ -26,7 +26,5 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> SaveUserPermissionOverridesAsync(int userId, SaveUserPermissionOverridesRequest request, int? adminUserId = null);
         Task<bool> ResetUserPermissionOverridesAsync(int userId);
         List<object> GetModulesMetadata();
-        Task<List<RoleModuleDto>> GetModulesForRoleAsync(int roleId);
-        Task<bool> SetModulesForRoleAsync(int roleId, UpdateRoleModulesRequest request);
     }
 }

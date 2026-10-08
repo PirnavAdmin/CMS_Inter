@@ -193,34 +193,8 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new KeyNotFoundException($"Role with ID {roleId} was not found.");
             }
 
-            var applicableSubModules = await _permissionRepository.GetApplicableSubModulesForRoleAsync(roleId);
-            var applicableSet = new HashSet<string>(applicableSubModules, StringComparer.OrdinalIgnoreCase);
-
             var normalizedModules = request.GetNormalizedModules();
-
-            // Filter to only modules applicable to this role
-            var filteredModules = normalizedModules
-                .Where(m => applicableSet.Count == 0 || 
-                            applicableSet.Contains(m.SubModule) || 
-                            applicableSet.Contains(ModulePermissionMatrixDto.NormalizeToKebabCase(m.SubModule)))
-                .ToList();
-
-            // Enforce dependencies: Add/Edit/Delete require View
-            foreach (var item in filteredModules)
-            {
-                if (item.CanAdd || item.CanEdit || item.CanDelete)
-                {
-                    item.CanView = true;
-                }
-                if (!item.CanView)
-                {
-                    item.CanAdd = false;
-                    item.CanEdit = false;
-                    item.CanDelete = false;
-                }
-            }
-
-            await _permissionRepository.UpdateRolePermissionsAsync(roleId, filteredModules);
+            await _permissionRepository.UpdateRolePermissionsAsync(roleId, normalizedModules);
             return true;
         }
 
@@ -350,28 +324,6 @@ namespace CollegeManagement.API.Services.Implementations
                 new { id = "settings", name = "Settings", route = "/dashboard/settings", section = "Administration", availableActions = actions },
                 new { id = "roles-permissions", name = "Roles & Permissions", route = "/dashboard/roles", section = "Administration", availableActions = actions }
             };
-        }
-
-        public async Task<List<RoleModuleDto>> GetModulesForRoleAsync(int roleId)
-        {
-            var role = await _roleRepository.GetByIdAsync(roleId);
-            if (role == null)
-            {
-                throw new KeyNotFoundException($"Role with ID {roleId} was not found.");
-            }
-
-            return await _permissionRepository.GetRoleModulesAsync(roleId);
-        }
-
-        public async Task<bool> SetModulesForRoleAsync(int roleId, UpdateRoleModulesRequest request)
-        {
-            var role = await _roleRepository.GetByIdAsync(roleId);
-            if (role == null)
-            {
-                throw new KeyNotFoundException($"Role with ID {roleId} was not found.");
-            }
-
-            return await _permissionRepository.SetRoleModulesAsync(roleId, request.Modules);
         }
     }
 }

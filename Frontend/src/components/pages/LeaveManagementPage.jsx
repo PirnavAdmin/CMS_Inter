@@ -1,10 +1,10 @@
 import { useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle, Loader2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
-import { Modal, Toast } from "@/components/common/Ui.jsx";
+import { Modal, Toast, SkeletonRow, Skeleton } from "@/components/common/Ui.jsx";
 import { 
   LEAVE_STATUS,
   getLeaveRequests, 
@@ -50,7 +50,7 @@ function LeaveStatus({ status }) {
   return <span className={`leave-detail-status ${normalized}`}><Icon size={15} />{status}</span>;
 }
 
-function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected }) {
+function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected, reviewing = false }) {
   const pending = String(leave.status || "").toLowerCase() === "pending";
   const staffName = leave.staffName || leave.facultyName || "Staff Member";
   const initials = staffName.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
@@ -72,18 +72,38 @@ function LeaveDetails({ leave, remark, setRemark, onClose, onReview, onAffected 
     </span>
   );
 
+  const [openingAffected, setOpeningAffected] = useState(false);
+
   const footer = pending ? (
     <>
-      <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
-      <button className="cms-btn cms-btn-danger" onClick={() => onReview("Rejected")}>Reject</button>
-      <button className="cms-btn cms-btn-primary" onClick={() => onReview("Approved")}>Approve</button>
+      <button className="cms-btn cms-btn-ghost" onClick={onClose} disabled={Boolean(reviewing)}>Close</button>
+      <button className="cms-btn cms-btn-danger" onClick={() => onReview("Rejected")} disabled={Boolean(reviewing)}>
+        {reviewing === "Rejected" ? <Loader2 size={14} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "6px" }} /> : null}
+        {reviewing === "Rejected" ? "Rejecting..." : "Reject"}
+      </button>
+      <button className="cms-btn cms-btn-primary" onClick={() => onReview("Approved")} disabled={Boolean(reviewing)}>
+        {reviewing === "Approved" ? <Loader2 size={14} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "6px" }} /> : null}
+        {reviewing === "Approved" ? "Approving..." : "Approve"}
+      </button>
     </>
   ) : (
     <>
       <button className="cms-btn cms-btn-ghost" onClick={onClose}>Close</button>
       {manage(leave) && (
-        <button className="cms-btn cms-btn-primary" onClick={onAffected}>
-          <UsersRound size={16} /> View Affected Classes
+        <button 
+          className="cms-btn cms-btn-primary" 
+          onClick={() => {
+            setOpeningAffected(true);
+            onAffected();
+          }}
+          disabled={openingAffected}
+        >
+          {openingAffected ? (
+            <Loader2 size={15} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "6px" }} />
+          ) : (
+            <UsersRound size={16} />
+          )}
+          {openingAffected ? "Loading Classes..." : "View Affected Classes"}
         </button>
       )}
     </>
@@ -176,6 +196,7 @@ function AffectedClasses({ leave, records = [], close, assign }) {
   const date = leave.fromDate || "2026-09-10";
   const [apiRows, setApiRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [openingSlotId, setOpeningSlotId] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -237,33 +258,52 @@ function AffectedClasses({ leave, records = [], close, assign }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map(row => {
-              const rowId = row.timetableId || row.id;
-              const isAssigned = Boolean(row.substitution);
-              return (
-                <tr key={rowId}>
-                  <td><b>{row.period}</b></td>
-                  <td>{row.time || `${row.startTime || ""} - ${row.endTime || ""}`}</td>
-                  <td>{row.program || row.group || "MPC"}</td>
-                  <td>{row.section || "A"}</td>
-                  <td>{row.subject || "Mathematics"}</td>
-                  <td>{leave.staffName || "Staff Member"}</td>
-                  <td>
-                    <span className={`leave-sub-status ${isAssigned ? "assigned" : "not-assigned"}`}>
-                      {isAssigned ? "Assigned" : "Not Assigned"}
-                    </span>
-                  </td>
-                  <td>
-                    <button 
-                      className="cms-btn cms-btn-primary leave-compact-btn" 
-                      onClick={() => assign({ ...row, date, leave, substitution: row.substitution })}
-                    >
-                      {isAssigned ? "View" : "Assign"}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
+            {loading ? (
+              Array.from({ length: 4 }, (_, index) => (
+                <SkeletonRow key={index} columns={8} />
+              ))
+            ) : rows.length === 0 ? (
+              <tr>
+                <td colSpan={8} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
+                  No affected classes found for this leave request.
+                </td>
+              </tr>
+            ) : (
+              rows.map(row => {
+                const rowId = row.timetableId || row.id;
+                const isAssigned = Boolean(row.substitution);
+                return (
+                  <tr key={rowId}>
+                    <td><b>{row.period}</b></td>
+                    <td>{row.time || `${row.startTime || ""} - ${row.endTime || ""}`}</td>
+                    <td>{row.program || row.group || "MPC"}</td>
+                    <td>{row.section || "A"}</td>
+                    <td>{row.subject || "Mathematics"}</td>
+                    <td>{leave.staffName || "Staff Member"}</td>
+                    <td>
+                      <span className={`leave-sub-status ${isAssigned ? "assigned" : "not-assigned"}`}>
+                        {isAssigned ? "Assigned" : "Not Assigned"}
+                      </span>
+                    </td>
+                    <td>
+                      <button 
+                        className="cms-btn cms-btn-primary leave-compact-btn" 
+                        onClick={() => {
+                          setOpeningSlotId(rowId);
+                          assign({ ...row, date, leave, substitution: row.substitution });
+                        }}
+                        disabled={openingSlotId === rowId}
+                      >
+                        {openingSlotId === rowId ? (
+                          <Loader2 size={13} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "4px" }} />
+                        ) : null}
+                        {openingSlotId === rowId ? "Opening..." : (isAssigned ? "View" : "Assign")}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
@@ -276,9 +316,11 @@ function Assignment({ item, records = [], close, save, toast }) {
   const [candidates, setCandidates] = useState([]);
   const [choice, setChoice] = useState("");
   const [checked, setChecked] = useState(false);
+  const [loadingCandidates, setLoadingCandidates] = useState(!existing);
 
   useEffect(() => {
     if (!existing) {
+      setLoadingCandidates(true);
       const leaveId = item.leave?.staffLeaveRequestId || item.leave?.id;
       const ttId = item.timetableId || item.id;
       if (leaveId && ttId) {
@@ -290,17 +332,24 @@ function Assignment({ item, records = [], close, save, toast }) {
           }
         }).catch(() => {
           setCandidates(defaultFaculty);
+        }).finally(() => {
+          setLoadingCandidates(false);
         });
       } else {
         setCandidates(defaultFaculty);
+        setLoadingCandidates(false);
       }
     }
   }, [item, existing]);
 
   const chosen = candidates.find(person => (String(person.staffId) === String(choice) || String(person.id) === String(choice)));
 
+  const [confirming, setConfirming] = useState(false);
+  const [checking, setChecking] = useState(false);
+
   const handleConfirm = () => {
     if (!chosen) return;
+    setConfirming(true);
     const leaveId = item.leave?.staffLeaveRequestId || item.leave?.id;
     const ttId = item.timetableId || item.id;
     
@@ -344,10 +393,11 @@ function Assignment({ item, records = [], close, save, toast }) {
       onClose={close} 
       footer={
         <>
-          <button className="cms-btn cms-btn-ghost" onClick={close}>Cancel</button>
+          <button className="cms-btn cms-btn-ghost" onClick={close} disabled={confirming}>Cancel</button>
           {!existing && (
-            <button className="cms-btn cms-btn-primary" disabled={!checked} onClick={handleConfirm}>
-              Confirm Assignment
+            <button className="cms-btn cms-btn-primary" disabled={!checked || confirming} onClick={handleConfirm}>
+              {confirming ? <Loader2 size={14} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "6px" }} /> : null}
+              {confirming ? "Assigning..." : "Confirm Assignment"}
             </button>
           )}
         </>
@@ -379,7 +429,16 @@ function Assignment({ item, records = [], close, save, toast }) {
             <span>{candidates.length} available</span>
           </div>
 
-          {candidates.length ? (
+          {loadingCandidates ? (
+            <div className="leave-candidates">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} style={{ padding: "14px", border: "1px solid var(--cms-border, #e5e7eb)", borderRadius: "10px", display: "grid", gap: "8px" }}>
+                  <Skeleton style={{ width: "45%", height: "16px" }} />
+                  <Skeleton style={{ width: "70%", height: "12px" }} />
+                </div>
+              ))}
+            </div>
+          ) : candidates.length ? (
             <div className="leave-candidates">
               {candidates.map((person, index) => {
                 const id = person.staffId || person.id;
@@ -423,12 +482,18 @@ function Assignment({ item, records = [], close, save, toast }) {
               </div>
               <button 
                 className="cms-btn cms-btn-ghost" 
+                disabled={checking}
                 onClick={() => {
-                  setChecked(true);
-                  toast(`${chosen.staffName || chosen.name} is available for substitution.`);
+                  setChecking(true);
+                  setTimeout(() => {
+                    setChecking(false);
+                    setChecked(true);
+                    toast(`${chosen.staffName || chosen.name} is available for substitution.`);
+                  }, 300);
                 }}
               >
-                Check Availability
+                {checking ? <Loader2 size={13} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "6px" }} /> : null}
+                {checking ? "Checking..." : "Check Availability"}
               </button>
             </div>
           )}
@@ -443,11 +508,16 @@ function LeaveHistory({ onSelect }) {
   const campusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
 
   const [historyData, setHistoryData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [openingStaffId, setOpeningStaffId] = useState(null);
   
   useEffect(() => {
+    setLoading(true);
     getLeaveHistorySummary(null, null, campusId).then(data => {
       if (Array.isArray(data)) setHistoryData(data);
-    }).catch(console.error);
+    }).catch(console.error).finally(() => {
+      setLoading(false);
+    });
   }, [campusId]);
 
   const [staffType, setStaffType] = useState("All Staff");
@@ -496,7 +566,11 @@ function LeaveHistory({ onSelect }) {
               </tr>
             </thead>
             <tbody>
-              {people.length ? people.map(person => {
+              {loading ? (
+                Array.from({ length: 6 }, (_, index) => (
+                  <SkeletonRow key={index} columns={11} />
+                ))
+              ) : people.length ? people.map(person => {
                 const total = person.totalLeaves || 12;
                 const used = person.used || 0;
                 const remaining = person.remaining !== undefined ? person.remaining : (total - used);
@@ -521,8 +595,18 @@ function LeaveHistory({ onSelect }) {
                     <td><LeaveStatus status="Pending" /> <small>{person.pending || 0}</small></td>
                     <td><LeaveStatus status="Rejected" /> <small>{person.rejected || 0}</small></td>
                     <td>
-                      <button className="cms-btn cms-btn-ghost leave-view-history" onClick={() => onSelect(person)}>
-                        View History
+                      <button 
+                        className="cms-btn cms-btn-ghost leave-view-history" 
+                        onClick={() => {
+                          setOpeningStaffId(person.staffId);
+                          onSelect(person);
+                        }}
+                        disabled={openingStaffId === person.staffId}
+                      >
+                        {openingStaffId === person.staffId ? (
+                          <Loader2 size={12} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "5px" }} />
+                        ) : null}
+                        {openingStaffId === person.staffId ? "Opening..." : "View History"}
                       </button>
                     </td>
                   </tr>
@@ -540,11 +624,16 @@ function LeaveHistory({ onSelect }) {
 
 function StaffLeaveHistory({ person, onClose, onLeave }) {
   const [detailHistory, setDetailHistory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [openingLeaveId, setOpeningLeaveId] = useState(null);
 
   useEffect(() => {
+    setLoading(true);
     getLeaveHistory(person.staffId).then(data => {
       if (data) setDetailHistory(data);
-    }).catch(console.error);
+    }).catch(console.error).finally(() => {
+      setLoading(false);
+    });
   }, [person]);
 
   const data = detailHistory || {
@@ -593,42 +682,58 @@ function StaffLeaveHistory({ person, onClose, onLeave }) {
 
       <section className="history-leaves">
         <h4>Leave History</h4>
-        {requests.length ? (
-          <div className="leave-history-table-wrap">
-            <table className="cms-table leave-history-table">
-              <thead>
-                <tr>
-                  {["Leave Type", "From Date", "To Date", "Days", "Status"].map(head => (
-                    <th key={head}>{head}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {requests.map(leave => (
+        <div className="leave-history-table-wrap">
+          <table className="cms-table leave-history-table">
+            <thead>
+              <tr>
+                {["Leave Type", "From Date", "To Date", "Days", "Status"].map(head => (
+                  <th key={head}>{head}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 4 }, (_, index) => (
+                  <SkeletonRow key={index} columns={5} />
+                ))
+              ) : requests.length ? (
+                requests.map(leave => (
                   <tr key={leave.staffLeaveRequestId || leave.id}>
                     <td>{leave.leaveType}</td>
                     <td>{prettyDate(leave.fromDate || leave.startDate)}</td>
                     <td>{prettyDate(leave.toDate || leave.endDate)}</td>
                     <td>{leave.days || leave.totalDays || 1} {Number(leave.days || leave.totalDays || 1) === 1 ? "day" : "days"}</td>
                     <td>
-                      <button className="history-status-link" onClick={() => onLeave(leave)}>
+                      <button 
+                        className="history-status-link" 
+                        onClick={() => {
+                          setOpeningLeaveId(leave.staffLeaveRequestId || leave.id);
+                          onLeave(leave);
+                        }}
+                        disabled={openingLeaveId === (leave.staffLeaveRequestId || leave.id)}
+                      >
+                        {openingLeaveId === (leave.staffLeaveRequestId || leave.id) ? (
+                          <Loader2 size={13} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "4px" }} />
+                        ) : null}
                         <LeaveStatus status={leave.status} />
                       </button>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="cms-empty">No leave history found.</div>
-        )}
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5}><div className="cms-empty">No leave history found.</div></td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
     </Modal>
   );
 }
 
-function RejectLeaveConfirmation({ leave, remark, setRemark, onCancel, onConfirm }) {
+function RejectLeaveConfirmation({ leave, remark, setRemark, onCancel, onConfirm, reviewing = false }) {
   return (
     <Modal 
       title="Reject Leave Request?" 
@@ -637,8 +742,11 @@ function RejectLeaveConfirmation({ leave, remark, setRemark, onCancel, onConfirm
       onClose={onCancel} 
       footer={
         <>
-          <button className="cms-btn cms-btn-ghost" onClick={onCancel}>Cancel</button>
-          <button className="cms-btn cms-btn-danger" onClick={onConfirm}>Reject Leave</button>
+          <button className="cms-btn cms-btn-ghost" onClick={onCancel} disabled={Boolean(reviewing)}>Cancel</button>
+          <button className="cms-btn cms-btn-danger" onClick={onConfirm} disabled={Boolean(reviewing)}>
+            {reviewing ? <Loader2 size={14} style={{ animation: "cms-spin 0.8s linear infinite", marginRight: "6px" }} /> : null}
+            {reviewing ? "Rejecting..." : "Reject Leave"}
+          </button>
         </>
       }
     >
@@ -659,6 +767,9 @@ export default function LeaveManagementPage() {
   const campusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
 
   const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [reviewing, setReviewing] = useState(false);
+  const [openingRequestId, setOpeningRequestId] = useState(null);
   const [selected, setSelected] = useState(null);
   const [rejecting, setRejecting] = useState(null);
   const [affected, setAffected] = useState(null);
@@ -709,9 +820,12 @@ export default function LeaveManagementPage() {
   }, [currentTabRequests, statusFilter, searchQuery]);
 
   const loadRequests = () => {
+    setLoading(true);
     getLeaveRequests(null, null, null, campusId).then(data => {
       if (Array.isArray(data)) setRequests(data);
-    }).catch(console.error);
+    }).catch(console.error).finally(() => {
+      setLoading(false);
+    });
   };
 
   useEffect(() => {
@@ -723,18 +837,23 @@ export default function LeaveManagementPage() {
     setRemark(req.adminRemark || "");
     const rid = req.staffLeaveRequestId || req.id;
     if (rid) {
+      setOpeningRequestId(rid);
       getLeaveDetails(rid).then(detail => {
         if (detail) {
           setSelected(prev => ({ ...prev, ...detail }));
           if (detail.adminRemark) setRemark(detail.adminRemark);
         }
-      }).catch(console.warn);
+      }).catch(console.warn).finally(() => {
+        setOpeningRequestId(null);
+      });
     }
   };
 
   const commitReview = (status) => { 
     const statusVal = status === "Approved" ? LEAVE_STATUS.APPROVED : LEAVE_STATUS.REJECTED;
-    const leaveId = selected.staffLeaveRequestId || selected.id;
+    const leaveId = (selected && (selected.staffLeaveRequestId || selected.id)) || (rejecting && (rejecting.staffLeaveRequestId || rejecting.id));
+    if (!leaveId) return;
+    setReviewing(status);
     reviewLeaveRequest(leaveId, {
       status: statusVal,
       rejectionReason: remark
@@ -743,7 +862,9 @@ export default function LeaveManagementPage() {
       setSelected(null);
       setRejecting(null);
       setMessage(`Leave request ${status.toLowerCase()}.`);
-    }).catch(console.error);
+    }).catch(console.error).finally(() => {
+      setReviewing(false);
+    });
   };
   
   const review = (status) => { 
@@ -796,6 +917,7 @@ export default function LeaveManagementPage() {
             onClose={() => setSelected(null)} 
             onReview={review} 
             onAffected={() => { setAffected(selected); setSelected(null); }} 
+            reviewing={reviewing}
           />
         )}
 
@@ -806,6 +928,7 @@ export default function LeaveManagementPage() {
             setRemark={setRemark} 
             onCancel={() => setRejecting(null)} 
             onConfirm={() => commitReview("Rejected")} 
+            reviewing={reviewing}
           />
         )}
 
@@ -915,7 +1038,11 @@ export default function LeaveManagementPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRequests.length === 0 ? (
+                  {loading ? (
+                    Array.from({ length: 6 }, (_, index) => (
+                      <SkeletonRow key={index} columns={11} />
+                    ))
+                  ) : filteredRequests.length === 0 ? (
                     <tr>
                       <td colSpan={11} style={{ textAlign: "center", padding: "30px", color: "var(--cms-muted)" }}>
                         {activeTab === "today" 
@@ -960,8 +1087,17 @@ export default function LeaveManagementPage() {
                           </td>
                           <td><LeaveStatus status={request.status} /></td>
                           <td>
-                            <button className="cms-action-btn" onClick={() => openDetails(request)} aria-label="View request">
-                              <Eye size={16} />
+                            <button 
+                              className="cms-action-btn" 
+                              onClick={() => openDetails(request)} 
+                              aria-label="View request"
+                              disabled={openingRequestId === rid}
+                            >
+                              {openingRequestId === rid ? (
+                                <Loader2 size={15} style={{ animation: "cms-spin 0.8s linear infinite" }} />
+                              ) : (
+                                <Eye size={16} />
+                              )}
                             </button>
                           </td>
                         </tr>
@@ -983,6 +1119,7 @@ export default function LeaveManagementPage() {
           onClose={() => setSelected(null)} 
           onReview={review} 
           onAffected={() => { setAffected(selected); setSelected(null); }} 
+          reviewing={reviewing}
         />
       )}
 
@@ -993,6 +1130,7 @@ export default function LeaveManagementPage() {
           setRemark={setRemark} 
           onCancel={() => setRejecting(null)} 
           onConfirm={() => commitReview("Rejected")} 
+          reviewing={reviewing}
         />
       )}
 
