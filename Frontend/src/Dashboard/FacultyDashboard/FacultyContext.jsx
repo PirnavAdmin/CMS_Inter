@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { facultyMockData } from "./data/facultyMockData.js";
+import { getAuthUser } from "@/features/authStorage.js";
+import * as staffApi from "@/api/staffApi.js";
 
 const FacultyContext = createContext(null);
 
@@ -28,13 +30,56 @@ export const persistStaffProfile = (data) => {
 
 const getInitialProfileData = () => {
   try {
+    const authUser = getAuthUser();
     const baseUser = facultyMockData.user;
-    const key = getStaffStorageKey(baseUser);
+    let mergedUser = { ...baseUser };
+
+    if (authUser) {
+      const nameParts = (authUser.name || authUser.fullName || "").trim().split(/\s+/).filter(Boolean);
+      const firstName = authUser.firstName || nameParts[0] || baseUser.firstName;
+      const lastName = authUser.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(" ") : baseUser.lastName);
+      const fullName = authUser.fullName || authUser.name || `${firstName} ${lastName}`.trim();
+
+      mergedUser = {
+        ...baseUser,
+        ...authUser,
+        id: authUser.staffId || authUser.id || baseUser.id,
+        employeeId: authUser.employeeId || authUser.empId || baseUser.employeeId,
+        fullName: fullName || baseUser.fullName,
+        firstName: firstName || baseUser.firstName,
+        lastName: lastName || baseUser.lastName,
+        email: authUser.email || baseUser.email,
+        role: authUser.role || "Faculty",
+        designation: authUser.designation || baseUser.designation,
+        department: authUser.department || baseUser.department,
+        mobile: authUser.mobile || authUser.phone || baseUser.mobile,
+      };
+    }
+
+    const key = getStaffStorageKey(mergedUser);
     if (key) {
       const saved = localStorage.getItem(key);
-      if (saved) return { ...baseUser, ...JSON.parse(saved) };
+      if (saved) {
+        mergedUser = { ...mergedUser, ...JSON.parse(saved) };
+      }
     }
-    return baseUser;
+
+    try {
+      const genericSaved = localStorage.getItem("staff_profile_data");
+      if (genericSaved) {
+        const parsedGeneric = JSON.parse(genericSaved);
+        if (
+          !authUser ||
+          String(parsedGeneric.id) === String(mergedUser.id) ||
+          parsedGeneric.email === mergedUser.email ||
+          parsedGeneric.employeeId === mergedUser.employeeId
+        ) {
+          mergedUser = { ...mergedUser, ...parsedGeneric };
+        }
+      }
+    } catch {}
+
+    return mergedUser;
   } catch {
     return facultyMockData.user;
   }
@@ -99,6 +144,53 @@ export function FacultyProvider({ children }) {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileStep, setProfileStep] = useState(1);
 
+  // Synchronize profile data with authenticated user and fetch full staff record if available
+  useEffect(() => {
+    const authUser = getAuthUser();
+    if (!authUser) return;
+
+    const nameParts = (authUser.name || authUser.fullName || "").trim().split(/\s+/).filter(Boolean);
+    const firstName = authUser.firstName || nameParts[0] || "";
+    const lastName = authUser.lastName || (nameParts.length > 1 ? nameParts.slice(1).join(" ") : "");
+    const fullName = authUser.fullName || authUser.name || `${firstName} ${lastName}`.trim();
+
+    setProfileData((prev) => ({
+      ...prev,
+      ...authUser,
+      id: authUser.staffId || authUser.id || prev.id,
+      employeeId: authUser.employeeId || authUser.empId || prev.employeeId,
+      fullName: fullName || prev.fullName,
+      firstName: firstName || prev.firstName,
+      lastName: lastName || prev.lastName,
+      email: authUser.email || prev.email,
+      role: authUser.role || prev.role,
+      designation: authUser.designation || prev.designation,
+      department: authUser.department || prev.department,
+      mobile: authUser.mobile || authUser.phone || prev.mobile,
+    }));
+
+    const staffId = authUser.staffId || authUser.id;
+    if (staffId) {
+      staffApi
+        .getStaffById(staffId)
+        .then((res) => {
+          const apiStaff = res?.data?.data || res?.data;
+          if (apiStaff && typeof apiStaff === "object") {
+            setProfileData((current) => {
+              const updated = { ...current, ...apiStaff };
+              if (apiStaff.firstName || apiStaff.lastName) {
+                updated.fullName = `${apiStaff.firstName || ""} ${apiStaff.lastName || ""}`.trim();
+              }
+              return updated;
+            });
+          }
+        })
+        .catch((err) => {
+          console.warn("Could not fetch detailed staff profile from API:", err?.message || err);
+        });
+    }
+  }, []);
+
   // Biometric Punch State
   const [punchState, setPunchState] = useState(getInitialPunchState);
 
@@ -141,10 +233,15 @@ export function FacultyProvider({ children }) {
 
   // Compute initials
   const initials = useMemo(() => {
-    const first = profileData.firstName?.[0] || profileData.fullName?.[0] || "S";
+    const name = (profileData.fullName || profileData.name || "").trim();
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    const first = profileData.firstName?.[0] || name[0] || "F";
     const last = profileData.lastName?.[0] || "";
     return `${first}${last}`.toUpperCase();
-  }, [profileData.firstName, profileData.lastName, profileData.fullName]);
+  }, [profileData.firstName, profileData.lastName, profileData.fullName, profileData.name]);
 
   const value = {
     profileData,
