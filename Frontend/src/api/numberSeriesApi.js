@@ -5,7 +5,7 @@ import { apiEndpoints } from "./apiEndpoints.js";
  * 1. GET /api/v1/settings/number-series (or /api/v1/number-series)
  * Returns list of configurations for all supported number series.
  */
-export async function getNumberSeriesList(campusId, boardId, academicYearId) {
+export async function getNumberSeriesList(campusId, boardId, academicYearId, includeSubCounters = false, campusCode = null) {
   const headers = campusId !== undefined && campusId !== null && campusId !== ""
     ? { "X-Campus-Id": String(campusId) }
     : {};
@@ -14,6 +14,10 @@ export async function getNumberSeriesList(campusId, boardId, academicYearId) {
   if (academicYearId !== undefined && academicYearId !== null && academicYearId !== "") {
     params.academicYear = String(academicYearId);
   }
+  if (includeSubCounters) {
+    params.includeSubCounters = true;
+  }
+  if (campusCode) params.campusCode = campusCode;
   const requestConfig = { headers, params };
 
   try {
@@ -65,6 +69,8 @@ export async function updateNumberSeries(seriesCode, configData, campusId) {
     numberLength: Number(configData.numberLength ?? 4),
     startNumber: Number(configData.startNumber ?? 1),
     description: configData.description ?? "",
+    isActive: configData.isActive !== undefined ? configData.isActive : true,
+    seriesName: configData.seriesName || configData.name || "",
   };
 
   try {
@@ -91,6 +97,11 @@ export async function updateNumberSeries(seriesCode, configData, campusId) {
 export async function generateNextNumber(seriesCode, context = {}, campusId) {
   if (!seriesCode) throw new Error("seriesCode is required");
   const payload = {
+    boardId: context.boardId ?? 0,
+    academicYearId: context.academicYearId ?? 0,
+    groupId: context.groupId ?? 0,
+    programId: context.programId ?? 0,
+    program: context.program ?? "",
     board: context.board ?? "",
     dept: context.dept ?? "",
     type: context.type ?? "",
@@ -99,6 +110,8 @@ export async function generateNextNumber(seriesCode, context = {}, campusId) {
     cert: context.cert ?? "",
     academicYear: context.academicYear ?? "",
     group: context.group ?? "",
+    groupCode: context.groupCode ?? "",
+    campusGroupPrefix: context.campusGroupPrefix ?? "",
     section: context.section ?? "",
     level: context.level ?? "",
     exam: context.exam ?? "",
@@ -106,6 +119,7 @@ export async function generateNextNumber(seriesCode, context = {}, campusId) {
 
   const params = {};
   if (campusId !== undefined && campusId !== null && campusId !== "") params.campusId = campusId;
+  if (campusCode !== undefined && campusCode !== null && campusCode !== "") params.campusCode = campusCode;
   const requestConfig = { params };
 
   try {
@@ -125,13 +139,14 @@ export async function generateNextNumber(seriesCode, context = {}, campusId) {
  * 5. GET /api/v1/settings/number-series/{seriesCode}/preview (or /api/v1/number-series/{seriesCode}/preview)
  * Dynamic on-the-fly preview calculation for UI typing without persisting changes.
  */
-export async function previewNumberSeries(seriesCode, { pattern, numberLength, prefix, campusId } = {}) {
+export async function previewNumberSeries(seriesCode, { pattern, numberLength, prefix, campusId, campusCode } = {}) {
   if (!seriesCode) throw new Error("seriesCode is required");
   const params = {};
   if (pattern !== undefined) params.pattern = pattern;
   if (numberLength !== undefined) params.numberLength = Number(numberLength);
   if (prefix !== undefined) params.prefix = prefix;
   if (campusId !== undefined) params.campusId = campusId;
+  if (campusCode !== undefined) params.campusCode = campusCode;
 
   try {
     const response = await apiClient.get(apiEndpoints.numberSeries.preview(seriesCode), { params });

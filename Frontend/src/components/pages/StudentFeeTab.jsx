@@ -497,7 +497,7 @@ async function loadFacilityFee(studentId) {
   };
 }
 
-export default function StudentFeeTab({ student }) {
+export default function StudentFeeTab({ student, compactContext = false }) {
   const studentId = student.studentId;
   const [state, setState] = useState({ loading: true, payload: null, error: "" });
   const [retry, setRetry] = useState(0);
@@ -629,7 +629,7 @@ export default function StudentFeeTab({ student }) {
       id="student-fee-panel"
       aria-labelledby="student-fee-tab"
     >
-      <div className="cms-fee-context">
+      {!compactContext && <div className="cms-fee-context">
         {context.map(([label, text]) => (
           <div className="cms-fee-context-item" key={label}>
             <span>{label}</span>
@@ -638,7 +638,7 @@ export default function StudentFeeTab({ student }) {
             </strong>
           </div>
         ))}
-      </div>
+      </div>}
       {facility.loading ? (
         <SkeletonTable columns={4} rows={1} />
       ) : facility.error ? (
@@ -663,7 +663,7 @@ export default function StudentFeeTab({ student }) {
         <section className="cms-fee-block">
           <h3>Applicable Facility Fees</h3>
           <div className="cms-fee-scroll">
-            <table className="cms-fee-table">
+            <table className="cms-fee-table student-profile-facility-table">
               <thead>
                 <tr>
                   <th>Fee Type</th>
@@ -676,7 +676,7 @@ export default function StudentFeeTab({ student }) {
                 <tr>
                   <td>{facility.fee.type}</td>
                   <td>{facility.fee.plan}</td>
-                  <td>{facility.fee.detail || "?"}</td>
+                  <td>{compactContext ? (facility.fee.detail || "?").split(" | ").map((line, index) => <div className="student-profile-facility-detail" key={index}>{line}</div>) : facility.fee.detail || "?"}</td>
                   <td className="num">
                     {facility.fee.amount === null ? "?" : formatCurrency(facility.fee.amount)}
                   </td>

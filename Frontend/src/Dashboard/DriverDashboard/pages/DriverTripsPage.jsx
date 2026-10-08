@@ -18,6 +18,8 @@ import {
 import DriverTripCard from "../components/DriverTripCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getTrips, startTrip, endTrip, getProfile, getDashboard } from "../../../api/transportDriverApi.js";
+import { unwrapDriverData } from "../data/driverData.js";
+import { useDriverData } from "../DriverDataContext.jsx";
 import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverTripsPage({
@@ -25,7 +27,7 @@ export default function DriverTripsPage({
 }) {
   const [morningTrip, setMorningTrip] = useState(null);
   const [eveningTrip, setEveningTrip] = useState(null);
-  const [driverProfile, setDriverProfile] = useState(null);
+  const { driverProfile } = useDriverData();
   const [emergencyHelpline, setEmergencyHelpline] = useState(null);
   const [preTripChecklist, setPreTripChecklist] = useState([]);
   
@@ -49,37 +51,9 @@ export default function DriverTripsPage({
           getDashboard()
         ]);
         
-        // Use real data if available, fallback to defaults that match the UI structure
-        const tripsData = tripsRes.data?.trips || {};
-        setMorningTrip(tripsData.morningTrip || {
-          id: "trip-01",
-          time: "07:00 AM - 08:30 AM",
-          title: "Morning Trip",
-          type: "Morning Pickup",
-          route: "Loading...",
-          stops: "0 Stops",
-          students: 0,
-          status: "Pending",
-        });
-        
-        setEveningTrip(tripsData.eveningTrip || {
-          id: "trip-02",
-          time: "04:00 PM - 05:30 PM",
-          title: "Evening Trip",
-          type: "Evening Drop",
-          route: "Loading...",
-          stops: "0 Stops",
-          students: 0,
-          status: "Pending",
-        });
-
-        setDriverProfile(profileRes.data?.profile || {
-          assignedVehicle: "N/A",
-          vehicleModel: "N/A",
-          assignedRoute: "N/A",
-          routeCode: "N/A",
-          assignedAttendant: "N/A",
-        });
+        const tripsData = unwrapDriverData(tripsRes);
+        setMorningTrip(tripsData.trips?.morningTrip || tripsData.morningTrip || null);
+        setEveningTrip(tripsData.trips?.eveningTrip || tripsData.eveningTrip || null);
 
         setEmergencyHelpline(dashboardRes.data?.emergencyHelpline || {
           headPhone: "N/A",
@@ -226,6 +200,7 @@ export default function DriverTripsPage({
             <h3>Morning Pickup Operation</h3>
             <span className="dp-time-chip">Shift: {morningTrip?.time}</span>
           </div>
+          {!morningTrip && <p className="dp-page-subtitle">No morning trip was returned by the server.</p>}
           {morningTrip && (
             <DriverTripCard
               trip={morningTrip}
@@ -243,6 +218,7 @@ export default function DriverTripsPage({
             <h3>Evening Drop Operation</h3>
             <span className="dp-time-chip">Shift: {eveningTrip?.time}</span>
           </div>
+          {!eveningTrip && <p className="dp-page-subtitle">No evening trip was returned by the server.</p>}
           {eveningTrip && (
             <DriverTripCard
               trip={eveningTrip}

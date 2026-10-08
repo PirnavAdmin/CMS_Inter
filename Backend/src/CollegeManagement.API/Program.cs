@@ -23,6 +23,8 @@ using CollegeManagement.API.Services.Implementations.Payroll;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Payroll;
+using CollegeManagement.API.Services.Interfaces.Transport;
+using CollegeManagement.API.Services.Implementations.Transport;
 using CollegeManagement.API.Services.Location;
 using CollegeManagement.API.Validators.StaffValidators;
 using FluentValidation;
@@ -34,6 +36,7 @@ using Microsoft.OpenApi.Models;
 using MySqlConnector;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSignalR();
 
 QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
@@ -284,6 +287,7 @@ builder.Services.AddScoped<ITransportDashboardService, TransportDashboardService
 builder.Services.AddScoped<ITransportReportService, TransportReportService>();
 builder.Services.AddScoped<IStudentTransportService, StudentTransportService>();
 builder.Services.AddScoped<ITransportService, TransportService>();
+builder.Services.AddScoped<IDriverAttendanceService, DriverAttendanceService>();
 
 // Payroll Service
 builder.Services.AddScoped<IPayrollService, PayrollService>();
@@ -322,6 +326,19 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ClockSkew = TimeSpan.Zero
+    };
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
     };
 });
 #endregion
@@ -519,8 +536,15 @@ app.Use(async (context, next) =>
 
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<CollegeManagement.API.Hubs.DriverNotificationHub>("/hubs/driverNotifications");
 app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
 app.Run();
+
+
+
+
+
+
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Net.Mail;
@@ -228,7 +228,7 @@ namespace CollegeManagement.API.Services.Implementations
             return result;
         }
 
-        public async Task<bool> ApproveAsync(
+        public async Task<(bool Success, int? StudentId)> ApproveAsync(
             ApproveStudentAdmissionRequest request)
         {
             if (request == null)
@@ -245,7 +245,8 @@ namespace CollegeManagement.API.Services.Implementations
             if (admission.IsApproved)
             {
                 _logger.LogInformation("Student admission {AdmissionId} is already approved.", request.AdmissionId);
-                return true;
+                var existingStudent = await _repository.GetStudentByAdmissionIdAsync(request.AdmissionId);
+                return (true, existingStudent?.StudentId);
             }
 
             // 2. Open database connection and begin outer transaction for atomicity
@@ -258,6 +259,7 @@ namespace CollegeManagement.API.Services.Implementations
             using var transaction = connection.BeginTransaction();
             UserProvisioningResult? userProvisioningResult = null;
             ParentUserProvisioningResult? parentProvisioningResult = null;
+            int? createdStudentId = null;
 
             try
             {
@@ -271,7 +273,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if (!approveSuccess)
                 {
                     transaction.Rollback();
-                    return false;
+                    return (false, null);
                 }
 
                 // 4. Retrieve created Student domain record
@@ -285,6 +287,8 @@ namespace CollegeManagement.API.Services.Implementations
                     transaction.Rollback();
                     throw new InvalidOperationException($"Approved Student domain record could not be found for AdmissionId {request.AdmissionId}.");
                 }
+                
+                createdStudentId = student.StudentId;
 
                 // 5. Evaluate Student Email for Student User account provisioning
                 var studentEmail = !string.IsNullOrWhiteSpace(student.Email)
@@ -507,7 +511,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            return true;
+            return (true, createdStudentId);
         }
 
         private static bool IsValidEmailFormat(string email)
