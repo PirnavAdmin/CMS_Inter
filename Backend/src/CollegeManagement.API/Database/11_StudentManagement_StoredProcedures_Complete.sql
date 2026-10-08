@@ -1426,6 +1426,8 @@ BEGIN
         AdmissionId = COALESCE(p_AdmissionId, AdmissionId),
         AdmissionNo = COALESCE(NULLIF(TRIM(p_AdmissionNo), ''), AdmissionNo),
         AdmissionDate = COALESCE(p_AdmissionDate, AdmissionDate),
+        AdmissionType = COALESCE(NULLIF(TRIM(p_AdmissionType), ''), AdmissionType),
+        AdmissionQuota = COALESCE(NULLIF(TRIM(p_AdmissionQuota), ''), AdmissionQuota),
         Medium = COALESCE(p_Medium, Medium),
         SecondLanguage = COALESCE(p_SecondLanguage, SecondLanguage),
         StudentName = COALESCE(NULLIF(TRIM(p_StudentName), ''), StudentName),

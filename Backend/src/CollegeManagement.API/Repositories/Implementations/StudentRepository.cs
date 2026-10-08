@@ -450,6 +450,8 @@ namespace CollegeManagement.API.Repositories
                         p_AdmissionId = request.AdmissionId,
                         p_AdmissionNo = request.AdmissionNo,
                         p_AdmissionDate = request.AdmissionDate,
+                        p_AdmissionType = request.AdmissionType,
+                        p_AdmissionQuota = request.AdmissionQuota,
                         p_Medium = request.Medium,
                         p_SecondLanguage = request.SecondLanguage,
 
