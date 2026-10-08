@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { CheckCircle2, Download, Eye, FileText, FileUp, ImageUp, Search, Upload } from "lucide-react";
+import { CheckCircle2, Download, Eye, FileText, FileUp, Search, Upload } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Modal, SkeletonRow, StatusBadge, Toast } from "@/components/common/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -502,17 +502,6 @@ export default function StudentManagementPage() {
                         <Link to={`/dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
                           <Eye size={16} />
                         </Link>
-                        <button
-                          type="button"
-                          aria-label={`Upload or replace photo for ${s.name}`}
-                          title="Upload / replace photo"
-                          onClick={() => {
-                            setError("");
-                            setFileAction({ kind: "photo", student: s });
-                          }}
-                        >
-                          <ImageUp size={16} />
-                        </button>
                         <button
                           type="button"
                           aria-label={`Upload document for ${s.name}`}

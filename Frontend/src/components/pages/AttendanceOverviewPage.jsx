@@ -7,9 +7,10 @@ import apiClient from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import "./AttendancePage.css";
+import "./AttendanceTimingConfigPage.css";
 
 function Metric({ label, value, icon: Icon }) {
-  const tone = /present/i.test(label) ? "present" : /absent/i.test(label) ? "absent" : /half|leave/i.test(label) ? "leave" : /late/i.test(label) ? "late" : "working";
+  const tone = /present/i.test(label) ? "present" : /absent/i.test(label) ? "absent" : /half/i.test(label) ? "half-day" : /leave/i.test(label) ? "leave" : /late/i.test(label) ? "late" : "working";
   return <article className={`att-overview-metric is-${tone}`}><span className="att-overview-metric-icon"><Icon size={22} /></span><div><span>{label}</span><strong>{value}</strong></div></article>;
 }
 

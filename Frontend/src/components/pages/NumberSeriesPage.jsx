@@ -23,6 +23,7 @@ import {
   BookOpen,
   FileText,
   UserCheck,
+  Trash2,
 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
@@ -41,6 +42,7 @@ import {
   normalizeNumberSeriesItem,
   isSeriesRemoved,
   MOCK_GENERATED_HISTORY,
+  autoGenerateRollNoPrefix,
 } from "@/data/numberSeriesData.js";
 import "./NumberSeriesPage.css";
 
@@ -69,22 +71,58 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [previewModalSeries, setPreviewModalSeries] = useState(null);
+  const [generatingRollNo, setGeneratingRollNo] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState("");
+    const [selectedBoardModal, setSelectedBoardModal] = useState("");
+    const [selectedAYModal, setSelectedAYModal] = useState("");
+    const [selectedProgramModal, setSelectedProgramModal] = useState("");
+  const [prefixOverride, setPrefixOverride] = useState("");
+  const [availableGroups, setAvailableGroups] = useState([]);
+  const [groupCounters, setGroupCounters] = useState([]);
+  const [prefixOverrides, setPrefixOverrides] = useState({});
+
+  const forceSyncLocal = useCallback(() => {
+    setSeriesList(readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem));
+  }, []);
 
   const fetchSeries = useCallback(async () => {
     setLoading(true);
     let data = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
+    
+    // Instantly render local offline data so the screen isn't blank while the API is loading
+    setSeriesList(data);
+    
     try {
       const serverData = await numberSeriesApi.getNumberSeriesList(
         activeCampusId,
         activeBoardId,
         activeAYId,
+        true, // includeSubCounters
+        selectedCampus?.campusCode || "MC"
       );
+      
+      const subCounters = Array.isArray(serverData) 
+        ? serverData.filter(s => s.seriesCode?.startsWith("ROLL_NO|")) 
+        : serverData?.items?.filter(s => s.seriesCode?.startsWith("ROLL_NO|")) || [];
+        
+      setGroupCounters(subCounters.map(s => ({
+        groupCode: s.seriesCode.split('|').pop(),
+        prefix: s.prefix,
+        currentSequence: s.currentSequence,
+        nextPreview: s.livePreview || (s.prefix + (s.currentSequence + 1))
+      })));
+      
       const items = Array.isArray(serverData) ? serverData : serverData?.items || serverData?.data || [];
       if (Array.isArray(items) && items.length > 0) {
         const normalized = items.filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
         const localList = readNumberSeriesSettings().filter((s) => !isSeriesRemoved(s)).map(normalizeNumberSeriesItem);
         const map = new Map();
-        localList.forEach((s) => map.set(s.id, s));
+        localList.forEach((s) => {
+          map.set(s.id, s);
+          if (s.seriesCode) map.set(s.seriesCode, s);
+          if (s.slug) map.set(s.slug, s);
+          if (s.key) map.set(s.key, s);
+        });
         normalized.forEach((s) => {
           const existing = map.get(s.id) || map.get(s.seriesCode) || map.get(s.slug);
           const mergedItem = existing ? { ...existing, ...s } : { ...s };
@@ -98,7 +136,25 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           if (s.seriesCode) map.set(s.seriesCode, mergedItem);
           if (s.slug) map.set(s.slug, mergedItem);
         });
-        const merged = Array.from(new Set(map.values())).filter((s) => !isSeriesRemoved(s));
+        const mergedValues = Array.from(new Set(map.values())).filter((s) => !isSeriesRemoved(s));
+        
+        // Final deduplication by seriesCode to prevent duplicate cards
+        const uniqueMerged = [];
+        const seenCodes = new Set();
+        for (const item of mergedValues) {
+          const rawCode = item.seriesCode || item.slug || item.id || "";
+          let code = rawCode.toUpperCase().replace(/-/g, '_');
+          if (code === 'EMPLOYEE_ID') continue; // Hide the accidental employee id
+            if (code === 'TEACHING_STAFF_ID') code = 'TEACHING_STAFF_ID';
+          if (code === 'STUDENT_ROLL_NO' || code === 'ROLL_NO') code = 'ROLL_NO';
+          if (code === 'ADMISSION_NO') code = 'ADMISSION_NO';
+
+          if (!seenCodes.has(code)) {
+            seenCodes.add(code);
+            uniqueMerged.push(item);
+          }
+        }
+        const merged = uniqueMerged;
         data = merged;
         writeNumberSeriesSettings(merged);
       }
@@ -155,6 +211,31 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     return true;
   };
 
+  const handleGenerateRollNo = async () => {
+    if (!selectedGroup) return;
+    try {
+      const res = await numberSeriesApi.generateNextNumber(
+        "ROLL_NO", 
+        { 
+          boardId: Number(selectedBoardModal) || 0,
+          academicYearId: Number(selectedAYModal) || 0,
+          groupId: 0,
+          programId: Number(selectedProgramModal) || 0,
+          groupCode: selectedGroup, 
+          campusGroupPrefix: prefixOverride || undefined, 
+          campusCode: selectedCampus?.campusCode 
+        },
+        activeCampusId
+      );
+      handleSequenceGenerated("student-roll-no", res.generatedNumber);
+      setToast({ message: `Generated ${res.generatedNumber} successfully.`, type: "success" });
+      setGeneratingRollNo(false);
+      fetchSeries();
+    } catch (e) {
+      setToast({ message: "Failed to generate roll number.", type: "error" });
+    }
+  };
+
   const handleSequenceGenerated = (code, nextNumber) => {
     setSeriesList((prev) =>
       prev.map((s) => {
@@ -188,13 +269,63 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
               <ArrowLeft size={16} /> Back to ID & Number Series
             </Link>
           </div>
-        </DashboardLayout>
+          {generatingRollNo && (
+        <Modal title="Generate Roll Number" onClose={() => setGeneratingRollNo(false)}>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '16px'}}>
+              {selectedGroup && (
+                <div style={{ padding: '10px', background: 'var(--bg-tertiary)', borderRadius: '6px', fontSize: '13px' }}>
+                  <strong>Current Count for {selectedGroup}:</strong> {
+                    groupCounters.find(g => g.groupCode === selectedGroup)?.currentSequence || 0
+                  } 
+                  <span style={{color: 'var(--text-tertiary)', marginLeft: '10px'}}>
+                    (Next sequence will be {(groupCounters.find(g => g.groupCode === selectedGroup)?.currentSequence || 0) + 1})
+                  </span>
+                </div>
+              )}
+            <div className="cms-form-group">
+              <label>Select Group</label>
+              <select 
+                className="cms-input"
+                value={selectedGroup} 
+                onChange={e => {
+                  setSelectedGroup(e.target.value);
+                  setPrefixOverride(autoGenerateRollNoPrefix(e.target.value));
+                }}
+              >
+                <option value="">Select Group...</option>
+                <option value="MPC">MPC</option>
+                <option value="BiPC">BiPC</option>
+                <option value="MEC">MEC</option>
+                <option value="CEC">CEC</option>
+                <option value="HEC">HEC</option>
+              </select>
+            </div>
+            
+            <div className="cms-form-group">
+              <label>Prefix (auto: {autoGenerateRollNoPrefix(selectedGroup)})</label>
+              <input
+                className="cms-input"
+                value={prefixOverride}
+                placeholder={autoGenerateRollNoPrefix(selectedGroup)}
+                onChange={e => setPrefixOverride(e.target.value.toUpperCase())}
+              />
+            </div>
+            
+            <div style={{display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px'}}>
+              <button className="cms-btn cms-btn-outline" onClick={() => setGeneratingRollNo(false)}>Cancel</button>
+              <button className="cms-btn cms-btn-primary" onClick={handleGenerateRollNo} disabled={!selectedGroup}>Generate</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </DashboardLayout>
       );
     }
     return (
-      <NumberSeriesEditView
-        series={activeSeries}
-        saving={saving}
+      <NumberSeriesEditView availableGroups={availableGroups}
+          forceSyncLocal={forceSyncLocal}
+          series={activeSeries}
+          saving={saving}
         onSave={async (updated) => {
           const ok = await handleSaveConfig(updated);
           if (ok) {
@@ -227,14 +358,14 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     }
     return (
       <>
-        <NumberSeriesDetailView
+        <NumberSeriesDetailView availableGroups={availableGroups}
           series={activeSeries}
           onPreviewModal={(s) => setPreviewModalSeries(s)}
           toast={toast}
           setToast={setToast}
         />
         {previewModalSeries && (
-          <PreviewNextModal
+          <PreviewNextModal availableGroups={availableGroups}
             series={previewModalSeries}
             onClose={() => setPreviewModalSeries(null)}
             onSequenceGenerated={handleSequenceGenerated}
@@ -247,16 +378,17 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
 
   return (
     <>
-      <NumberSeriesDashboardView
-        seriesList={seriesList}
-        loading={loading}
+      <NumberSeriesDashboardView availableGroups={availableGroups}
+          forceSyncLocal={forceSyncLocal}
+          seriesList={seriesList}
+          loading={loading}
         onRefresh={fetchSeries}
         onPreviewModal={(s) => setPreviewModalSeries(s)}
         toast={toast}
         setToast={setToast}
       />
       {previewModalSeries && (
-        <PreviewNextModal
+        <PreviewNextModal availableGroups={availableGroups}
           series={previewModalSeries}
           onClose={() => setPreviewModalSeries(null)}
           onSequenceGenerated={handleSequenceGenerated}
@@ -267,11 +399,126 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   );
 }
 
+function AddCustomSeriesModal({ onClose, onSave, campus, toast }) {
+  const [formState, setFormState] = useState({ name: "" });
+
+  const generatePrefix = (name) => {
+    const words = name.trim().toUpperCase().split(/[^A-Z0-9]+/);
+    if (words.length > 1) {
+      return words.map(w => w[0]).join('').substring(0, 4);
+    }
+    const stripped = words[0].replace(/[AEIOU]/g, '');
+    const prefix = stripped.substring(0, 3).padEnd(3, words[0].substring(0, 3)).substring(0, 4);
+    return prefix || "CUST";
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formState.name.trim()) return;
+    
+    const newCode = formState.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const autoPrefix = generatePrefix(formState.name);
+    
+    const campusCode = campus?.shortName || campus?.campusCode || "CMP";
+    
+    onSave({
+      seriesCode: newCode,
+      id: newCode,
+      seriesName: formState.name.trim(),
+      prefix: autoPrefix,
+      format: `${campusCode}-${autoPrefix}-{YYYY}-{SEQ}`,
+      numberLength: 4,
+      startNumber: 1,
+      description: `Auto-generated series for ${formState.name.trim()}`,
+      isActive: true
+    });
+  };
+
+  return (
+    <Modal title="Create Custom Series" onClose={onClose} footer={
+      <>
+        <button type="button" className="cms-btn cms-btn-ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="cms-btn cms-btn-primary" onClick={handleSubmit}>Create Series</button>
+      </>
+    }>
+      <div className="ns-modal-body">
+        <form id="add-custom-series-form" onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div className="ns-field">
+            <label>Series Name*</label>
+            <input type="text" value={formState.name} onChange={e => setFormState({ name: e.target.value })} placeholder="e.g. Library ID" required autoFocus />
+            <small style={{ color: "var(--text-tertiary)", marginTop: "5px", display: "block" }}>
+              The ID, prefix, and format will be automatically generated. You can edit them later.
+            </small>
+          </div>
+        </form>
+      </div>
+    </Modal>
+  );
+}
+
 // ======================================================================
 // 1. DASHBOARD VIEW (MAIN CARD GRID)
 // ======================================================================
-function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setToast }) {
+function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast, availableGroups = [] }) {
   const navigate = useNavigate();
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [savingCustom, setSavingCustom] = useState(false);
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+
+  const handleCreateCustom = async (data) => {
+    setShowAddModal(false); // Close instantly for snappy UI
+    setSavingCustom(true);
+    
+    // We can optimistically push to offline data here to make it instantly available
+    const tempConfig = {
+      ...data,
+      currentSequence: 0,
+      totalGenerated: 0
+    };
+    
+    // If the user previously deleted a card with this exact ID, we must un-delete it so it can be recreated!
+    try {
+      const key = String(data.seriesCode || data.id).toLowerCase().replace(/_/g, '-');
+      const existingRaw = localStorage.getItem('NumberSeries_Deleted');
+      if (existingRaw) {
+        let arr = JSON.parse(existingRaw);
+        if (Array.isArray(arr)) {
+          arr = arr.filter(k => k !== key);
+          localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+        }
+      }
+    } catch (e) {}
+    // Read, append, and save to local storage instantly
+    try {
+      const raw = localStorage.getItem('NumberSeries_Config') || sessionStorage.getItem('NumberSeries_Config');
+      let parsed = [];
+      if (raw) parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        parsed.push(tempConfig);
+        localStorage.setItem('NumberSeries_Config', JSON.stringify(parsed));
+      }
+    } catch (e) { }
+
+    try {
+      await numberSeriesApi.updateNumberSeries(data.seriesCode, {
+        prefix: data.prefix,
+        formatPattern: data.format,
+        numberLength: data.numberLength,
+        startNumber: data.startNumber,
+        description: data.description,
+        isActive: data.isActive,
+        seriesName: data.seriesName,
+        campusId: selectedCampusId
+      });
+      setShowAddModal(false);
+      onRefresh();
+      setToast({ message: "Custom series created successfully!", type: "success" });
+    } catch (error) {
+      setToast({ message: "Failed to create custom series.", type: "error" });
+    } finally {
+      setSavingCustom(false);
+    }
+  };
 
   return (
     <DashboardLayout
@@ -313,10 +560,18 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
           </div>
           <button
             type="button"
+            className="cms-btn cms-btn-primary"
+            onClick={() => setShowAddModal(true)}
+            style={{ alignSelf: "center", marginLeft: "auto", marginRight: "10px" }}
+          >
+            + Add Custom Series
+          </button>
+          <button
+            type="button"
             className="cms-btn cms-btn-ghost"
             onClick={onRefresh}
             disabled={loading}
-            style={{ alignSelf: "center", marginLeft: "auto" }}
+            style={{ alignSelf: "center" }}
             title="Refresh series"
           >
             <RefreshCw size={13} className={loading ? "spin" : ""} />
@@ -324,22 +579,50 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
           </button>
         </div>
 
+        {showAddModal && <AddCustomSeriesModal onClose={() => setShowAddModal(false)} onSave={handleCreateCustom} campus={selectedCampus} toast={toast} />}
+
         {/* 4 FIXED CARDS GRID */}
         <div className="ns-card-grid">
           {seriesList.map((series) => {
             const IconComponent = SERIES_ICONS[series.id] || Hash;
-            const nextVal = series.livePreview || getNextNumberPreview(series);
+            const nextVal = series.livePreview || getNextNumberPreview(series, null, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
 
             return (
-              <div key={series.id} className="ns-card">
-                <div className="ns-card-top">
-                  <div className="ns-card-icon-box">
-                    <IconComponent size={22} />
+                <div key={series.id} className="ns-card">
+                  <div className="ns-card-top">
+                    <div className="ns-card-icon-box">
+                      <IconComponent size={22} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div className={`ns-card-badge ${series.isActive ? "" : "ns-card-badge-inactive"}`}>
+                        {series.isActive ? "Active" : "Inactive"}
+                      </div>
+                      {!series.isActive && (
+                        <button 
+                          className="cms-btn cms-btn-ghost" 
+                          style={{ padding: '4px', color: 'var(--error)' }} 
+                          title="Delete Series"
+                          onClick={() => {
+                            if (window.confirm(`Are you sure you want to completely delete "${series.name || series.seriesName}"? This action removes the configuration permanently.`)) {
+                              try {
+                                const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
+                                const existingRaw = localStorage.getItem('NumberSeries_Deleted');
+                                let arr = [];
+                                if (existingRaw) arr = JSON.parse(existingRaw);
+                                arr.push(key);
+                                localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+                                setToast({ message: "Series deleted successfully.", type: "success" });
+                                if (forceSyncLocal) forceSyncLocal();
+                                else onRefresh();
+                              } catch(e) {}
+                            }
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className={`ns-card-badge ${series.isActive ? "" : "ns-card-badge-inactive"}`}>
-                    {series.isActive ? "Active" : "Inactive"}
-                  </div>
-                </div>
 
                 <h3 className="ns-card-title">{series.name || series.seriesName}</h3>
 
@@ -351,7 +634,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
                          <RefreshCw size={12} className="spin" /> Loading...
                       </span>
                     ) : (
-                      series.livePreview || series.currentExample || nextVal
+                      loading ? "Loading..." : nextVal
                     )}
                   </div>
                 </div>
@@ -391,7 +674,8 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, toast, setT
 // ======================================================================
 // 2. DETAIL VIEW (GENERATED IDS & CONFIGURATION HISTORY)
 // ======================================================================
-function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
+function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, availableGroups = [] }) {
+  const { selectedCampus } = useCampusContext();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [pageSize, setPageSize] = useState(5);
@@ -439,7 +723,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast }) {
     return filteredHistory.slice(start, start + pageSize);
   }, [filteredHistory, currentPage, pageSize]);
 
-  const nextNumberVal = currentSeries.livePreview || getNextNumberPreview(currentSeries);
+  const nextNumberVal = currentSeries.livePreview || getNextNumberPreview(currentSeries, null, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
 
   return (
     <DashboardLayout
@@ -796,9 +1080,10 @@ function RenderTableRow({ seriesId, row, index }) {
 // ======================================================================
 // 3. EDIT VIEW (2-COLUMN CONFIGURATION FORM)
 // ======================================================================
-function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
+function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, setToast, availableGroups = [] }) {
+  
   const navigate = useNavigate();
-  const { selectedCampusId } = useCampusContext();
+  const { selectedCampusId, selectedCampus } = useCampusContext();
 
   const [formState, setFormState] = useState({
     prefix: series.prefix || "",
@@ -825,7 +1110,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
   const localLivePreviewVal = useMemo(() => {
     if (!liveValidation.valid) return null;
     const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
-    return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength);
+    return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
   }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, liveValidation]);
 
   // Dynamic on-the-fly preview calculation for UI typing via GET /api/v1/settings/number-series/{seriesCode}/preview
@@ -842,6 +1127,7 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
           numberLength: formState.numberLength,
           prefix: formState.prefix,
           campusId: selectedCampusId,
+          campusCode: selectedCampus?.campusCode,
         });
         if (typeof res === "string" && res.trim()) {
           setApiPreview(res.trim());
@@ -925,6 +1211,25 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
               </div>
 
               <form onSubmit={handleSubmit} className="ns-form-body">
+                {/* STATUS TOGGLE */}
+                <div className="ns-edit-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '16px', background: 'var(--cms-bg-secondary)', borderRadius: '8px' }}>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: '15px' }}>Series Status</h3>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--cms-text-secondary)' }}>If inactive, this series cannot generate new numbers.</p>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: formState.status === "Active" ? "var(--cms-success)" : "var(--cms-text-secondary)" }}>
+                      {formState.status === "Active" ? "Active" : "Inactive"}
+                    </span>
+                    <input 
+                      type="checkbox" 
+                      checked={formState.status === "Active"} 
+                      onChange={(e) => setFormState(p => ({ ...p, status: e.target.checked ? "Active" : "Inactive" }))} 
+                      style={{ width: '18px', height: '18px', accentColor: 'var(--cms-success)' }}
+                    />
+                  </label>
+                </div>
+
                 {/* ROW 1: READ ONLY SERIES NAME & PREFIX */}
                 <div className="ns-field-row-2">
                   <div className="ns-field">
@@ -1026,6 +1331,29 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
                   </button>
 
                   <button
+                    type="button"
+                    className="cms-btn cms-btn-ghost"
+                    style={{ color: "var(--error)" }}
+                    title="Delete Series Permanently"
+                    onClick={() => {
+                      if (window.confirm(`Are you sure you want to completely delete "${series.name || series.seriesName}"?`)) {
+                        try {
+                          const key = String(series.id || series.seriesCode).toLowerCase().replace(/_/g, '-');
+                          const existingRaw = localStorage.getItem('NumberSeries_Deleted');
+                          let arr = [];
+                          if (existingRaw) arr = JSON.parse(existingRaw);
+                          arr.push(key);
+                          localStorage.setItem('NumberSeries_Deleted', JSON.stringify(arr));
+                                                    setToast({ message: "Series deleted successfully.", type: "success" });
+                          if (forceSyncLocal) forceSyncLocal();
+                          setTimeout(() => navigate("/dashboard/settings/number-series"), 50);
+                        } catch(e) {}
+                      }
+                    }}
+                  >
+                    <Trash2 size={16} /> Delete
+                  </button>
+                  <button
                     type="submit"
                     className="cms-btn cms-btn-primary"
                     disabled={!liveValidation.valid || saving}
@@ -1101,12 +1429,14 @@ function NumberSeriesEditView({ series, saving, onSave, toast, setToast }) {
 // ======================================================================
 // 4. PREVIEW NEXT NUMBER MODAL (NON-MUTATING & TEST GENERATE)
 // ======================================================================
-function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast }) {
+function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, availableGroups = [] }) {
+    const { selectedCampus } = useCampusContext();
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [liveGeneratedNumber, setLiveGeneratedNumber] = useState(null);
+  const isInactive = series?.isActive === false;
 
-  const nextVal = liveGeneratedNumber || series.livePreview || getNextNumberPreview(series);
+  const nextVal = liveGeneratedNumber || series.livePreview || getNextNumberPreview(series, null, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
   const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
 
   const handleCopy = () => {
@@ -1131,7 +1461,7 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast }) {
       console.warn("POST /api/v1/settings/number-series/{seriesCode}/generate-next fallback:", err?.message || err);
     }
 
-    const simulated = nextGenerated || getNextNumberPreview(series);
+    const simulated = nextGenerated || getNextNumberPreview(series, null, { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" });
     setLiveGeneratedNumber(simulated);
     if (onSequenceGenerated) {
       onSequenceGenerated(code, simulated);
@@ -1156,8 +1486,9 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast }) {
             type="button"
             className="cms-btn cms-btn-ghost"
             onClick={handleTestGenerate}
-            disabled={generating}
-            title="Atomically increments the counter and generates the real next ID"
+            disabled={generating || isInactive}
+            style={isInactive ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+            title={isInactive ? "Series is inactive" : "Atomically increments the counter and generates the real next ID"}
           >
             <Play size={15} />
             <span>{generating ? "Generating..." : "Generate Next (Live)"}</span>
@@ -1172,6 +1503,11 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast }) {
         <p className="ns-modal-sub">
           Preview how the next {series.name.toLowerCase()} will be generated by the system.
         </p>
+        {isInactive && (
+          <div style={{ marginTop: '10px', padding: '10px', background: '#ffebee', color: '#c62828', borderRadius: '4px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <AlertTriangle size={14} /> This series is inactive. Reactivate it to continue generating IDs.
+          </div>
+        )}
 
         {/* LARGE HIGHLIGHTED PREVIEW VALUE */}
         <div className="ns-modal-highlight-box">

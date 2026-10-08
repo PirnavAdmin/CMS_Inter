@@ -3692,6 +3692,64 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("StaffAttendances");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceRegularization", b =>
+                {
+                    b.Property<int>("RegularizationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RegularizationId"));
+
+                    b.Property<string>("AdminRemarks")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<DateTime>("AttendanceDate")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("FacultyId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)");
+
+                    b.Property<TimeSpan?>("RequestedInTime")
+                        .HasColumnType("time(6)");
+
+                    b.Property<TimeSpan?>("RequestedOutTime")
+                        .HasColumnType("time(6)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int?>("ReviewedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("StaffId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("RegularizationId");
+
+                    b.HasIndex("FacultyId");
+
+                    b.HasIndex("StaffId");
+
+                    b.ToTable("StaffAttendanceRegularizations");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceSession", b =>
                 {
                     b.Property<int>("StaffSessionId")
@@ -5374,6 +5432,73 @@ namespace CollegeManagement.API.Migrations
                         .HasDatabaseName("IX_TimetableSubstitutions_SubConflict");
 
                     b.ToTable("TimetableSubstitutions", (string)null);
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Transport.DriverNotification", b =>
+                {
+                    b.Property<long>("NotificationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("NotificationId"));
+
+                    b.Property<long?>("AssignmentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("longtext");
+
+                    b.Property<DateTime?>("ReadTime")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<int>("StaffId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)");
+
+                    b.HasKey("NotificationId");
+
+                    b.ToTable("DriverNotifications");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Transport.DriverPreference", b =>
+                {
+                    b.Property<int>("StaffId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AutoLogoutMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("EmailAttendanceAlerts")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("SmsUrgentAlerts")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("TripReminders")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("StaffId");
+
+                    b.ToTable("DriverPreferences");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Transport.TransportGpsTelemetry", b =>
@@ -7161,6 +7286,21 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("StaffAttendanceSession");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceRegularization", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Faculty.Faculty", "Faculty")
+                        .WithMany()
+                        .HasForeignKey("FacultyId");
+
+                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
+                        .WithMany()
+                        .HasForeignKey("StaffId");
+
+                    b.Navigation("Faculty");
+
+                    b.Navigation("Staff");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.StaffAttendanceSession", b =>
                 {
                     b.HasOne("CollegeManagement.API.Models.Campus", "Campus")
@@ -7711,6 +7851,17 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("SubstituteStaff");
 
                     b.Navigation("Timetable");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Transport.DriverPreference", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Staff");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Transport.TransportGpsTelemetry", b =>
