@@ -118,9 +118,11 @@ public class FeeController : ControllerBase
     public async Task<IActionResult> GetBulkStudentFeeDetails([FromBody] List<int> studentIds)
     {
         if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
-        var tasks = studentIds.Distinct().ToDictionary(id => id, id => _service.GetStudentFeeDetailsByStudentAsync(id));
-        await Task.WhenAll(tasks.Values);
-        var result = tasks.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Result);
+        var result = new Dictionary<int, StudentFeeDetailsResponse?>();
+        foreach (var id in studentIds.Distinct())
+        {
+            result[id] = await _service.GetStudentFeeDetailsByStudentAsync(id);
+        }
         return Ok(result);
     }
 
@@ -165,9 +167,11 @@ public class FeeController : ControllerBase
     public async Task<IActionResult> GetBulkHistory([FromBody] List<int> studentIds)
     {
         if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
-        var tasks = studentIds.Distinct().ToDictionary(id => id, id => _service.GetFeePaymentsAsync(id));
-        await Task.WhenAll(tasks.Values);
-        var result = tasks.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Result);
+        var result = new Dictionary<int, IEnumerable<FeePaymentResponse>>();
+        foreach (var id in studentIds.Distinct())
+        {
+            result[id] = await _service.GetFeePaymentsAsync(id);
+        }
         return Ok(result);
     }
 
