@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
-  Building2, LayoutDashboard, Users, BarChart3,
+  Building2, LayoutDashboard, Users, BarChart3, BedDouble, AlertTriangle, ArrowLeftRight,
 } from "lucide-react";
 import ThemeToggle from "@/components/common/ThemeToggle.jsx";
 import apiClient from "@/api/axios.js";
@@ -67,6 +67,16 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/dashboard/promotions", icon: promotionIcon },
   { path: "/dashboard/payroll", icon: generatedSidebarIcons.payroll },
   { path: "/dashboard/staff-salary", icon: generatedSidebarIcons.payroll },
+  { path: "/warden-dashboard/students", icon: studentsIcon },
+  { path: "/warden-dashboard/rooms", icon: sectionsIcon },
+  { path: "/warden-dashboard/beds", icon: sectionsIcon },
+  { path: "/warden-dashboard/allocations", icon: allocateSectionIcon },
+  { path: "/warden-dashboard/leave-requests", icon: generatedSidebarIcons.staffLeave },
+  { path: "/warden-dashboard/complaints", icon: settingsAuditLogsIcon },
+  { path: "/warden-dashboard/attendance", icon: attendanceIcon },
+  { path: "/warden-dashboard/reports", icon: reportsAnalyticsIcon },
+  { path: "/warden-dashboard/profile", icon: staffIcon },
+  { path: "/warden-dashboard", icon: dashboardIcon },
 ];
 
 function SidebarIcon({ icon, sub = false }) {
@@ -217,6 +227,20 @@ export const parentMenu = [
   },
 ];
 
+export const wardenMenu = [
+  { section: "Warden Dashboard", items: [{ to: "/warden-dashboard", label: "Overview", icon: dashboardIcon }] },
+  { section: "Hostel Management", items: [
+    { to: "/warden-dashboard/students", label: "Students", icon: studentsIcon },
+    { to: "/warden-dashboard/rooms", label: "Rooms / Beds", icon: sectionsIcon },
+    { to: "/warden-dashboard/allocations", label: "Allocations", icon: allocateSectionIcon },
+    { to: "/warden-dashboard/leave-requests", label: "Leave Requests", icon: generatedSidebarIcons.staffLeave },
+    { to: "/warden-dashboard/complaints", label: "Complaints", icon: settingsAuditLogsIcon },
+    { to: "/warden-dashboard/attendance", label: "Attendance", icon: attendanceIcon },
+    { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
+    { to: "/warden-dashboard/profile", label: "Profile", icon: staffIcon },
+  ] },
+];
+
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
@@ -270,6 +294,12 @@ const parentSearchIndex = [
   { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
 ];
 
+const wardenSearchIndex = wardenMenu.flatMap((g) =>
+  g.items.flatMap((item) => [
+    { to: item.to, label: item.label, section: g.section },
+  ]),
+);
+
 const breadcrumbLinkForLabel = (label) =>
   searchIndex.find((item) => item.label.toLowerCase() === String(label).toLowerCase())?.to;
 
@@ -303,7 +333,11 @@ const menuBreadcrumbForPath = (pathname) => {
     if (!bestMatch || score > bestMatch.score) bestMatch = { to, labels, icon, score };
   };
 
-  const activeMenus = pathname.startsWith("/parent-dashboard") ? parentMenu : menu;
+  const activeMenus = pathname.startsWith("/parent-dashboard")
+    ? parentMenu
+    : pathname.startsWith("/warden") || pathname.startsWith("/warden-dashboard")
+    ? wardenMenu
+    : menu;
   activeMenus.forEach((group) => {
     group.items.forEach((item) => {
       consider(item.to, [group.section, item.label], item.icon);
@@ -420,13 +454,18 @@ export default function DashboardLayout({
   }, [breadcrumb, pageMenuItem, title]);
   const user = readUser();
   const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const activeMenu = isParent ? parentMenu : menu;
-  const currentSearchIndex = isParent ? parentSearchIndex : searchIndex;
+  const isWarden =
+    String(user?.role || "").toLowerCase().includes("warden") ||
+    pathname.startsWith("/warden") ||
+    pathname.startsWith("/warden-dashboard") ||
+    (typeof window !== "undefined" && (window.localStorage?.getItem("cms_role") === "warden" || window.sessionStorage?.getItem("cms_role") === "warden"));
+  const activeMenu = isParent ? parentMenu : isWarden ? wardenMenu : menu;
+  const currentSearchIndex = isParent ? parentSearchIndex : isWarden ? wardenSearchIndex : searchIndex;
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
-  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || "CMS Admin");
-  const profileRole = user?.role || "admin";
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : "CMS Admin"));
+  const profileRole = isWarden ? "Hostel Warden" : (user?.role || "admin");
   const pendingActionCount = currentNotifications.reduce((total, item) => total + item.count, 0);
 
   const rememberSidebarScroll = () => {
@@ -521,6 +560,22 @@ export default function DashboardLayout({
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
     if (basePath === "/dashboard") return pathname === "/dashboard";
+    if (basePath === "/warden-dashboard" || basePath === "/warden") {
+      return (
+        pathname === "/warden-dashboard" ||
+        pathname === "/warden-dashboard/overview" ||
+        pathname === "/warden" ||
+        pathname === "/warden/overview"
+      );
+    }
+    if (basePath === "/warden-dashboard/rooms") {
+      return (
+        pathname === "/warden-dashboard/rooms" ||
+        pathname.startsWith("/warden-dashboard/rooms/") ||
+        pathname === "/warden-dashboard/beds" ||
+        pathname.startsWith("/warden-dashboard/beds/")
+      );
+    }
     if (basePath === "/dashboard/settings") {
       return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
     }

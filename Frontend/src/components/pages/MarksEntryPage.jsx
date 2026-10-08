@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../layout/DashboardLayout";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { getAuthToken } from "@/features/authStorage.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { SkeletonButton, SkeletonPage, SkeletonRow } from "@/components/common/Ui.jsx";
@@ -246,7 +247,7 @@ const isLegalStatusTransition = (from, to) =>
   }[from] || []).includes(to);
 
 // Reusable Hook for Independent Academic Cascading Filters
-function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => {}) {
+function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = () => {}, isActive = true) {
   const {
     selectedBoard,
     selectedBoardId,
@@ -268,10 +269,15 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
   const [groups, setGroups] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [sections, setSections] = useState([]);
+  const [sectionsLoading, setSectionsLoading] = useState(false);
+  const [sectionsError, setSectionsError] = useState(null);
   const [exams, setExams] = useState([]);
+  const [examsLoading, setExamsLoading] = useState(false);
+  const [examsError, setExamsError] = useState(null);
 
   // Auto-select board when allBoards loads or navbar board changes
   useEffect(() => {
+    if (!isActive) return;
     if (allBoards.length > 0) {
       const targetBoard = allBoards.find(
         (b) =>
@@ -281,23 +287,26 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
       ) || allBoards.find((b) => b.isActive) || allBoards[0];
 
       if (targetBoard && !eq(filters.board, targetBoard.id)) {
-        setFilters((prev) => ({ ...prev, board: targetBoard.id }));
+        setFilters((prev) => (eq(prev.board, targetBoard.id) ? prev : { ...prev, board: targetBoard.id }));
       }
     }
-  }, [allBoards, selectedBoardId, selectedBoard, filters.board]);
+  }, [isActive, allBoards, selectedBoardId, filters.board]);
 
   // Load Years, Levels, Groups when Board changes
   useEffect(() => {
-    if (!filters.board) {
+    if (!isActive || !filters.board) {
       setYears([]);
       setLevels([]);
       setGroups([]);
       return;
     }
 
+    const authToken = getAuthToken();
+    if (!authToken) return;
+
     let isMounted = true;
     const loadBoardDeps = async () => {
-      const selectedBoard = allBoards.find((b) => eq(b.id, filters.board));
+      const selectedBoardItem = allBoards.find((b) => eq(b.id, filters.board));
 
       // Fetch Years
       try {
@@ -326,10 +335,9 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               (selectedAcademicYear?.code && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.code).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, ""))
           ) || listYears.find((y) => y.isCurrent) || listYears[0];
 
-          setFilters((prev) => ({
-            ...prev,
-            year: targetYear ? targetYear.id : "",
-          }));
+          if (targetYear && !eq(filters.year, targetYear.id)) {
+            setFilters((prev) => (eq(prev.year, targetYear.id) ? prev : { ...prev, year: targetYear.id }));
+          }
         }
       } catch (err) {
         console.error("Error fetching academic years:", err);
@@ -359,10 +367,10 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
             name: l.levelName ?? l.name,
             isActive: l.isActive !== false,
           }));
-        } else if (selectedBoard?.academicLevelIds?.length) {
-          levelItems = selectedBoard.academicLevelIds.map((id, idx) => ({
+        } else if (selectedBoardItem?.academicLevelIds?.length) {
+          levelItems = selectedBoardItem.academicLevelIds.map((id, idx) => ({
             id: normalizeId(id),
-            name: selectedBoard.academicLevelNames?.[idx] || `Level ${id}`,
+            name: selectedBoardItem.academicLevelNames?.[idx] || `Level ${id}`,
             isActive: true,
           }));
         }
@@ -411,14 +419,17 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return () => {
       isMounted = false;
     };
-  }, [filters.board, allBoards]);
+  }, [isActive, filters.board]);
 
   // Load Programs when Group changes
   useEffect(() => {
-    if (!filters.group) {
+    if (!isActive || !filters.group) {
       setPrograms([]);
       return;
     }
+
+    const authToken = getAuthToken();
+    if (!authToken) return;
 
     let isMounted = true;
     const loadPrograms = async () => {
@@ -463,30 +474,57 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     return () => {
       isMounted = false;
     };
-  }, [filters.group, groups]);
+  }, [isActive, filters.group, groups]);
 
-  // Load Sections and Exams when Board, Year, Level, Group, Program are set
+  // Load Sections when Board is selected (STEP 8, 9, 10)
   useEffect(() => {
-    if (!filters.board || !filters.year || !filters.level || !filters.group || !filters.program) {
+    if (!isActive || !filters.board) {
       setSections([]);
-      setExams([]);
+      setSectionsLoading(false);
+      setSectionsError(null);
+      return;
+    }
+
+    const authToken = getAuthToken();
+    if (!authToken) {
+      setSections([]);
+      setSectionsLoading(false);
       return;
     }
 
     let isMounted = true;
-    const loadSectionsAndExams = async () => {
-      // 1. Fetch Sections
+    setSectionsLoading(true);
+    setSectionsError(null);
+
+    const loadSections = async () => {
       try {
-        const res = await apiClient.get(apiEndpoints.sections.getAll, {
-          params: {
-            BoardId: filters.board,
-            AcademicYearId: filters.year,
-            AcademicLevelId: filters.level,
-            GroupId: filters.group,
-            ProgramId: filters.program,
-            IsActive: true,
-          },
-        });
+        const params = {
+          IsActive: true,
+          isActive: true,
+          BoardId: filters.board,
+          boardId: filters.board,
+        };
+        if (filters.year) {
+          params.AcademicYearId = filters.year;
+          params.academicYearId = filters.year;
+        }
+        if (filters.level) {
+          params.AcademicLevelId = filters.level;
+          params.academicLevelId = filters.level;
+        }
+        if (filters.group) {
+          params.GroupId = filters.group;
+          params.groupId = filters.group;
+        }
+        if (filters.program) {
+          params.ProgramId = filters.program;
+          params.programId = filters.program;
+        }
+
+        const res = await apiClient
+          .get(apiEndpoints.sections.getAll, { params })
+          .catch(() => apiClient.get("/api/v1/sections", { params }));
+
         const raw = unwrapRecords(res);
         const list = raw
           .map((s) => ({
@@ -503,13 +541,55 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           }))
           .filter((s) => s.isActive);
 
-        if (isMounted) setSections(list);
+        if (isMounted) {
+          setSections(list);
+          setSectionsLoading(false);
+          setFilters((prev) => (prev.section && !list.some((s) => eq(s.id, prev.section)) ? { ...prev, section: "" } : prev));
+        }
       } catch (err) {
-        console.error("Error fetching sections:", err);
-        if (isMounted) setSections([]);
+        if (!isMounted) return;
+        const status = err?.response?.status;
+        if (status === 401) {
+          setSectionsError("Session expired. Please sign in again.");
+        } else if (status === 403) {
+          setSectionsError("You do not have permission to view sections.");
+        } else if (status >= 500) {
+          setSectionsError("Server error loading sections. Please try again later.");
+        } else {
+          setSectionsError(getApiErrorMessage(err) || "Failed to load sections.");
+        }
+        setSections([]);
+        setSectionsLoading(false);
       }
+    };
 
-      // 2. Fetch Completed Examinations strictly matching academic scope
+    loadSections();
+    return () => {
+      isMounted = false;
+    };
+  }, [isActive, filters.board, filters.year, filters.level, filters.group, filters.program]);
+
+  // Load Completed Examinations strictly matching academic scope
+  useEffect(() => {
+    if (!isActive || !filters.board || !filters.year || !filters.level || !filters.group || !filters.program) {
+      setExams([]);
+      setExamsLoading(false);
+      setExamsError(null);
+      return;
+    }
+
+    const authToken = getAuthToken();
+    if (!authToken) {
+      setExams([]);
+      setExamsLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setExamsLoading(true);
+    setExamsError(null);
+
+    const loadExams = async () => {
       try {
         const examsRes = await apiClient.get(apiEndpoints.examinations.getAll, {
           params: {
@@ -546,7 +626,6 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           })
           .filter((e) => {
             if (!e.isActive) return false;
-            // STRICT FILTER: Only Completed Examinations
             const isCompleted =
               e.status === "COMPLETED" ||
               e.status === "FINISHED" ||
@@ -554,7 +633,6 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
               e.isCompleted === true;
             if (!isCompleted || e.status === "SCHEDULED" || e.status === "DRAFT") return false;
 
-            // Strict matching of academic scope when fields exist on exam
             if (filters.board && e.boardId && !eq(e.boardId, filters.board)) return false;
             if (filters.year && e.academicYearId && !eq(e.academicYearId, filters.year)) return false;
             if (filters.level && e.academicLevelId && !eq(e.academicLevelId, filters.level)) return false;
@@ -566,43 +644,54 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
 
         if (isMounted) {
           setExams(examList);
+          setExamsLoading(false);
           setFilters((prev) => {
-            if (prev.exam && examList.some((e) => eq(e.id, prev.exam))) return prev;
+            if (!prev.exam) return prev;
+            if (examList.some((e) => eq(e.id, prev.exam))) return prev;
             return { ...prev, exam: "" };
           });
         }
       } catch (err) {
+        if (!isMounted) return;
         console.error("Error fetching examinations:", err);
-        if (isMounted) setExams([]);
+        const status = err?.response?.status;
+        if (status === 401) {
+          setExamsError("Session expired. Please sign in again.");
+        } else if (status === 403) {
+          setExamsError("You do not have permission to view examinations.");
+        } else if (status >= 500) {
+          setExamsError("Server error loading examinations.");
+        } else {
+          setExamsError(getApiErrorMessage(err) || "Failed to load examinations.");
+        }
+        setExams([]);
+        setExamsLoading(false);
       }
     };
 
-    loadSectionsAndExams();
+    loadExams();
     return () => {
       isMounted = false;
     };
-  }, [filters.board, filters.year, filters.level, filters.group, filters.program]);
+  }, [isActive, filters.board, filters.year, filters.level, filters.group, filters.program]);
 
   // Sync year when navbar selected academic year changes
   useEffect(() => {
-    if (years.length > 0) {
-      const targetYear = years.find(
-        (y) =>
-          eq(y.id, selectedAcademicYearId) ||
-          (selectedAcademicYear?.name && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.name).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "")) ||
-          (selectedAcademicYear?.code && String(y.name || "").trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, "") === String(selectedAcademicYear.code).trim().toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, ""))
-      );
+    if (!isActive) return;
+    if (years.length > 0 && selectedAcademicYearId) {
+      const targetYear = years.find((y) => eq(y.id, selectedAcademicYearId));
       if (targetYear && !eq(filters.year, targetYear.id)) {
-        setFilters((prev) => ({ ...prev, year: targetYear.id }));
+        setFilters((prev) => (eq(prev.year, targetYear.id) ? prev : { ...prev, year: targetYear.id }));
       }
     }
-  }, [years, selectedAcademicYearId, selectedAcademicYear, filters.year]);
+  }, [isActive, years, selectedAcademicYearId, filters.year]);
 
   // Change filter handler with cascading resets and invalidating applied state
   const changeFilter = (key, value) =>
     guard(() => {
       onReset();
       setFilters((prev) => {
+        if (prev[key] === value) return prev;
         const next = { ...prev, [key]: value };
         const children = {
           board: ["group", "program", "section", "exam"],
@@ -628,7 +717,11 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
     groups,
     programs,
     sections,
+    sectionsLoading,
+    sectionsError,
     exams,
+    examsLoading,
+    examsError,
     setExams,
     changeFilter,
   };
@@ -716,7 +809,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   const [validationResult, setValidationResult] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
 
-  const entry = useAcademicFilterState(allBoards, guard, () => setEntryApplied(false));
+  const entry = useAcademicFilterState(allBoards, guard, () => setEntryApplied(false), tab === "entry");
 
   // Helper to load schedules & search evaluations for an examination in Marks Entry
   const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
@@ -1931,7 +2024,7 @@ export default function MarksEntryPage({ embedded = false } = {}) {
   const [evaluationSearch, setEvaluationSearch] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
 
-  const evalState = useAcademicFilterState(allBoards, guard, () => setEvalApplied(false));
+  const evalState = useAcademicFilterState(allBoards, guard, () => setEvalApplied(false), tab === "evaluation");
 
   // Handle Switching Between Main Tabs: Reset cascading filters from scratch (preserving Board and Year)
   const handleTabChange = (nextTab) => {
@@ -1967,13 +2060,15 @@ export default function MarksEntryPage({ embedded = false } = {}) {
         setEvalApplied(false);
         setEvalConfigs([]);
         setEvalStudents([]);
-        setEvaluations([]);
+        setBackendAnalysis([]);
         setSelectedEvaluation(null);
         setSelectedStudent(null);
         setEvalSubTab("evaluation");
         setEvaluationPage(1);
         setStudentPage(1);
         setDetailPage(1);
+        setEvaluationSearch("");
+        setStudentSearch("");
       }
     });
   };
@@ -2553,6 +2648,8 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               groups={entry.groups}
               programs={entry.programs}
               sections={entry.sections}
+              sectionsLoading={entry.sectionsLoading}
+              sectionsError={entry.sectionsError}
               changeFilter={entry.changeFilter}
               actionLabel="Enter Marks"
               onAction={applyEntryContext}
@@ -2636,7 +2733,11 @@ export default function MarksEntryPage({ embedded = false } = {}) {
               groups={evalState.groups}
               programs={evalState.programs}
               sections={evalState.sections}
+              sectionsLoading={evalState.sectionsLoading}
+              sectionsError={evalState.sectionsError}
               exams={evalState.exams}
+              examsLoading={evalState.examsLoading}
+              examsError={evalState.examsError}
               changeFilter={evalState.changeFilter}
               actionLabel="Check Evaluations"
               onAction={applyEvalContext}
@@ -2921,7 +3022,11 @@ function FilterCard({
   groups,
   programs,
   sections,
+  sectionsLoading = false,
+  sectionsError = null,
   exams,
+  examsLoading = false,
+  examsError = null,
   changeFilter,
   actionLabel,
   onAction,
@@ -2936,7 +3041,15 @@ function FilterCard({
     { key: "level", label: "Academic Level", options: levels, disabled: !filters.board },
     { key: "group", label: "Group", options: groups, disabled: !filters.board },
     { key: "program", label: "Program", options: programs, disabled: !filters.group },
-    { key: "section", label: "Section", options: sections, disabled: !filters.program },
+    {
+      key: "section",
+      label: "Section",
+      options: sections,
+      disabled: !filters.program || sectionsLoading,
+      loading: sectionsLoading,
+      error: sectionsError,
+      emptyText: sectionsLoading ? "Loading sections..." : "No sections available",
+    },
     ...(mode === "evaluation"
       ? [
           {
@@ -2948,7 +3061,10 @@ function FilterCard({
               const displayName = code && !baseName.includes(code) ? `${baseName} (${code})` : baseName;
               return { ...exam, name: displayName };
             }),
-            disabled: !filters.program,
+            disabled: !filters.program || examsLoading,
+            loading: examsLoading,
+            error: examsError,
+            emptyText: examsLoading ? "Loading examinations..." : "No completed examinations available",
           },
         ]
       : []),
@@ -2981,6 +3097,9 @@ function FilterCard({
             value={filters[field.key]}
             options={field.options}
             disabled={field.disabled}
+            loading={field.loading}
+            error={field.error}
+            emptyText={field.emptyText}
             onChange={(value) => changeFilter(field.key, value)}
           />
         ))}
@@ -3671,6 +3790,8 @@ function SearchableSelect({
   value,
   options = [],
   disabled,
+  loading = false,
+  error = null,
   onChange,
   emptyText = "No matching options",
   hideLabel = false,
@@ -3719,7 +3840,9 @@ function SearchableSelect({
     }
   };
 
-  const displayName = selected?.name || `Select ${label}`;
+  const displayName = loading
+    ? `Loading ${label}...`
+    : selected?.name || `Select ${label}`;
 
   return (
     <div className={`cms-field-group ${compact ? "cms-entry-select-compact" : ""}`}>
@@ -3731,21 +3854,21 @@ function SearchableSelect({
       <div className={`cms-custom-select ${open ? "is-open" : ""}`} ref={ref}>
         <button
           type="button"
-          className="cms-custom-select-trigger"
+          className={`cms-custom-select-trigger ${loading ? "is-loading" : ""} ${error ? "has-error" : ""}`}
           role="combobox"
           aria-label={label}
           aria-labelledby={!hideLabel ? `${id}-label` : undefined}
           aria-expanded={open}
           aria-controls={listId}
-          disabled={disabled}
+          disabled={disabled || loading}
           title={displayName}
           onClick={() => setOpen((current) => !current)}
           onKeyDown={keyDown}
         >
           <span className="cms-select-trigger-text">{displayName}</span>
-          <span className="cms-select-arrow">⌄</span>
+          <span className="cms-select-arrow">{loading ? "⋯" : "⌄"}</span>
         </button>
-        {open && (
+        {open && !loading && (
           <div className="cms-custom-select-menu">
             <input
               autoFocus
@@ -3801,6 +3924,23 @@ function SearchableSelect({
           </div>
         )}
       </div>
+      {error && (
+        <span
+          className="cms-field-error-text"
+          style={{
+            color: "var(--danger-color, #ef4444)",
+            fontSize: "0.72rem",
+            marginTop: "4px",
+            display: "flex",
+            alignItems: "center",
+            gap: "4px",
+            lineHeight: 1.2,
+          }}
+        >
+          <AlertCircle size={12} style={{ flexShrink: 0 }} />
+          <span>{error}</span>
+        </span>
+      )}
     </div>
   );
 }

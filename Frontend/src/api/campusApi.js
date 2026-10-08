@@ -86,7 +86,7 @@ export const normalizeCampus = (item) => {
  * 1. GET /api/v1/campuses
  * Retrieves all campuses with search and filtering (search, isActive, boardId).
  */
-export async function getCampuses(params = {}) {
+export async function getCampuses(params = {}, requestConfig = {}) {
   try {
     const queryParams = {};
     if (params.search && String(params.search).trim()) {
@@ -99,11 +99,10 @@ export async function getCampuses(params = {}) {
       queryParams.boardId = Number(params.boardId);
     }
 
-    const response = await apiClient.get(apiEndpoints.campuses.list, { params: queryParams });
+    const response = await apiClient.get(apiEndpoints.campuses.list, { params: queryParams, ...requestConfig });
     const rawList = unwrapResponse(response);
     return Array.isArray(rawList) ? rawList.map(normalizeCampus) : [];
   } catch (error) {
-    console.error("Failed to fetch campuses list:", error);
     throw new Error(getApiErrorMessage(error) || "Failed to load campuses.");
   }
 }

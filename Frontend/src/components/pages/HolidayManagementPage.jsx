@@ -3,8 +3,8 @@ import { CalendarDays, CheckCircle2, Clock3, Edit3, Eye, Flag, PartyPopper, Plus
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
-import { holidayRecords } from "@/data/mockData.js";
 import "./HolidayManagementPage.css";
 
 const PAGE_SIZE = 5;
@@ -159,8 +159,9 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
 
 export default function HolidayManagementPage() {
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext();
-  const [holidays, setHolidays] = useState(holidayRecords);
-  const [summary, setSummary] = useState({ total: 8, national: 3, festival: 5, upcoming: 7, completed: 1 });
+  const { selectedCampusId } = useCampusContext();
+  const [holidays, setHolidays] = useState([]);
+  const [summary, setSummary] = useState({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
@@ -180,24 +181,43 @@ export default function HolidayManagementPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      const params = {
+        campusId: selectedCampusId ? Number(selectedCampusId) : undefined,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined,
+        boardId: selectedBoardId ? Number(selectedBoardId) : undefined,
+      };
       const [summaryRes, listRes] = await Promise.allSettled([
-        holidayApi.getSummary({ academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined }),
-        holidayApi.getHolidays({ academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined, page: 1, pageSize: 100 }),
+        holidayApi.getSummary(params),
+        holidayApi.getHolidays({ ...params, page: 1, pageSize: 100 }),
       ]);
 
       if (summaryRes.status === "fulfilled" && summaryRes.value) {
         setSummary(summaryRes.value);
+      } else {
+        setSummary({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
       }
 
-      if (listRes.status === "fulfilled" && Array.isArray(listRes.value?.data) && listRes.value.data.length > 0) {
-        setHolidays(listRes.value.data);
+      if (listRes.status === "fulfilled") {
+        const val = listRes.value;
+        const items = Array.isArray(val?.data?.data)
+          ? val.data.data
+          : Array.isArray(val?.data)
+          ? val.data
+          : Array.isArray(val)
+          ? val
+          : [];
+        setHolidays(items);
+      } else {
+        setHolidays([]);
       }
     } catch (err) {
-      console.warn("Using local holiday data fallback:", err);
+      console.error("Holiday API load error:", err);
+      setHolidays([]);
+      setSummary({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
     } finally {
       setLoading(false);
     }
-  }, [selectedAcademicYearId, selectedBoardId]);
+  }, [selectedCampusId, selectedAcademicYearId, selectedBoardId]);
 
   useEffect(() => {
     loadData();
@@ -304,9 +324,17 @@ export default function HolidayManagementPage() {
     try {
       setSaving(true);
       const payload = {
-        ...values,
-        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : null,
-        boardId: selectedBoardId ? Number(selectedBoardId) : null,
+        holidayName: values.holidayName,
+        holidayType: values.holidayType,
+        appliesTo: values.appliesTo,
+        dateType: values.dateType,
+        startDate: values.startDate,
+        endDate: values.dateType === "Date Range" && values.endDate ? values.endDate : values.startDate,
+        status: values.status || "Active",
+        description: values.description || "",
+        campusId: selectedCampusId ? Number(selectedCampusId) : 0,
+        academicYearId: selectedAcademicYearId ? Number(selectedAcademicYearId) : 0,
+        boardId: selectedBoardId ? Number(selectedBoardId) : 0,
       };
 
       if (formHoliday?.id) {

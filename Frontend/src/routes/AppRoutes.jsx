@@ -105,6 +105,35 @@ export default function AppRoutes() {
       <Route path="/verify-otp" element={<VerifyOTP />} />
       <Route path="/reset-password" element={<ResetPassword />} />
 
+      <Route path="/warden-login" element={<Navigate to="/login" replace />} />
+
+      <Route element={<ProtectedRoute requireWarden />}>
+        <Route path="/warden-dashboard" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/overview" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/students" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/rooms" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/beds" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/allocations" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/leave-requests" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/complaints" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/attendance" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/profile" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/reports" element={<HostelDashboard />} />
+        <Route path="/warden-dashboard/*" element={<HostelDashboard />} />
+
+        {/* Legacy /warden Aliases redirect to /warden-dashboard */}
+        <Route path="/warden" element={<Navigate to="/warden-dashboard" replace />} />
+        <Route path="/warden/dashboard" element={<Navigate to="/warden-dashboard" replace />} />
+        <Route path="/warden/overview" element={<Navigate to="/warden-dashboard/overview" replace />} />
+        <Route path="/warden/rooms" element={<Navigate to="/warden-dashboard/rooms" replace />} />
+        <Route path="/warden/beds" element={<Navigate to="/warden-dashboard/beds" replace />} />
+        <Route path="/warden/students" element={<Navigate to="/warden-dashboard/students" replace />} />
+        <Route path="/warden/attendance" element={<Navigate to="/warden-dashboard/attendance" replace />} />
+        <Route path="/warden/leave-requests" element={<Navigate to="/warden-dashboard/leave-requests" replace />} />
+        <Route path="/warden/reports" element={<Navigate to="/warden-dashboard/reports" replace />} />
+        <Route path="/warden/*" element={<Navigate to="/warden-dashboard" replace />} />
+      </Route>
+
       <Route element={<ProtectedRoute requireAdmin />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/dashboard/board-academic-year" element={<BoardAcademicYearManagementPage />} />

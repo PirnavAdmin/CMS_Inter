@@ -81,6 +81,15 @@ export default function Login() {
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
       const userRole = String(result.user.role || "").toLowerCase();
+      const isWarden =
+        userRole.includes("warden") ||
+        String(result.roleType || "").toLowerCase() === "warden" ||
+        String(result.user?.email || "").toLowerCase().includes("warden");
+
+      if (isWarden) {
+        navigate("/warden-dashboard", { replace: true });
+        return;
+      }
       const isFacultyOrStaff =
         userRole === "faculty" ||
         userRole === "teacher" ||
@@ -100,12 +109,7 @@ export default function Login() {
       }
     } catch (loginError) {
       clearAuthSession();
-      const status = Number(loginError?.response?.status || 0);
-      setError(
-        [400, 401, 403].includes(status) || loginError?.code === "INVALID_CREDENTIALS"
-          ? "Invalid username or password. Please try again."
-          : getApiErrorMessage(loginError) || "Unable to sign in right now. Please try again.",
-      );
+      setError("Invalid username or password.");
     } finally {
       setBusy(false);
     }

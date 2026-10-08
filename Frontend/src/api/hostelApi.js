@@ -5,8 +5,8 @@ import api from "./axios";
 export const getHostelBlocks = (params) =>
   api.get("/api/v1/hostel/blocks", { params });
 
-export const getHostelBlockById = (id) =>
-  api.get(`/api/v1/hostel/blocks/${id}`);
+export const getHostelBlockById = (id, params) =>
+  api.get(`/api/v1/hostel/blocks/${id}`, { params });
 
 export const createHostelBlock = (data) =>
   api.post("/api/v1/hostel/blocks", data);
@@ -22,8 +22,8 @@ export const deleteHostelBlock = (id) =>
 export const getRoomTypes = (params) =>
   api.get("/api/v1/hostel/room-types", { params });
 
-export const getRoomTypeById = (id) =>
-  api.get(`/api/v1/hostel/room-types/${id}`);
+export const getRoomTypeById = (id, params) =>
+  api.get(`/api/v1/hostel/room-types/${id}`, { params });
 
 export const createRoomType = (data) =>
   api.post("/api/v1/hostel/room-types", data);
@@ -39,8 +39,8 @@ export const deleteRoomType = (id) =>
 export const getRooms = (params) =>
   api.get("/api/v1/hostel/rooms", { params });
 
-export const getRoomById = (id) =>
-  api.get(`/api/v1/hostel/rooms/${id}`);
+export const getRoomById = (id, params) =>
+  api.get(`/api/v1/hostel/rooms/${id}`, { params });
 
 export const createRoom = (data) =>
   api.post("/api/v1/hostel/rooms", data);
@@ -56,8 +56,8 @@ export const deleteRoom = (id) =>
 export const getBeds = (params) =>
   api.get("/api/v1/hostel/beds", { params });
 
-export const getBedById = (id) =>
-  api.get(`/api/v1/hostel/beds/${id}`);
+export const getBedById = (id, params) =>
+  api.get(`/api/v1/hostel/beds/${id}`, { params });
 
 export const createBed = (data) =>
   api.post("/api/v1/hostel/beds", data);
@@ -73,8 +73,14 @@ export const deleteBed = (id) =>
 export const getWardens = (params) =>
   api.get("/api/v1/hostel/wardens", { params });
 
-export const getWardenById = (id) =>
-  api.get(`/api/v1/hostel/wardens/${id}`);
+export const getWardenById = (id, params) =>
+  api.get(`/api/v1/hostel/wardens/${id}`, { params });
+
+export const getWardenMe = (params) =>
+  api.get("/api/v1/hostel/warden/me", { params });
+
+export const getWardenProfile = (params) =>
+  api.get("/api/v1/hostel/warden/profile", { params });
 
 export const createWarden = (data) =>
   api.post("/api/v1/hostel/wardens", data);
@@ -90,8 +96,8 @@ export const deleteWarden = (id) =>
 export const getStudentAllocations = (params) =>
   api.get("/api/v1/hostel/student-allocations", { params });
 
-export const getStudentAllocationById = (id) =>
-  api.get(`/api/v1/hostel/student-allocations/${id}`);
+export const getStudentAllocationById = (id, params) =>
+  api.get(`/api/v1/hostel/student-allocations/${id}`, { params });
 
 export const createStudentAllocation = (data) =>
   api.post("/api/v1/hostel/student-allocations", data);
@@ -107,8 +113,8 @@ export const deleteStudentAllocation = (id) =>
 export const getAttendance = (params) =>
   api.get("/api/v1/hostel/attendance", { params });
 
-export const getAttendanceById = (id) =>
-  api.get(`/api/v1/hostel/attendance/${id}`);
+export const getAttendanceById = (id, params) =>
+  api.get(`/api/v1/hostel/attendance/${id}`, { params });
 
 export const createAttendance = (data) =>
   api.post("/api/v1/hostel/attendance", data);
@@ -124,8 +130,8 @@ export const deleteAttendance = (id) =>
 export const getOutpassLeave = (params) =>
   api.get("/api/v1/hostel/outpass-leave", { params });
 
-export const getOutpassLeaveById = (id) =>
-  api.get(`/api/v1/hostel/outpass-leave/${id}`);
+export const getOutpassLeaveById = (id, params) =>
+  api.get(`/api/v1/hostel/outpass-leave/${id}`, { params });
 
 export const createOutpassLeave = (data) =>
   api.post("/api/v1/hostel/outpass-leave", data);
@@ -144,8 +150,8 @@ export const deleteOutpassLeave = (id) =>
 export const getTransferVacate = (params) =>
   api.get("/api/v1/hostel/transfer-vacate", { params });
 
-export const getTransferVacateById = (id) =>
-  api.get(`/api/v1/hostel/transfer-vacate/${id}`);
+export const getTransferVacateById = (id, params) =>
+  api.get(`/api/v1/hostel/transfer-vacate/${id}`, { params });
 
 export const createTransferVacate = (data) =>
   api.post("/api/v1/hostel/transfer-vacate", data);
@@ -186,3 +192,35 @@ export const getOutpassLeaveReport = (params) =>
 
 export const getTransferVacateReport = (params) =>
   api.get("/api/v1/hostel/reports/transfer-vacate", { params });
+
+// ==================== COMPLAINTS ====================
+
+export const getComplaints = (params) =>
+  api.get("/api/v1/hostel/complaints", { params });
+
+export const getComplaintById = (id, params) =>
+  api.get(`/api/v1/hostel/complaints/${id}`, { params });
+
+export const createComplaint = (data) =>
+  api.post("/api/v1/hostel/complaints", data);
+
+export const updateComplaint = (id, data) =>
+  api.put(`/api/v1/hostel/complaints/${id}`, data);
+
+export const deleteComplaint = (id) =>
+  api.delete(`/api/v1/hostel/complaints/${id}`);
+
+export const updateComplaintStatus = (id, data) =>
+  api.put(`/api/v1/hostel/complaints/${id}/status`, data);
+
+export const patchComplaintStatus = (id, data) =>
+  api.patch(`/api/v1/hostel/complaints/${id}/status`, data);
+
+export const getComplaintCategories = (params) =>
+  api.get("/api/v1/hostel/complaints/categories", { params });
+
+export const getComplaintPriorities = (params) =>
+  api.get("/api/v1/hostel/complaints/priorities", { params });
+
+export const getComplaintStatuses = (params) =>
+  api.get("/api/v1/hostel/complaints/statuses", { params });

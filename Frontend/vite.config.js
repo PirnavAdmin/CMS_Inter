@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev";
+  const apiBaseUrl = env.VITE_API_BASE_URL || "https://suitor-shoptalk-earmuff.ngrok-free.dev";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -31,10 +31,10 @@ export default defineConfig(({ mode }) => {
         "/api": {
           target: apiBaseUrl,
           changeOrigin: true,
-          secure: !isHttpsApi ? true : false,
-          agent: isHttpsApi ? new https.Agent({ keepAlive: false, rejectUnauthorized: false }) : undefined,
-          proxyTimeout: 10000,
-          timeout: 10000,
+          secure: false,
+          agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
+          proxyTimeout: 30000,
+          timeout: 30000,
           headers: {
             "ngrok-skip-browser-warning": "true",
           },
@@ -43,7 +43,13 @@ export default defineConfig(({ mode }) => {
               if (res && !res.headersSent && typeof res.writeHead === "function") {
                 try {
                   res.writeHead(502, { "Content-Type": "application/json" });
-                  res.end(JSON.stringify({ success: false, message: "Backend proxy unreachable", error: err?.message }));
+                  res.end(
+                    JSON.stringify({
+                      success: false,
+                      message: `Backend proxy unreachable at ${apiBaseUrl}. Please ensure the backend server is running.`,
+                      error: err?.message,
+                    })
+                  );
                 } catch {
                   // ignore
                 }

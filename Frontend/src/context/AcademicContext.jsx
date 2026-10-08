@@ -103,7 +103,6 @@ const sameBoard = (left, right) => {
 const sameYear = (left, right) => String(yearIdOf(left) ?? "") === String(yearIdOf(right) ?? "") || normalize(left?.code ?? left?.name ?? left?.label) === normalize(right?.code ?? right?.name ?? right?.label);
 
 export function AcademicProvider({ children }) {
-  useLocation();
   const isAuthenticated = Boolean(getAuthToken());
 
   // Connect to Campus Context to filter boards dynamically based on selected campus
@@ -231,7 +230,7 @@ export function AcademicProvider({ children }) {
     let active = true;
     setBoardsLoading(true);
     setBoardsError("");
-    apiClient.get(apiEndpoints.boards.list, { params: { Status: true, PageNumber: 1, PageSize: 100 } }).then((response) => {
+    apiClient.get(apiEndpoints.boards.list, { params: { Status: true, PageNumber: 1, PageSize: 100 }, skipErrorLog: true }).then((response) => {
       if (!active) return;
       const fetched = uniqueById(asList(response).filter(isActive).map(mapBoard));
       const nextBoards = fetched.length ? fetched : DEFAULT_BOARDS;
@@ -260,10 +259,12 @@ export function AcademicProvider({ children }) {
       try {
         return await apiClient.get(apiEndpoints.academicYears.active, {
           params: { boardId: effectiveBoardId, isActive: true },
+          skipErrorLog: true,
         });
       } catch {
         return apiClient.get(apiEndpoints.academicYears.list, {
           params: { boardId: effectiveBoardId, isActive: true, Status: true },
+          skipErrorLog: true,
         });
       }
     };
@@ -295,7 +296,8 @@ export function AcademicProvider({ children }) {
       });
     }).finally(() => active && setAcademicYearsLoading(false));
     return () => { active = false; };
-  }, [isAuthenticated, selectedBoardId, selectedBoard, refreshToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, selectedBoardId, refreshToken]);
 
   const value = useMemo(() => ({
     boards,
