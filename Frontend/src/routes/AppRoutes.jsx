@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/components/pages/LandingPage.jsx";
 import DashboardPage from "@/components/pages/DashboardPage.jsx";
 import PrincipalDashboard from "@/Dashboard/PrincipalDashboard/PrincipalDashboard.jsx";
