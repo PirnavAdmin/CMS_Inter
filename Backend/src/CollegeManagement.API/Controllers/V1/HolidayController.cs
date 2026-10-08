@@ -3,6 +3,9 @@ using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Holiday;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Helpers;
+using CollegeManagement.API.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,10 +18,14 @@ namespace CollegeManagement.API.Controllers.V1
     public class HolidayController : ControllerBase
     {
         private readonly IHolidayService _holidayService;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly AppDbContext _context;
 
-        public HolidayController(IHolidayService holidayService)
+        public HolidayController(IHolidayService holidayService, IJwtTokenHelper jwtTokenHelper, AppDbContext context)
         {
             _holidayService = holidayService;
+            _jwtTokenHelper = jwtTokenHelper;
+            _context = context;
         }
 
         // GET: api/v1/holidays
@@ -27,6 +34,25 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var role = _jwtTokenHelper.GetRole(User);
+                if (role == "Driver")
+                {
+                    var staffId = _jwtTokenHelper.GetStaffId(User);
+                    if (staffId != null)
+                    {
+                        var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == staffId.Value && !s.IsDeleted);
+                        if (staff != null && staff.CampusId.HasValue)
+                        {
+                            filter.CampusId = staff.CampusId.Value;
+                        }
+                    }
+                    
+                    filter.Status = "Active";
+                    // Only upcoming or currently active holidays
+                    filter.FromDate = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(5).AddMinutes(30)); 
+                    filter.AppliesToIn = new[] { "All students and staff", "All staff", "Non-teaching staff", "Drivers" };
+                }
+
                 var (items, totalCount, totalPages) = await _holidayService.GetPagedHolidaysAsync(filter);
                 return Ok(new
                 {
