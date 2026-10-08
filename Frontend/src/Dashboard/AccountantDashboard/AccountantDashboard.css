@@ -146,6 +146,28 @@
   font-size: 20px;
   font-weight: 800;
 }
+.accountant-shell .sp-card,
+.accountant-shell .sp-card-body,
+.accountant-shell .sp-search {
+  min-width: 0;
+}
+.accountant-shell .sp-toolbar {
+  flex-wrap: wrap;
+}
+.accountant-shell .sp-toolbar select {
+  flex: 0 1 180px;
+  max-width: 100%;
+}
+.accountant-shell .sp-metric-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.accountant-shell .sp-metric-list strong,
+.accountant-shell .sp-api-state {
+  overflow-wrap: anywhere;
+}
+.accountant-shell .sp-metric-list strong {
+  font-size: 14px;
+}
 @media (max-width: 900px) {
   .accountant-shell .sp-summary-grid.four,
   .accountant-shell .sp-dashboard-grid,
@@ -153,4 +175,8 @@
     grid-template-columns: 1fr;
   }
 }
-@media (max-width: 620px) { .accountant-shell .accountant-chart-row { grid-template-columns: 88px minmax(0, 1fr) auto; } }
+@media (max-width: 620px) {
+  .accountant-shell .accountant-chart-row { grid-template-columns: 88px minmax(0, 1fr) auto; }
+  .accountant-shell .sp-metric-list { grid-template-columns: minmax(0, 1fr); }
+  .accountant-shell .sp-toolbar select { flex-basis: 100%; }
+}
