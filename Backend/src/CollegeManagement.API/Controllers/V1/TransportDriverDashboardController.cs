@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Data;
@@ -48,6 +48,75 @@ namespace CollegeManagement.API.Controllers.V1
                 .ToListAsync();
 
             return Ok(new { success = true, data = notifications });
+        }
+
+        [HttpPut("notifications/{id}/read")]
+        public async Task<IActionResult> MarkNotificationAsRead(long id)
+        {
+            var staffId = _jwtTokenHelper.GetStaffId(User);
+            if (staffId == null) return Unauthorized();
+
+            var notification = await _context.DriverNotifications
+                .FirstOrDefaultAsync(n => n.NotificationId == id && n.StaffId == staffId.Value);
+
+            if (notification == null) return NotFound(new { success = false, message = "Notification not found." });
+
+            if (notification.ReadTime == null)
+            {
+                notification.ReadTime = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new { success = true, message = "Notification marked as read." });
+        }
+
+        [HttpPost("notifications")]
+        [Authorize(Roles = "Admin,TransportAdmin")]
+        public async Task<IActionResult> SendNotification([FromBody] CustomDriverNotificationRequest request)
+        {
+            if (request.DriverId <= 0 || string.IsNullOrWhiteSpace(request.Message))
+            {
+                return BadRequest(new { success = false, message = "DriverId and Message are required." });
+            }
+            
+            // Use DriverId or StaffId based on request
+            long staffId = 0;
+            var driver = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(d => d.DriverId == request.DriverId && !d.IsDeleted);
+            
+            if (driver != null && driver.StaffId.HasValue && driver.StaffId.Value > 0)
+            {
+                staffId = driver.StaffId.Value;
+            }
+            else
+            {
+                // Fallback: check if it's already a StaffId
+                var staff = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == request.DriverId && !s.IsDeleted && s.IsDriver);
+                if (staff != null) staffId = staff.Id;
+            }
+
+            if (staffId <= 0)
+            {
+                return NotFound(new { success = false, message = "Driver not found or missing Staff mapping." });
+            }
+
+            var notification = new DriverNotification
+            {
+                StaffId = (int)staffId,
+                Type = string.IsNullOrWhiteSpace(request.Type) ? "CUSTOM_ALERT" : request.Type,
+                Title = string.IsNullOrWhiteSpace(request.Title) ? "Admin Alert" : request.Title,
+                Message = request.Message,
+                CreatedTime = DateTime.UtcNow
+            };
+
+            _context.DriverNotifications.Add(notification);
+            await _context.SaveChangesAsync();
+
+            // Note: If you want to use SignalR here, you need to inject IHubContext<DriverNotificationHub> _hubContext
+            // For now, we skip SignalR or just log it if we don't have it injected in DashboardController.
+            // Let's assume we don't need realtime for custom admin alerts if we don't have the hub injected, 
+            // or we just inject it. Let's just omit _hubContext call here since it's missing in the controller constructor.
+
+            return Ok(new { success = true, message = "Notification sent successfully." });
         }
 
         [HttpPost("notifications/read-all")]
@@ -278,6 +347,14 @@ namespace CollegeManagement.API.Controllers.V1
 
             return Ok(new { success = true, message = "Profile contact updated.", driverId = driverId });
         }
+    }
+
+    public class CustomDriverNotificationRequest
+    {
+        public long DriverId { get; set; }
+        public string? Type { get; set; }
+        public string? Title { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 }
 

@@ -32,7 +32,6 @@ namespace CollegeManagement.API.DTOs.Settings
 
     public class UpdateNumberSeriesDto
     {
-        [Required]
         [MaxLength(20)]
         public string Prefix { get; set; } = string.Empty;
 
@@ -57,6 +56,10 @@ namespace CollegeManagement.API.DTOs.Settings
 
     public class GenerateNumberSeriesRequestDto
     {
+        public int? BoardId { get; set; }
+        public int? AcademicYearId { get; set; }
+        public int? GroupId { get; set; }
+        public int? ProgramId { get; set; }
         public string? Board { get; set; }
         public string? Dept { get; set; }
         public string? Type { get; set; }
@@ -65,11 +68,13 @@ namespace CollegeManagement.API.DTOs.Settings
         public string? Cert { get; set; }
         public string? AcademicYear { get; set; }
         public string? Group { get; set; }
+        public string? Program { get; set; }
         public string? Section { get; set; }
         public string? Level { get; set; }
         public string? Exam { get; set; }
         public string? GroupCode { get; set; }
         public string? CampusGroupPrefix { get; set; }
+        public string? CampusCode { get; set; }
     }
 
     public class GenerateNumberSeriesResponseDto

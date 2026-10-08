@@ -28,7 +28,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 "teaching-staff-id" or "teaching-staff" or "teaching" or "tch" => "TEACHING_STAFF_ID",
                 "non-teaching-staff-id" or "non-teaching-staff" or "non-teaching" or "nonteaching" or "nt" => "NON_TEACHING_STAFF_ID",
-                "employee-id" or "employee" or "employeeid" or "emp" => "TEACHING_STAFF_ID",
+                "employee-id" or "employee" or "employeeid" or "emp" => "EMPLOYEE_ID",
                 "admission-no" or "admission" or "admissionno" or "adm" => "ADMISSION_NO",
                 "roll-no" or "rollno" or "roll" => "ROLL_NO",
                 "student-id" or "studentid" or "student" or "stu" => "STUDENT_ID",
@@ -46,7 +46,7 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 "TEACHING_STAFF_ID" => "teaching-staff-id",
                 "NON_TEACHING_STAFF_ID" => "non-teaching-staff-id",
-                "EMPLOYEE_ID" => "teaching-staff-id",
+                "EMPLOYEE_ID" => "employee-id",
                 "ADMISSION_NO" => "admission-no",
                 "ROLL_NO" => "roll-no",
                 "STUDENT_ID" => "student-id",
@@ -58,12 +58,12 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync(int? campusId = null, string? board = null, string? academicYear = null, bool includeSubCounters = false)
+        public async Task<IEnumerable<NumberSeriesResponseDto>> GetAllSeriesAsync(int? campusId = null, string? board = null, string? academicYear = null, bool includeSubCounters = false, string? campusCode = null)
         {
             var entities = await _repository.GetAllAsync(campusId, includeSubCounters);
             var dtos = new List<NumberSeriesResponseDto>();
 
-            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear };
+            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear, CampusCode = campusCode };
 
             foreach (var entity in entities)
             {
@@ -73,13 +73,13 @@ namespace CollegeManagement.API.Services.Implementations
             return dtos;
         }
 
-        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug, int? campusId = null, string? board = null, string? academicYear = null)
+        public async Task<NumberSeriesResponseDto?> GetSeriesByCodeAsync(string seriesCodeOrSlug, int? campusId = null, string? board = null, string? academicYear = null, string? campusCode = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
             var entity = await _repository.GetByCodeAsync(code, campusId);
             if (entity == null) return null;
 
-            var context = (board != null || academicYear != null) ? new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear } : null;
+            var context = (board != null || academicYear != null || campusCode != null) ? new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear, CampusCode = campusCode } : null;
             return await MapToDtoAsync(entity, context, campusId);
         }
 
@@ -115,8 +115,12 @@ namespace CollegeManagement.API.Services.Implementations
                 if (!campusId.HasValue || campusId <= 0)
                     throw new System.ArgumentException("campusId is required for Roll Number generation.");
 
-                var groupCode = (context?.GroupCode ?? context?.Group ?? "GEN").Trim().ToUpperInvariant();
-                var subCode = $"ROLL_NO|{campusId}|{groupCode}";
+                var boardId = context?.BoardId ?? 0;
+                var academicYearId = context?.AcademicYearId ?? 0;
+                var groupId = context?.GroupId ?? 0;
+                var programId = context?.ProgramId ?? 0;
+
+                var subCode = $"ROLL_NO|{campusId}|{boardId}|{academicYearId}|{groupId}|{programId}";
 
                 var rollEntity = await _repository.GenerateNextSequenceAsync(
                     subCode,
@@ -178,7 +182,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null, int? campusId = null, string? board = null, string? academicYear = null)
+        public async Task<string> GetLivePreviewAsync(string seriesCodeOrSlug, string? pattern = null, int? numberLength = null, string? prefix = null, int? campusId = null, string? board = null, string? academicYear = null, string? campusCode = null)
         {
             var code = NormalizeSeriesCode(seriesCodeOrSlug);
             var actualCode = code;
@@ -215,7 +219,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             var nextSeq = curSeq < startNum ? startNum : curSeq + 1;
 
-            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear };
+            var contextDto = new GenerateNumberSeriesRequestDto { Board = board, AcademicYear = academicYear, CampusCode = campusCode };
 
             return NumberSeriesPatternEvaluator.Evaluate(
                 pattern: activePattern,
@@ -243,10 +247,7 @@ namespace CollegeManagement.API.Services.Implementations
             // We no longer split sequence by Board or AcademicYear.
             // The sequence is continuous globally for the campus.
             // Formatting will still use Board/AY if present in the pattern.
-            {
-                var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode, campusId, context?.Board, context?.AcademicYear);
-                curSeq = Math.Max(curSeq, maxSeq);
-            }
+            if (entity.SeriesCode != "ROLL_NO") { var maxSeq = await _repository.GetMaxSequenceForBaseSeriesAsync(entity.SeriesCode, campusId, context?.Board, context?.AcademicYear); curSeq = Math.Max(curSeq, maxSeq); }
 
             var nextSeq = curSeq < entity.StartNumber
                 ? entity.StartNumber

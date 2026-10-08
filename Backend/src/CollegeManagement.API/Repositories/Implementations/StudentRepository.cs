@@ -114,13 +114,13 @@ namespace CollegeManagement.API.Repositories
                     BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
                     AcademicYearId = s.AcademicYearId,
                     AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
-                    AcademicLevelId = s.AcademicLevelId ?? 0,
+                    AcademicLevelId = s.AcademicLevelId,
                     AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
-                    GroupId = s.GroupId ?? 0,
+                    GroupId = s.GroupId,
                     GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
-                    SectionId = s.SectionId ?? 0,
+                    SectionId = s.SectionId,
                     SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
-                    ProgramId = s.ProgramId ?? 0,
+                    ProgramId = s.ProgramId,
                     ProgramName = s.ProgramNavigation != null ? s.ProgramNavigation.ProgramName : null,
                     IsActive = s.IsActive,
                     Status = s.Status,
@@ -450,6 +450,8 @@ namespace CollegeManagement.API.Repositories
                         p_AdmissionId = request.AdmissionId,
                         p_AdmissionNo = request.AdmissionNo,
                         p_AdmissionDate = request.AdmissionDate,
+                        p_AdmissionType = request.AdmissionType,
+                        p_AdmissionQuota = request.AdmissionQuota,
                         p_Medium = request.Medium,
                         p_SecondLanguage = request.SecondLanguage,
 
@@ -658,6 +660,36 @@ namespace CollegeManagement.API.Repositories
                     new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 0 },
                     transaction,
                     commandType: CommandType.StoredProcedure);
+
+                // Parent orphan cleanup: check if parent has any other active children
+                var parentUserId = await connection.ExecuteScalarAsync<int?>(
+                    "SELECT ParentUserId FROM ParentStudentMappings WHERE StudentId = @StudentId LIMIT 1;",
+                    new { StudentId = studentId },
+                    transaction: transaction);
+
+                if (parentUserId.HasValue && parentUserId.Value > 0)
+                {
+                    await connection.ExecuteAsync(
+                        "DELETE FROM ParentStudentMappings WHERE StudentId = @StudentId;",
+                        new { StudentId = studentId },
+                        transaction: transaction);
+
+                    var remainingChildren = await connection.ExecuteScalarAsync<int>(@"
+                        SELECT COUNT(1) 
+                        FROM ParentStudentMappings psm
+                        INNER JOIN Students s ON psm.StudentId = s.StudentId
+                        WHERE psm.ParentUserId = @ParentUserId AND s.IsActive = 1;",
+                        new { ParentUserId = parentUserId.Value },
+                        transaction: transaction);
+
+                    if (remainingChildren == 0)
+                    {
+                        await connection.ExecuteAsync(
+                            "UPDATE Users SET IsActive = 0, UpdatedAt = CURRENT_TIMESTAMP(6) WHERE UserId = @UserId;",
+                            new { UserId = parentUserId.Value },
+                            transaction: transaction);
+                    }
+                }
 
                 transaction.Commit();
                 return result == 1;

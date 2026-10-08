@@ -342,7 +342,7 @@ export default function AppRoutes() {
         <Route path="/parent-dashboard/settings" element={<ParentSettingsPage />} />
       </Route>
 
-      <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
+      <Route path="/faculty-dashboard/*" element={<ProtectedRoute requireFaculty><FacultyPortalRoutes /></ProtectedRoute>} />
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />
       <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />

@@ -209,34 +209,6 @@ namespace CollegeManagement.API.Repositories.Implementations
                          && n.CampusId == campusId)
                 .MaxAsync(n => (int?)n.CurrentSequence) ?? 0;
 
-            // Sync with actual Staffs table for Teaching and Non-Teaching Staff IDs
-            var code = baseSeriesCode.Trim().ToUpperInvariant();
-            if (code == "TEACHING_STAFF_ID" || code == "NON_TEACHING_STAFF_ID")
-            {
-                var isTeaching = code == "TEACHING_STAFF_ID";
-                
-                // Fetch all Employee IDs in memory for robust parsing
-                var staffIds = await _context.Set<CollegeManagement.API.Models.Staff.Staff>()
-                    .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null 
-                             && (isTeaching ? s.StaffType == "Teaching" : s.StaffType != "Teaching"))
-                    .Select(s => s.EmployeeId)
-                    .ToListAsync();
-                    
-                if (staffIds.Any())
-                {
-                    var actualMax = staffIds
-                        .Select(id => 
-                        {
-                            var numericPart = new string(id.Where(char.IsDigit).ToArray());
-                            return int.TryParse(numericPart, out var val) ? val : 0;
-                        })
-                        .DefaultIfEmpty(0)
-                        .Max();
-                        
-                    max = System.Math.Max(max, actualMax);
-                }
-            }
-                
             return max;
         }
     }

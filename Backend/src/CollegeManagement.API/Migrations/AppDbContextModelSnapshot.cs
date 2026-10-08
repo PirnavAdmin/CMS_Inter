@@ -5473,6 +5473,34 @@ namespace CollegeManagement.API.Migrations
                     b.ToTable("DriverNotifications");
                 });
 
+            modelBuilder.Entity("CollegeManagement.API.Models.Transport.DriverPreference", b =>
+                {
+                    b.Property<int>("StaffId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("AutoLogoutMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.Property<bool>("EmailAttendanceAlerts")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("SmsUrgentAlerts")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<bool>("TripReminders")
+                        .HasColumnType("tinyint(1)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("datetime(6)");
+
+                    b.HasKey("StaffId");
+
+                    b.ToTable("DriverPreferences");
+                });
+
             modelBuilder.Entity("CollegeManagement.API.Models.Transport.TransportGpsTelemetry", b =>
                 {
                     b.Property<int>("Id")
@@ -7823,6 +7851,17 @@ namespace CollegeManagement.API.Migrations
                     b.Navigation("SubstituteStaff");
 
                     b.Navigation("Timetable");
+                });
+
+            modelBuilder.Entity("CollegeManagement.API.Models.Transport.DriverPreference", b =>
+                {
+                    b.HasOne("CollegeManagement.API.Models.Staff.Staff", "Staff")
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Staff");
                 });
 
             modelBuilder.Entity("CollegeManagement.API.Models.Transport.TransportGpsTelemetry", b =>

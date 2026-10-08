@@ -273,5 +273,114 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             return result == 1;
         }
+
+        public async Task<List<RoleModuleDto>> GetRoleModulesAsync(int roleId)
+        {
+            var conn = await GetOpenConnectionAsync();
+            var result = await conn.QueryAsync<RoleModuleDto>(
+                "sp_GetRoleModules",
+                new { p_RoleId = roleId },
+                commandType: CommandType.StoredProcedure);
+
+            var list = result.ToList();
+            var defaultActions = new List<string> { "view", "create", "edit", "delete" };
+            foreach (var item in list)
+            {
+                if (string.Equals(item.Id, "dashboard", StringComparison.OrdinalIgnoreCase))
+                {
+                    item.AvailableActions = new List<string> { "view", "export" };
+                }
+                else
+                {
+                    item.AvailableActions = new List<string>(defaultActions);
+                }
+            }
+
+            return list;
+        }
+
+        public async Task<List<string>> GetApplicableSubModulesForRoleAsync(int roleId)
+        {
+            var modules = await GetRoleModulesAsync(roleId);
+            return modules.Select(m => m.SubModule).Where(s => !string.IsNullOrWhiteSpace(s)).ToList();
+        }
+
+        public async Task<bool> SetRoleModulesAsync(int roleId, List<string> moduleIdentifiers)
+        {
+            if (moduleIdentifiers == null) return false;
+
+            // Map identifiers (kebab-case or title) to ModuleKey and SubModule
+            var allKnownModules = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "dashboard", "Dashboard" },
+                { "group-management", "Group Management" },
+                { "subject-management", "Subject Management" },
+                { "section-room", "Section & Room" },
+                { "timetable", "Timetable" },
+                { "holiday-management", "Holiday Management" },
+                { "student-admission", "Student Admission" },
+                { "student-management", "Student Management" },
+                { "section-allocation", "Section Allocation" },
+                { "attendance", "Attendance" },
+                { "promotion", "Promotion" },
+                { "transport", "Transport" },
+                { "staff-management", "Staff Management" },
+                { "department-designation", "Department & Designation" },
+                { "staff-attendance", "Staff Attendance" },
+                { "staff-leave-management", "Staff Leave Management" },
+                { "examination", "Examination" },
+                { "marks-evaluation", "Marks Evaluation" },
+                { "results", "Results" },
+                { "fee-management", "Fee Management" },
+                { "payroll", "Payroll" },
+                { "certificates", "Certificates" },
+                { "reports-analytics", "Reports & Analytics" },
+                { "hostel-management", "Hostel Management" },
+                { "library", "Library" },
+                { "placement", "Placement" },
+                { "settings", "Settings" },
+                { "roles-permissions", "Roles & Permissions" }
+            };
+
+            var payload = new List<object>();
+            foreach (var mod in moduleIdentifiers)
+            {
+                if (string.IsNullOrWhiteSpace(mod)) continue;
+                string trimmed = mod.Trim();
+                string key = ModulePermissionMatrixDto.NormalizeToKebabCase(trimmed);
+                string subModule = allKnownModules.TryGetValue(key, out var name) ? name : trimmed;
+
+                payload.Add(new
+                {
+                    ModuleKey = key,
+                    SubModule = subModule
+                });
+            }
+
+            string json = JsonSerializer.Serialize(payload);
+            var conn = await GetOpenConnectionAsync();
+            await conn.ExecuteAsync(
+                "sp_SetRoleModules",
+                new { p_RoleId = roleId, p_ModulesJson = json },
+                commandType: CommandType.StoredProcedure);
+
+            return true;
+        }
+
+        public async Task<bool> HasModulePermissionAsync(int userId, string moduleIdentifier, string action)
+        {
+            var conn = await GetOpenConnectionAsync();
+            var result = await conn.ExecuteScalarAsync<int?>(
+                "sp_CheckUserModuleAction",
+                new
+                {
+                    p_UserId = userId,
+                    p_ModuleIdentifier = moduleIdentifier,
+                    p_Action = action ?? "View"
+                },
+                commandType: CommandType.StoredProcedure);
+
+            return result == 1;
+        }
     }
 }
