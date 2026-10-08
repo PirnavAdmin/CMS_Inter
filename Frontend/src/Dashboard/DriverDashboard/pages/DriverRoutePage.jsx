@@ -15,50 +15,13 @@ import {
   Info,
 } from "lucide-react";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
-import { getRoute } from "../../../api/transportDriverApi.js";
+import { useDriverData } from "../DriverDataContext.jsx";
 import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverRoutePage({ onNavigateTab }) {
-  const [routeDetails, setRouteDetails] = useState(null);
+  const { routeDetails: currentRoute, driverProfile, routeError: error, loading: isLoading } = useDriverData();
   const [selectedStopId, setSelectedStopId] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const fetchRoute = async () => {
-      try {
-        setIsLoading(true);
-        const res = await getRoute();
-        const routeData = res.data?.route || {
-          routeName: "Loading...",
-          routeCode: "...",
-          startPoint: "...",
-          morningStartTime: "...",
-          endPoint: "...",
-          morningEndTime: "...",
-          distanceKm: 0,
-          busNumber: "...",
-          vehicleModel: "...",
-          assignedAttendant: "...",
-          attendantPhone: "...",
-          shift: "...",
-          effectiveDate: "...",
-          totalStudents: 0,
-          stops: []
-        };
-        setRouteDetails(routeData);
-        if (routeData.stops && routeData.stops.length > 0) {
-          setSelectedStopId(routeData.stops[0].id);
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load route details.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchRoute();
-  }, []);
+  const routeDetails = currentRoute ? { ...currentRoute, busNumber: driverProfile.assignedVehicle, vehicleModel: driverProfile.vehicleModel, assignedAttendant: driverProfile.assignedAttendant, shift: driverProfile.shift } : null;
 
   if (isLoading) {
     return <div className="dp-page-container"><SkeletonPage variant="page" /></div>;
@@ -67,6 +30,8 @@ export default function DriverRoutePage({ onNavigateTab }) {
   if (error) {
     return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
   }
+
+  if (!routeDetails) return <div className="dp-page-container"><h1 className="dp-page-title">My Route</h1><p className="dp-page-subtitle">No route is currently assigned.</p></div>;
 
   const activeStop = routeDetails?.stops?.find((s) => s.id === selectedStopId) || routeDetails?.stops?.[0];
 
@@ -123,8 +88,8 @@ export default function DriverRoutePage({ onNavigateTab }) {
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Total Distance</span>
-              <strong className="dp-rd-val">{routeDetails?.distanceKm} km</strong>
-              <small className="dp-rd-sub">Approx. 90 mins loop</small>
+              <strong className="dp-rd-val">{routeDetails?.distanceKm != null ? `${routeDetails.distanceKm} km` : "Not available"}</strong>
+              <small className="dp-rd-sub">{routeDetails.estimatedDurationMinutes != null ? `${routeDetails.estimatedDurationMinutes} mins estimated` : "Duration not available"}</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Bus Number</span>
@@ -139,16 +104,16 @@ export default function DriverRoutePage({ onNavigateTab }) {
             <div className="dp-rd-item">
               <span className="dp-rd-label">Shift</span>
               <strong className="dp-rd-val">{routeDetails?.shift}</strong>
-              <small className="dp-rd-sub">Morning & Evening</small>
+              <small className="dp-rd-sub">Shift details</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Effective Date</span>
               <strong className="dp-rd-val">{routeDetails?.effectiveDate}</strong>
-              <small className="dp-rd-sub">Academic Term 2026-27</small>
+              <small className="dp-rd-sub">Assignment details</small>
             </div>
             <div className="dp-rd-item">
               <span className="dp-rd-label">Total Assigned Students</span>
-              <strong className="dp-rd-val">{routeDetails?.totalStudents} Students</strong>
+              <strong className="dp-rd-val">{routeDetails?.totalStudents != null ? `${routeDetails.totalStudents} Students` : "Not available"}</strong>
               <small className="dp-rd-sub">Across {routeDetails?.stops?.length || 0} Scheduled Stops</small>
             </div>
           </div>
@@ -226,7 +191,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
                 </div>
                 <div className="dp-ssb-stat">
                   <small>Students at Stop</small>
-                  <strong>{activeStop.studentCount} Students</strong>
+                  <strong>{activeStop.studentCount != null ? `${activeStop.studentCount} Students` : "--"}</strong>
                 </div>
               </div>
               <div className="dp-ssb-right">
@@ -299,7 +264,7 @@ export default function DriverRoutePage({ onNavigateTab }) {
                     </td>
                     <td>
                       <span className="dp-student-count-chip">
-                        <Users size={12} /> {stop.studentCount} Students
+                        <Users size={12} /> {stop.studentCount != null ? `${stop.studentCount} Students` : "--"}
                       </span>
                     </td>
                     <td>
