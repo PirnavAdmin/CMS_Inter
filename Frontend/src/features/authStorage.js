@@ -38,6 +38,7 @@ export const clearAuthSession = () => {
       }
     });
   } catch { /* Storage unavailable */ }
+  window.dispatchEvent(new Event("cms-auth-session-updated"));
 };
 
 export const saveAuthSession = ({ token, user, role }, persistent) => {
@@ -47,6 +48,7 @@ export const saveAuthSession = ({ token, user, role }, persistent) => {
   storage.setItem("token", String(token));
   storage.setItem("user", JSON.stringify(user));
   storage.setItem("role", String(role ?? user?.role ?? ""));
+  window.dispatchEvent(new Event("cms-auth-session-updated"));
 };
 
 export const updateAuthToken = (token) => {

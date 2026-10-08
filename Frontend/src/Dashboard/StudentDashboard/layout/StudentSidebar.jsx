@@ -11,6 +11,8 @@ import certificateIcon from "@/assets/sidebar-3d/certificates.png";
 import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
+import { useEffectivePermissions } from "@/features/rolesPermissions/EffectivePermissionsContext.jsx";
+import { getModuleKeyForPath } from "@/features/rolesPermissions/permissionRoutes.js";
 
 const groups = [
   ["STUDENT PORTAL", [["Dashboard", "", dashboardIcon]]],
@@ -33,13 +35,23 @@ const groups = [
 ];
 
 export default function StudentSidebar({ open, onClose }) {
+  const { status, canAccess } = useEffectivePermissions();
+
+  const visibleGroups = groups.map(([heading, links]) => [
+    heading,
+    links.filter(([, path]) => {
+      const moduleKey = getModuleKeyForPath(`/student-dashboard${path ? `/${path}` : ""}`);
+      return !moduleKey || (status === "ready" && canAccess(moduleKey));
+    }),
+  ]).filter(([, links]) => links.length);
+
   return (
     <aside className={`sp-sidebar ${open ? "is-open" : ""}`}>
       <div className="sp-brand">
         <img src={logo} alt="Pirnav Colleges" />
       </div>
       <nav>
-        {groups.map(([heading, links]) => (
+        {visibleGroups.map(([heading, links]) => (
           <section key={heading}>
             <h2>{heading}</h2>
             {links.map(([label, path, icon]) => (

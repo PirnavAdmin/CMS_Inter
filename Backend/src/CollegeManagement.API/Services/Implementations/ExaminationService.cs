@@ -305,23 +305,65 @@ namespace CollegeManagement.API.Services.Implementations
             var cacheKey = $"exam:details:{examinationId}";
             if (_memoryCache.TryGetValue(cacheKey, out ExaminationResponse? cachedResponse) && cachedResponse != null)
             {
-                return cachedResponse;
+                if (!string.Equals(cachedResponse.Status, "COMPLETED", StringComparison.OrdinalIgnoreCase))
+                {
+                    _memoryCache.Remove(cacheKey);
+                }
+                else
+                {
+                    return cachedResponse;
+                }
             }
 
             var exam = await _examinationRepository.GetExaminationByIdAsync(examinationId);
             if (exam == null) return null;
+
+            if (string.Equals(exam.Status, "SCHEDULED", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(exam.Status, "ONGOING", StringComparison.OrdinalIgnoreCase))
+            {
+                var nowIst = CollegeManagement.API.Services.Background.ExamAutoCompletionWorker.GetIstNow();
+                var today = DateOnly.FromDateTime(nowIst);
+                var currentTime = TimeOnly.FromDateTime(nowIst);
+                var activeSchedules = exam.ExamSchedules?.Where(s => s.IsActive).ToList() ?? new List<ExamSchedule>();
+
+                bool allFinished = activeSchedules.Any()
+                    ? activeSchedules.All(s => s.ExamDate < today || (s.ExamDate == today && s.EndTime <= currentTime))
+                    : exam.EndDate < today;
+
+                bool hasStarted = activeSchedules.Any()
+                    ? activeSchedules.Any(s => s.ExamDate < today || (s.ExamDate == today && s.StartTime <= currentTime))
+                    : exam.StartDate <= today;
+
+                string targetStatus = allFinished ? "COMPLETED" : (hasStarted ? "ONGOING" : "SCHEDULED");
+
+                if (!string.Equals(exam.Status, targetStatus, StringComparison.OrdinalIgnoreCase))
+                {
+                    exam.Status = targetStatus;
+                    exam.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
 
             var response = _mapper.Map<ExaminationResponse>(exam);
             var eligibleSubjects = await _examinationRepository.GetEligibleSubjectsForExamAsync(examinationId);
             response.TotalEligibleSubjects = eligibleSubjects.Count();
             response.ScheduledSubjectsCount = exam.ExamSchedules?.Count(s => s.IsActive) ?? 0;
 
-            _memoryCache.Set(cacheKey, response, TimeSpan.FromMinutes(10));
+            _memoryCache.Set(cacheKey, response, TimeSpan.FromMinutes(2));
             return response;
         }
 
         public async Task<IEnumerable<ExaminationResponse>> GetExaminationsAsync(ExaminationSearchRequestDto filter)
         {
+            try
+            {
+                await CollegeManagement.API.Services.Background.ExamAutoCompletionWorker.AutoTransitionExaminationsInternalAsync(_context, _logger);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "On-demand examination auto-completion check encountered an exception.");
+            }
+
             return await _examinationRepository.GetExaminationResponsesAsync(filter);
         }
 
