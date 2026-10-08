@@ -1,0 +1,182 @@
+.accountant-shell {
+  --sp-primary: var(--cms-primary);
+  --sp-primary-dark: var(--cms-primary-dark);
+  --sp-primary-hover: var(--cms-primary-hover);
+  --sp-primary-soft: var(--cms-primary-soft);
+  --sp-soft: var(--cms-subtle);
+  --sp-bg: var(--cms-bg);
+  --sp-surface: var(--cms-surface);
+  --sp-border: var(--cms-border);
+  --sp-text: var(--cms-text);
+  --sp-muted: var(--cms-muted);
+  display: grid;
+  gap: 12px;
+  color: var(--cms-text);
+}
+
+.accountant-shell .sp-page-header {
+  min-height: auto;
+}
+
+.accountant-shell .sp-page-header h1 {
+  color: var(--cms-text);
+  font-size: clamp(19px, 1.5vw, 22px);
+  letter-spacing: 0;
+}
+
+.accountant-shell .sp-page-header p {
+  color: var(--cms-muted);
+}
+
+.accountant-shell .sp-btn {
+  border-color: var(--cms-border);
+  background: var(--cms-surface);
+  color: var(--cms-text);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(28, 36, 22, 0.03);
+}
+
+.accountant-shell .sp-btn:hover {
+  border-color: var(--cms-primary-border);
+  background: var(--cms-primary-soft);
+  color: var(--cms-primary-dark);
+}
+
+.accountant-shell .sp-btn.primary {
+  border-color: var(--cms-primary);
+  background: linear-gradient(90deg, var(--cms-primary), var(--cms-primary-hover));
+  color: #ffffff;
+}
+
+.accountant-shell .sp-btn.primary:hover {
+  background: var(--cms-primary-dark);
+  color: #ffffff;
+}
+
+.accountant-btn-icon,
+.accountant-btn-generated-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgb(0 0 0 / 16%));
+}
+
+.accountant-btn-generated-icon {
+  background-repeat: no-repeat;
+  background-size: 300% 200%;
+  border-radius: 5px;
+}
+
+.accountant-shell .sp-summary-grid {
+  gap: 8px;
+}
+
+.accountant-shell .sp-summary {
+  --kpi-accent: var(--cms-primary);
+  min-height: 76px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--kpi-accent) 20%, var(--cms-border));
+  border-radius: 8px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--kpi-accent) 10%, var(--cms-surface)), var(--cms-surface) 75%);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--kpi-accent) 6%, transparent);
+}
+
+.accountant-shell .sp-summary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--kpi-accent) 12%, transparent);
+}
+
+.accountant-shell .sp-summary-icon {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--kpi-accent) 14%, var(--cms-surface));
+}
+
+.accountant-shell .sp-summary-3d-icon {
+  display: block;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 3px color-mix(in srgb, var(--kpi-accent) 20%, transparent));
+}
+
+.accountant-shell .sp-summary-generated-icon {
+  background-repeat: no-repeat;
+  background-size: 300% 200%;
+  border-radius: 5px;
+}
+
+.accountant-shell .sp-tone-blue { --kpi-accent: #2563eb; }
+.accountant-shell .sp-tone-orange { --kpi-accent: #f07a1a; }
+.accountant-shell .sp-tone-purple { --kpi-accent: #7c3aed; }
+.accountant-shell .sp-tone-red { --kpi-accent: #ef4444; }
+
+.accountant-shell .sp-card,
+.accountant-shell .sp-toolbar,
+.accountant-shell .sp-profile-hero {
+  border-color: var(--cms-border);
+  border-radius: 10px;
+  background: var(--cms-surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.accountant-shell .sp-card-head {
+  border-bottom-color: var(--cms-border);
+  background: color-mix(in srgb, var(--cms-subtle) 40%, var(--cms-surface));
+}
+
+.accountant-shell .accountant-chart { display: grid; gap: 10px; }
+.accountant-shell .accountant-chart-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 11px; }
+.accountant-shell .accountant-chart-row > span:first-child { color: var(--sp-muted); }
+.accountant-shell .accountant-bar { height: 9px; overflow: hidden; border-radius: 99px; background: var(--sp-soft); }
+.accountant-shell .accountant-bar i { display: block; height: 100%; border-radius: inherit; background: var(--sp-primary); }
+.accountant-shell .accountant-error { border-color: #efb4bc; background: #fff1f2; color: #b42336; }
+.accountant-shell .accountant-filter-row { display: flex; flex-wrap: wrap; gap: 9px; }
+.accountant-shell .accountant-filter-row input { flex: 1 1 220px; min-height: 38px; padding: 8px 10px; border: 1px solid var(--sp-border); border-radius: 8px; background: var(--sp-surface); color: var(--sp-text); font: inherit; font-size: 12px; }
+.accountant-profile-container {
+  max-width: 1300px;
+  padding-inline: 0;
+}
+.accountant-avatar-initials {
+  color: var(--cms-primary);
+  font-size: 20px;
+  font-weight: 800;
+}
+.accountant-shell .sp-card,
+.accountant-shell .sp-card-body,
+.accountant-shell .sp-search {
+  min-width: 0;
+}
+.accountant-shell .sp-toolbar {
+  flex-wrap: wrap;
+}
+.accountant-shell .sp-toolbar select {
+  flex: 0 1 180px;
+  max-width: 100%;
+}
+.accountant-shell .sp-metric-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.accountant-shell .sp-metric-list strong,
+.accountant-shell .sp-api-state {
+  overflow-wrap: anywhere;
+}
+.accountant-shell .sp-metric-list strong {
+  font-size: 14px;
+}
+@media (max-width: 900px) {
+  .accountant-shell .sp-summary-grid.four,
+  .accountant-shell .sp-dashboard-grid,
+  .accountant-shell .sp-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 620px) {
+  .accountant-shell .accountant-chart-row { grid-template-columns: 88px minmax(0, 1fr) auto; }
+  .accountant-shell .sp-metric-list { grid-template-columns: minmax(0, 1fr); }
+  .accountant-shell .sp-toolbar select { flex-basis: 100%; }
+}

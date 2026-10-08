@@ -4,6 +4,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Field, SkeletonPage, SkeletonRow, SkeletonText, Toast, useConfirmDialog } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { getStoredCertificateTemplates, DEFAULT_CERTIFICATE_TEMPLATES, normalizeApiTemplate } from "@/components/pages/TemplatesPage.jsx";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
@@ -1622,7 +1623,7 @@ function buildPrintHtml(record) {
   const templateParaTwo = escapeHtml(template.paragraphTwo || "");
   const issueDate = escapeHtml(formatDateDdMmYyyy(record.issue || record.requestDate || todayIso()));
   const place = escapeHtml(record.place || "Vijayawada");
-  const remarks = record.remarks ? `<p class="cert-remarks" style="margin-top:10px;font-size:13px;"><strong>Remarks:</strong> ${escapeHtml(record.remarks)}</p>` : "";
+  const remarks = ""; // Remarks are internal and should not be printed on the certificate
   const orientation = getCertificateOrientation(record.type, record.orientation) || "landscape";
 
   const borderColor = template.borderColor || "#1e3a8a";
@@ -1716,7 +1717,8 @@ function buildPrintHtml(record) {
 
 export default function CertificatesPage() {
   const { confirm, confirmationDialog } = useConfirmDialog();
-  const { selectedBoard, selectedAcademicYear } = useAcademicContext();
+  const { selectedBoard, selectedAcademicYear, selectedBoardId, selectedAcademicYearId } = useAcademicContext();
+  const { selectedCampusId } = useCampusContext();
   const navbarBoardName = selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "";
   const navbarYearName = selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || "";
 
@@ -1838,6 +1840,10 @@ export default function CertificatesPage() {
     if (showLoader) setLoadingList(true);
     try {
       const params = {};
+      if (selectedCampusId) params.campusId = selectedCampusId;
+      if (selectedBoardId) params.boardId = selectedBoardId;
+      if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
+      
       if (query.trim()) params.search = query.trim();
       if (status !== "All") params.status = status;
       if (typeFilter !== "All") params.certificateType = typeFilter;
@@ -1885,7 +1891,12 @@ export default function CertificatesPage() {
   const loadWorkflowStats = async (rowsForStats = null) => {
     setLoadingStats(true);
     try {
-      const response = await apiClient.get(CERTIFICATE_API.workflowStats, { skipGlobalLoader: true });
+      const params = {};
+      if (selectedCampusId) params.campusId = selectedCampusId;
+      if (selectedBoardId) params.boardId = selectedBoardId;
+      if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
+      
+      const response = await apiClient.get(CERTIFICATE_API.workflowStats, { params, skipGlobalLoader: true });
       const data = unwrapSinglePayload(response?.data) || {};
       setWorkflowStats({
         totalCount: Number(pick(data, ["totalCount", "TotalCount"])) || 0,
@@ -1978,11 +1989,10 @@ export default function CertificatesPage() {
     try {
       let raw = null;
       try {
-        const { boardId, academicYearId, campusId } = academicCtx || {};
         const params = {};
-        if (campusId) params.campusId = campusId;
-        if (boardId) params.boardId = boardId;
-        if (academicYearId) params.academicYearId = academicYearId;
+        if (selectedCampusId) params.campusId = selectedCampusId;
+        if (selectedBoardId) params.boardId = selectedBoardId;
+        if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
         
         const response = await apiClient.get(CERTIFICATE_API.studentsDropdown, { params, skipGlobalLoader: true });
         raw = response?.data;
@@ -2028,6 +2038,10 @@ export default function CertificatesPage() {
       let raw = null;
       try {
         const params = {};
+        if (selectedCampusId) params.campusId = selectedCampusId;
+        if (selectedBoardId) params.boardId = selectedBoardId;
+        if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
+        
         if (bulkStudentSearch.trim()) params.search = bulkStudentSearch.trim();
         const response = await apiClient.get(CERTIFICATE_API.bulkEligibleStudents, { params, skipGlobalLoader: true });
         raw = response?.data;
@@ -2071,6 +2085,17 @@ export default function CertificatesPage() {
   useEffect(() => {
     if (!filtersReadyRef.current) return undefined;
     const timer = window.setTimeout(() => {
+      loadStudents();
+      loadCertificates();
+      loadWorkflowStats();
+    }, 300);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
+
+  useEffect(() => {
+    if (!filtersReadyRef.current) return undefined;
+    const timer = window.setTimeout(() => {
       loadCertificates();
     }, 300);
     return () => window.clearTimeout(timer);
@@ -2083,7 +2108,7 @@ export default function CertificatesPage() {
     const timer = window.setTimeout(loadBulkEligibleStudents, 300);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generationMode]);
+  }, [generationMode, selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
   useEffect(() => {
     if (!printPreview) return;
@@ -2790,7 +2815,7 @@ export default function CertificatesPage() {
         <div class="cert-body-area" style="text-align: center; line-height: 1.75; margin: 14px 0;">
           <p class="cert-content-text" style="font-size: 14px; margin: 0 0 8px 0; color: #1e293b; white-space: pre-line;">${template.paragraphOne}</p>
           ${template.paragraphTwo ? `<p class="cert-purpose-text" style="font-size: 12.5px; margin: 0; color: #334155;">${template.paragraphTwo}</p>` : ""}
-          ${record.remarks ? `<p class="cert-remarks" style="margin-top: 10px; font-size: 13px;"><strong>Remarks:</strong> ${record.remarks}</p>` : ""}
+          ${"" /* Removed remarks from print layout as they are for internal tracking only */}
         </div>
 
         <footer class="cert-footer-area" style="display: flex; align-items: flex-end; justify-content: space-between; margin-top: 16px;">
@@ -2986,6 +3011,9 @@ export default function CertificatesPage() {
               requestDate: previewData.requestDate || prev.requestDate,
               remarks: prev.remarks !== undefined ? prev.remarks : (previewData.remarks || ""),
               signature: previewData.signature || prev.signature || principalSignatureImg,
+              paragraphOne: previewData.paragraphOne || prev.paragraphOne,
+              paragraphTwo: previewData.paragraphTwo || prev.paragraphTwo,
+              ...(previewData.dataPayload || {})
             };
           });
         }
@@ -3887,11 +3915,11 @@ export default function CertificatesPage() {
                   </div>
 
                   <div className="cert-body-area">
-                    <p className="cert-content-text">{extractCleanCertificateBody(renderTemplateWithRecord(printTemplate.paragraphOne, printPreview)) || printTemplate.paragraphOne}</p>
-                    {printTemplate.paragraphTwo ? (
-                      <p className="cert-purpose-text">{extractCleanCertificateBody(renderTemplateWithRecord(printTemplate.paragraphTwo, printPreview)) || printTemplate.paragraphTwo}</p>
+                    <p className="cert-content-text">{printPreview.paragraphOne || extractCleanCertificateBody(renderTemplateWithRecord(printTemplate.paragraphOne, printPreview)) || printTemplate.paragraphOne}</p>
+                    {printPreview.paragraphTwo || printTemplate.paragraphTwo ? (
+                      <p className="cert-purpose-text">{printPreview.paragraphTwo || extractCleanCertificateBody(renderTemplateWithRecord(printTemplate.paragraphTwo, printPreview)) || printTemplate.paragraphTwo}</p>
                     ) : null}
-                    {printPreview.remarks ? <p className="cert-remarks" style={{ marginTop: "10px", fontSize: "13px" }}><strong>Remarks:</strong> {printPreview.remarks}</p> : null}
+                    {/* Remarks removed from certificate face */}
                   </div>
 
                   <footer className="cert-footer-area">

@@ -33,6 +33,21 @@ namespace CollegeManagement.API.Controllers.V1
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
 
+            // Extract SourceCampusId
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+            {
+                request.SourceCampusId = cId;
+            }
+            else
+            {
+                var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                {
+                    request.SourceCampusId = claimCampusId;
+                }
+            }
+
             try
             {
                 var result =
@@ -90,6 +105,60 @@ namespace CollegeManagement.API.Controllers.V1
             }
         }
 
+
+        [HttpGet("requests/outgoing")]
+        public async Task<IActionResult> GetOutgoingRequests()
+        {
+            try
+            {
+                int campusId = 0;
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                    campusId = cId;
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                        campusId = claimCampusId;
+                }
+
+                if (campusId <= 0) return BadRequest(new { message = "Campus context is required." });
+
+                var all = await _service.GetAllAsync(null); // getting all and filtering in memory since we don't have a specific DB query yet
+                var outgoing = all.Where(x => x.SourceCampusId == campusId && x.CampusId != campusId).ToList();
+                return Ok(outgoing);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred.", details = ex.Message });
+            }
+        }
+
+        [HttpGet("requests/incoming")]
+        public async Task<IActionResult> GetIncomingRequests()
+        {
+            try
+            {
+                int campusId = 0;
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
+                    campusId = cId;
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                        campusId = claimCampusId;
+                }
+
+                if (campusId <= 0) return BadRequest(new { message = "Campus context is required." });
+
+                var all = await _service.GetAllAsync(campusId);
+                var incoming = all.Where(x => x.SourceCampusId != null && x.SourceCampusId != campusId).ToList();
+                return Ok(incoming);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred.", details = ex.Message });
+            }
+        }
 
         // =========================================================
         // GET ADMISSION BY ID
@@ -243,6 +312,36 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
 
+        [HttpPost("{id:int}/approve-request")]
+        public async Task<IActionResult> ApproveRequest(int id, [FromBody] ApproveStudentAdmissionRequest request)
+        {
+            try
+            {
+                var success = await _service.ApproveAdmissionRequestAsync(id, request.Remarks);
+                if (!success) return BadRequest(new { message = "Could not approve request." });
+                return Ok(new { message = "Request approved successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred.", details = ex.Message });
+            }
+        }
+
+        [HttpPost("{id:int}/reject-request")]
+        public async Task<IActionResult> RejectRequest(int id, [FromBody] RejectStudentAdmissionRequest request)
+        {
+            try
+            {
+                var success = await _service.RejectAdmissionRequestAsync(id, request.RejectionReason, request.Remarks);
+                if (!success) return BadRequest(new { message = "Could not reject request." });
+                return Ok(new { message = "Request rejected successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred.", details = ex.Message });
+            }
+        }
+
         // =========================================================
         // APPROVE ADMISSION
         // POST: api/v1/student-admissions/{id}/approve
@@ -257,10 +356,10 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 request.AdmissionId = id;
 
-                var success =
+                var result =
                     await _service.ApproveAsync(request);
 
-                if (!success)
+                if (!result.Success)
                 {
                     return BadRequest(new
                     {
@@ -274,7 +373,8 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     statusCode = 200,
                     message =
-                        "Student admission approved successfully."
+                        "Student admission approved successfully.",
+                    studentId = result.StudentId
                 });
             }
             catch (ArgumentException ex)
@@ -312,7 +412,11 @@ namespace CollegeManagement.API.Controllers.V1
         {
             if (!campusId.HasValue || campusId <= 0)
             {
-                if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
+                if (request?.CampusId.HasValue == true && request.CampusId > 0)
+                {
+                    campusId = request.CampusId.Value;
+                }
+                else if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) && 
                     int.TryParse(headerVal.FirstOrDefault(), out int cId) && cId > 0)
                 {
                     campusId = cId;
@@ -560,7 +664,9 @@ namespace CollegeManagement.API.Controllers.V1
 
     public class GenerateAdmissionNumberRequestDto
     {
+        public int? CampusId { get; set; }
         public int? BoardId { get; set; }
         public int? AcademicYearId { get; set; }
     }
 }
+

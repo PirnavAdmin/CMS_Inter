@@ -26,7 +26,9 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> VerifyAsync(
             VerifyStudentAdmissionRequest request);
 
-        Task<bool> ApproveAsync(
+        Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks);
+        Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks);
+        Task<(bool Success, int? StudentId)> ApproveAsync(
             ApproveStudentAdmissionRequest request);
 
         Task<bool> RejectAsync(

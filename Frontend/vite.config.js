@@ -35,6 +35,13 @@ export default defineConfig(({ mode }) => {
         host: "localhost",
       },
       proxy: {
+        "/hubs/driverNotifications": {
+          target: apiBaseUrl,
+          changeOrigin: true,
+          secure: !isHttpsApi,
+          ws: true,
+          headers: { "ngrok-skip-browser-warning": "true" },
+        },
         "/api": {
           target: apiBaseUrl,
           changeOrigin: true,

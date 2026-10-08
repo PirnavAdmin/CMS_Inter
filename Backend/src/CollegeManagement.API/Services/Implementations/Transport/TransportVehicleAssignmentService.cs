@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.SignalR;
+using CollegeManagement.API.Hubs;
+using CollegeManagement.API.Models.Transport;
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Common;
 using CollegeManagement.API.Data;
@@ -12,13 +15,16 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly ITransportVehicleAssignmentRepository _repository;
         private readonly AppDbContext _context;
+        private readonly IHubContext<DriverNotificationHub> _hubContext;
 
         public TransportVehicleAssignmentService(
             ITransportVehicleAssignmentRepository repository,
-            AppDbContext context)
+            AppDbContext context,
+            IHubContext<DriverNotificationHub> hubContext)
         {
             _repository = repository;
             _context = context;
+            _hubContext = hubContext;
         }
 
         public async Task<PagedResult<TransportVehicleAssignmentDto>> GetAllAsync(
@@ -67,12 +73,17 @@ namespace CollegeManagement.API.Services.Implementations
                 if (activeVehicle != null) dto.VehicleId = activeVehicle.VehicleId;
             }
 
-            // Auto-resolve driverId if missing or non-existent (Staff is single source of truth for drivers)
-            if (dto.DriverId <= 0 || !await _context.Staffs.AnyAsync(x => x.Id == dto.DriverId && !x.IsDeleted && x.IsDriver))
+            // The frontend passes TransportDrivers.DriverId in dto.DriverId.
+            // We need to validate it against TransportDrivers, NOT Staffs.
+            bool isValidDriver = false;
+            if (dto.DriverId > 0)
             {
-                var activeDriver = await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.IsDriver && x.Status == "Active")
-                    ?? await _context.Staffs.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.IsDriver);
-                if (activeDriver != null) dto.DriverId = activeDriver.Id;
+                isValidDriver = await _context.TransportDrivers.AnyAsync(x => x.DriverId == dto.DriverId && !x.IsDeleted);
+            }
+            if (!isValidDriver)
+            {
+                var activeDriver = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.Status);
+                if (activeDriver != null) dto.DriverId = activeDriver.DriverId;
             }
 
             await ValidateAssignmentAsync(
@@ -106,9 +117,43 @@ namespace CollegeManagement.API.Services.Implementations
             if (conflictingVehicleAssignments.Any() || conflictingDriverAssignments.Any())
             {
                 await _context.SaveChangesAsync();
+                    
             }
 
-            return await _repository.CreateAsync(dto, userId);
+            using var transaction = new System.Transactions.TransactionScope(System.Transactions.TransactionScopeAsyncFlowOption.Enabled);
+            var assignmentId = await _repository.CreateAsync(dto, userId);
+            
+            if (assignmentId > 0)
+            {
+                var driver = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(d => d.DriverId == dto.DriverId);
+                if (driver != null && driver.StaffId.HasValue && driver.StaffId.Value > 0)
+                {
+                    var notification = new DriverNotification
+                    {
+                        StaffId = driver.StaffId.Value,
+                        Type = "ASSIGNMENT_CREATED",
+                        Title = "New Vehicle Assigned",
+                        Message = "You have been assigned to a new vehicle and route.",
+                        AssignmentId = assignmentId
+                    };
+                    _context.DriverNotifications.Add(notification);
+                    await _context.SaveChangesAsync();
+                    
+                    await _hubContext.Clients.Group(driver.StaffId.Value.ToString())
+                        .SendAsync("ReceiveNotification", new
+                        {
+                            id = notification.NotificationId,
+                            title = notification.Title,
+                            message = notification.Message,
+                            type = notification.Type,
+                            createdAt = notification.CreatedTime,
+                            isRead = notification.ReadTime != null,
+                            assignmentId = notification.AssignmentId
+                        });
+                }
+            }
+            transaction.Complete();
+            return assignmentId;
         }
 
         public async Task<bool> UpdateAsync(
@@ -136,8 +181,14 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.VehicleId = existing.VehicleId;
             }
 
-            // Auto-resolve driverId if missing or non-existent (Staff is single source of truth for drivers)
-            if (dto.DriverId <= 0 || !await _context.Staffs.AnyAsync(x => x.Id == dto.DriverId && !x.IsDeleted && x.IsDriver))
+            // The frontend passes TransportDrivers.DriverId in dto.DriverId.
+            // We need to validate it against TransportDrivers, NOT Staffs.
+            bool isValidDriver = false;
+            if (dto.DriverId > 0)
+            {
+                isValidDriver = await _context.TransportDrivers.AnyAsync(x => x.DriverId == dto.DriverId && !x.IsDeleted);
+            }
+            if (!isValidDriver)
             {
                 dto.DriverId = existing.DriverId;
             }
@@ -173,12 +224,44 @@ namespace CollegeManagement.API.Services.Implementations
             if (conflictingVehicleAssignments.Any() || conflictingDriverAssignments.Any())
             {
                 await _context.SaveChangesAsync();
+                    
             }
 
-            return await _repository.UpdateAsync(
+            var updated = await _repository.UpdateAsync(
                 assignmentId,
                 dto,
                 userId);
+                
+            if (updated)
+            {
+                var driver = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(d => d.DriverId == dto.DriverId);
+                if (driver != null && driver.StaffId.HasValue && driver.StaffId.Value > 0)
+                {
+                    var notification = new DriverNotification
+                    {
+                        StaffId = driver.StaffId.Value,
+                        Type = "ASSIGNMENT_UPDATED",
+                        Title = "Vehicle Assignment Updated",
+                        Message = "Your vehicle assignment has been updated.",
+                        AssignmentId = assignmentId
+                    };
+                    _context.DriverNotifications.Add(notification);
+                    await _context.SaveChangesAsync();
+                    
+                    await _hubContext.Clients.Group(driver.StaffId.Value.ToString())
+                        .SendAsync("ReceiveNotification", new
+                        {
+                            id = notification.NotificationId,
+                            title = notification.Title,
+                            message = notification.Message,
+                            type = notification.Type,
+                            createdAt = notification.CreatedTime,
+                            isRead = notification.ReadTime != null,
+                            assignmentId = notification.AssignmentId
+                        });
+                }
+            }
+            return updated;
         }
 
         public async Task<bool> DeleteAsync(
@@ -188,9 +271,44 @@ namespace CollegeManagement.API.Services.Implementations
             if (assignmentId <= 0)
                 return false;
 
-            return await _repository.DeleteAsync(
+            var existing = await _repository.GetByIdAsync(assignmentId);
+            if (existing == null) return false;
+
+            var deleted = await _repository.DeleteAsync(
                 assignmentId,
                 userId);
+                
+            if (deleted && existing.DriverId > 0)
+            {
+                var driver = await _context.TransportDrivers.AsNoTracking().FirstOrDefaultAsync(d => d.DriverId == existing.DriverId);
+                if (driver != null && driver.StaffId.HasValue && driver.StaffId.Value > 0)
+                {
+                    var notification = new DriverNotification
+                    {
+                        StaffId = driver.StaffId.Value,
+                        Type = "ASSIGNMENT_CANCELED",
+                        Title = "Assignment Canceled",
+                        Message = "Your vehicle assignment has been canceled or deleted.",
+                        AssignmentId = assignmentId
+                    };
+                    _context.DriverNotifications.Add(notification);
+                    await _context.SaveChangesAsync();
+                    
+                    await _hubContext.Clients.Group(driver.StaffId.Value.ToString())
+                        .SendAsync("ReceiveNotification", new
+                        {
+                            id = notification.NotificationId,
+                            title = notification.Title,
+                            message = notification.Message,
+                            type = notification.Type,
+                            createdAt = notification.CreatedTime,
+                            isRead = notification.ReadTime != null,
+                            assignmentId = notification.AssignmentId
+                        });
+                }
+            }
+            
+            return deleted;
         }
 
         public async Task<IEnumerable<TransportVehicleAssignmentLookupDto>>
@@ -277,3 +395,14 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+

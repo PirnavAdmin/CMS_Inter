@@ -23,13 +23,13 @@ namespace CollegeManagement.API.DTOs.Students
 
         public string? Email { get; set; }
 
-        public int AcademicLevelId { get; set; }
+        public int? AcademicLevelId { get; set; }
 
-        public int GroupId { get; set; }
+        public int? GroupId { get; set; }
 
-        public int ProgramId { get; set; }
+        public int? ProgramId { get; set; }
 
-        public int SectionId { get; set; }
+        public int? SectionId { get; set; }
 
         public string? AcademicLevelName { get; set; }
 

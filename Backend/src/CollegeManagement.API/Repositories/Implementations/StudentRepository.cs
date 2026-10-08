@@ -114,13 +114,13 @@ namespace CollegeManagement.API.Repositories
                     BoardName = s.BoardNavigation != null ? s.BoardNavigation.BoardName : null,
                     AcademicYearId = s.AcademicYearId,
                     AcademicYearName = s.AcademicYear != null ? s.AcademicYear.AcademicYearName : null,
-                    AcademicLevelId = s.AcademicLevelId ?? 0,
+                    AcademicLevelId = s.AcademicLevelId,
                     AcademicLevelName = s.AcademicLevelNavigation != null ? s.AcademicLevelNavigation.LevelName : null,
-                    GroupId = s.GroupId ?? 0,
+                    GroupId = s.GroupId,
                     GroupName = s.GroupNavigation != null ? s.GroupNavigation.GroupName : null,
-                    SectionId = s.SectionId ?? 0,
+                    SectionId = s.SectionId,
                     SectionName = s.SectionNavigation != null ? s.SectionNavigation.SectionName : null,
-                    ProgramId = s.ProgramId ?? 0,
+                    ProgramId = s.ProgramId,
                     ProgramName = s.ProgramNavigation != null ? s.ProgramNavigation.ProgramName : null,
                     IsActive = s.IsActive,
                     Status = s.Status,
@@ -450,6 +450,8 @@ namespace CollegeManagement.API.Repositories
                         p_AdmissionId = request.AdmissionId,
                         p_AdmissionNo = request.AdmissionNo,
                         p_AdmissionDate = request.AdmissionDate,
+                        p_AdmissionType = request.AdmissionType,
+                        p_AdmissionQuota = request.AdmissionQuota,
                         p_Medium = request.Medium,
                         p_SecondLanguage = request.SecondLanguage,
 
@@ -558,6 +560,64 @@ namespace CollegeManagement.API.Repositories
                     parentMobile,
                     relationshipType);
 
+                await SyncLinkedAdmissionFromStudentAsync(
+                    connection,
+                    transaction,
+                    studentId,
+                    request.AdmissionId,
+                    request.StudentName,
+                    request.Photo,
+                    request.Gender,
+                    request.DateOfBirth,
+                    request.BloodGroup,
+                    request.Email,
+                    request.MobileNumber,
+                    request.AadhaarNumber,
+                    request.Nationality,
+                    request.Religion,
+                    request.Category,
+                    request.Address,
+                    request.City,
+                    request.District,
+                    request.State,
+                    request.Pincode,
+                    request.BoardId,
+                    request.AcademicYearId,
+                    request.AcademicLevelId,
+                    request.GroupId,
+                    request.ProgramId,
+                    request.Medium,
+                    request.SecondLanguage,
+                    request.PreviousSchool,
+                    request.PreviousHallTicketNumber,
+                    request.PreviousBoard,
+                    request.PreviousYearOfPassing,
+                    request.PreviousPercentage,
+                    request.FatherName,
+                    request.FatherOccupation,
+                    request.FatherMobile,
+                    request.MotherName,
+                    request.MotherOccupation,
+                    request.MotherMobile,
+                    request.GuardianName,
+                    request.GuardianMobile,
+                    request.ParentGuardianEmail,
+                    request.StudentType,
+                    request.TransportRequired.HasValue ? (request.TransportRequired.Value ? 1 : 0) : (int?)null,
+                    request.BusType,
+                    request.RouteId,
+                    busRoute,
+                    request.PickupPointId,
+                    pickupPoint,
+                    request.HostelId,
+                    hostelBlock,
+                    request.RoomId,
+                    hostelRoom,
+                    request.BedId,
+                    hostelBed,
+                    request.HallTicketNumber ?? request.PreviousHallTicketNumber,
+                    request.CampusId);
+
                 transaction.Commit();
                 return result;
             }
@@ -600,6 +660,36 @@ namespace CollegeManagement.API.Repositories
                     new { p_StaffId = (int?)null, p_StudentId = studentId, p_AdminId = (int?)null, p_IsActive = 0 },
                     transaction,
                     commandType: CommandType.StoredProcedure);
+
+                // Parent orphan cleanup: check if parent has any other active children
+                var parentUserId = await connection.ExecuteScalarAsync<int?>(
+                    "SELECT ParentUserId FROM ParentStudentMappings WHERE StudentId = @StudentId LIMIT 1;",
+                    new { StudentId = studentId },
+                    transaction: transaction);
+
+                if (parentUserId.HasValue && parentUserId.Value > 0)
+                {
+                    await connection.ExecuteAsync(
+                        "DELETE FROM ParentStudentMappings WHERE StudentId = @StudentId;",
+                        new { StudentId = studentId },
+                        transaction: transaction);
+
+                    var remainingChildren = await connection.ExecuteScalarAsync<int>(@"
+                        SELECT COUNT(1) 
+                        FROM ParentStudentMappings psm
+                        INNER JOIN Students s ON psm.StudentId = s.StudentId
+                        WHERE psm.ParentUserId = @ParentUserId AND s.IsActive = 1;",
+                        new { ParentUserId = parentUserId.Value },
+                        transaction: transaction);
+
+                    if (remainingChildren == 0)
+                    {
+                        await connection.ExecuteAsync(
+                            "UPDATE Users SET IsActive = 0, UpdatedAt = CURRENT_TIMESTAMP(6) WHERE UserId = @UserId;",
+                            new { UserId = parentUserId.Value },
+                            transaction: transaction);
+                    }
+                }
 
                 transaction.Commit();
                 return result == 1;
@@ -745,6 +835,64 @@ namespace CollegeManagement.API.Repositories
                     parentFullName,
                     parentMobile,
                     relationshipType);
+
+                await SyncLinkedAdmissionFromStudentAsync(
+                    connection,
+                    transaction,
+                    studentId,
+                    admissionId: null,
+                    studentName: request.StudentName,
+                    photo: request.Photo,
+                    gender: null,
+                    dateOfBirth: null,
+                    bloodGroup: null,
+                    email: request.Email,
+                    mobileNumber: request.MobileNumber,
+                    aadhaarNumber: null,
+                    nationality: null,
+                    religion: null,
+                    category: null,
+                    address: request.Address,
+                    city: request.City,
+                    district: request.District,
+                    state: request.State,
+                    pincode: request.Pincode,
+                    boardId: null,
+                    academicYearId: null,
+                    academicLevelId: null,
+                    groupId: null,
+                    programId: null,
+                    medium: null,
+                    secondLanguage: null,
+                    previousSchool: null,
+                    previousHallTicketNumber: null,
+                    previousBoard: null,
+                    previousYearOfPassing: null,
+                    previousPercentage: null,
+                    fatherName: request.FatherName,
+                    fatherOccupation: null,
+                    fatherMobile: request.FatherMobile,
+                    motherName: request.MotherName,
+                    motherOccupation: null,
+                    motherMobile: request.MotherMobile,
+                    guardianName: request.GuardianName,
+                    guardianMobile: request.GuardianMobile,
+                    parentGuardianEmail: request.ParentGuardianEmail,
+                    studentType: null,
+                    transportRequired: null,
+                    busType: null,
+                    routeId: null,
+                    busRoute: null,
+                    pickupPointId: null,
+                    pickupPoint: null,
+                    hostelId: null,
+                    hostelBlock: null,
+                    roomId: null,
+                    hostelRoom: null,
+                    bedId: null,
+                    hostelBed: null,
+                    hallTicketNumber: null,
+                    campusId: null);
 
                 transaction.Commit();
                 return result;
@@ -1193,6 +1341,18 @@ namespace CollegeManagement.API.Repositories
                     p_PhotoPath = photoPath
                 },
                 commandType: CommandType.StoredProcedure);
+
+            if (rows > 0)
+            {
+                // Sync to linked StudentAdmissions
+                await connection.ExecuteAsync(@"
+                    UPDATE StudentAdmissions sa
+                    INNER JOIN Students s ON sa.AdmissionId = s.AdmissionId
+                    SET sa.StudentPhoto = @PhotoPath, sa.UpdatedAt = CURRENT_TIMESTAMP(6)
+                    WHERE s.StudentId = @StudentId;",
+                    new { StudentId = studentId, PhotoPath = photoPath });
+            }
+
             return rows > 0;
         }
 
@@ -1304,6 +1464,64 @@ namespace CollegeManagement.API.Repositories
                     parentFullName: null,
                     parentPhoneNumber: parentMobile,
                     relationshipType: "Parent");
+
+                await SyncLinkedAdmissionFromStudentAsync(
+                    connection,
+                    transaction,
+                    studentId,
+                    admissionId: null,
+                    studentName: null,
+                    photo: null,
+                    gender: null,
+                    dateOfBirth: null,
+                    bloodGroup: request.BloodGroup,
+                    email: request.Email,
+                    mobileNumber: request.MobileNumber,
+                    aadhaarNumber: request.AadhaarNumber,
+                    nationality: request.Nationality,
+                    religion: request.Religion,
+                    category: null,
+                    address: request.Address,
+                    city: request.City,
+                    district: request.District,
+                    state: request.State,
+                    pincode: request.Pincode,
+                    boardId: null,
+                    academicYearId: null,
+                    academicLevelId: null,
+                    groupId: null,
+                    programId: null,
+                    medium: null,
+                    secondLanguage: null,
+                    previousSchool: request.PreviousSchool,
+                    previousHallTicketNumber: request.PreviousHallTicketNumber,
+                    previousBoard: request.PreviousBoard,
+                    previousYearOfPassing: request.PreviousYearOfPassing,
+                    previousPercentage: request.PreviousPercentage,
+                    fatherName: null,
+                    fatherOccupation: null,
+                    fatherMobile: request.FatherMobile,
+                    motherName: null,
+                    motherOccupation: null,
+                    motherMobile: request.MotherMobile,
+                    guardianName: null,
+                    guardianMobile: request.GuardianMobile,
+                    parentGuardianEmail: request.ParentGuardianEmail,
+                    studentType: null,
+                    transportRequired: null,
+                    busType: null,
+                    routeId: null,
+                    busRoute: null,
+                    pickupPointId: null,
+                    pickupPoint: null,
+                    hostelId: null,
+                    hostelBlock: null,
+                    roomId: null,
+                    hostelRoom: null,
+                    bedId: null,
+                    hostelBed: null,
+                    hallTicketNumber: null,
+                    campusId: null);
 
                 transaction.Commit();
                 return rows > 0;
@@ -1513,6 +1731,240 @@ namespace CollegeManagement.API.Repositories
                     RelationshipType = string.IsNullOrWhiteSpace(relationshipType) ? "Parent" : relationshipType.Trim()
                 }, transaction: transaction);
             }
+        }
+
+        // =========================================================
+        // LINKED ADMISSION & USER SYNCHRONIZATION HELPER
+        // =========================================================
+
+        private async Task SyncLinkedAdmissionFromStudentAsync(
+            IDbConnection connection,
+            IDbTransaction transaction,
+            int studentId,
+            int? admissionId = null,
+            string? studentName = null,
+            string? photo = null,
+            string? gender = null,
+            DateTime? dateOfBirth = null,
+            string? bloodGroup = null,
+            string? email = null,
+            string? mobileNumber = null,
+            string? aadhaarNumber = null,
+            string? nationality = null,
+            string? religion = null,
+            string? category = null,
+            string? address = null,
+            string? city = null,
+            string? district = null,
+            string? state = null,
+            string? pincode = null,
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            string? medium = null,
+            string? secondLanguage = null,
+            string? previousSchool = null,
+            string? previousHallTicketNumber = null,
+            string? previousBoard = null,
+            int? previousYearOfPassing = null,
+            decimal? previousPercentage = null,
+            string? fatherName = null,
+            string? fatherOccupation = null,
+            string? fatherMobile = null,
+            string? motherName = null,
+            string? motherOccupation = null,
+            string? motherMobile = null,
+            string? guardianName = null,
+            string? guardianMobile = null,
+            string? parentGuardianEmail = null,
+            string? studentType = null,
+            int? transportRequired = null,
+            string? busType = null,
+            int? routeId = null,
+            string? busRoute = null,
+            int? pickupPointId = null,
+            string? pickupPoint = null,
+            int? hostelId = null,
+            string? hostelBlock = null,
+            int? roomId = null,
+            string? hostelRoom = null,
+            int? bedId = null,
+            string? hostelBed = null,
+            string? hallTicketNumber = null,
+            int? campusId = null)
+        {
+            // 1. Sync student profile updates to Users table (Student login credentials/display)
+            if (!string.IsNullOrWhiteSpace(studentName) || !string.IsNullOrWhiteSpace(email) || !string.IsNullOrWhiteSpace(mobileNumber))
+            {
+                const string updateUserSql = @"
+                    UPDATE Users 
+                    SET FullName = COALESCE(@FullName, FullName),
+                        Email = COALESCE(@Email, Email),
+                        PhoneNumber = COALESCE(@PhoneNumber, PhoneNumber),
+                        UpdatedAt = CURRENT_TIMESTAMP(6)
+                    WHERE StudentId = @StudentId;";
+
+                await connection.ExecuteAsync(updateUserSql, new
+                {
+                    FullName = !string.IsNullOrWhiteSpace(studentName) ? studentName.Trim() : null,
+                    Email = !string.IsNullOrWhiteSpace(email) ? email.Trim() : null,
+                    PhoneNumber = !string.IsNullOrWhiteSpace(mobileNumber) ? mobileNumber.Trim() : null,
+                    StudentId = studentId
+                }, transaction: transaction);
+            }
+
+            // 2. Resolve target AdmissionId
+            int? targetAdmissionId = admissionId;
+            if (!targetAdmissionId.HasValue || targetAdmissionId.Value <= 0)
+            {
+                targetAdmissionId = await connection.ExecuteScalarAsync<int?>(
+                    "SELECT AdmissionId FROM Students WHERE StudentId = @StudentId LIMIT 1;",
+                    new { StudentId = studentId },
+                    transaction: transaction);
+            }
+
+            if (!targetAdmissionId.HasValue || targetAdmissionId.Value <= 0)
+            {
+                return;
+            }
+
+            // 3. Split StudentName into FirstName and LastName for StudentAdmissions
+            string? firstName = null;
+            string? lastName = null;
+            if (!string.IsNullOrWhiteSpace(studentName))
+            {
+                var trimmed = studentName.Trim();
+                int spaceIdx = trimmed.IndexOf(' ');
+                if (spaceIdx > 0)
+                {
+                    firstName = trimmed.Substring(0, spaceIdx).Trim();
+                    lastName = trimmed.Substring(spaceIdx + 1).Trim();
+                }
+                else
+                {
+                    firstName = trimmed;
+                    lastName = string.Empty;
+                }
+            }
+
+            // 4. Update linked StudentAdmissions record atomically
+            const string updateAdmSql = @"
+                UPDATE StudentAdmissions
+                SET 
+                    FirstName = COALESCE(@FirstName, FirstName),
+                    LastName = CASE WHEN @FirstName IS NOT NULL THEN @LastName ELSE LastName END,
+                    StudentPhoto = COALESCE(@Photo, StudentPhoto),
+                    Gender = COALESCE(@Gender, Gender),
+                    DateOfBirth = COALESCE(@DateOfBirth, DateOfBirth),
+                    BloodGroup = COALESCE(@BloodGroup, BloodGroup),
+                    StudentEmail = COALESCE(@Email, StudentEmail),
+                    StudentMobileNumber = COALESCE(@MobileNumber, StudentMobileNumber),
+                    AadhaarNumber = COALESCE(@AadhaarNumber, AadhaarNumber),
+                    Nationality = COALESCE(@Nationality, Nationality),
+                    Religion = COALESCE(@Religion, Religion),
+                    Category = COALESCE(@Category, Category),
+                    StreetVillage = COALESCE(@Address, StreetVillage),
+                    City = COALESCE(@City, City),
+                    District = COALESCE(@District, District),
+                    State = COALESCE(@State, State),
+                    Pincode = COALESCE(@Pincode, Pincode),
+                    BoardId = COALESCE(@BoardId, BoardId),
+                    AcademicYearId = COALESCE(@AcademicYearId, AcademicYearId),
+                    AcademicLevelId = COALESCE(@AcademicLevelId, AcademicLevelId),
+                    GroupId = COALESCE(@GroupId, GroupId),
+                    ProgramId = COALESCE(@ProgramId, ProgramId),
+                    Medium = COALESCE(@Medium, Medium),
+                    SecondLanguage = COALESCE(@SecondLanguage, SecondLanguage),
+                    PreviousSchool = COALESCE(@PreviousSchool, PreviousSchool),
+                    PreviousBoard = COALESCE(@PreviousBoard, PreviousBoard),
+                    PreviousYearOfPassing = COALESCE(@PreviousYearOfPassing, PreviousYearOfPassing),
+                    PreviousPercentage = COALESCE(@PreviousPercentage, PreviousPercentage),
+                    FatherName = COALESCE(@FatherName, FatherName),
+                    FatherOccupation = COALESCE(@FatherOccupation, FatherOccupation),
+                    FatherMobile = COALESCE(@FatherMobile, FatherMobile),
+                    MotherName = COALESCE(@MotherName, MotherName),
+                    MotherOccupation = COALESCE(@MotherOccupation, MotherOccupation),
+                    MotherMobile = COALESCE(@MotherMobile, MotherMobile),
+                    GuardianName = COALESCE(@GuardianName, GuardianName),
+                    GuardianMobile = COALESCE(@GuardianMobile, GuardianMobile),
+                    ParentGuardianEmail = COALESCE(@ParentGuardianEmail, ParentGuardianEmail),
+                    StudentType = COALESCE(@StudentType, StudentType),
+                    TransportRequired = COALESCE(@TransportRequired, TransportRequired),
+                    BusType = COALESCE(@BusType, BusType),
+                    RouteId = COALESCE(@RouteId, RouteId),
+                    BusRoute = COALESCE(@BusRoute, BusRoute),
+                    PickupPointId = COALESCE(@PickupPointId, PickupPointId),
+                    PickupPoint = COALESCE(@PickupPoint, PickupPoint),
+                    HostelId = COALESCE(@HostelId, HostelId),
+                    HostelBlock = COALESCE(@HostelBlock, HostelBlock),
+                    RoomId = COALESCE(@RoomId, RoomId),
+                    HostelRoom = COALESCE(@HostelRoom, HostelRoom),
+                    BedId = COALESCE(@BedId, BedId),
+                    HostelBed = COALESCE(@HostelBed, HostelBed),
+                    HallTicketNumber = COALESCE(@HallTicketNumber, COALESCE(@PreviousHallTicketNumber, HallTicketNumber)),
+                    CampusId = COALESCE(@CampusId, CampusId),
+                    UpdatedAt = CURRENT_TIMESTAMP(6)
+                WHERE AdmissionId = @AdmissionId;";
+
+            await connection.ExecuteAsync(updateAdmSql, new
+            {
+                AdmissionId = targetAdmissionId.Value,
+                FirstName = firstName,
+                LastName = lastName,
+                Photo = photo,
+                Gender = gender,
+                DateOfBirth = dateOfBirth,
+                BloodGroup = bloodGroup,
+                Email = email,
+                MobileNumber = mobileNumber,
+                AadhaarNumber = aadhaarNumber,
+                Nationality = nationality,
+                Religion = religion,
+                Category = category,
+                Address = address,
+                City = city,
+                District = district,
+                State = state,
+                Pincode = pincode,
+                BoardId = boardId,
+                AcademicYearId = academicYearId,
+                AcademicLevelId = academicLevelId,
+                GroupId = groupId,
+                ProgramId = programId,
+                Medium = medium,
+                SecondLanguage = secondLanguage,
+                PreviousSchool = previousSchool,
+                PreviousBoard = previousBoard,
+                PreviousYearOfPassing = previousYearOfPassing,
+                PreviousPercentage = previousPercentage,
+                FatherName = fatherName,
+                FatherOccupation = fatherOccupation,
+                FatherMobile = fatherMobile,
+                MotherName = motherName,
+                MotherOccupation = motherOccupation,
+                MotherMobile = motherMobile,
+                GuardianName = guardianName,
+                GuardianMobile = guardianMobile,
+                ParentGuardianEmail = parentGuardianEmail,
+                StudentType = studentType,
+                TransportRequired = transportRequired,
+                BusType = busType,
+                RouteId = routeId,
+                BusRoute = busRoute,
+                PickupPointId = pickupPointId,
+                PickupPoint = pickupPoint,
+                HostelId = hostelId,
+                HostelBlock = hostelBlock,
+                RoomId = roomId,
+                HostelRoom = hostelRoom,
+                BedId = bedId,
+                HostelBed = hostelBed,
+                HallTicketNumber = hallTicketNumber,
+                PreviousHallTicketNumber = previousHallTicketNumber,
+                CampusId = campusId
+            }, transaction: transaction);
         }
     }
 }

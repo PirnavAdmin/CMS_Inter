@@ -25,6 +25,7 @@ import {
 import {
   assignRoleToUser,
   getModulesAndPermissions,
+  getRoleModules,
   getRolePermissions,
   getRoles,
   getRoleMembers,
@@ -425,7 +426,10 @@ function PermissionMatrix({ modules, permissionRows, selectedRole, saving, query
           })}
         </div>
       ) : (
-        <EmptyState title="No permissions found" message="Try searching by module, section or action." />
+        <EmptyState
+          title={modules.length ? "No permissions found" : "No modules are configured for this role."}
+          message={modules.length ? "Try searching by module, section or action." : "Configure the role's applicable modules before assigning permissions."}
+        />
       )}
     </div>
   );
@@ -536,9 +540,9 @@ function RoleDetails({
   modules,
   permissions,
   setPermissions,
-  onPersistPermissions,
   onUseRolePermissions,
   loading,
+  error,
   saving,
   dirty,
   query,
@@ -556,8 +560,7 @@ function RoleDetails({
     const withoutModule = previousPermissions.filter((row) => row.module !== moduleId);
     const nextPermissions = normalizePermissionPayload([...withoutModule, { module: moduleId, actions: nextActions }]);
     setPermissions(nextPermissions);
-    onPersistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, nextPermissions, previousPermissions);
-  }, [loading, modules, onPersistPermissions, permissions, saving, selectedMember, selectedRole, setPermissions]);
+  }, [loading, modules, permissions, saving, selectedRole, setPermissions]);
 
   const editablePermissionTargets = useMemo(
     () => getEditablePermissionTargets(modules, selectedRole, loading || saving),
@@ -598,13 +601,12 @@ function RoleDetails({
     });
     const nextPermissions = normalizePermissionPayload([...byModule.entries()].map(([module, actions]) => ({ module, actions })));
     setPermissions(nextPermissions);
-    onPersistPermissions({ type: selectedMember ? "user" : "role", role: selectedRole, user: selectedMember }, nextPermissions, previousPermissions);
   };
 
   if (!selectedRole) {
     return (
       <section className="rbac-panel rbac-detail-panel">
-        <EmptyState title="Select a role" message="Choose a role to view and stage permission changes." />
+        <EmptyState title="Select a role" message="Choose a role to view and edit its permissions." />
       </section>
     );
   }
@@ -641,6 +643,8 @@ function RoleDetails({
 
       {loading ? (
         <div className="rbac-loading-card"><Loader label="Loading role permissions..." /></div>
+      ) : error ? (
+        <EmptyState title="Unable to load role configuration" message={error} />
       ) : (
         <>
           <PermissionMatrix
@@ -1121,6 +1125,7 @@ export default function RolesPermissionsPage() {
   const [activeTab, setActiveTab] = useState("permissions");
   const [allRoles, setAllRoles] = useState([]);
   const [manageableRoles, setManageableRoles] = useState([]);
+  const [moduleCatalog, setModuleCatalog] = useState([]);
   const [modules, setModules] = useState([]);
   const [selectedRole, setSelectedRole] = useState(null);
   const [selectedMember, setSelectedMember] = useState(null);
@@ -1133,6 +1138,7 @@ export default function RolesPermissionsPage() {
   const [permissionQuery, setPermissionQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [permissionLoading, setPermissionLoading] = useState(false);
+  const [permissionError, setPermissionError] = useState("");
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1142,6 +1148,7 @@ export default function RolesPermissionsPage() {
   const selectedRoleIdRef = useRef(null);
   const pageRequestRef = useRef(0);
   const roleCountsRequestRef = useRef(0);
+  const roleConfigurationRequestRef = useRef(0);
 
   useEffect(() => {
     selectedRoleIdRef.current = selectedRole?.id;
@@ -1173,17 +1180,32 @@ export default function RolesPermissionsPage() {
     [lastSavedPermissions, permissions],
   );
 
-  const loadPermissions = useCallback(async (role) => {
+  const loadRoleConfiguration = useCallback(async (role) => {
     if (!role) return;
+    const requestId = roleConfigurationRequestRef.current + 1;
+    roleConfigurationRequestRef.current = requestId;
     setPermissionLoading(true);
+    setPermissionError("");
+    setModules([]);
+    setPermissions([]);
+    setLastSavedPermissions([]);
     try {
-      const response = await getRolePermissions(role.id, role.code);
-      setPermissions(response.data);
-      setLastSavedPermissions(response.data);
+      const [modulesResponse, permissionsResponse] = await Promise.all([
+        getRoleModules(role.id),
+        getRolePermissions(role.id, role.code),
+      ]);
+      if (roleConfigurationRequestRef.current !== requestId || String(selectedRoleIdRef.current) !== String(role.id)) return;
+      setModules(modulesResponse.data);
+      setPermissions(permissionsResponse.data);
+      setLastSavedPermissions(permissionsResponse.data);
     } catch (err) {
-      setToast({ type: "error", message: err?.message || "Unable to load role permissions." });
+      if (roleConfigurationRequestRef.current === requestId) {
+        const message = err?.message || "Unable to load role configuration.";
+        setPermissionError(message);
+        setToast({ type: "error", message });
+      }
     } finally {
-      setPermissionLoading(false);
+      if (roleConfigurationRequestRef.current === requestId) setPermissionLoading(false);
     }
   }, []);
 
@@ -1217,6 +1239,7 @@ export default function RolesPermissionsPage() {
   const loadMemberPermissions = useCallback(async (member, role = selectedRole) => {
     if (!member || !role) return;
     setPermissionLoading(true);
+    setPermissionError("");
     try {
       const roleCode = (member.roleCodes || [role.code])[0] || role.code;
       const response = await getUserPermissions(member.id, roleCode);
@@ -1225,7 +1248,9 @@ export default function RolesPermissionsPage() {
       setLastSavedPermissions(response.data);
       setMembersDialogOpen(false);
     } catch (err) {
-      setToast({ type: "error", message: err?.message || "Unable to load member permissions." });
+      const message = err?.message || "Unable to load member permissions.";
+      setPermissionError(message);
+      setToast({ type: "error", message });
     } finally {
       setPermissionLoading(false);
     }
@@ -1246,19 +1271,24 @@ export default function RolesPermissionsPage() {
       const nextManageableRoles = getManageableRoles(nextAllRoles);
       setAllRoles(nextAllRoles);
       setManageableRoles(nextManageableRoles);
-      setModules(modulesResponse.data);
+      setModuleCatalog(modulesResponse.data);
       const role = nextManageableRoles.find((r) => String(r.id) === String(selectedRoleIdRef.current)) || nextManageableRoles[0] || null;
+      selectedRoleIdRef.current = role?.id ?? null;
       setSelectedRole(role);
       if (role) {
-        await loadPermissions(role);
+        await loadRoleConfiguration(role);
         await loadRoleMembers(role);
+      } else {
+        setModules([]);
+        setPermissions([]);
+        setLastSavedPermissions([]);
       }
     } catch (err) {
       if (pageRequestRef.current === requestId) setError(err?.message || "Unable to load roles and permissions.");
     } finally {
       if (pageRequestRef.current === requestId) setLoading(false);
     }
-  }, [activeContextFilters, loadPermissions, loadRoleMembers]);
+  }, [activeContextFilters, loadRoleConfiguration, loadRoleMembers]);
 
   useEffect(() => {
     loadPage();
@@ -1291,9 +1321,11 @@ export default function RolesPermissionsPage() {
   const selectRole = async (role) => {
     if (String(role.id) === String(selectedRole?.id)) return;
     if (!guardDirty()) return;
+    selectedRoleIdRef.current = role.id;
     setSelectedRole(role);
     setSelectedMember(null);
-    await loadPermissions(role);
+    setPermissionQuery("");
+    await loadRoleConfiguration(role);
     await loadRoleMembers(role);
   };
 
@@ -1312,7 +1344,8 @@ export default function RolesPermissionsPage() {
     if (!selectedRole) return;
     if (!guardDirty()) return;
     setSelectedMember(null);
-    await loadPermissions(selectedRole);
+    selectedRoleIdRef.current = selectedRole.id;
+    await loadRoleConfiguration(selectedRole);
     setMembersDialogOpen(false);
   };
 
@@ -1323,6 +1356,7 @@ export default function RolesPermissionsPage() {
       return;
     }
     if (!guardDirty()) return;
+    selectedRoleIdRef.current = role.id;
     setSelectedRole(role);
     await loadMemberPermissions(member, role);
   };
@@ -1422,9 +1456,9 @@ export default function RolesPermissionsPage() {
               modules={modules}
               permissions={permissions}
               setPermissions={setPermissions}
-              onPersistPermissions={persistPermissions}
               onUseRolePermissions={useRolePermissions}
               loading={permissionLoading}
+              error={permissionError}
               saving={saving}
               dirty={dirty}
               query={permissionQuery}
@@ -1435,7 +1469,7 @@ export default function RolesPermissionsPage() {
           </div>
         ) : null}
 
-        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={allRoles} modules={modules} contextFilters={activeContextFilters} onRoleAssignmentsChanged={refreshRoleCounts} /> : null}
+        {!loading && !error && activeTab === "assignments" ? <UserRoleAssignment roles={allRoles} modules={moduleCatalog} contextFilters={activeContextFilters} onRoleAssignmentsChanged={refreshRoleCounts} /> : null}
         {membersDialogOpen ? (
           <RoleMembersDialog
             role={membersRole}

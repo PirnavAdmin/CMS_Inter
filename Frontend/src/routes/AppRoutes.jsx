@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/components/pages/LandingPage.jsx";
 import DashboardPage from "@/components/pages/DashboardPage.jsx";
+import PrincipalDashboard from "@/Dashboard/PrincipalDashboard/PrincipalDashboard.jsx";
 import ListPage from "@/components/pages/ListPage.jsx";
 import FormPage from "@/components/pages/FormPage.jsx";
 import BoardManagementPage, { pageConfig as boardManagementConfig } from "@/components/pages/BoardManagementPage.jsx";
@@ -39,12 +40,14 @@ import CredentialsGeneratorPage from "@/components/pages/CredentialsGeneratorPag
 import PayrollPage from "@/components/pages/PayrollPage.jsx";
 import AdminProfilePage from "@/components/pages/AdminProfilePage.jsx";
 import CampusConfigurationPage from "@/components/pages/CampusConfigurationPage.jsx";
+import AuditLogsPage from "@/components/pages/AuditLogsPage.jsx";
 import Login from "@/features/auth/pages/Login.jsx";
 import Register from "@/features/auth/pages/Register.jsx";
 import ForgotPassword from "@/features/auth/pages/ForgotPassword.jsx";
 import VerifyOTP from "@/features/auth/pages/VerifyOTP.jsx";
 import ResetPassword from "@/features/auth/pages/ResetPassword.jsx";
 import StudentPortalRoutes from "@/Dashboard/StudentDashboard/StudentPortalRoutes.jsx";
+import AccountantPortalRoutes from "@/Dashboard/AccountantDashboard/AccountantPortalRoutes.jsx";
 import FacultyPortalRoutes from "@/Dashboard/FacultyDashboard/FacultyPortalRoutes.jsx";
 import DriverDashboard from "@/Dashboard/DriverDashboard/DriverDashboard.jsx";
 import ParentDashboard from "@/Dashboard/Parent Dashboard/ParentDashboard.jsx";
@@ -119,6 +122,10 @@ export default function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/verify-otp" element={<VerifyOTP />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+
+      <Route element={<ProtectedRoute requirePrincipal />}>
+        <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
+      </Route>
 
       <Route element={<ProtectedRoute requireAdmin />}>
         <Route path="/dashboard" element={<DashboardPage />} />
@@ -196,6 +203,7 @@ export default function AppRoutes() {
         <Route path="/dashboard/my-profile" element={<AdminProfilePage />} />
         <Route path="/dashboard/settings/campus-configuration" element={<CampusConfigurationPage />} />
         <Route path="/dashboard/settings/campus" element={<CampusConfigurationPage />} />
+        <Route path="/dashboard/settings/audit-logs" element={<AuditLogsPage />} />
         <Route path="/dashboard/settings/roles-permissions" element={<RolesPermissionsPage />} />
         <Route path="/dashboard/settings/leave-types" element={<LeaveTypesPage />} />
         <Route path="/dashboard/settings/attendance-timing" element={<AttendanceTimingConfigPage />} />
@@ -311,6 +319,10 @@ export default function AppRoutes() {
         <Route path="/student-dashboard/*" element={<StudentPortalRoutes />} />
       </Route>
 
+      <Route element={<ProtectedRoute requireAccountant />}>
+        <Route path="/accountant-dashboard/*" element={<AccountantPortalRoutes />} />
+      </Route>
+
       {/* Parent Portal Module Routes */}
       <Route element={<ProtectedRoute requireParent />}>
         <Route element={<ParentPortalProvider><ErrorBoundary><Outlet /></ErrorBoundary></ParentPortalProvider>}>
@@ -334,7 +346,7 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
+      <Route path="/faculty-dashboard/*" element={<ProtectedRoute requireFaculty><FacultyPortalRoutes /></ProtectedRoute>} />
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />
       <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />

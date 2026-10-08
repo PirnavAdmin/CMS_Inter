@@ -29,6 +29,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IWebHostEnvironment _environment;
         private readonly ILogger<StudentAdmissionService> _logger;
         private readonly INumberSeriesService _numberSeriesService;
+        private readonly IAuditLoggingService _auditLoggingService;
 
         public StudentAdmissionService(
             IStudentAdmissionRepository repository,
@@ -38,7 +39,7 @@ namespace CollegeManagement.API.Services.Implementations
             IConfiguration configuration,
             IWebHostEnvironment environment,
             ILogger<StudentAdmissionService> logger,
-            INumberSeriesService numberSeriesService)
+            INumberSeriesService numberSeriesService, IAuditLoggingService auditLoggingService)
         {
             _repository = repository;
             _userProvisioningService = userProvisioningService;
@@ -48,6 +49,7 @@ namespace CollegeManagement.API.Services.Implementations
             _environment = environment;
             _logger = logger;
             _numberSeriesService = numberSeriesService;
+            _auditLoggingService = auditLoggingService;
         }
 
 
@@ -186,13 +188,7 @@ namespace CollegeManagement.API.Services.Implementations
                 AcademicYear = academicYearId?.ToString()
             };
             
-            // Auto-sync sequence to actual count BEFORE generating if context is fully specified
-            if (campusId.HasValue && boardId.HasValue && academicYearId.HasValue)
-            {
-                int actualCount = await _repository.GetActualAdmissionCountAsync(campusId.Value, boardId.Value, academicYearId.Value);
-                await _repository.SyncAdmissionSequenceAsync(campusId.Value, boardId.Value, academicYearId.Value, actualCount);
-            }
-            
+            // Generate next number purely from the NumberSeriesSequences table for global continuity
             var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
             
             if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
@@ -208,7 +204,31 @@ namespace CollegeManagement.API.Services.Implementations
         // APPROVE (ATOMIC STUDENT DOMAIN + CENTRALIZED USER PROVISIONING)
         // =====================================================
 
-        public async Task<bool> ApproveAsync(
+        public async Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks)
+        {
+            var result = await _repository.ApproveAdmissionRequestAsync(admissionId, remarks);
+            if (result)
+            {
+                var admission = await _repository.GetByIdAsync(admissionId);
+                if (admission != null)
+                    await _auditLoggingService.LogAsync("Request Approved", "Admissions", admission.AdmissionNo, "Info", "Success", remarks);
+            }
+            return result;
+        }
+
+        public async Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks)
+        {
+            var result = await _repository.RejectAdmissionRequestAsync(admissionId, rejectionReason, remarks);
+            if (result)
+            {
+                var admission = await _repository.GetByIdAsync(admissionId);
+                if (admission != null)
+                    await _auditLoggingService.LogAsync("Request Rejected", "Admissions", admission.AdmissionNo, "Warning", "Success", rejectionReason + " - " + remarks);
+            }
+            return result;
+        }
+
+        public async Task<(bool Success, int? StudentId)> ApproveAsync(
             ApproveStudentAdmissionRequest request)
         {
             if (request == null)
@@ -225,7 +245,8 @@ namespace CollegeManagement.API.Services.Implementations
             if (admission.IsApproved)
             {
                 _logger.LogInformation("Student admission {AdmissionId} is already approved.", request.AdmissionId);
-                return true;
+                var existingStudent = await _repository.GetStudentByAdmissionIdAsync(request.AdmissionId);
+                return (true, existingStudent?.StudentId);
             }
 
             // 2. Open database connection and begin outer transaction for atomicity
@@ -238,6 +259,7 @@ namespace CollegeManagement.API.Services.Implementations
             using var transaction = connection.BeginTransaction();
             UserProvisioningResult? userProvisioningResult = null;
             ParentUserProvisioningResult? parentProvisioningResult = null;
+            int? createdStudentId = null;
 
             try
             {
@@ -251,7 +273,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if (!approveSuccess)
                 {
                     transaction.Rollback();
-                    return false;
+                    return (false, null);
                 }
 
                 // 4. Retrieve created Student domain record
@@ -265,6 +287,8 @@ namespace CollegeManagement.API.Services.Implementations
                     transaction.Rollback();
                     throw new InvalidOperationException($"Approved Student domain record could not be found for AdmissionId {request.AdmissionId}.");
                 }
+                
+                createdStudentId = student.StudentId;
 
                 // 5. Evaluate Student Email for Student User account provisioning
                 var studentEmail = !string.IsNullOrWhiteSpace(student.Email)
@@ -487,7 +511,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            return true;
+            return (true, createdStudentId);
         }
 
         private static bool IsValidEmailFormat(string email)
@@ -782,4 +806,8 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+
+
+
+
 

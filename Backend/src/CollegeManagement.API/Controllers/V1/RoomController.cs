@@ -43,6 +43,24 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// Gets all active rooms with optional filtering.
+        /// </summary>
+        [HttpGet("active")]
+        [ProducesResponseType(typeof(IEnumerable<RoomResponseDto>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetActive([FromQuery] RoomFilterDto? filter)
+        {
+            filter ??= new RoomFilterDto();
+            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+            {
+                filter.CampusId = ResolveCampusId();
+            }
+            filter.IsActive = true;
+
+            var result = await _roomService.GetAllAsync(filter);
+            return Ok(result);
+        }
+
+        /// <summary>
         /// Gets a room by ID.
         /// </summary>
         [HttpGet("{id:int}")]

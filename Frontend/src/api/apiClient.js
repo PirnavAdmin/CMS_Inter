@@ -118,6 +118,10 @@ const onTokenRefreshFailed = (error) => {
 
 apiClient.interceptors.request.use(
   (config) => {
+    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+      // Preserve file bodies and let the browser supply the multipart boundary.
+      config.headers.delete("Content-Type");
+    }
     beginApiLoading(config);
     let token = getStoredAccessToken();
     const isParentEndpoint = config.url && (

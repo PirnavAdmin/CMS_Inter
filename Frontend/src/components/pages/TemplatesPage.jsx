@@ -63,7 +63,6 @@ export function getPresentDateFormatted() {
 export const DEMO_STUDENT = {
   student_name: "Rahul Kumar",
   admission_no: "ADM-2026-0017",
-  student_id: "518",
   roll_no: "2601518",
   father_name: "Suresh Kumar",
   mother_name: "Anita Devi",
@@ -142,10 +141,10 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "navy",
     refPrefix: "BC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.",
     purpose: "Higher Studies / Passport / Bank Loan",
     dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
+      "{{student_name}}", "{{admission_no}}", "{{father_name}}",
       "{{group_name}}", "{{academic_level}}", "{{academic_year}}", "{{purpose}}",
       "{{certificate_number}}", "{{issue_date}}", "{{place}}"
     ],
@@ -175,10 +174,10 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "green",
     refPrefix: "SC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.",
     purpose: "General Verification",
     dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
+      "{{student_name}}", "{{admission_no}}", "{{father_name}}",
       "{{study_from}}", "{{study_to}}", "{{group_name}}", "{{board_name}}",
       "{{certificate_number}}", "{{issue_date}}", "{{place}}"
     ],
@@ -208,10 +207,10 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "maroon",
     refPrefix: "CC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has been a student of this college during the academic year(s) {{academic_year}}.\nTo the best of our knowledge and records, his/her conduct and character have been {{conduct_rating}}.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has been a student of this college during the academic year(s) {{academic_year}}.\nTo the best of our knowledge and records, his/her conduct and character have been {{conduct_rating}}.",
     purpose: "Employment / Higher Education",
     dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
+      "{{student_name}}", "{{admission_no}}", "{{father_name}}",
       "{{academic_year}}", "{{conduct_rating}}", "{{certificate_number}}",
       "{{issue_date}}", "{{place}}"
     ],
@@ -241,10 +240,10 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "gold",
     refPrefix: "TC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} in {{group_name}} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} in {{group_name}} Group.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
     purpose: "Institution Transfer",
     dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
+      "{{student_name}}", "{{admission_no}}", "{{father_name}}",
       "{{mother_name}}", "{{dob}}", "{{date_of_admission}}", "{{study_from}}",
       "{{study_to}}", "{{reason_for_leaving}}", "{{dues_cleared}}",
       "{{certificate_number}}", "{{issue_date}}", "{{place}}"
@@ -275,17 +274,17 @@ export const DEFAULT_CERTIFICATE_TEMPLATES = [
     builtIn: true,
     accent: "teal",
     refPrefix: "OC",
-    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} and Admission Number {{admission_no}} is studying in {{academic_level}} ({{group_name}}) for the Academic Year {{academic_year}}.\nThis is to certify that {{purpose}}.",
+    content: "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} is studying in {{academic_level}} ({{group_name}}) for the Academic Year {{academic_year}}.\nThis is to certify that {{purpose}}.",
     purpose: "Higher Education / Official Purpose",
     dynamicFields: [
-      "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
+      "{{student_name}}", "{{admission_no}}", "{{father_name}}",
       "{{academic_level}}", "{{group_name}}", "{{academic_year}}", "{{purpose}}",
       "{{certificate_number}}", "{{issue_date}}", "{{place}}"
     ],
   },
 ];
 
-export const TEMPLATES_STORAGE_KEY = "cms_certificate_templates_v5";
+export const TEMPLATES_STORAGE_KEY = "cms_certificate_templates_v6";
 
 export const CANONICAL_TEMPLATES = [
   "certificate-bonafide",
@@ -425,6 +424,7 @@ export function getStoredCertificateTemplates() {
     localStorage.removeItem("cms_certificate_templates_v2");
     localStorage.removeItem("cms_certificate_templates_v3");
     localStorage.removeItem("cms_certificate_templates_v4");
+    localStorage.removeItem("cms_certificate_templates_v5");
 
     const raw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
     if (raw) {
@@ -490,7 +490,6 @@ const INITIAL_TEMPLATES = [
 
 const DYNAMIC_FIELD_TOKENS = [
   "{{student_name}}",
-  "{{student_id}}",
   "{{admission_no}}",
   "{{roll_no}}",
   "{{father_name}}",
@@ -1286,7 +1285,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
   const [bodyText, setBodyText] = useState(
     cleanCertificateContent(
       template.content,
-      "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada."
+      "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada."
     )
   );
   const [purposeText, setPurposeText] = useState(template.purpose || "Higher Education");

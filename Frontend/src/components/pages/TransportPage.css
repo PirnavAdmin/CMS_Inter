@@ -4,6 +4,92 @@
   gap: 6px;
 }
 
+.cms-transport-print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 14mm;
+  }
+
+  body > *:not(.cms-transport-print-root) {
+    display: none !important;
+  }
+
+  body > .cms-transport-print-root {
+    display: block !important;
+    width: 100%;
+    color: #20251b;
+    background: #fff;
+    font-family: Arial, sans-serif;
+    font-size: 10pt;
+  }
+
+  .cms-transport-print-header {
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #7a8f00;
+    text-align: center;
+  }
+
+  .cms-transport-print-header > strong {
+    color: #5d7000;
+    font-size: 12pt;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .cms-transport-print-header h1 {
+    margin: 5px 0;
+    font-size: 18pt;
+  }
+
+  .cms-transport-print-header p,
+  .cms-transport-print-header small {
+    display: block;
+    margin: 3px 0;
+    color: #4b5144;
+    font-size: 10pt;
+  }
+
+  .cms-transport-print-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 0 0 12px;
+    color: #414739;
+    font-size: 9pt;
+  }
+
+  .cms-transport-print-root table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+  }
+
+  .cms-transport-print-root th,
+  .cms-transport-print-root td {
+    padding: 7px 8px;
+    border: 1px solid #bfc5b3;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+
+  .cms-transport-print-root th {
+    background: #eff2e5 !important;
+    color: #28301c;
+    font-weight: 700;
+    print-color-adjust: exact;
+  }
+
+  .cms-transport-print-root tr {
+    break-inside: avoid;
+  }
+}
+
 .cms-transport-page .cms-card-head {
   padding: 10px 16px;
   min-height: auto;

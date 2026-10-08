@@ -17,4 +17,6 @@ public class GenerateCertificateRequestDto
     public DateTime? RequestDate { get; set; }
 
     public string? Remarks { get; set; }
+
+    public string? CertificateNo { get; set; }
 }

@@ -516,6 +516,24 @@
   box-shadow: none;
 }
 
+.exam-list-table .exam-status-cell .cms-badge.status-ongoing,
+.exam-list-table .exam-status-cell .cms-badge.cms-badge-info {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+}
+
+.exam-list-table .exam-status-cell .cms-badge.status-scheduled,
+.exam-list-table .exam-status-cell .cms-badge.cms-badge-inactive {
+  background: var(--cms-subtle) !important;
+  color: var(--cms-muted) !important;
+}
+
+.exam-list-table .exam-status-cell .cms-badge.status-completed,
+.exam-list-table .exam-status-cell .cms-badge.cms-badge-active {
+  background: #f0fdf4 !important;
+  color: #16a34a !important;
+}
+
 .exam-list-table .exam-status-cell .cms-badge::before {
   width: 5px;
   height: 5px;
