@@ -18,6 +18,9 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "./src"),
       },
     },
+    optimizeDeps: {
+      include: ["@microsoft/signalr"],
+    },
     build: {
       chunkSizeWarningLimit: 1000,
       rolldownOptions: {
