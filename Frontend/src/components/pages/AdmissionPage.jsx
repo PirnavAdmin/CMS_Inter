@@ -14,6 +14,7 @@ import {
   IndianRupee,
   MapPin,
   Plus,
+  RotateCcw,
   School,
   Search,
   User,
@@ -25,6 +26,7 @@ import { apiEndpoints, uniqueAcademicYearsByName } from "@/api/apiEndpoints.js";
 import * as hostelApi from "@/api/hostelApi.js";
 import { env } from "@/config/env.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import AdmissionRequests from "@/components/pages/AdmissionRequests.jsx";
 import { Field, Modal, Skeleton, SkeletonButton, SkeletonInput, SkeletonRow, SkeletonTable, Toast } from "@/components/common/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -881,13 +883,13 @@ const steps = [
     fields: [
       { name: "fatherName", label: "Father Name" },
       { name: "fatherOccupation", label: "Father Occupation" },
-      { name: "fatherMobile", label: "Father Mobile", type: "tel" },
+      { name: "fatherMobile", label: "Father Mobile", type: "tel", required: true },
       { name: "motherName", label: "Mother Name" },
       { name: "motherOccupation", label: "Mother Occupation" },
       { name: "motherMobile", label: "Mother Mobile", type: "tel" },
       { name: "guardianName", label: "Guardian Name" },
       { name: "guardianMobile", label: "Guardian Mobile", type: "tel" },
-      { name: "annualIncome", label: "Annual Income", type: "number" },
+      { name: "parentGuardianEmail", label: "Parent/Guardian Email", type: "email", required: true },
     ],
   },
   {
@@ -993,7 +995,8 @@ const admissionMainTabs = [
   { title: "Fee", step: FEE_STEP_INDEX, icon: IndianRupee },
   { title: "Preview", step: PREVIEW_STEP_INDEX, icon: Eye },
 ];
-const admissionStatusFilterOptions = ["Pending", "Verified", "Approved", "Rejected"];
+const ADMISSION_NUMBER_SERIES_CODE = "ADMISSION_NO";
+const admissionStatusFilterOptions = ["Pending", "Request Approved", "Request Rejected", "Verified", "Approved", "Rejected"];
 
 const stepIcons = {
   Admission: ClipboardList,
@@ -1010,7 +1013,7 @@ const stepIcons = {
   Preview: Eye,
 };
 
-const buildAdmissionFormData = (values) => {
+const buildAdmissionFormData = (values, { includeFee = true } = {}) => {
   const formData = new FormData();
   const houseDoorNumber = values.houseDoorNumber ?? values.address1 ?? "";
   const streetVillage = values.streetVillage ?? values.address2 ?? "";
@@ -1042,7 +1045,7 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "MotherEmail", values.motherEmail);
   appendIfPresent(formData, "GuardianName", values.guardianName);
   appendIfPresent(formData, "GuardianMobile", values.guardianMobile);
-  appendIfPresent(formData, "GuardianEmail", values.guardianEmail);
+  appendIfPresent(formData, "ParentGuardianEmail", values.parentGuardianEmail);
   appendIfPresent(formData, "AnnualIncome", values.annualIncome);
   appendIfPresent(formData, "Address", [houseDoorNumber, streetVillage, values.city, values.district, values.state, values.pincode].filter(Boolean).join(", "));
   appendIfPresent(formData, "HouseDoorNumber", houseDoorNumber);
@@ -1057,7 +1060,7 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "AcademicLevel", values.levelName || values.level);
   appendIfPresent(formData, "GroupId", values.group);
   appendIfPresent(formData, "ProgramId", values.program);
-  appendIfPresent(formData, "FeeStructureId", numericId(values.feeStructureId));
+  if (includeFee) appendIfPresent(formData, "FeeStructureId", numericId(values.feeStructureId));
   const admissionPaymentPlan = toAdmissionPaymentPlan(values.paymentPlan);
   appendIfPresent(formData, "PaymentPlan", admissionPaymentPlan);
   appendIfPresent(formData, "StudentType", values.studentType);
@@ -1066,9 +1069,11 @@ const buildAdmissionFormData = (values) => {
   appendIfPresent(formData, "PickupPointId", values.pickupPoint);
   appendIfPresent(formData, "HostelId", values.hostelBlock);
   appendIfPresent(formData, "HostelRoom", values.hostelRoomName || values.hostelRoom);
-  selectedFeeStructureComponentIdsFor(values).componentIds.forEach((componentId) => {
-    formData.append("SelectedFeeStructureComponentIds", componentId);
-  });
+  if (includeFee) {
+    selectedFeeStructureComponentIdsFor(values).componentIds.forEach((componentId) => {
+      formData.append("SelectedFeeStructureComponentIds", componentId);
+    });
+  }
   if (import.meta.env.DEV) {
     console.log("Student Admission payment plan payload:", {
       uiPaymentPlan: values.paymentPlan,
@@ -1229,6 +1234,26 @@ const normalizeHostelRoomOption = (room = {}) => {
   };
 };
 
+const toNullableNumberId = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const normalizeSeriesKey = (value) => String(value || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+
+const admissionNumberSeriesCodeFrom = (rows = []) => {
+  const match = rows.find((item) => {
+    const keys = [
+      readText(item, "seriesCode", "SeriesCode", "code", "Code", "key", "Key", "slug", "Slug", "id", "Id"),
+      readText(item, "seriesName", "SeriesName", "name", "Name", "title", "Title"),
+    ].map(normalizeSeriesKey);
+    return keys.some((key) => key === "admissionno" || key === "admissionnumber");
+  });
+  if (!match) return ADMISSION_NUMBER_SERIES_CODE;
+  return readText(match, "seriesCode", "SeriesCode", "code", "Code", "key", "Key", "slug", "Slug", "id", "Id") || ADMISSION_NUMBER_SERIES_CODE;
+};
+
 const normalizeHostelRoomTypeOption = (roomType = {}) => {
   const id = read(roomType, "roomTypeId", "RoomTypeId", "hostelRoomTypeId", "HostelRoomTypeId", "id", "Id");
   const value = id !== undefined && id !== null && id !== "" ? String(id) : readText(roomType, "roomTypeSpecification", "RoomTypeSpecification", "roomTypeName", "RoomTypeName", "name", "Name");
@@ -1371,6 +1396,8 @@ const clearAdmissionDraft = () => {
 
 const normalizeAdmissionStatus = (value, fallback = "Pending") => {
   const status = String(value || "").trim().toLowerCase();
+  if (["request approved", "requestapproved", "approved request"].includes(status)) return "Request Approved";
+  if (["request rejected", "requestrejected", "rejected request"].includes(status)) return "Request Rejected";
   if (["approved", "approve", "active", "completed", "complete"].includes(status)) return "Approved";
   if (["rejected", "reject", "inactive", "cancelled", "canceled", "denied"].includes(status)) return "Rejected";
   if (["verified", "verify"].includes(status)) return "Verified";
@@ -1419,6 +1446,8 @@ const isAdmissionVerified = (...sources) => sources.some((source) => {
 
 const admissionStatusClass = (status) => {
   if (status === "Approved") return "cms-badge-active";
+  if (status === "Request Approved") return "cms-badge-info";
+  if (status === "Request Rejected") return "cms-badge-danger";
   if (status === "Verified") return "cms-badge-info";
   if (status === "Rejected") return "cms-badge-danger";
   return "cms-badge-warn";
@@ -1610,7 +1639,7 @@ const normalizeAdmissionRow = (item) => {
     || [firstName, lastName].filter(Boolean).join(" ");
   const admissionNo = readText(item, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber", "number", "Number");
   const status = normalizeAdmissionStatus(readText(item, "status", "Status", "admissionStatus", "AdmissionStatus"));
-  const programName = readText(item, "programName", "ProgramName")
+  const programName = readTextFromSources([item, admission, student], "programName", "ProgramName")
     || (typeof program === "string" ? program : readText(program, "programName", "ProgramName", "name", "Name", "programCode", "ProgramCode"));
   const boardId = readId(item, "boardId", "BoardId") || readId(board, "boardId", "BoardId", "id", "Id");
   const rawBoardName = readText(item, "boardName", "BoardName")
@@ -1622,11 +1651,15 @@ const normalizeAdmissionRow = (item) => {
   const academicYearName = !isRawIdDisplay(rawAcademicYearName, academicYearId) ? rawAcademicYearName : "";
   const groupId = readId(item, "groupId", "GroupId") || readId(group, "groupId", "GroupId", "id", "Id");
   const groupName = readText(item, "groupName", "GroupName") || (typeof group === "string" ? group : readText(group, "groupName", "GroupName", "name", "Name", "groupCode", "GroupCode"));
-  const programId = readId(item, "programId", "ProgramId") || readId(program, "programId", "ProgramId", "id", "Id");
+  const programId = readIdFromSources([item, admission, student], "programId", "ProgramId") || readId(program, "programId", "ProgramId", "id", "Id");
   const campus = read(item, "campus", "Campus");
   const campusId = readId(item, "campusId", "CampusId") || readId(campus, "campusId", "CampusId", "id", "Id");
   const campusName = readText(item, "campusName", "CampusName")
     || (typeof campus === "string" ? campus : readText(campus, "campusName", "CampusName", "name", "Name", "campusCode", "CampusCode"));
+  const sourceCampus = read(item, "sourceCampus", "SourceCampus");
+  const sourceCampusId = readId(item, "sourceCampusId", "SourceCampusId") || readId(sourceCampus, "campusId", "CampusId", "id", "Id");
+  const sourceCampusName = readText(item, "sourceCampusName", "SourceCampusName")
+    || (typeof sourceCampus === "string" ? sourceCampus : readText(sourceCampus, "campusName", "CampusName", "name", "Name", "campusCode", "CampusCode"));
   const admittedByEmployeeId = readText(item, "admittedByEmployeeId", "AdmittedByEmployeeId", "admittedByEmpId", "AdmittedByEmpId");
   const admittedByEmployeeName = readText(item, "admittedByEmployeeName", "AdmittedByEmployeeName", "admittedByName", "AdmittedByName");
   const studentPhoto = readPhotoUrl(item, student, admission);
@@ -1686,12 +1719,15 @@ const normalizeAdmissionRow = (item) => {
     campusId,
     campus: campusId || campusName,
     campusName,
+    sourceCampusId,
+    sourceCampusName,
     boardId,
     board: boardId || boardName,
     boardName,
     groupId,
     group: !isRawIdDisplay(groupName, groupId) ? groupName : groupId,
     programId,
+    programName,
     program: !isRawIdDisplay(programName, programId) ? programName : programId,
     studentPhoto,
     photoUrl,
@@ -1705,6 +1741,8 @@ const normalizeAdmissionRow = (item) => {
       admissionType: readText(item, "admissionType", "AdmissionType"),
       campus: campusId,
       campusName,
+      sourceCampusId,
+      sourceCampusName,
       board: boardId,
       year: academicYearId,
       firstName,
@@ -1732,7 +1770,7 @@ const normalizeAdmissionRow = (item) => {
       motherEmail: readText(item, "motherEmail", "MotherEmail"),
       guardianName: readText(item, "guardianName", "GuardianName"),
       guardianMobile: readText(item, "guardianMobile", "GuardianMobile"),
-      guardianEmail: readText(item, "guardianEmail", "GuardianEmail"),
+      parentGuardianEmail: readText(item, "parentGuardianEmail", "ParentGuardianEmail", "guardianEmail", "GuardianEmail", "ParentparentparentParentGuardianEmail"),
       annualIncome: readText(item, "annualIncome", "AnnualIncome"),
       houseDoorNumber,
       streetVillage,
@@ -2015,6 +2053,7 @@ const selectedFeeStructureComponentIdsFor = (values = {}) => {
 const saveAdmissionFeeSelections = async (admissionId, values) => {
   const numericAdmissionId = numericId(admissionId);
   if (!numericAdmissionId) throw new Error("Admission was saved, but the admission ID was not returned for fee selection.");
+  if (values?.isCrossCampusAdmission) return;
 
   const { selectedItems, missingComponentItems, componentIds } = selectedFeeStructureComponentIdsFor(values);
   if (!selectedItems.length) return;
@@ -2043,6 +2082,7 @@ const saveAdmissionFeeSelections = async (admissionId, values) => {
 
 const feeStepErrors = (values) => {
   const next = {};
+  if (values?.isCrossCampusAdmission) return next;
   const fee = deriveAdmissionFee(values);
   if (!numericId(values.feeStructureId) || !fee.feeItems.length) {
     next.feeStructure = "No fee structure is configured for the selected Academic Year, Group and Program.";
@@ -2175,35 +2215,35 @@ function StudentPhotoPreview({ src, label = "Student photo", emptyLabel = "Uploa
   );
 }
 
-function AdmissionPreview({ sections, values, errors, onEdit, feeNode, photoPreviewUrl }) {
+function AdmissionPreview({ sections, values, errors, onEdit, feeNode, photoPreviewUrl, readOnly = false }) {
   return (
     <div className="cms-admission-preview">
       {sections.map((section, index) => (
         <section key={section.title} className="cms-preview-section">
           <div className="cms-preview-head">
             <h3>{section.title}</h3>
-            <button type="button" className="cms-btn cms-btn-ghost cms-preview-edit" onClick={() => onEdit(index)}>
+            {!readOnly ? <button type="button" className="cms-btn cms-btn-ghost cms-preview-edit" onClick={() => onEdit(index)}>
               <Edit3 size={14} /> Edit
-            </button>
+            </button> : null}
           </div>
           {section.custom === "fee" ? (
             <div className="cms-preview-fee">{feeNode}</div>
           ) : (
-          <div className="cms-preview-grid">
-            {visibleFieldsFor(section.previewFields ?? section.fields, values).map((field) => {
-              const value = previewFieldValue(field, values);
-              const fieldRequired = field.required || (typeof field.requiredWhen === "function" && field.requiredWhen(values));
-              const missingRequired = fieldRequired && (value === undefined || value === null || String(value).trim() === "");
-              const isPhoto = field.type === "file" && field.name === "photo";
-              return (
-                <div key={field.name} className={`cms-preview-item ${isPhoto ? "cms-preview-photo-item" : ""} ${missingRequired ? "is-missing" : ""}`}>
-                  <span>{field.label}</span>
-                  {isPhoto ? <StudentPhotoPreview src={studentPhotoSource(values, photoPreviewUrl)} emptyLabel="No Photo" /> : <strong>{formatPreviewValue(field, value)}</strong>}
-                  {errors[field.name] || missingRequired ? <small>{errors[field.name] || `${field.label} is required`}</small> : null}
-                </div>
-              );
-            })}
-          </div>
+            <div className="cms-preview-grid">
+              {visibleFieldsFor(section.previewFields ?? section.fields, values).map((field) => {
+                const value = previewFieldValue(field, values);
+                const fieldRequired = field.required || (typeof field.requiredWhen === "function" && field.requiredWhen(values));
+                const missingRequired = fieldRequired && (value === undefined || value === null || String(value).trim() === "");
+                const isPhoto = field.type === "file" && field.name === "photo";
+                return (
+                  <div key={field.name} className={`cms-preview-item ${isPhoto ? "cms-preview-photo-item" : ""} ${missingRequired ? "is-missing" : ""}`}>
+                    <span>{field.label}</span>
+                    {isPhoto ? <StudentPhotoPreview src={studentPhotoSource(values, photoPreviewUrl)} emptyLabel="No Photo" /> : <strong>{formatPreviewValue(field, value)}</strong>}
+                    {errors[field.name] || missingRequired ? <small>{errors[field.name] || `${field.label} is required`}</small> : null}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
       ))}
@@ -2211,7 +2251,7 @@ function AdmissionPreview({ sections, values, errors, onEdit, feeNode, photoPrev
   );
 }
 
-function AdmissionFormSections({ sections, values, errors, onChange, onFileChange, onFileRemove, inputRefs, photoPreviewUrl }) {
+function AdmissionFormSections({ sections, values, errors, onChange, onFileChange, onFileRemove, inputRefs, photoPreviewUrl, readOnly = false }) {
   return (
     <div className="cms-admission-form-sections">
       {sections.map((section) => {
@@ -2239,7 +2279,7 @@ function AdmissionFormSections({ sections, values, errors, onChange, onFileChang
               {visibleFields.map((field) => (
                 <AdmissionField
                   key={field.name}
-                  field={{ ...field, required: field.required || (typeof field.requiredWhen === "function" && field.requiredWhen(values)) }}
+                  field={{ ...field, required: field.required || (typeof field.requiredWhen === "function" && field.requiredWhen(values)), disabled: readOnly || field.disabled }}
                   value={values[field.name]}
                   error={errors[field.name]}
                   onChange={onChange}
@@ -2259,6 +2299,151 @@ function AdmissionFormSections({ sections, values, errors, onChange, onFileChang
 
 function AdmissionField({ field, value, error, onChange, onFileChange, onFileRemove, inputRef, previewUrl = "" }) {
   const fieldStyle = field.gridColumn || field.gridRow ? { gridColumn: field.gridColumn, gridRow: field.gridRow, minWidth: 0 } : undefined;
+  if (field.type === "campusSearch") {
+    const normalizedOptions = (field.options || []).map((option, index) => (
+      option && typeof option === "object"
+        ? {
+          value: option.value,
+          label: option.label ?? option.value,
+          disabled: Boolean(option.disabled),
+          searchText: option.searchText ?? `${option.label ?? option.value ?? ""} ${option.code ?? ""}`.toLowerCase(),
+          key: option.key ?? `${option.value}-${index}`,
+        }
+        : {
+          value: option,
+          label: option,
+          disabled: false,
+          searchText: String(option ?? "").toLowerCase(),
+          key: `${option}-${index}`,
+        }
+    ));
+    const selectableOptions = normalizedOptions.filter((option) => !option.disabled);
+    const selectOption = (option) => {
+      if (!option || option.disabled) return;
+      onChange(field.name, option.value);
+      field.onClose?.();
+    };
+    return (
+      <div
+        className={`cms-field ${field.full ? "full" : ""} ${error ? "has-error" : ""}`}
+        style={{ ...fieldStyle, position: "relative", zIndex: field.open ? 60 : "auto" }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            field.onClose?.();
+          }
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            field.onClose?.();
+            return;
+          }
+          if (event.key === "Enter" && field.open && event.target?.id === `f-${field.name}-search`) {
+            event.preventDefault();
+            selectOption(selectableOptions[0]);
+          }
+        }}
+      >
+        <label htmlFor={`f-${field.name}`}>
+          {field.label} {field.required ? <span className="req">*</span> : null}
+        </label>
+        <div style={{ position: "relative" }}>
+          <input
+            id={`f-${field.name}`}
+            ref={inputRef}
+            value={field.displayValue ?? ""}
+            placeholder={field.placeholder || `Select ${field.label}`}
+            autoComplete="off"
+            readOnly
+            disabled={field.disabled}
+            aria-haspopup="listbox"
+            aria-expanded={Boolean(field.open)}
+            aria-controls={`f-${field.name}-listbox`}
+            onFocus={field.onOpen}
+            onClick={field.onOpen}
+          />
+          <ChevronDown
+            size={16}
+            aria-hidden="true"
+            style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "#6f7a63", pointerEvents: "none" }}
+          />
+        </div>
+        {field.open && !field.disabled ? (
+          <div
+            id={`f-${field.name}-listbox`}
+            role="listbox"
+            aria-label="Campus results"
+            style={{
+              position: "absolute",
+              zIndex: 1000,
+              left: 0,
+              right: 0,
+              top: "calc(100% + 4px)",
+              maxHeight: 218,
+              overflowY: "auto",
+              background: "#fff",
+              border: "1px solid rgba(111, 128, 50, 0.25)",
+              borderRadius: 12,
+              boxShadow: "0 14px 30px rgba(24, 36, 20, 0.14)",
+              padding: 6,
+            }}
+          >
+            <div style={{ position: "sticky", top: 0, zIndex: 1, background: "#fff", paddingBottom: 6 }}>
+              <input
+                id={`f-${field.name}-search`}
+                value={field.searchValue ?? ""}
+                placeholder="Search campus..."
+                autoComplete="off"
+                aria-label="Search campuses"
+                onMouseDown={(event) => event.stopPropagation()}
+                onChange={(event) => field.onSearchChange?.(event.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: 34,
+                  border: "1px solid rgba(111, 128, 50, 0.25)",
+                  borderRadius: 8,
+                  padding: "8px 10px",
+                  font: "inherit",
+                  outline: "none",
+                }}
+              />
+            </div>
+            <div>
+              {normalizedOptions.length ? (
+                normalizedOptions.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    role="option"
+                    aria-selected={String(option.value) === String(value ?? "")}
+                    disabled={option.disabled}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectOption(option)}
+                    style={{
+                      width: "100%",
+                      border: 0,
+                      background: String(option.value) === String(value ?? "") ? "rgba(111, 143, 0, 0.12)" : "transparent",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      cursor: option.disabled ? "not-allowed" : "pointer",
+                      color: option.disabled ? "#8a927f" : "#1f2b1d",
+                      font: "inherit",
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))
+              ) : (
+                <div style={{ padding: "10px 12px", color: "#6f7a63" }}>No campuses found</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {error ? <span className="cms-error">{error}</span> : null}
+      </div>
+    );
+  }
+
   if (field.type === "staffSearch") {
     const displayValue = field.displayValue ?? value ?? "";
     return (
@@ -2273,6 +2458,7 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             value={displayValue}
             placeholder={field.placeholder || "Search employee by name or ID..."}
             autoComplete="off"
+            disabled={field.disabled}
             onFocus={field.onFocus}
             onBlur={field.onBlur}
             onChange={(event) => onChange(field.name, { kind: "search", value: event.target.value })}
@@ -2283,7 +2469,7 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "#6f7a63", pointerEvents: "none" }}
           />
         </div>
-        {field.open ? (
+        {field.open && !field.disabled ? (
           <div
             role="listbox"
             aria-label="Admitted By employee results"
@@ -2303,7 +2489,9 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             }}
           >
             {field.loading ? (
-              <div style={{ padding: "10px 12px", color: "#6f7a63" }}>Loading employees...</div>
+              <div style={{ padding: "10px 12px" }} role="status" aria-label="Loading employees">
+                {Array.from({ length: 3 }, (_, index) => <Skeleton key={index} style={{ height: 14, marginBottom: index === 2 ? 0 : 10, width: `${88 - (index * 12)}%` }} />)}
+              </div>
             ) : field.loadError ? (
               <div style={{ padding: "10px 12px", color: "#c43d3d" }}>{field.loadError}</div>
             ) : field.options?.length ? (
@@ -2447,9 +2635,10 @@ function AdmissionField({ field, value, error, onChange, onFileChange, onFileRem
             type="file"
             className="cms-admission-photo-input"
             accept="image/*"
+            disabled={field.disabled}
             onChange={(event) => onFileChange(field, event.target.files?.[0] || null)}
           />
-          {fileName || hasPhoto ? (
+          {(fileName || hasPhoto) && !field.disabled ? (
             <button type="button" className="cms-file-remove" onClick={() => onFileRemove(field.name)} aria-label={`Remove ${field.label}`}>
               <X size={14} />
             </button>
@@ -2512,7 +2701,7 @@ function FacilityFeesTable({ feeItems }) {
   );
 }
 
-function FeeItemsTable({ feeItems, errors, onChange }) {
+function FeeItemsTable({ feeItems, errors, onChange, readOnly = false }) {
   const updateItem = (id, patch) => {
     onChange("feeItems", feeItems.map((item) => {
       if (item.id !== id) return item;
@@ -2538,7 +2727,7 @@ function FeeItemsTable({ feeItems, errors, onChange }) {
                 <input
                   type="checkbox"
                   checked={item.selected}
-                  disabled={item.required}
+                  disabled={item.required || readOnly}
                   aria-label={`Apply ${item.type}`}
                   onChange={(event) => updateItem(item.id, { selected: event.target.checked })}
                 />
@@ -2564,14 +2753,14 @@ function FeeItemsTable({ feeItems, errors, onChange }) {
   );
 }
 
-function ConcessionPanel({ fee, values, errors, onChange, scholarships }) {
+function ConcessionPanel({ fee, values, errors, onChange, scholarships, readOnly = false }) {
   const scholarshipOptions = scholarships.map((item) => ({ value: item.id, label: item.name }));
   return (
     <section className="cms-fee-block">
       <h3>Scholarship / Concession</h3>
       <div className="cms-form-grid cols-3">
         <Field
-          field={{ name: "scholarshipId", label: "Scholarship", type: "select", options: scholarshipOptions }}
+          field={{ name: "scholarshipId", label: "Scholarship", type: "select", options: scholarshipOptions, disabled: readOnly }}
           value={values.scholarshipId}
           error={errors.scholarshipId}
           onChange={onChange}
@@ -2657,7 +2846,7 @@ function InstallmentScheduleTable({ schedule, editable, onChange }) {
   );
 }
 
-function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, onPlanChange, onInstallmentCountChange, scholarships = [], feeStructureLoading, feeStructureError }) {
+function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, onPlanChange, onInstallmentCountChange, scholarships = [], feeStructureLoading, feeStructureError, readOnly = false }) {
   const hasStructure = fee.feeItems.length > 0;
   const isInstallment = values.paymentPlan === "Installment Payment";
   const schedule = fee.schedule;
@@ -2686,12 +2875,12 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
         <>
           <section className="cms-fee-block">
             <h3>Applicable Fee Structure</h3>
-            <FeeItemsTable feeItems={fee.feeItems} errors={errors} onChange={onChange} />
+            <FeeItemsTable feeItems={fee.feeItems} errors={errors} onChange={onChange} readOnly={readOnly} />
           </section>
 
           <FacilityFeesTable feeItems={fee.facilityFeeItems} />
 
-          <ConcessionPanel fee={fee} values={values} errors={errors} onChange={onChange} scholarships={scholarships} />
+          <ConcessionPanel fee={fee} values={values} errors={errors} onChange={onChange} scholarships={scholarships} readOnly={readOnly} />
 
           <section className="cms-fee-block">
             <h3>Course Fee Payment Plan</h3>
@@ -2701,6 +2890,7 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
                   type="button"
                   key={plan}
                   className={`cms-fee-plan ${values.paymentPlan === plan ? "is-active" : ""}`}
+                  disabled={readOnly}
                   onClick={() => onPlanChange(plan)}
                   aria-pressed={values.paymentPlan === plan}
                 >
@@ -2724,13 +2914,14 @@ function FeeStep({ context, fee, values, errors, onChange, onInstallmentChange, 
                   <select
                     id="f-installmentCount"
                     value={String(values.installmentCount || DEFAULT_INSTALLMENT_COUNT)}
+                    disabled={readOnly}
                     onChange={(event) => onInstallmentCountChange(Number(event.target.value))}
                   >
                     {INSTALLMENT_COUNTS.map((count) => <option key={count} value={String(count)}>{count} Course Fee Schedules</option>)}
                   </select>
                 </div>
               </div>
-              <InstallmentScheduleTable schedule={schedule} editable onChange={onInstallmentChange} />
+              <InstallmentScheduleTable schedule={schedule} editable={!readOnly} onChange={onInstallmentChange} />
               {errors.installments ? <span className="cms-error">{errors.installments}</span> : null}
             </section>
           ) : (
@@ -2820,7 +3011,7 @@ function FeePreview({ fee, values }) {
       {values.paymentPlan === "Installment Payment" && fee.courseSchedules.length ? (
         <div className="cms-fee-preview-schedule">
           <h4>Course Fee Schedule</h4>
-          <InstallmentScheduleTable schedule={fee.courseSchedules} editable={false} onChange={() => {}} />
+          <InstallmentScheduleTable schedule={fee.courseSchedules} editable={false} onChange={() => { }} />
         </div>
       ) : null}
     </div>
@@ -2836,13 +3027,14 @@ export default function AdmissionPage() {
     selectedAcademicYear,
     selectedAcademicYearId,
   } = useAcademicContext();
-  const { campuses, selectedCampus } = useCampusContext();
+  const { campuses, selectedCampus, selectedCampusId } = useCampusContext();
   const [initialDraft] = useState(readAdmissionDraft);
   const [viewMode, setViewMode] = useState("list");
   const [step, setStep] = useState(initialDraft.step);
   const [values, setValues] = useState(initialDraft.values);
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
+  const [requestsOpen, setRequestsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [admissions, setAdmissions] = useState([]);
   const [listLoading, setListLoading] = useState(false);
@@ -2876,7 +3068,11 @@ export default function AdmissionPage() {
   const [admittedByStaffLoaded, setAdmittedByStaffLoaded] = useState(false);
   const [admittedByStaffError, setAdmittedByStaffError] = useState("");
   const [admittedByDropdownOpen, setAdmittedByDropdownOpen] = useState(false);
+  const [campusDropdownOpen, setCampusDropdownOpen] = useState(false);
+  const [campusSearch, setCampusSearch] = useState("");
   const [editingAdmissionId, setEditingAdmissionId] = useState("");
+  const [readOnlyAdmission, setReadOnlyAdmission] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [feeSelection, setFeeSelection] = useState(initialDraft.feeSelection);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
@@ -2889,6 +3085,7 @@ export default function AdmissionPage() {
   const suppressPersistRef = useRef(false);
   const feeSelectionInitializedRef = useRef(initialDraft.hasFeeSelection);
   const admissionNumberInFlightRef = useRef(false);
+  const admissionNumberSeriesCodeRef = useRef("");
   const pincodeRequestRef = useRef(0);
   const academicLevelRequestRef = useRef(0);
   const programRequestRef = useRef(0);
@@ -2963,11 +3160,42 @@ export default function AdmissionPage() {
         return {
           value: String(value),
           label: code ? `${name || code} (${code})` : name || String(value),
+          searchText: `${name} ${code} ${value}`.toLowerCase(),
         };
       })
       .filter(Boolean)
   ), [campuses]);
-  const selectedCampusValue = selectedCampus?.campusId ?? selectedCampus?.id ?? "";
+  const selectedCampusLabel = useMemo(() => (
+    campusOptions.find((option) => String(option.value) === String(values.campus ?? ""))?.label
+    || (!isPlaceholderOption(values.campus) ? String(values.campus || "") : "")
+  ), [campusOptions, values.campus]);
+  const filteredCampusOptions = useMemo(() => {
+    const query = String(campusSearch || "").trim().toLowerCase();
+    if (!query) return campusOptions;
+    return campusOptions.filter((option) => option.searchText.includes(query));
+  }, [campusOptions, campusSearch]);
+  const selectedCampusValue = selectedCampusId || selectedCampus?.campusId || selectedCampus?.id || "";
+  const isCrossCampusAdmission = Boolean(
+    selectedCampusValue
+    && values.campus
+    && String(selectedCampusValue).trim() !== String(values.campus).trim()
+  );
+  const admissionListParams = useMemo(() => (
+    selectedCampusValue ? { campusId: selectedCampusValue } : {}
+  ), [selectedCampusValue]);
+  const admissionNumberPayload = useMemo(() => ({
+    campusId: toNullableNumberId(values.campus || selectedCampusValue),
+    boardId: toNullableNumberId(values.board || selectedContextBoardValue),
+    academicYearId: toNullableNumberId(values.year || selectedContextYearValue),
+  }), [
+    values.campus,
+    values.board,
+    values.year,
+    selectedCampusValue,
+    selectedContextBoardValue,
+    selectedContextYearValue,
+  ]);
+  const canRequestAdmissionNumber = Boolean(admissionNumberPayload.campusId && admissionNumberPayload.boardId && admissionNumberPayload.academicYearId);
   const admittedBySelectedLabel = admissionStaffLabel({
     employeeId: values.admittedByEmployeeId,
     fullName: values.admittedByEmployeeName,
@@ -2980,6 +3208,52 @@ export default function AdmissionPage() {
     return admittedByStaffOptions
       .filter((option) => shouldShowAll || option.searchText.includes(query));
   }, [admittedByDisplayValue, admittedBySelectedLabel, admittedByStaffOptions]);
+
+  const resolveAdmissionNumberSeriesCode = useCallback(async () => {
+    if (admissionNumberSeriesCodeRef.current) return admissionNumberSeriesCodeRef.current;
+    try {
+      const response = await apiClient.get(apiEndpoints.numberSeries.getAll);
+      const code = admissionNumberSeriesCodeFrom(getCollection(response.data));
+      admissionNumberSeriesCodeRef.current = code;
+      return code;
+    } catch {
+      admissionNumberSeriesCodeRef.current = ADMISSION_NUMBER_SERIES_CODE;
+      return ADMISSION_NUMBER_SERIES_CODE;
+    }
+  }, []);
+
+  const previewAdmissionNumber = useCallback(async () => {
+    const seriesCode = await resolveAdmissionNumberSeriesCode();
+    const response = await apiClient.get(
+      apiEndpoints.numberSeries.preview(seriesCode),
+      {
+        params: {
+          campusId: admissionNumberPayload.campusId,
+          board: admissionNumberPayload.boardId ? String(admissionNumberPayload.boardId) : "",
+          academicYear: admissionNumberPayload.academicYearId ? String(admissionNumberPayload.academicYearId) : ""
+        }
+      },
+    );
+    const data = response.data?.data ?? response.data?.Data ?? response.data;
+    const admissionNumber = typeof data === "string"
+      ? data
+      : read(data, "livePreview", "LivePreview", "currentExample", "CurrentExample", "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo", "generatedNumber", "GeneratedNumber", "number", "Number");
+    if (!admissionNumber) throw new Error("Admission number could not be generated by the backend.");
+    return String(admissionNumber);
+  }, [admissionNumberPayload, resolveAdmissionNumberSeriesCode]);
+
+  const generateAdmissionNumber = useCallback(async () => {
+    const response = await apiClient.post(
+      apiEndpoints.admissions.generateNumber,
+      admissionNumberPayload,
+    );
+    const data = response.data?.data ?? response.data?.Data ?? response.data;
+    const admissionNumber = typeof data === "string"
+      ? data
+      : read(data, "generatedNumber", "GeneratedNumber", "admissionNumber", "AdmissionNumber", "admissionNo", "AdmissionNo", "number", "Number", "livePreview", "LivePreview");
+    if (!admissionNumber) throw new Error("Admission number could not be generated by the backend.");
+    return String(admissionNumber);
+  }, [admissionNumberPayload, resolveAdmissionNumberSeriesCode]);
   const loadAdmittedByStaffOptions = useCallback(() => {
     setAdmittedByDropdownOpen(true);
     if (admittedByStaffLoaded || admittedByLookupLoading) return;
@@ -3042,6 +3316,12 @@ export default function AdmissionPage() {
     ));
   }, [masterOptions.boards, masterOptions.groups, masterOptions.levels, masterOptions.sections, values.board, values.group, values.groupName, values.level, values.levelName, values.year]);
   const programOptions = useMemo(() => masterOptions.programs || [], [masterOptions.programs]);
+  const admissionProgramDisplay = useCallback((row) => (
+    lookupLabel(programOptions, row.programId, row.programName)
+    || row.programId
+    || row.program
+    || "-"
+  ), [programOptions]);
   const routeBusTypesByRoute = useMemo(() => {
     const vehicleTypeById = new Map(
       allocationMasterData.vehicles
@@ -3127,18 +3407,58 @@ export default function AdmissionPage() {
     ));
     return { room, roomType, config: config || null };
   }, [allocationMasterData.hostelBlocks, allocationMasterData.hostelFees, allocationMasterData.hostelRooms, allocationMasterData.hostelRoomTypes]);
+  const contextScopedAdmissions = useMemo(() => {
+    const contextBoardValue = selectedContextBoardValue || selectedBoardId;
+    const contextYearValue = selectedContextYearValue || selectedAcademicYearId;
+    return admissions.filter((row) => (
+      optionMatchesRecord(
+        selectedCampusValue,
+        campusOptions,
+        row.campusId,
+        row.values?.campus,
+        row.campus,
+        row.campusName,
+      )
+      && optionMatchesRecord(
+        contextBoardValue,
+        boardOptions,
+        row.boardId,
+        row.values?.board,
+        row.board,
+        row.boardName,
+      )
+      && optionMatchesRecord(
+        contextYearValue,
+        yearOptions,
+        row.academicYearId,
+        row.values?.year,
+        row.academicYear,
+        row.academicYearName,
+      )
+    ));
+  }, [
+    admissions,
+    boardOptions,
+    campusOptions,
+    selectedAcademicYearId,
+    selectedBoardId,
+    selectedCampusValue,
+    selectedContextBoardValue,
+    selectedContextYearValue,
+    yearOptions,
+  ]);
   const groupFilterOptions = useMemo(() => {
     const scopedMasterGroups = (masterOptions.groups || []).filter((item) => (
       scopedOptionMatches(selectedContextBoardValue, boardOptions, item.boardId, item.boardName, selectedContextBoardLabel)
       && scopedOptionMatches(selectedContextYearValue, yearOptions, item.academicYearId, item.academicYearName, selectedContextYearLabel)
     ));
-    const admissionGroups = admissions
+    const admissionGroups = contextScopedAdmissions
       .map((row) => optionFromRecord(row.groupId || row.values?.group, row.group || row.values?.groupName))
       .filter(Boolean);
     return uniqueOptionsByValue([...scopedMasterGroups, ...admissionGroups]);
   }, [
-    admissions,
     boardOptions,
+    contextScopedAdmissions,
     masterOptions.groups,
     selectedContextBoardLabel,
     selectedContextBoardValue,
@@ -3187,7 +3507,21 @@ export default function AdmissionPage() {
     if (field.name === "campus") {
       return {
         ...field,
-        options: campusOptions.length ? campusOptions : [{ value: "__no_campuses", label: "No campuses available", disabled: true }],
+        type: "campusSearch",
+        displayValue: selectedCampusLabel,
+        searchValue: campusSearch,
+        options: campusOptions.length ? filteredCampusOptions : [{ value: "__no_campuses", label: "No campuses available", disabled: true }],
+        placeholder: "Select Campus",
+        open: campusDropdownOpen,
+        onOpen: () => {
+          setCampusSearch("");
+          setCampusDropdownOpen(true);
+        },
+        onClose: () => setCampusDropdownOpen(false),
+        onSearchChange: (nextSearch) => {
+          setCampusSearch(nextSearch);
+          setCampusDropdownOpen(true);
+        },
       };
     }
     if (field.name === "board" && boardOptions?.length) return { ...field, options: boardOptions };
@@ -3289,7 +3623,7 @@ export default function AdmissionPage() {
   }));
   const displayedAdmissions = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return admissions.filter((row) => {
+    return contextScopedAdmissions.filter((row) => {
       const matchesSearch = !term
         || String(row.studentName || "").toLowerCase().includes(term)
         || String(row.admissionNo || "").toLowerCase().includes(term);
@@ -3313,7 +3647,7 @@ export default function AdmissionPage() {
       const matchesStatus = !filters.status || normalizeAdmissionStatus(row.status) === filters.status;
       return matchesSearch && matchesYear && matchesGroup && matchesStatus;
     });
-  }, [academicYearFilterOptions, admissionYearDisplay, admissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
+  }, [academicYearFilterOptions, admissionYearDisplay, contextScopedAdmissions, filters.group, filters.status, filters.year, groupFilterOptions, search]);
   const totalPages = Math.max(1, Math.ceil(displayedAdmissions.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedAdmissions = displayedAdmissions.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -3459,12 +3793,13 @@ export default function AdmissionPage() {
     document.save(`${safeExportFileName(`Admission ${admissionNo}`)}.pdf`);
   };
 
-  const refreshAdmissions = async () => {
+  const refreshAdmissions = useCallback(async () => {
     const requestId = admissionsRequestRef.current + 1;
     admissionsRequestRef.current = requestId;
     setListLoading(true);
+    setAdmissions([]);
     try {
-      const response = await apiClient.get(apiEndpoints.admissions.getAll);
+      const response = await apiClient.get(apiEndpoints.admissions.getAll, { params: admissionListParams });
       const apiRows = getCollection(response.data).map(normalizeAdmissionRow);
       if (admissionsRequestRef.current !== requestId) return apiRows;
       setAdmissions(apiRows);
@@ -3475,14 +3810,17 @@ export default function AdmissionPage() {
     } finally {
       if (admissionsRequestRef.current === requestId) setListLoading(false);
     }
-  };
+  }, [admissionListParams]);
 
   useEffect(() => {
+    setPage(1);
     refreshAdmissions();
-  }, []);
+  }, [refreshAdmissions, selectedContextBoardValue, selectedContextYearValue]);
 
   useEffect(() => {
     let cancelled = false;
+    const campusId = Number(selectedCampusValue);
+    const hasValidCampusId = Number.isFinite(campusId) && campusId > 0;
     const loadAllocationMasterData = async () => {
       setAllocationMasterStatus({ loading: true, error: "", failed: [] });
       const [
@@ -3496,7 +3834,11 @@ export default function AdmissionPage() {
         hostelFeesResult,
       ] = await Promise.allSettled([
         apiClient.get(`${apiEndpoints.transport.routes}?PageNumber=1&PageSize=1000`),
-        apiClient.get(`${apiEndpoints.transport.pickupPoints}?PageNumber=1&PageSize=1000`),
+        hasValidCampusId
+          ? apiClient.get(apiEndpoints.transport.pickupPoints, {
+            params: { CampusId: campusId, PageNumber: 1, PageSize: 1000 },
+          })
+          : Promise.resolve({ skipped: true }),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
         hostelApi.getHostelBlocks(),
@@ -3509,7 +3851,7 @@ export default function AdmissionPage() {
         routes: routesResult.status === "fulfilled"
           ? getCollection(routesResult.value.data).map(normalizeTransportRouteOption).filter(Boolean)
           : [],
-        pickupPoints: pickupPointsResult.status === "fulfilled"
+        pickupPoints: pickupPointsResult.status === "fulfilled" && !pickupPointsResult.value?.skipped
           ? getCollection(pickupPointsResult.value.data).map(normalizeTransportPickupOption).filter(Boolean)
           : [],
         vehicles: vehiclesResult.status === "fulfilled"
@@ -3534,7 +3876,7 @@ export default function AdmissionPage() {
       setAllocationMasterData(nextData);
       const failed = [
         routesResult.status === "rejected" ? "routes" : "",
-        pickupPointsResult.status === "rejected" ? "pickup points" : "",
+        pickupPointsResult.status === "rejected" || pickupPointsResult.value?.skipped ? "pickup points" : "",
         vehiclesResult.status === "rejected" ? "vehicles" : "",
         vehicleAssignmentsResult.status === "rejected" ? "vehicle assignments" : "",
         hostelBlocksResult.status === "rejected" ? "hostel blocks" : "",
@@ -3565,7 +3907,7 @@ export default function AdmissionPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedCampusValue]);
 
   useEffect(() => {
     if (viewMode !== "form" || editingAdmissionId || values.admissionDate) return;
@@ -3741,6 +4083,10 @@ export default function AdmissionPage() {
   const paymentPlan = values.paymentPlan;
   const installmentCount = values.installmentCount;
   const admissionDate = values.admissionDate;
+  const validationValues = useMemo(() => ({
+    ...values,
+    isCrossCampusAdmission,
+  }), [isCrossCampusAdmission, values]);
 
   // Keeps an explicitly selected installment schedule aligned with the course fee.
   useEffect(() => {
@@ -3824,7 +4170,7 @@ export default function AdmissionPage() {
           })
           .filter(Boolean)
         : [];
-      
+
       const loadedBloodGroups = bloodGroupsResult.status === "fulfilled"
         ? getCollection(bloodGroupsResult.value.data).map(normalizeBloodGroupOption).filter(Boolean)
         : [];
@@ -3912,6 +4258,7 @@ export default function AdmissionPage() {
         program: "",
         programName: "",
         section: "",
+        ...(campusChanged || boardChanged || yearChanged ? { admissionNo: "" } : {}),
         feeStructureId: "",
         feeItems: [],
         installments: [],
@@ -3924,6 +4271,7 @@ export default function AdmissionPage() {
   useEffect(() => {
     if (viewMode !== "form") return undefined;
     if (editingAdmissionId || values.admissionNo) return undefined;
+    if (!canRequestAdmissionNumber) return undefined;
     if (admissionNumberInFlightRef.current) return undefined;
 
     let ignore = false;
@@ -3932,21 +4280,10 @@ export default function AdmissionPage() {
     setErrors((current) => ({ ...current, admissionNo: undefined }));
     setAdmissionNumberLoading(true);
 
-    apiClient.post(apiEndpoints.admissions.generateNumber)
+    previewAdmissionNumber()
       .then((response) => {
         if (ignore) return;
-        const data = response.data?.data ?? response.data?.Data ?? response.data;
-        const generatedNumber = typeof data === "string"
-          ? data
-          : read(data, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber", "number", "Number");
-        if (generatedNumber) {
-          setValues((currentValues) => ({ ...currentValues, admissionNo: String(generatedNumber) }));
-          return;
-        }
-        const message = "Admission number could not be generated by the backend.";
-        setAdmissionNumberError(message);
-        setErrors((current) => ({ ...current, admissionNo: message }));
-        setToast(message);
+        setValues((currentValues) => ({ ...currentValues, admissionNo: response }));
       })
       .catch((err) => {
         if (ignore) return;
@@ -3964,7 +4301,7 @@ export default function AdmissionPage() {
       ignore = true;
       admissionNumberInFlightRef.current = false;
     };
-  }, [editingAdmissionId, values.admissionNo, viewMode]);
+  }, [canRequestAdmissionNumber, editingAdmissionId, previewAdmissionNumber, selectedCampusValue, values.admissionNo, viewMode]);
 
   useEffect(() => {
     if (viewMode !== "form") return undefined;
@@ -4378,10 +4715,18 @@ export default function AdmissionPage() {
   const setValue = (name, val) => {
     const field = fieldByName[name] || {};
     if (isPlaceholderOption(val)) return;
+
+    if (["campus", "board", "year"].includes(name)) {
+      setValues((v) => ({ ...v, [name]: val, admissionNo: "" }));
+      setErrors((e) => ({ ...e, [name]: undefined, admissionNo: undefined }));
+    }
+
     if (name === "feeItems") {
-      setValues((v) => ({ ...v, feeItems: val, installments: v.paymentPlan === "Installment Payment"
-        ? buildInstallmentSchedule(deriveAdmissionFee({ ...v, feeItems: val }).courseFeePayable, Number(v.installmentCount) || DEFAULT_INSTALLMENT_COUNT, v.admissionDate || todayISO())
-        : v.installments }));
+      setValues((v) => ({
+        ...v, feeItems: val, installments: v.paymentPlan === "Installment Payment"
+          ? buildInstallmentSchedule(deriveAdmissionFee({ ...v, feeItems: val }).courseFeePayable, Number(v.installmentCount) || DEFAULT_INSTALLMENT_COUNT, v.admissionDate || todayISO())
+          : v.installments
+      }));
       setErrors((e) => ({ ...e, feeItems: undefined, installments: undefined }));
       return;
     }
@@ -4675,7 +5020,7 @@ export default function AdmissionPage() {
   const validateStepAt = (stepIndex) => {
     const section = steps[stepIndex];
     if (!section) return {};
-    if (section.custom === "fee") return feeStepErrors(values);
+    if (section.custom === "fee") return feeStepErrors(validationValues);
     return validateFields(section.fields);
   };
 
@@ -4691,7 +5036,7 @@ export default function AdmissionPage() {
   const validateAdmission = () => {
     const next = steps.reduce((all, section) => ({
       ...all,
-      ...(section.custom === "fee" ? feeStepErrors(values) : validateFields(section.fields)),
+      ...(section.custom === "fee" ? feeStepErrors(validationValues) : validateFields(section.fields)),
     }), {});
     setErrors(next);
     if (Object.keys(next).length) focusFirstError(next);
@@ -4704,7 +5049,7 @@ export default function AdmissionPage() {
     let firstInvalidStep = -1;
 
     relevantSteps.forEach((section, index) => {
-      const sectionErrors = section.custom === "fee" ? feeStepErrors(values) : validateFields(section.fields);
+      const sectionErrors = section.custom === "fee" ? feeStepErrors(validationValues) : validateFields(section.fields);
       if (Object.keys(sectionErrors).length && firstInvalidStep === -1) firstInvalidStep = index;
       Object.assign(next, sectionErrors);
     });
@@ -4744,7 +5089,9 @@ export default function AdmissionPage() {
     suppressPersistRef.current = true;
     clearAdmissionDraft();
     committedAdmissionRef.current = null;
+    setReadOnlyAdmission(false);
     setValues({});
+    setPhotoPreviewUrl("");
     setFeeSelection([]);
     feeSelectionInitializedRef.current = false;
     Object.values(fileInputRefs.current).forEach((input) => {
@@ -4754,10 +5101,51 @@ export default function AdmissionPage() {
     window.setTimeout(() => { suppressPersistRef.current = false; }, 0);
   };
 
+  const formHasEnteredData = () => {
+    const serializableValues = toSerializableAdmissionValues(values);
+    return Object.entries(serializableValues).some(([key, value]) => {
+      if (["campus", "board", "year", "admissionDate", "status"].includes(key)) return false;
+      if (Array.isArray(value)) return value.length > 0;
+      if (value && typeof value === "object") return Object.keys(value).length > 0;
+      return String(value ?? "").trim() !== "";
+    }) || feeSelection.length > 0;
+  };
+
+  const clearAdmissionForm = () => {
+    suppressPersistRef.current = true;
+    clearAdmissionDraft();
+    committedAdmissionRef.current = null;
+    setEditingAdmissionId("");
+    setReadOnlyAdmission(false);
+    setValues(newAdmissionValues(applyNewAdmissionAcademicDefaults({})));
+    setPhotoPreviewUrl("");
+    setErrors({});
+    setAdmissionNumberError("");
+    setAdmittedByDropdownOpen(false);
+    setFeeSelection([]);
+    setFeeStructureError("");
+    feeSelectionInitializedRef.current = false;
+    Object.values(fileInputRefs.current).forEach((input) => {
+      if (input) input.value = "";
+    });
+    setStep(0);
+    setClearConfirmOpen(false);
+    window.setTimeout(() => { suppressPersistRef.current = false; }, 0);
+  };
+
+  const requestClearAdmissionForm = () => {
+    if (readOnlyAdmission) return;
+    if (formHasEnteredData()) {
+      setClearConfirmOpen(true);
+      return;
+    }
+    clearAdmissionForm();
+  };
+
   const backOrCancel = () => {
     if (step !== 0) {
       const previousStep = isPreview ? FEE_STEP_INDEX : 0;
-      
+
       if (!editingAdmissionId) persistAdmissionDraft({ currentStep: previousStep, formData: values, feeSelection });
       setStep(previousStep);
       return;
@@ -4772,10 +5160,11 @@ export default function AdmissionPage() {
     setStep(nextStep);
   };
 
-  const openAdmissionForm = ({ formValues = {}, targetStep = 0, selection = [], admissionId = "" } = {}) => {
+  const openAdmissionForm = ({ formValues = {}, targetStep = 0, selection = [], admissionId = "", readOnly = false } = {}) => {
     suppressPersistRef.current = false;
     setAdmissionNumberError("");
     setEditingAdmissionId(admissionId ? String(admissionId) : "");
+    setReadOnlyAdmission(Boolean(readOnly));
     committedAdmissionRef.current = admissionId
       ? { admissionId: String(admissionId), admissionNo: formValues.admissionNo || "" }
       : null;
@@ -4796,6 +5185,7 @@ export default function AdmissionPage() {
       formValues: draftValues,
       targetStep: draft.step || 0,
       selection: draft.feeSelection || [],
+      readOnly: false,
     });
   };
 
@@ -4866,11 +5256,14 @@ export default function AdmissionPage() {
           }
         }
       }
+      const loadedStatus = normalizeAdmissionStatus(detailRow.status || record.status);
+      const isLoadedApprovedAdmission = loadedStatus === "Approved";
       openAdmissionForm({
         formValues,
-        targetStep,
+        targetStep: isLoadedApprovedAdmission ? PREVIEW_STEP_INDEX : targetStep,
         selection: persistedSelection.length ? persistedSelection : null,
         admissionId,
+        readOnly: isLoadedApprovedAdmission,
       });
     } catch (err) {
       setToast(getApiErrorMessage(err));
@@ -4881,6 +5274,7 @@ export default function AdmissionPage() {
 
   const returnToAdmissions = () => {
     if (!editingAdmissionId) persistAdmissionDraft({ currentStep: step, formData: values, feeSelection });
+    setReadOnlyAdmission(false);
     setViewMode("list");
     setPage(1);
     refreshAdmissions();
@@ -5109,7 +5503,7 @@ export default function AdmissionPage() {
 
   const submit = async () => {
     if (saving || submitInFlightRef.current) return;
-    if (feeStructureLoading) {
+    if (!isCrossCampusAdmission && feeStructureLoading) {
       setToast("Fee structure is being prepared. Please wait.");
       return;
     }
@@ -5134,21 +5528,35 @@ export default function AdmissionPage() {
     const visibleMobile = typeof document !== "undefined"
       ? studentMobileValue({ studentMobileNumber: document.getElementById("f-studentMobileNumber")?.value || "" })
       : "";
-    const submitValues = normalizeAdmissionMobileState({
+    let submitValues = normalizeAdmissionMobileState({
       ...values,
+      campus: values.campus || selectedCampusValue,
+      board: values.board || selectedContextBoardValue,
+      year: values.year || selectedContextYearValue,
       studentMobileNumber: studentMobileValue(values) || visibleMobile,
+      isCrossCampusAdmission,
     });
 
     submitInFlightRef.current = true;
     setSaving(true);
     let savedAdmissionId = submitAdmissionId;
     let admissionWriteCompleted = false;
+    let submittedAdmissionNo = submitValues.admissionNo || values.admissionNo;
     try {
+      if (!isUpdate) {
+        const committedAdmissionNo = await generateAdmissionNumber();
+        submittedAdmissionNo = committedAdmissionNo;
+        submitValues = {
+          ...submitValues,
+          admissionNo: committedAdmissionNo,
+        };
+        setValues((current) => ({ ...current, admissionNo: committedAdmissionNo }));
+      }
       const endpoint = isUpdate
         ? apiEndpoints.admissions.update(submitAdmissionId)
         : apiEndpoints.admissions.create;
       const method = isUpdate ? "put" : "post";
-      const formData = buildAdmissionFormData(submitValues);
+      const formData = buildAdmissionFormData(submitValues, { includeFee: !isCrossCampusAdmission });
       if (isUpdate) formData.delete("CampusId");
       debugAdmissionSubmitPayload({ endpoint, method, formData, values: submitValues });
       const response = await apiClient[method](endpoint, formData, {
@@ -5176,7 +5584,7 @@ export default function AdmissionPage() {
         if (savedRow.admissionId) {
           committedAdmissionRef.current = {
             admissionId: savedRow.admissionId,
-            admissionNo: savedRow.admissionNo || values.admissionNo,
+            admissionNo: savedRow.admissionNo || submittedAdmissionNo,
           };
         }
       }
@@ -5187,22 +5595,22 @@ export default function AdmissionPage() {
         if (!isUpdate) {
           committedAdmissionRef.current = {
             admissionId: savedAdmissionId,
-            admissionNo: values.admissionNo,
+            admissionNo: submittedAdmissionNo,
           };
           setEditingAdmissionId(savedAdmissionId);
         }
-        setToast(`Admission ${values.admissionNo} was ${isUpdate ? "updated" : "created"}, but fee selections could not be saved: ${message}`);
+        setToast(`Admission ${submittedAdmissionNo} was ${isUpdate ? "updated" : "created"}, but fee selections could not be saved: ${message}`);
         submitInFlightRef.current = false;
         setSaving(false);
         return;
       }
-      if (!isUpdate && values.admissionNo) {
+      if (!isUpdate && submittedAdmissionNo) {
         const latestAdmissions = await refreshAdmissions();
-        const committedRow = findAdmissionByNumber(latestAdmissions, values.admissionNo);
+        const committedRow = findAdmissionByNumber(latestAdmissions, submittedAdmissionNo);
         if (committedRow?.admissionId) {
           committedAdmissionRef.current = {
             admissionId: committedRow.admissionId,
-            admissionNo: committedRow.admissionNo || values.admissionNo,
+            admissionNo: committedRow.admissionNo || submittedAdmissionNo,
           };
           setEditingAdmissionId(committedRow.admissionId);
           setValues((current) => ({
@@ -5212,7 +5620,7 @@ export default function AdmissionPage() {
           }));
           setViewMode("list");
           setPage(1);
-          setToast(`Admission ${committedRow.admissionNo || values.admissionNo} was created successfully, but fee setup could not be completed: ${message}`);
+          setToast(`Admission ${committedRow.admissionNo || submittedAdmissionNo} was created successfully, but fee setup could not be completed: ${message}`);
           submitInFlightRef.current = false;
           setSaving(false);
           return;
@@ -5224,7 +5632,9 @@ export default function AdmissionPage() {
       return;
     }
 
-    setToast(`Admission ${values.admissionNo} ${isUpdate ? "updated" : "submitted"} successfully.`);
+    setToast(isCrossCampusAdmission
+      ? `Admission request ${submittedAdmissionNo} submitted successfully.`
+      : `Admission ${submittedAdmissionNo} ${isUpdate ? "updated" : "submitted"} successfully.`);
     resetAdmissionDraftState();
     setViewMode("list");
     setPage(1);
@@ -5233,6 +5643,18 @@ export default function AdmissionPage() {
     setSaving(false);
   };
 
+  const handlePreviewPrimaryAction = () => {
+    if (canVerifyPreviewAdmission) {
+      verifyAdmission(previewVerifyRecord);
+      return;
+    }
+    submit();
+  };
+
+  if (requestsOpen) {
+    return <AdmissionRequests campusOptions={campusOptions} currentCampusId={selectedCampusValue} onClose={() => setRequestsOpen(false)} />;
+  }
+
   if (viewMode === "list") {
     return (
       <DashboardLayout
@@ -5240,9 +5662,14 @@ export default function AdmissionPage() {
         subtitle="Manage student admission applications and admissions."
         breadcrumb={["People"]}
         actions={(
-          <button type="button" className="cms-btn cms-btn-primary" onClick={addNewAdmission}>
-            <Plus size={15} /> Add New Admission
-          </button>
+          <div className="cms-admission-form-actions">
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRequestsOpen(true)}>
+              <ClipboardList size={15} /> Admission Requests
+            </button>
+            <button type="button" className="cms-btn cms-btn-primary" onClick={addNewAdmission}>
+              <Plus size={15} /> Add New Admission
+            </button>
+          </div>
         )}
       >
         <div className="cms-card cms-admission-list-card">
@@ -5320,7 +5747,9 @@ export default function AdmissionPage() {
               <tbody>
                 {listLoading ? (
                   Array.from({ length: 6 }, (_, index) => <SkeletonRow key={index} columns={9} />)
-                ) : pagedAdmissions.length ? pagedAdmissions.map((row) => (
+                ) : pagedAdmissions.length ? pagedAdmissions.map((row) => {
+                  const isApprovedAdmission = normalizeAdmissionStatus(row.status) === "Approved";
+                  return (
                   <tr key={`${row.source}-${row.id}`}>
                     <td className="cms-strong">{row.admissionNo}</td>
                     <td>{row.studentName}</td>
@@ -5328,24 +5757,24 @@ export default function AdmissionPage() {
                     <td>{admissionYearDisplay(row)}</td>
                     <td>{admissionBoardDisplay(row)}</td>
                     <td>{row.group || "-"}</td>
-                    <td>{row.program || "-"}</td>
+                    <td>{admissionProgramDisplay(row)}</td>
                     <td><span className={`cms-badge ${admissionStatusClass(row.status)}`}>{row.status}</span></td>
                     <td>
                       <div className="cms-actions cms-admission-actions">
-                        <button type="button" className="cms-action-btn view" title="View / edit admission" aria-label="View or edit admission" disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row)}>
+                        <button type="button" className="cms-action-btn view" title={isApprovedAdmission ? "View admission" : "View / edit admission"} aria-label={isApprovedAdmission ? "View admission" : "View or edit admission"} disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row)}>
                           <Eye size={15} />
                         </button>
-                        {row.status === "Pending" ? (
+                        {!isApprovedAdmission && row.status === "Pending" ? (
                           <button type="button" className="cms-action-btn edit" title="Verify admission" aria-label="Verify admission" disabled={actionBusy === `Load-${row.id}`} onClick={() => continueAdmission(row, allSteps.length - 1)}>
                             <BadgeCheck size={15} />
                           </button>
                         ) : null}
-                        {row.status === "Verified" ? (
+                        {!isApprovedAdmission && row.status === "Verified" ? (
                           <button type="button" className="cms-action-btn edit" title="Approve admission" aria-label="Approve admission" disabled={actionBusy === `Approved-${row.id}`} onClick={() => setApproveTarget(row)}>
                             <Check size={15} />
                           </button>
                         ) : null}
-                        {row.status === "Pending" || row.status === "Verified" ? (
+                        {!isApprovedAdmission && (row.status === "Pending" || row.status === "Verified") ? (
                           <button type="button" className="cms-action-btn danger" title="Reject admission" aria-label="Reject admission" disabled={actionBusy === `Rejected-${row.id}`} onClick={() => setRejectTarget(row)}>
                             <X size={15} />
                           </button>
@@ -5353,7 +5782,8 @@ export default function AdmissionPage() {
                       </div>
                     </td>
                   </tr>
-                )) : (
+                );
+                }) : (
                   <tr><td colSpan={9}><div className="cms-empty">No admissions found.</div></td></tr>
                 )}
               </tbody>
@@ -5428,6 +5858,9 @@ export default function AdmissionPage() {
       breadcrumb={["People"]}
       actions={(
         <div className="cms-admission-form-actions">
+          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setRequestsOpen(true)}>
+            <ClipboardList size={15} /> Admission Requests
+          </button>
           <div className="cms-admission-main-tabs" role="tablist" aria-label="Admission form steps">
             {admissionMainTabs.map((tab) => {
               const TabIcon = tab.icon;
@@ -5449,6 +5882,17 @@ export default function AdmissionPage() {
           <button type="button" className="cms-btn cms-btn-ghost" onClick={returnToAdmissions}>
             Back to Admissions
           </button>
+          {!readOnlyAdmission ? (
+            <button
+              type="button"
+              className="cms-admission-clear-btn"
+              title="Clear Form"
+              aria-label="Clear Form"
+              onClick={requestClearAdmissionForm}
+            >
+              <RotateCcw size={15} />
+            </button>
+          ) : null}
         </div>
       )}
     >
@@ -5465,6 +5909,7 @@ export default function AdmissionPage() {
               onEdit={editPreviewStep}
               feeNode={<FeePreview fee={fee} values={values} />}
               photoPreviewUrl={photoPreviewUrl}
+              readOnly={readOnlyAdmission}
             />
           ) : isFeeStep ? (
             <div className="cms-admission-form-sections cms-admission-fee-form">
@@ -5486,6 +5931,7 @@ export default function AdmissionPage() {
                     scholarships={scholarships}
                     feeStructureLoading={feeStructureLoading}
                     feeStructureError={feeStructureError}
+                    readOnly={readOnlyAdmission}
                   />
                 </div>
               </section>
@@ -5500,6 +5946,7 @@ export default function AdmissionPage() {
               onFileRemove={removeFileValue}
               inputRefs={fileInputRefs}
               photoPreviewUrl={photoPreviewUrl}
+              readOnly={readOnlyAdmission}
             />
           ) : (
             <div
@@ -5509,7 +5956,7 @@ export default function AdmissionPage() {
               {visibleCurrentFields.map((f) => (
                 <AdmissionField
                   key={f.name}
-                  field={{ ...f, required: f.required || (typeof f.requiredWhen === "function" && f.requiredWhen(values)) }}
+                  field={{ ...f, required: f.required || (typeof f.requiredWhen === "function" && f.requiredWhen(values)), disabled: readOnlyAdmission || f.disabled }}
                   value={values[f.name]}
                   error={errors[f.name]}
                   onChange={setValue}
@@ -5531,27 +5978,43 @@ export default function AdmissionPage() {
               <Download size={14} /> Download
             </button>
           ) : null}
-          {!isPreview ? (
+          {!readOnlyAdmission && !isPreview ? (
             <button className="cms-btn cms-btn-primary" onClick={next} disabled={admissionNumberLoading || (!editingAdmissionId && (!values.admissionNo || admissionNumberError))}>
               {admissionNumberLoading ? "Generating Number..." : step === steps.length - 1 ? "Preview" : "Save & Continue"}
             </button>
-          ) : (
+          ) : !readOnlyAdmission ? (
             <button
               className="cms-btn cms-btn-primary"
-              onClick={canVerifyPreviewAdmission ? () => verifyAdmission(previewVerifyRecord) : submit}
+              onClick={handlePreviewPrimaryAction}
               disabled={
                 canVerifyPreviewAdmission
                   ? actionBusy === `Verified-${editingAdmissionId}`
-                  : saving || feeStructureLoading || admissionNumberLoading || (!editingAdmissionId && (!values.admissionNo || admissionNumberError))
+                : saving || (!isCrossCampusAdmission && feeStructureLoading) || admissionNumberLoading || (!editingAdmissionId && (!values.admissionNo || admissionNumberError))
               }
             >
               {canVerifyPreviewAdmission
                 ? (actionBusy === `Verified-${editingAdmissionId}` ? "Verifying..." : "Verify Admission")
-                : (saving ? "Submitting..." : "Submit Admission")}
+                : (saving ? "Submitting..." : isCrossCampusAdmission ? "Request Admission" : "Submit Admission")}
             </button>
-          )}
+          ) : null}
         </div>
       </div>
+
+      {clearConfirmOpen ? (
+        <Modal
+          title="Clear Form"
+          size="sm"
+          onClose={() => setClearConfirmOpen(false)}
+          footer={(
+            <>
+              <button type="button" className="cms-btn cms-btn-ghost" onClick={() => setClearConfirmOpen(false)}>Cancel</button>
+              <button type="button" className="cms-btn cms-btn-danger" onClick={clearAdmissionForm}>Clear</button>
+            </>
+          )}
+        >
+          <p style={{ margin: 0, color: "var(--cms-muted)" }}>Clear all entered information?</p>
+        </Modal>
+      ) : null}
 
       <Toast message={toast} onClose={() => setToast("")} />
     </DashboardLayout>

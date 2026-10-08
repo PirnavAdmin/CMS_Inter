@@ -23,7 +23,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
         Task<(List<Staff> Items, int TotalCount)> GetPagedStaffAsync(StaffQueryParams queryParams);
         Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null);
-        Task<string> GenerateNextEmployeeIdAsync(string staffType);
+        Task<string> GenerateNextEmployeeIdAsync(string staffType, int campusId);
         Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null);
 
         Task<Staff> AddAsync(Staff staff);

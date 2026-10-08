@@ -1088,11 +1088,16 @@ public class ReportRepository : IReportRepository
             return list.Select(a => new AuditLogDto
             {
                 AuditLogId = a.AuditLogId,
-                UserName = a.UserName ?? "System",
+                Actor = a.UserName ?? "System",
+                Role = a.ActorRole,
                 Action = a.Action,
-                EntityName = a.EntityName,
-                EntityId = a.EntityId,
-                Description = a.Description,
+                Module = a.Module ?? a.EntityName,
+                Target = a.EntityName + (a.EntityId.HasValue ? " - " + a.EntityId.Value : ""),
+                Severity = a.Severity ?? "Info",
+                Status = a.Status ?? "Success",
+                Ip = a.IpAddress,
+                Device = a.UserAgent,
+                Details = a.Description,
                 CreatedAt = a.CreatedAt
             }).ToList();
         }, ct);

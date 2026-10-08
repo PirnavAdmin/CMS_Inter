@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using CollegeManagement.API.Enums;
@@ -58,3 +58,4 @@ namespace CollegeManagement.API.Models
         #endregion
     }
 }
+

@@ -15,6 +15,7 @@ import {
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStudentTable from "../components/DriverStudentTable.jsx";
 import { getStudents, updateStudentAttendance, bulkAttendance, getRoute } from "../../../api/transportDriverApi.js";
+import { SkeletonPage } from "../../../components/common/Ui.jsx";
 
 export default function DriverStudentsPage() {
   const [students, setStudents] = useState([]);
@@ -97,7 +98,7 @@ export default function DriverStudentsPage() {
   const stopsList = routeDetails.stops?.map((s) => s.name) || [];
 
   if (isLoading) {
-    return <div className="dp-page-container"><p>Loading students...</p></div>;
+    return <div className="dp-page-container"><SkeletonPage variant="table" columns={6} rows={7} /></div>;
   }
 
   if (error) {

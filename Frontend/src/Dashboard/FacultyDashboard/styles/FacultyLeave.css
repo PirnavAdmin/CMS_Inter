@@ -1,0 +1,16 @@
+/* Faculty Leave Management Styles */
+.sp-leave-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.sp-leave-card {
+  background: var(--cms-surface, #fff);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}

@@ -20,6 +20,7 @@ namespace CollegeManagement.API.Data
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<ParentStudentMapping> ParentStudentMappings { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
@@ -40,6 +41,7 @@ namespace CollegeManagement.API.Data
         public DbSet<AttendanceSession> AttendanceSessions { get; set; }
         public DbSet<StaffAttendanceSession> StaffAttendanceSessions { get; set; }
         public DbSet<StaffAttendance> StaffAttendances { get; set; }
+        public DbSet<StaffAttendanceRegularization> StaffAttendanceRegularizations { get; set; }
         public DbSet<StaffLeaveRequest> StaffLeaveRequests { get; set; }
         public DbSet<StaffLeaveBalance> StaffLeaveBalances { get; set; }
         public DbSet<LeaveCategory> LeaveCategories { get; set; }
@@ -55,6 +57,11 @@ namespace CollegeManagement.API.Data
         public DbSet<Student> Students { get; set; }
         public DbSet<StudentAdmission> StudentAdmissions { get; set; }
         public DbSet<Designation> Designations { get; set; }
+        
+        // Multi-Campus / Multi-Board Staff Assignments
+        public DbSet<StaffCampusAssignment> StaffCampusAssignments { get; set; }
+        public DbSet<StaffBoardAssignment> StaffBoardAssignments { get; set; }
+
         // Transport
         public DbSet<TransportAttendant> TransportAttendants { get; set; } = null!;
         public DbSet<TransportRoute> TransportRoutes => Set<TransportRoute>();
@@ -62,6 +69,8 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportVehicle> TransportVehicles => Set<TransportVehicle>();
         public DbSet<TransportDriver> TransportDrivers { get; set; } = null!;
         public DbSet<TransportVehicleAssignment> TransportVehicleAssignments { get; set; } = null!;
+        public DbSet<DriverNotification> DriverNotifications { get; set; } = null!;
+        public DbSet<DriverPreference> DriverPreferences { get; set; } = null!;
         public DbSet<StudentTransportAssignment> StudentTransportAssignments { get; set; } = null!;
         public DbSet<VehicleMaintenance> VehicleMaintenances { get; set; } = null!;
         public DbSet<TransportTrip> TransportTrips => Set<TransportTrip>();
@@ -443,6 +452,25 @@ namespace CollegeManagement.API.Data
                       .WithMany()
                       .HasForeignKey(es => es.SubjectId)
                       .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<InvigilatorAssignment>(entity =>
+            {
+                entity.ToTable("InvigilatorAssignments");
+                entity.HasKey(ia => ia.InvigilatorAssignmentId);
+                entity.Property(ia => ia.InvigilatorAssignmentId).HasColumnName("InvigilatorAssignmentId");
+                entity.Property(ia => ia.ExamScheduleId).HasColumnName("ExamScheduleId");
+                entity.Property(ia => ia.InvigilatorId).HasColumnName("InvigilatorId");
+                entity.Property(ia => ia.HallNumber).HasColumnName("HallNumber").HasMaxLength(100);
+                entity.Property(ia => ia.AssignedAt).HasColumnName("AssignedAt");
+                entity.HasOne(ia => ia.ExamSchedule)
+                      .WithMany(es => es.InvigilatorAssignments)
+                      .HasForeignKey(ia => ia.ExamScheduleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(ia => ia.InvigilatorStaff)
+                      .WithMany()
+                      .HasForeignKey(ia => ia.InvigilatorId)
+                      .OnDelete(DeleteBehavior.Cascade);
             });
           
 
@@ -1194,6 +1222,7 @@ namespace CollegeManagement.API.Data
 
             modelBuilder.Entity<Faculty>(entity =>
             {
+                entity.Ignore(f => f.Aadhaar);
                 entity.HasOne(f => f.DesignationRef)
                     .WithMany(d => d.Faculties)
                     .HasForeignKey(f => f.DesignationId)
@@ -1624,6 +1653,36 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     .HasDatabaseName("IX_VehMaint_Vehicle_ServiceDate_Deleted");
             });
 
+            // Staff Campus Assignments Configuration
+            modelBuilder.Entity<CollegeManagement.API.Models.Staff.StaffCampusAssignment>(entity =>
+            {
+                entity.ToTable("StaffCampusAssignments");
+                entity.HasIndex(e => new { e.StaffId, e.CampusId }).IsUnique();
+                entity.HasOne(e => e.Staff)
+                    .WithMany(s => s.StaffCampusAssignments)
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Campus)
+                    .WithMany()
+                    .HasForeignKey(e => e.CampusId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Staff Board Assignments Configuration
+            modelBuilder.Entity<CollegeManagement.API.Models.Staff.StaffBoardAssignment>(entity =>
+            {
+                entity.ToTable("StaffBoardAssignments");
+                entity.HasIndex(e => new { e.StaffId, e.BoardId }).IsUnique();
+                entity.HasOne(e => e.Staff)
+                    .WithMany(s => s.StaffBoardAssignments)
+                    .HasForeignKey(e => e.StaffId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(e => e.Board)
+                    .WithMany()
+                    .HasForeignKey(e => e.BoardId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
             // Permissions Configuration
             modelBuilder.Entity<Permission>(entity =>
             {
@@ -1662,6 +1721,8 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
 
 }
 }
+
+
 
 
 

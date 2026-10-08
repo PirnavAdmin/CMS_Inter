@@ -28,13 +28,20 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       allowedHosts: true,
       proxy: {
+        "/hubs/driverNotifications": {
+          target: apiBaseUrl,
+          changeOrigin: true,
+          secure: !isHttpsApi,
+          ws: true,
+          headers: { "ngrok-skip-browser-warning": "true" },
+        },
         "/api": {
           target: apiBaseUrl,
           changeOrigin: true,
           secure: false,
           agent: isHttpsApi ? new https.Agent({ keepAlive: true, rejectUnauthorized: false }) : undefined,
-          proxyTimeout: 30000,
-          timeout: 30000,
+          proxyTimeout: 120000,
+          timeout: 120000,
           headers: {
             "ngrok-skip-browser-warning": "true",
           },

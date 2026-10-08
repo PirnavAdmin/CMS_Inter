@@ -4,6 +4,8 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
     {
         public string? Search { get; set; }
 
+        public long? CampusId { get; set; }
+
         public long? RouteId { get; set; }
 
         public bool? Status { get; set; }

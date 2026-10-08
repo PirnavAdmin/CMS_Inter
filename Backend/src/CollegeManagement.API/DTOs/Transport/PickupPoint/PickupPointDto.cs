@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using CollegeManagement.API.Helpers;
 
 namespace CollegeManagement.API.Dtos.Transport.PickupPoint
 {
@@ -16,6 +17,9 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
         [JsonPropertyName("routeName")]
         public string RouteName { get; set; } = string.Empty;
 
+        [JsonPropertyName("route")]
+        public string Route => !string.IsNullOrWhiteSpace(RouteName) ? RouteName : (RouteId > 0 ? RouteId.ToString() : "-");
+
         [JsonPropertyName("pickupPointName")]
         public string PickupPointName { get; set; } = string.Empty;
 
@@ -25,41 +29,38 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
         [JsonPropertyName("landmark")]
         public string? Landmark { get; set; }
 
+        [JsonPropertyName("stopAddress")]
+        public string? StopAddress => Landmark;
+
         [JsonPropertyName("sequenceNo")]
-        public int SequenceNo { get; set; }
+        public int SequenceNo { get; set; } = 1;
 
         [JsonPropertyName("sequenceNumber")]
         public int SequenceNumber => SequenceNo;
 
         [JsonPropertyName("pickupTime")]
+        [JsonConverter(typeof(TimeSpanJsonConverter))]
         public TimeSpan PickupTime { get; set; }
 
-        [JsonPropertyName("arrivalTime")]
-        public string ArrivalTime => PickupTime.ToString(@"hh\:mm");
-
         [JsonPropertyName("morningPickupTime")]
-        public string MorningPickupTime => PickupTime != TimeSpan.Zero ? DateTime.Today.Add(PickupTime).ToString("hh:mm tt") : "00:00";
-
-        [JsonPropertyName("morningPickup")]
-        public string MorningPickup => MorningPickupTime;
+        public string MorningPickupTime => PickupTime != TimeSpan.Zero 
+            ? DateTime.Today.Add(PickupTime).ToString("hh:mm tt") 
+            : PickupTime.ToString(@"hh\:mm");
 
         [JsonPropertyName("dropTime")]
+        [JsonConverter(typeof(TimeSpanJsonConverter))]
         public TimeSpan DropTime { get; set; } = new TimeSpan(16, 15, 0);
 
         [JsonPropertyName("eveningDropTime")]
-        public string EveningDropTime => DropTime != TimeSpan.Zero ? DateTime.Today.Add(DropTime).ToString("hh:mm tt") : "04:15 PM";
-
-        [JsonPropertyName("eveningDrop")]
-        public string EveningDrop => EveningDropTime;
+        public string EveningDropTime => DropTime != TimeSpan.Zero 
+            ? DateTime.Today.Add(DropTime).ToString("hh:mm tt") 
+            : DropTime.ToString(@"hh\:mm");
 
         [JsonPropertyName("distanceFromStart")]
         public decimal DistanceFromStart { get; set; }
 
         [JsonPropertyName("distanceFromCollegeKm")]
-        public decimal distanceFromCollegeKm => DistanceFromStart;
-
-        [JsonPropertyName("distanceKm")]
-        public string DistanceKm => $"{DistanceFromStart} KM";
+        public decimal DistanceFromCollegeKm => DistanceFromStart;
 
         [JsonPropertyName("monthlyFee")]
         public decimal MonthlyFee { get; set; } = 1200;
@@ -67,13 +68,14 @@ namespace CollegeManagement.API.Dtos.Transport.PickupPoint
         [JsonPropertyName("monthlyFare")]
         public decimal MonthlyFare => MonthlyFee;
 
-        [JsonPropertyName("monthlyFeeText")]
-        public string MonthlyFeeText => $"₹{MonthlyFee}/mo";
-
         [JsonPropertyName("status")]
-        public bool Status { get; set; }
+        public bool Status { get; set; } = true;
 
-        [JsonPropertyName("statusText")]
-        public string StatusText { get; set; } = string.Empty;
+        [JsonPropertyName("isActive")]
+        public bool IsActive => Status;
+
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
     }
 }
+

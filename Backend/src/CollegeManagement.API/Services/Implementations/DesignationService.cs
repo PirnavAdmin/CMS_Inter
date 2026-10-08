@@ -422,43 +422,20 @@ namespace CollegeManagement.API.Services.Implementations
             using var workbook = new ClosedXML.Excel.XLWorkbook();
             var ws = workbook.Worksheets.Add("Designations");
 
-            var headers = new[] { "Designation Code", "Designation Name", "Status" };
+            var headers = new[] { "Designation Code", "Designation Name", "Department Name", "Status" };
 
             for (int col = 0; col < headers.Length; col++)
             {
                 var cell = ws.Cell(1, col + 1);
                 cell.Value = headers[col];
                 cell.Style.Font.Bold = true;
-                cell.Style.Font.FontSize = 11;
-                cell.Style.Font.FontColor = ClosedXML.Excel.XLColor.White;
-                cell.Style.Fill.BackgroundColor = ClosedXML.Excel.XLColor.FromArgb(30, 64, 175);
-                cell.Style.Alignment.Horizontal = ClosedXML.Excel.XLAlignmentHorizontalValues.Center;
-                cell.Style.Alignment.Vertical = ClosedXML.Excel.XLAlignmentVerticalValues.Center;
-                cell.Style.Border.OutsideBorder = ClosedXML.Excel.XLBorderStyleValues.Thin;
-                cell.Style.Border.OutsideBorderColor = ClosedXML.Excel.XLColor.FromArgb(203, 213, 225);
             }
-            ws.Row(1).Height = 26;
-
-            // Sample guidance rows
-            var sampleDesigs = new[]
-            {
-                new { Code = "DES_PROF", Name = "Professor", Status = "Active" },
-                new { Code = "DES_ASST_PROF", Name = "Assistant Professor", Status = "Active" },
-                new { Code = "DES_ASSOC_PROF", Name = "Associate Professor", Status = "Active" }
-            };
-
-            for (int r = 0; r < sampleDesigs.Length; r++)
-            {
-                var rowIdx = r + 2;
-                ws.Cell(rowIdx, 1).Value = sampleDesigs[r].Code;
-                ws.Cell(rowIdx, 2).Value = sampleDesigs[r].Name;
-                ws.Cell(rowIdx, 3).Value = sampleDesigs[r].Status;
-                ws.Row(rowIdx).Height = 20;
-            }
+            ws.Row(1).Height = 20;
 
             ws.Column(1).Width = 24;
             ws.Column(2).Width = 42;
-            ws.Column(3).Width = 16;
+            ws.Column(3).Width = 24;
+            ws.Column(4).Width = 16;
             ws.ShowGridLines = true;
 
             using var ms = new System.IO.MemoryStream();

@@ -37,8 +37,7 @@ namespace CollegeManagement.API.Models.Faculty
         [Required]
         public DateTime DateOfBirth { get; set; }
 
-        [Required]
-        [StringLength(12)]
+        [NotMapped]
         public string Aadhaar { get; set; } = string.Empty;
 
         [Required]

@@ -31,14 +31,11 @@ namespace CollegeManagement.API.DTOs.Students.Requests
         // Parent / Guardian Contact
         public string? FatherMobile { get; set; }
 
-        public string? FatherEmail { get; set; }
-
         public string? MotherMobile { get; set; }
-
-        public string? MotherEmail { get; set; }
 
         public string? GuardianMobile { get; set; }
 
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
     }
 }
+

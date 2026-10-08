@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CalendarDays, CheckCircle2, Clock3, Eye, FileText, History as HistoryIcon, Search, ShieldCheck, UserRound, UsersRound, XCircle } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
 import { 
@@ -438,13 +439,16 @@ function Assignment({ item, records = [], close, save, toast }) {
 }
 
 function LeaveHistory({ onSelect }) {
+  const campusCtx = useCampusContext();
+  const campusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
+
   const [historyData, setHistoryData] = useState([]);
   
   useEffect(() => {
-    getLeaveHistorySummary().then(data => {
-      if (Array.isArray(data) && data.length) setHistoryData(data);
+    getLeaveHistorySummary(null, null, campusId).then(data => {
+      if (Array.isArray(data)) setHistoryData(data);
     }).catch(console.error);
-  }, []);
+  }, [campusId]);
 
   const [staffType, setStaffType] = useState("All Staff");
   const [query, setQuery] = useState("");
@@ -651,6 +655,9 @@ function RejectLeaveConfirmation({ leave, remark, setRemark, onCancel, onConfirm
 }
 
 export default function LeaveManagementPage() {
+  const campusCtx = useCampusContext();
+  const campusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
+
   const [requests, setRequests] = useState([]);
   const [selected, setSelected] = useState(null);
   const [rejecting, setRejecting] = useState(null);
@@ -702,14 +709,14 @@ export default function LeaveManagementPage() {
   }, [currentTabRequests, statusFilter, searchQuery]);
 
   const loadRequests = () => {
-    getLeaveRequests().then(data => {
+    getLeaveRequests(null, null, null, campusId).then(data => {
       if (Array.isArray(data)) setRequests(data);
     }).catch(console.error);
   };
 
   useEffect(() => {
     loadRequests();
-  }, []);
+  }, [campusId]);
 
   const openDetails = (req) => {
     setSelected(req); // Open immediately so the modal is never blocked

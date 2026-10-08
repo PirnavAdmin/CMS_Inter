@@ -34,6 +34,7 @@ const isHtmlResponse = (data) =>
   typeof data === "string" && /^\s*(<!doctype html|<html)/i.test(data);
 
 const isAuthBypassRequest = (config) => {
+  if (config?.skipAuthRedirect || config?.optionalAuth || config?.silentAuth) return true;
   const url = String(config?.url || "");
   return /\/login\/?$/i.test(url) || /\/refresh(-token)?\/?$/i.test(url) || /\/register\/?$/i.test(url);
 };
@@ -44,7 +45,7 @@ const getStoredAccessToken = () => {
   return stored.replace(/^Bearer\s+/i, "").trim();
 };
 
-const getJwtExpiryState = (token) => {
+export const getJwtExpiryState = (token) => {
   try {
     const [, payload] = token.split(".");
     if (!payload) return { isJwt: false };
@@ -122,6 +123,10 @@ const onTokenRefreshFailed = (error) => {
 
 apiClient.interceptors.request.use(
   (config) => {
+    if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+      // Preserve file bodies and let the browser supply the multipart boundary.
+      config.headers.delete("Content-Type");
+    }
     beginApiLoading(config);
     const token = getStoredAccessToken();
     if (token) {
@@ -131,6 +136,12 @@ apiClient.interceptors.request.use(
         if (!config.headers) config.headers = {};
         config.headers.Authorization = `Bearer ${token}`;
       }
+    }
+    try {
+      const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
+      if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
+    } catch {
+      // Storage may be unavailable in restricted browser contexts.
     }
     if (import.meta.env.DEV) {
       const expiry = token ? getJwtExpiryState(token) : {};
@@ -170,33 +181,36 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (import.meta.env.DEV && !originalRequest?.silent && !originalRequest?.skipErrorLog) {
-      const status = error.response?.status || (error.message === "Network Error" ? "Network Error" : "Request Error");
-      const url = originalRequest?.url || "Unknown URL";
-      const method = (originalRequest?.method || "GET").toUpperCase();
-      const message = getApiErrorMessage(error) || error.message || "Unknown error";
-      const isAuthenticated = Boolean(getStoredAccessToken());
+    const shouldLogDevError =
+      import.meta.env.DEV &&
+      !originalRequest?.silent &&
+      !originalRequest?.skipErrorLog &&
+      !originalRequest?.skipAuthRedirect &&
+      !originalRequest?.silentAuth &&
+      !originalRequest?.optionalAuth;
 
-      // Deduplicate identical error messages in DEV to prevent console flooding
-      const errorKey = `${method}:${url}:${status}`;
-      const now = Date.now();
-      const lastLogged = recentApiErrorLogTimes.get(errorKey) || 0;
-      if (now - lastLogged > 4000) {
-        recentApiErrorLogTimes.set(errorKey, now);
-        if (recentApiErrorLogTimes.size > 100) {
-          recentApiErrorLogTimes.clear();
-        }
-        console.warn(
-          `[API ${status}] ${method} ${url}: ${message}`,
-          {
-            url,
-            method,
-            status,
-            message,
-            authenticated: isAuthenticated,
-            data: error.response?.data,
-          }
-        );
+    if (shouldLogDevError) {
+      if (!error.response) {
+        console.warn("API network warning (server unreachable or proxy empty response):", {
+          url: originalRequest?.url,
+          method: originalRequest?.method,
+          message: error?.message,
+        });
+      } else {
+        const errDetail =
+          error.response?.data?.message ||
+          error.response?.data?.Message ||
+          error.response?.data?.error ||
+          error.response?.data?.title ||
+          getApiErrorMessage(error) ||
+          error.message;
+        console.error("API response error:", {
+          url: originalRequest?.url,
+          method: originalRequest?.method,
+          status: error.response?.status,
+          message: errDetail,
+          data: error.response?.data,
+        });
       }
     }
 

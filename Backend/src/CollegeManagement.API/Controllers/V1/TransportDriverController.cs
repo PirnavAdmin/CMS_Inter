@@ -54,33 +54,6 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateTransportDriverDto dto)
-        {
-            try
-            {
-                var id = await _service.CreateAsync(dto, null);
-                var result = await _service.GetByIdAsync(id);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Driver created successfully.",
-                    data = result ?? new TransportDriverDto
-                    {
-                        DriverId = id,
-                        DriverName = dto.DriverName,
-                        MobileNumber = dto.MobileNumber,
-                        LicenceNumber = dto.LicenceNumber,
-                        Status = dto.Status ? "Active" : "Inactive"
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
-        }
 
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
@@ -90,33 +63,19 @@ namespace CollegeManagement.API.Controllers
             try
             {
                 var existing = await _service.GetByIdOrNumberAsync(id);
-                if (existing != null)
+                if (existing == null)
                 {
-                    var updated = await _service.UpdateAsync(existing.DriverId, dto, null);
-                    if (updated)
-                    {
-                        var updatedDto = await _service.GetByIdAsync(existing.DriverId);
-                        return Ok(new { success = true, message = "Driver updated successfully.", data = updatedDto });
-                    }
+                    return NotFound(new { success = false, message = "Driver not found." });
                 }
 
-                var createDto = new CreateTransportDriverDto
+                var updated = await _service.UpdateAsync(existing.DriverId, dto, null);
+                if (updated)
                 {
-                    DriverName = !string.IsNullOrWhiteSpace(dto.DriverName) ? dto.DriverName : id,
-                    LicenceNumber = dto.LicenceNumber ?? "",
-                    LicenceExpiry = dto.LicenceExpiry,
-                    MobileNumber = dto.MobileNumber ?? "",
-                    AlternateMobileNumber = dto.AlternateMobileNumber ?? "",
-                    Address = dto.Address ?? "",
-                    BloodGroup = dto.BloodGroup ?? "",
-                    EmergencyContactName = dto.EmergencyContactName ?? "",
-                    EmergencyContactNumber = dto.EmergencyContactNumber ?? "",
-                    Status = dto.Status
-                };
+                    var updatedDto = await _service.GetByIdAsync(existing.DriverId);
+                    return Ok(new { success = true, message = "Driver updated successfully.", data = updatedDto });
+                }
 
-                var newId = await _service.CreateAsync(createDto, null);
-                var newDto = await _service.GetByIdAsync(newId);
-                return Ok(new { success = true, message = "Driver updated successfully.", data = newDto });
+                return BadRequest(new { success = false, message = "Failed to update driver." });
             }
             catch (Exception ex)
             {

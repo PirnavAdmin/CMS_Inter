@@ -29,9 +29,12 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet]
         public async Task<IActionResult> GetAllFeeConfigs(
             [FromQuery] int? hostelId = null,
-            [FromQuery] string? status = null)
+            [FromQuery] string? status = null,
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null)
         {
-            var result = await _hostelFeeConfigService.GetAllAsync(hostelId, status);
+            var result = await _hostelFeeConfigService.GetAllAsync(hostelId, status, campusId, boardId, academicYearId);
             return Ok(new { success = true, data = result });
         }
 

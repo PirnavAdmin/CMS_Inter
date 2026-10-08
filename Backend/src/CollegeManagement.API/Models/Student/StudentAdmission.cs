@@ -78,7 +78,7 @@ namespace CollegeManagement.API.Models
         public string? GuardianMobile { get; set; }
 
         [MaxLength(150)]
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal? AnnualIncome { get; set; }
@@ -102,7 +102,9 @@ namespace CollegeManagement.API.Models
         public string? Pincode { get; set; }
 
         // Academic Relations & Campus
-        public int? CampusId { get; set; } public int? AdmittedById { get; set; }
+        public int? CampusId { get; set; } 
+        public int? SourceCampusId { get; set; }
+        public int? AdmittedById { get; set; }
 
         [ForeignKey(nameof(CampusId))]
         public virtual Campus? CampusNavigation { get; set; }
@@ -214,3 +216,4 @@ namespace CollegeManagement.API.Models
         public string? HallTicketNumber { get; set; }
     }
 }
+

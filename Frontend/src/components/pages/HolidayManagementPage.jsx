@@ -6,6 +6,11 @@ import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
 import "./HolidayManagementPage.css";
+import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
+import nationalHolidaysIcon from "@/assets/sidebar-3d/holiday-national.svg";
+import festivalHolidaysIcon from "@/assets/sidebar-3d/holiday-festival.svg";
+import upcomingHolidaysIcon from "@/assets/sidebar-3d/holiday-upcoming.svg";
+import completedHolidaysIcon from "@/assets/sidebar-3d/holiday-completed.svg";
 
 const PAGE_SIZE = 5;
 const TYPES = ["National Holiday", "Festival Holiday", "Special Holiday", "Other"];
@@ -199,13 +204,19 @@ export default function HolidayManagementPage() {
 
       if (listRes.status === "fulfilled") {
         const val = listRes.value;
-        const items = Array.isArray(val?.data?.data)
+        const rawItems = Array.isArray(val?.data?.data)
           ? val.data.data
           : Array.isArray(val?.data)
           ? val.data
           : Array.isArray(val)
           ? val
           : [];
+        const items = selectedCampusId
+          ? rawItems.filter((holiday) => {
+              const campusId = holiday?.campusId ?? holiday?.CampusId;
+              return campusId == null || String(campusId) === String(selectedCampusId);
+            })
+          : rawItems;
         setHolidays(items);
       } else {
         setHolidays([]);
@@ -381,11 +392,11 @@ export default function HolidayManagementPage() {
     >
       <div className="holiday-page">
         <section className="holiday-summary" aria-label="Holiday summary">
-          <article className="holiday-stat is-primary"><span><CalendarDays size={19} /></span><div><small>Total Holidays</small><strong>{summary.total}</strong></div></article>
-          <article className="holiday-stat is-blue"><span><Flag size={19} /></span><div><small>National Holidays</small><strong>{summary.national}</strong></div></article>
-          <article className="holiday-stat is-amber"><span><PartyPopper size={19} /></span><div><small>Festival Holidays</small><strong>{summary.festival}</strong></div></article>
-          <article className="holiday-stat is-violet"><span><Clock3 size={19} /></span><div><small>Upcoming Holidays</small><strong>{summary.upcoming}</strong></div></article>
-          <article className="holiday-stat is-completed"><span><CheckCircle2 size={19} /></span><div><small>Completed Holidays</small><strong>{summary.completed}</strong></div></article>
+          <article className="holiday-stat is-primary"><span><img src={totalHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>Total Holidays</small><strong>{summary.total}</strong></div></article>
+          <article className="holiday-stat is-blue"><span><img src={nationalHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>National Holidays</small><strong>{summary.national}</strong></div></article>
+          <article className="holiday-stat is-amber"><span><img src={festivalHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>Festival Holidays</small><strong>{summary.festival}</strong></div></article>
+          <article className="holiday-stat is-violet"><span><img src={upcomingHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>Upcoming Holidays</small><strong>{summary.upcoming}</strong></div></article>
+          <article className="holiday-stat is-completed"><span><img src={completedHolidaysIcon} alt="" aria-hidden="true" /></span><div><small>Completed Holidays</small><strong>{summary.completed}</strong></div></article>
         </section>
 
         <section className="cms-card holiday-list-card">

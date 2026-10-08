@@ -1,0 +1,18 @@
+/* Faculty Classes Styles */
+.sp-classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.sp-class-card {
+  background: var(--cms-surface, #fff);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  border-radius: 12px;
+  padding: 18px;
+  transition: all 0.18s ease;
+}
+.sp-class-card:hover {
+  border-color: var(--cms-primary, #6F8400);
+  box-shadow: 0 4px 14px rgba(16, 32, 60, 0.06);
+}

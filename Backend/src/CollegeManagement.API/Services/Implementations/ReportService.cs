@@ -727,10 +727,10 @@ public class ReportService : IReportService
                     rows.Add(new[]
                     {
                         $"{logIdx++}",
-                        l.UserName ?? "System",
+                        l.Actor ?? "System",
                         l.Action ?? "—",
-                        l.EntityName ?? "—",
-                        l.Description ?? "—",
+                        l.Target ?? "—",
+                        l.Details ?? "—",
                         l.CreatedAt.ToString("dd-MM-yyyy HH:mm")
                     });
                 }

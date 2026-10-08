@@ -37,7 +37,7 @@ public class CertificateModuleBackendTester
 
         var dbContext = new DatabaseContext(config);
         var repo = new CertificateRepository(dbContext);
-        var service = new CertificateService(repo);
+        var service = new CertificateService(repo, null!, null!);
 
         // 1. Test Database Connectivity
         Console.WriteLine("\n[1/8] Testing Database Connection...");

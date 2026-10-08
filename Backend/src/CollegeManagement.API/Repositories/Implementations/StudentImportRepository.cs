@@ -147,14 +147,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_FatherName = s.FatherName,
                     p_FatherOccupation = s.FatherOccupation,
                     p_FatherMobile = s.FatherMobile,
-                    p_FatherEmail = s.FatherEmail,
                     p_MotherName = s.MotherName,
                     p_MotherOccupation = s.MotherOccupation,
                     p_MotherMobile = s.MotherMobile,
-                    p_MotherEmail = s.MotherEmail,
                     p_GuardianName = s.GuardianName,
                     p_GuardianMobile = s.GuardianMobile,
-                    p_GuardianEmail = s.GuardianEmail,
+                    p_ParentGuardianEmail = s.ParentGuardianEmail,
                     p_AnnualIncome = s.AnnualIncome,
                     p_FeeAmount = s.FeeAmount,
                     p_FeePaid = s.FeePaid,
@@ -200,3 +198,4 @@ namespace CollegeManagement.API.Repositories.Implementations
         }
     }
 }
+

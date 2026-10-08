@@ -28,11 +28,8 @@ namespace CollegeManagement.API.Dtos.Transport.Reports
         [JsonPropertyName("pickupPoint")]
         public string PickupPoint { get; set; } = string.Empty;
 
-        [JsonPropertyName("assignedBus")]
-        public string AssignedBus { get; set; } = string.Empty;
-
         [JsonPropertyName("vehicleNumber")]
-        public string VehicleNumber => AssignedBus;
+        public string VehicleNumber { get; set; } = string.Empty;
 
         [JsonPropertyName("driverName")]
         public string DriverName { get; set; } = string.Empty;

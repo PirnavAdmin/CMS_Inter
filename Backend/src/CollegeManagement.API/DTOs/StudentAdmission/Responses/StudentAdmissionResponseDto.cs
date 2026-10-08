@@ -20,7 +20,11 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
 
         // Academic Relations
-        public int? CampusId { get; set; } public int? AdmittedById { get; set; } public string? AdmittedByName { get; set; }
+        public int? CampusId { get; set; } 
+        public int? SourceCampusId { get; set; }
+        public string? SourceCampusName { get; set; }
+        public int? AdmittedById { get; set; } 
+        public string? AdmittedByName { get; set; }
         public string? CampusName { get; set; }
 
         public int BoardId { get; set; }
@@ -83,8 +87,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? FatherMobile { get; set; }
 
-        public string? FatherEmail { get; set; }
-
 
         // Mother
 
@@ -94,8 +96,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? MotherMobile { get; set; }
 
-        public string? MotherEmail { get; set; }
-
 
         // Guardian
 
@@ -103,7 +103,7 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? GuardianMobile { get; set; }
 
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
 
         // Other
@@ -203,3 +203,4 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public List<int> SelectedFeeStructureComponentIds { get; set; } = new();
     }
 }
+

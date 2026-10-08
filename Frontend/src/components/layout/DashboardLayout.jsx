@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronRight, ChevronDown, Settings, User, LogOut, CheckCircle2, Building, ShieldCheck,
@@ -9,14 +9,17 @@ import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
-import { useCampusContext } from "@/context/CampusContext.jsx";
+import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
+import { useEffectivePermissions } from "@/features/rolesPermissions/EffectivePermissionsContext.jsx";
+import { filterMenuByPermissions } from "@/features/rolesPermissions/permissionRoutes.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import boardAcademicYearIcon from "@/assets/sidebar-3d/board-academic-year.png";
 import subjectsIcon from "@/assets/sidebar-3d/subjects.png";
 import timetableIcon from "@/assets/sidebar-3d/timetable.png";
+import transportBusIcon from "@/assets/sidebar-3d/transport-bus.png";
 import marksEvaluationIcon from "@/assets/sidebar-3d/marks-evaluation.png";
 import resultsIcon from "@/assets/sidebar-3d/results.png";
 import promotionIcon from "@/assets/sidebar-3d/promotion.png";
@@ -34,6 +37,7 @@ import settingsBoardAcademicYearIcon from "@/assets/settings-3d/board-academic-y
 import settingsNumberSeriesIcon from "@/assets/settings-3d/number-series.png";
 import settingsTemplatesIcon from "@/assets/settings-3d/templates.png";
 import settingsAuditLogsIcon from "@/assets/settings-3d/audit-logs.png";
+import hostelManagementIcon from "@/assets/sidebar-3d/hostel-management.svg";
 import navbarMenuIcon from "@/assets/navbar-3d/menu.png";
 import navbarSearchIcon from "@/assets/navbar-3d/search.png";
 import navbarBoardIcon from "@/assets/navbar-3d/board.png";
@@ -41,13 +45,28 @@ import navbarAcademicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import navbarNotificationsIcon from "@/assets/navbar-3d/notifications.png";
 import "./DashboardLayout.css";
 
-const generatedSidebarIcons = {
+export const generatedSidebarIcons = {
   department: { src: managementIconsSprite, position: "0% 0%" },
   staffAttendance: { src: managementIconsSprite, position: "50% 0%" },
   staffLeave: { src: managementIconsSprite, position: "100% 0%" },
   payroll: { src: managementIconsSprite, position: "0% 100%" },
   admission: { src: managementIconsSprite, position: "50% 100%" },
   groups: { src: managementIconsSprite, position: "100% 100%" },
+};
+
+export const adminIconAssets = {
+  dashboard: dashboardIcon,
+  feeManagement: feeManagementIcon,
+  paymentHistory: feeManagementIcon,
+  payroll: generatedSidebarIcons.payroll,
+  attendanceImpact: generatedSidebarIcons.staffAttendance,
+  financialReports: reportsAnalyticsIcon,
+  profile: studentsIcon,
+  notifications: navbarNotificationsIcon,
+  menu: navbarMenuIcon,
+  search: navbarSearchIcon,
+  board: navbarBoardIcon,
+  academicYear: navbarAcademicYearIcon,
 };
 
 const PAGE_TITLE_ICON_OVERRIDES = Object.freeze({
@@ -148,7 +167,7 @@ export const menu = [
       { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon },
       { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon },
       { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon },
-      { to: "/dashboard/transport", label: "Transport", icon: timetableIcon },
+      { to: "/dashboard/transport", label: "Transport", icon: transportBusIcon },
     ],
   },
   {
@@ -185,7 +204,7 @@ export const menu = [
   {
     section: "Hostel Management",
     items: [
-      { to: "/hostel", label: "Hostel Management", icon: Building2 },
+      { to: "/hostel", label: "Hostel Management", icon: hostelManagementIcon },
     ],
   },
   {
@@ -195,10 +214,6 @@ export const menu = [
         to: "/dashboard/settings",
         label: "Settings",
         icon: boardAcademicYearIcon,
-        children: [
-          { to: "/dashboard/settings", label: "General Settings", icon: Settings },
-          { to: "/dashboard/settings/roles-permissions", label: "Roles & Permissions", icon: ShieldCheck },
-        ],
       },
     ],
   },
@@ -241,9 +256,52 @@ export const wardenMenu = [
   ] },
 ];
 
+export const principalMenu = [
+  {
+    section: "Overview",
+    items: [{ to: "/principal-dashboard", label: "Dashboard", icon: dashboardIcon }],
+  },
+  {
+    section: "Academic Management",
+    items: [
+      { to: "/dashboard/students", label: "Students", icon: studentsIcon },
+      { to: "/dashboard/staff", label: "Staff", icon: staffIcon },
+      { to: "/dashboard/attendance/student", label: "Student Attendance", icon: attendanceIcon },
+      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance },
+      { to: "/dashboard/sections", label: "Classes & Sections", icon: sectionsIcon },
+      { to: "/dashboard/subjects", label: "Subjects", icon: subjectsIcon },
+      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon },
+    ],
+  },
+  {
+    section: "Assessment",
+    items: [
+      { to: "/dashboard/examinations", label: "Examinations", icon: examinationIcon },
+      { to: "/dashboard/results", label: "Results", icon: resultsIcon },
+      { to: "/dashboard/marks-entry", label: "Assignments & Marks", icon: marksEvaluationIcon },
+    ],
+  },
+  {
+    section: "Administration",
+    items: [
+      { to: "/dashboard/admission", label: "Admissions", icon: generatedSidebarIcons.admission },
+      { to: "/dashboard/fee-structure", label: "Fees", icon: feeManagementIcon },
+      { to: "/dashboard/leave-management", label: "Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/dashboard/reports", label: "Reports", icon: reportsAnalyticsIcon },
+      { to: "/dashboard/settings", label: "Settings", icon: boardAcademicYearIcon },
+    ],
+  },
+];
+
 const SIDEBAR_SCROLL_KEY = "cms_sidebar_scroll_top";
 const NOTIFICATION_REFRESH_INTERVAL = 60_000;
 const EMPTY_NOTIFICATION_SOURCES = [];
+const EMPTY_CAMPUS_CONTEXT = Object.freeze({
+  campuses: [],
+  activeCampuses: [],
+  selectedCampus: null,
+  setSelectedCampus: () => undefined,
+});
 const MOCK_NOTIFICATIONS = [];
 const PARENT_NOTIFICATIONS = [
   { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
@@ -275,12 +333,18 @@ const notificationRows = (payload) => {
 const notificationStatus = (item = {}) => String(item.status ?? item.Status ?? item.workflowStatus ?? item.WorkflowStatus ?? "").trim().toLowerCase();
 const pendingRowCount = (payload, predicate = (item) => PENDING_STATUSES.has(notificationStatus(item))) => notificationRows(payload).filter(predicate).length;
 
-const searchIndex = menu.flatMap((g) =>
+const createSearchIndex = (items) => items.flatMap((g) =>
   g.items.flatMap((item) => [
     { to: item.to, label: item.label, section: g.section },
     ...(item.children || []).map((c) => ({ to: c.to, label: c.label, section: item.label })),
   ]),
 );
+
+const principalSearchIndex = principalMenu.flatMap((g) =>
+  g.items.map((item) => ({ to: item.to, label: item.label, section: g.section })),
+);
+
+const searchIndex = createSearchIndex(menu);
 
 const parentSearchIndex = [
   ...parentMenu.flatMap((g) =>
@@ -306,7 +370,7 @@ const breadcrumbLinkForLabel = (label) =>
 const normalizeBreadcrumbLabel = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
 const breadcrumbKey = (value) => normalizeBreadcrumbLabel(value).toLowerCase();
 
-const menuBreadcrumbForPath = (pathname) => {
+const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
   let bestMatch = null;
   const consider = (to, labels, icon) => {
     const [path] = to.split("?");
@@ -335,6 +399,8 @@ const menuBreadcrumbForPath = (pathname) => {
 
   const activeMenus = pathname.startsWith("/parent-dashboard")
     ? parentMenu
+    : pathname.startsWith("/principal-dashboard")
+    ? principalMenu
     : pathname.startsWith("/warden") || pathname.startsWith("/warden-dashboard")
     ? wardenMenu
     : menu;
@@ -350,9 +416,9 @@ const menuBreadcrumbForPath = (pathname) => {
   return bestMatch;
 };
 
-const menuIconForTitle = (title) => {
+const menuIconForTitle = (title, sourceMenu = menu) => {
   const titleKey = breadcrumbKey(title);
-  for (const group of menu) {
+  for (const group of sourceMenu) {
     for (const item of group.items) {
       if (breadcrumbKey(item.label) === titleKey) return item.icon;
       for (const child of item.children || []) {
@@ -388,6 +454,16 @@ function readUser() {
   return getAuthUser();
 }
 
+function isPrincipalRole(role) {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "principal" || normalized.includes("principal");
+}
+
+function hasFullAccess(user) {
+  const role = String(user?.role || user?.roleCode || "").trim().toLowerCase();
+  return Boolean(user?.isAdmin) || role === "admin" || role === "super admin" || role === "super_admin";
+}
+
 function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
@@ -403,6 +479,11 @@ export default function DashboardLayout({
   actions,
   children,
   excludeNotificationSources = EMPTY_NOTIFICATION_SOURCES,
+  menuOverride,
+  searchIndexOverride,
+  profilePath,
+  settingsPath,
+  showSettingsAction = true,
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -417,7 +498,8 @@ export default function DashboardLayout({
     setSelectedBoard,
     setSelectedAcademicYear,
   } = useAcademicContext();
-  const { campuses, activeCampuses, selectedCampus, setSelectedCampus } = useCampusContext();
+  const campusContext = useContext(CampusContext) || EMPTY_CAMPUS_CONTEXT;
+  const { campuses, activeCampuses, selectedCampus, setSelectedCampus } = campusContext;
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -438,9 +520,27 @@ export default function DashboardLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
-  const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname), [pathname]);
-  const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title) ?? pageMenuItem?.icon;
-  const pageTitleNode = <div className="cms-page-title">{title && pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div>;
+  const user = readUser();
+  const { status: permissionStatus, canAccess } = useEffectivePermissions();
+  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
+  const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
+  const isWarden =
+    String(user?.role || "").toLowerCase().includes("warden") ||
+    pathname.startsWith("/warden") ||
+    pathname.startsWith("/warden-dashboard") ||
+    (typeof window !== "undefined" && (window.localStorage?.getItem("cms_role") === "warden" || window.sessionStorage?.getItem("cms_role") === "warden"));
+  const baseMenu = menuOverride || (isParent ? parentMenu : isWarden ? wardenMenu : isPrincipal ? principalMenu : menu);
+  const activeMenu = useMemo(
+    () => (isWarden ? baseMenu : filterMenuByPermissions(baseMenu, canAccess, hasFullAccess(user) ? "ready" : permissionStatus)),
+    [baseMenu, canAccess, permissionStatus, user, isWarden],
+  );
+  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isWarden ? wardenSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
+  const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
+  const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  const canManageAcademicContext = !isParent && !menuOverride;
+  const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
+  const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
+  const pageTitleNode = title ? <div className="cms-page-title">{pageIcon ? <PageTitleIcon icon={pageIcon} /> : null}<div className="cms-page-title-copy"><h1>{title}</h1>{subtitle ? <p>{subtitle}</p> : null}</div></div> : null;
 
   const navbarCampuses = useMemo(() => {
     if (Array.isArray(activeCampuses) && activeCampuses.length > 0) return activeCampuses;
@@ -452,20 +552,13 @@ export default function DashboardLayout({
     const menuLabels = pageMenuItem?.labels ?? [];
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
-  const user = readUser();
-  const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
-  const isWarden =
-    String(user?.role || "").toLowerCase().includes("warden") ||
-    pathname.startsWith("/warden") ||
-    pathname.startsWith("/warden-dashboard") ||
-    (typeof window !== "undefined" && (window.localStorage?.getItem("cms_role") === "warden" || window.sessionStorage?.getItem("cms_role") === "warden"));
-  const activeMenu = isParent ? parentMenu : isWarden ? wardenMenu : menu;
-  const currentSearchIndex = isParent ? parentSearchIndex : isWarden ? wardenSearchIndex : searchIndex;
+
   const currentNotifications = isParent ? PARENT_NOTIFICATIONS : MOCK_NOTIFICATIONS;
+
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
-  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : "CMS Admin"));
-  const profileRole = isWarden ? "Hostel Warden" : (user?.role || "admin");
+  const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : isPrincipal ? "Principal" : "CMS Admin"));
+  const profileRole = isWarden ? "Hostel Warden" : isPrincipal ? "Principal" : (user?.role || "admin");
   const pendingActionCount = currentNotifications.reduce((total, item) => total + item.count, 0);
 
   const rememberSidebarScroll = () => {
@@ -576,6 +669,9 @@ export default function DashboardLayout({
         pathname.startsWith("/warden-dashboard/beds/")
       );
     }
+    if (basePath === "/principal-dashboard") return pathname === "/principal-dashboard";
+    if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
+    if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
     if (basePath === "/dashboard/settings") {
       return pathname === "/dashboard/settings" || pathname === "/dashboard/settings/general";
     }
@@ -795,7 +891,7 @@ export default function DashboardLayout({
                         })
                       )}
                     </div>
-                    <div className="cms-academic-panel-footer">
+                    {canManageAcademicContext ? <div className="cms-academic-panel-footer">
                       <button
                         type="button"
                         className="cms-academic-manage-btn"
@@ -806,7 +902,7 @@ export default function DashboardLayout({
                       >
                         <Settings size={14} /> Manage Campuses
                       </button>
-                    </div>
+                    </div> : null}
                   </div>
                 )}
               </div>
@@ -882,7 +978,7 @@ export default function DashboardLayout({
                         );
                       })}
                     </div>
-                    <div className="cms-academic-panel-footer">
+                    {canManageAcademicContext ? <div className="cms-academic-panel-footer">
                       <button
                         type="button"
                         className="cms-academic-manage-btn"
@@ -893,7 +989,7 @@ export default function DashboardLayout({
                       >
                         <Settings size={14} /> Manage Boards
                       </button>
-                    </div>
+                    </div> : null}
                   </div>
                 )}
               </div>
@@ -949,7 +1045,7 @@ export default function DashboardLayout({
                         );
                       })}
                     </div>
-                    {!isParent && (
+                    {canManageAcademicContext && (
                       <div className="cms-academic-panel-footer">
                         <button
                           type="button"
@@ -1028,10 +1124,40 @@ export default function DashboardLayout({
 
             {profileOpen ? (
               <div className="cms-dropdown">
-                <div className="cms-dropdown-head"><strong>{profileName}</strong><div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{profileEmail}</div><div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 3 }}>{profileRole}</div></div>
-                <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings/my-profile"); }}><User size={15} /> My Profile</button>
-                <button className="cms-dropdown-item" onClick={() => { setProfileOpen(false); navigate("/dashboard/settings"); }}><Settings size={15} /> Settings</button>
-                <button type="button" className="cms-dropdown-item danger" onClick={logout}><LogOut size={15} /> Logout</button>
+                <div className="cms-dropdown-head"><strong title={profileName}>{profileName}</strong><div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{profileEmail}</div><div style={{ fontSize: 12, color: "var(--cms-muted)", marginTop: 3 }}>{profileRole}</div></div>
+                <button
+                  type="button"
+                  className="cms-dropdown-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    closeOnMobile();
+                    navigate(resolvedProfilePath);
+                  }}
+                >
+                  <User size={15} /> My Profile
+                </button>
+                {showSettingsAction && resolvedSettingsPath ? <button
+                  type="button"
+                  className="cms-dropdown-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    closeOnMobile();
+                    navigate(resolvedSettingsPath);
+                  }}
+                >
+                  <Settings size={15} /> Settings
+                </button> : null}
+                <button
+                  type="button"
+                  className="cms-dropdown-item danger"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    closeOnMobile();
+                    logout();
+                  }}
+                >
+                  <LogOut size={15} /> Logout
+                </button>
               </div>
             ) : null}
           </div>

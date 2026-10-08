@@ -173,7 +173,7 @@ namespace CollegeManagement.API.Tests
                 var approveReq = new ApproveStudentAdmissionRequest { AdmissionId = seededAdmissionId };
                 var approveResult = await admissionService.ApproveAsync(approveReq);
 
-                AssertTrue(approveResult, "Test 4B: Student admission approval succeeds atomically");
+                AssertTrue(approveResult.Success, "Test 4B: Student admission approval succeeds atomically");
 
                 // Verify Student domain record creation
                 var studentRecord = await admissionRepo.GetStudentByAdmissionIdAsync(seededAdmissionId);
@@ -275,7 +275,7 @@ namespace CollegeManagement.API.Tests
                 noEmailAdmId = createdNoEmailAdm?.AdmissionId ?? 0;
 
                 var approveNoEmailResult = await admissionService.ApproveAsync(new ApproveStudentAdmissionRequest { AdmissionId = noEmailAdmId });
-                AssertTrue(approveNoEmailResult, "Test 13A: Student admission with missing email is approved successfully");
+                AssertTrue(approveNoEmailResult.Success, "Test 13A: Student admission with missing email is approved successfully");
 
                 var noEmailStudent = await admissionRepo.GetStudentByAdmissionIdAsync(noEmailAdmId);
                 AssertTrue(noEmailStudent != null, "Test 13B: Student domain record is created for missing email admission");

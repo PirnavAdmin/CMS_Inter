@@ -113,6 +113,8 @@ namespace CollegeManagement.API.DTOs.Staff
         [StringLength(100)]
         public string? CampusName { get; set; }
 
+        public List<int>? AssignedCampusIds { get; set; } = new();
+
         public int? BoardId { get; set; }
 
         [StringLength(50)]
@@ -126,6 +128,8 @@ namespace CollegeManagement.API.DTOs.Staff
             get => !string.IsNullOrWhiteSpace(BoardCode) ? BoardCode : BoardName;
             set => BoardName = value;
         }
+
+        public List<int>? AssignedBoardIds { get; set; } = new();
 
         public DateTime? JoiningDate { get; set; }
 

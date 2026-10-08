@@ -22,7 +22,12 @@ export const getCertificateById = (id) => {
   return api.get(`/api/v1/certificates/${id}`);
 };
 
-// 4.1. Get hydrated certificate preview by ID (interpolated template & placeholders)
+// 4.1. Get active certificate templates for dropdown
+export const getActiveTemplates = () => {
+  return api.get("/api/v1/certificates/active-templates");
+};
+
+// 4.2. Get hydrated certificate preview by ID (interpolated template & placeholders)
 export const getCertificatePreview = (id) => {
   return api.get(`/api/v1/certificates/${id}/preview`);
 };

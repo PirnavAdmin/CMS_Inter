@@ -255,12 +255,68 @@ export function findParentAccount(input) {
   const val = String(input || "").trim().toLowerCase();
   const digits = val.replace(/\D/g, "");
 
-  // Parent A (parent-001 - Suresh Kumar)
+  // Parent C (parent-003 - Mahesh Reddy)
+  if (
+    val === "parent3" ||
+    val === "parent-c" ||
+    val === "parent-003" ||
+    val === "par-2026-003" ||
+    val.includes("parent3") ||
+    val.includes("mahesh") ||
+    val === "parent3@cms.com" ||
+    val === "mahesh.r@example.com" ||
+    digits === "9876543212"
+  ) {
+    return {
+      id: "parent-003",
+      name: "Mahesh Reddy",
+      email: val.includes("@") ? val : "parent3@cms.com",
+      role: "parent",
+      isAdmin: false,
+      mobile: "9876543212",
+      relation: "Father",
+      studentId: "stu-004",
+      studentName: "Arjun Reddy",
+    };
+  }
+
+  // Parent B (parent-002 - Ramesh Sharma)
+  if (
+    val === "parent2" ||
+    val === "parent-b" ||
+    val === "parent-002" ||
+    val === "par-2026-002" ||
+    val.includes("parent2") ||
+    val.includes("ramesh") ||
+    val === "parent2@cms.com" ||
+    val === "ramesh.s@example.com" ||
+    digits === "9876543211"
+  ) {
+    return {
+      id: "parent-002",
+      name: "Ramesh Sharma",
+      email: val.includes("@") ? val : "parent2@cms.com",
+      role: "parent",
+      isAdmin: false,
+      mobile: "9876543211",
+      relation: "Father",
+      studentId: "stu-003",
+      studentName: "Priya Sharma",
+    };
+  }
+
+  // Parent A (parent-001 - Suresh Kumar) - default parent account
   if (
     val === "parent" ||
     val === "parent1" ||
     val === "parent-a" ||
+    val === "parent-001" ||
+    val === "par-2026-001" ||
+    val.includes("parent") ||
+    val.includes("suresh") ||
+    val.includes("srinivas") ||
     val === "parent@cms.com" ||
+    val === "parent1@cms.com" ||
     val === "parent@pirnav.edu.in" ||
     val === "suresh.k@example.com" ||
     digits === "9876543210"
@@ -275,48 +331,6 @@ export function findParentAccount(input) {
       relation: "Father",
       studentId: "stu-001",
       studentName: "Rahul Kumar",
-    };
-  }
-
-  // Parent B (parent-002 - Ramesh Sharma)
-  if (
-    val === "parent2" ||
-    val === "parent-b" ||
-    val === "parent2@cms.com" ||
-    val === "ramesh.s@example.com" ||
-    digits === "9876543211"
-  ) {
-    return {
-      id: "parent-002",
-      name: "Ramesh Sharma",
-      email: val.includes("@") ? val : "ramesh.s@example.com",
-      role: "parent",
-      isAdmin: false,
-      mobile: "9876543211",
-      relation: "Father",
-      studentId: "stu-003",
-      studentName: "Priya Sharma",
-    };
-  }
-
-  // Parent C (parent-003 - Mahesh Reddy)
-  if (
-    val === "parent3" ||
-    val === "parent-c" ||
-    val === "parent3@cms.com" ||
-    val === "mahesh.r@example.com" ||
-    digits === "9876543212"
-  ) {
-    return {
-      id: "parent-003",
-      name: "Mahesh Reddy",
-      email: val.includes("@") ? val : "mahesh.r@example.com",
-      role: "parent",
-      isAdmin: false,
-      mobile: "9876543212",
-      relation: "Father",
-      studentId: "stu-004",
-      studentName: "Arjun Reddy",
     };
   }
 
@@ -384,21 +398,6 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     throw new Error("Authentication failed because the server did not return an access token.");
   }
 
-  const role = data.Role || data.role || payload.Role || payload.role;
-  if (!role) {
-    throw new Error("Authentication failed because the server returned an invalid user response.");
-  }
-  const normalizedRole = String(role).trim().toLowerCase();
-  const isAdmin = normalizedRole === "admin" || normalizedRole === "super admin";
-  if (expectedAccountType === "admin" && !isAdmin) {
-    throw new Error("Authentication failed because the server returned an invalid admin response.");
-  }
-  const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
-  const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
-  const isWarden =
-    normalizedRole === "warden" ||
-    normalizedRole.includes("warden") ||
-    String(enteredEmail || "").toLowerCase().includes("warden");
 
   let jwtClaims = {};
   try {
@@ -415,13 +414,53 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     }
   } catch {}
 
+  const jwtRole =
+    jwtClaims.Role ||
+    jwtClaims.role ||
+    jwtClaims.roles ||
+    jwtClaims["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] ||
+    jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"];
+  const role = data.Role || data.role || payload.Role || payload.role || jwtRole;
+  if (!role) {
+    throw new Error("Authentication failed because the server returned an invalid user response.");
+  }
+  const normalizedRole = String(Array.isArray(role) ? role[0] : role).trim().toLowerCase();
+  const adminFlag = data.IsAdmin ?? data.isAdmin ?? payload.IsAdmin ?? payload.isAdmin;
+  const isAdmin =
+    adminFlag === true ||
+    adminFlag === 1 ||
+    String(adminFlag || "").trim().toLowerCase() === "true" ||
+    Boolean(data.AdminId || data.adminId || payload.AdminId || payload.adminId) ||
+    normalizedRole.includes("admin");
+  if (expectedAccountType === "admin" && !isAdmin) {
+    throw new Error("Authentication failed because the server returned an invalid admin response.");
+  }
+  const isFaculty = normalizedRole === "faculty" || normalizedRole === "teacher" || normalizedRole === "hod" || normalizedRole.includes("faculty") || normalizedRole.includes("lecturer");
+  const isParent = normalizedRole === "parent" || normalizedRole.includes("parent");
+  const isWarden =
+    normalizedRole === "warden" ||
+    normalizedRole.includes("warden") ||
+    String(enteredEmail || "").toLowerCase().includes("warden");
+
   const staffId = data.StaffId || data.staffId || payload.StaffId || payload.staffId || jwtClaims.StaffId || jwtClaims.staffId || null;
   const employeeId = data.EmployeeId || data.employeeId || payload.EmployeeId || payload.employeeId || jwtClaims.EmployeeId || jwtClaims.employeeId || null;
+  const designation =
+    data.Designation ||
+    data.designation ||
+    data.DesignationName ||
+    data.designationName ||
+    payload.Designation ||
+    payload.designation ||
+    jwtClaims.Designation ||
+    jwtClaims.designation ||
+    jwtClaims.DesignationName ||
+    jwtClaims.designationName ||
+    "";
   const userName = data.Name || data.name || data.fullName || payload.Name || payload.name || payload.fullName || jwtClaims.unique_name || jwtClaims.name || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || "Staff Member";
 
   const rawEmail = data.Email || data.email || payload.Email || payload.email || jwtClaims.email || jwtClaims["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || enteredEmail;
   const userEmail = Array.isArray(rawEmail) ? String(rawEmail[0] || "").trim() : String(rawEmail || "").trim();
-  const effectiveRole = isWarden ? "Hostel Warden" : role;
+  const effectiveRole = isWarden ? "Hostel Warden" : (Array.isArray(role) ? role[0] : role);
   const user = {
     id: data.AdminId || data.adminId || data.UserId || data.userId || data.id || data.Id || payload.AdminId || payload.adminId || payload.UserId || payload.userId || payload.id || payload.Id,
     staffId: staffId ? (Number(staffId) || staffId) : null,
@@ -430,6 +469,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     fullName: userName,
     email: userEmail,
     role: effectiveRole,
+    designation,
     isAdmin,
   };
 

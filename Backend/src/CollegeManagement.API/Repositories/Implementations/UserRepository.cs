@@ -303,6 +303,69 @@ namespace CollegeManagement.API.Repositories.Implementations
             return true;
         }
 
+        public async Task<ParentStudentMapping?> GetParentStudentMappingAsync(int parentUserId, int studentId, IDbConnection? connection = null, IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? Connection;
+            const string sql = @"
+                SELECT Id, ParentUserId, StudentId, RelationshipType, IsPrimaryContact, CreatedAt
+                FROM ParentStudentMappings
+                WHERE ParentUserId = @ParentUserId AND StudentId = @StudentId
+                LIMIT 1;";
+
+            return await conn.QueryFirstOrDefaultAsync<ParentStudentMapping>(
+                sql,
+                new { ParentUserId = parentUserId, StudentId = studentId },
+                transaction: transaction);
+        }
+
+        public async Task<bool> AddParentStudentMappingAsync(int parentUserId, int studentId, string relationshipType = "Parent", bool isPrimaryContact = true, IDbConnection? connection = null, IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? Connection;
+            const string sql = @"
+                INSERT INTO ParentStudentMappings (ParentUserId, StudentId, RelationshipType, IsPrimaryContact, CreatedAt)
+                VALUES (@ParentUserId, @StudentId, @RelationshipType, @IsPrimaryContact, CURRENT_TIMESTAMP(6))
+                ON DUPLICATE KEY UPDATE RelationshipType = VALUES(RelationshipType), IsPrimaryContact = VALUES(IsPrimaryContact);";
+
+            var rows = await conn.ExecuteAsync(
+                sql,
+                new
+                {
+                    ParentUserId = parentUserId,
+                    StudentId = studentId,
+                    RelationshipType = string.IsNullOrWhiteSpace(relationshipType) ? "Parent" : relationshipType.Trim(),
+                    IsPrimaryContact = isPrimaryContact ? 1 : 0
+                },
+                transaction: transaction);
+
+            return rows > 0;
+        }
+
+        public async Task<List<ParentStudentMapping>> GetStudentsByParentUserIdAsync(int parentUserId, IDbConnection? connection = null, IDbTransaction? transaction = null)
+        {
+            var conn = connection ?? Connection;
+            const string sql = @"
+                SELECT psm.Id, psm.ParentUserId, psm.StudentId, psm.RelationshipType, psm.IsPrimaryContact, psm.CreatedAt,
+                       s.StudentId, s.StudentName, s.AdmissionNo, s.RollNo, s.Photo, s.Gender, s.Status, s.IsActive,
+                       s.CampusId, s.BoardId, s.AcademicYearId, s.AcademicLevelId, s.GroupId, s.ProgramId, s.SectionId
+                FROM ParentStudentMappings psm
+                INNER JOIN Students s ON s.StudentId = psm.StudentId
+                WHERE psm.ParentUserId = @ParentUserId
+                ORDER BY psm.CreatedAt ASC;";
+
+            var result = await conn.QueryAsync<ParentStudentMapping, Student, ParentStudentMapping>(
+                sql,
+                (mapping, student) =>
+                {
+                    mapping.Student = student;
+                    return mapping;
+                },
+                new { ParentUserId = parentUserId },
+                splitOn: "StudentId",
+                transaction: transaction);
+
+            return result.ToList();
+        }
+
         public async Task DeleteAsync(int id)
         {
             try

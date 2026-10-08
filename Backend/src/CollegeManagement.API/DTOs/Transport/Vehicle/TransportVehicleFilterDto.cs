@@ -8,6 +8,8 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
 
         public bool? Status { get; set; }
 
+        public int? CampusId { get; set; }
+
         public string SortBy { get; set; } = "vehicleName";
 
         public string SortOrder { get; set; } = "asc";

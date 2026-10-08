@@ -256,6 +256,7 @@ namespace CollegeManagement.API.DTOs.Timetable
 
     public class BulkCreateRoomsRequest
     {
+        public int CampusId { get; set; } = 1;
         public string? BlockName { get; set; }
         public string? Building
         {

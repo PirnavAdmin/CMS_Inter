@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.DTOs.Payroll;
+using CollegeManagement.API.DTOs.Payroll;
 
 namespace CollegeManagement.API.Services.Interfaces.Payroll
 {
@@ -12,10 +12,10 @@ namespace CollegeManagement.API.Services.Interfaces.Payroll
         Task<bool> DeleteSalaryStructureAsync(int id);
 
         // Employees
-        Task<IEnumerable<PayrollEmployeeDto>> GetEmployeesAsync(string? staffType, string? search);
+        Task<IEnumerable<PayrollEmployeeDto>> GetEmployeesAsync(string? staffType, string? search, int? campusId = null);
 
         // Salary Assignments
-        Task<IEnumerable<SalaryAssignmentDto>> GetSalaryAssignmentsAsync(int? staffId, string? status);
+        Task<IEnumerable<SalaryAssignmentDto>> GetSalaryAssignmentsAsync(int? staffId, string? status, int? campusId = null);
         Task<SalaryAssignmentDto?> GetSalaryAssignmentByIdAsync(int id);
 
         Task<int> AssignSalaryStructureAsync(
@@ -29,23 +29,27 @@ AssignSalaryStructureRequest request);
         Task<IEnumerable<int>> GenerateBulkPayslipsAsync(GenerateBulkPayslipRequest request);
         Task<bool> UpdatePayslipStatusAsync(int id, string status);
         Task<bool> SendPayslipEmailAsync(int payslipId);
-        Task<IEnumerable<PayslipDto>> GetPayslipHistoryAsync(int? payrollMonth, int? payrollYear, string? staffType, string? search);
+        Task<bool> SendPayslipEmailAsync(string rawId);
+        Task<byte[]?> GeneratePayslipPdfAsync(int payslipId);
+        Task<byte[]?> GeneratePayslipPdfAsync(string rawId);
+        Task<int?> ResolvePayslipIdAsync(string rawId);
+        Task<IEnumerable<PayslipDto>> GetPayslipHistoryAsync(int? payrollMonth, int? payrollYear, string? staffType, string? search, int? campusId = null);
         Task<PayslipDto?> GetPayslipByIdAsync(int payslipId);
 
         // Salary Revisions
         Task<int> CreateSalaryRevisionAsync(CreateSalaryRevisionRequest request);
-        Task<IEnumerable<SalaryRevisionDto>> GetSalaryRevisionsAsync(int? staffId, string? status);
+        Task<IEnumerable<SalaryRevisionDto>> GetSalaryRevisionsAsync(int? staffId, string? status, int? campusId = null);
         Task<bool> ApproveSalaryRevisionAsync(int revisionId, int approvedBy);
 
         // Bonuses
         Task<int> CreateBonusAsync(CreateBonusRequest request);
-        Task<IEnumerable<BonusDto>> GetBonusesAsync(int? staffId, string? status);
+        Task<IEnumerable<BonusDto>> GetBonusesAsync(int? staffId, string? status, int? campusId = null);
         Task<BonusDto?> GetBonusByIdAsync(int id);
         Task<bool> ApproveBonusAsync(int bonusId, int approvedBy);
 
         // Advances and Loans
         Task<int> CreateAdvanceAsync(CreateAdvanceRequest request);
-        Task<IEnumerable<AdvanceDto>> GetAdvancesAsync(int? staffId, string? status);
+        Task<IEnumerable<AdvanceDto>> GetAdvancesAsync(int? staffId, string? status, int? campusId = null);
         Task<AdvanceDto?> GetAdvanceByIdAsync(int id);
         Task<bool> ApproveAdvanceAsync(int advanceId, int approvedBy);
         Task<IEnumerable<AdvanceBalanceDto>> GetAdvanceBalancesAsync(int? staffId);
@@ -54,7 +58,7 @@ AssignSalaryStructureRequest request);
         Task<StaffPayrollSummaryDto> GetStaffPayrollSummaryAsync(int staffId, int year);
 
         // Monthly payroll summary
-        Task<MonthlyPayrollSummaryDto> GetMonthlyPayrollSummaryAsync(int month, int year);
+        Task<MonthlyPayrollSummaryDto> GetMonthlyPayrollSummaryAsync(int month, int year, int? campusId = null);
         Task<IEnumerable<PayslipAdvanceRepaymentDto>> GetAdvanceRepaymentsByPayslipAsync(int payslipId);
 
     }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -148,14 +148,13 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             });
 
-            var resultList = new List<TimetableSubstitutionResponseDto>();
-            foreach (var id in createdIds)
+            if (createdIds.Count == 0)
             {
-                var sub = await _substitutionRepository.GetSubstitutionByIdAsync(id);
-                if (sub != null) resultList.Add(sub);
+                return Enumerable.Empty<TimetableSubstitutionResponseDto>();
             }
 
-            return resultList;
+            var result = await _substitutionRepository.GetSubstitutionsByIdsAsync(createdIds);
+            return result;
         }
 
         public async Task<TimetableSubstitutionResponseDto> CancelSubstitutionAsync(int substitutionId, CancelSubstitutionRequestDto request, int userId)

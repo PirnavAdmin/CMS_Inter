@@ -28,6 +28,8 @@ public interface ICertificateRepository
 
     Task<IReadOnlyList<StudentCertificateDropdownDto>> GetStudentsDropdownAsync(
         int? campusId = null,
+        int? boardId = null,
+        int? academicYearId = null,
         CancellationToken ct = default);
 
     Task<CertificateResponseDto?> GenerateAsync(

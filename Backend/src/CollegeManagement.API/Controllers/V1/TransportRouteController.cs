@@ -19,6 +19,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpGet]
+        [ProducesResponseType(typeof(CollegeManagement.API.Common.PagedResult<TransportRouteDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
             [FromQuery] TransportRouteFilterDto filter)
         {
@@ -27,19 +28,14 @@ namespace CollegeManagement.API.Controllers
                 var result = await _service.GetAllAsync(filter);
                 return Ok(result);
             }
-            catch
+            catch (Exception ex)
             {
-                return Ok(new CollegeManagement.API.Common.PagedResult<TransportRouteDto>
-                {
-                    Items = new List<TransportRouteDto>(),
-                    TotalCount = 0,
-                    PageNumber = filter.PageNumber,
-                    PageSize = filter.PageSize
-                });
+                return StatusCode(500, new { error = ex.Message, stack = ex.StackTrace });
             }
         }
 
         [HttpGet("{routeIdOrCode}")]
+        [ProducesResponseType(typeof(TransportRouteDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetByIdOrCode(
             string routeIdOrCode)
         {
@@ -54,9 +50,9 @@ namespace CollegeManagement.API.Controllers
 
                 return Ok(result);
             }
-            catch
+            catch (Exception ex)
             {
-                return NotFound(new { success = false, message = "Transport route not found." });
+                return StatusCode(500, new { error = ex.Message, stack = ex.StackTrace });
             }
         }
 
@@ -123,7 +119,8 @@ namespace CollegeManagement.API.Controllers
                     DistanceKm = dto.DistanceKm,
                     EstimatedDurationMinutes = dto.EstimatedDurationMinutes,
                     Description = dto.Description,
-                    Status = dto.Status
+                    Status = dto.Status,
+                    CampusId = dto.CampusId ?? 1
                 };
 
                 long createdId = await _service.CreateAsync(createDto, userId: null);

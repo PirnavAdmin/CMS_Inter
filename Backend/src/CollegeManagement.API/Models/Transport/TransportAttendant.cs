@@ -12,6 +12,7 @@ public class TransportAttendant
 
     public string? MobileNumber { get; set; }
 
+    public int? StaffId { get; set; }
     public string? EmployeeId { get; set; }
     public string? Gender { get; set; }
     public string? BranchName { get; set; }

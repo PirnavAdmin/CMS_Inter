@@ -279,6 +279,29 @@ namespace CollegeManagement.API.Repositories.Implementations
             return count;
         }
 
+        
+        public async Task<int> SaveRollNumberAllocationsAsync(List<RollNumberPreviewStudentDto> allocations)
+        {
+            if (allocations == null || allocations.Count == 0) return 0;
+            
+            await OpenAsync();
+            var count = 0;
+            foreach (var allocation in allocations)
+            {
+                var affected = await Connection.ExecuteAsync(
+                    "sp_ConfirmStudentRollNumberAllocation",
+                    new
+                    {
+                        p_StudentId = allocation.StudentId,
+                        p_RollNo = allocation.RollNo
+                    },
+                    commandType: CommandType.StoredProcedure);
+
+                count += affected;
+            }
+            return count;
+        }
+
         // =========================================================
         // UPDATE STUDENT ALLOCATION
         // =========================================================

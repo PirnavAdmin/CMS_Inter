@@ -94,6 +94,13 @@
   color: var(--cms-primary);
 }
 
+.cms-hostel-tab-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex: 0 0 20px;
+}
+
 /* ---------- Stat Cards Grid ---------- */
 .cms-hostel-stat-grid {
   display: grid;
@@ -1616,6 +1623,13 @@ button,
   letter-spacing: -0.02em;
 }
 
+.cms-hostel-dashboard-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex: 0 0 28px;
+}
+
 .cms-dash-header-sub {
   color: var(--cms-muted);
   font-size: 12.5px;
@@ -1693,6 +1707,12 @@ button,
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.cms-hostel-kpi-3d-icon {
+  width: 25px;
+  height: 25px;
+  object-fit: contain;
 }
 
 .cms-dash-kpi-info {

@@ -31,6 +31,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
+                .Include(s => s.StaffCampusAssignments)
+                    .ThenInclude(sca => sca.Campus)
+                .Include(s => s.StaffBoardAssignments)
+                    .ThenInclude(sba => sba.Board)
                 .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
         }
 
@@ -43,6 +47,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .Include(s => s.BoardRef)
                 .Include(s => s.StaffSubjectAllocations)
                     .ThenInclude(ssa => ssa.Subject)
+                .Include(s => s.StaffCampusAssignments)
+                    .ThenInclude(sca => sca.Campus)
+                .Include(s => s.StaffBoardAssignments)
+                    .ThenInclude(sba => sba.Board)
                 .FirstOrDefaultAsync(s => s.EmployeeId == employeeId.Trim() && !s.IsDeleted);
         }
 
@@ -229,7 +237,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     st.Equals("Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
                     st.Equals("Non Teaching", StringComparison.OrdinalIgnoreCase))
                 {
-                    query = query.Where(s => s.StaffType == "Non-Teaching" || s.StaffType == "NonTeaching" || s.StaffType == "Non Teaching");
+                    query = query.Where(s => s.StaffType != "Teaching" && s.StaffType != null && s.StaffType != "");
                 }
                 else if (st.Equals("Teaching", StringComparison.OrdinalIgnoreCase))
                 {
@@ -367,33 +375,43 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .ToListAsync();
         }
 
-        public async Task<string> GenerateNextEmployeeIdAsync(string staffType)
+        public async Task<string> GenerateNextEmployeeIdAsync(string staffType, int campusId)
         {
             var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-            var prefix = isTeaching ? "PCTCH" : "PCNT";
+            var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+            
+            using var conn = _context.Database.GetDbConnection();
+            var parameters = new DynamicParameters();
+            parameters.Add("p_SeriesCode", seriesCode, System.Data.DbType.String);
+            parameters.Add("p_CampusId", campusId, System.Data.DbType.Int32);
 
-            // Find maximum existing sequential numeric suffix for the staff type
-            var existingStaff = await _context.Staffs
-                .Where(s => !s.IsDeleted)
-                .Select(s => new { s.EmployeeId, s.StaffType })
-                .ToListAsync();
+            var nextId = await conn.QueryFirstOrDefaultAsync<string>(
+                "sp_GenerateNextNumberSeries",
+                parameters,
+                commandType: System.Data.CommandType.StoredProcedure);
 
-            int maxNumber = 0;
-            foreach (var s in existingStaff)
+            if (string.IsNullOrWhiteSpace(nextId))
             {
-                var id = s.EmployeeId?.Trim() ?? string.Empty;
-                var currentIsTeaching = !string.Equals(s.StaffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-                if (currentIsTeaching == isTeaching || id.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                // Fallback if SP fails or configuration doesn't exist
+                var prefix = isTeaching ? "PCTCH" : "PCNT";
+                var maxNumber = await _context.Staffs
+                    .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null && s.EmployeeId.StartsWith(prefix))
+                    .Select(s => s.EmployeeId)
+                    .ToListAsync();
+                    
+                int max = 0;
+                foreach (var id in maxNumber)
                 {
                     var match = System.Text.RegularExpressions.Regex.Match(id, @"\d+");
-                    if (match.Success && int.TryParse(match.Value, out int parsedNum) && parsedNum > maxNumber && parsedNum < 100000)
+                    if (match.Success && int.TryParse(match.Value, out int parsedNum) && parsedNum > max)
                     {
-                        maxNumber = parsedNum;
+                        max = parsedNum;
                     }
                 }
+                return $"{prefix}{(max + 1):D4}";
             }
 
-            return $"{prefix}{(maxNumber + 1):D4}";
+            return nextId;
         }
 
         public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)

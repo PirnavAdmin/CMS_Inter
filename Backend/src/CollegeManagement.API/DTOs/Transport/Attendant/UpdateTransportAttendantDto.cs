@@ -1,108 +1,46 @@
-using System.ComponentModel.DataAnnotations;
+using System;
 using System.Text.Json.Serialization;
 using CollegeManagement.API.Common;
 
 namespace CollegeManagement.API.Dtos.Transport.Attendant
 {
+    /// <summary>
+    /// Request model to update transport-specific Attendant details.
+    /// Employee identity belongs to Staff and is not updated through this DTO.
+    /// </summary>
     public class UpdateTransportAttendantDto
     {
-        private string _attendantName = string.Empty;
-        private string _mobileNumber = string.Empty;
+        [JsonPropertyName("assignedVehicleId")]
+        public long? AssignedVehicleId { get; set; }
+
+        [JsonPropertyName("status")]
+        [JsonConverter(typeof(FlexibleBoolConverter))]
+        public bool Status { get; set; } = true;
+
+        // --- Frontend Compatibility Pass-Through Fields (Accepted to prevent JSON deserialization errors) ---
+        [JsonPropertyName("staffId")]
+        public int? StaffId { get; set; }
 
         [JsonPropertyName("employeeId")]
         public string? EmployeeId { get; set; }
 
-        [JsonPropertyName("attendantCode")]
-        public string? AttendantCode
-        {
-            get => EmployeeId;
-            set { if (!string.IsNullOrWhiteSpace(value)) EmployeeId = value; }
-        }
-
         [JsonPropertyName("attendantName")]
-        public string AttendantName
-        {
-            get => !string.IsNullOrWhiteSpace(_attendantName) ? _attendantName : "Bus Attendant";
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                    _attendantName = value;
-            }
-        }
-
-        [JsonPropertyName("attendantFullName")]
-        public string? AttendantFullName
-        {
-            get => AttendantName;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_attendantName))
-                    _attendantName = value;
-            }
-        }
-
-        [JsonPropertyName("fullName")]
-        public string? FullName
-        {
-            get => AttendantName;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_attendantName))
-                    _attendantName = value;
-            }
-        }
-
-        [JsonPropertyName("name")]
-        public string? Name
-        {
-            get => AttendantName;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_attendantName))
-                    _attendantName = value;
-            }
-        }
+        public string? AttendantName { get; set; }
 
         [JsonPropertyName("mobileNumber")]
-        public string MobileNumber
-        {
-            get => !string.IsNullOrWhiteSpace(_mobileNumber) ? _mobileNumber : "0000000000";
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value))
-                    _mobileNumber = value;
-            }
-        }
-
-        [JsonPropertyName("phone")]
-        public string? Phone
-        {
-            get => MobileNumber;
-            set
-            {
-                if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(_mobileNumber))
-                    _mobileNumber = value;
-            }
-        }
+        public string? MobileNumber { get; set; }
 
         [JsonPropertyName("gender")]
         public string? Gender { get; set; }
 
-        [JsonPropertyName("branchCampus")]
-        public string? BranchCampus { get; set; }
-
         [JsonPropertyName("branchName")]
-        public string? BranchName
-        {
-            get => BranchCampus;
-            set { if (!string.IsNullOrWhiteSpace(value)) BranchCampus = value; }
-        }
+        public string? BranchName { get; set; }
 
-        [JsonPropertyName("branch")]
-        public string? Branch
+        [JsonPropertyName("branchCampus")]
+        public string? BranchCampus
         {
-            get => BranchCampus;
-            set { if (!string.IsNullOrWhiteSpace(value)) BranchCampus = value; }
+            get => BranchName;
+            set { if (!string.IsNullOrWhiteSpace(value) && string.IsNullOrWhiteSpace(BranchName)) BranchName = value; }
         }
 
         [JsonPropertyName("alternateMobileNumber")]
@@ -119,13 +57,5 @@ namespace CollegeManagement.API.Dtos.Transport.Attendant
 
         [JsonPropertyName("emergencyContactNumber")]
         public string? EmergencyContactNumber { get; set; }
-
-        [JsonPropertyName("assignedVehicleId")]
-        public long? AssignedVehicleId { get; set; }
-
-        [JsonPropertyName("status")]
-        [JsonConverter(typeof(FlexibleBoolConverter))]
-        public bool Status { get; set; } = true;
     }
 }
-

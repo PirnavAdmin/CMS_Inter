@@ -10,6 +10,13 @@ namespace CollegeManagement.API.Models
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int GroupId { get; set; }
 
+        [NotMapped]
+        public int Id
+        {
+            get => GroupId;
+            set => GroupId = value;
+        }
+
         [Required]
         public int BoardId { get; set; }
 

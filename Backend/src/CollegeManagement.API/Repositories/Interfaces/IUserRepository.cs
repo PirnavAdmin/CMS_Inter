@@ -27,6 +27,9 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> UpdateStatusByStaffIdAsync(int staffId, bool isActive, IDbConnection? connection = null, IDbTransaction? transaction = null);
         Task<bool> UpdateStatusByStudentIdAsync(int studentId, bool isActive, IDbConnection? connection = null, IDbTransaction? transaction = null);
         Task<bool> UpdateStatusByAdminIdAsync(int adminId, bool isActive, IDbConnection? connection = null, IDbTransaction? transaction = null);
+        Task<ParentStudentMapping?> GetParentStudentMappingAsync(int parentUserId, int studentId, IDbConnection? connection = null, IDbTransaction? transaction = null);
+        Task<bool> AddParentStudentMappingAsync(int parentUserId, int studentId, string relationshipType = "Parent", bool isPrimaryContact = true, IDbConnection? connection = null, IDbTransaction? transaction = null);
+        Task<List<ParentStudentMapping>> GetStudentsByParentUserIdAsync(int parentUserId, IDbConnection? connection = null, IDbTransaction? transaction = null);
         Task DeleteAsync(int id);
     }
 }

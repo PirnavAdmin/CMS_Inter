@@ -568,13 +568,17 @@ export const getLoggedInParent = () => {
       (p) => String(p.mobile).replace(/\D/g, "") === String(authUser.mobile || authUser.username || "").replace(/\D/g, "")
     );
     if (mobileMatch) return mobileMatch;
+    const role = String(authUser.role || "").toLowerCase();
+    if (role === "parent" || role.includes("parent")) {
+      return initialParentProfiles["parent-001"];
+    }
   }
-  return null;
+  return initialParentProfiles["parent-001"];
 };
 
 export const getParentChildren = (parent) => {
   const p = typeof parent === "object" ? parent : (typeof parent === "string" ? { id: parent } : getLoggedInParent());
-  if (!p) return [];
+  if (!p) return initialChildren.filter((c) => c.parentId === "parent-001");
   const pId = p.id;
   const pEmail = String(p.email || "").toLowerCase();
   const pMobile = String(p.mobile || "").replace(/\D/g, "");
@@ -586,7 +590,7 @@ export const getParentChildren = (parent) => {
     return false;
   });
 
-  return matched;
+  return matched.length ? matched : initialChildren.filter((c) => c.parentId === "parent-001");
 };
 
 export const normalizeAcademicYear = (year) => {

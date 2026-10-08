@@ -28,6 +28,8 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IConfiguration _configuration;
         private readonly IWebHostEnvironment _environment;
         private readonly ILogger<StudentAdmissionService> _logger;
+        private readonly INumberSeriesService _numberSeriesService;
+        private readonly IAuditLoggingService _auditLoggingService;
 
         public StudentAdmissionService(
             IStudentAdmissionRepository repository,
@@ -36,7 +38,8 @@ namespace CollegeManagement.API.Services.Implementations
             AppDbContext context,
             IConfiguration configuration,
             IWebHostEnvironment environment,
-            ILogger<StudentAdmissionService> logger)
+            ILogger<StudentAdmissionService> logger,
+            INumberSeriesService numberSeriesService, IAuditLoggingService auditLoggingService)
         {
             _repository = repository;
             _userProvisioningService = userProvisioningService;
@@ -45,6 +48,8 @@ namespace CollegeManagement.API.Services.Implementations
             _configuration = configuration;
             _environment = environment;
             _logger = logger;
+            _numberSeriesService = numberSeriesService;
+            _auditLoggingService = auditLoggingService;
         }
 
 
@@ -175,16 +180,55 @@ namespace CollegeManagement.API.Services.Implementations
         // GENERATE ADMISSION NUMBER
         // =====================================================
 
-        public async Task<string> GenerateAdmissionNumberAsync()
+        public async Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _repository.GenerateAdmissionNumberAsync();
+            var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto 
+            { 
+                Board = boardId?.ToString(),
+                AcademicYear = academicYearId?.ToString()
+            };
+            
+            // Generate next number purely from the NumberSeriesSequences table for global continuity
+            var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("ADMISSION_NO", reqDto, campusId);
+            
+            if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+            {
+                return generatedDto.GeneratedNumber;
+            }
+            
+            // Fallback to repository if number series configuration doesn't exist
+            return await _repository.GenerateAdmissionNumberAsync(campusId, boardId, academicYearId);
         }
 
         // =====================================================
         // APPROVE (ATOMIC STUDENT DOMAIN + CENTRALIZED USER PROVISIONING)
         // =====================================================
 
-        public async Task<bool> ApproveAsync(
+        public async Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks)
+        {
+            var result = await _repository.ApproveAdmissionRequestAsync(admissionId, remarks);
+            if (result)
+            {
+                var admission = await _repository.GetByIdAsync(admissionId);
+                if (admission != null)
+                    await _auditLoggingService.LogAsync("Request Approved", "Admissions", admission.AdmissionNo, "Info", "Success", remarks);
+            }
+            return result;
+        }
+
+        public async Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks)
+        {
+            var result = await _repository.RejectAdmissionRequestAsync(admissionId, rejectionReason, remarks);
+            if (result)
+            {
+                var admission = await _repository.GetByIdAsync(admissionId);
+                if (admission != null)
+                    await _auditLoggingService.LogAsync("Request Rejected", "Admissions", admission.AdmissionNo, "Warning", "Success", rejectionReason + " - " + remarks);
+            }
+            return result;
+        }
+
+        public async Task<(bool Success, int? StudentId)> ApproveAsync(
             ApproveStudentAdmissionRequest request)
         {
             if (request == null)
@@ -201,7 +245,8 @@ namespace CollegeManagement.API.Services.Implementations
             if (admission.IsApproved)
             {
                 _logger.LogInformation("Student admission {AdmissionId} is already approved.", request.AdmissionId);
-                return true;
+                var existingStudent = await _repository.GetStudentByAdmissionIdAsync(request.AdmissionId);
+                return (true, existingStudent?.StudentId);
             }
 
             // 2. Open database connection and begin outer transaction for atomicity
@@ -213,6 +258,8 @@ namespace CollegeManagement.API.Services.Implementations
 
             using var transaction = connection.BeginTransaction();
             UserProvisioningResult? userProvisioningResult = null;
+            ParentUserProvisioningResult? parentProvisioningResult = null;
+            int? createdStudentId = null;
 
             try
             {
@@ -226,7 +273,7 @@ namespace CollegeManagement.API.Services.Implementations
                 if (!approveSuccess)
                 {
                     transaction.Rollback();
-                    return false;
+                    return (false, null);
                 }
 
                 // 4. Retrieve created Student domain record
@@ -240,8 +287,10 @@ namespace CollegeManagement.API.Services.Implementations
                     transaction.Rollback();
                     throw new InvalidOperationException($"Approved Student domain record could not be found for AdmissionId {request.AdmissionId}.");
                 }
+                
+                createdStudentId = student.StudentId;
 
-                // 5. Evaluate Student Email for User account provisioning
+                // 5. Evaluate Student Email for Student User account provisioning
                 var studentEmail = !string.IsNullOrWhiteSpace(student.Email)
                     ? student.Email.Trim()
                     : (!string.IsNullOrWhiteSpace(admission.StudentEmail) ? admission.StudentEmail.Trim() : null);
@@ -277,15 +326,81 @@ namespace CollegeManagement.API.Services.Implementations
                 else
                 {
                     _logger.LogInformation(
-                        "Student admission {AdmissionId} (StudentId: {StudentId}) approved without a User account because no valid email was provided.",
+                        "Student admission {AdmissionId} (StudentId: {StudentId}) approved without a Student User account because no valid email was provided.",
                         request.AdmissionId, student.StudentId);
                 }
 
-                // 6. Commit single atomic transaction (Student + User created atomically)
+                // 6. Evaluate Parent/Guardian Email for Parent User account provisioning & bridging mapping
+                var parentEmail = !string.IsNullOrWhiteSpace(student.ParentGuardianEmail)
+                    ? student.ParentGuardianEmail.Trim()
+                    : (!string.IsNullOrWhiteSpace(admission.ParentGuardianEmail) ? admission.ParentGuardianEmail.Trim() : null);
+
+                if (!string.IsNullOrWhiteSpace(parentEmail) && IsValidEmailFormat(parentEmail))
+                {
+                    var parentName = !string.IsNullOrWhiteSpace(student.FatherName)
+                        ? student.FatherName.Trim()
+                        : (!string.IsNullOrWhiteSpace(student.MotherName)
+                            ? student.MotherName.Trim()
+                            : (!string.IsNullOrWhiteSpace(student.GuardianName)
+                                ? student.GuardianName.Trim()
+                                : (!string.IsNullOrWhiteSpace(admission.FatherName)
+                                    ? admission.FatherName.Trim()
+                                    : (!string.IsNullOrWhiteSpace(admission.MotherName)
+                                        ? admission.MotherName.Trim()
+                                        : (!string.IsNullOrWhiteSpace(admission.GuardianName)
+                                            ? admission.GuardianName.Trim()
+                                            : "Parent / Guardian")))));
+
+                    var parentPhone = !string.IsNullOrWhiteSpace(student.FatherMobile)
+                        ? student.FatherMobile.Trim()
+                        : (!string.IsNullOrWhiteSpace(student.MotherMobile)
+                            ? student.MotherMobile.Trim()
+                            : (!string.IsNullOrWhiteSpace(student.GuardianMobile)
+                                ? student.GuardianMobile.Trim()
+                                : (!string.IsNullOrWhiteSpace(admission.FatherMobile)
+                                    ? admission.FatherMobile.Trim()
+                                    : (!string.IsNullOrWhiteSpace(admission.MotherMobile)
+                                        ? admission.MotherMobile.Trim()
+                                        : admission.GuardianMobile))));
+
+                    var relationshipType = !string.IsNullOrWhiteSpace(student.FatherName) || !string.IsNullOrWhiteSpace(admission.FatherName)
+                        ? "Father"
+                        : (!string.IsNullOrWhiteSpace(student.MotherName) || !string.IsNullOrWhiteSpace(admission.MotherName)
+                            ? "Mother"
+                            : "Guardian");
+
+                    var parentProvisionRequest = new ProvisionParentUserRequest
+                    {
+                        StudentId = student.StudentId,
+                        FullName = parentName,
+                        Email = parentEmail,
+                        PhoneNumber = parentPhone,
+                        RelationshipType = relationshipType
+                    };
+
+                    parentProvisioningResult = await _userProvisioningService.ProvisionParentUserAsync(
+                        parentProvisionRequest,
+                        connection: connection,
+                        transaction: transaction);
+
+                    if (!parentProvisioningResult.Success)
+                    {
+                        transaction.Rollback();
+                        throw new InvalidOperationException($"Parent user account provisioning failed: {parentProvisioningResult.ErrorMessage}");
+                    }
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Student admission {AdmissionId} (StudentId: {StudentId}) approved without a Parent User account because no valid ParentGuardianEmail was provided.",
+                        request.AdmissionId, student.StudentId);
+                }
+
+                // 7. Commit single atomic transaction (Student + Student User + Parent User + Bridging Mapping created atomically)
                 transaction.Commit();
                 _logger.LogInformation(
-                    "Successfully committed Student approval for AdmissionId {AdmissionId} (StudentId: {StudentId}, UserProvisioned: {UserProvisioned})",
-                    request.AdmissionId, student.StudentId, userProvisioningResult?.Success == true);
+                    "Successfully committed Student approval for AdmissionId {AdmissionId} (StudentId: {StudentId}, StudentUserProvisioned: {StudentUser}, ParentUserProvisioned: {ParentUser})",
+                    request.AdmissionId, student.StudentId, userProvisioningResult?.Success == true, parentProvisioningResult?.Success == true);
             }
             catch (Exception ex)
             {
@@ -302,7 +417,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw;
             }
 
-            // 7. Post-commit initial credential onboarding email dispatch
+            // 8. Post-commit Student initial credential onboarding email dispatch
             if (userProvisioningResult?.Success == true && !string.IsNullOrWhiteSpace(userProvisioningResult.TemporaryPassword))
             {
                 try
@@ -326,7 +441,7 @@ namespace CollegeManagement.API.Services.Implementations
                         $"Your Student Portal Account Credentials - {institutionName}",
                         emailBody);
 
-                    _logger.LogInformation("Successfully sent initial credential onboarding email to {Email}", userProvisioningResult.Email);
+                    _logger.LogInformation("Successfully sent student initial credential onboarding email to {Email}", userProvisioningResult.Email);
                 }
                 catch (Exception ex)
                 {
@@ -335,7 +450,68 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            return true;
+            // 9. Post-commit Parent onboarding or child linked notification email dispatch
+            if (parentProvisioningResult?.Success == true && !string.IsNullOrWhiteSpace(parentProvisioningResult.Email))
+            {
+                try
+                {
+                    var portalUrl = _configuration?["ParentPortal:LoginUrl"]
+                                 ?? _configuration?["InstitutionSettings:PortalUrl"]
+                                 ?? "http://localhost:5173";
+
+                    var institutionName = _configuration?["InstitutionSettings:InstitutionName"]
+                                       ?? "College Management System";
+
+                    var childDisplayName = !string.IsNullOrWhiteSpace(admission.FirstName)
+                        ? $"{admission.FirstName} {admission.LastName}".Trim()
+                        : "Student";
+
+                    var admissionNoDisplay = admission.AdmissionNo ?? $"ADM-{request.AdmissionId}";
+
+                    if (parentProvisioningResult.IsNewAccount && !string.IsNullOrWhiteSpace(parentProvisioningResult.TemporaryPassword))
+                    {
+                        var emailBody = ParentCredentialHelper.BuildInitialCredentialEmailHtml(
+                            parentProvisioningResult.FullName ?? "Parent / Guardian",
+                            parentProvisioningResult.Email,
+                            parentProvisioningResult.TemporaryPassword,
+                            childDisplayName,
+                            admissionNoDisplay,
+                            portalUrl,
+                            institutionName);
+
+                        await _emailService.SendEmailAsync(
+                            parentProvisioningResult.Email,
+                            $"Your Parent Portal Account Credentials - {institutionName}",
+                            emailBody);
+
+                        _logger.LogInformation("Successfully sent parent initial credential onboarding email to {Email}", parentProvisioningResult.Email);
+                    }
+                    else if (!parentProvisioningResult.IsNewAccount)
+                    {
+                        var emailBody = ParentCredentialHelper.BuildChildLinkedNotificationEmailHtml(
+                            parentProvisioningResult.FullName ?? "Parent / Guardian",
+                            parentProvisioningResult.Email,
+                            childDisplayName,
+                            admissionNoDisplay,
+                            portalUrl,
+                            institutionName);
+
+                        await _emailService.SendEmailAsync(
+                            parentProvisioningResult.Email,
+                            $"New Student Linked to Your Parent Account - {institutionName}",
+                            emailBody);
+
+                        _logger.LogInformation("Successfully sent parent sibling linked notification email to {Email}", parentProvisioningResult.Email);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // SMTP delivery failure after DB commit must NOT corrupt DB records or fail the API response.
+                    _logger.LogWarning(ex, "Parent email delivery failed for parent {Email} after successful commit.", parentProvisioningResult.Email);
+                }
+            }
+
+            return (true, createdStudentId);
         }
 
         private static bool IsValidEmailFormat(string email)
@@ -630,4 +806,8 @@ namespace CollegeManagement.API.Services.Implementations
         }
     }
 }
+
+
+
+
 

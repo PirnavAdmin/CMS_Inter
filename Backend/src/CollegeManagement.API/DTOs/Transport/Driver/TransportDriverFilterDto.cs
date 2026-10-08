@@ -6,6 +6,8 @@ namespace CollegeManagement.API.Dtos.Transport.Driver
 
         public bool? Status { get; set; }
 
+        public int? CampusId { get; set; }
+
         public bool? LicenceExpired { get; set; }
 
         public string? SortBy { get; set; } = "driverName";

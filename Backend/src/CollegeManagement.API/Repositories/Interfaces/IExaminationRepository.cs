@@ -41,6 +41,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<Stream?> GetHallTicketPdfStreamAsync(int studentId, int examinationId);
 
         Task AssignInvigilatorsAsync(int examScheduleId, IEnumerable<int> invigilatorIds, string hallNumber);
+        Task AssignInvigilatorHallsAsync(int examScheduleId, IEnumerable<(int invigilatorId, string hallNumber)> assignments);
         Task<IEnumerable<InvigilatorAssignment>> GetInvigilatorsByScheduleIdAsync(int examScheduleId);
     }
 }

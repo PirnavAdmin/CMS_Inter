@@ -72,12 +72,93 @@ namespace CollegeManagement.API.Services.Implementations
         private void InvalidateResultsCache(int? examId = null)
         {
             _logger.LogInformation("Invalidating results cache for ExamId: {ExamId}", examId);
-            var keysToRemove = _trackedCacheKeys.Keys.Where(k => examId == null || k.Contains($"_{examId}_") || k.EndsWith($"_{examId}")).ToList();
+            var keysToRemove = _trackedCacheKeys.Keys.Where(k =>
+                examId == null ||
+                k.StartsWith("published_results_") ||
+                k.Contains($"_{examId}_") ||
+                k.EndsWith($"_{examId}") ||
+                k.StartsWith($"results_sec_{examId}_") ||
+                k.StartsWith($"results_ranks_{examId}_") ||
+                k.StartsWith($"results_analytics_{examId}_") ||
+                k.StartsWith("results_memo_")
+            ).ToList();
+
             foreach (var k in keysToRemove)
             {
                 _cache.Remove(k);
                 _trackedCacheKeys.TryRemove(k, out _);
             }
+        }
+
+        private async Task<(Dictionary<int, string> sectionNames, Dictionary<int, string> inChargeNames, Dictionary<int, int?> sectionIncharges)> GetSectionAndInchargeLookupsAsync()
+        {
+            var sectionNames = new Dictionary<int, string>();
+            var inChargeNames = new Dictionary<int, string>();
+            var sectionIncharges = new Dictionary<int, int?>();
+
+            try
+            {
+                // Query Sections directly without navigation properties
+                var sections = await _context.Sections.AsNoTracking()
+                    .Select(s => new { s.SectionId, s.SectionName, s.InchargeId })
+                    .ToListAsync();
+
+                foreach (var s in sections)
+                {
+                    if (!string.IsNullOrWhiteSpace(s.SectionName))
+                    {
+                        sectionNames[s.SectionId] = s.SectionName;
+                    }
+                    if (s.InchargeId.HasValue && s.InchargeId.Value > 0)
+                    {
+                        sectionIncharges[s.SectionId] = s.InchargeId.Value;
+                    }
+                }
+
+                // Resolve Incharge names from Staff (or Faculty fallback)
+                var inchargeIds = sections
+                    .Where(s => s.InchargeId.HasValue && s.InchargeId.Value > 0)
+                    .Select(s => s.InchargeId!.Value)
+                    .Distinct()
+                    .ToList();
+
+                if (inchargeIds.Any())
+                {
+                    var staffMembers = await _context.Staffs.AsNoTracking()
+                        .Where(st => inchargeIds.Contains(st.Id))
+                        .Select(st => new { st.Id, st.FirstName, st.LastName })
+                        .ToListAsync();
+
+                    var staffDict = staffMembers.ToDictionary(st => st.Id, st => $"{st.FirstName} {st.LastName}".Trim());
+
+                    var missingIds = inchargeIds.Where(id => !staffDict.ContainsKey(id)).ToList();
+                    if (missingIds.Any())
+                    {
+                        var facultyMembers = await _context.Faculties.AsNoTracking()
+                            .Where(f => missingIds.Contains(f.Id))
+                            .Select(f => new { f.Id, f.FirstName, f.LastName })
+                            .ToListAsync();
+                        foreach (var f in facultyMembers)
+                        {
+                            staffDict[f.Id] = $"{f.FirstName} {f.LastName}".Trim();
+                        }
+                    }
+
+                    foreach (var s in sections)
+                    {
+                        if (s.InchargeId.HasValue && staffDict.TryGetValue(s.InchargeId.Value, out var staffName) && !string.IsNullOrWhiteSpace(staffName))
+                        {
+                            inChargeNames[s.SectionId] = staffName;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load section and incharge lookups");
+            }
+
+            return (sectionNames, inChargeNames, sectionIncharges);
         }
         #endregion
 
@@ -125,18 +206,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (!marks.Any())
             {
-                // Fallback: search by examId alone if specific filter didn't match
-                var fallbackQuery = _context.Marks
-                    .Include(m => m.Subject)
-                    .Where(m => m.ExaminationId == request.ExamId && m.IsActive);
-                if (request.CampusId.HasValue && request.CampusId.Value > 0)
-                    fallbackQuery = fallbackQuery.Where(m => (m.SectionNavigation != null && m.SectionNavigation.CampusId == request.CampusId.Value) || (m.Student != null && m.Student.CampusId == request.CampusId.Value));
-                marks = await fallbackQuery.ToListAsync();
-            }
-
-            if (!marks.Any())
-            {
-                throw new ValidationException("Results cannot be generated until all required evaluations are APPROVED.");
+                throw new ValidationException("No marks found for the specified examination criteria.");
             }
 
             // Precondition Check: Check if any marks for this exam are NOT approved
@@ -150,22 +220,8 @@ namespace CollegeManagement.API.Services.Implementations
             InvalidateResultsCache(request.ExamId);
 
             // Safe Lookups for Sections & Groups & Incharges
-            Dictionary<int, string> sectionNames = new();
+            var (sectionNames, inChargeNames, sectionInchargeIds) = await GetSectionAndInchargeLookupsAsync();
             Dictionary<int, string> groupNames = new();
-            Dictionary<int, string> inChargeNames = new();
-            try
-            {
-                var sections = await _context.Sections.Include(s => s.InchargeNavigation).ToListAsync();
-                foreach (var s in sections)
-                {
-                    sectionNames[s.SectionId] = s.SectionName;
-                    if (s.InchargeNavigation != null)
-                    {
-                        inChargeNames[s.SectionId] = $"{s.InchargeNavigation.FirstName} {s.InchargeNavigation.LastName}".Trim();
-                    }
-                }
-            }
-            catch { }
 
             try
             {
@@ -188,7 +244,9 @@ namespace CollegeManagement.API.Services.Implementations
                     var rollNo = !string.IsNullOrEmpty(first.RollNo) ? first.RollNo : $"ROLL{first.StudentId:000}";
                     var studentName = !string.IsNullOrEmpty(first.StudentName) ? first.StudentName : "Student";
                     var sectionId = first.SectionId;
-                    var sectionName = sectionNames.ContainsKey(sectionId) ? sectionNames[sectionId] : $"Section-{sectionId}";
+                    var sectionName = (sectionNames.TryGetValue(sectionId, out var sName) && !string.IsNullOrWhiteSpace(sName))
+                        ? sName
+                        : (first.SectionNavigation?.SectionName ?? $"Section-{sectionId}");
                     var groupName = groupNames.ContainsKey(first.GroupId) ? groupNames[first.GroupId] : "MPC";
                     var isPublished = g.All(m => m.IsPublished);
 
@@ -285,8 +343,20 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     var sectionId = sg.Key;
                     var students = sg.ToList();
-                    var sectionName = sectionNames.ContainsKey(sectionId) ? sectionNames[sectionId] : $"Section-{sectionId}";
-                    var inChargeName = inChargeNames.ContainsKey(sectionId) ? inChargeNames[sectionId] : "Deepa";
+                    var sectionName = (sectionNames.TryGetValue(sectionId, out var sName) && !string.IsNullOrWhiteSpace(sName))
+                        ? sName
+                        : (students.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.SectionName) && !s.SectionName.StartsWith("Section-"))?.SectionName
+                           ?? $"Section-{sectionId}");
+
+                    foreach (var st in students)
+                    {
+                        if (string.IsNullOrWhiteSpace(st.SectionName) || st.SectionName.StartsWith("Section-"))
+                        {
+                            st.SectionName = sectionName;
+                        }
+                    }
+
+                    var inChargeName = inChargeNames.TryGetValue(sectionId, out var ic) && !string.IsNullOrWhiteSpace(ic) ? ic : "—";
 
                     var totalStudents = students.Count;
                     var passed = students.Count(s => s.Result == "PASS");
@@ -299,7 +369,7 @@ namespace CollegeManagement.API.Services.Implementations
                     {
                         Id = sectionId,
                         Name = sectionName,
-                        InChargeId = 1,
+                        InChargeId = sectionInchargeIds.TryGetValue(sectionId, out var sIncId) ? sIncId : 1,
                         InChargeName = inChargeName,
                         Count = totalStudents,
                         Passed = passed,
@@ -356,27 +426,51 @@ namespace CollegeManagement.API.Services.Implementations
 
             var marks = await _context.Marks
                 .Include(m => m.Subject)
+                .Include(m => m.SectionNavigation)
                 .Where(m => m.SectionId == sectionId && m.ExaminationId == examId && m.IsActive)
                 .ToListAsync();
 
             if (!marks.Any()) return null;
 
             string sectionName = $"Section-{sectionId}";
-            string inChargeName = "Deepa";
+            string inChargeName = "—";
             string groupName = "MPC";
             try
             {
-                var sec = await _context.Sections.Include(s => s.InchargeNavigation).Include(s => s.GroupNavigation).FirstOrDefaultAsync(s => s.SectionId == sectionId);
+                var sec = await _context.Sections.AsNoTracking().FirstOrDefaultAsync(s => s.SectionId == sectionId);
                 if (sec != null)
                 {
-                    sectionName = sec.SectionName;
-                    if (sec.InchargeNavigation != null)
-                        inChargeName = $"{sec.InchargeNavigation.FirstName} {sec.InchargeNavigation.LastName}".Trim();
-                    if (sec.GroupNavigation != null)
-                        groupName = sec.GroupNavigation.GroupName;
+                    if (!string.IsNullOrWhiteSpace(sec.SectionName)) sectionName = sec.SectionName;
+                    if (sec.GroupId.HasValue)
+                    {
+                        var grp = await _context.Groups.AsNoTracking().FirstOrDefaultAsync(g => g.GroupId == sec.GroupId.Value);
+                        if (grp != null && !string.IsNullOrWhiteSpace(grp.GroupName)) groupName = grp.GroupName;
+                    }
+                    if (sec.InchargeId.HasValue && sec.InchargeId.Value > 0)
+                    {
+                        var staff = await _context.Staffs.AsNoTracking().Where(st => st.Id == sec.InchargeId.Value).Select(st => new { st.FirstName, st.LastName }).FirstOrDefaultAsync();
+                        if (staff != null)
+                        {
+                            inChargeName = $"{staff.FirstName} {staff.LastName}".Trim();
+                        }
+                        else
+                        {
+                            var fac = await _context.Faculties.AsNoTracking().Where(f => f.Id == sec.InchargeId.Value).Select(f => new { f.FirstName, f.LastName }).FirstOrDefaultAsync();
+                            if (fac != null) inChargeName = $"{fac.FirstName} {fac.LastName}".Trim();
+                        }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(sectionName) || sectionName.StartsWith("Section-"))
+                {
+                    var navSecName = marks.FirstOrDefault(m => m.SectionNavigation != null && !string.IsNullOrWhiteSpace(m.SectionNavigation.SectionName))?.SectionNavigation?.SectionName;
+                    if (!string.IsNullOrWhiteSpace(navSecName)) sectionName = navSecName;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load section detail info for Section {SecId}", sectionId);
+            }
 
             var distinctSubjects = marks
                 .GroupBy(m => m.SubjectId)
@@ -537,11 +631,6 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             var marks = await query.ToListAsync();
-            if (!marks.Any())
-            {
-                marks = await _context.Marks.Where(m => m.ExaminationId == examId && m.IsActive).ToListAsync();
-            }
-
             if (!marks.Any()) return false;
 
             foreach (var m in marks)
@@ -615,6 +704,8 @@ namespace CollegeManagement.API.Services.Implementations
             // 1. Query published marks
             var marksQuery = _context.Marks
                 .Include(m => m.Subject)
+                .Include(m => m.Student)
+                .Include(m => m.SectionNavigation)
                 .Where(m => m.IsActive && m.IsPublished);
 
             if (boardId.HasValue && boardId.Value > 0)
@@ -631,6 +722,8 @@ namespace CollegeManagement.API.Services.Implementations
             // 2. Query published results table
             var resultsQuery = _context.Results
                 .Include(r => r.Subject)
+                .Include(r => r.Student)
+                    .ThenInclude(s => s.SectionNavigation)
                 .Where(r => r.IsPublished);
 
             if (boardId.HasValue && boardId.Value > 0)
@@ -663,21 +756,7 @@ namespace CollegeManagement.API.Services.Implementations
                 .Where(e => examIds.Contains(e.ExaminationId))
                 .ToDictionaryAsync(e => e.ExaminationId);
 
-            Dictionary<int, string> sectionNames = new();
-            Dictionary<int, string> inChargeNames = new();
-            try
-            {
-                var sections = await _context.Sections.Include(s => s.InchargeNavigation).ToListAsync();
-                foreach (var s in sections)
-                {
-                    sectionNames[s.SectionId] = s.SectionName;
-                    if (s.InchargeNavigation != null)
-                    {
-                        inChargeNames[s.SectionId] = $"{s.InchargeNavigation.FirstName} {s.InchargeNavigation.LastName}".Trim();
-                    }
-                }
-            }
-            catch { }
+            var (sectionNames, inChargeNames, sectionInchargeIds) = await GetSectionAndInchargeLookupsAsync();
 
             Dictionary<int, string> groupNames = new();
             try
@@ -724,22 +803,40 @@ namespace CollegeManagement.API.Services.Implementations
                 var passPercentage = exam?.PassPercentage ?? 35m;
 
                 var sectionSummaries = new List<SectionResultSummaryDto>();
+                List<SectionStudentResultDto> studentList = new();
 
                 if (examMarks.Any())
                 {
-                    var studentGroups = examMarks
+                    studentList = examMarks
                         .GroupBy(m => m.StudentId)
                         .Select(g =>
                         {
                             var first = g.First();
-                            var rollNo = !string.IsNullOrEmpty(first.RollNo) ? first.RollNo : $"ROLL{first.StudentId:000}";
-                            var studentName = !string.IsNullOrEmpty(first.StudentName) ? first.StudentName : "Student";
+                            var rollNo = !string.IsNullOrEmpty(first.RollNo) ? first.RollNo : (first.Student?.RollNo ?? $"ROLL{first.StudentId:000}");
+                            var studentName = !string.IsNullOrEmpty(first.StudentName) ? first.StudentName : (!string.IsNullOrEmpty(first.Student?.StudentName) ? first.Student.StudentName : $"Student {g.Key}");
                             var secId = first.SectionId;
-                            var secName = sectionNames.ContainsKey(secId) ? sectionNames[secId] : $"Section-{secId}";
+                            var secName = (sectionNames.TryGetValue(secId, out var sName) && !string.IsNullOrWhiteSpace(sName))
+                                ? sName
+                                : (first.SectionNavigation?.SectionName ?? $"Section-{secId}");
+
+                            var subjectsList = g.Select(m => new StudentSubjectMarkItemDto
+                            {
+                                SubjectId = m.SubjectId,
+                                SubjectName = m.Subject?.SubjectName ?? $"Subject-{m.SubjectId}",
+                                SubjectCode = m.Subject?.SubjectCode ?? $"SUB{m.SubjectId:000}",
+                                Short = m.Subject?.SubjectCode ?? $"S{m.SubjectId}",
+                                InternalMarks = m.InternalMarks,
+                                PracticalMarks = m.PracticalMarks > 0 ? m.PracticalMarks : null,
+                                TheoryMarks = m.TheoryMarks,
+                                TotalMarks = m.TotalMarks,
+                                ObtainedMarks = m.TotalMarks,
+                                MaxMarks = m.Subject?.TotalMarks > 0 ? (decimal)m.Subject.TotalMarks : 100m
+                            }).ToList();
 
                             decimal grandTotal = g.Sum(m => (decimal)m.TotalMarks);
                             var maxPossible = exam?.TotalMarks > 0 ? (decimal)exam.TotalMarks : (g.Count() * 100m);
                             var percentage = maxPossible > 0 ? Math.Round((grandTotal / maxPossible) * 100m, 2) : 0m;
+                            var grade = GradeFor(percentage);
                             var result = percentage >= passPercentage ? "PASS" : "FAIL";
 
                             return new SectionStudentResultDto
@@ -747,62 +844,55 @@ namespace CollegeManagement.API.Services.Implementations
                                 StudentId = g.Key,
                                 RollNo = rollNo,
                                 StudentName = studentName,
+                                BoardId = first.BoardId,
+                                YearId = first.AcademicYearId,
+                                LevelId = first.AcademicLevelId,
+                                GroupId = first.GroupId,
+                                GroupName = groupName,
+                                ProgramId = programIdVal,
+                                ProgramName = programName,
                                 SectionId = secId,
                                 SectionName = secName,
+                                ExaminationId = examId,
+                                Subjects = subjectsList,
                                 Total = grandTotal,
                                 Maximum = maxPossible,
                                 Percentage = percentage,
-                                Grade = GradeFor(percentage),
+                                Grade = grade,
                                 Result = result,
                                 Status = "PUBLISHED",
                                 IsPublished = true
                             };
                         })
                         .ToList();
-
-                    sectionSummaries = studentGroups
-                        .GroupBy(s => s.SectionId ?? 0)
-                        .Select(sg =>
-                        {
-                            var secId = sg.Key;
-                            var students = sg.ToList();
-                            var secName = sectionNames.ContainsKey(secId) ? sectionNames[secId] : $"Section-{secId}";
-                            var inCharge = inChargeNames.ContainsKey(secId) ? inChargeNames[secId] : "—";
-                            var total = students.Count;
-                            var passed = students.Count(s => s.Result == "PASS");
-                            var failed = total - passed;
-                            var rate = total > 0 ? Math.Round(((decimal)passed / total) * 100m, 2) : 0m;
-                            var avg = total > 0 ? Math.Round(students.Average(s => s.Percentage), 2) : 0m;
-
-                            return new SectionResultSummaryDto
-                            {
-                                Id = secId,
-                                Name = secName,
-                                InChargeId = 1,
-                                InChargeName = inCharge,
-                                Count = total,
-                                Passed = passed,
-                                Failed = failed,
-                                PassRate = rate,
-                                Average = avg,
-                                ResultStatus = "PUBLISHED",
-                                IsPublished = true,
-                                StudentRows = students
-                            };
-                        })
-                        .OrderBy(s => s.Name)
-                        .ToList();
                 }
                 else if (examResults.Any())
                 {
-                    var studentGroups = examResults
+                    studentList = examResults
                         .GroupBy(r => r.StudentId)
                         .Select(g =>
                         {
                             var first = g.First();
-                            var rollNo = $"ROLL{first.StudentId:000}";
-                            var secId = 1;
-                            var secName = "Section-1";
+                            var rollNo = first.Student?.RollNo ?? $"ROLL{first.StudentId:000}";
+                            var studentName = !string.IsNullOrEmpty(first.Student?.StudentName) ? first.Student.StudentName : $"Student {g.Key}";
+                            var secId = first.Student?.SectionId ?? 1;
+                            var secName = (sectionNames.TryGetValue(secId, out var sn) && !string.IsNullOrWhiteSpace(sn))
+                                ? sn
+                                : (first.Student?.SectionNavigation?.SectionName ?? $"Section-{secId}");
+
+                            var subjectsList = g.Select(r => new StudentSubjectMarkItemDto
+                            {
+                                SubjectId = r.SubjectId,
+                                SubjectName = r.Subject?.SubjectName ?? $"Subject-{r.SubjectId}",
+                                SubjectCode = r.Subject?.SubjectCode ?? $"SUB{r.SubjectId:000}",
+                                Short = r.Subject?.SubjectCode ?? $"S{r.SubjectId}",
+                                InternalMarks = r.InternalMarks,
+                                PracticalMarks = r.PracticalMarks > 0 ? r.PracticalMarks : null,
+                                TheoryMarks = r.ExternalMarks,
+                                TotalMarks = r.TotalMarks,
+                                ObtainedMarks = r.TotalMarks,
+                                MaxMarks = r.Subject?.TotalMarks > 0 ? (decimal)r.Subject.TotalMarks : 100m
+                            }).ToList();
 
                             decimal grandTotal = g.Sum(r => r.TotalMarks);
                             var maxPossible = exam?.TotalMarks > 0 ? (decimal)exam.TotalMarks : (g.Count() * 100m);
@@ -814,9 +904,18 @@ namespace CollegeManagement.API.Services.Implementations
                             {
                                 StudentId = g.Key,
                                 RollNo = rollNo,
-                                StudentName = $"Student {g.Key}",
+                                StudentName = studentName,
+                                BoardId = first.BoardId,
+                                YearId = first.AcademicYearId,
+                                LevelId = first.AcademicLevelId,
+                                GroupId = first.GroupId,
+                                GroupName = groupName,
+                                ProgramId = programIdVal,
+                                ProgramName = programName,
                                 SectionId = secId,
                                 SectionName = secName,
+                                ExaminationId = examId,
+                                Subjects = subjectsList,
                                 Total = grandTotal,
                                 Maximum = maxPossible,
                                 Percentage = percentage,
@@ -827,25 +926,70 @@ namespace CollegeManagement.API.Services.Implementations
                             };
                         })
                         .ToList();
+                }
 
-                    sectionSummaries = studentGroups
+                if (studentList.Any())
+                {
+                    // Compute Group Ranks
+                    int gRank = 0;
+                    decimal? prevGTotal = null;
+                    var sortedGroup = studentList.OrderByDescending(s => s.Total).ThenBy(s => s.StudentName).ToList();
+                    for (int i = 0; i < sortedGroup.Count; i++)
+                    {
+                        if (sortedGroup[i].Total != prevGTotal)
+                        {
+                            gRank = i + 1;
+                            prevGTotal = sortedGroup[i].Total;
+                        }
+                        sortedGroup[i].GroupRank = gRank;
+                    }
+
+                    // Group by Section and compute Section Ranks
+                    sectionSummaries = sortedGroup
                         .GroupBy(s => s.SectionId ?? 0)
                         .Select(sg =>
                         {
                             var secId = sg.Key;
-                            var students = sg.ToList();
-                            var total = students.Count;
-                            var passed = students.Count(s => s.Result == "PASS");
+                            var secStudents = sg.OrderByDescending(s => s.Total).ThenBy(s => s.StudentName).ToList();
+                            int sRank = 0;
+                            decimal? prevSTotal = null;
+                            for (int i = 0; i < secStudents.Count; i++)
+                            {
+                                if (secStudents[i].Total != prevSTotal)
+                                {
+                                    sRank = i + 1;
+                                    prevSTotal = secStudents[i].Total;
+                                }
+                                secStudents[i].SectionRank = sRank;
+                            }
+
+                            var secName = (sectionNames.TryGetValue(secId, out var sn) && !string.IsNullOrWhiteSpace(sn))
+                                ? sn
+                                : (secStudents.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.SectionName) && !s.SectionName.StartsWith("Section-"))?.SectionName
+                                   ?? $"Section-{secId}");
+
+                            foreach (var sRow in secStudents)
+                            {
+                                if (string.IsNullOrWhiteSpace(sRow.SectionName) || sRow.SectionName.StartsWith("Section-"))
+                                {
+                                    sRow.SectionName = secName;
+                                }
+                            }
+
+                            var inCharge = inChargeNames.TryGetValue(secId, out var ic) && !string.IsNullOrWhiteSpace(ic) ? ic : "—";
+                            var inChargeId = sectionInchargeIds.TryGetValue(secId, out var sIncId) ? sIncId : 1;
+                            var total = secStudents.Count;
+                            var passed = secStudents.Count(s => s.Result == "PASS");
                             var failed = total - passed;
                             var rate = total > 0 ? Math.Round(((decimal)passed / total) * 100m, 2) : 0m;
-                            var avg = total > 0 ? Math.Round(students.Average(s => s.Percentage), 2) : 0m;
+                            var avg = total > 0 ? Math.Round(secStudents.Average(s => s.Percentage), 2) : 0m;
 
                             return new SectionResultSummaryDto
                             {
                                 Id = secId,
-                                Name = "Section-1",
-                                InChargeId = 1,
-                                InChargeName = "—",
+                                Name = secName,
+                                InChargeId = inChargeId,
+                                InChargeName = inCharge,
                                 Count = total,
                                 Passed = passed,
                                 Failed = failed,
@@ -853,9 +997,10 @@ namespace CollegeManagement.API.Services.Implementations
                                 Average = avg,
                                 ResultStatus = "PUBLISHED",
                                 IsPublished = true,
-                                StudentRows = students
+                                StudentRows = secStudents
                             };
                         })
+                        .OrderBy(s => s.Name)
                         .ToList();
                 }
 
@@ -868,7 +1013,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                 publishedGroups.Add(new PublishedExamResultGroupDto
                 {
-                    PublishedId = examId,
+                    PublishedId = (examId * 10000) + gId,
                     ExamId = examId,
                     ExamName = exam?.ExamName ?? $"Exam {examId}",
                     ExamCode = exam?.ExamCode,
@@ -907,27 +1052,35 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<StudentResultDto?> GetStudentMemoAsync(int studentId, int? examId = null)
         {
-            var cacheKey = $"results_memo_{studentId}_{examId ?? 0}";
+            if (!examId.HasValue || examId.Value <= 0)
+            {
+                var latestExamId = await _context.Marks
+                    .Where(m => m.StudentId == studentId && m.IsActive)
+                    .OrderByDescending(m => m.ExaminationId)
+                    .Select(m => m.ExaminationId)
+                    .FirstOrDefaultAsync();
+
+                if (latestExamId <= 0) return null;
+                examId = latestExamId;
+            }
+
+            var cacheKey = $"results_memo_{studentId}_{examId.Value}";
             if (_cache.TryGetValue(cacheKey, out StudentResultDto? cachedMemo) && cachedMemo != null)
             {
                 _logger.LogInformation("Cache hit for Student Memo: {Key}", cacheKey);
                 return cachedMemo;
             }
 
+            var targetExamId = examId.Value;
             var query = _context.Marks
                 .Include(m => m.Subject)
-                .Where(m => m.StudentId == studentId && m.IsActive);
-
-            if (examId.HasValue && examId.Value > 0)
-            {
-                query = query.Where(m => m.ExaminationId == examId.Value);
-            }
+                .Include(m => m.SectionNavigation)
+                .Where(m => m.StudentId == studentId && m.ExaminationId == targetExamId && m.IsActive);
 
             var marks = await query.ToListAsync();
             if (!marks.Any()) return null;
 
             var first = marks.First();
-            var targetExamId = examId ?? first.ExaminationId;
             var exam = await _context.Examinations
                 .Include(e => e.Program)
                 .Include(e => e.AssessmentType)
@@ -936,13 +1089,13 @@ namespace CollegeManagement.API.Services.Implementations
             var rollNo = !string.IsNullOrEmpty(first.RollNo) ? first.RollNo : $"ROLL{first.StudentId:000}";
             var studentName = !string.IsNullOrEmpty(first.StudentName) ? first.StudentName : "Student";
             var groupName = "MPC";
-            var sectionName = $"Section-{first.SectionId}";
+            var sectionName = first.SectionNavigation?.SectionName ?? $"Section-{first.SectionId}";
             try
             {
-                var g = await _context.Groups.FirstOrDefaultAsync(grp => grp.GroupId == first.GroupId);
-                if (g != null) groupName = g.GroupName;
-                var s = await _context.Sections.FirstOrDefaultAsync(sec => sec.SectionId == first.SectionId);
-                if (s != null) sectionName = s.SectionName;
+                var g = await _context.Groups.AsNoTracking().FirstOrDefaultAsync(grp => grp.GroupId == first.GroupId);
+                if (g != null && !string.IsNullOrWhiteSpace(g.GroupName)) groupName = g.GroupName;
+                var s = await _context.Sections.AsNoTracking().FirstOrDefaultAsync(sec => sec.SectionId == first.SectionId);
+                if (s != null && !string.IsNullOrWhiteSpace(s.SectionName)) sectionName = s.SectionName;
             }
             catch { }
 
@@ -1041,13 +1194,14 @@ namespace CollegeManagement.API.Services.Implementations
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId)
+            int examId,
+            int? campusId = null)
         {
             var memo = await GetStudentMemoAsync(studentId, examId);
             if (memo != null) return memo;
 
             return await _resultRepository.GetStudentResultAsync(
-                studentId, boardId, academicYearId, academicLevelId, groupId, examId);
+                studentId, boardId, academicYearId, academicLevelId, groupId, examId, campusId);
         }
 
         #endregion
@@ -1074,6 +1228,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             var query = _context.Marks
                 .Include(m => m.Subject)
+                .Include(m => m.SectionNavigation)
                 .Where(m => m.IsActive);
 
             if (boardId.HasValue && boardId.Value > 0) query = query.Where(m => m.BoardId == boardId.Value);
@@ -1091,14 +1246,8 @@ namespace CollegeManagement.API.Services.Implementations
             var exams = await _context.Examinations.Include(e => e.Program).Where(e => distinctExamIds.Contains(e.ExaminationId)).ToListAsync();
             var examDict = exams.ToDictionary(e => e.ExaminationId, e => e);
 
-            Dictionary<int, string> sectionNames = new();
+            var (sectionNames, _, _) = await GetSectionAndInchargeLookupsAsync();
             Dictionary<int, string> groupNames = new();
-            try
-            {
-                var sections = await _context.Sections.ToListAsync();
-                sectionNames = sections.ToDictionary(s => s.SectionId, s => s.SectionName);
-            }
-            catch { }
             try
             {
                 var groups = await _context.Groups.ToListAsync();
@@ -1113,7 +1262,9 @@ namespace CollegeManagement.API.Services.Implementations
                     var first = g.First();
                     var rollNo = !string.IsNullOrEmpty(first.RollNo) ? first.RollNo : $"ROLL{first.StudentId:000}";
                     var studentName = !string.IsNullOrEmpty(first.StudentName) ? first.StudentName : "Student";
-                    var secName = sectionNames.ContainsKey(first.SectionId) ? sectionNames[first.SectionId] : $"Section-{first.SectionId}";
+                    var secName = (sectionNames.TryGetValue(first.SectionId, out var sn) && !string.IsNullOrWhiteSpace(sn))
+                        ? sn
+                        : (first.SectionNavigation?.SectionName ?? $"Section-{first.SectionId}");
                     var grpName = groupNames.ContainsKey(first.GroupId) ? groupNames[first.GroupId] : "MPC";
 
                     examDict.TryGetValue(first.ExaminationId, out var exam);
@@ -1213,13 +1364,26 @@ namespace CollegeManagement.API.Services.Implementations
 
             var query = _context.Marks
                 .Include(m => m.Subject)
+                .Include(m => m.SectionNavigation)
                 .Where(m => m.IsActive);
 
             if (boardId.HasValue && boardId.Value > 0) query = query.Where(m => m.BoardId == boardId.Value);
             if (academicYearId.HasValue && academicYearId.Value > 0) query = query.Where(m => m.AcademicYearId == academicYearId.Value);
             if (academicLevelId.HasValue && academicLevelId.Value > 0) query = query.Where(m => m.AcademicLevelId == academicLevelId.Value);
-            if (groupId.HasValue && groupId.Value > 0) query = query.Where(m => m.GroupId == groupId.Value);
-            if (examId.HasValue && examId.Value > 0) query = query.Where(m => m.ExaminationId == examId.Value);
+            if (examId.HasValue && examId.Value > 0)
+            {
+                query = query.Where(m => m.ExaminationId == examId.Value);
+            }
+            else
+            {
+                var latestExamId = await query.OrderByDescending(m => m.ExaminationId).Select(m => m.ExaminationId).FirstOrDefaultAsync();
+                if (latestExamId > 0)
+                {
+                    query = query.Where(m => m.ExaminationId == latestExamId);
+                    examId = latestExamId;
+                }
+            }
+
             if (campusId.HasValue && campusId.Value > 0) query = query.Where(m => (m.SectionNavigation != null && m.SectionNavigation.CampusId == campusId.Value) || (m.Student != null && m.Student.CampusId == campusId.Value));
 
             var marks = await query.ToListAsync();
@@ -1229,26 +1393,12 @@ namespace CollegeManagement.API.Services.Implementations
                 return new ResultAnalyticsDto();
             }
 
-            Examination? exam = null;
-            if (examId.HasValue && examId.Value > 0)
-            {
-                exam = await _context.Examinations.FirstOrDefaultAsync(e => e.ExaminationId == examId.Value);
-            }
-            else
-            {
-                var firstExamId = marks.First().ExaminationId;
-                exam = await _context.Examinations.FirstOrDefaultAsync(e => e.ExaminationId == firstExamId);
-            }
+            var targetExamId = examId ?? marks.First().ExaminationId;
+            var exam = await _context.Examinations.FirstOrDefaultAsync(e => e.ExaminationId == targetExamId);
 
             var passPercentage = exam?.PassPercentage ?? 35m;
 
-            Dictionary<int, string> sectionNames = new();
-            try
-            {
-                var sections = await _context.Sections.ToListAsync();
-                sectionNames = sections.ToDictionary(s => s.SectionId, s => s.SectionName);
-            }
-            catch { }
+            var (sectionNames, _, _) = await GetSectionAndInchargeLookupsAsync();
 
             var studentTotals = marks
                 .GroupBy(m => m.StudentId)
@@ -1257,7 +1407,9 @@ namespace CollegeManagement.API.Services.Implementations
                     var first = g.First();
                     var rollNo = !string.IsNullOrEmpty(first.RollNo) ? first.RollNo : $"ROLL{first.StudentId:000}";
                     var studentName = !string.IsNullOrEmpty(first.StudentName) ? first.StudentName : "Student";
-                    var secName = sectionNames.ContainsKey(first.SectionId) ? sectionNames[first.SectionId] : $"Section-{first.SectionId}";
+                    var secName = (sectionNames.TryGetValue(first.SectionId, out var sn) && !string.IsNullOrWhiteSpace(sn))
+                        ? sn
+                        : (first.SectionNavigation?.SectionName ?? $"Section-{first.SectionId}");
                     var max = exam?.TotalMarks > 0 ? (decimal)exam.TotalMarks : (g.Count() * 100m);
                     decimal total = g.Sum(m => (decimal)m.TotalMarks);
                     var percentage = max > 0 ? Math.Round((total / max) * 100m, 2) : 0m;
@@ -1387,10 +1539,11 @@ namespace CollegeManagement.API.Services.Implementations
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId)
+            int examId,
+            int? campusId = null)
         {
             return await _resultRepository.GetResultAnalysisAsync(
-                boardId, academicYearId, academicLevelId, groupId, examId);
+                boardId, academicYearId, academicLevelId, groupId, examId, campusId);
         }
 
         #endregion

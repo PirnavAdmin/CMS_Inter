@@ -10,6 +10,8 @@ namespace CollegeManagement.API.DTOs.Examination.Responses
         public string ExamCode { get; set; } = string.Empty;
         public string ExamName { get; set; } = string.Empty;
 
+        public int? CampusId { get; set; } = 1;
+
         public int BoardId { get; set; }
         public string BoardName { get; set; } = string.Empty;
 

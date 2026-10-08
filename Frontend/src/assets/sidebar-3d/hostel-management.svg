@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="wall" x1="12" y1="18" x2="51" y2="54" gradientUnits="userSpaceOnUse"><stop stop-color="#FFF1B8"/><stop offset="1" stop-color="#E6A832"/></linearGradient>
+    <linearGradient id="side" x1="43" y1="26" x2="57" y2="47" gradientUnits="userSpaceOnUse"><stop stop-color="#E99A20"/><stop offset="1" stop-color="#B95A19"/></linearGradient>
+    <linearGradient id="roof" x1="8" y1="17" x2="47" y2="29" gradientUnits="userSpaceOnUse"><stop stop-color="#54C7B2"/><stop offset="1" stop-color="#148B83"/></linearGradient>
+    <filter id="shadow" x="4" y="8" width="58" height="54" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#263A2D" flood-opacity=".28"/></filter>
+  </defs>
+  <g filter="url(#shadow)" stroke="#253D35" stroke-linejoin="round" stroke-width="2.4">
+    <path d="M11 25 43 14l12 7v31L24 59V28l-13-3Z" fill="url(#wall)"/>
+    <path d="m43 14 12 7v31l-12-5V14Z" fill="url(#side)"/>
+    <path d="m7 24 35-13 16 9-34 13L7 24Z" fill="url(#roof)"/>
+    <path d="M30 38h8v9h-8zM17 34h6v7h-6zM17 46h6v7h-6zM44 28h5v7h-5zM44 39h5v7h-5z" fill="#FFF9E8"/>
+    <path d="M28 56V46l6-2 6 2v8" fill="#8B4D25"/>
+    <path d="M29 20V9l5-2 5 2v8" fill="#F6D46B"/>
+  </g>
+</svg>

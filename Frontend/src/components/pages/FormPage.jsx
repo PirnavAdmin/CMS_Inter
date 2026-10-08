@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { Field, Toast, useForm } from "@/components/common/Ui.jsx";
+import { Field, SkeletonPage, Toast, useForm } from "@/components/common/Ui.jsx";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { addRow, configFor, getRow, updateRow } from "@/data/store.js";
 
@@ -154,7 +154,7 @@ export default function FormPage({ slug, config, id = null, secondary = false, l
         <form className="cms-card" onSubmit={submit} noValidate>
           <div className="cms-card-body">
             {loading ? (
-              <div className="cms-empty">Loading record...</div>
+              <SkeletonPage variant="form" rows={fields.length || 6} />
             ) : (
               <div className="cms-form-grid">
                 {fields.map((field) => <Field key={field.name} field={field} value={values[field.name]} error={errors[field.name]} onChange={setValue} />)}

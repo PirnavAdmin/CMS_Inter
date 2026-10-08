@@ -51,6 +51,7 @@ BEGIN
 
     -- 2. Insert calculated results per student per subject from active Marks
     INSERT INTO `Results` (
+        CampusId,
         StudentId,
         BoardId,
         AcademicYearId,
@@ -71,6 +72,7 @@ BEGIN
         UpdatedAt
     )
     SELECT 
+        COALESCE(p_CampusId, m.CampusId, 1) AS CampusId,
         m.StudentId,
         m.BoardId,
         m.AcademicYearId,
@@ -150,6 +152,15 @@ BEGIN
         PublishedDate = COALESCE(p_PublishDate, UTC_TIMESTAMP()),
         UpdatedAt = UTC_TIMESTAMP()
     WHERE ExamId = p_ExamId
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR BoardId = p_BoardId)
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR AcademicYearId = p_AcademicYearId)
+      AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR AcademicLevelId = p_AcademicLevelId)
+      AND (p_GroupId IS NULL OR p_GroupId = 0 OR GroupId = p_GroupId);
+
+    UPDATE `Marks` SET IsPublished = 1,
+        PublishedAt = COALESCE(p_PublishDate, UTC_TIMESTAMP()),
+        UpdatedAt = UTC_TIMESTAMP()
+    WHERE ExaminationId = p_ExamId
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR AcademicLevelId = p_AcademicLevelId)

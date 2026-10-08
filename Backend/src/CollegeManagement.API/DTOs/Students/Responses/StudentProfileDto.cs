@@ -51,6 +51,8 @@ namespace CollegeManagement.API.DTOs.Students
 
         public string? GuardianMobile { get; set; }
 
+        public string? ParentGuardianEmail { get; set; }
+
         public string? AcademicLevelName { get; set; }
 
         public string? GroupName { get; set; }

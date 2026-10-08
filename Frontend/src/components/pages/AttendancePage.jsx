@@ -8,9 +8,16 @@ import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./AttendancePage.css";
+import "./AttendanceTimingConfigPage.css";
 
 const STUDENT_STATUSES = ["Present", "Absent", "Half Day"];
+const STUDENT_SESSION_STATUSES = ["Present", "Absent"];
+const dailyStudentStatus = (morning, afternoon) => {
+  if (!STUDENT_SESSION_STATUSES.includes(morning) || !STUDENT_SESSION_STATUSES.includes(afternoon)) return "Select both sessions";
+  return morning === afternoon ? morning : "Half Day";
+};
 const STAFF_STATUSES = ["Present", "Absent", "Leave", "Late"];
 const STUDENT_LABEL = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
 const STAFF_LABEL = { 1: "Present", 2: "Absent", 3: "Late", 4: "Leave", 5: "Holiday" };
@@ -38,6 +45,10 @@ const studentStatus = (v) => STUDENT_LABEL[v] ?? (v === "Half-Day" ? "Half Day" 
 const staffStatus = (v) => STAFF_LABEL[v] ?? v ?? "—";
 const status = (v, staff = false) => staff ? staffStatus(v) : studentStatus(v);
 const studentSessionStatus = (row, session) => studentStatus(get(row, `${session}Status`, `${session}AttendanceStatus`, `${session}SessionStatus`, session, `${session}Attendance`));
+const attendancePercentage = (row) => {
+  const parsed = Number.parseFloat(String(get(row, "attendancePercentage", "percentage") ?? 0).replace("%", ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 const staffType = (v) => {
   if (v === "" || v == null) return undefined;
   const n = Number(v);
@@ -48,12 +59,12 @@ const ATTENDANCE_PAGE_SIZE = 5;
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
 function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select></Field>; }
 
-function AttendancePagination({ page, totalRows, onPageChange }) {
+function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
  const currentPage = Math.min(page, totalPages);
  const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
  const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
- return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start}-{end} of {totalRows} records</span><div className="att-pagination-controls"><button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button></div></nav>;
+ return <nav className="att-pagination" aria-label="Attendance pages"><span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span><div className="att-pagination-controls"><button type="button" disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Previous</button><span>Page {currentPage} of {totalPages}</span><button type="button" disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button></div></nav>;
 }
 
 export default function AttendancePage() { const { area = "student" } = useParams(), staff = area === "staff"; const [notice, setNotice] = useState({ message: "", type: "success" }), [importOpen, setImportOpen] = useState(false); const say = (message, type = "success") => setNotice({ message, type }); return <><DashboardLayout title={staff ? "Staff Attendance" : "Student Attendance"} subtitle={staff ? "View and manage teaching and non-teaching staff attendance" : "View and manage student attendance records"} breadcrumb={["Operations", "Attendance"]} actions={<button type="button" className="cms-btn cms-btn-primary attendance-import-trigger" onClick={() => setImportOpen(true)}><Upload size={16} /> Import Attendance</button>}><main className="attendance-module"><Screen key={staff ? "staff" : "student"} staff={staff} say={say} /></main></DashboardLayout>{importOpen && <AttendanceImportModal staff={staff} say={say} onClose={() => setImportOpen(false)} />}<Toast message={notice.message} type={notice.type} onClose={() => setNotice({ message: "", type: "success" })} /></>; }
@@ -244,6 +255,8 @@ function Screen({ staff = false, say }) {
  const navigate = useNavigate();
  const location = useLocation();
  const { selectedBoardId: navbarBoardId, selectedAcademicYearId: navbarAcademicYearId } = useAcademicContext();
+ const campusCtx = useCampusContext();
+ const navbarCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
  const restoredState = !staff ? location.state?.attendanceState : null;
  const defaultFilters = { date: getTodayDate(), level: "", group: "", section: "", program: "", department: "", type: "", person: "", status: "", view: "Attendance" };
  const [f, setF] = useState(() => restoredState?.filters || defaultFilters);
@@ -254,9 +267,10 @@ function Screen({ staff = false, say }) {
  const [editing, setEditing] = useState(null);
  const [search, setSearch] = useState(() => restoredState?.search || "");
  const [page, setPage] = useState(() => restoredState?.page || 1);
+ const [attendanceThreshold, setAttendanceThreshold] = useState(75);
  const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
  const [dirty, setDirty] = useState(false);
- const initialAcademicContext = useRef(`${staff}:${navbarBoardId}:${navbarAcademicYearId}`);
+ const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
  const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program);
  const options = staff ? staffOptions : studentOptions;
@@ -269,24 +283,20 @@ function Screen({ staff = false, say }) {
  const switchView = (newView) => {
    setPage(1);
    setF((old) => ({ ...old, view: newView }));
-   if (loaded) { load(newView); }
  };
 
  useEffect(() => {
-   const currentAcademicContext = `${staff}:${navbarBoardId}:${navbarAcademicYearId}`;
+   const currentAcademicContext = `${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`;
    if (initialAcademicContext.current === currentAcademicContext) return;
    initialAcademicContext.current = currentAcademicContext;
    if (!staff) setF((old) => ({ ...old, level: "", group: "", program: "", section: "" }));
-   if (loaded) {
-     load();
-   }
- }, [staff, navbarBoardId, navbarAcademicYearId]);
+ }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId]);
 
  const monthParams = () => {
    const [year, month] = f.date.slice(0, 7).split("-");
    return staff
-     ? { month: Number(month), year: Number(year), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), departmentId: num(f.department), staffType: staffType(f.type), ...(f.person ? { facultyId: num(f.person) } : {}) }
-     : { month: Number(month), year: Number(year), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), academicLevelId: num(f.level), groupId: num(f.group), sectionId: num(f.section), ...(f.program ? { programId: num(f.program) } : {}) };
+     ? { month: Number(month), year: Number(year), campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), departmentId: num(f.department), staffType: staffType(f.type), ...(f.person ? { facultyId: num(f.person) } : {}) }
+     : { month: Number(month), year: Number(year), campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), academicLevelId: num(f.level), groupId: num(f.group), sectionId: num(f.section), ...(f.program ? { programId: num(f.program) } : {}) };
  };
 
  const load = async (overrideView) => {
@@ -318,6 +328,7 @@ function Screen({ staff = false, say }) {
      } else if (staff) {
        const r = await apiClient.post(apiEndpoints.staffAttendance.load, {
          date: f.date,
+         campusId: num(navbarCampusId),
          boardId: num(navbarBoardId),
          academicYearId: num(navbarAcademicYearId),
          departmentId: num(f.department),
@@ -330,6 +341,7 @@ function Screen({ staff = false, say }) {
        const r = await apiClient.get(apiEndpoints.attendance.studentAdminDaily, {
          params: {
            date: f.date,
+           campusId: num(navbarCampusId),
            boardId: num(navbarBoardId),
            academicYearId: num(navbarAcademicYearId),
            academicLevelId: num(f.level),
@@ -347,6 +359,19 @@ function Screen({ staff = false, say }) {
      setBusy(false);
    }
  };
+
+ // Reuse the existing loader for the selected view, date and filters.
+ const dailyLoader = useRef(load);
+ dailyLoader.current = load;
+ const restoredDailyLoad = useRef(Boolean(restoredState?.loaded));
+ useEffect(() => {
+   if (!staff && (!navbarBoardId || !navbarAcademicYearId)) return;
+   if (restoredDailyLoad.current) { restoredDailyLoad.current = false; return; }
+   const timer = window.setTimeout(() => dailyLoader.current(), 200);
+  
+
+ return () => window.clearTimeout(timer);
+ }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.date, f.level, f.group, f.program, f.section, f.department, f.type, f.person, f.view]);
 
  const markAllPresent = () => {
    if (staff) {
@@ -377,6 +402,7 @@ function Screen({ staff = false, say }) {
      if (staff) {
        const payload = {
          attendanceDate: f.date,
+         campusId: num(navbarCampusId),
          staffType: staffType(f.type) || 1,
          departmentId: num(f.department),
          staffAttendances: rows.map((r) => ({
@@ -419,6 +445,9 @@ function Screen({ staff = false, say }) {
 
  const save = async () => {
    const r = editing.record;
+   if (!staff && (!STUDENT_SESSION_STATUSES.includes(editing.morning) || !STUDENT_SESSION_STATUSES.includes(editing.afternoon))) {
+     return say("Choose Present or Absent for both sessions.", "error");
+   }
    const changed = staff
      ? editing.status !== staffStatus(r.status) || (editing.inTime || "") !== (get(r, "inTime") || "") || (editing.outTime || "") !== (get(r, "outTime") || "")
      : editing.morning !== studentSessionStatus(r, "morning") || editing.afternoon !== studentSessionStatus(r, "afternoon");
@@ -430,6 +459,7 @@ function Screen({ staff = false, say }) {
        await apiClient.put(apiEndpoints.staffAttendance.update, {
          facultyId: get(r, "facultyId", "staffId", "id"),
          attendanceDate: f.date,
+         campusId: num(navbarCampusId),
          departmentId: num(f.department) ?? get(r, "departmentId"),
          staffType: staffType(f.type) ?? get(r, "staffType"),
          status: VALUE[editing.status],
@@ -443,6 +473,7 @@ function Screen({ staff = false, say }) {
          attendanceDate: f.date,
          morningStatus: editing.morning !== studentSessionStatus(r, "morning") ? VALUE[editing.morning] : null,
          afternoonStatus: editing.afternoon !== studentSessionStatus(r, "afternoon") ? VALUE[editing.afternoon] : null,
+         campusId: num(navbarCampusId),
          boardId: num(navbarBoardId),
          academicYearId: num(navbarAcademicYearId),
          academicLevelId: num(f.level),
@@ -489,9 +520,13 @@ function Screen({ staff = false, say }) {
      .some((value) => String(value ?? "").toLowerCase().includes(normalizedSearch));
  }).filter((r) => staff ? (!f.status || staffStatus(r.status) === f.status) : (!f.status || [studentSessionStatus(r, "morning"), studentSessionStatus(r, "afternoon")].includes(f.status)));
 
- const totalPages = Math.max(1, Math.ceil(visible.length / ATTENDANCE_PAGE_SIZE));
+ const normalizedThreshold = attendanceThreshold === "" ? 0 : Number(attendanceThreshold);
+ const defaulterRows = f.view === "Defaulters"
+   ? visible.filter((row) => attendancePercentage(row) < normalizedThreshold)
+   : visible;
+ const totalPages = Math.max(1, Math.ceil(defaulterRows.length / ATTENDANCE_PAGE_SIZE));
  const currentPage = Math.min(page, totalPages);
- const pagedRows = visible.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
+ const pagedRows = defaulterRows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
 
  useEffect(() => {
    if (skipInitialPageReset.current) {
@@ -502,27 +537,7 @@ function Screen({ staff = false, say }) {
  }, [rows]);
  useEffect(() => { setPage((current) => Math.min(current, totalPages)); }, [totalPages]);
 
- return (
-   <>
-     <Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} />
-     <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
-     {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
-     {loaded && (f.view === "Monthly Report" ? (
-       <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
-     ) : !staff && f.view === "Defaulters" ? (
-       <Defaulters rows={rows} />
-     ) : (
-       <>
-         {activeHoliday && (
-           <div className="att-holiday-banner">
-             <span className="att-holiday-banner-badge">Official Holiday</span>
-             <strong>{activeHoliday.holidayName || activeHoliday.name}</strong>
-             <span>({activeHoliday.holidayType || "General Holiday"}) — Official institution holiday; attendance is optional.</span>
-           </div>
-         )}
-         {staff ? <StaffSummary rows={visible} /> : <StudentSummary rows={visible} />}
-         <section className={`att-card att-table-card ${staff ? "att-staff-table-card" : ""}`}>
-           <div className={`att-student-search att-records-search-toolbar ${staff ? "att-staff-table-toolbar" : ""}`}>
+ const recordsToolbar = (<div className={`att-student-search att-records-search-toolbar ${staff ? "att-staff-table-toolbar" : ""}`}>
              <div className="att-student-search-box">
                <Search3DIcon size={18} />
                <input
@@ -568,7 +583,31 @@ function Screen({ staff = false, say }) {
                  </>
                ) : null}
              </div>
+           </div>);
+
+ return (
+   <>
+     <Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} search={search} onSearchChange={setSearch} switchView={switchView} />
+
+     {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
+     {loaded && (f.view === "Monthly Report" ? (
+     <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} />
+     ) : !staff && f.view === "Defaulters" ? (
+       <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} onPageChange={setPage} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
+     ) : (
+       <>
+         {activeHoliday && (
+           <div className="att-holiday-banner">
+             <span className="att-holiday-banner-badge">Official Holiday</span>
+             <strong>{activeHoliday.holidayName || activeHoliday.name}</strong>
+             <span>({activeHoliday.holidayType || "General Holiday"}) — Official institution holiday; attendance is optional.</span>
            </div>
+         )}
+         {staff ? <StaffSummary rows={visible} /> : <StudentSummary rows={visible} />}
+         {staff ? <section className="att-card att-staff-record-controls">{recordsToolbar}<StaffAttendanceFilters f={f} update={update} o={options} /></section> : null}
+         {!staff ? <section className="att-card att-student-record-controls">{recordsToolbar}<StudentAttendanceFilters f={f} update={update} o={options} /></section> : null}
+         <section className={`att-card att-table-card ${staff ? "att-staff-table-card" : ""}`}>
+
            <DailyTable
              rows={pagedRows}
              staff={staff}
@@ -600,28 +639,46 @@ function Screen({ staff = false, say }) {
  );
 }
 
-function Filters({ f, update, o, staff, busy, load, exportReport }) {
+function Filters({ f, update, o, staff, busy, load, exportReport, search, onSearchChange, switchView }) {
   const isMonth = f.view === "Monthly Report";
   const label = new Date(`${f.date.slice(0, 7)}-01T00:00:00`)
     .toLocaleDateString("en-US", { month: "long", year: "numeric" })
     .replace(" ", ", ");
-  return <section className="att-card att-filter-card">
-    <div className={`att-filter-grid ${staff ? "att-staff-filter-grid" : "att-student-filter-grid"}`}>
-      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
-      {staff ? <>
-        <Select label="Staff" value={f.person} onChange={update("person")} items={(o.faculty || []).map((item) => ({ id: get(item, "facultyId", "id"), name: `${get(item, "staffName", "name")} (${get(item, "facultyId", "id")})` }))} all="All Staff" />
-        <Select label="Staff Type" value={f.type} onChange={update("type")} items={[{ id: "1", name: "Teaching Staff" }, { id: "2", name: "Non-Teaching Staff" }]} all="All Staff" mutedPlaceholder />
-        <Select label="Department" value={f.department} onChange={update("department")} items={o.departments} all="All Departments" mutedPlaceholder />
-      </> : <>
-        <Select label="Academic Level" value={f.level} onChange={update("level")} items={o.levels} all={o.loadingLevels ? "Loading academic levels..." : "All Academic Levels"} disabled={o.loadingLevels} mutedPlaceholder />
-        <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all={o.loadingGroups ? "Loading groups..." : "All Groups"} disabled={o.loadingGroups} mutedPlaceholder />
-        <Select label="Program" value={f.program} onChange={update("program")} items={o.programs} all={o.loadingPrograms ? "Loading programs..." : "All Programs"} disabled={o.loadingPrograms} mutedPlaceholder />
-        <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all={o.loadingSections ? "Loading sections..." : "All Sections"} disabled={o.loadingSections} mutedPlaceholder />
-      </>}
-      <Select label="Status" value={f.status} onChange={update("status")} items={staff ? STAFF_STATUSES : STUDENT_STATUSES} all="All Status" mutedPlaceholder />
-      <div className="att-filter-action"><button className="cms-btn cms-btn-primary" disabled={busy} onClick={() => load()}>{busy ? "Fetching records…" : "Get Records"}</button>{isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}</div>
+  if (!staff) return <>
+    <div className="att-student-date-card">
+      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label={<>Date <span className="req">*</span></>}><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
+      {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
     </div>
-  </section>;
+    {f.view !== "Attendance" ? <section className="att-card att-student-report-filters"><label className="att-student-top-search"><Search3DIcon size={18} /><input type="search" aria-label="Search students" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search by name, admission no, roll no..." /></label><StudentAttendanceFilters f={f} update={update} o={o} /></section> : null}
+  </>;
+  return <>
+    <div className="att-student-date-card att-staff-date-row">
+      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
+      {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
+    </div>
+    {isMonth ? <section className="att-card att-staff-report-controls"><label className="att-student-top-search"><Search3DIcon size={18} /><input type="search" aria-label="Search staff" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search by staff name or staff ID..." /></label><StaffAttendanceFilters f={f} update={update} o={o} /></section> : null}
+  </>;
+
+}
+
+function StaffAttendanceFilters({ f, update, o }) {
+  return <div className="att-staff-relocated-filters">
+    <Select label="Staff Type" value={f.type} onChange={update("type")} items={[{ id: "1", name: "Teaching" }, { id: "2", name: "Non-Teaching" }]} all="All Staff" />
+    <Select label="Department" value={f.department} onChange={update("department")} items={o.departments} all="All Departments" />
+    <Select label="Status" value={f.status} onChange={update("status")} items={STAFF_STATUSES} all="All Status" />
+  </div>;
+}
+
+function StudentAttendanceFilters({ f, update, o }) {
+  return <div className="att-student-relocated-filters">
+    <Select label="Academic Level" value={f.level} onChange={update("level")} items={o.levels} all="All Academic Levels" disabled={o.loadingLevels} />
+    <Select label="Group" value={f.group} onChange={update("group")} items={o.groups} all="All Groups" disabled={o.loadingGroups} />
+    <Select label="Program" value={f.program} onChange={update("program")} items={o.programs} all="All Programs" disabled={o.loadingPrograms} />
+    <Select label="Section" value={f.section} onChange={update("section")} items={o.sections} all="All Sections" disabled={o.loadingSections} />
+    <Select label="Status" value={f.status} onChange={update("status")} items={STUDENT_STATUSES} all="All Status" />
+  </div>;
 }
 
 function AttendanceViewSection({ view, update, staff }) {
@@ -632,7 +689,7 @@ function StudentSummary({ rows }) {
   const perStudent = rows.map((r) => {
     const m = studentSessionStatus(r, "morning");
     const a = studentSessionStatus(r, "afternoon");
-    if (m === "Present" && a === "Present") return "Present";
+    if (STUDENT_SESSION_STATUSES.includes(m) && STUDENT_SESSION_STATUSES.includes(a)) return dailyStudentStatus(m, a);
     if (m === "Half Day" || a === "Half Day") return "Half Day";
     if ((m === "Present" && a === "Absent") || (a === "Present" && m === "Absent")) return "Half Day";
     if (m === "Present" || a === "Present") return "Present";
@@ -828,6 +885,7 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
   return (
     <Modal
       title={`Edit ${staff ? "Staff" : "Student"} Attendance`}
+      className={staff ? "" : "att-student-edit-modal"}
       onClose={close}
       footer={
         <>
@@ -861,17 +919,20 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
               <div className="att-time-fields">
                 <Select
                   label="Morning"
-                  value={editing.morning}
+                  value={STUDENT_SESSION_STATUSES.includes(editing.morning) ? editing.morning : ""}
+                  all={STUDENT_SESSION_STATUSES.includes(editing.morning) ? undefined : "Choose session status"}
                   onChange={(e) => setEditing({ ...editing, morning: e.target.value })}
-                  items={STUDENT_STATUSES}
+                  items={STUDENT_SESSION_STATUSES}
                 />
                 <Select
                   label="Afternoon"
-                  value={editing.afternoon}
+                  value={STUDENT_SESSION_STATUSES.includes(editing.afternoon) ? editing.afternoon : ""}
+                  all={STUDENT_SESSION_STATUSES.includes(editing.afternoon) ? undefined : "Choose session status"}
                   onChange={(e) => setEditing({ ...editing, afternoon: e.target.value })}
-                  items={STUDENT_STATUSES}
+                  items={STUDENT_SESSION_STATUSES}
                 />
               </div>
+              <p role="status">Daily Status: <strong>{dailyStudentStatus(editing.morning, editing.afternoon)}</strong></p>
             </div>
             <div className="att-detail-history">
               <b>Period Attendance</b>
@@ -924,14 +985,7 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
   const totalPages = Math.max(1, Math.ceil(rows.length / ATTENDANCE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedRows = rows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
-  return (
-    <section className="att-card att-month-card">
-      <header className="att-month-header">
-        <div>
-          <h3>{staff ? "Staff" : "Student"} Monthly Attendance</h3>
-          <p>{headers.length} days · {rows.length} {staff ? "staff" : "students"}</p>
-        </div>
-        <div className="att-month-legend">
+  const monthlyLegend = (<div className="att-month-legend">
           <span><i className="att-month-p">P</i> Present</span>
           <span><i className="att-month-a">A</i> Absent</span>
           {staff ? (
@@ -944,7 +998,15 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
           )}
           <span><i className="att-month-h">H</i> Holiday</span>
           <span><i className="att-month-off">-</i> Non-working day</span>
+        </div>);
+  return (
+    <section className={`att-card att-month-card${staff ? " att-staff-month-card" : ""}`}>
+      <header className="att-month-header">
+        <div>
+          <h3>{staff ? "Staff" : "Student"} Monthly Attendance</h3>
+          <p>{headers.length} days · {rows.length} {staff ? "staff" : "students"}</p>
         </div>
+        {staff ? monthlyLegend : null}
       </header>
       <div className="att-student-search att-records-search-toolbar att-month-search-toolbar">
         <div className="att-student-search-box">
@@ -956,6 +1018,7 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
             placeholder={staff ? "Search by staff name or staff ID..." : "Search by student name, roll no. or admission no..."}
           />
         </div>
+        {!staff ? monthlyLegend : null}
       </div>
       <div className="att-month-scroll">
         <table className="cms-table att-month-table">
@@ -1029,9 +1092,33 @@ function MonthRow({ r, headers, staff }) {
   );
 }
 
-function Defaulters({ rows }) {
+function Defaulters({ rows, totalRows, page, onPageChange, threshold, onThresholdChange }) {
+  const normalizedThreshold = threshold === "" ? 0 : Number(threshold);
   return (
-    <section className="att-card att-table-card">
+    <>
+      <section className="att-card att-defaulter-threshold">
+        <label className="att-field">
+          <span>Attendance Threshold</span>
+          <div className="att-threshold-input">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              inputMode="numeric"
+              value={threshold}
+              onChange={(event) => {
+                const next = event.target.value;
+                if (next === "") return onThresholdChange("");
+                const numberValue = Number(next);
+                if (Number.isFinite(numberValue)) onThresholdChange(Math.min(100, Math.max(0, numberValue)));
+              }}
+            />
+            <span>%</span>
+          </div>
+        </label>
+      </section>
+      <section className="att-card att-table-card">
       <div className="att-scroll">
         <table className="cms-table att-table">
           <thead>
@@ -1042,6 +1129,7 @@ function Defaulters({ rows }) {
               <th>Group</th>
               <th>Section</th>
               <th>Attendance %</th>
+              <th>Shortage %</th>
             </tr>
           </thead>
           <tbody>
@@ -1053,12 +1141,13 @@ function Defaulters({ rows }) {
                   <td>{get(r, "admissionNo", "admissionNumber") || "—"}</td>
                   <td>{get(r, "groupName") || "—"}</td>
                   <td>{get(r, "sectionName") || "—"}</td>
-                  <td>{get(r, "attendancePercentage", "percentage") ?? "—"}%</td>
+                  <td>{attendancePercentage(r)}%</td>
+                  <td>{Math.max(0, normalizedThreshold - attendancePercentage(r)).toFixed(1)}%</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="6">
+                <td colSpan="7">
                   <div className="cms-empty">No students are below this threshold.</div>
                 </td>
               </tr>
@@ -1066,6 +1155,8 @@ function Defaulters({ rows }) {
           </tbody>
         </table>
       </div>
+      <AttendancePagination page={page} totalRows={totalRows} onPageChange={onPageChange} unit="students" />
     </section>
+    </>
   );
 }

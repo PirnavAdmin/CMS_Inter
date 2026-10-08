@@ -21,7 +21,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId);
+            int examId,
+            int? campusId = null);
 
         Task<IEnumerable<RankListDto>> GetRankListAsync(
             int boardId,
@@ -52,7 +53,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
             int academicYearId,
             int academicLevelId,
             int groupId,
-            int examId);
+            int examId,
+            int? campusId = null);
 
         Task<IEnumerable<ResultDto>> DownloadMemoAsync(
             int studentId,

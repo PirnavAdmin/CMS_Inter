@@ -56,6 +56,10 @@ namespace CollegeManagement.API.DTOs.Promotion
         public int StudentId { get; set; }
 
         public string StudentCode { get; set; } = string.Empty;
+        
+        public string AdmissionNo { get; set; } = string.Empty;
+        
+        public string? RollNo { get; set; }
 
         public string StudentName { get; set; } = string.Empty;
 
@@ -295,6 +299,8 @@ namespace CollegeManagement.API.DTOs.Promotion
 
     public class PromotionHistoryQuery
     {
+        public int? CampusId { get; set; }
+
         public int? AcademicYearId { get; set; }
 
         public int? TargetAcademicYearId { get; set; }

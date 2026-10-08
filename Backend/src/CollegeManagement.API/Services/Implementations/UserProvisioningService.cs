@@ -171,6 +171,123 @@ namespace CollegeManagement.API.Services.Implementations
             return await ProvisionUserAsync(genericRequest, connection, transaction);
         }
 
+        public async Task<ParentUserProvisioningResult> ProvisionParentUserAsync(
+            ProvisionParentUserRequest request,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null)
+        {
+            if (request == null)
+            {
+                return ParentUserProvisioningResult.Failed("Parent provisioning request cannot be null.");
+            }
+
+            if (request.StudentId <= 0)
+            {
+                return ParentUserProvisioningResult.Failed("A valid StudentId (> 0) is required for parent account linking.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Email))
+            {
+                return ParentUserProvisioningResult.Failed("Parent/Guardian Email is required.");
+            }
+
+            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+            if (!IsValidEmailFormat(normalizedEmail))
+            {
+                return ParentUserProvisioningResult.Failed($"The parent email address '{request.Email}' is not in a valid format.");
+            }
+
+            // Dynamically resolve canonical Parent role from Roles table
+            var parentRole = await _userRepository.GetRoleByNameAsync("Parent", connection, transaction);
+            if (parentRole == null)
+            {
+                parentRole = await _userRepository.GetRoleByIdAsync(6, connection, transaction);
+                if (parentRole == null)
+                {
+                    return ParentUserProvisioningResult.Failed("Canonical 'Parent' role was not found in Roles table.");
+                }
+            }
+
+            try
+            {
+                // Check if a User account with this ParentGuardianEmail already exists
+                var existingUser = await _userRepository.GetByEmailAsync(normalizedEmail, connection, transaction);
+                if (existingUser != null)
+                {
+                    // Existing Parent Account (e.g. Sibling Admission) -> Link new child without changing credentials
+                    await _userRepository.AddParentStudentMappingAsync(
+                        parentUserId: existingUser.UserId,
+                        studentId: request.StudentId,
+                        relationshipType: string.IsNullOrWhiteSpace(request.RelationshipType) ? "Parent" : request.RelationshipType.Trim(),
+                        isPrimaryContact: true,
+                        connection: connection,
+                        transaction: transaction);
+
+                    _logger.LogInformation("Linked StudentId {StudentId} to existing Parent User account (UserId: {UserId}, Email: {Email})",
+                        request.StudentId, existingUser.UserId, normalizedEmail);
+
+                    return ParentUserProvisioningResult.Succeeded(
+                        userId: existingUser.UserId,
+                        fullName: existingUser.FullName,
+                        email: existingUser.Email,
+                        roleId: existingUser.RoleId,
+                        roleName: parentRole.RoleName,
+                        studentId: request.StudentId,
+                        temporaryPassword: null,
+                        isNewAccount: false);
+                }
+
+                // Brand New Parent Account -> Generate temporary credentials and persist
+                var temporaryPassword = GenerateSecureTemporaryPassword(14);
+                var passwordHash = PasswordHasher.HashPassword(temporaryPassword);
+
+                var parentUser = new User
+                {
+                    FullName = string.IsNullOrWhiteSpace(request.FullName) ? "Parent / Guardian" : request.FullName.Trim(),
+                    Email = normalizedEmail,
+                    PasswordHash = passwordHash,
+                    PhoneNumber = request.PhoneNumber?.Trim() ?? string.Empty,
+                    RoleId = parentRole.RoleId,
+                    StudentId = null,
+                    StaffId = null,
+                    AdminId = null,
+                    IsFirstLogin = true,
+                    IsActive = true,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                var parentUserId = await _userRepository.CreateUserAsync(parentUser, connection, transaction);
+
+                // Insert into ParentStudentMappings bridging table
+                await _userRepository.AddParentStudentMappingAsync(
+                    parentUserId: parentUserId,
+                    studentId: request.StudentId,
+                    relationshipType: string.IsNullOrWhiteSpace(request.RelationshipType) ? "Parent" : request.RelationshipType.Trim(),
+                    isPrimaryContact: true,
+                    connection: connection,
+                    transaction: transaction);
+
+                _logger.LogInformation("Successfully provisioned new Parent User account (UserId: {UserId}, Email: {Email}, RoleId: {RoleId}, StudentId: {StudentId})",
+                    parentUserId, normalizedEmail, parentRole.RoleId, request.StudentId);
+
+                return ParentUserProvisioningResult.Succeeded(
+                    userId: parentUserId,
+                    fullName: parentUser.FullName,
+                    email: parentUser.Email,
+                    roleId: parentRole.RoleId,
+                    roleName: parentRole.RoleName,
+                    studentId: request.StudentId,
+                    temporaryPassword: temporaryPassword,
+                    isNewAccount: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to provision Parent User account for email {Email} and StudentId {StudentId}", normalizedEmail, request.StudentId);
+                return ParentUserProvisioningResult.Failed($"Database error occurred during parent user account provisioning: {ex.Message}");
+            }
+        }
+
         public async Task<UserProvisioningResult> ProvisionUserAsync(
             ProvisionUserRequest request,
             IDbConnection? connection = null,

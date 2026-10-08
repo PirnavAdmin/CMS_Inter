@@ -60,10 +60,15 @@ namespace CollegeManagement.API.DTOs.Staff
         public string Department { get; set; } = string.Empty;
         public int? CampusId { get; set; }
         public string? CampusName { get; set; }
+        public List<int> AssignedCampusIds { get; set; } = new();
+        public List<object> AssignedCampuses { get; set; } = new();
+
         public int? BoardId { get; set; }
         public string? BoardCode { get; set; }
         public string? BoardName { get; set; }
         public string? Board => !string.IsNullOrWhiteSpace(BoardCode) ? BoardCode : BoardName;
+        public List<int> AssignedBoardIds { get; set; } = new();
+        public List<object> AssignedBoards { get; set; } = new();
         
         public DateTime DateOfJoining
         {

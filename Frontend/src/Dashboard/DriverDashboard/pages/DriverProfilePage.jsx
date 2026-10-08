@@ -19,9 +19,12 @@ import {
 } from "lucide-react";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
 import { getProfile, updateProfileContact } from "../../../api/transportDriverApi.js";
+import { SkeletonPage } from "../../../components/common/Ui.jsx";
+import { getDriverIdentity } from "../data/driverIdentity.js";
+import { assignmentProfile } from "../data/driverData.js";
 
 export default function DriverProfilePage() {
-  const [driverProfile, setDriverProfile] = useState({});
+  const [driverProfile, setDriverProfile] = useState(getDriverIdentity);
   const [driverDocuments, setDriverDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -47,8 +50,8 @@ export default function DriverProfilePage() {
       try {
         setLoading(true);
         const res = await getProfile();
-        const data = res.data || res;
-        const profile = data.profile || data || {};
+        const data = res.data?.data || res.data || {};
+        const profile = getDriverIdentity(assignmentProfile(data, data.profile || data.driverProfile || {}));
         setDriverProfile(profile);
         setDriverDocuments(data.documents || data.driverDocuments || []);
         setProfileData({
@@ -84,7 +87,7 @@ export default function DriverProfilePage() {
     triggerToast(`Downloading ${doc.title}...`);
   };
 
-  if (loading) return <div className="dp-page-container"><p>Loading Profile Data...</p></div>;
+  if (loading) return <div className="dp-page-container"><SkeletonPage variant="form" rows={8} /></div>;
   if (error) return <div className="dp-page-container"><p className="dp-text-danger">{error}</p></div>;
 
   return (

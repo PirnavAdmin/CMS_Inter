@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Models;
 
@@ -51,7 +51,9 @@ namespace CollegeManagement.API.Repositories.Interfaces
             return Task.FromResult(bloodGroups);
         }
 
-        Task<string> GenerateAdmissionNumberAsync();
+        Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
+        Task<int> GetActualAdmissionCountAsync(int campusId, int boardId, int academicYearId);
+        Task SyncAdmissionSequenceAsync(int campusId, int boardId, int academicYearId, int correctSequence);
 
         // =====================================================
         // VERIFY / APPROVE / REJECT
@@ -60,6 +62,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> VerifyAsync(
             VerifyStudentAdmissionRequest request);
 
+        Task<bool> ApproveAdmissionRequestAsync(int admissionId, string? remarks);
+        Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks);
         Task<bool> ApproveAsync(
             ApproveStudentAdmissionRequest request,
             string? passwordHash = null,
@@ -90,3 +94,4 @@ namespace CollegeManagement.API.Repositories.Interfaces
             BulkRollNumberAllocationRequest request);
     }
 }
+

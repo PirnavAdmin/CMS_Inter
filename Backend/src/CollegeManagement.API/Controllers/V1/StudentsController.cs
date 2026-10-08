@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using CollegeManagement.API.Common;
 using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
 using CollegeManagement.API.DTOs.Students.Responses;
@@ -195,20 +196,40 @@ namespace CollegeManagement.API.Controllers.V1
 
 
         // =========================================================
-        // GET ALL STUDENTS
+        // GET ALL STUDENTS (SEARCH, FILTER & PAGINATION)
         // =========================================================
 
         [HttpGet]
+        [ProducesResponseType(typeof(PagedResult<StudentListItemDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetAll(
+            [FromQuery] string? search = null,
             [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null,
             [FromQuery] int? academicLevelId = null,
             [FromQuery] int? groupId = null,
             [FromQuery] int? programId = null,
             [FromQuery] int? sectionId = null,
             [FromQuery] string? status = null,
-            [FromQuery] int? campusId = null)
+            [FromQuery] bool? isActive = null,
+            [FromQuery] int? campusId = null,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] int? page = null)
         {
-            var students = await _service.GetAllAsync(boardId, academicLevelId, groupId, programId, sectionId, status, campusId);
+            var effectivePageNumber = page.HasValue && page.Value > 0 ? page.Value : pageNumber;
+            var students = await _service.GetPagedAsync(
+                search,
+                boardId,
+                academicYearId,
+                academicLevelId,
+                groupId,
+                programId,
+                sectionId,
+                status,
+                isActive,
+                campusId,
+                effectivePageNumber,
+                pageSize);
 
             return Ok(students);
         }
@@ -527,25 +548,36 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("search")]
+        [ProducesResponseType(typeof(PagedResult<StudentListItemDto>), StatusCodes.Status200OK)]
         public async Task<IActionResult> Search(
-            [FromQuery] string? search,
-            [FromQuery] int? boardId,
-            [FromQuery] int? academicYearId,
-            [FromQuery] int? academicLevelId,
-            [FromQuery] int? groupId,
-            [FromQuery] int? sectionId,
-            [FromQuery] bool? isActive,
-            [FromQuery] int? campusId = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null,
+            [FromQuery] int? academicLevelId = null,
+            [FromQuery] int? groupId = null,
+            [FromQuery] int? programId = null,
+            [FromQuery] int? sectionId = null,
+            [FromQuery] string? status = null,
+            [FromQuery] bool? isActive = null,
+            [FromQuery] int? campusId = null,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 10,
+            [FromQuery] int? page = null)
         {
-            var students = await _service.SearchAsync(
+            var effectivePageNumber = page.HasValue && page.Value > 0 ? page.Value : pageNumber;
+            var students = await _service.GetPagedAsync(
                 search,
                 boardId,
                 academicYearId,
                 academicLevelId,
                 groupId,
+                programId,
                 sectionId,
+                status,
                 isActive,
-                campusId);
+                campusId,
+                effectivePageNumber,
+                pageSize);
 
             return Ok(students);
         }

@@ -1,0 +1,115 @@
+/* Faculty Reimbursements Styles */
+.faculty-reimbursement-modal {
+  width: min(580px, calc(100vw - 32px)) !important;
+  max-width: 580px !important;
+  max-height: calc(100vh - 100px) !important;
+}
+.faculty-reimbursement-modal .cms-modal-head {
+  padding: 12px 18px;
+}
+.faculty-reimbursement-modal .cms-modal-head h3 {
+  font-size: 15px;
+}
+.faculty-reimbursement-modal .cms-modal-body {
+  padding: 14px 18px;
+}
+.faculty-reimbursement-modal .faculty-reimbursement-form {
+  gap: 10px 14px;
+}
+.faculty-reimbursement-modal .cms-field {
+  gap: 4px;
+}
+.faculty-reimbursement-modal .cms-field label {
+  min-height: 17px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.faculty-reimbursement-modal .cms-field input,
+.faculty-reimbursement-modal .cms-field select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.faculty-reimbursement-modal .cms-field textarea {
+  min-height: 68px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.faculty-reimbursement-modal .sp-proof-upload-box {
+  min-height: 68px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+.faculty-reimbursement-modal .sp-proof-upload-box > div {
+  min-width: 0;
+}
+.faculty-reimbursement-modal .sp-proof-upload-box > div span {
+  font-size: 11.5px !important;
+  line-height: 1.35;
+}
+.faculty-reimbursement-modal .cms-modal-foot {
+  padding: 10px 18px;
+  gap: 8px;
+}
+.faculty-reimbursement-modal .cms-modal-foot .cms-btn {
+  min-height: 40px;
+  padding: 9px 15px;
+  font-size: 12.5px;
+}
+@media (max-width: 600px) {
+  .faculty-reimbursement-modal .faculty-reimbursement-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sp-proof-upload-box {
+  border: 1.5px dashed var(--cms-border, #E6E9EE);
+  background: var(--cms-subtle, #f9fafb);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: border-color 0.2s, background 0.2s;
+}
+.sp-proof-upload-box:hover {
+  border-color: var(--cms-primary);
+  background: var(--cms-primary-soft);
+}
+.sp-proof-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid var(--cms-border);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--cms-text);
+}
+
+.sp-proof-upload {
+  border: 1.5px dashed var(--cms-border);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  background: var(--cms-bg);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.sp-proof-upload:hover { border-color: var(--cms-primary); }
+.sp-proof-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid var(--cms-border);
+  border-radius: 8px;
+  margin-top: 8px;
+  font-size: 12.5px;
+}

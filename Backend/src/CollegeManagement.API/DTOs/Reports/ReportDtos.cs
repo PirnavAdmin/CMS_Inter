@@ -327,12 +327,35 @@ public class StudentPerformanceReportDto
 public class AuditLogDto
 {
     public long AuditLogId { get; set; }
-    public string? UserName { get; set; }
+    public string Id => $"AUD-{CreatedAt:yyyyMMdd}-{AuditLogId:D3}";
+    public string Time => CreatedAt.ToString("dd MMM yyyy, hh:mm tt");
+    public string? Actor { get; set; }
+    public string? Role { get; set; }
     public string? Action { get; set; } = string.Empty;
-    public string? EntityName { get; set; } = string.Empty;
-    public int? EntityId { get; set; }
-    public string? Description { get; set; }
+    public string? Module { get; set; }
+    public string? Target { get; set; }
+    public string? Severity { get; set; } = "Info";
+    public string? Status { get; set; } = "Success";
+    public string? Ip { get; set; }
+    public string? Device { get; set; }
+    public string? Details { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public class AuditLogStatsDto
+{
+    public int EventsToday { get; set; }
+    public int SecurityAlerts { get; set; }
+    public int ActiveAdministrators { get; set; }
+}
+
+public class AuditLogPagedResultDto
+{
+    public bool Success { get; set; } = true;
+    public int Total { get; set; }
+    public AuditLogStatsDto Stats { get; set; } = new();
+    public List<string> Modules { get; set; } = new();
+    public List<AuditLogDto> Records { get; set; } = new();
 }
 
 public class CustomReportRequestDto : ReportFilterDto

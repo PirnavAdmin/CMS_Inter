@@ -14,6 +14,10 @@ namespace CollegeManagement.API.DTOs.Students.Responses
         public string? Nationality { get; set; }
         public string? Religion { get; set; }
 
+        // Campus
+        public int? CampusId { get; set; }
+        public string? CampusName { get; set; }
+
         // Admission
         public string AdmissionNo { get; set; } = string.Empty;
         public DateTime AdmissionDate { get; set; }
@@ -45,13 +49,11 @@ namespace CollegeManagement.API.DTOs.Students.Responses
         // Parent / Guardian
         public string? FatherName { get; set; }
         public string? FatherMobile { get; set; }
-        public string? FatherEmail { get; set; }
         public string? MotherName { get; set; }
         public string? MotherMobile { get; set; }
-        public string? MotherEmail { get; set; }
         public string? GuardianName { get; set; }
         public string? GuardianMobile { get; set; }
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
         // Previous Education
         public string? PreviousSchool { get; set; }
@@ -96,3 +98,4 @@ namespace CollegeManagement.API.DTOs.Students.Responses
         public string? HallTicketNumber { get; set; }
     }
 }
+

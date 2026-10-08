@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using CollegeManagement.API.Dtos.Transport.Attendant;
 using CollegeManagement.API.Services.Interfaces;
 
@@ -63,45 +64,52 @@ namespace CollegeManagement.API.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(string id, [FromBody] UpdateTransportAttendantDto dto)
         {
-            var existing = await _service.GetByIdOrNameAsync(id);
-            if (existing != null)
+            try
             {
+                var existing = await _service.GetByIdOrNameAsync(id);
+                if (existing == null)
+                {
+                    return NotFound(new { success = false, message = "Bus attendant not found." });
+                }
+
                 var updated = await _service.UpdateAsync(existing.AttendantId, dto, null);
                 if (updated)
                 {
                     var updatedDto = await _service.GetByIdAsync(existing.AttendantId);
                     return Ok(new { success = true, message = "Bus attendant updated successfully.", data = updatedDto });
                 }
+
+                return BadRequest(new { success = false, message = "Failed to update bus attendant." });
             }
-
-            var createDto = new CreateTransportAttendantDto
+            catch (Exception ex)
             {
-                AttendantName = !string.IsNullOrWhiteSpace(dto.AttendantName) ? dto.AttendantName : id,
-                MobileNumber = !string.IsNullOrWhiteSpace(dto.MobileNumber) ? dto.MobileNumber : "",
-                AlternateMobileNumber = dto.AlternateMobileNumber,
-                Address = dto.Address,
-                BloodGroup = dto.BloodGroup,
-                EmergencyContactName = dto.EmergencyContactName,
-                EmergencyContactNumber = dto.EmergencyContactNumber,
-                AssignedVehicleId = dto.AssignedVehicleId,
-                Status = dto.Status
-            };
-
-            var newId = await _service.CreateAsync(createDto, null);
-            var newDto = await _service.GetByIdAsync(newId);
-            return Ok(new { success = true, message = "Bus attendant updated successfully.", data = newDto });
+                return BadRequest(new { success = false, message = ex.Message });
+            }
         }
 
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(string id)
         {
+            var userId = GetCurrentUserId();
             var existing = await _service.GetByIdOrNameAsync(id);
             if (existing != null)
             {
-                await _service.DeleteAsync(existing.AttendantId, null);
+                await _service.DeleteAsync(existing.AttendantId, userId);
             }
 
             return Ok(new { success = true, message = "Bus attendant deleted successfully." });
+        }
+
+        private long? GetCurrentUserId()
+        {
+            var claim = User.FindFirst("UserId")
+                     ?? User.FindFirst(ClaimTypes.NameIdentifier)
+                     ?? User.FindFirst("sub");
+
+            if (claim != null && long.TryParse(claim.Value, out var id) && id > 0)
+                return id;
+
+            return null;
         }
     }
 }

@@ -76,11 +76,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                         TemplateCode = "BONAFIDE_CERT",
                         Title = "Bonafide Certificate",
                         Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}} during the academic year {{academic_year}}.",
+                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} is a bonafide student of Pirnav College (Intermediate / Junior College), Vijayawada. He/She is studying in {{group_name}} Group, {{academic_level}}, Section {{section}} during the academic year {{academic_year}}.",
                         PlaceholdersJson = JsonSerializer.Serialize(new List<string>
                         {
-                            "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
-                            "{{group_name}}", "{{academic_level}}", "{{academic_year}}", "{{purpose}}",
+                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
+                            "{{group_name}}", "{{academic_level}}", "{{academic_year}}", "{{section}}", "{{purpose}}",
                             "{{certificate_number}}", "{{issue_date}}", "{{place}}"
                         }),
                         IsActive = true,
@@ -93,11 +93,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                         TemplateCode = "STUDY_CERT",
                         Title = "Study Certificate",
                         Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group and appeared for the Intermediate Public Examination conducted by the {{board_name}}.",
+                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college during the period from {{study_from}} to {{study_to}} in {{group_name}} Group (Section {{section}}) and appeared for the Intermediate Public Examination conducted by the {{board_name}}.",
                         PlaceholdersJson = JsonSerializer.Serialize(new List<string>
                         {
-                            "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
-                            "{{study_from}}", "{{study_to}}", "{{group_name}}", "{{board_name}}",
+                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
+                            "{{study_from}}", "{{study_to}}", "{{group_name}}", "{{board_name}}", "{{section}}",
                             "{{certificate_number}}", "{{issue_date}}", "{{place}}"
                         }),
                         IsActive = true,
@@ -110,11 +110,11 @@ namespace CollegeManagement.API.Repositories.Implementations
                         TemplateCode = "CONDUCT_CERT",
                         Title = "Conduct Certificate",
                         Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this institution from {{study_from}} to {{study_to}}.\nDuring his/her tenure in this college, his/her character and conduct have been {{conduct_rating}}.",
+                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this institution from {{study_from}} to {{study_to}} (Section {{section}}).\nDuring his/her tenure in this college, his/her character and conduct have been {{conduct_rating}}.",
                         PlaceholdersJson = JsonSerializer.Serialize(new List<string>
                         {
-                            "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
-                            "{{conduct_rating}}", "{{study_from}}", "{{study_to}}",
+                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
+                            "{{conduct_rating}}", "{{study_from}}", "{{study_to}}", "{{section}}",
                             "{{certificate_number}}", "{{issue_date}}", "{{place}}"
                         }),
                         IsActive = true,
@@ -127,12 +127,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                         TemplateCode = "TRANSFER_CERT",
                         Title = "Transfer Certificate",
                         Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}} has studied in this college from {{study_from}} to {{study_to}}.\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
+                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}} has studied in this college from {{study_from}} to {{study_to}} (Section {{section}}).\nHe/She is hereby relieved from this institution as he/she is seeking admission elsewhere. There are no dues towards the college.\nWe wish him/her all the best for his/her future endeavours.",
                         PlaceholdersJson = JsonSerializer.Serialize(new List<string>
                         {
-                            "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
+                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
                             "{{mother_name}}", "{{dob}}", "{{date_of_admission}}", "{{study_from}}",
-                            "{{study_to}}", "{{reason_for_leaving}}", "{{dues_cleared}}",
+                            "{{study_to}}", "{{reason_for_leaving}}", "{{dues_cleared}}", "{{section}}",
                             "{{certificate_number}}", "{{issue_date}}", "{{place}}"
                         }),
                         IsActive = true,
@@ -145,12 +145,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                         TemplateCode = "CUSTOM_CERT",
                         Title = "Others",
                         Category = "Certificate",
-                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Student ID {{student_id}}.\nThis is to certify that {{custom_body}}.",
+                        ContentBody = "This is to certify that Mr./Ms. {{student_name}} (S/o / D/o {{father_name}}) bearing Admission Number {{admission_no}}.\nThis is to certify that {{custom_body}}.",
                         PlaceholdersJson = JsonSerializer.Serialize(new List<string>
                         {
-                            "{{student_name}}", "{{student_id}}", "{{admission_no}}", "{{father_name}}",
+                            "{{student_name}}", "{{admission_no}}", "{{father_name}}",
                             "{{custom_body}}", "{{purpose}}", "{{certificate_number}}",
-                            "{{issue_date}}", "{{place}}"
+                            "{{issue_date}}", "{{place}}", "{{board_name}}", "{{section}}"
                         }),
                         IsActive = true,
                         Version = "1",

@@ -21,7 +21,9 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
 
         // Academic Relations
-        public int? CampusId { get; set; } = 1; public int? AdmittedById { get; set; }
+        public int? CampusId { get; set; } = 1; 
+        public int? SourceCampusId { get; set; }
+        public int? AdmittedById { get; set; }
 
         [Required]
         public int BoardId { get; set; }
@@ -85,8 +87,6 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? FatherMobile { get; set; }
 
-        public string? FatherEmail { get; set; }
-
 
         // Mother - Optional
         public string? MotherName { get; set; }
@@ -95,22 +95,19 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
 
         public string? MotherMobile { get; set; }
 
-        public string? MotherEmail { get; set; }
-
 
         // Guardian - Optional
         public string? GuardianName { get; set; }
 
         public string? GuardianMobile { get; set; }
 
-        public string? GuardianEmail { get; set; }
+        public string? ParentGuardianEmail { get; set; }
 
 
         // Other
         public decimal? AnnualIncome { get; set; }
         // ADD THIS
-        [Required]
-        public int FeeStructureId { get; set; }
+        public int? FeeStructureId { get; set; }
         public string? PaymentPlan { get; set; }
 
         public string? ScholarshipStatus { get; set; }
@@ -163,3 +160,4 @@ namespace CollegeManagement.API.DTOs.StudentAdmission
         public string? HallTicketNumber { get; set; }
     }
 }
+

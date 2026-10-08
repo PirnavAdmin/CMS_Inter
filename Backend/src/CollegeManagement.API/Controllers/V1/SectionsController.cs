@@ -31,6 +31,12 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(IEnumerable<SectionResponse>), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetSections([FromQuery] SectionFilterDto filter)
         {
+            filter ??= new SectionFilterDto();
+            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+            {
+                filter.CampusId = ResolveCampusId();
+            }
+
             var sections = await _sectionService.GetAllSectionsAsync(filter);
             return Ok(sections);
         }
@@ -57,6 +63,11 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> CreateSection([FromBody] CreateSectionRequest request)
         {
+            if (request.CampusId <= 0)
+            {
+                request.CampusId = ResolveCampusId();
+            }
+
             var result = await _sectionService.CreateSectionAsync(request);
             return CreatedAtAction(nameof(GetSection), new { id = result.SectionId }, result);
         }
@@ -71,6 +82,11 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> CreateMultipleSections([FromBody] BulkCreateSectionsRequest request)
         {
+            if (request.CampusId <= 0)
+            {
+                request.CampusId = ResolveCampusId();
+            }
+
             var result = await _sectionService.CreateMultipleSectionsAsync(request);
             return Created(string.Empty, result);
         }
@@ -85,6 +101,11 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status409Conflict)]
         public async Task<IActionResult> UpdateSection(int id, [FromBody] UpdateSectionRequest request)
         {
+            if (request.CampusId <= 0)
+            {
+                request.CampusId = ResolveCampusId();
+            }
+
             var result = await _sectionService.UpdateSectionAsync(id, request);
             return Ok(result);
         }
@@ -110,6 +131,26 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var sections = await _sectionService.GetSectionsByGroupAsync(groupId);
             return Ok(sections);
+        }
+
+        private int ResolveCampusId(int? explicitlyProvided = null)
+        {
+            if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
+                return explicitlyProvided.Value;
+
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var headerVal) &&
+                int.TryParse(headerVal.FirstOrDefault(), out int campusId) && campusId > 0)
+            {
+                return campusId;
+            }
+
+            var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+            if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+            {
+                return claimCampusId;
+            }
+
+            return 1;
         }
     }
 }

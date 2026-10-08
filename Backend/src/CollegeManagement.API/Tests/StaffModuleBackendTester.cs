@@ -639,5 +639,6 @@ namespace CollegeManagement.API.Tests
     public class NullTestEmailService : CollegeManagement.API.Interfaces.IEmailService
     {
         public Task SendEmailAsync(string toEmail, string subject, string body) => Task.CompletedTask;
+        public Task SendEmailWithAttachmentAsync(string toEmail, string subject, string body, byte[] attachmentBytes, string attachmentFileName, string contentType = "application/pdf") => Task.CompletedTask;
     }
 }

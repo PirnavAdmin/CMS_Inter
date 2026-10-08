@@ -641,32 +641,10 @@ namespace CollegeManagement.API.Services.Implementations
                 var cell = ws.Cell(1, col + 1);
                 cell.Value = headers[col];
                 cell.Style.Font.Bold = true;
-                cell.Style.Font.FontSize = 11;
-                cell.Style.Font.FontColor = XLColor.White;
-                cell.Style.Fill.BackgroundColor = XLColor.FromArgb(30, 64, 175);
-                cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-                cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-                cell.Style.Border.OutsideBorderColor = XLColor.FromArgb(203, 213, 225);
             }
-            ws.Row(1).Height = 26;
+            ws.Row(1).Height = 20;
 
-            // Sample guidance rows
-            var sampleDepts = new[]
-            {
-                new { Code = "DEP_CSE", Name = "Computer Science and Engineering", Status = "Active" },
-                new { Code = "DEP_ECE", Name = "Electronics and Communication Engineering", Status = "Active" },
-                new { Code = "DEP_MEC", Name = "Mechanical Engineering", Status = "Active" }
-            };
 
-            for (int r = 0; r < sampleDepts.Length; r++)
-            {
-                var rowIdx = r + 2;
-                ws.Cell(rowIdx, 1).Value = sampleDepts[r].Code;
-                ws.Cell(rowIdx, 2).Value = sampleDepts[r].Name;
-                ws.Cell(rowIdx, 3).Value = sampleDepts[r].Status;
-                ws.Row(rowIdx).Height = 20;
-            }
 
             ws.Column(1).Width = 24;
             ws.Column(2).Width = 42;
@@ -694,18 +672,19 @@ namespace CollegeManagement.API.Services.Implementations
                     var cell = ws.Cell(1, col + 1);
                     cell.Value = headers[col];
                     cell.Style.Font.Bold = true;
-                    cell.Style.Font.FontSize = 11;
-                    cell.Style.Font.FontColor = XLColor.White;
-                    cell.Style.Fill.BackgroundColor = XLColor.FromArgb(30, 64, 175); // Institutional Blue
-                    cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                    cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-                    cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-                    cell.Style.Border.OutsideBorderColor = XLColor.FromArgb(203, 213, 225);
                 }
-                ws.Row(1).Height = 26;
+                ws.Row(1).Height = 20;
                 ws.Column(1).Width = 24;
                 ws.Column(2).Width = 42;
-                ws.Column(3).Width = 16;
+                if (headers.Length == 4)
+                {
+                    ws.Column(3).Width = 24;
+                    ws.Column(4).Width = 16;
+                }
+                else
+                {
+                    ws.Column(3).Width = 16;
+                }
                 ws.ShowGridLines = true;
             }
 
@@ -713,37 +692,11 @@ namespace CollegeManagement.API.Services.Implementations
             var deptWs = workbook.Worksheets.Add("Departments");
             var deptHeaders = new[] { "Department Code", "Department Name", "Status" };
             ApplyHeaderStyle(deptWs, deptHeaders);
-            var sampleDepts = new[]
-            {
-                new { Code = "DEP_CSE", Name = "Computer Science and Engineering", Status = "Active" },
-                new { Code = "DEP_ECE", Name = "Electronics and Communication Engineering", Status = "Active" }
-            };
-            for (int r = 0; r < sampleDepts.Length; r++)
-            {
-                var rowIdx = r + 2;
-                deptWs.Cell(rowIdx, 1).Value = sampleDepts[r].Code;
-                deptWs.Cell(rowIdx, 2).Value = sampleDepts[r].Name;
-                deptWs.Cell(rowIdx, 3).Value = sampleDepts[r].Status;
-                deptWs.Row(rowIdx).Height = 20;
-            }
 
-            // Sheet 2: Designations (3 fields: Designation Code, Designation Name, Status)
+            // Sheet 2: Designations (4 fields: Designation Code, Designation Name, Department Name, Status)
             var desigWs = workbook.Worksheets.Add("Designations");
-            var desigHeaders = new[] { "Designation Code", "Designation Name", "Status" };
+            var desigHeaders = new[] { "Designation Code", "Designation Name", "Department Name", "Status" };
             ApplyHeaderStyle(desigWs, desigHeaders);
-            var sampleDesigs = new[]
-            {
-                new { Code = "DES_PROF", Name = "Professor", Status = "Active" },
-                new { Code = "DES_ASST_PROF", Name = "Assistant Professor", Status = "Active" }
-            };
-            for (int r = 0; r < sampleDesigs.Length; r++)
-            {
-                var rowIdx = r + 2;
-                desigWs.Cell(rowIdx, 1).Value = sampleDesigs[r].Code;
-                desigWs.Cell(rowIdx, 2).Value = sampleDesigs[r].Name;
-                desigWs.Cell(rowIdx, 3).Value = sampleDesigs[r].Status;
-                desigWs.Row(rowIdx).Height = 20;
-            }
 
             using var ms = new MemoryStream();
             workbook.SaveAs(ms);

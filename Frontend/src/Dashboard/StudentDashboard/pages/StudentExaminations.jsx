@@ -70,14 +70,13 @@ export default function StudentExaminations() {
   }, [profileLoading, student]);
 
   const { upcoming, completed, schedules } = useMemo(() => {
-    const today = dateValue(new Date().toISOString());
     const upcomingRows = [];
     const completedRows = [];
     const scheduleRows = [];
     examinations.forEach((exam) => {
-      const status = String(exam.status || "").toUpperCase();
-      const endDate = dateValue(exam.endDate || exam.startDate);
-      (status === "COMPLETED" || (endDate && endDate < today) ? completedRows : upcomingRows).push(exam);
+      const status = String(exam.status || "").trim().toUpperCase();
+      // Completion follows the API status; past dates do not complete an exam.
+      (status === "COMPLETED" ? completedRows : upcomingRows).push(exam);
       exam.schedules.forEach((schedule) => scheduleRows.push({ exam, schedule }));
     });
     scheduleRows.sort((left, right) => String(left.schedule.examDate || "").localeCompare(String(right.schedule.examDate || "")));
@@ -110,6 +109,6 @@ export default function StudentExaminations() {
       <StudentCard title="Exam Timetable / Schedule"><StudentDataTable columns={["Exam Name", "Exam Type", "Subject", "Exam Date", "Time", "Room / Hall", "Maximum Marks", "Status"]} rows={pageRows(scheduleRows, schedulePage)} statusColumns={[7]} empty="No examination schedule is available."/><Pagination page={schedulePage} total={scheduleRows.length} label="schedules" onChange={setSchedulePage}/></StudentCard>
       <StudentCard title="Completed Exams"><StudentDataTable columns={["Exam Name", "Exam Type", "Dates", "Status"]} rows={pageRows(completedRows, completedPage)} statusColumns={[3]} empty="No completed examinations."/><Pagination page={completedPage} total={completedRows.length} label="examinations" onChange={setCompletedPage}/></StudentCard>
     </> : null}
-    <StudentCard title="Examination Instructions"><ul className="sp-list"><li>Report to the examination hall at least 20 minutes before the scheduled time.</li><li>Carry your college identity card and required stationery.</li><li>Electronic devices are not permitted inside the hall.</li></ul></StudentCard>
+
   </div>;
 }

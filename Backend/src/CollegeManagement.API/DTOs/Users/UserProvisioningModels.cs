@@ -167,4 +167,85 @@ namespace CollegeManagement.API.DTOs.Users
             };
         }
     }
+
+    /// <summary>
+    /// Request model specifically for Parent / Guardian account provisioning.
+    /// </summary>
+    public class ProvisionParentUserRequest
+    {
+        [Required]
+        public int StudentId { get; set; }
+
+        [Required]
+        [StringLength(100)]
+        public string FullName { get; set; } = string.Empty;
+
+        [Required]
+        [EmailAddress]
+        [StringLength(100)]
+        public string Email { get; set; } = string.Empty;
+
+        [StringLength(15)]
+        [Phone]
+        public string? PhoneNumber { get; set; }
+
+        [StringLength(50)]
+        public string RelationshipType { get; set; } = "Parent";
+    }
+
+    /// <summary>
+    /// Operational result model returned upon parent user account provisioning.
+    /// Distinguishes between brand-new parent accounts and existing accounts linked to a new sibling.
+    /// </summary>
+    public class ParentUserProvisioningResult
+    {
+        public bool Success { get; set; }
+        public bool IsNewAccount { get; set; }
+        public int? UserId { get; set; }
+        public string? FullName { get; set; }
+        public string? Email { get; set; }
+        public int RoleId { get; set; }
+        public string? RoleName { get; set; }
+        public int StudentId { get; set; }
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// Plaintext temporary password for newly provisioned accounts (null for existing linked accounts).
+        /// </summary>
+        [JsonIgnore]
+        public string? TemporaryPassword { get; set; }
+
+        public static ParentUserProvisioningResult Failed(string errorMessage)
+        {
+            return new ParentUserProvisioningResult
+            {
+                Success = false,
+                ErrorMessage = errorMessage
+            };
+        }
+
+        public static ParentUserProvisioningResult Succeeded(
+            int userId,
+            string fullName,
+            string email,
+            int roleId,
+            string? roleName,
+            int studentId,
+            string? temporaryPassword,
+            bool isNewAccount)
+        {
+            return new ParentUserProvisioningResult
+            {
+                Success = true,
+                IsNewAccount = isNewAccount,
+                UserId = userId,
+                FullName = fullName,
+                Email = email,
+                RoleId = roleId,
+                RoleName = roleName,
+                StudentId = studentId,
+                TemporaryPassword = temporaryPassword
+            };
+        }
+    }
 }

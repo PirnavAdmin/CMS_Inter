@@ -642,7 +642,8 @@ END //
 
 DROP PROCEDURE IF EXISTS `sp_GetRoomByCode` //
 CREATE PROCEDURE `sp_GetRoomByCode`(
-    IN p_RoomCode VARCHAR(50)
+    IN p_RoomCode VARCHAR(50),
+    IN p_CampusId INT
 )
 BEGIN
     SELECT 
@@ -662,8 +663,9 @@ BEGIN
         CreatedAt,
         UpdatedAt
     FROM `Rooms`
-    WHERE LOWER(TRIM(RoomCode)) = LOWER(TRIM(p_RoomCode))
-       OR LOWER(TRIM(RoomNumber)) = LOWER(TRIM(p_RoomCode))
+    WHERE (LOWER(TRIM(RoomCode)) = LOWER(TRIM(p_RoomCode))
+           OR LOWER(TRIM(RoomNumber)) = LOWER(TRIM(p_RoomCode)))
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId = p_CampusId)
     LIMIT 1;
 END //
 
@@ -698,10 +700,13 @@ BEGIN
     FROM `Sections` s
     WHERE s.IsActive = 1
       AND (
-          (p_RoomId IS NOT NULL AND p_RoomId > 0 AND s.RoomId = p_RoomId)
-          OR (p_RoomCode IS NOT NULL AND p_RoomCode <> '' AND s.RoomId IN (
-              SELECT r.RoomId FROM `Rooms` r WHERE r.RoomCode = p_RoomCode OR r.RoomNumber = p_RoomCode
-          ))
+          CASE 
+              WHEN p_RoomId IS NOT NULL AND p_RoomId > 0 THEN s.RoomId = p_RoomId
+              WHEN p_RoomCode IS NOT NULL AND p_RoomCode <> '' THEN s.RoomId IN (
+                  SELECT r.RoomId FROM `Rooms` r WHERE r.RoomCode = p_RoomCode OR r.RoomNumber = p_RoomCode
+              )
+              ELSE FALSE
+          END
       );
 END //
 

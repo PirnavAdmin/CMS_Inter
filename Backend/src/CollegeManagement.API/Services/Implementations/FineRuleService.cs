@@ -27,6 +27,9 @@ namespace CollegeManagement.API.Services.Implementations
                 FineType = request.FineType,
                 FineAmount = request.FineAmount,
                 GracePeriod = request.GracePeriod,
+                CampusId = request.CampusId,
+                BoardId = request.BoardId,
+                AcademicYearId = request.AcademicYearId,
                 Status = request.Status,
                 CreatedAt = System.DateTime.UtcNow,
                 UpdatedAt = System.DateTime.UtcNow
@@ -35,9 +38,9 @@ namespace CollegeManagement.API.Services.Implementations
             return created.FineRuleId;
         }
 
-        public async Task<IEnumerable<FineRuleDto>> GetAllAsync()
+        public async Task<IEnumerable<FineRuleDto>> GetAllAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            var rules = await _repository.GetAllAsync();
+            var rules = await _repository.GetAllAsync(campusId, boardId, academicYearId);
             return rules.Select(r => new FineRuleDto
             {
                 FineRuleId = r.FineRuleId,
@@ -46,6 +49,9 @@ namespace CollegeManagement.API.Services.Implementations
                 ApplicableFeeName = r.ApplicableFee?.FeeTypeName ?? "",
                 FineType = r.FineType,
                 FineAmount = r.FineAmount,
+                CampusId = r.CampusId,
+                BoardId = r.BoardId,
+                AcademicYearId = r.AcademicYearId,
                 GracePeriod = r.GracePeriod,
                 Status = r.Status
             });
@@ -63,6 +69,9 @@ namespace CollegeManagement.API.Services.Implementations
                 ApplicableFeeName = r.ApplicableFee?.FeeTypeName ?? "",
                 FineType = r.FineType,
                 FineAmount = r.FineAmount,
+                CampusId = r.CampusId,
+                BoardId = r.BoardId,
+                AcademicYearId = r.AcademicYearId,
                 GracePeriod = r.GracePeriod,
                 Status = r.Status
             };
@@ -78,6 +87,9 @@ namespace CollegeManagement.API.Services.Implementations
             existing.FineType = request.FineType;
             existing.FineAmount = request.FineAmount;
             existing.GracePeriod = request.GracePeriod;
+            existing.CampusId = request.CampusId;
+            existing.BoardId = request.BoardId;
+            existing.AcademicYearId = request.AcademicYearId;
             existing.Status = request.Status;
             existing.UpdatedAt = System.DateTime.UtcNow;
 

@@ -17,6 +17,7 @@ import {
   updateStaffSubjectAllocation,
   deleteStaffSubjectAllocation,
 } from "../../api/staffApi";
+import { SkeletonTable } from "../../components/common/Ui.jsx";
 import "./StaffSubjectAllocation.css";
 
 const BOARDS = ["State Board (BIE Telangana/AP)", "CBSE", "ICSE", "Autonomous"];
@@ -407,10 +408,7 @@ const StaffSubjectAllocation = () => {
 
         <div className="ssa-table-wrapper">
           {loading ? (
-            <div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
-              <FiRefreshCw className="spin" size={24} />
-              <p style={{ marginTop: "8px" }}>Loading subject allocations...</p>
-            </div>
+            <SkeletonTable columns={6} rows={6} />
           ) : allocations.length === 0 ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
               <p>No subjects currently allocated for this staff member.</p>

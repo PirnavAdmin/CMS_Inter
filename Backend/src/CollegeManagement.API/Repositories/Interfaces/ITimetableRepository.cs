@@ -10,6 +10,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<(IEnumerable<TimetableResponseDto> Items, int TotalCount)> GetPagedAsync(TimetableQueryParams queryParams);
         Task<IEnumerable<TimetableResponseDto>> GetByFacultyIdAsync(int facultyId, int? academicYearId = null, int? campusId = null);
         Task<IEnumerable<TimetableResponseDto>> GetBySectionIdAsync(int sectionId, int? academicYearId = null, bool? isPublished = null, int? campusId = null);
+        Task<IEnumerable<TimetableResponseDto>> GetBySectionIdsBatchAsync(IEnumerable<int> sectionIds, int? academicYearId = null, bool? isPublished = null, int? campusId = null);
+        Task<string?> CheckSlotConflictAsync(int academicYearId, int sectionId, int staffId, int roomId, int dayOfWeek, int periodId, int? excludeId = null);
         Task<int> AddAsync(CreateTimetableDto dto);
         Task UpdateAsync(int id, UpdateTimetableDto dto);
         Task DeleteAsync(int id);

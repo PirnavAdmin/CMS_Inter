@@ -96,7 +96,7 @@ export default function StudentTimetable() {
             const isToday = day === today;
             const dayEntries = timetable.get(day) || [];
             return <tr key={day} className={isToday ? "is-today" : ""}>
-              <th scope="row">{day}{isToday ? <small>Today</small> : null}</th>
+              <th scope="row">{day}</th>
               {columns.map((column) => {
                 const entry = findEntry(dayEntries, column);
                 if (column.breakType) return <td key={column.key} className={`sp-timetable-break is-${column.breakType}`}>{entry?.periodName || column.label}</td>;

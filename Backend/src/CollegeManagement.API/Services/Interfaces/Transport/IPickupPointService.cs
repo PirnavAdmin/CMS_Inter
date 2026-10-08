@@ -18,5 +18,8 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<IEnumerable<PickupPointLookupDto>> GetLookupAsync(long? routeId);
 
         Task<PickupPointDto?> GetByIdOrNameAsync(string pickupIdOrName);
+        Task<bool> ExistsAsync(long routeId, string pickupPointName, long? excludePickupPointId = null);
+        Task<bool> SequenceExistsAsync(long routeId, int sequenceNo, long? excludePickupPointId = null);
     }
 }
+

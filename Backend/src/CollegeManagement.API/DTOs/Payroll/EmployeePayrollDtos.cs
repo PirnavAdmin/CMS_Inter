@@ -28,6 +28,7 @@ namespace CollegeManagement.API.DTOs.Payroll
 
         public DateTime? EffectiveFrom { get; set; }
         public DateTime? EffectiveTo { get; set; }
+        public int? CampusId { get; set; }
     }
 
     public class AssignSalaryStructureRequest

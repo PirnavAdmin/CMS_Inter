@@ -44,6 +44,16 @@ namespace CollegeManagement.API.Helpers
         int? GetAdminId(ClaimsPrincipal? principal);
 
         /// <summary>
+        /// Extracts the Designation from claims if present.
+        /// </summary>
+        string? GetDesignation(ClaimsPrincipal? principal);
+
+        /// <summary>
+        /// Extracts the EmployeeId from claims if present.
+        /// </summary>
+        string? GetEmployeeId(ClaimsPrincipal? principal);
+
+        /// <summary>
         /// Extracts the canonical RoleName (ClaimTypes.Role) from claims.
         /// </summary>
         string? GetRole(ClaimsPrincipal? principal);

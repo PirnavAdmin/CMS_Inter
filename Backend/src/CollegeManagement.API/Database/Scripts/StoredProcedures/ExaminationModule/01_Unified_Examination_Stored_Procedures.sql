@@ -52,6 +52,7 @@ BEGIN
     SELECT 
         e.ExamId,
         e.ExamId AS ExaminationId,
+        COALESCE(e.CampusId, 1) AS CampusId,
         COALESCE(e.ExamCode, CONCAT('EXM-', YEAR(e.StartDate), '-', LPAD(e.ExamId, 3, '0'))) AS ExamCode,
         e.ExamName,
         e.BoardId,
@@ -99,6 +100,7 @@ BEGIN
     LEFT JOIN Programs p ON p.ProgramId = e.ProgramId
     LEFT JOIN AssessmentTypes at ON at.AssessmentTypeId = e.AssessmentTypeId
     WHERE e.IsActive = 1
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR COALESCE(e.CampusId, 1) = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR e.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR e.AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR e.AcademicLevelId = p_AcademicLevelId)
@@ -128,6 +130,7 @@ BEGIN
     SELECT 
         e.ExamId,
         e.ExamId AS ExaminationId,
+        COALESCE(e.CampusId, 1) AS CampusId,
         COALESCE(e.ExamCode, CONCAT('EXM-', YEAR(e.StartDate), '-', LPAD(e.ExamId, 3, '0'))) AS ExamCode,
         e.ExamName,
         e.BoardId,
@@ -201,6 +204,7 @@ CREATE PROCEDURE `sp_CreateExamination`(
     IN p_CampusId INT)
 BEGIN
     INSERT INTO `Examinations` (
+        CampusId,
         ExamCode,
         ExamName,
         BoardId,
@@ -219,7 +223,8 @@ BEGIN
         IsActive,
         CreatedAt,
         UpdatedAt
-    , CampusId) VALUES (
+    ) VALUES (
+        IFNULL(p_CampusId, 1),
         p_ExamCode,
         p_ExamName,
         p_BoardId,
@@ -231,7 +236,7 @@ BEGIN
         p_StartDate,
         p_EndDate,
         p_Description,
-        COALESCE(p_ExamPattern, 'REGULAR_ACADEMIC', p_CampusId),
+        COALESCE(p_ExamPattern, 'REGULAR_ACADEMIC'),
         p_TotalMarks,
         p_PassPercentage,
         COALESCE(p_Status, 'DRAFT'),
@@ -267,6 +272,7 @@ CREATE PROCEDURE `sp_UpdateExamination`(
     IN p_CampusId INT)
 BEGIN
     UPDATE `Examinations` SET 
+        CampusId = COALESCE(p_CampusId, CampusId),
         ExamName = COALESCE(p_ExamName, ExamName),
         BoardId = COALESCE(p_BoardId, BoardId),
         AcademicYearId = COALESCE(p_AcademicYearId, AcademicYearId),

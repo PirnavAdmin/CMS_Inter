@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -11,9 +11,9 @@ namespace CollegeManagement.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Subjects_AcademicYears_AcademicYearId",
-                table: "Subjects");
+            // migrationBuilder.DropForeignKey(
+            //     name: "FK_Subjects_AcademicYears_AcademicYearId",
+            //     table: "Subjects");
 
             migrationBuilder.DropIndex(
                 name: "IX_Subjects_AcademicYearId",

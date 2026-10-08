@@ -717,6 +717,7 @@ BEGIN
     LEFT JOIN `AcademicLevels` al ON al.AcademicLevelId = m.AcademicLevelId
     LEFT JOIN `Faculties` f ON f.Id = m.FacultyId
     WHERE m.IsActive = 1
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR sec.CampusId = p_CampusId OR e.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR m.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR m.AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR m.AcademicLevelId = p_AcademicLevelId)
@@ -745,11 +746,16 @@ CREATE PROCEDURE `sp_GetFilteredEvaluationsCount`(
     IN p_SubjectId INT,
     IN p_StudentId INT,
     IN p_FacultyId INT,
-    IN p_Status INT
+    IN p_Status INT,
+    IN p_CampusId INT
 )
 BEGIN
     SELECT COUNT(*) AS TotalCount
-    FROM `Marks` m WHERE (p_CampusId IS NULL OR m.CampusId = p_CampusId) AND  m.IsActive = 1
+    FROM `Marks` m
+    LEFT JOIN `Sections` sec ON sec.SectionId = m.SectionId
+    LEFT JOIN `Examinations` e ON e.ExamId = m.ExaminationId
+    WHERE m.IsActive = 1
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR sec.CampusId = p_CampusId OR e.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR m.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR m.AcademicYearId = p_AcademicYearId)
       AND (p_AcademicLevelId IS NULL OR p_AcademicLevelId = 0 OR m.AcademicLevelId = p_AcademicLevelId)

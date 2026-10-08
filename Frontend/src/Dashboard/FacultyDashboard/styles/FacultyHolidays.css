@@ -1,0 +1,15 @@
+/* Faculty Holidays Styles */
+.sp-holiday-card {
+  background: var(--cms-surface, #fff);
+  border: 1px solid var(--cms-border, #e4e8f0);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.15s ease;
+}
+.sp-holiday-card:hover {
+  border-color: var(--cms-primary);
+  box-shadow: 0 4px 12px rgba(16, 32, 60, 0.05);
+}

@@ -22,7 +22,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<PagedResult<TransportVehicleDto>> GetAllAsync(TransportVehicleFilterDto filter)
         {
             using var c = Connection();
-            var items = await c.QueryAsync<TransportVehicleDto>("sp_GetTransportVehicles", new { p_Search = filter.Search ?? "" }, commandType: CommandType.StoredProcedure);
+            var items = await c.QueryAsync<TransportVehicleDto>(
+                "sp_GetTransportVehicles", 
+                new { p_Search = filter.Search ?? "", p_CampusId = filter.CampusId }, 
+                commandType: CommandType.StoredProcedure);
             
             var list = items.AsQueryable();
             if (filter.Status.HasValue) list = list.Where(x => x.Status == (filter.Status.Value ? "Active" : "Inactive"));
@@ -63,7 +66,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_IsAC = dto.IsAC ? 1 : 0,
                     p_InsuranceNumber = dto.InsuranceNumber,
                     p_CreatedBy = userId,
-                    p_UpdatedBy = (long?)null
+                    p_UpdatedBy = (long?)null,
+                    p_CampusId = dto.CampusId ?? 1
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -94,7 +98,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_IsAC = dto.IsAC ? 1 : 0,
                     p_InsuranceNumber = dto.InsuranceNumber,
                     p_CreatedBy = (long?)null,
-                    p_UpdatedBy = userId
+                    p_UpdatedBy = userId,
+                    p_CampusId = dto.CampusId
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
@@ -103,7 +108,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long vehicleId, long? userId)
         {
             using var c = Connection();
-            var rows = await c.ExecuteAsync("sp_DeleteTransportVehicles", new { p_Id = vehicleId }, commandType: CommandType.StoredProcedure);
+            var rows = await c.ExecuteAsync(
+                "sp_DeleteTransportVehicles", 
+                new { p_Id = vehicleId, p_UpdatedBy = userId }, 
+                commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
 

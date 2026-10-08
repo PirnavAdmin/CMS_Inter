@@ -33,14 +33,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<IEnumerable<HostelFeeConfigDto>> GetAllAsync(int? hostelId, string? status)
+        public async Task<IEnumerable<HostelFeeConfigDto>> GetAllAsync(int? hostelId, string? status, int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
             return await _dbConnection.QueryAsync<HostelFeeConfigDto>(
                 "sp_GetHostelFeeConfigs",
                 new
                 {
                     p_HostelId = hostelId,
-                    p_Status = status
+                    p_Status = status,
+                    p_CampusId = campusId,
+                    p_BoardId = boardId,
+                    p_AcademicYearId = academicYearId
                 },
                 commandType: CommandType.StoredProcedure);
         }

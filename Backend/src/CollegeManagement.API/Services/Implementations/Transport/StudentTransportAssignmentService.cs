@@ -67,35 +67,82 @@ namespace CollegeManagement.API.Services.Implementations
         {
             NormalizeDto(dto);
 
-            // Auto-resolve route if unassigned or missing
-            if (dto.RouteId <= 0 || !await _context.TransportRoutes.AnyAsync(r => r.RouteId == dto.RouteId && !r.IsDeleted))
-            {
-                var activeRoute = await _context.TransportRoutes.AsNoTracking().FirstOrDefaultAsync(r => !r.IsDeleted && r.Status)
-                    ?? await _context.TransportRoutes.AsNoTracking().FirstOrDefaultAsync(r => !r.IsDeleted);
-                if (activeRoute != null) dto.RouteId = activeRoute.RouteId;
-            }
-
-            // Auto-resolve pickup point if unassigned or missing
-            if (dto.PickupPointId <= 0 || !await _context.PickupPoints.AnyAsync(p => p.PickupPointId == dto.PickupPointId && !p.IsDeleted))
-            {
-                var activePp = await _context.PickupPoints.AsNoTracking().FirstOrDefaultAsync(p => p.RouteId == dto.RouteId && !p.IsDeleted && p.Status)
-                    ?? await _context.PickupPoints.AsNoTracking().FirstOrDefaultAsync(p => !p.IsDeleted);
-                if (activePp != null) dto.PickupPointId = activePp.PickupPointId;
-            }
-
-            // Auto-resolve vehicle assignment if unassigned or missing
-            if (dto.VehicleAssignmentId <= 0 || !await _context.TransportVehicleAssignments.AnyAsync(v => v.AssignmentId == dto.VehicleAssignmentId && !v.IsDeleted))
-            {
-                var activeVa = await _context.TransportVehicleAssignments.AsNoTracking().FirstOrDefaultAsync(v => v.RouteId == dto.RouteId && !v.IsDeleted && v.Status)
-                    ?? await _context.TransportVehicleAssignments.AsNoTracking().FirstOrDefaultAsync(v => !v.IsDeleted);
-                if (activeVa != null) dto.VehicleAssignmentId = activeVa.AssignmentId;
-            }
-
-            // Auto-resolve AdmissionNo if empty
             if (string.IsNullOrWhiteSpace(dto.AdmissionNo))
             {
-                var latestApp = await _context.Students.AsNoTracking().OrderByDescending(a => a.StudentId).FirstOrDefaultAsync();
-                dto.AdmissionNo = latestApp?.AdmissionNo ?? "REG-1001";
+                throw new ArgumentException("Admission number is required and must correspond to an active registered student.");
+            }
+
+            var student = await _context.Students.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.AdmissionNo == dto.AdmissionNo.Trim() && s.IsActive);
+
+            if (student == null)
+            {
+                throw new InvalidOperationException($"Student with admission number '{dto.AdmissionNo}' was not found or is not active in the CMS.");
+            }
+
+            dto.AdmissionNo = student.AdmissionNo;
+
+            // Validate Route
+            if (dto.RouteId <= 0 || !await _context.TransportRoutes.AnyAsync(r => r.RouteId == dto.RouteId && !r.IsDeleted))
+            {
+                throw new InvalidOperationException($"Invalid or non-existent Route ID {dto.RouteId}.");
+            }
+
+            // Resolve PickupPointId if missing or 0
+            if (dto.PickupPointId <= 0)
+            {
+                if (!string.IsNullOrWhiteSpace(dto.PickupPointName))
+                {
+                    var nameLower = dto.PickupPointName.Trim().ToLower();
+                    var point = await _context.PickupPoints
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(p => p.RouteId == dto.RouteId &&
+                            p.PickupPointName != null && p.PickupPointName.ToLower() == nameLower &&
+                            !p.IsDeleted);
+
+                    if (point != null)
+                    {
+                        dto.PickupPointId = point.PickupPointId;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"Pickup point '{dto.PickupPointName}' was not found on Route ID {dto.RouteId}.");
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException("Pickup point ID or a valid pickup point name is required.");
+                }
+            }
+
+            // Validate Pickup Point
+            if (dto.PickupPointId <= 0 || !await _context.PickupPoints.AnyAsync(p => p.PickupPointId == dto.PickupPointId && !p.IsDeleted))
+            {
+                throw new InvalidOperationException($"Invalid or non-existent Pickup Point ID {dto.PickupPointId}.");
+            }
+
+            // Resolve VehicleAssignmentId if missing or 0
+            if (dto.VehicleAssignmentId <= 0 && dto.VehicleId > 0)
+            {
+                var va = await _context.TransportVehicleAssignments
+                    .AsNoTracking()
+                    .OrderByDescending(v => v.Status)
+                    .FirstOrDefaultAsync(v => v.RouteId == dto.RouteId && v.VehicleId == dto.VehicleId && !v.IsDeleted);
+
+                if (va != null)
+                {
+                    dto.VehicleAssignmentId = va.AssignmentId;
+                }
+                else
+                {
+                    throw new InvalidOperationException($"No active vehicle assignment found for Vehicle ID {dto.VehicleId} on Route ID {dto.RouteId}.");
+                }
+            }
+
+            // Validate Vehicle Assignment
+            if (dto.VehicleAssignmentId <= 0 || !await _context.TransportVehicleAssignments.AnyAsync(v => v.AssignmentId == dto.VehicleAssignmentId && !v.IsDeleted))
+            {
+                throw new InvalidOperationException($"Invalid or non-existent Vehicle Assignment ID {dto.VehicleAssignmentId}.");
             }
 
             await ValidateAssignmentAsync(
@@ -140,9 +187,85 @@ namespace CollegeManagement.API.Services.Implementations
 
             NormalizeDto(dto);
 
+            // 1. Preserve RouteId and AdmissionNo
+            if (dto.RouteId <= 0)
+            {
+                dto.RouteId = existing.RouteId;
+            }
+
             if (string.IsNullOrWhiteSpace(dto.AdmissionNo))
             {
                 dto.AdmissionNo = existing.AdmissionNo;
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.TransportType) || dto.TransportType.Equals("Both", StringComparison.OrdinalIgnoreCase))
+            {
+                dto.TransportType = !string.IsNullOrWhiteSpace(existing.TransportType) ? existing.TransportType : "TwoWay";
+            }
+
+            if (dto.EffectiveFrom == default)
+            {
+                dto.EffectiveFrom = existing.EffectiveFrom;
+            }
+
+            // 2. Resolve PickupPointId safely
+            if (dto.PickupPointId <= 0)
+            {
+                if (!string.IsNullOrWhiteSpace(dto.PickupPointName))
+                {
+                    var nameLower = dto.PickupPointName.Trim().ToLower();
+                    var point = await _context.PickupPoints
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(p => p.RouteId == dto.RouteId &&
+                            p.PickupPointName != null && p.PickupPointName.ToLower() == nameLower &&
+                            !p.IsDeleted);
+
+                    if (point != null)
+                    {
+                        dto.PickupPointId = point.PickupPointId;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"Pickup point '{dto.PickupPointName}' was not found on Route ID {dto.RouteId}.");
+                    }
+                }
+                else if (existing.PickupPointId > 0)
+                {
+                    dto.PickupPointId = existing.PickupPointId;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Pickup point ID or a valid pickup point name is required.");
+                }
+            }
+
+            // 3. Resolve VehicleAssignmentId safely
+            if (dto.VehicleAssignmentId <= 0)
+            {
+                if (dto.VehicleId > 0)
+                {
+                    var va = await _context.TransportVehicleAssignments
+                        .AsNoTracking()
+                        .OrderByDescending(v => v.Status)
+                        .FirstOrDefaultAsync(v => v.RouteId == dto.RouteId && v.VehicleId == dto.VehicleId && !v.IsDeleted);
+
+                    if (va != null)
+                    {
+                        dto.VehicleAssignmentId = va.AssignmentId;
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException($"No active vehicle assignment found for Vehicle ID {dto.VehicleId} on Route ID {dto.RouteId}.");
+                    }
+                }
+                else if (existing.VehicleAssignmentId > 0)
+                {
+                    dto.VehicleAssignmentId = existing.VehicleAssignmentId;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Vehicle assignment ID or a valid vehicle ID is required.");
+                }
             }
 
             await ValidateAssignmentAsync(
@@ -210,16 +333,55 @@ namespace CollegeManagement.API.Services.Implementations
             DateTime? effectiveTo,
             string transportType)
         {
-            if (string.IsNullOrWhiteSpace(admissionNo)) admissionNo = "REG-1001";
+            if (string.IsNullOrWhiteSpace(admissionNo))
+            {
+                throw new ArgumentException("Admission number is required.");
+            }
 
-            // Route validation
-            if (routeId <= 0) routeId = 1;
+            var student = await _context.Students.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.AdmissionNo == admissionNo.Trim() && s.IsActive);
 
-            // Pickup-point validation
-            if (pickupPointId <= 0) pickupPointId = 1;
+            if (student == null)
+            {
+                throw new InvalidOperationException($"Student with admission number '{admissionNo}' is not registered or active in the CMS.");
+            }
 
-            // Vehicle-assignment validation
-            if (vehicleAssignmentId <= 0) vehicleAssignmentId = 1;
+            // -----------------------------------------------------
+            // Validate Route
+            // -----------------------------------------------------
+            var route = await _context.TransportRoutes
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.RouteId == routeId && !x.IsDeleted);
+
+            if (route == null)
+            {
+                throw new InvalidOperationException($"Route ID {routeId} does not exist or has been deleted.");
+            }
+
+            // -----------------------------------------------------
+            // Validate Pickup Point
+            // -----------------------------------------------------
+            var pickupPoint = await _context.PickupPoints
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.PickupPointId == pickupPointId && !x.IsDeleted);
+
+            if (pickupPoint == null)
+            {
+                throw new InvalidOperationException($"Pickup point ID {pickupPointId} does not exist or has been deleted.");
+            }
+
+            // -----------------------------------------------------
+            // Validate Vehicle Assignment
+            // -----------------------------------------------------
+            var vehicleAssignment = await _context
+                .TransportVehicleAssignments
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.AssignmentId == vehicleAssignmentId && !x.IsDeleted);
+
+            if (vehicleAssignment == null)
+            {
+                throw new InvalidOperationException($"Vehicle assignment ID {vehicleAssignmentId} does not exist or has been deleted.");
+            }
 
             if (effectiveFrom == default)
             {
@@ -229,53 +391,6 @@ namespace CollegeManagement.API.Services.Implementations
             if (!AllowedTransportTypes.Contains(transportType, StringComparer.OrdinalIgnoreCase))
             {
                 transportType = "Both";
-            }
-
-            // -----------------------------------------------------
-            // Validate Route
-            // -----------------------------------------------------
-            var route = await _context.TransportRoutes
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.RouteId == routeId);
-
-            if (route == null)
-            {
-                var activeRoute = await _context.TransportRoutes.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.Status)
-                    ?? await _context.TransportRoutes.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted);
-                if (activeRoute != null) routeId = activeRoute.RouteId;
-            }
-
-            // -----------------------------------------------------
-            // Validate Pickup Point
-            // -----------------------------------------------------
-            var pickupPoint = await _context.PickupPoints
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.PickupPointId == pickupPointId);
-
-            if (pickupPoint == null)
-            {
-                var activePp = await _context.PickupPoints.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted)
-                    ?? new Models.PickupPoint { PickupPointId = pickupPointId, RouteId = routeId, Status = true };
-                pickupPointId = activePp.PickupPointId;
-            }
-
-            // -----------------------------------------------------
-            // Validate Vehicle Assignment
-            // -----------------------------------------------------
-            var vehicleAssignment = await _context
-                .TransportVehicleAssignments
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.AssignmentId == vehicleAssignmentId);
-
-            if (vehicleAssignment == null)
-            {
-                var anyActiveAssignment = await _context.TransportVehicleAssignments.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.Status)
-                    ?? await _context.TransportVehicleAssignments.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted);
-
-                if (anyActiveAssignment != null)
-                {
-                    vehicleAssignmentId = anyActiveAssignment.AssignmentId;
-                }
             }
         }
 

@@ -99,8 +99,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     IsActive = d.IsActive,
                     CreatedAt = d.CreatedAt,
                     UpdatedAt = d.UpdatedAt,
-                    DesignationCount = _context.Designations.Count(des => des.DepartmentId == d.DepartmentId && des.IsActive),
-                    StaffCount = _context.Staffs.Count(s => s.DepartmentId == d.DepartmentId && !s.IsDeleted)
+                    DesignationCount = _context.Designations.Count(des => des.DepartmentId == d.DepartmentId && des.IsActive && (!campusId.HasValue || des.CampusId == campusId.Value || des.CampusId == null)),
+                    StaffCount = _context.Staffs.Count(s => s.DepartmentId == d.DepartmentId && !s.IsDeleted && (!campusId.HasValue || s.CampusId == campusId.Value))
                 }).ToList();
             }
         }

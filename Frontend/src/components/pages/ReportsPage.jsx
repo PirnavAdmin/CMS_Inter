@@ -157,7 +157,7 @@ function activeAcademicYearOptions(payload) {
 }
 
 function formatMetric(value, { currency = false, suffix = "" } = {}) {
-  if (value === undefined || value === null || Number.isNaN(value)) return "0";
+  if (value === undefined || value === null || Number.isNaN(value) || value === 0) return "No Data";
   if (currency) {
     return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
   }

@@ -40,6 +40,7 @@ export const clearAuthSession = () => {
       }
     });
   } catch { /* Storage unavailable */ }
+  window.dispatchEvent(new Event("cms-auth-session-updated"));
 };
 
 export const getAuthToken = () => {
@@ -85,6 +86,7 @@ export const saveAuthSession = ({ token, user, role }, persistent) => {
       window.sessionStorage.setItem("cms_username", user?.email || "Warden@CMS.com");
     } catch {}
   }
+  window.dispatchEvent(new Event("cms-auth-session-updated"));
 };
 
 export const updateAuthToken = (token) => {

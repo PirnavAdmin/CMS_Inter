@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Models;
@@ -24,12 +25,23 @@ namespace CollegeManagement.API.Repositories.Implementations
             return fineRule;
         }
 
-        public async Task<IEnumerable<FineRule>> GetAllAsync()
+        public async Task<IEnumerable<FineRule>> GetAllAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _context.FineRules
+            var query = _context.FineRules
                 .Include(f => f.ApplicableFee)
                 .AsNoTracking()
-                .ToListAsync();
+                .AsQueryable();
+
+            if (campusId.HasValue && campusId.Value > 0)
+                query = query.Where(f => f.CampusId == null || f.CampusId == campusId.Value);
+
+            if (boardId.HasValue && boardId.Value > 0)
+                query = query.Where(f => f.BoardId == null || f.BoardId == boardId.Value);
+
+            if (academicYearId.HasValue && academicYearId.Value > 0)
+                query = query.Where(f => f.AcademicYearId == null || f.AcademicYearId == academicYearId.Value);
+
+            return await query.ToListAsync();
         }
 
         public async Task<FineRule?> GetByIdAsync(int id)
@@ -49,12 +61,10 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var rule = await _context.FineRules.FindAsync(id);
-            if (rule == null) return false;
-            
-            rule.Status = "Inactive";
-            rule.UpdatedAt = System.DateTime.UtcNow;
-            
+            var fineRule = await _context.FineRules.FindAsync(id);
+            if (fineRule == null) return false;
+
+            fineRule.Status = "Inactive";
             var rows = await _context.SaveChangesAsync();
             return rows > 0;
         }

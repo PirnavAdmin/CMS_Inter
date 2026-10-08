@@ -25,9 +25,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
             PreviewRollNumberAllocationAsync(
                 SectionRollAllocationFilterRequest request);
 
-        Task<int>
-            ConfirmRollNumberAllocationAsync(
-                ConfirmRollNumberAllocationRequest request);
+        Task<int> ConfirmRollNumberAllocationAsync(ConfirmRollNumberAllocationRequest request);
+        Task<int> SaveRollNumberAllocationsAsync(List<RollNumberPreviewStudentDto> allocations);
 
         // =====================================================
         // UPDATE STUDENT ALLOCATION

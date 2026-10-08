@@ -1,20 +1,23 @@
+using CollegeManagement.API.Common;
 using CollegeManagement.API.DTOs.Students;
 using CollegeManagement.API.DTOs.Students.Requests;
 using CollegeManagement.API.DTOs.Students.Responses;
 using CollegeManagement.API.Repositories;
+using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Settings;
+
 
 namespace CollegeManagement.API.Services
 {
     public class StudentService : IStudentService
     {
         private readonly IStudentRepository _repository;
-        private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment? _environment;
+        private readonly Microsoft.AspNetCore.Hosting.IWebHostEnvironment? _environment; private readonly INumberSeriesService _numberSeriesService;
 
-        public StudentService(
-            IStudentRepository repository,
-            Microsoft.AspNetCore.Hosting.IWebHostEnvironment? environment = null)
+        public StudentService(IStudentRepository repository, INumberSeriesService numberSeriesService, Microsoft.AspNetCore.Hosting.IWebHostEnvironment? environment = null)
         {
             _repository = repository;
+            _numberSeriesService = numberSeriesService;
             _environment = environment;
         }
 
@@ -22,16 +25,47 @@ namespace CollegeManagement.API.Services
         // STUDENT CRUD
         // =========================================================
 
-        public async Task<List<StudentListItemDto>> GetAllAsync(
+        public async Task<PagedResult<StudentListItemDto>> GetPagedAsync(
+            string? search = null,
             int? boardId = null,
+            int? academicYearId = null,
             int? academicLevelId = null,
             int? groupId = null,
             int? programId = null,
             int? sectionId = null,
             string? status = null,
-            int? campusId = null)
+            bool? isActive = null,
+            int? campusId = null,
+            int pageNumber = 1,
+            int pageSize = 10)
         {
-            return await _repository.GetAllAsync(boardId, academicLevelId, groupId, programId, sectionId, status, campusId);
+            return await _repository.GetPagedAsync(
+                search,
+                boardId,
+                academicYearId,
+                academicLevelId,
+                groupId,
+                programId,
+                sectionId,
+                status,
+                isActive,
+                campusId,
+                pageNumber,
+                pageSize);
+        }
+
+        public async Task<List<StudentListItemDto>> GetAllAsync(
+            int? boardId = null,
+            int? academicYearId = null,
+            int? academicLevelId = null,
+            int? groupId = null,
+            int? programId = null,
+            int? sectionId = null,
+            string? status = null,
+            int? campusId = null,
+            string? search = null)
+        {
+            return await _repository.GetAllAsync(boardId, academicYearId, academicLevelId, groupId, programId, sectionId, status, campusId, search);
         }
 
         public async Task<StudentResponse?> GetByIdAsync(int studentId)
@@ -413,4 +447,4 @@ namespace CollegeManagement.API.Services
             return await _repository.UpdateSelfProfileAsync(studentId, request);
         }
     }
-}
+}

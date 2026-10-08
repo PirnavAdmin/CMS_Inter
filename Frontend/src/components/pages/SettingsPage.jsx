@@ -2,9 +2,13 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ListOrdered, ShieldCheck, ArrowRight, Landmark, FileText, CalendarDays, Clock, Building2 } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import campusConfigImage from "@/assets/settings-3d/campus-configuration.png";
 import boardAcademicYearImage from "@/assets/settings-3d/board-academic-year.png";
 import numberSeriesImage from "@/assets/settings-3d/number-series.png";
 import templatesImage from "@/assets/settings-3d/templates.png";
+import rolesPermissionsImage from "@/assets/settings-3d/roles-permissions.png";
+import leaveTypesImage from "@/assets/settings-3d/leave-types.png";
+import attendanceTimingImage from "@/assets/settings-3d/attendance-timing.png";
 import auditLogsImage from "@/assets/settings-3d/audit-logs.png";
 import "./SettingsPage.css";
 
@@ -17,6 +21,7 @@ export default function SettingsPage() {
       title: "Campus Configuration",
       description: "Configure multi-campus branches, branch codes, address, affiliated education boards and active header branch selector.",
       icon: Building2,
+      image: campusConfigImage,
       to: "/dashboard/settings/campus-configuration",
       buttonText: "Configure Campuses",
       primary: true,
@@ -56,6 +61,7 @@ export default function SettingsPage() {
       title: "Roles & Permissions",
       description: "Manage system roles and module-level permissions for dashboard access control.",
       icon: ShieldCheck,
+      image: rolesPermissionsImage,
       to: "/dashboard/settings/roles-permissions",
       buttonText: "Manage Roles",
       primary: true,
@@ -65,6 +71,7 @@ export default function SettingsPage() {
       title: "Leave Types & Policy Configuration",
       description: "Define annual leave quotas, staff eligibility, carry-forward policies, and proof requirements.",
       icon: CalendarDays,
+      image: leaveTypesImage,
       to: "/dashboard/settings/leave-types",
       buttonText: "Manage Leave Types",
       primary: true,
@@ -74,6 +81,7 @@ export default function SettingsPage() {
       title: "Attendance Timing Configuration",
       description: "Configure work shifts, check-in & check-out timings, late arrival thresholds, and early checkout rules for staff.",
       icon: Clock,
+      image: attendanceTimingImage,
       to: "/dashboard/settings/attendance-timing",
       buttonText: "Manage Timing Rules",
       primary: true,
