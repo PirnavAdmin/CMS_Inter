@@ -217,6 +217,15 @@ const extractCollection = (payload) => {
   return [];
 };
 
+const getVal = (o, ...keys) => {
+  if (!o || typeof o !== "object") return undefined;
+  const flatKeys = keys.flat();
+  for (const k of flatKeys) {
+    if (o[k] !== undefined && o[k] !== null && o[k] !== "") return o[k];
+  }
+  return undefined;
+};
+
 // ── Warden Section State Component (Loading & Error Handling) ─────────
 function WardenSectionState({ loading, error, loadingTitle, errorTitle, errorMessage, onRetry, children }) {
   if (loading) {
