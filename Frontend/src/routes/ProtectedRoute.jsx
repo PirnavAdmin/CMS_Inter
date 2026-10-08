@@ -36,8 +36,7 @@ export default function ProtectedRoute({ children, requireAdmin = false, require
   if (requireStudent && isFaculty) return <Navigate to="/faculty-dashboard" replace />;
   if (requireStudent && isParent) return <Navigate to="/parent-dashboard" replace />;
 
-  if (requireParent && !isParent) {
-    if (isAdmin) return <Navigate to="/dashboard" replace />;
+  if (requireParent && !isParent && !isAdmin) {
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
   }

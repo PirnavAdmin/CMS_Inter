@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev";
+  const apiBaseUrl = env.VITE_API_BASE_URL || "https://whiff-lyrics-debug.ngrok-free.dev";
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -24,9 +24,16 @@ export default defineConfig(({ mode }) => {
         checks: { pluginTimings: false },
       },
     },
+    legacy: {
+      skipWebSocketTokenCheck: true,
+    },
     server: {
       port: 5173,
+      host: "0.0.0.0",
       allowedHosts: true,
+      hmr: {
+        host: "localhost",
+      },
       proxy: {
         "/api": {
           target: apiBaseUrl,

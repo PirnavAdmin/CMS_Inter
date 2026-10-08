@@ -331,6 +331,8 @@ export const apiEndpoints = {
     percentage: "/api/v1/attendance/percentage",
     report: "/api/v1/attendance/report",
     yearlyOverview: (studentId, academicYearId) => `/api/v1/attendance/student/${studentId}/yearly-overview?academicYearId=${academicYearId}`,
+    studentSubjects: (studentId) => `/api/v1/attendance/student/${encodeURIComponent(studentId)}/subjects`,
+    studentDailyLogs: (studentId) => `/api/v1/attendance/student/${encodeURIComponent(studentId)}/daily-logs`,
     importTemplate: "/api/v1/attendance/import/template",
     importExcel: "/api/v1/attendance/import/excel",
     updateStatus: (attendanceId) => `/api/v1/attendance/${attendanceId}/status`,
