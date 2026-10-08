@@ -89,8 +89,7 @@ export default function ProtectedRoute({
   if (requireStudent && isFaculty) return <Navigate to="/faculty-dashboard" replace />;
   if (requireStudent && isParent) return <Navigate to="/parent-dashboard" replace />;
 
-  if (requireParent && !isParent) {
-    if (isAdmin) return <Navigate to="/dashboard" replace />;
+  if (requireParent && !isParent && !isAdmin) {
     if (isAccountant) return <Navigate to="/accountant-dashboard" replace />;
     if (isFaculty) return <Navigate to="/faculty-dashboard" replace />;
     return <Navigate to="/student-dashboard" replace />;
