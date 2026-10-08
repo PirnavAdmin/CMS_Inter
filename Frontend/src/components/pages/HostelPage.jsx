@@ -1846,6 +1846,8 @@ export default function HostelPage() {
     }
   };
 
+  const handleCreateComplaint = handleSaveComplaint;
+
   const handleDeleteComplaint = (complaint) => {
     setComplaints((prev) =>
       prev.filter(
@@ -6849,6 +6851,7 @@ export default function HostelPage() {
             modal={modal}
             closeModal={closeModal}
             allocations={allocations}
+            outpasses={outpasses}
             handleSaveOutpass={handleSaveOutpass}
             showToast={showToast}
           />
@@ -9257,7 +9260,7 @@ function VacateModal({ modal, closeModal, handleVacateAllocation }) {
   };
 
   // Outpass Modal (Enhanced with Conflict Pre-Validation & Inline Error Feedback)
-  const OutpassModal = () => {
+  function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSaveOutpass, showToast }) {
     const isView = modal.mode === "view";
 
     const formatDateTimeLocal = (date) => {
