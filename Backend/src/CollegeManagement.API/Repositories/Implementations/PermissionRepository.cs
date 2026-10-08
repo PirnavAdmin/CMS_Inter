@@ -263,6 +263,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             return rows > 0;
         }
 
+        public async Task<bool> HasModulePermissionAsync(int userId, string module, string action)
+        {
+            return await HasPermissionAsync(userId, $"{module}_{action}".ToUpper());
+        }
+
         public async Task<bool> HasPermissionAsync(int userId, string permissionCode)
         {
             var conn = await GetOpenConnectionAsync();
