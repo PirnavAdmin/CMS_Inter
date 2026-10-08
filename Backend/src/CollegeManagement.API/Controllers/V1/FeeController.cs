@@ -108,6 +108,8 @@ public class FeeController : ControllerBase
 
     /// <summary>Get student fee details by student ID.</summary>
     [HttpGet("students/{studentId:int}/fee-details")]
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+    [CollegeManagement.API.Filters.ParentStudentAuthorization]
     public async Task<IActionResult> GetStudentFeeDetails(int studentId)
     {
         var result = await _service.GetStudentFeeDetailsByStudentAsync(studentId);
@@ -121,6 +123,8 @@ public class FeeController : ControllerBase
 
     /// <summary>Compatibility route for student-specific fee ledger.</summary>
     [HttpGet("students/{studentId:int}/fee-ledger")]
+    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+    [CollegeManagement.API.Filters.ParentStudentAuthorization]
     public async Task<IActionResult> GetStudentLedger(int studentId) => Ok(await _service.GetStudentFeeDetailsByStudentAsync(studentId));
 
     // ---------------- Concession ----------------
