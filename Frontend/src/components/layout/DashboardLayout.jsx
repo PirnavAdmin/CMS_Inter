@@ -11,8 +11,6 @@ import { useSidebar } from "@/hooks/useSidebar.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import CampusContext from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/features/authStorage.js";
-import { useEffectivePermissions } from "@/features/rolesPermissions/EffectivePermissionsContext.jsx";
-import { filterMenuByPermissions } from "@/features/rolesPermissions/permissionRoutes.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -423,11 +421,6 @@ function isPrincipalRole(role) {
   return normalized === "principal" || normalized.includes("principal");
 }
 
-function hasFullAccess(user) {
-  const role = String(user?.role || user?.roleCode || "").trim().toLowerCase();
-  return Boolean(user?.isAdmin) || role === "admin" || role === "super admin" || role === "super_admin";
-}
-
 function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
@@ -485,14 +478,9 @@ export default function DashboardLayout({
   const location = useLocation();
   const pathname = location.pathname;
   const user = readUser();
-  const { status: permissionStatus, canAccess } = useEffectivePermissions();
   const isParent = String(user?.role || "").toLowerCase() === "parent" || pathname.startsWith("/parent-dashboard");
   const isPrincipal = isPrincipalRole(user?.role) || pathname.startsWith("/principal-dashboard");
-  const baseMenu = menuOverride || (isParent ? parentMenu : isPrincipal ? principalMenu : menu);
-  const activeMenu = useMemo(
-    () => filterMenuByPermissions(baseMenu, canAccess, hasFullAccess(user) ? "ready" : permissionStatus),
-    [baseMenu, canAccess, permissionStatus, user],
-  );
+  const activeMenu = menuOverride || (isParent ? parentMenu : isPrincipal ? principalMenu : menu);
   const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isParent ? parentSearchIndex : isPrincipal ? principalSearchIndex : searchIndex);
   const resolvedProfilePath = profilePath || (isParent ? "/parent-dashboard/profile" : "/dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isParent ? "/parent-dashboard/settings" : "/dashboard/settings") : settingsPath;

@@ -1,5 +1,5 @@
 import React from "react";
-import { Calendar } from "lucide-react";
+import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import staffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -11,7 +11,7 @@ import feeManagementIcon from "@/assets/sidebar-3d/fee-management.png";
 import managementIconsSprite from "@/assets/sidebar-3d/management-icons-sprite.png";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
 import { useFaculty } from "../FacultyContext.jsx";
-import { useEffectivePermissions } from "@/features/rolesPermissions/EffectivePermissionsContext.jsx";
+import { useFacultyPermissions } from "../PermissionContext.jsx";
 
 export const generatedSidebarIcons = {
   staffAttendance: { src: managementIconsSprite, position: "50% 0%" },
@@ -48,28 +48,28 @@ export const NAV_ITEMS = [
   { id: "leave", label: "Faculty Leave", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
   { id: "salary", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll, group: "HR & FINANCE" },
   { id: "reimbursements", label: "Reimbursements", icon: feeManagementIcon, group: "HR & FINANCE" },
-  { id: "holidays", label: "Holidays", icon: Calendar, group: "HR & FINANCE" },
+  { id: "holidays", label: "Holidays", icon: holidayManagementIcon, group: "HR & FINANCE" },
   { id: "settings", label: "Settings", icon: generalSettingsIcon, group: "ADMINISTRATION" },
 ];
 
-export const moduleByNavItem = {
-  dashboard: "dashboard",
-  profile: "dashboard",
-  timetable: "timetable",
-  attendance: "attendance",
-  marks: "marks-evaluation",
-  examduties: "examination",
-  myattendance: "staff-attendance",
-  leave: "staff-leave-management",
-  salary: "payroll",
-  reimbursements: "payroll",
-  holidays: "holiday-management",
-  settings: "settings",
+export const permissionByModule = {
+  dashboard: "VIEW_DASHBOARD",
+  profile: "VIEW_PROFILE",
+  timetable: "VIEW_TIMETABLE",
+  attendance: "MARK_ATTENDANCE",
+  marks: "ENTER_MARKS",
+  examduties: "VIEW_EXAM_DUTIES",
+  myattendance: "VIEW_SELF_ATTENDANCE",
+  leave: "APPLY_LEAVE",
+  salary: "VIEW_PAYSLIPS",
+  reimbursements: "VIEW_PAYSLIPS",
+  holidays: "VIEW_HOLIDAYS",
+  classes: "VIEW_CLASSES",
 };
 
 export default function FacultySidebar() {
   const { activeModule, setActiveModule, sidebarOpen, setSidebarOpen, profileData, initials } = useFaculty();
-  const { status, canAccess } = useEffectivePermissions();
+  const permissions = useFacultyPermissions();
 
   const navGroups = ["MAIN", "ACADEMICS", "HR & FINANCE", "ADMINISTRATION"];
 
@@ -82,7 +82,7 @@ export default function FacultySidebar() {
       <nav className="cms-nav">
         {navGroups.map((grp) => {
           const items = NAV_ITEMS.filter(
-            (n) => n.group === grp && status === "ready" && canAccess(moduleByNavItem[n.id] || "dashboard")
+            (n) => n.group === grp && (!permissionByModule[n.id] || permissions.includes(permissionByModule[n.id]))
           );
           if (!items.length) return null;
           return (

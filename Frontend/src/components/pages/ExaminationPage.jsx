@@ -2546,68 +2546,6 @@ const deleteScheduleFromBackend = async (examId, scheduleId) => {
   return { success: true };
 };
 
-// Helper to calculate dynamic lifecycle status: SCHEDULED -> ONGOING -> COMPLETED
-export const getExamLifecycleStatus = (exam) => {
-  if (!exam) return "DRAFT";
-  const rawStatus = normalizeStatus(exam?.status || "DRAFT");
-  if (["DRAFT", "CANCELLED"].includes(rawStatus)) {
-    return rawStatus;
-  }
-  if (rawStatus === "COMPLETED") {
-    return "COMPLETED";
-  }
-
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const todayStr = `${yyyy}-${mm}-${dd}`;
-  const currentTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-
-  const startDate = exam?.startDate ? String(exam.startDate).split("T")[0] : "";
-  const endDate = exam?.endDate ? String(exam.endDate).split("T")[0] : "";
-
-  const schedules = ensureArray(exam?.schedules || exam?.examinationSchedules || exam?.examSchedules);
-
-  if (schedules.length > 0) {
-    const allFinished = schedules.every((s) => {
-      const sDate = s?.date || s?.examDate ? String(s.date || s.examDate).split("T")[0] : (endDate || todayStr);
-      const sEnd = formatTimeOnly(s?.endTime || s?.timeTo || "12:00:00");
-      return sDate < todayStr || (sDate === todayStr && sEnd <= currentTimeStr);
-    });
-    if (allFinished) return "COMPLETED";
-
-    const hasStarted = schedules.some((s) => {
-      const sDate = s?.date || s?.examDate ? String(s.date || s.examDate).split("T")[0] : (startDate || todayStr);
-      const sStart = formatTimeOnly(s?.startTime || s?.timeFrom || "09:00:00");
-      return sDate < todayStr || (sDate === todayStr && sStart <= currentTimeStr);
-    });
-    if (hasStarted) return "ONGOING";
-
-    return "SCHEDULED";
-  }
-
-  // Fallback if individual schedules are not yet loaded (e.g. list view):
-  if (endDate && endDate < todayStr) {
-    return "COMPLETED";
-  }
-  if (startDate && startDate > todayStr) {
-    return "SCHEDULED";
-  }
-  if (startDate && startDate <= todayStr) {
-    if (endDate && endDate < todayStr) return "COMPLETED";
-    // Current date is within [startDate, endDate]
-    return "ONGOING";
-  }
-
-  return rawStatus;
-};
-
-// Helper to check whether an examination has concluded
-export const isExamConcluded = (exam) => {
-  return getExamLifecycleStatus(exam) === "COMPLETED";
-};
-
 const normalizeExamRecord = (e) => {
   const id = normalizeId(e?.examinationId ?? e?.id);
   const rawLevels =
@@ -2671,15 +2609,6 @@ const normalizeExamRecord = (e) => {
   const rawCampusId = e?.campusId ?? e?.CampusId ?? e?.campus?.id ?? e?.campus?.campusId;
   const campusId = rawCampusId ? normalizeId(rawCampusId) : "";
 
-  const rawStatus = normalizeStatus(e?.status || "DRAFT");
-  const parsedStartDate = e?.startDate ? String(e.startDate).split("T")[0] : "";
-  const parsedEndDate = e?.endDate ? String(e.endDate).split("T")[0] : "";
-
-  let effectiveStatus = rawStatus;
-  if (["SCHEDULED", "ONGOING"].includes(rawStatus)) {
-    effectiveStatus = getExamLifecycleStatus({ ...e, startDate: parsedStartDate, endDate: parsedEndDate, schedules: rawSchedules, status: rawStatus });
-  }
-
   return {
     id,
     campusId: campusId || normalizeId(e?.campus?.id ?? e?.campus?.campusId ?? ""),
@@ -2706,6 +2635,8 @@ const normalizeExamRecord = (e) => {
     programName: isAllPrograms ? "All Programs" : (e?.programName || e?.program?.name || ""),
     academicLevelName: e?.academicLevelName || e?.levelName || e?.academicLevel?.name || "",
     selectedSubjectIds,
+    // List/detail DTOs can omit allocations; distinguish omission from an
+    // explicitly empty selection so scheduling can retrieve the server scope.
     needsSubjectSelection: rawSubjects == null && e?.groupSubjectSelections == null,
     groupSubjectSelections: e?.groupSubjectSelections || {},
     selectedSubjectDetails: ensureArray(e?.selectedSubjectDetails),
@@ -2713,10 +2644,10 @@ const normalizeExamRecord = (e) => {
     examType: e?.examType || "",
     selectedGroupPatterns,
     examPattern: pat,
-    startDate: parsedStartDate,
-    endDate: parsedEndDate,
+    startDate: e?.startDate ? String(e.startDate).split("T")[0] : "",
+    endDate: e?.endDate ? String(e.endDate).split("T")[0] : "",
     description: e?.description || "",
-    status: effectiveStatus,
+    status: normalizeStatus(e?.status || "DRAFT"),
     scheduleMode:
       resolvedExamCategory === "Objective"
         ? "PATTERN_WISE"
@@ -3707,27 +3638,6 @@ export default function ExaminationPage() {
 
   useEffect(() => setPage(1), [filters, search]);
 
-  // Periodic check to transition exams between SCHEDULED, ONGOING, and COMPLETED in real time as timings change
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setExams((previousExams) => {
-        let changed = false;
-        const next = previousExams.map((exam) => {
-          if (["SCHEDULED", "ONGOING"].includes(normalizeStatus(exam.status))) {
-            const nextStatus = getExamLifecycleStatus(exam);
-            if (nextStatus !== exam.status) {
-              changed = true;
-              return { ...exam, status: nextStatus };
-            }
-          }
-          return exam;
-        });
-        return changed ? next : previousExams;
-      });
-    }, 15000);
-    return () => clearInterval(timer);
-  }, []);
-
   const changeFilter = (n, v) => {
     setFilters((x) => ({
       ...x,
@@ -3789,7 +3699,7 @@ export default function ExaminationPage() {
   const printSchedule = async (targetExam = null) => {
     const targetExams = targetExam
       ? [targetExam]
-      : exams.filter((item) => ["SCHEDULED", "ONGOING", "COMPLETED"].includes(item.status));
+      : exams.filter((item) => item.status === "SCHEDULED" || item.status === "COMPLETED");
     const filename = targetExam ? `${targetExam.name}_Schedule` : "Scheduled_Examinations";
 
     // Attempt backend export endpoint first if single exam export
@@ -4176,7 +4086,7 @@ export default function ExaminationPage() {
 
   const handleCancelExam = async () => {
     if (!cancelExamTarget || cancelLoading || mutationRef.current) return;
-    if (!["SCHEDULED", "ONGOING"].includes(normalizeStatus(cancelExamTarget.status))) return;
+    if (normalizeStatus(cancelExamTarget.status) !== "SCHEDULED") return;
     mutationRef.current = true;
     setCancelLoading(true);
     try {
@@ -4800,7 +4710,7 @@ export default function ExaminationPage() {
                           >
                             <Eye size={15} />
                           </button>
-                          {["DRAFT", "SCHEDULED", "ONGOING"].includes(e.status) && (
+                          {["DRAFT", "SCHEDULED"].includes(e.status) && (
                             <button
                               className="cms-action-btn"
                               title="Schedule / Reschedule Examination"
@@ -4823,7 +4733,7 @@ export default function ExaminationPage() {
                               <CalendarDays size={15} />
                             </button>
                           )}
-                          {["DRAFT", "SCHEDULED", "ONGOING"].includes(e.status) && (
+                          {["DRAFT", "SCHEDULED"].includes(e.status) && (
                             <button
                               className="cms-action-btn edit"
                               title="Edit Examination Scope"
@@ -4845,7 +4755,7 @@ export default function ExaminationPage() {
                               <Pencil size={15} />
                             </button>
                           )}
-                          {["SCHEDULED", "ONGOING", "COMPLETED"].includes(e.status) && (
+                          {["SCHEDULED", "COMPLETED"].includes(e.status) && (
                             <button
                               className="cms-action-btn"
                               title="Export Schedule Excel"
@@ -4854,7 +4764,7 @@ export default function ExaminationPage() {
                               <Printer size={15} />
                             </button>
                           )}
-                          {["DRAFT", "SCHEDULED", "ONGOING"].includes(e.status) && (
+                          {["DRAFT", "SCHEDULED"].includes(e.status) && (
                             <button
                               className="cms-action-btn warning"
                               title="Cancel Examination"
@@ -7448,14 +7358,14 @@ function ScheduleSection({
   const [readinessErrors, setReadinessErrors] = useState([]);
   const [editingHallsSchedule, setEditingHallsSchedule] = useState(null);
 
-  // Draft schedules can be created; scheduled or ongoing examinations can be viewed or rescheduled.
+  // Draft schedules can be created; scheduled examinations can be rescheduled.
   const schedulableExams = useMemo(
-    () => exams.filter((ex) => ["DRAFT", "SCHEDULED", "ONGOING"].includes(normalizeStatus(ex.status))),
+    () => exams.filter((ex) => ["DRAFT", "SCHEDULED"].includes(normalizeStatus(ex.status))),
     [exams],
   );
 
   useEffect(() => {
-    if (examId && (!exam || !["DRAFT", "SCHEDULED", "ONGOING"].includes(normalizeStatus(exam.status)))) {
+    if (examId && (!exam || !["DRAFT", "SCHEDULED"].includes(normalizeStatus(exam.status)))) {
       setExamId("");
     }
   }, [examId, exam, setExamId]);
@@ -8298,7 +8208,7 @@ function ScheduleSection({
                     </strong>
                   </h3>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    {["DRAFT", "SCHEDULED", "ONGOING"].includes(exam.status) &&
+                    {["DRAFT", "SCHEDULED"].includes(exam.status) &&
                       entries.filter((s) => normalizeId(s.groupId) === normalizeId(selectedGroupId) || matchesScheduleGroup(s, selectedGroupId, exam, effectiveGroupSubjects)).length === 0 && (
                         <button
                           type="button"
@@ -9408,34 +9318,7 @@ function ScheduleTable({
                     </td>
                     <td>{d(s.date)}</td>
                     <td>
-                      <span style={{ display: "block" }}>{s.startTime} - {s.endTime}</span>
-                      {(() => {
-                        const sDate = canonicalDate(s.date);
-                        if (!sDate) return null;
-                        const now = new Date();
-                        const yyyy = now.getFullYear();
-                        const mm = String(now.getMonth() + 1).padStart(2, "0");
-                        const dd = String(now.getDate()).padStart(2, "0");
-                        const todayStr = `${yyyy}-${mm}-${dd}`;
-                        const currentTimeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-                        const start = formatTimeOnly(s.startTime || "09:00:00");
-                        const end = formatTimeOnly(s.endTime || "12:00:00");
-
-                        let slotText = "Upcoming";
-                        let slotColor = "#64748b";
-                        if (sDate < todayStr || (sDate === todayStr && currentTimeStr >= end)) {
-                          slotText = "Completed";
-                          slotColor = "#16a34a";
-                        } else if (sDate === todayStr && currentTimeStr >= start && currentTimeStr < end) {
-                          slotText = "Ongoing";
-                          slotColor = "#2563eb";
-                        }
-                        return (
-                          <span style={{ display: "inline-block", fontSize: "11px", fontWeight: "600", color: slotColor, marginTop: "2px" }}>
-                            • {slotText}
-                          </span>
-                        );
-                      })()}
+                      {s.startTime} - {s.endTime}
                     </td>
                     <td>{s.totalMarks || "100"}</td>
                     <td>

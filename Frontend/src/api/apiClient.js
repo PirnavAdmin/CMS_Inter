@@ -123,16 +123,7 @@ apiClient.interceptors.request.use(
       config.headers.delete("Content-Type");
     }
     beginApiLoading(config);
-    let token = getStoredAccessToken();
-    const isParentEndpoint = config.url && (
-      config.url.includes("/api/v1/students") ||
-      config.url.includes("/api/v1/fees") ||
-      config.url.includes("/api/v1/attendance") ||
-      config.url.includes("/api/v1/timetable")
-    );
-    if ((!token || token.startsWith("parent-auth-token")) && isParentEndpoint) {
-      token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4NTkiLCJuYW1laWQiOiI4NTkiLCJlbWFpbCI6Im5hdmVlbnBvbm5hcHVsYTBAZ21haWwuY29tIiwidW5pcXVlX25hbWUiOiJQYXJlbnQgLyBHdWFyZGlhbiIsInJvbGUiOiJQYXJlbnQiLCJqdGkiOiIyYTljZjZiOC1hMWY4LTQ0YTctOThkZC1lNWUwYzBjYzBiODMiLCJuYmYiOjE3OTEzNDc2NjUsImV4cCI6MTc5MTQzNDA2NSwiaWF0IjoxNzkxMzQ3NjY1LCJpc3MiOiJDb2xsZWdlTWFuYWdlbWVudEFQSSIsImF1ZCI6IkNvbGxlZ2VNYW5hZ2VtZW50RnJvbnRlbmQifQ.eRXaOtzZoam440h3U95bLTPmQjoelD9Sq4lsLTmgPpM";
-    }
+    const token = getStoredAccessToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
     try {
       const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
@@ -174,15 +165,8 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const isExpectedValidation =
-      error.response?.status === 400 &&
-      /already has a pending or approved request/i.test(
-        error.response?.data?.message || error.response?.data?.Message || ""
-      );
-
     const shouldLogDevError =
       import.meta.env.DEV &&
-      !isExpectedValidation &&
       !originalRequest?.silent &&
       !originalRequest?.skipErrorLog &&
       !originalRequest?.skipAuthRedirect &&

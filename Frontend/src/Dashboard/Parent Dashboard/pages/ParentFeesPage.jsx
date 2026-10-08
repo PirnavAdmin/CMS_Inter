@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Wallet, CreditCard, CheckCircle2, Download, Printer, Users, Eye, AlertCircle, Clock } from "lucide-react";
+import { Wallet, CreditCard, CheckCircle2, Download, Printer, Users, Eye, AlertCircle, Clock, ShieldCheck } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useParentPortal, getStoredFeeRecords, saveStoredFeeRecords } from "../parentData.js";
 import { Modal, Toast } from "@/components/common/Ui.jsx";
@@ -11,30 +11,30 @@ export default function ParentFeesPage() {
     activeChildId,
     setActiveChildId,
     child,
-    childFee: contextChildFee,
     dataKey,
     currentAcademicYear,
-    loading,
   } = useParentPortal();
   const [feeRecords, setFeeRecords] = useState(getStoredFeeRecords());
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState("UPI");
+  const [payBusy, setPayBusy] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
   const isCurrentYear = currentAcademicYear === "2026-2027";
   const feeKey = dataKey || child?.id;
-  const rawChildFee = contextChildFee && contextChildFee.total !== undefined
-    ? contextChildFee
-    : (child
-        ? (feeRecords[feeKey] || (isCurrentYear ? feeRecords[child.id] || child.fees : null)) || {
-            total: 0,
-            paid: 0,
-            pending: 0,
-            status: "—",
-            dueDate: "—",
-            breakdown: [],
-            receipts: [],
-          }
-        : { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], receipts: [] });
+  const rawChildFee = child
+    ? (feeRecords[feeKey] || (isCurrentYear ? feeRecords[child.id] || child.fees : null)) || {
+        total: 0,
+        paid: 0,
+        pending: 0,
+        status: "—",
+        dueDate: "—",
+        breakdown: [],
+        receipts: [],
+      }
+    : { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], receipts: [] };
 
   const breakdownTotal = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.amount || 0), 0);
   const breakdownPaid = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.paid || 0), 0);
@@ -53,25 +53,76 @@ export default function ParentFeesPage() {
     setSelectedReceipt(null);
   };
 
-  if (loading && !child) {
-    return (
-      <DashboardLayout
-        title="Fees & Payments"
-        subtitle="Loading fee ledger and installment status..."
-        breadcrumb={["Parent Portal", "Fees & Payments"]}
-      >
-        <div className="parent-dashboard-wrapper">
-          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
-            <Wallet size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
-            <h3>Loading Fee Account Details...</h3>
-            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
-              Connecting to campus finance ledger to retrieve pending fees and breakdown.
-            </p>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const handleOpenPayModal = () => {
+    setPayAmount(String(childFee.pending || "5000"));
+    setPayModalOpen(true);
+  };
+
+  const handleExecutePayment = (e) => {
+    e.preventDefault();
+    const amount = Number(payAmount);
+    if (!amount || amount <= 0 || amount > childFee.pending) {
+      alert("Please enter a valid payment amount up to the pending fee balance.");
+      return;
+    }
+
+    setPayBusy(true);
+    setTimeout(() => {
+      let remaining = amount;
+      const updatedBreakdown = (childFee.breakdown || []).map((item) => {
+        if (remaining <= 0 || (item.pending || 0) <= 0) return item;
+        const alloc = Math.min(item.pending, remaining);
+        remaining -= alloc;
+        const newPaid = item.paid + alloc;
+        const newPending = item.pending - alloc;
+        return {
+          ...item,
+          paid: newPaid,
+          pending: newPending,
+          status: newPending === 0 ? "Paid" : "Partial",
+        };
+      });
+
+      const newPaid = updatedBreakdown.length > 0
+        ? updatedBreakdown.reduce((sum, b) => sum + b.paid, 0)
+        : childFee.paid + amount;
+      const newPending = updatedBreakdown.length > 0
+        ? updatedBreakdown.reduce((sum, b) => sum + b.pending, 0)
+        : Math.max(0, childFee.pending - amount);
+      const newStatus = newPending === 0 ? "Paid" : newPaid > 0 ? "Partial" : "Due";
+
+      const newReceipt = {
+        id: `rec-${Date.now()}`,
+        receiptNo: `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+        amount,
+        method: payMethod,
+        txnId: `TXN${Date.now()}`,
+        paidFor: `Term Installment Payment (${child?.programme || ""})`,
+        status: "Success",
+      };
+
+      const targetKey = dataKey || child?.id;
+      const updated = {
+        ...feeRecords,
+        [targetKey]: {
+          ...childFee,
+          total: childFee.total,
+          paid: newPaid,
+          pending: newPending,
+          status: newStatus,
+          breakdown: updatedBreakdown,
+          receipts: [newReceipt, ...(childFee.receipts || [])],
+        },
+      };
+
+      setFeeRecords(updated);
+      saveStoredFeeRecords(updated);
+      setPayBusy(false);
+      setPayModalOpen(false);
+      setToastMessage(`Payment of ₹${amount.toLocaleString()} completed successfully! Receipt generated.`);
+    }, 1000);
+  };
 
   if (availableChildren.length === 0 || !child) {
     return (
@@ -133,7 +184,7 @@ export default function ParentFeesPage() {
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Total Annual Fee</div>
-              <div className="parent-stat-value">₹{(childFee?.total || 0).toLocaleString()}</div>
+              <div className="parent-stat-value">₹{childFee.total.toLocaleString()}</div>
               <div className="parent-stat-subtext">Academic Year {child?.academicYear || "2026-2027"}</div>
             </div>
           </div>
@@ -144,35 +195,35 @@ export default function ParentFeesPage() {
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Paid Fees</div>
-              <div className="parent-stat-value" style={{ color: "var(--cms-green)" }}>₹{(childFee?.paid || 0).toLocaleString()}</div>
-              <div className="parent-stat-subtext">Status: <strong>{childFee?.status || "—"}</strong></div>
+              <div className="parent-stat-value" style={{ color: "var(--cms-green)" }}>₹{childFee.paid.toLocaleString()}</div>
+              <div className="parent-stat-subtext">Status: <strong>{childFee.status}</strong></div>
             </div>
           </div>
 
           <div className="parent-stat-card">
-            <div className="parent-stat-icon-wrap" style={{ background: (childFee?.pending || 0) > 0 ? "var(--cms-red-soft)" : "var(--cms-green-soft)", color: (childFee?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
+            <div className="parent-stat-icon-wrap" style={{ background: childFee.pending > 0 ? "var(--cms-red-soft)" : "var(--cms-green-soft)", color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
               <Clock size={24} />
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Pending Balance</div>
-              <div className="parent-stat-value" style={{ color: (childFee?.pending || 0) > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
-                ₹{(childFee?.pending || 0).toLocaleString()}
+              <div className="parent-stat-value" style={{ color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>
+                ₹{childFee.pending.toLocaleString()}
               </div>
-              <div className="parent-stat-subtext">{(childFee?.pending || 0) > 0 ? `Due: ${childFee?.dueDate || "—"}` : "All Dues Cleared"}</div>
+              <div className="parent-stat-subtext">{childFee.pending > 0 ? `Due: ${childFee.dueDate}` : "All Dues Cleared"}</div>
             </div>
           </div>
 
-          <div className="parent-stat-card">
+          <div className="parent-stat-card" style={{ cursor: childFee.pending > 0 ? "pointer" : "default" }} onClick={childFee.pending > 0 ? handleOpenPayModal : undefined}>
             <div className="parent-stat-icon-wrap" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary-dark)" }}>
               <CreditCard size={24} />
             </div>
             <div className="parent-stat-info">
-              <div className="parent-stat-label">Fee Status</div>
+              <div className="parent-stat-label">Quick Action</div>
               <div className="parent-stat-value" style={{ fontSize: 18 }}>
-                {childFee?.status || "—"}
+                {childFee.pending > 0 ? "Pay Now" : "Receipts"}
               </div>
               <div className="parent-stat-subtext" style={{ color: "var(--cms-primary-dark)" }}>
-                {childFee.receipts?.length || 0} Receipt{(childFee.receipts?.length || 0) !== 1 ? "s" : ""} on Record
+                {childFee.pending > 0 ? "Secure Instant Payment" : "All cleared"}
               </div>
             </div>
           </div>
@@ -184,6 +235,11 @@ export default function ParentFeesPage() {
             <h3 className="parent-card-title">
               <Wallet size={18} /> Fee Structure & Component Breakdown
             </h3>
+            {childFee.pending > 0 && (
+              <button type="button" className="cms-btn cms-btn-primary cms-btn-sm" onClick={handleOpenPayModal}>
+                <CreditCard size={14} /> Pay Pending Balance (₹{childFee.pending.toLocaleString()})
+              </button>
+            )}
           </div>
           <div className="parent-card-body" style={{ padding: 0 }}>
             <div className="parent-timetable-table-wrap" style={{ border: "none" }}>
@@ -285,7 +341,75 @@ export default function ParentFeesPage() {
           </div>
         </div>
 
+        {/* Pay Now Interactive Modal */}
+        {payModalOpen && (
+          <Modal
+            title="Make Fee Payment"
+            onClose={() => !payBusy && setPayModalOpen(false)}
+            size="md"
+            footer={
+              <>
+                <button type="button" className="cms-btn cms-btn-outline" onClick={() => setPayModalOpen(false)} disabled={payBusy}>Cancel</button>
+                <button type="button" className="cms-btn cms-btn-primary" onClick={handleExecutePayment} disabled={payBusy}>
+                  {payBusy ? "Processing Payment..." : `Confirm & Pay ₹${Number(payAmount || 0).toLocaleString()}`}
+                </button>
+              </>
+            }
+          >
+            <form onSubmit={handleExecutePayment} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ padding: 14, background: "var(--cms-bg)", borderRadius: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span>Student Name:</span>
+                  <strong>{child.name}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                  <span>Admission Number:</span>
+                  <strong>{child.admissionNo}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Total Pending Balance:</span>
+                  <strong style={{ color: "var(--cms-red)" }}>₹{childFee.pending.toLocaleString()}</strong>
+                </div>
+              </div>
 
+              <div>
+                <label className="cms-label" htmlFor="pay-amount">Amount to Pay (₹)</label>
+                <input
+                  id="pay-amount"
+                  type="number"
+                  className="cms-input"
+                  min={500}
+                  max={childFee.pending}
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="cms-label">Payment Method</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+                  {["UPI", "Net Banking", "Debit/Credit Card"].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`cms-btn ${payMethod === m ? "cms-btn-primary" : "cms-btn-outline"}`}
+                      style={{ fontSize: 13, padding: "10px 8px", textAlign: "center" }}
+                      onClick={() => setPayMethod(m)}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "var(--cms-muted)" }}>
+                <ShieldCheck size={16} color="var(--cms-green)" />
+                256-Bit Encrypted Payment Gateway • Instant Receipt Generation
+              </div>
+            </form>
+          </Modal>
+        )}
 
         {/* Printable Official Receipt Modal */}
         {selectedReceipt && (

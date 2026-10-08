@@ -16,53 +16,9 @@ export const adminLogin = (data) =>
     password: data.password,
   });
 
-export const DEFAULT_PARENT_BACKEND_TOKEN =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4NTkiLCJuYW1laWQiOiI4NTkiLCJlbWFpbCI6Im5hdmVlbnBvbm5hcHVsYTBAZ21haWwuY29tIiwidW5pcXVlX25hbWUiOiJQYXJlbnQgLyBHdWFyZGlhbiIsInJvbGUiOiJQYXJlbnQiLCJqdGkiOiI3NWQ4NTk5Zi00ZGQ0LTQ0M2MtYjgxYy1iYzMxMzcyZjQxMmQiLCJuYmYiOjE3OTExOTAzMzMsImV4cCI6MTc5MTI3NjczMywiaWF0IjoxNzkxMTkwMzMzLCJpc3MiOiJDb2xsZWdlTWFuYWdlbWVudEFQSSIsImF1ZCI6IkNvbGxlZ2VNYW5hZ2VtZW50RnJvbnRlbmQifQ.glGlypm3m7Aor0iRCXpuGc-ZuGfOB93JQaPbtOSNicI";
-
-function authenticateParentAccount(parentAccount, password) {
-  let valid = true;
-  try {
-    const savedMap = typeof window !== "undefined" ? JSON.parse(window.localStorage.getItem("cms-parent-passwords") || "{}") : {};
-    const savedPass = savedMap?.[parentAccount.id];
-    if (savedPass && password !== savedPass) {
-      valid = false;
-    }
-  } catch {
-    /* storage unavailable */
-  }
-  if (!valid) {
-    const err = new Error("Invalid username or password.");
-    err.code = "INVALID_CREDENTIALS";
-    throw err;
-  }
-  return {
-    token: DEFAULT_PARENT_BACKEND_TOKEN,
-    user: parentAccount,
-    roleType: "parent",
-    message: "Login successful.",
-  };
-}
-
 export const loginUser = async (credentials) => {
   const emailOrMobile = String(credentials.emailOrMobile || credentials.email || "").trim();
   const password = credentials.password;
-
-  const normalized = emailOrMobile.toLowerCase();
-  const isExplicitParent =
-    normalized.includes("parent") ||
-    normalized.startsWith("par-") ||
-    normalized === "parent@cms.com" ||
-    normalized === "parent1@cms.com" ||
-    normalized === "parent2@cms.com" ||
-    normalized === "parent3@cms.com" ||
-    normalized === "parent@pirnav.edu.in";
-
-  if (isExplicitParent) {
-    const parentAccount = findParentAccount(emailOrMobile);
-    if (parentAccount && password) {
-      return authenticateParentAccount(parentAccount, password);
-    }
-  }
 
   logLoginSelection(apiEndpoints.auth.login, emailOrMobile);
   try {
@@ -70,20 +26,37 @@ export const loginUser = async (credentials) => {
     logLoginResponse(response.status);
     return normalizeLoginResponse(response.data, emailOrMobile);
   } catch (authError) {
-    const parentAccount = findParentAccount(emailOrMobile);
-    if (parentAccount && password) {
-      return authenticateParentAccount(parentAccount, password);
-    }
-
     // If the auth endpoint failed due to 404 or connection error and it's an admin email, fallback to admin login
-    const isAdminEmail = normalized.includes("admin");
-    if (isAdminEmail && authError?.response?.status === 404 && apiEndpoints.admin?.login) {
+    if (authError?.response?.status === 404 && apiEndpoints.admin?.login) {
       logLoginSelection(apiEndpoints.admin.login, emailOrMobile);
       const fallbackResponse = await adminLogin({ email: emailOrMobile, password });
       logLoginResponse(fallbackResponse.status);
       return normalizeLoginResponse(fallbackResponse.data, emailOrMobile, "admin");
     }
-
+    const parentAccount = findParentAccount(emailOrMobile);
+    if (parentAccount && password) {
+      let valid = true;
+      try {
+        const savedMap = typeof window !== "undefined" ? JSON.parse(window.localStorage.getItem("cms-parent-passwords") || "{}") : {};
+        const savedPass = savedMap?.[parentAccount.id];
+        if (savedPass && password !== savedPass) {
+          valid = false;
+        }
+      } catch {
+        /* storage unavailable */
+      }
+      if (!valid) {
+        const err = new Error("Invalid username or password.");
+        err.code = "INVALID_CREDENTIALS";
+        throw err;
+      }
+      return {
+        token: `parent-auth-token-${Date.now()}`,
+        user: parentAccount,
+        roleType: "parent",
+        message: "Login successful.",
+      };
+    }
     throw authError;
   }
 };

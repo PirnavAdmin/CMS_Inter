@@ -1,22 +1,19 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAcademicContext } from "../../context/AcademicContext.jsx";
 import { getAuthUser } from "../../features/authStorage.js";
-import { useParentPortalContext } from "./context/ParentPortalContext.jsx";
 
 // ==========================================================================
-// PIRNAV COLLEGE ERP — PARENT MODULE DATA & IN-MEMORY STATE (NO STORAGE)
+// PIRNAV COLLEGE ERP — PARENT MODULE DATA & STATE
 // ==========================================================================
 
-const inMemoryStore = {
-  activeChildId: {},
-  fees: null,
-  leave: null,
-  notifications: null,
-  profiles: {},
-  passwords: {},
-  settings: {},
-  docs: null,
-};
+const PARENT_LEAVE_KEY = "pirnav_parent_leave_requests";
+const PARENT_FEES_KEY = "pirnav_parent_fees_records";
+const PARENT_ACTIVE_CHILD_KEY = "pirnav_parent_active_child_id";
+const PARENT_MESSAGES_KEY = "pirnav_parent_messages";
+const PARENT_NOTIFICATIONS_KEY = "pirnav_parent_notifications";
+const PARENT_DOCS_KEY = "pirnav_parent_requested_docs";
+const PARENT_PROFILE_KEY = "pirnav_parent_profile";
+const PARENT_SETTINGS_KEY = "pirnav_parent_settings";
 
 export const initialParentSettings = {
   smsAlerts: true,
@@ -605,44 +602,8 @@ export const normalizeAcademicYear = (year) => {
 export const getChildForYear = (baseChild, year) => {
   if (!baseChild) return null;
   const norm = normalizeAcademicYear(year);
-  const defaultAttendance = baseChild.attendance || {
-    overall: 94,
-    presentDays: 47,
-    absentDays: 3,
-    totalWorkingDays: 50,
-    status: "Excellent",
-  };
-  const defaultAcademics = baseChild.academics || {
-    sgpa: "8.8",
-    cgpa: "8.9",
-    grade: "A+",
-    rank: "3rd in Class",
-    totalCredits: 24,
-    performanceTrend: "+4.2% from last term",
-  };
-  const defaultFees = baseChild.fees || {
-    total: 70000,
-    paid: 70000,
-    pending: 0,
-    status: "Paid",
-    dueDate: "—",
-  };
-
   if (norm === "2026-2027") {
-    return {
-      ...baseChild,
-      academicYear: norm,
-      level: baseChild.level || "Intermediate 1st Year",
-      semester: baseChild.semester || "Semester 1",
-      board: baseChild.board || "Board of Intermediate Education",
-      mentor: baseChild.mentor || "Dr. Anitha Rao",
-      mentorDesignation: baseChild.mentorDesignation || "Professor & Class Teacher",
-      mentorMobile: baseChild.mentorMobile || "+91 98480 12345",
-      mentorEmail: baseChild.mentorEmail || "anitha.rao@college.edu",
-      attendance: defaultAttendance,
-      academics: defaultAcademics,
-      fees: defaultFees,
-    };
+    return { ...baseChild, academicYear: norm };
   }
   const yearly = childYearlyRecords?.[baseChild.id]?.[norm];
   if (yearly) {
@@ -651,16 +612,9 @@ export const getChildForYear = (baseChild, year) => {
   return {
     ...baseChild,
     academicYear: norm,
-    level: baseChild.level || "Intermediate 1st Year",
-    semester: baseChild.semester || "Semester 1",
-    board: baseChild.board || "Board of Intermediate Education",
-    mentor: baseChild.mentor || "Dr. Anitha Rao",
-    mentorDesignation: baseChild.mentorDesignation || "Professor & Class Teacher",
-    mentorMobile: baseChild.mentorMobile || "+91 98480 12345",
-    mentorEmail: baseChild.mentorEmail || "anitha.rao@college.edu",
-    attendance: defaultAttendance,
-    academics: defaultAcademics,
-    fees: defaultFees,
+    attendance: { overall: 0, presentDays: 0, absentDays: 0, totalWorkingDays: 0, status: "—" },
+    academics: { sgpa: "—", cgpa: "—", rank: "—", totalCredits: 0, grade: "—", performanceTrend: "—" },
+    fees: { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—" },
   };
 };
 
@@ -675,15 +629,28 @@ export const getChildDataKey = (childId, year) => {
 export const getStoredActiveChildId = (childrenList) => {
   const children = childrenList || getParentChildren();
   if (!children || children.length === 0) return "";
-  const parentId = getLoggedInParent()?.id || "default";
-  const saved = inMemoryStore.activeChildId[parentId];
-  if (saved && children.some((c) => c.id === saved)) return saved;
+  try {
+    const parentId = getLoggedInParent()?.id;
+    const saved = parentId
+      ? localStorage.getItem(`${PARENT_ACTIVE_CHILD_KEY}_${parentId}`) || localStorage.getItem(PARENT_ACTIVE_CHILD_KEY)
+      : localStorage.getItem(PARENT_ACTIVE_CHILD_KEY);
+    if (saved && children.some((c) => c.id === saved)) return saved;
+  } catch (e) {
+    console.debug("Failed reading active child from storage:", e);
+  }
   return children[0]?.id || "";
 };
 
 export const setStoredActiveChildId = (id) => {
-  const parentId = getLoggedInParent()?.id || "default";
-  inMemoryStore.activeChildId[parentId] = id;
+  try {
+    const parentId = getLoggedInParent()?.id;
+    if (parentId) {
+      localStorage.setItem(`${PARENT_ACTIVE_CHILD_KEY}_${parentId}`, id);
+    }
+    localStorage.setItem(PARENT_ACTIVE_CHILD_KEY, id);
+  } catch (e) {
+    console.debug("Failed writing active child to storage:", e);
+  }
 };
 
 export const getActiveChild = (activeId, parent) => {
@@ -693,38 +660,57 @@ export const getActiveChild = (activeId, parent) => {
 };
 
 export const useParentPortal = () => {
-  const context = useParentPortalContext?.();
-  if (context && context.availableChildren) {
-    return context;
-  }
-
   const academicCtx = useAcademicContext?.() || {};
   const rawYear = academicCtx.selectedAcademicYear;
-  const currentAcademicYear = normalizeAcademicYear(rawYear);
+  const currentAcademicYear = useMemo(() => normalizeAcademicYear(rawYear), [rawYear]);
   
   const authUser = getAuthUser();
-  const parentUser = getLoggedInParent();
-  const availableChildren = getParentChildren(parentUser);
-  const activeBaseChild = availableChildren[0] || null;
-  const child = activeBaseChild ? getChildForYear(activeBaseChild, currentAcademicYear) : null;
+  const parentUser = useMemo(() => getLoggedInParent(), [authUser?.id, authUser?.email, authUser?.username]);
+  const availableChildren = useMemo(() => getParentChildren(parentUser), [parentUser?.id]);
+  
+  const [activeChildId, setActiveChildIdState] = useState(() => {
+    return getStoredActiveChildId(availableChildren);
+  });
+
+  // Revalidate activeChildId whenever availableChildren changes (e.g. login switch)
+  useEffect(() => {
+    if (availableChildren.length > 0 && !availableChildren.some((c) => c.id === activeChildId)) {
+      const fallback = availableChildren[0].id;
+      setActiveChildIdState(fallback);
+      setStoredActiveChildId(fallback);
+    }
+  }, [availableChildren, activeChildId]);
+
+  const setActiveChildId = useCallback((id) => {
+    setActiveChildIdState(id);
+    setStoredActiveChildId(id);
+  }, []);
+
+  const activeBaseChild = useMemo(() => {
+    if (!availableChildren.length) return null;
+    return availableChildren.find((c) => c.id === activeChildId) || availableChildren[0];
+  }, [availableChildren, activeChildId]);
+
+  const child = useMemo(() => {
+    if (!activeBaseChild) return null;
+    return getChildForYear(activeBaseChild, currentAcademicYear);
+  }, [activeBaseChild, currentAcademicYear]);
+
+  const dataKey = useMemo(() => {
+    if (!activeBaseChild) return "";
+    return getChildDataKey(activeBaseChild.id, currentAcademicYear);
+  }, [activeBaseChild?.id, currentAcademicYear]);
 
   return {
-    loading: false,
     parentUser,
     availableChildren,
     activeChildId: activeBaseChild?.id || "",
-    setActiveChildId: () => {},
+    setActiveChildId,
     selectedAcademicYear: currentAcademicYear,
     currentAcademicYear,
     activeBaseChild,
-    childFee: (activeBaseChild && initialFeeRecords[activeBaseChild.id]) ? initialFeeRecords[activeBaseChild.id] : { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], receipts: [], schedules: [] },
-    results: (activeBaseChild && examResultsData[activeBaseChild.id]) ? examResultsData[activeBaseChild.id] : [],
-    childTimetable: (activeBaseChild && timetableData[activeBaseChild.id]) || timetableData["stu-001"] || [],
-    timetableSchedule: (activeBaseChild && timetableData[activeBaseChild.id]) || timetableData["stu-001"] || [],
-    rawTimetable: [],
-    childAttendance: null,
-    attendanceOverview: null,
-    dataKey: activeBaseChild?.id || "",
+    child,
+    dataKey,
     getChildForYear,
   };
 };
@@ -734,14 +720,6 @@ export const useParentPortal = () => {
 // ==========================================================================
 
 export const subjectAttendanceData = {
-  "860": [
-    { code: "MAT1A", subject: "Mathematics IA", faculty: "Dr. Anitha Rao", total: 25, present: 24, absent: 1, percentage: 96, status: "Excellent" },
-    { code: "PHY1", subject: "Physics", faculty: "Mr. Suresh Kumar", total: 25, present: 23, absent: 2, percentage: 92, status: "Good" },
-    { code: "CHE1", subject: "Chemistry", faculty: "Mrs. Lakshmi Devi", total: 20, present: 19, absent: 1, percentage: 95, status: "Excellent" },
-    { code: "ENG1", subject: "English", faculty: "Ms. Priya Sharma", total: 20, present: 18, absent: 2, percentage: 90, status: "Good" },
-    { code: "CSC1", subject: "Computer Science", faculty: "Mr. Ravi Teja", total: 20, present: 19, absent: 1, percentage: 95, status: "Excellent" },
-    { code: "PHYL1", subject: "Physics Lab", faculty: "Mr. Suresh Kumar", total: 10, present: 10, absent: 0, percentage: 100, status: "Outstanding" },
-  ],
   "stu-001": [
     { code: "MAT1A", subject: "Mathematics IA", faculty: "Dr. Anitha Rao", total: 25, present: 24, absent: 1, percentage: 96, status: "Excellent" },
     { code: "PHY1", subject: "Physics", faculty: "Mr. Suresh Kumar", total: 25, present: 23, absent: 2, percentage: 92, status: "Good" },
@@ -810,14 +788,6 @@ export const subjectAttendanceData = {
 };
 
 export const recentAttendanceLogs = {
-  "860": [
-    { date: "2026-09-20", day: "Saturday", status: "Present", timeIn: "08:45 AM", timeOut: "03:45 PM", remark: "On time" },
-    { date: "2026-09-19", day: "Friday", status: "Present", timeIn: "08:50 AM", timeOut: "03:45 PM", remark: "On time" },
-    { date: "2026-09-18", day: "Thursday", status: "Present", timeIn: "08:42 AM", timeOut: "03:45 PM", remark: "On time" },
-    { date: "2026-09-17", day: "Wednesday", status: "Absent", timeIn: "—", timeOut: "—", remark: "Informed Leave (Mild fever)" },
-    { date: "2026-09-16", day: "Tuesday", status: "Present", timeIn: "08:48 AM", timeOut: "03:45 PM", remark: "On time" },
-    { date: "2026-09-15", day: "Monday", status: "Present", timeIn: "08:44 AM", timeOut: "03:45 PM", remark: "On time" },
-  ],
   "stu-001": [
     { date: "2026-09-20", day: "Saturday", status: "Present", timeIn: "08:45 AM", timeOut: "03:45 PM", remark: "On time" },
     { date: "2026-09-19", day: "Friday", status: "Present", timeIn: "08:50 AM", timeOut: "03:45 PM", remark: "On time" },
@@ -857,14 +827,6 @@ export const recentAttendanceLogs = {
 // ==========================================================================
 
 export const academicSubjectsData = {
-  "860": [
-    { code: "MAT1A", name: "Mathematics IA", credits: 4, internals: "23 / 25", assignments: "9.5 / 10", attendance: "96%", grade: "A+", faculty: "Dr. Anitha Rao", status: "High Performer" },
-    { code: "PHY1", name: "Physics", credits: 4, internals: "21 / 25", assignments: "8.5 / 10", attendance: "92%", grade: "A", faculty: "Mr. Suresh Kumar", status: "Good" },
-    { code: "CHE1", name: "Chemistry", credits: 4, internals: "22 / 25", assignments: "9.0 / 10", attendance: "95%", grade: "A+", faculty: "Mrs. Lakshmi Devi", status: "Consistent" },
-    { code: "ENG1", name: "English", credits: 3, internals: "22 / 25", assignments: "9.0 / 10", attendance: "90%", grade: "A", faculty: "Ms. Priya Sharma", status: "Active" },
-    { code: "CSC1", name: "Computer Science", credits: 4, internals: "24 / 25", assignments: "10 / 10", attendance: "95%", grade: "O", faculty: "Mr. Ravi Teja", status: "Top in Subject" },
-    { code: "PHYL1", name: "Physics Lab", credits: 2, internals: "25 / 25", assignments: "10 / 10", attendance: "100%", grade: "O", faculty: "Mr. Suresh Kumar", status: "Perfect Score" },
-  ],
   "stu-001": [
     { code: "MAT1A", name: "Mathematics IA", credits: 4, internals: "23 / 25", assignments: "9.5 / 10", attendance: "96%", grade: "A+", faculty: "Dr. Anitha Rao", status: "High Performer" },
     { code: "PHY1", name: "Physics", credits: 4, internals: "21 / 25", assignments: "8.5 / 10", attendance: "92%", grade: "A", faculty: "Mr. Suresh Kumar", status: "Good" },
@@ -933,28 +895,6 @@ export const academicSubjectsData = {
 };
 
 export const examResultsData = {
-  "860": [
-    {
-      examName: "Quarterly Examination 2026",
-      period: "Sep 2026",
-      academicYear: "2026-2027",
-      maxMarks: 600,
-      obtainedMarks: 532,
-      percentage: "88.6%",
-      sgpa: "8.8",
-      cgpa: "8.9",
-      resultStatus: "Passed with Distinction",
-      classRank: "3 of 45",
-      subjects: [
-        { code: "MAT1A", subject: "Mathematics IA", max: 100, obtained: 92, grade: "A+", status: "Pass" },
-        { code: "PHY1", subject: "Physics", max: 100, obtained: 84, grade: "A", status: "Pass" },
-        { code: "CHE1", subject: "Chemistry", max: 100, obtained: 88, grade: "A+", status: "Pass" },
-        { code: "ENG1", subject: "English", max: 100, obtained: 86, grade: "A", status: "Pass" },
-        { code: "CSC1", subject: "Computer Science", max: 100, obtained: 94, grade: "O", status: "Pass" },
-        { code: "PHYL1", subject: "Physics Lab", max: 100, obtained: 88, grade: "A+", status: "Pass" },
-      ],
-    },
-  ],
   "stu-001": [
     {
       examName: "Quarterly Examination 2026",
@@ -1330,13 +1270,6 @@ export const examResultsData = {
 // ==========================================================================
 
 export const upcomingExamsData = {
-  "860": [
-    { id: "ex-01", subject: "Mathematics IA", code: "MAT1A", date: "05 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 1", seat: "R-101", invigilator: "Dr. Rajesh Sharma", syllabus: "Units 1 to 4 (Algebra, Coordinate Geometry, Calculus)", maxMarks: 100 },
-    { id: "ex-02", subject: "Physics", code: "PHY1", date: "08 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 2", seat: "R-102", invigilator: "Mr. Suresh Kumar", syllabus: "Units 1 to 5 (Mechanics, Thermodynamics, Waves)", maxMarks: 100 },
-    { id: "ex-03", subject: "Chemistry", code: "CHE1", date: "10 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 1", seat: "R-101", invigilator: "Mrs. Lakshmi Devi", syllabus: "Units 1 to 4 (Atomic Structure, Bonding, States of Matter)", maxMarks: 100 },
-    { id: "ex-04", subject: "English", code: "ENG1", date: "12 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 3", seat: "R-105", invigilator: "Ms. Priya Sharma", syllabus: "Prose, Poetry, Comprehension, Writing Skills", maxMarks: 100 },
-    { id: "ex-05", subject: "Computer Science", code: "CSC1", date: "15 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 2", seat: "R-102", invigilator: "Mr. Ravi Teja", syllabus: "Python Basics, Loops, Functions, OOP concepts", maxMarks: 100 },
-  ],
   "stu-001": [
     { id: "ex-01", subject: "Mathematics IA", code: "MAT1A", date: "05 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 1", seat: "R-101", invigilator: "Dr. Rajesh Sharma", syllabus: "Units 1 to 4 (Algebra, Coordinate Geometry, Calculus)", maxMarks: 100 },
     { id: "ex-02", subject: "Physics", code: "PHY1", date: "08 Dec 2026", time: "09:30 AM - 12:30 PM", hall: "Examination Hall 2", seat: "R-102", invigilator: "Mr. Suresh Kumar", syllabus: "Units 1 to 5 (Mechanics, Thermodynamics, Waves)", maxMarks: 100 },
@@ -1390,7 +1323,7 @@ export const upcomingExamsData = {
 // FEES & PAYMENTS DATA
 // ==========================================================================
 
-export const storedFeeRecords = {
+export const initialFeeRecords = {
   "stu-001": {
     total: 45500,
     paid: 28000,
@@ -1535,15 +1468,60 @@ export const storedFeeRecords = {
   },
 };
 
-export const initialFeeRecords = storedFeeRecords;
-
 export const getStoredFeeRecords = () => {
-  if (inMemoryStore.fees) return inMemoryStore.fees;
+  try {
+    const raw = localStorage.getItem(PARENT_FEES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      let modified = false;
+      const sanitized = {};
+      for (const [key, record] of Object.entries(parsed)) {
+        if (record && Array.isArray(record.breakdown)) {
+          const hasLibrary = record.breakdown.some((b) => /library/i.test(b.category));
+          const filteredBreakdown = record.breakdown.filter((b) => !/library/i.test(b.category));
+          const cleanedReceipts = (record.receipts || []).map((r) => ({
+            ...r,
+            paidFor: (r.paidFor || "").replace(/& Library/gi, "& Academic Amenities").replace(/Library/gi, "Academic"),
+          }));
+
+          const bTotal = filteredBreakdown.reduce((sum, b) => sum + (b.amount || 0), 0);
+          const bPaid = filteredBreakdown.reduce((sum, b) => sum + (b.paid || 0), 0);
+          const bPending = filteredBreakdown.reduce((sum, b) => sum + (b.pending || 0), 0);
+
+          if (hasLibrary || record.total !== bTotal) {
+            modified = true;
+          }
+
+          sanitized[key] = {
+            ...record,
+            total: bTotal > 0 ? bTotal : record.total,
+            paid: bTotal > 0 ? bPaid : record.paid,
+            pending: bTotal > 0 ? bPending : record.pending,
+            status: bTotal > 0 ? (bPending === 0 ? "Paid" : bPaid > 0 ? "Partial" : "Due") : record.status,
+            breakdown: filteredBreakdown,
+            receipts: cleanedReceipts,
+          };
+        } else {
+          sanitized[key] = record;
+        }
+      }
+      if (modified) {
+        saveStoredFeeRecords(sanitized);
+      }
+      return sanitized;
+    }
+  } catch (e) {
+    console.debug("Failed reading fees from storage:", e);
+  }
   return initialFeeRecords;
 };
 
 export const saveStoredFeeRecords = (records) => {
-  inMemoryStore.fees = records;
+  try {
+    localStorage.setItem(PARENT_FEES_KEY, JSON.stringify(records));
+  } catch (e) {
+    console.debug("Failed writing fees to storage:", e);
+  }
 };
 
 // ==========================================================================
@@ -1551,16 +1529,6 @@ export const saveStoredFeeRecords = (records) => {
 // ==========================================================================
 
 export const timetableData = {
-  "860": [
-    { period: "Period 1", time: "09:00 - 10:00 AM", mon: "Mathematics IA (Room 203)", tue: "Physics (Room 203)", wed: "Chemistry (Room 203)", thu: "Mathematics IA (Room 203)", fri: "Computer Science (Lab 1)", sat: "Mathematics IA (Room 203)" },
-    { period: "Period 2", time: "10:00 - 11:00 AM", mon: "Physics (Room 203)", tue: "Mathematics IA (Room 203)", wed: "English (Room 203)", thu: "Computer Science (Lab 1)", fri: "Physics (Room 203)", sat: "Chemistry (Room 203)" },
-    { period: "Break", time: "11:00 - 11:15 AM", mon: "Short Break", tue: "Short Break", wed: "Short Break", thu: "Short Break", fri: "Short Break", sat: "Short Break", isBreak: true },
-    { period: "Period 3", time: "11:15 - 12:15 PM", mon: "Chemistry (Room 203)", tue: "English (Room 203)", wed: "Mathematics IA (Room 203)", thu: "Physics (Room 203)", fri: "Mathematics IA (Room 203)", sat: "English (Room 203)" },
-    { period: "Lunch", time: "12:15 - 01:15 PM", mon: "Lunch Break", tue: "Lunch Break", wed: "Lunch Break", thu: "Lunch Break", fri: "Lunch Break", sat: "Lunch Break", isBreak: true },
-    { period: "Period 4", time: "01:15 - 02:15 PM", mon: "Physics Lab (Lab 2)", tue: "Chemistry Lab (Lab 3)", wed: "Physics (Room 203)", thu: "English (Room 203)", fri: "Chemistry (Room 203)", sat: "Remedial / Mentorship" },
-    { period: "Period 5", time: "02:15 - 03:15 PM", mon: "Physics Lab (Lab 2)", tue: "Chemistry Lab (Lab 3)", wed: "Computer Science (Lab 1)", thu: "Study Hour & Revision", fri: "Computer Science (Lab 1)", sat: "Sports & Club Activity" },
-    { period: "Period 6", time: "03:15 - 04:00 PM", mon: "Tutorial (Mathematics)", tue: "Tutorial (Physics)", wed: "Tutorial (Chemistry)", thu: "Doubt Clearance", fri: "Doubt Clearance", sat: "Dispersal" },
-  ],
   "stu-001": [
     { period: "Period 1", time: "09:00 - 10:00 AM", mon: "Mathematics IA (Room 203)", tue: "Physics (Room 203)", wed: "Chemistry (Room 203)", thu: "Mathematics IA (Room 203)", fri: "Computer Science (Lab 1)", sat: "Mathematics IA (Room 203)" },
     { period: "Period 2", time: "10:00 - 11:00 AM", mon: "Physics (Room 203)", tue: "Mathematics IA (Room 203)", wed: "English (Room 203)", thu: "Computer Science (Lab 1)", fri: "Physics (Room 203)", sat: "Chemistry (Room 203)" },
@@ -1671,16 +1639,25 @@ export const initialLeaveRequests = [
 ];
 
 export const getStoredLeaves = () => {
-  if (inMemoryStore.leave) return inMemoryStore.leave;
+  try {
+    const raw = localStorage.getItem(PARENT_LEAVE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.debug("Failed reading leaves from storage:", e);
+  }
   return initialLeaveRequests;
 };
 
 export const saveStoredLeaves = (leaves) => {
-  inMemoryStore.leave = leaves;
+  try {
+    localStorage.setItem(PARENT_LEAVE_KEY, JSON.stringify(leaves));
+  } catch (e) {
+    console.debug("Failed writing leaves to storage:", e);
+  }
 };
 
 // ==========================================================================
-// COMMUNICATION / TEACHER DIRECTORY
+// COMMUNICATION / TEACHER DIRECTORY & MESSAGES
 // ==========================================================================
 
 export const teachersDirectory = [
@@ -1691,6 +1668,95 @@ export const teachersDirectory = [
   { id: "tea-05", name: "Ms. Priya Sharma", subject: "English", role: "Assistant Professor", mobile: "+91 98480 56789", email: "priya.s@college.edu", availableHours: "01:30 PM - 02:30 PM (Wed, Fri)", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150" },
   { id: "tea-06", name: "Dr. V. R. Murthy", subject: "Administration", role: "Principal, Pirnav Junior College", mobile: "+91 98480 99999", email: "principal@pirnav.edu.in", availableHours: "By Prior Appointment", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150" },
 ];
+
+export const initialMessages = {
+  "parent-001": [
+    {
+      id: "msg-01",
+      teacherId: "tea-01",
+      teacherName: "Dr. Anitha Rao",
+      subject: "Quarterly Math Performance Feedback",
+      snippet: "Rahul scored 92/100 in Mathematics. Keep encouraging his problem-solving habits.",
+      date: "18 Sep 2026, 04:15 PM",
+      thread: [
+        { sender: "teacher", senderName: "Dr. Anitha Rao", time: "18 Sep 2026, 04:15 PM", text: "Dear Suresh garu, Rahul has performed exceptionally well in the Quarterly Maths exam scoring 92/100. He is very active during tutorial hours. Keep encouraging his problem-solving habits." },
+        { sender: "parent", senderName: "Suresh Kumar", time: "18 Sep 2026, 05:30 PM", text: "Thank you Dr. Anitha Madam for your guidance and support. He really enjoys your mathematics lectures." },
+      ],
+    },
+    {
+      id: "msg-02",
+      teacherId: "tea-02",
+      teacherName: "Mr. Suresh Kumar",
+      subject: "Physics Numerical Practice",
+      snippet: "Please ensure Rahul spends 30 minutes daily on Physics derivation practice.",
+      date: "10 Sep 2026, 11:20 AM",
+      thread: [
+        { sender: "teacher", senderName: "Mr. Suresh Kumar", time: "10 Sep 2026, 11:20 AM", text: "Hello Mr. Suresh, Rahul's conceptual understanding of Physics is strong, but he tends to skip intermediate steps in numerical derivations. A daily 30-minute practice at home will help him secure full marks." },
+        { sender: "parent", senderName: "Suresh Kumar", time: "10 Sep 2026, 01:10 PM", text: "Noted sir. I will monitor his numerical workout sessions at home." },
+      ],
+    },
+  ],
+  "parent-002": [
+    {
+      id: "msg-21",
+      teacherId: "tea-03",
+      teacherName: "Mrs. Lakshmi Devi",
+      subject: "Botany & Chemistry Laboratory Assessment",
+      snippet: "Priya is excelling in practical lab records and biology experiments.",
+      date: "17 Sep 2026, 03:30 PM",
+      thread: [
+        { sender: "teacher", senderName: "Mrs. Lakshmi Devi", time: "17 Sep 2026, 03:30 PM", text: "Dear Ramesh garu, Priya has shown great diligence in her BiPC practicals and maintained 100% record accuracy. Keep encouraging her." },
+        { sender: "parent", senderName: "Ramesh Sharma", time: "17 Sep 2026, 05:15 PM", text: "Thank you Mrs. Lakshmi Devi. We will ensure she continues her focus on medical entrance preparations." },
+      ],
+    },
+  ],
+  "parent-003": [
+    {
+      id: "msg-31",
+      teacherId: "tea-01",
+      teacherName: "Dr. Anitha Rao",
+      subject: "Quarterly Mathematics & Physics Progress",
+      snippet: "Arjun is performing well in calculus concepts and MPC tutorials.",
+      date: "16 Sep 2026, 02:45 PM",
+      thread: [
+        { sender: "teacher", senderName: "Dr. Anitha Rao", time: "16 Sep 2026, 02:45 PM", text: "Dear Mahesh garu, Arjun has secured good marks in the Mathematics quarterly test. Regular tutorial attendance has helped his confidence." },
+        { sender: "parent", senderName: "Mahesh Reddy", time: "16 Sep 2026, 04:30 PM", text: "Thank you madam. I will monitor his practice hours regularly." },
+      ],
+    },
+  ],
+};
+
+export const getStoredMessages = (overrideParentId) => {
+  const p = getLoggedInParent();
+  const pid = overrideParentId || p?.id || "parent-001";
+  try {
+    const raw = localStorage.getItem(`${PARENT_MESSAGES_KEY}_${pid}`);
+    if (raw) return JSON.parse(raw);
+    if (pid === "parent-001") {
+      const globalRaw = localStorage.getItem(PARENT_MESSAGES_KEY);
+      if (globalRaw) {
+        const parsed = JSON.parse(globalRaw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    }
+  } catch (e) {
+    console.debug("Failed reading messages from storage:", e);
+  }
+  return initialMessages[pid] || initialMessages["parent-001"] || [];
+};
+
+export const saveStoredMessages = (messages, overrideParentId) => {
+  const p = getLoggedInParent();
+  const pid = overrideParentId || p?.id || "parent-001";
+  try {
+    localStorage.setItem(`${PARENT_MESSAGES_KEY}_${pid}`, JSON.stringify(messages));
+    if (pid === "parent-001") {
+      localStorage.setItem(PARENT_MESSAGES_KEY, JSON.stringify(messages));
+    }
+  } catch (e) {
+    console.debug("Failed writing messages to storage:", e);
+  }
+};
 
 // ==========================================================================
 // ANNOUNCEMENTS & EVENTS DATA
@@ -1796,54 +1862,122 @@ export const initialParentNotifications = [
 ];
 
 export const getStoredNotifications = () => {
-  if (inMemoryStore.notifications) return inMemoryStore.notifications;
+  try {
+    const raw = localStorage.getItem(PARENT_NOTIFICATIONS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.debug("Failed reading notifications from storage:", e);
+  }
   return initialParentNotifications;
 };
 
 export const saveStoredNotifications = (notifs) => {
-  inMemoryStore.notifications = notifs;
+  try {
+    localStorage.setItem(PARENT_NOTIFICATIONS_KEY, JSON.stringify(notifs));
+  } catch (e) {
+    console.debug("Failed writing notifications to storage:", e);
+  }
 };
 
 export const getStoredParentProfile = (overrideParentId) => {
   const currentParent = getLoggedInParent();
   const effectiveId = overrideParentId || currentParent?.id || "parent-001";
-  return inMemoryStore.profiles[effectiveId] || initialParentProfiles[effectiveId] || initialParentProfile;
+  const storageKey = `${PARENT_PROFILE_KEY}_${effectiveId}`;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) return JSON.parse(raw);
+    const globalRaw = localStorage.getItem(PARENT_PROFILE_KEY);
+    if (globalRaw && effectiveId === "parent-001") return JSON.parse(globalRaw);
+  } catch (e) {
+    console.debug("Failed reading profile from storage:", e);
+  }
+  return initialParentProfiles[effectiveId] || initialParentProfile;
 };
 
 export const saveStoredParentProfile = (profile, overrideParentId) => {
   const effectiveId = overrideParentId || profile?.id || getLoggedInParent()?.id || "parent-001";
-  inMemoryStore.profiles[effectiveId] = profile;
+  const storageKey = `${PARENT_PROFILE_KEY}_${effectiveId}`;
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(profile));
+    if (effectiveId === "parent-001") {
+      localStorage.setItem(PARENT_PROFILE_KEY, JSON.stringify(profile));
+    }
+  } catch (e) {
+    console.debug("Failed writing profile to storage:", e);
+  }
 };
 
 export const PARENT_PASSWORDS_KEY = "cms-parent-passwords";
 
 export const getStoredParentPassword = (parentId) => {
-  return inMemoryStore.passwords[parentId] || null;
+  try {
+    const raw = localStorage.getItem(PARENT_PASSWORDS_KEY);
+    if (raw) {
+      const map = JSON.parse(raw);
+      return map[parentId] || null;
+    }
+  } catch (e) {
+    console.debug("Failed reading parent password from storage:", e);
+  }
+  return null;
 };
 
 export const saveStoredParentPassword = (parentId, newPassword) => {
-  inMemoryStore.passwords[parentId] = newPassword;
+  try {
+    const raw = localStorage.getItem(PARENT_PASSWORDS_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[parentId] = newPassword;
+    localStorage.setItem(PARENT_PASSWORDS_KEY, JSON.stringify(map));
+  } catch (e) {
+    console.debug("Failed writing parent password to storage:", e);
+  }
 };
 
 export const getStoredSettings = (overrideParentId) => {
   const currentParent = getLoggedInParent();
   const effectiveId = overrideParentId || currentParent?.id || "parent-001";
-  return inMemoryStore.settings[effectiveId] || initialParentSettings;
+  const storageKey = `${PARENT_SETTINGS_KEY}_${effectiveId}`;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (raw) return JSON.parse(raw);
+    const globalRaw = localStorage.getItem(PARENT_SETTINGS_KEY);
+    if (globalRaw && effectiveId === "parent-001") return JSON.parse(globalRaw);
+  } catch (e) {
+    console.debug("Failed reading settings from storage:", e);
+  }
+  return initialParentSettings;
 };
 
 export const saveStoredSettings = (settings, overrideParentId) => {
   const currentParent = getLoggedInParent();
   const effectiveId = overrideParentId || currentParent?.id || "parent-001";
-  inMemoryStore.settings[effectiveId] = settings;
+  const storageKey = `${PARENT_SETTINGS_KEY}_${effectiveId}`;
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(settings));
+    if (effectiveId === "parent-001") {
+      localStorage.setItem(PARENT_SETTINGS_KEY, JSON.stringify(settings));
+    }
+  } catch (e) {
+    console.debug("Failed writing settings to storage:", e);
+  }
 };
 
 export const getStoredDocs = () => {
-  if (inMemoryStore.docs) return inMemoryStore.docs;
+  try {
+    const raw = localStorage.getItem(PARENT_DOCS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.debug("Failed reading documents from storage:", e);
+  }
   return studentDocuments;
 };
 
 export const saveStoredDocs = (docs) => {
-  inMemoryStore.docs = docs;
+  try {
+    localStorage.setItem(PARENT_DOCS_KEY, JSON.stringify(docs));
+  } catch (e) {
+    console.debug("Failed writing documents to storage:", e);
+  }
 };
 
 

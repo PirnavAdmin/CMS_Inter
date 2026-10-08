@@ -1290,36 +1290,17 @@ export default function HostelPage() {
         return;
       }
 
-      const formatLocalIso = (val, fallbackOffsetMs = 0) => {
-        if (!val) {
-          const d = new Date(Date.now() + fallbackOffsetMs);
-          const pad = (n) => String(n).padStart(2, "0");
-          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
-        }
-        if (typeof val === "string") {
-          const match = val.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?/);
-          if (match) {
-            return `${match[1]}T${match[2]}:${match[3] || "00"}`;
-          }
-        }
-        const d = new Date(val);
-        if (!isNaN(d.getTime())) {
-          const pad = (n) => String(n).padStart(2, "0");
-          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-        }
-        const fallback = new Date(Date.now() + fallbackOffsetMs);
-        const pad = (n) => String(n).padStart(2, "0");
-        return `${fallback.getFullYear()}-${pad(fallback.getMonth() + 1)}-${pad(fallback.getDate())}T${pad(fallback.getHours())}:${pad(fallback.getMinutes())}:00`;
+      const parseIso = (val, fallbackOffsetMs = 0) => {
+        if (!val) return new Date(Date.now() + fallbackOffsetMs).toISOString();
+        let d = new Date(val);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        d = new Date(`${val}T09:00:00Z`);
+        if (!isNaN(d.getTime())) return d.toISOString();
+        return new Date(Date.now() + fallbackOffsetMs).toISOString();
       };
 
-      const fromIso = formatLocalIso(outData.departureDate || outData.outDate || outData.fromDateTime, 0);
-      let toIso = formatLocalIso(outData.returnDate || outData.toDateTime, 14400000);
-
-      // Guard: Ensure toDateTime is strictly greater than fromDateTime
-      if (new Date(toIso).getTime() <= new Date(fromIso).getTime()) {
-        showToast("To date and time must be greater than From date and time.", "warning");
-        return;
-      }
+      const fromIso = parseIso(outData.departureDate || outData.outDate || outData.fromDateTime, 0);
+      const toIso = parseIso(outData.returnDate || outData.toDateTime, 14400000);
 
       let reqType = "Outpass";
       const rawType = (outData.requestType || outData.outpassType || "").toLowerCase();
@@ -1347,12 +1328,8 @@ export default function HostelPage() {
       closeModal();
       showToast(`Outpass request submitted for ${outData.studentName || "student"}.`);
     } catch (err) {
-      const errMsg = getApiErrorMessage(err);
-      const isExpectedValidation = /already has a pending or approved request|must be greater than/i.test(errMsg);
-      if (!isExpectedValidation) {
-        console.error("Save outpass error:", err);
-      }
-      showToast(errMsg || "Failed to submit outpass request.", isExpectedValidation ? "warning" : "danger");
+      console.error("Save outpass error:", err);
+      showToast(getApiErrorMessage(err), "danger");
     }
   };
 
@@ -5620,7 +5597,6 @@ export default function HostelPage() {
             modal={modal}
             closeModal={closeModal}
             allocations={allocations}
-            outpasses={outpasses}
             handleSaveOutpass={handleSaveOutpass}
             showToast={showToast}
           />
@@ -8015,111 +7991,22 @@ function VacateModal({ modal, closeModal, handleVacateAllocation }) {
     );
   };
 
-const formatToDatetimeLocal = (val, offsetMs = 0, baseTimestamp = null) => {
-  let d;
-  if (!val) {
-    const base = baseTimestamp !== null ? baseTimestamp : Date.now();
-    d = new Date(base + offsetMs);
-  } else {
-    d = new Date(val);
-    if (isNaN(d.getTime())) {
-      const base = baseTimestamp !== null ? baseTimestamp : Date.now();
-      d = new Date(base + offsetMs);
-    }
-  }
-  const pad = (n) => String(n).padStart(2, "0");
-  const YYYY = d.getFullYear();
-  const MM = pad(d.getMonth() + 1);
-  const DD = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mm = pad(d.getMinutes());
-  return `${YYYY}-${MM}-${DD}T${hh}:${mm}`;
-};
-
 // Outpass Modal (Screenshot 4 - Theme-based & Exact Fields Only)
-function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSaveOutpass, showToast }) {
+function OutpassModal({ modal, closeModal, allocations, handleSaveOutpass, showToast }) {
     const isView = modal.mode === "view";
-    const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedStudentId, setSelectedStudentId] = useState(
       modal.data?.studentId ? String(modal.data.studentId) : (modal.data?.admissionNo || "")
     );
     const [outpassCategory, setOutpassCategory] = useState(
       modal.data?.outpassType || modal.data?.requestType || "Local Outpass (Same Day)"
     );
-
-    const initialDep = modal.data
-      ? formatToDatetimeLocal(modal.data?.fromDateTime || modal.data?.departureDate || modal.data?.outDate)
-      : formatToDatetimeLocal(null, 0);
-
-    const isLeaveInitial = (modal.data?.requestType || modal.data?.outpassType || outpassCategory || "").toLowerCase().includes("leave");
-    const initialRet = modal.data
-      ? formatToDatetimeLocal(modal.data?.toDateTime || modal.data?.returnDate)
-      : formatToDatetimeLocal(null, isLeaveInitial ? 48 * 3600 * 1000 : 4 * 3600 * 1000);
-
-    const [departureDateTime, setDepartureDateTime] = useState(initialDep);
-    const [returnDateTime, setReturnDateTime] = useState(initialRet);
-    const [reason, setReason] = useState(modal.data?.reason || "");
-
-    const isDateInvalid = Boolean(
-      departureDateTime &&
-      returnDateTime &&
-      new Date(returnDateTime).getTime() <= new Date(departureDateTime).getTime()
+    const [departureDateTime, setDepartureDateTime] = useState(
+      modal.data?.departureDate || modal.data?.outDate || ""
     );
-
-    const conflictingRequest = useMemo(() => {
-      if (!selectedStudentId || !departureDateTime || !returnDateTime || !Array.isArray(outpasses)) {
-        return null;
-      }
-      const newStart = new Date(departureDateTime).getTime();
-      const newEnd = new Date(returnDateTime).getTime();
-      if (isNaN(newStart) || isNaN(newEnd) || newEnd <= newStart) return null;
-
-      return outpasses.find((op) => {
-        if (modal.data?.requestId && op.requestId === modal.data.requestId) return false;
-
-        const isSameStudent =
-          String(op.studentId) === String(selectedStudentId) ||
-          (op.admissionNo && op.admissionNo === selectedStudentId);
-        if (!isSameStudent) return false;
-
-        const status = String(op.approvalStatus || op.status || "").toLowerCase();
-        const isActive = status === "pending" || status === "approved" || status === "active";
-        if (!isActive) return false;
-
-        const existingStartStr = op.fromDateTime || op.departureDate || op.outDate;
-        const existingEndStr = op.toDateTime || op.returnDate;
-        if (!existingStartStr || !existingEndStr) return false;
-
-        const existingStart = new Date(existingStartStr).getTime();
-        const existingEnd = new Date(existingEndStr).getTime();
-        if (isNaN(existingStart) || isNaN(existingEnd)) return false;
-
-        return newStart < existingEnd && newEnd > existingStart;
-      });
-    }, [selectedStudentId, departureDateTime, returnDateTime, outpasses, modal.data]);
-
-    const handleCategoryChange = (newCat) => {
-      setOutpassCategory(newCat);
-      if (isView) return;
-      const depDate = departureDateTime ? new Date(departureDateTime) : new Date();
-      const baseTime = isNaN(depDate.getTime()) ? Date.now() : depDate.getTime();
-      const isLeave = newCat.toLowerCase().includes("leave") || newCat.toLowerCase().includes("home");
-      const defaultDurationMs = isLeave ? 48 * 3600 * 1000 : 4 * 3600 * 1000;
-      setReturnDateTime(formatToDatetimeLocal(null, defaultDurationMs, baseTime));
-    };
-
-    const handleDepartureChange = (newDep) => {
-      setDepartureDateTime(newDep);
-      if (!newDep) return;
-      const newDepTime = new Date(newDep).getTime();
-      const curRetTime = returnDateTime ? new Date(returnDateTime).getTime() : 0;
-      if (isNaN(newDepTime)) return;
-      if (!returnDateTime || isNaN(curRetTime) || curRetTime <= newDepTime) {
-        const isLeave = outpassCategory.toLowerCase().includes("leave") || outpassCategory.toLowerCase().includes("home");
-        const defaultDurationMs = isLeave ? 48 * 3600 * 1000 : 4 * 3600 * 1000;
-        setReturnDateTime(formatToDatetimeLocal(null, defaultDurationMs, newDepTime));
-      }
-    };
+    const [returnDateTime, setReturnDateTime] = useState(
+      modal.data?.returnDate || ""
+    );
+    const [reason, setReason] = useState(modal.data?.reason || "");
 
     // Resident candidates for student dropdown - strictly active allocations with valid studentId
     const studentCandidates = useMemo(() => {
@@ -8145,10 +8032,8 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
       return Array.from(map.values());
     }, [allocations]);
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
       e.preventDefault();
-      if (isSubmitting) return;
-
       if (!selectedStudentId) {
         showToast("Please select a registered resident student", "error");
         return;
@@ -8162,57 +8047,25 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
         return;
       }
 
-      if (!departureDateTime) {
-        showToast("Please select Departure Date & Time.", "error");
-        return;
-      }
-
-      if (!returnDateTime) {
-        showToast("Please select Expected Return Date & Time.", "error");
-        return;
-      }
-
-      const depMs = new Date(departureDateTime).getTime();
-      const retMs = new Date(returnDateTime).getTime();
-      if (isNaN(depMs) || isNaN(retMs)) {
-        showToast("Please enter valid departure and return dates.", "error");
-        return;
-      }
-
-      if (retMs <= depMs) {
-        showToast("To date and time must be greater than From date and time.", "error");
-        return;
-      }
-
-      if (conflictingRequest) {
-        showToast("Student already has a pending or approved request for the selected date and time range.", "warning");
-        return;
-      }
-
-      try {
-        setIsSubmitting(true);
-        await handleSaveOutpass({
-          studentId: studentObj.studentId,
-          studentName: studentObj.name,
-          admissionNo: studentObj.admissionNo,
-          hostelId: studentObj.hostelId,
-          blockName: studentObj.blockName,
-          roomId: studentObj.roomId,
-          roomNo: studentObj.room,
-          roomNumber: studentObj.room,
-          bedId: studentObj.bedId,
-          wardenAssignmentId: studentObj.wardenAssignmentId,
-          outpassType: outpassCategory,
-          requestType: outpassCategory,
-          departureDate: departureDateTime,
-          outDate: departureDateTime,
-          returnDate: returnDateTime,
-          reason: reason || "Outpass permission request",
-          destination: "City",
-        });
-      } finally {
-        setIsSubmitting(false);
-      }
+      handleSaveOutpass({
+        studentId: studentObj.studentId,
+        studentName: studentObj.name,
+        admissionNo: studentObj.admissionNo,
+        hostelId: studentObj.hostelId,
+        blockName: studentObj.blockName,
+        roomId: studentObj.roomId,
+        roomNo: studentObj.room,
+        roomNumber: studentObj.room,
+        bedId: studentObj.bedId,
+        wardenAssignmentId: studentObj.wardenAssignmentId,
+        outpassType: outpassCategory,
+        requestType: outpassCategory,
+        departureDate: departureDateTime || new Date().toISOString().slice(0, 16),
+        outDate: departureDateTime || new Date().toISOString().slice(0, 16),
+        returnDate: returnDateTime || new Date(Date.now() + 14400000).toISOString().slice(0, 16),
+        reason: reason || "Outpass permission request",
+        destination: "City",
+      });
     };
 
     return (
@@ -8231,7 +8084,7 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
               <div style={{ position: "relative" }}>
                 <select
                   required
-                  disabled={isView || isSubmitting}
+                  disabled={isView}
                   value={selectedStudentId}
                   onChange={(e) => setSelectedStudentId(e.target.value)}
                   className="cms-alloc-modal-select"
@@ -8257,9 +8110,9 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
               <div style={{ position: "relative" }}>
                 <select
                   required
-                  disabled={isView || isSubmitting}
+                  disabled={isView}
                   value={outpassCategory}
-                  onChange={(e) => handleCategoryChange(e.target.value)}
+                  onChange={(e) => setOutpassCategory(e.target.value)}
                   className="cms-alloc-modal-select"
                 >
                   <option value="Local Outpass (Same Day)">Local Outpass (Same Day)</option>
@@ -8280,10 +8133,10 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
                 </label>
                 <input
                   required
-                  disabled={isView || isSubmitting}
+                  disabled={isView}
                   type="datetime-local"
                   value={departureDateTime}
-                  onChange={(e) => handleDepartureChange(e.target.value)}
+                  onChange={(e) => setDepartureDateTime(e.target.value)}
                   className="cms-alloc-modal-input"
                   placeholder="dd-mm-yyyy --:--"
                 />
@@ -8295,60 +8148,15 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
                 </label>
                 <input
                   required
-                  disabled={isView || isSubmitting}
+                  disabled={isView}
                   type="datetime-local"
-                  min={departureDateTime || undefined}
                   value={returnDateTime}
                   onChange={(e) => setReturnDateTime(e.target.value)}
                   className="cms-alloc-modal-input"
-                  style={isDateInvalid || conflictingRequest ? { borderColor: "var(--cms-red, #dc2626)" } : undefined}
                   placeholder="dd-mm-yyyy --:--"
                 />
-                {isDateInvalid && (
-                  <span
-                    style={{
-                      color: "var(--cms-red, #dc2626)",
-                      fontSize: "12px",
-                      marginTop: "4px",
-                      display: "block",
-                      fontWeight: 500,
-                    }}
-                  >
-                    To date and time must be greater than From date and time.
-                  </span>
-                )}
-                {conflictingRequest && !isDateInvalid && (
-                  <span
-                    style={{
-                      color: "var(--cms-warning-text, #b45309)",
-                      fontSize: "12px",
-                      marginTop: "4px",
-                      display: "block",
-                      fontWeight: 500,
-                    }}
-                  >
-                    ⚠️ Conflict: Active ({conflictingRequest.approvalStatus || "Pending"}) request exists for this range.
-                  </span>
-                )}
               </div>
             </div>
-
-            {conflictingRequest && !isDateInvalid && (
-              <div
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  backgroundColor: "rgba(234, 179, 8, 0.12)",
-                  border: "1px solid rgba(234, 179, 8, 0.35)",
-                  color: "var(--cms-warning-text, #b45309)",
-                  fontSize: "12px",
-                  lineHeight: "1.4",
-                  fontWeight: 500,
-                }}
-              >
-                ⚠️ Student already has an active ({conflictingRequest.approvalStatus || "Pending"}) request for this date/time range. Please select another date or time.
-              </div>
-            )}
 
             {/* 4. Reason */}
             <div className="cms-alloc-modal-field">
@@ -8356,7 +8164,7 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
                 Reason
               </label>
               <input
-                disabled={isView || isSubmitting}
+                disabled={isView}
                 placeholder="e.g. Medical appointment, family visit"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
@@ -8371,7 +8179,6 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
               type="button"
               className="cms-alloc-modal-cancel-btn"
               onClick={closeModal}
-              disabled={isSubmitting}
             >
               Cancel
             </button>
@@ -8379,10 +8186,8 @@ function OutpassModal({ modal, closeModal, allocations, outpasses = [], handleSa
               <button
                 type="submit"
                 className="cms-alloc-modal-submit-btn"
-                disabled={isDateInvalid || Boolean(conflictingRequest) || isSubmitting}
-                style={isDateInvalid || Boolean(conflictingRequest) || isSubmitting ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
               >
-                {isSubmitting ? "Saving..." : "Save"}
+                Save
               </button>
             )}
           </div>

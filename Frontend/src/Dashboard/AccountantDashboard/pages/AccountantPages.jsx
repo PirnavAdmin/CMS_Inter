@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CalendarCheck, CheckCircle2, Eye, EyeOff, KeyRound, Lock, RefreshCw, Search, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -7,15 +7,22 @@ import * as reportApi from "@/api/reportApi.js";
 import * as payrollApi from "@/api/payrollApi.js";
 import { attendanceService } from "@/api/attendanceService.js";
 import { getAuthUser } from "@/features/authStorage.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import { adminIconAssets } from "@/components/layout/DashboardLayout.jsx";
 import StudentCard from "@/Dashboard/StudentDashboard/components/StudentCard.jsx";
 import StudentDataTable from "@/Dashboard/StudentDashboard/components/StudentDataTable.jsx";
 import StudentPageHeader from "@/Dashboard/StudentDashboard/components/StudentPageHeader.jsx";
 import StudentSummaryCard from "@/Dashboard/StudentDashboard/components/StudentSummaryCard.jsx";
-import { rowsOf, unwrap, requestError, useFinanceParams, useFinancePage, loadSections, loadPaymentHistory, loadScopedLedger } from "../accountantData.js";
 import "@/components/pages/AdminProfilePage.css";
 
-export const getRows = rowsOf;
+export const getRows = (payload) => {
+  const value = payload?.data ?? payload?.Data ?? payload;
+  if (Array.isArray(value)) return value;
+  for (const key of ["items", "Items", "records", "Records", "results", "Results", "$values", "rows", "Rows", "payments", "Payments", "dues", "Dues"]) {
+    if (Array.isArray(value?.[key])) return value[key];
+  }
+  return [];
+};
 
 export const getNumber = (item, keys) => {
   for (const key of keys) {
@@ -33,7 +40,7 @@ export const getText = (item, keys, fallback = "-") => {
   return fallback;
 };
 
-export const formatMoney = (value) => value == null ? "-" : `\u20b9${Number(value).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+export const formatMoney = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 export const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -41,184 +48,139 @@ export const formatDate = (value) => {
 };
 
 export const normalizePayment = (item = {}) => ({
-  id: getText(item, ["feePaymentId", "FeePaymentId", "paymentId", "PaymentId", "id", "Id"], ""),
+  id: getText(item, ["feePaymentId", "FeePaymentId", "paymentId", "PaymentId", "id", "Id"], Math.random()),
   studentName: getText(item, ["studentName", "StudentName", "name", "Name"]),
   admissionNo: getText(item, ["admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber"]),
   type: getText(item, ["paymentType", "PaymentType", "feeTypeName", "FeeTypeName", "type", "Type"], "Fee payment"),
-  amount: getNumber(item, ["amount", "Amount", "paymentAmount", "PaymentAmount"])
-    ?? (getNumber(item, ["paidAmount", "PaidAmount"]) > 0 ? getNumber(item, ["paidAmount", "PaidAmount"]) : getNumber(item, ["collected", "Collected", "paidAmount", "PaidAmount"])),
+  amount: getNumber(item, ["amount", "Amount", "paidAmount", "PaidAmount", "paymentAmount", "PaymentAmount"]) || 0,
   date: getText(item, ["paymentDate", "PaymentDate", "paidDate", "PaidDate", "date", "Date", "createdAt", "CreatedAt"], ""),
   method: getText(item, ["paymentMethod", "PaymentMethod", "paymentMode", "PaymentMode", "method", "Method"]),
   reference: getText(item, ["referenceNumber", "ReferenceNumber", "receiptNo", "ReceiptNo", "receiptNumber", "ReceiptNumber"]),
-  status: getText(item, ["status", "Status", "paymentStatus", "PaymentStatus"]),
-  transaction: getText(item, ["transactionReference", "TransactionReference"]),
-  raw: item,
+  status: getText(item, ["status", "Status", "paymentStatus", "PaymentStatus"], "Paid"),
 });
 
 export const normalizeDue = (item = {}) => ({
-  id: getText(item, ["feeInstallmentId", "FeeInstallmentId", "studentFeeId", "StudentFeeId", "id", "Id"], ""),
+  id: getText(item, ["feeInstallmentId", "FeeInstallmentId", "studentFeeId", "StudentFeeId", "id", "Id"], Math.random()),
   studentName: getText(item, ["studentName", "StudentName", "name", "Name"]),
   admissionNo: getText(item, ["admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber"]),
-  amount: getNumber(item, ["balance", "Balance", "balanceAmount", "BalanceAmount", "outstandingBalance", "OutstandingBalance", "outstandingAmount", "OutstandingAmount", "pendingAmount", "PendingAmount", "dueAmount", "DueAmount", "amount", "Amount"]),
+  amount: getNumber(item, ["balance", "Balance", "outstandingAmount", "OutstandingAmount", "pendingAmount", "PendingAmount", "dueAmount", "DueAmount", "amount", "Amount"]) || 0,
   dueDate: getText(item, ["dueDate", "DueDate", "nextDue", "NextDue"], ""),
   status: getText(item, ["status", "Status", "feeStatus", "FeeStatus"], "Due"),
 });
 
 export const normalizePayroll = (item = {}) => ({
-  id: getText(item, ["payslipId", "PayslipId", "salaryAssignmentId", "SalaryAssignmentId", "id", "Id"], ""),
+  id: getText(item, ["payslipId", "PayslipId", "salaryAssignmentId", "SalaryAssignmentId", "id", "Id"], Math.random()),
   staffName: getText(item, ["staffName", "StaffName", "employeeName", "EmployeeName", "name", "Name"]),
-  month: `${getText(item, ["monthName", "MonthName", "payrollMonth", "PayrollMonth", "month", "Month"])} / ${getText(item, ["payrollYear", "PayrollYear"])}`,
-  amount: getNumber(item, ["netSalary", "NetSalary", "netPay", "NetPay", "amount", "Amount", "salary", "Salary"]),
-  status: getText(item, ["payslipStatus", "PayslipStatus", "status", "Status", "paymentStatus", "PaymentStatus"]),
+  month: getText(item, ["monthName", "MonthName", "payrollMonth", "PayrollMonth", "month", "Month"]),
+  amount: getNumber(item, ["netSalary", "NetSalary", "netPay", "NetPay", "amount", "Amount", "salary", "Salary"]) || 0,
+  status: getText(item, ["status", "Status", "paymentStatus", "PaymentStatus"], "Pending"),
 });
 
-export function PageState({ loading, error, data, reload }) {
-  if (loading) return <div role="status" className="sp-api-state">{data == null ? "Loading finance data..." : "Refreshing finance data..."}</div>;
-  const message = error || data?.errors?.join(" ");
-  if (message) return <div role="alert" className="sp-api-state is-error"><AlertCircle size={15} /> {message} {error && data != null ? "Showing previously loaded data." : ""} <button type="button" className="sp-btn" onClick={reload}><RefreshCw size={14} /> Retry</button></div>;
+function useFinancePage(loader, dependencies) {
+  const [state, setState] = useState({ data: null, loading: true, error: "" });
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey((value) => value + 1), []);
+  useEffect(() => {
+    let active = true;
+    setState({ data: null, loading: true, error: "" });
+    loader().then((data) => { if (active) setState({ data, loading: false, error: "" }); }).catch((error) => {
+      if (active) setState({ data: null, loading: false, error: getApiErrorMessage(error, "Unable to load finance data.") });
+    });
+    return () => { active = false; };
+  }, [...dependencies, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { ...state, reload };
+}
+
+function PageState({ loading, error, onRetry }) {
+  if (loading) return <div className="sp-api-state">Loading finance data...</div>;
+  if (error) return <div className="sp-api-state is-error"><AlertCircle size={15} /> {error} {onRetry ? <button type="button" className="sp-btn" onClick={onRetry}><RefreshCw size={14} /> Retry</button> : null}</div>;
   return null;
 }
 
 function useCampusParams() {
-  return useFinanceParams();
+  const { selectedCampusId } = useCampusContext();
+  return useMemo(() => selectedCampusId ? { campusId: Number(selectedCampusId) || selectedCampusId } : {}, [selectedCampusId]);
 }
 
 export function AccountantFees() {
   const campusParams = useCampusParams();
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [selected, setSelected] = useState(null);
-  const load = useCallback((signal) => loadScopedLedger(campusParams, signal), [campusParams]);
-  const state = useFinancePage(load);
-  const rows = (state.data || []).filter((row) => {
-    const due = normalizeDue(row);
-    return `${due.studentName} ${due.admissionNo}`.toLowerCase().includes(search.toLowerCase()) && (!status || due.status === status);
-  });
+  const load = useCallback(async () => {
+    const [ledger, due, dashboard] = await Promise.all([
+      apiClient.get(apiEndpoints.fee.ledger, { params: campusParams }),
+      apiClient.get(apiEndpoints.fee.due, { params: campusParams }),
+      apiClient.get(apiEndpoints.fee.dashboard, { params: campusParams }),
+    ]);
+    return { ledger: getRows(ledger.data), due: getRows(due.data), dashboard: dashboard.data };
+  }, [campusParams]);
+  const state = useFinancePage(load, [load]);
+  const rows = (state.data?.ledger || state.data?.due || []).map(normalizeDue).filter((row) => row.amount > 0);
   return <>
-    <StudentPageHeader title="Fee Management" subtitle="Review student ledgers, outstanding balances, installments, and collection status." action={<Link className="sp-btn" to="/accountant-dashboard/payments">Payment history</Link>} />
+    <StudentPageHeader title="Fee Management" subtitle="Review student ledgers, outstanding balances, installments, and collection status." action={<Link className="sp-btn" to="payments">Payment history</Link>} />
     <PageState {...state} />
-    {state.data != null ? <StudentCard title="Student Fee Ledger" subtitle={`${rows.length} fee records`}>
-      <div className="sp-toolbar"><div className="sp-search"><Search size={15} /><input aria-label="Search fee ledger" placeholder="Search by student or admission number" value={search} onChange={(event) => setSearch(event.target.value)} /></div><select aria-label="Payment status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="">All statuses</option>{[...new Set((state.data || []).map((row) => normalizeDue(row).status))].map((value) => <option key={value}>{value}</option>)}</select></div>
-      <StudentDataTable columns={["Student", "Admission No", "Group", "Section", "Payment Plan", "Payable", "Paid", "Balance", "Status", "Details"]} statusColumns={[8]} rows={rows.map((row) => {
-        const due = normalizeDue(row);
-        return { id: due.id, Student: due.studentName, "Admission No": due.admissionNo, Group: getText(row, ["groupName", "GroupName"]), Section: getText(row, ["sectionName", "SectionName"]), "Payment Plan": getText(row, ["paymentPlan", "PaymentPlan"]), Payable: formatMoney(getNumber(row, ["totalPayable", "TotalPayable"])), Paid: formatMoney(getNumber(row, ["totalPaid", "TotalPaid"])), Balance: formatMoney(due.amount), Status: due.status, Details: <button type="button" className="sp-btn" aria-label={`View fees for ${due.studentName}`} onClick={() => setSelected({ row, context: campusParams })}><Eye size={15} /></button> };
-      })} empty="No fee records match the selected filters." />
+    {!state.loading && !state.error ? <StudentCard title="Student Fee Ledger" subtitle={`${rows.length} outstanding records`}>
+      <div className="sp-toolbar"><div className="sp-search"><Search size={15} /><input aria-label="Search fee ledger" placeholder="Search by student or admission number" onChange={(event) => { const term = event.target.value.toLowerCase(); event.currentTarget.closest(".sp-card").querySelectorAll("tbody tr").forEach((row) => { row.hidden = term && !row.textContent.toLowerCase().includes(term); }); }} /></div></div>
+      <StudentDataTable columns={["Student", "Admission No", "Amount", "Due Date", "Status"]} statusColumns={[4]} rows={rows.map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": formatDate(row.dueDate), Status: row.status }))} empty="No outstanding fee records available." />
     </StudentCard> : null}
-    {selected?.context === campusParams ? <FeeDetails row={selected.row} params={campusParams} onClose={() => setSelected(null)} /> : null}
   </>;
-}
-
-function PaymentTable({ payments }) {
-  return <StudentDataTable columns={["Student", "Admission No", "Type", "Amount", "Date", "Method", "Receipt", "Transaction", "Status"]} statusColumns={[8]} rows={payments.map(normalizePayment).map((row) => ({ id: row.id, Student: row.studentName, "Admission No": row.admissionNo, Type: row.type, Amount: formatMoney(row.amount), Date: formatDate(row.date), Method: row.method, Receipt: row.reference, Transaction: row.transaction, Status: row.status }))} empty="No payment transactions available." />;
-}
-
-function FeeDetails({ row, params, onClose }) {
-  const load = useCallback((signal) => loadSections({
-    account: async () => {
-      const id = row.studentFeeId ?? row.StudentFeeId;
-      const assignment = unwrap(await apiClient.get(apiEndpoints.fee.studentFeeDetails(id), { params, signal }));
-      return {
-        ...assignment,
-        originalFee: getNumber(assignment, ["totalAmount", "TotalAmount"]),
-        concession: getNumber(assignment, ["concessionAmount", "ConcessionAmount"]),
-        totalPayable: getNumber(assignment, ["payableAmount", "PayableAmount"]),
-        totalPaid: getNumber(assignment, ["paidAmount", "PaidAmount"]),
-        outstandingBalance: getNumber(assignment, ["balanceAmount", "BalanceAmount"]),
-        breakdown: getRows(assignment.components ?? assignment.Components).map((item) => ({
-          feeType: getText(item, ["feeTypeName", "FeeTypeName"]),
-          amount: getNumber(item, ["amount", "Amount"]),
-          concessionScheme: getText(item, ["concessionScheme", "ConcessionScheme"]),
-          discount: getNumber(item, ["concessionAmount", "ConcessionAmount"]),
-          payable: getNumber(item, ["payableAmount", "PayableAmount"]),
-        })),
-      };
-    },
-    studentDetails: () => apiClient.get(apiEndpoints.fee.studentFeeDetailsByStudent(row.studentId ?? row.StudentId), { params, signal }),
-    history: () => apiClient.get(apiEndpoints.fee.history(row.studentId ?? row.StudentId), { params, signal }),
-  }), [row, params]);
-  const state = useFinancePage(load);
-  const feeId = row.studentFeeId ?? row.StudentFeeId;
-  const studentDetail = state.data?.studentDetails;
-  const detail = studentDetail && String(studentDetail.studentFeeId ?? studentDetail.StudentFeeId) === String(feeId)
-    ? studentDetail : state.data?.account;
-  const history = getRows(state.data?.history).filter((payment) => String(payment.studentFeeId ?? payment.StudentFeeId) === String(feeId));
-  const matches = detail && String(detail.studentFeeId ?? detail.StudentFeeId) === String(feeId);
-  return <StudentCard title="Student Fee Details" action={<button className="sp-btn" type="button" onClick={onClose}>Close</button>}>
-    <PageState {...state} />
-    {detail && !matches ? <div role="alert" className="sp-api-state is-error">The backend returned a different fee assignment. Details are unavailable for this record.</div> : null}
-    {matches ? <>
-      <div className="sp-metric-list">{[
-        ["Student", getText(detail, ["studentName", "StudentName"])], ["Admission No", getText(detail, ["admissionNumber", "AdmissionNumber"])],
-        ["Board", getText(row, ["boardName", "BoardName"])], ["Academic Year", getText(detail, ["academicYearName", "AcademicYearName"], getText(row, ["academicYearName", "AcademicYearName"]))],
-        ["Roll Number", getText(detail, ["rollNumber", "RollNumber"], getText(row, ["rollNumber", "RollNumber"]))], ["Payment Plan", getText(detail, ["paymentPlan", "PaymentPlan"])],
-        ["Status", getText(detail, ["feeStatus", "FeeStatus", "status", "Status"])], ["Assigned Fees", formatMoney(getNumber(detail, ["originalFee", "OriginalFee"]))],
-        ["Concession", formatMoney(getNumber(detail, ["concession", "Concession"]))], ["Payable", formatMoney(getNumber(detail, ["totalPayable", "TotalPayable"]))],
-        ["Paid", formatMoney(getNumber(detail, ["totalPaid", "TotalPaid"]))], ["Outstanding", formatMoney(getNumber(detail, ["outstandingBalance", "OutstandingBalance"]))],
-      ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
-      <h3>Assigned Fees</h3>
-      <StudentDataTable columns={["Fee", "Amount", "Concession", "Discount", "Payable"]} rows={getRows(detail.breakdown ?? detail.Breakdown).map((item) => ({ Fee: getText(item, ["feeType", "FeeType"]), Amount: formatMoney(getNumber(item, ["amount", "Amount"])), Concession: getText(item, ["concessionScheme", "ConcessionScheme"]), Discount: formatMoney(getNumber(item, ["discount", "Discount"])), Payable: formatMoney(getNumber(item, ["payable", "Payable"])) }))} />
-      <h3>Installments</h3>
-      <StudentDataTable columns={["Installment", "Due Date", "Amount", "Paid", "Balance", "Status"]} statusColumns={[5]} rows={getRows(detail.schedules ?? detail.Schedules).map((item) => ({ Installment: getText(item, ["feeSchedule", "FeeSchedule", "installmentNumber", "InstallmentNumber"]), "Due Date": formatDate(item.dueDate ?? item.DueDate), Amount: formatMoney(getNumber(item, ["amount", "Amount"])), Paid: formatMoney(getNumber(item, ["paidAmount", "PaidAmount"])), Balance: formatMoney(getNumber(item, ["balanceAmount", "BalanceAmount"])), Status: getText(item, ["status", "Status"]) }))} />
-    </> : null}
-    {state.data?.history != null ? <><h3>Payment Transactions</h3><PaymentTable payments={history} /></> : null}
-  </StudentCard>;
 }
 
 export function AccountantPayments() {
   const campusParams = useCampusParams();
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState(null);
-  const load = useCallback((signal) => loadPaymentHistory(campusParams, signal), [campusParams]);
-  const state = useFinancePage(load);
-  const rows = (state.data?.payments || []).map(normalizePayment).sort((a, b) => String(b.date).localeCompare(String(a.date))).filter((row) => !search || `${row.studentName} ${row.admissionNo} ${row.reference} ${row.transaction}`.toLowerCase().includes(search.toLowerCase()));
+  const load = useCallback(async () => {
+    const [collection, payments] = await Promise.allSettled([
+      apiClient.get(apiEndpoints.fee.collection, { params: campusParams }),
+      apiClient.get(apiEndpoints.fee.payments, { params: campusParams }),
+    ]);
+    const rows = [
+      ...(collection.status === "fulfilled" ? getRows(collection.value.data) : []),
+      ...(payments.status === "fulfilled" ? getRows(payments.value.data) : []),
+    ];
+    if (!rows.length && collection.status === "rejected" && payments.status === "rejected") throw collection.reason;
+    return rows.map(normalizePayment).filter((row, index, list) => list.findIndex((item) => String(item.id) === String(row.id)) === index).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  }, [campusParams]);
+  const state = useFinancePage(load, [load]);
+  const rows = (state.data || []).filter((row) => !search || `${row.studentName} ${row.admissionNo} ${row.reference}`.toLowerCase().includes(search.toLowerCase()));
   return <>
-    <StudentPageHeader title="Payment History" subtitle="Review fee transactions, references, payment methods, and status." action={<Link className="sp-btn" to="/accountant-dashboard/fees">Fee ledger</Link>} />
+    <StudentPageHeader title="Payment History" subtitle="Review fee transactions, references, payment methods, and status." action={<Link className="sp-btn" to="fees">Fee ledger</Link>} />
     <PageState {...state} />
-    {state.data != null ? <StudentCard title="Fee Transactions" subtitle={`${rows.length} transactions`}>
+    {!state.loading && !state.error ? <StudentCard title="Fee Transactions" subtitle={`${rows.length} transactions`}>
       <div className="sp-toolbar"><div className="sp-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search student, admission number, or reference" /></div></div>
-      <StudentDataTable columns={["Student", "Admission No", "Type", "Amount", "Date", "Method", "Receipt", "Transaction", "Status", "Details"]} statusColumns={[8]} rows={rows.map((row) => ({ id: row.id, Student: row.studentName, "Admission No": row.admissionNo, Type: row.type, Amount: formatMoney(row.amount), Date: formatDate(row.date), Method: row.method, Receipt: row.reference, Transaction: row.transaction, Status: row.status, Details: <button type="button" className="sp-btn" aria-label="View payment details" onClick={() => setSelected({ row, context: campusParams })}><Eye size={15} /></button> }))} empty="No payment transactions available." />
+      <StudentDataTable columns={["Student", "Admission No", "Type", "Amount", "Date", "Method", "Reference", "Status"]} statusColumns={[7]} rows={rows.map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Type: row.type, Amount: formatMoney(row.amount), Date: formatDate(row.date), Method: row.method, Reference: row.reference, Status: row.status }))} empty="No payment transactions available." />
     </StudentCard> : null}
-    {selected?.context === campusParams ? <PaymentDetails payment={selected.row} onClose={() => setSelected(null)} /> : null}
   </>;
-}
-
-function PaymentDetails({ payment, onClose }) {
-  const load = useCallback((signal) => apiClient.get(apiEndpoints.fee.paymentDetails(payment.id), { signal }).then(unwrap), [payment]);
-  const state = useFinancePage(load);
-  return <StudentCard title="Payment Details" action={<button className="sp-btn" type="button" onClick={onClose}>Close</button>}>
-    <PageState {...state} />
-    {state.data ? <><PaymentTable payments={[state.data]} /><div className="sp-metric-list">{[
-      ["Discount", formatMoney(getNumber(state.data, ["discount", "Discount"]))],
-      ["Fine", formatMoney(getNumber(state.data, ["fine", "Fine"]))],
-      ["Note", getText(state.data, ["note", "Note", "remarks", "Remarks"])],
-    ].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></> : null}
-  </StudentCard>;
 }
 
 export function AccountantPayroll() {
   const campusParams = useCampusParams();
   const load = useCallback(async () => {
-    const data = await loadSections({
-      summary: () => payrollApi.getPayrollSummary({ campusId: campusParams.campusId }),
-      payslips: () => payrollApi.getPayslips({ campusId: campusParams.campusId, payrollMonth: new Date().getMonth() + 1, payrollYear: new Date().getFullYear() }),
-    });
-    return { ...data, payslips: data.payslips == null ? undefined : getRows(data.payslips).map(normalizePayroll) };
+    const results = await Promise.allSettled([
+      payrollApi.getPayrollSummary({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), ...campusParams }),
+      payrollApi.getPayslips(campusParams),
+      payrollApi.getSalaryAssignments(campusParams),
+    ]);
+    if (results.every((result) => result.status === "rejected")) throw results[0].reason;
+    return {
+      summary: results[0].status === "fulfilled" ? results[0].value : {},
+      payslips: results[1].status === "fulfilled" ? getRows(results[1].value).map(normalizePayroll) : [],
+      assignments: results[2].status === "fulfilled" ? getRows(results[2].value) : [],
+    };
   }, [campusParams]);
-  const state = useFinancePage(load);
+  const state = useFinancePage(load, [load]);
   const summary = state.data?.summary || {};
-  const total = getNumber(summary, ["totalNetSalary", "TotalNetSalary", "totalPayroll", "TotalPayroll", "netSalary", "NetSalary"]);
+  const total = getNumber(summary, ["totalNetSalary", "TotalNetSalary", "totalPayroll", "TotalPayroll", "netSalary", "NetSalary"]) ?? (state.data?.payslips || []).reduce((sum, row) => sum + row.amount, 0);
   return <>
-    <StudentPageHeader title="Payroll" subtitle={`Payroll for ${new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" })}`} action={<Link className="sp-btn" to="/accountant-dashboard/payroll/attendance-impact"><CalendarCheck size={15} /> Attendance impact</Link>} />
+    <StudentPageHeader title="Payroll" subtitle="Financial payroll visibility for salary amounts, payslips, and processing status." action={<Link className="sp-btn" to="attendance-impact"><CalendarCheck size={15} /> Attendance impact</Link>} />
     <PageState {...state} />
-    {state.data != null ? <>
+    {!state.loading && !state.error ? <>
       <section className="sp-summary-grid four">
         <StudentSummaryCard icon={adminIconAssets.payroll} label="Payroll Total" value={formatMoney(total)} note="Current payroll summary" />
-        <StudentSummaryCard icon={adminIconAssets.payroll} label="Payslips" value={getNumber(summary, ["totalPayslips", "TotalPayslips"]) ?? state.data?.payslips?.length ?? "-"} note="Current month" tone="blue" />
-        <StudentSummaryCard icon={adminIconAssets.attendanceImpact} label="Paid" value={getNumber(summary, ["paidPayslips", "PaidPayslips"]) ?? "-"} note="Current month" tone="purple" />
-        <StudentSummaryCard icon={adminIconAssets.attendanceImpact} label="Pending" value={getNumber(summary, ["pendingPayslips", "PendingPayslips"]) ?? "-"} note="Current month" tone="orange" />
+        <StudentSummaryCard icon={adminIconAssets.payroll} label="Payslips" value={state.data?.payslips?.length || 0} note="Available records" tone="blue" />
+        <StudentSummaryCard icon={adminIconAssets.attendanceImpact} label="Processed" value={getNumber(summary, ["processedCount", "ProcessedCount"]) ?? "-"} note="From payroll API" tone="purple" />
+        <StudentSummaryCard icon={adminIconAssets.attendanceImpact} label="Pending" value={getNumber(summary, ["pendingCount", "PendingCount"]) ?? "-"} note="From payroll API" tone="orange" />
       </section>
       <StudentCard title="Payroll Records" subtitle="Read-only payroll information">
-        <StudentDataTable columns={["Staff Member", "Month", "Net Amount", "Status"]} statusColumns={[3]} rows={(state.data?.payslips || []).map((row) => ({ "Staff Member": row.staffName, Month: row.month, "Net Amount": formatMoney(row.amount), Status: row.status }))} empty={state.data?.payslips == null ? "Payslips unavailable." : "No payroll records available."} />
+        <StudentDataTable columns={["Staff Member", "Month", "Net Amount", "Status"]} statusColumns={[3]} rows={(state.data?.payslips || []).map((row) => ({ "Staff Member": row.staffName, Month: row.month, "Net Amount": formatMoney(row.amount), Status: row.status }))} empty="No payroll records available." />
       </StudentCard>
     </> : null}
   </>;
@@ -227,13 +189,13 @@ export function AccountantPayroll() {
 export function AccountantAttendanceImpact() {
   const campusParams = useCampusParams();
   const load = useCallback(() => attendanceService.getStaffMonthlyReport({ ...campusParams, month: new Date().getMonth() + 1, year: new Date().getFullYear() }).then((data) => getRows(data)), [campusParams]);
-  const state = useFinancePage(load);
+  const state = useFinancePage(load, [load]);
   const rows = state.data || [];
   return <>
-    <StudentPageHeader title="Attendance Impact" subtitle="Review staff attendance figures that may affect payroll calculations." action={<Link className="sp-btn" to="/accountant-dashboard/payroll"><span className="accountant-btn-generated-icon" style={{ backgroundImage: `url(${adminIconAssets.payroll.src})`, backgroundPosition: adminIconAssets.payroll.position }} aria-hidden="true" /> Payroll</Link>} />
+    <StudentPageHeader title="Attendance Impact" subtitle="Review staff attendance figures that may affect payroll calculations." action={<Link className="sp-btn" to="payroll"><span className="accountant-btn-generated-icon" style={{ backgroundImage: `url(${adminIconAssets.payroll.src})`, backgroundPosition: adminIconAssets.payroll.position }} aria-hidden="true" /> Payroll</Link>} />
     <PageState {...state} />
-    {state.data != null ? <StudentCard title="Monthly Attendance Impact" subtitle="Staff attendance for the current month">
-      <StudentDataTable columns={["Staff Member", "Present Days", "Absent Days", "Late", "Leave", "Attendance %"]} rows={rows.map((row) => ({ "Staff Member": getText(row, ["staffName", "StaffName"]), "Present Days": getNumber(row, ["presentCount", "PresentCount"]) ?? "-", "Absent Days": getNumber(row, ["absentCount", "AbsentCount"]) ?? "-", Late: getNumber(row, ["lateCount", "LateCount"]) ?? "-", Leave: getNumber(row, ["leaveCount", "LeaveCount"]) ?? "-", "Attendance %": getNumber(row, ["percentage", "Percentage"]) ?? "-" }))} empty="No attendance impact records available." />
+    {!state.loading && !state.error ? <StudentCard title="Monthly Attendance Impact" subtitle="The backend determines the available attendance and deduction fields.">
+      <StudentDataTable columns={["Staff Member", "Present Days", "Absent Days", "Leave", "Deduction", "Payroll Impact"]} rows={rows.map((row) => ({ "Staff Member": getText(row, ["staffName", "StaffName", "employeeName", "EmployeeName", "name", "Name"]), "Present Days": getNumber(row, ["presentDays", "PresentDays", "present", "Present"]) ?? "-", "Absent Days": getNumber(row, ["absentDays", "AbsentDays", "absent", "Absent"]) ?? "-", Leave: getNumber(row, ["leaveDays", "LeaveDays", "leave", "Leave"]) ?? "-", Deduction: formatMoney(getNumber(row, ["deduction", "Deduction", "deductionAmount", "DeductionAmount"]) || 0), "Payroll Impact": formatMoney(getNumber(row, ["payrollImpact", "PayrollImpact", "impactAmount", "ImpactAmount"]) || 0) }))} empty="No attendance impact records available." />
     </StudentCard> : null}
   </>;
 }
@@ -241,39 +203,44 @@ export function AccountantAttendanceImpact() {
 export function AccountantReports() {
   const campusParams = useCampusParams();
   const load = useCallback(async () => {
-    return loadSections({
-      collections: () => reportApi.getFeeCollectionDetails(campusParams),
-      dues: () => reportApi.getDueFeesDetails(campusParams),
-      payroll: () => payrollApi.getPayrollSummary({ campusId: campusParams.campusId }),
-    });
+    const [dashboard, collections, dues, payroll] = await Promise.allSettled([
+      reportApi.getReportsDashboard(campusParams),
+      reportApi.getFeeCollectionDetails(campusParams),
+      reportApi.getDueFeesDetails(campusParams),
+      payrollApi.getPayrollSummary({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), ...campusParams }),
+    ]);
+    if (dashboard.status === "rejected" && collections.status === "rejected" && dues.status === "rejected" && payroll.status === "rejected") throw dashboard.reason;
+    return {
+      dashboard: dashboard.status === "fulfilled" ? dashboard.value.data : {},
+      collections: collections.status === "fulfilled" ? getRows(collections.value.data) : [],
+      dues: dues.status === "fulfilled" ? getRows(dues.value.data) : [],
+      payroll: payroll.status === "fulfilled" ? payroll.value : {},
+    };
   }, [campusParams]);
-  const state = useFinancePage(load);
-  const collectionRows = getRows(state.data?.collections).map(normalizePayment);
-  const dueRows = getRows(state.data?.dues).map(normalizeDue).filter((row) => row.amount > 0);
+  const state = useFinancePage(load, [load]);
+  const report = state.data?.dashboard || {};
+  const collectionRows = (state.data?.collections || []).map(normalizePayment);
+  const dueRows = (state.data?.dues || []).map(normalizeDue).filter((row) => row.amount > 0);
   return <>
     <StudentPageHeader title="Financial Reports" subtitle="Financial collection, outstanding dues, transaction, and payroll reporting." />
     <PageState {...state} />
-    {state.data != null ? <>
+    {!state.loading && !state.error ? <>
       <section className="sp-summary-grid four">
-        <StudentSummaryCard icon={adminIconAssets.feeManagement} label="Fee Collection" value={formatMoney(getNumber(state.data?.collections, ["totalCollected", "TotalCollected"]))} note="Selected context" />
-        <StudentSummaryCard icon={adminIconAssets.feeManagement} label="Outstanding Dues" value={formatMoney(getNumber(state.data?.dues, ["totalDue", "TotalDue"]))} note="Selected context" tone="orange" />
-        <StudentSummaryCard icon={adminIconAssets.payroll} label="Payroll Total" value={formatMoney(getNumber(state.data?.payroll, ["totalPayroll", "TotalPayroll", "totalNetSalary", "TotalNetSalary"]))} note="Current month, selected campus" tone="purple" />
-        <StudentSummaryCard icon={adminIconAssets.financialReports} label="Transactions" value={getNumber(state.data?.collections, ["totalTransactions", "TotalTransactions"]) ?? "-"} note="Selected context" tone="blue" />
+        <StudentSummaryCard icon={adminIconAssets.feeManagement} label="Fee Collection Rows" value={collectionRows.length} note="Report detail records" />
+        <StudentSummaryCard icon={adminIconAssets.feeManagement} label="Outstanding Rows" value={dueRows.length} note="Report detail records" tone="orange" />
+        <StudentSummaryCard icon={adminIconAssets.payroll} label="Payroll Total" value={formatMoney(getNumber(state.data?.payroll, ["totalPayroll", "TotalPayroll", "totalNetSalary", "TotalNetSalary"]) || 0)} note="Current payroll API" tone="purple" />
+        <StudentSummaryCard icon={adminIconAssets.financialReports} label="Report Metrics" value={Object.keys(report || {}).length} note="Available dashboard fields" tone="blue" />
       </section>
       <div className="sp-grid-2">
-        <StudentCard title="Fee Collection Report"><StudentDataTable columns={["Student", "Amount", "Date", "Status"]} statusColumns={[3]} rows={collectionRows.map((row) => ({ Student: row.studentName, Amount: formatMoney(row.amount), Date: formatDate(row.date), Status: row.status }))} empty={state.data?.collections == null ? "Fee collection report unavailable." : "No fee collection report data available."} /></StudentCard>
-        <StudentCard title="Outstanding Dues Report"><StudentDataTable columns={["Student", "Admission No", "Amount", "Due Date"]} rows={dueRows.map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": formatDate(row.dueDate) }))} empty={state.data?.dues == null ? "Outstanding dues report unavailable." : "No outstanding dues report data available."} /></StudentCard>
+        <StudentCard title="Fee Collection Report"><StudentDataTable columns={["Student", "Amount", "Date", "Status"]} statusColumns={[3]} rows={collectionRows.slice(0, 10).map((row) => ({ Student: row.studentName, Amount: formatMoney(row.amount), Date: formatDate(row.date), Status: row.status }))} empty="No fee collection report data available." /></StudentCard>
+        <StudentCard title="Outstanding Dues Report"><StudentDataTable columns={["Student", "Admission No", "Amount", "Due Date"]} rows={dueRows.slice(0, 10).map((row) => ({ Student: row.studentName, "Admission No": row.admissionNo, Amount: formatMoney(row.amount), "Due Date": formatDate(row.dueDate) }))} empty="No outstanding dues report data available." /></StudentCard>
       </div>
     </> : null}
   </>;
 }
 
 export function AccountantProfile() {
-  const sessionUser = useMemo(() => getAuthUser() || {}, []);
-  const userId = sessionUser.userId ?? sessionUser.UserId ?? sessionUser.id;
-  const load = useCallback(() => userId ? apiClient.get(apiEndpoints.auth.userById(userId)).then(unwrap) : Promise.resolve(null), [userId]);
-  const profileState = useFinancePage(load);
-  const user = profileState.data ? { ...sessionUser, ...profileState.data, role: profileState.data.roleName || sessionUser.role } : sessionUser;
+  const user = getAuthUser() || {};
   const name = user.fullName || user.name || "Accountant";
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "AC";
   const [currentPassword, setCurrentPassword] = useState("");
@@ -288,12 +255,12 @@ export function AccountantProfile() {
   const firstName = user.firstName || name.split(/\s+/)[0] || "";
   const lastName = user.lastName || name.split(/\s+/).slice(1).join(" ");
   const phone = user.phoneNumber || user.mobile || user.mobileNumber || user.phone || "";
-  const employeeId = user.employeeId || user.staffId || "";
-  const department = user.department || user.departmentName || "";
-  const designation = user.designation || user.designationName || "";
+  const employeeId = user.employeeId || user.staffId || user.userId || user.id || "";
+  const department = user.department || user.departmentName || "Finance";
+  const designation = user.designation || user.designationName || user.role || "Accountant";
   const campus = user.campus || user.campusName || user.branch || user.branchName || "";
   const username = user.username || user.userName || user.email || "";
-  const status = user.status || user.accountStatus || (user.isActive === false ? "Inactive" : user.isActive === true ? "Active Account" : "Not available");
+  const status = user.status || user.accountStatus || (user.isActive === false ? "Inactive" : "Active Account");
 
   const handleUpdatePassword = async (event) => {
     event.preventDefault();
@@ -319,7 +286,7 @@ export function AccountantProfile() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (error) {
-      setPasswordError(requestError(error));
+      setPasswordError(error?.response?.data?.message || error?.response?.data?.title || error.message || "Failed to update password.");
     } finally {
       setPasswordLoading(false);
     }
@@ -327,7 +294,6 @@ export function AccountantProfile() {
 
   return <>
     <StudentPageHeader title="My Profile" subtitle="Account information for the signed-in finance user." />
-    <PageState {...profileState} />
     <div className="admin-profile-container accountant-profile-container">
       <div className="admin-profile-grid">
         <div className="admin-profile-card">
@@ -363,7 +329,6 @@ export function AccountantProfile() {
             <ReadOnlyField label="Email Address" value={user.email} />
             <ReadOnlyField label="Contact Phone Number" value={phone} />
             <ReadOnlyField label="Employee / Staff ID" value={employeeId} />
-            <ReadOnlyField label="Account User ID" value={user.userId || user.UserId || user.id} />
             <ReadOnlyField label="Department" value={department} />
             <ReadOnlyField label="Designation" value={designation} />
             <ReadOnlyField label="Campus / Branch Assignment" value={campus} />

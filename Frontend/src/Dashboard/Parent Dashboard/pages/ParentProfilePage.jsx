@@ -6,25 +6,23 @@ import { Modal, Toast } from "@/components/common/Ui.jsx";
 import "../ParentDashboard.css";
 
 export default function ParentProfilePage() {
-  const { parentUser, availableChildren, loading } = useParentPortal();
-  const [profile, setProfile] = useState(() => parentUser || getStoredParentProfile(parentUser?.id));
+  const { parentUser, availableChildren } = useParentPortal();
+  const [profile, setProfile] = useState(() => getStoredParentProfile(parentUser?.id));
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [mobileInput, setMobileInput] = useState(parentUser?.mobile || "");
-  const [emailInput, setEmailInput] = useState(parentUser?.email || "");
-  const [addressInput, setAddressInput] = useState(parentUser?.address || "");
+  const [mobileInput, setMobileInput] = useState(profile?.mobile || "");
+  const [emailInput, setEmailInput] = useState(profile?.email || "");
+  const [addressInput, setAddressInput] = useState(profile?.address || "");
   const [toastMessage, setToastMessage] = useState("");
 
   useEffect(() => {
-    if (parentUser) {
-      setProfile((prev) => ({
-        ...parentUser,
-        ...prev,
-      }));
-      if (!mobileInput) setMobileInput(parentUser.mobile || "");
-      if (!emailInput) setEmailInput(parentUser.email || "");
-      if (!addressInput) setAddressInput(parentUser.address || "");
+    if (parentUser?.id) {
+      const p = getStoredParentProfile(parentUser.id);
+      setProfile(p);
+      setMobileInput(p?.mobile || "");
+      setEmailInput(p?.email || "");
+      setAddressInput(p?.address || "");
     }
-  }, [parentUser]);
+  }, [parentUser?.id]);
 
   const initials = (profile?.name || "SK")
     .split(" ")

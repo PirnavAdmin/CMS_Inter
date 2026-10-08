@@ -4715,12 +4715,6 @@ export default function AdmissionPage() {
   const setValue = (name, val) => {
     const field = fieldByName[name] || {};
     if (isPlaceholderOption(val)) return;
-
-    if (["campus", "board", "year"].includes(name)) {
-      setValues((v) => ({ ...v, [name]: val, admissionNo: "" }));
-      setErrors((e) => ({ ...e, [name]: undefined, admissionNo: undefined }));
-    }
-
     if (name === "feeItems") {
       setValues((v) => ({
         ...v, feeItems: val, installments: v.paymentPlan === "Installment Payment"
@@ -5302,18 +5296,11 @@ export default function AdmissionPage() {
     return resolveApprovedStudentId(matchingStudent);
   }, []);
 
-  const ensureApprovedStudentFeeAccount = useCallback(async ({ admissionId, studentId: approvedStudentId, approvedPayload, selectedFeeStructureId = "", selectedFeeValues = {} }) => {
-    const returnedStudentId = numericId(approvedStudentId) || resolveApprovedStudentId(approvedPayload);
-    let detail = {};
-    try {
-      const detailResponse = await apiClient.get(apiEndpoints.admissions.getById(admissionId));
-      detail = getObject(detailResponse.data);
-    } catch (err) {
-      // The approval response is authoritative even if admission readback is unavailable.
-      if (!returnedStudentId || err?.response?.status === 401 || err?.response?.status === 403) throw err;
-    }
+  const ensureApprovedStudentFeeAccount = useCallback(async ({ admissionId, approvedPayload, selectedFeeStructureId = "", selectedFeeValues = {} }) => {
+    const detailResponse = await apiClient.get(apiEndpoints.admissions.getById(admissionId));
+    const detail = getObject(detailResponse.data);
     const detailRow = normalizeAdmissionRow(detail);
-    const studentId = returnedStudentId || await resolveApprovedStudentIdFromBackend({ admissionId, approvedPayload, detail, detailRow });
+    const studentId = await resolveApprovedStudentIdFromBackend({ admissionId, approvedPayload, detail, detailRow });
     if (!studentId) {
       throw new Error("Admission approved successfully, but the backend did not expose the created student ID required for fee assignment.");
     }
@@ -5446,15 +5433,14 @@ export default function AdmissionPage() {
         return;
       }
       const response = status === "Approved"
-        ? await apiClient.post(endpoint(admissionId), { remarks: "" })
+        ? await apiClient.post(endpoint(admissionId), admissionStatusBody(admissionId))
         : await apiClient.post(endpoint(admissionId), admissionFeeApprovalBody(admissionId, status));
       if (status === "Approved") {
-        const approvedStudentId = numericId(response.data?.studentId);
         setApproveTarget(null);
+        await refreshAdmissions();
         try {
           const feeAccount = await ensureApprovedStudentFeeAccount({
             admissionId,
-            studentId: approvedStudentId,
             approvedPayload: getObject(response.data),
             selectedFeeStructureId: record.feeStructureId || record.values?.feeStructureId || values.feeStructureId,
             selectedFeeValues: record.values || values,
@@ -5463,11 +5449,9 @@ export default function AdmissionPage() {
             setValues((current) => ({ ...current, ...feeAccount.persistedFeeValues }));
           }
         } catch (feeErr) {
-          await refreshAdmissions();
           setToast(`Admission ${record.admissionNo} was approved, but fee account creation failed: ${getApiErrorMessage(feeErr)}`);
           return;
         }
-        await refreshAdmissions();
         approveStatusCheckRef.current.delete(admissionKey);
         setToast(`Admission ${record.admissionNo} approved and fee account is ready.`);
         return;

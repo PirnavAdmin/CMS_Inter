@@ -31,6 +31,5 @@ namespace CollegeManagement.API.Models
         // Navigation Properties
         public ICollection<User> Users { get; set; } = new List<User>();
         public ICollection<RolePermission> RolePermissions { get; set; } = new List<RolePermission>();
-        public ICollection<RoleModule> RoleModules { get; set; } = new List<RoleModule>();
     }
 }

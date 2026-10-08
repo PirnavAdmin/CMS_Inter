@@ -114,16 +114,6 @@ public class FeeController : ControllerBase
         return result == null ? NotFound(new { message = "Student fee record not found." }) : Ok(result);
     }
 
-    [HttpPost("students/bulk-fee-details")]
-    public async Task<IActionResult> GetBulkStudentFeeDetails([FromBody] List<int> studentIds)
-    {
-        if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
-        var tasks = studentIds.Distinct().ToDictionary(id => id, id => _service.GetStudentFeeDetailsByStudentAsync(id));
-        await Task.WhenAll(tasks.Values);
-        var result = tasks.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Result);
-        return Ok(result);
-    }
-
     /// <summary>Student Fee Ledger with search and screen filters.</summary>
     [HttpGet("ledger")]
     public async Task<IActionResult> GetLedger([FromQuery] int? campusId, [FromQuery] int? academicYearId, [FromQuery] int? groupId, [FromQuery] int? sectionId, [FromQuery] string? paymentPlan, [FromQuery] string? status, [FromQuery] string? search, [FromQuery] int? boardId)
@@ -160,16 +150,6 @@ public class FeeController : ControllerBase
     /// <summary>View payment history for one student.</summary>
     [HttpGet("history/{studentId:int}")]
     public async Task<IActionResult> GetHistory(int studentId) => Ok(await _service.GetFeePaymentsAsync(studentId));
-
-    [HttpPost("bulk-history")]
-    public async Task<IActionResult> GetBulkHistory([FromBody] List<int> studentIds)
-    {
-        if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
-        var tasks = studentIds.Distinct().ToDictionary(id => id, id => _service.GetFeePaymentsAsync(id));
-        await Task.WhenAll(tasks.Values);
-        var result = tasks.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Result);
-        return Ok(result);
-    }
 
     /// <summary>Fetch one payment transaction by payment ID.</summary>
     [HttpGet("payments/{id:int}")]
