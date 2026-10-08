@@ -108,12 +108,22 @@ public class FeeController : ControllerBase
 
     /// <summary>Get student fee details by student ID.</summary>
     [HttpGet("students/{studentId:int}/fee-details")]
-    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
-    [CollegeManagement.API.Filters.ParentStudentAuthorization]
     public async Task<IActionResult> GetStudentFeeDetails(int studentId)
     {
         var result = await _service.GetStudentFeeDetailsByStudentAsync(studentId);
         return result == null ? NotFound(new { message = "Student fee record not found." }) : Ok(result);
+    }
+
+    [HttpPost("students/bulk-fee-details")]
+    public async Task<IActionResult> GetBulkStudentFeeDetails([FromBody] List<int> studentIds)
+    {
+        if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
+        var result = new Dictionary<int, StudentFeeDetailsResponse?>();
+        foreach (var id in studentIds.Distinct())
+        {
+            result[id] = await _service.GetStudentFeeDetailsByStudentAsync(id);
+        }
+        return Ok(result);
     }
 
     /// <summary>Student Fee Ledger with search and screen filters.</summary>
@@ -123,8 +133,6 @@ public class FeeController : ControllerBase
 
     /// <summary>Compatibility route for student-specific fee ledger.</summary>
     [HttpGet("students/{studentId:int}/fee-ledger")]
-    [Authorize(Roles = "Admin,Teacher,Student,Parent")]
-    [CollegeManagement.API.Filters.ParentStudentAuthorization]
     public async Task<IActionResult> GetStudentLedger(int studentId) => Ok(await _service.GetStudentFeeDetailsByStudentAsync(studentId));
 
     // ---------------- Concession ----------------
@@ -154,6 +162,18 @@ public class FeeController : ControllerBase
     /// <summary>View payment history for one student.</summary>
     [HttpGet("history/{studentId:int}")]
     public async Task<IActionResult> GetHistory(int studentId) => Ok(await _service.GetFeePaymentsAsync(studentId));
+
+    [HttpPost("bulk-history")]
+    public async Task<IActionResult> GetBulkHistory([FromBody] List<int> studentIds)
+    {
+        if (studentIds == null || !studentIds.Any()) return Ok(new Dictionary<int, object>());
+        var result = new Dictionary<int, IEnumerable<FeePaymentResponse>>();
+        foreach (var id in studentIds.Distinct())
+        {
+            result[id] = await _service.GetFeePaymentsAsync(id);
+        }
+        return Ok(result);
+    }
 
     /// <summary>Fetch one payment transaction by payment ID.</summary>
     [HttpGet("payments/{id:int}")]

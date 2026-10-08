@@ -20,16 +20,6 @@ namespace CollegeManagement.API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] PickupPointFilterDto filter)
         {
-            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = "CampusId is required and must be greater than zero.",
-                    errors = new { campusId = new[] { "CampusId is required and must be greater than zero." } }
-                });
-            }
-
             var result = await _service.GetAllAsync(filter);
             return Ok(result);
         }
