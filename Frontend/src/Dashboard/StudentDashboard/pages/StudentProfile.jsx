@@ -254,8 +254,14 @@ export default function StudentProfile() {
   if (loading && !profile) return <div className="sp-page"><SkeletonPage variant="form" rows={8}/></div>;
   return <>
     <div className="sp-page sp-profile-page">
-      <StudentPageHeader title="My Profile" subtitle="Review and maintain your permitted student information." action={<div className="sp-actions"><button className="sp-btn" onClick={() => setPasswordOpen(true)}><KeyRound size={15}/> Change Password</button><button className="sp-btn primary" disabled={Boolean(editingSection) || saving} title={editingSection ? "Save or cancel the current section first" : "Edit personal details"} onClick={() => beginEdit("personal")}><Pencil size={15}/> Edit Profile</button></div>}/>
+      <StudentPageHeader title="My Profile" subtitle="Review and maintain your permitted student information." action={<div className="sp-actions"><button className="sp-btn" onClick={() => setPasswordOpen(true)}><KeyRound size={15}/> Change Password</button></div>}/>
       <section className="sp-profile-hero"><div className="sp-photo-control"><button className="sp-photo-avatar-button" onClick={openPhotoMenu} aria-label="Open profile photo options" title="Profile photo">{photoAvailable ? <img className="sp-profile-photo" src={photoUrl} alt={profile?.studentName} onError={() => setFailedPhotoUrl(photoUrl)}/> : <span className="sp-avatar is-xl">{initials}</span>}</button><button className="sp-photo-camera-button" onClick={openPhotoMenu} aria-label="Change profile photo" title="Change profile photo"><Camera size={16}/></button></div><div><h2>{profile?.studentName}</h2><p>Student ID: {profile?.studentId} • Roll No: {display(profile?.rollNo, true)} • {display(profile?.sectionName, true)}</p></div><input ref={photoRef} type="file" accept=".jpg,.jpeg,.png,.webp" hidden onChange={selectPhoto}/></section>
+      <nav className="sp-profile-tabs" aria-label="Profile sections">
+        {[["personal", "Personal Details", UserRound], ["contact", "Contact & Address", House], ["previousSchool", "Previous School", Landmark], ["academic", "Academic Information", GraduationCap], ["documents", "Documents", FileText]].map(([id, title, TabIcon]) => <label key={id}>
+          <input type="radio" name="student-profile-section" value={id} defaultChecked={id === "personal"} disabled={Boolean(editingSection)} />
+          <span><TabIcon size={16} aria-hidden="true"/>{title}</span>
+        </label>)}
+      </nav>
       <div className={`sp-profile-sections ${editingSection ? "has-editing" : ""}`}>
         {groups.map(([id, title, SectionIcon, fields]) => {
           const active = editingSection === id;

@@ -1,4 +1,4 @@
-﻿using CollegeManagement.API.Models;
+using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Models.Settings;
@@ -69,6 +69,8 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportVehicle> TransportVehicles => Set<TransportVehicle>();
         public DbSet<TransportDriver> TransportDrivers { get; set; } = null!;
         public DbSet<TransportVehicleAssignment> TransportVehicleAssignments { get; set; } = null!;
+        public DbSet<DriverPreference> DriverPreferences { get; set; } = null!;
+
         public DbSet<DriverNotification> DriverNotifications { get; set; } = null!;
         public DbSet<StudentTransportAssignment> StudentTransportAssignments { get; set; } = null!;
         public DbSet<VehicleMaintenance> VehicleMaintenances { get; set; } = null!;
@@ -1720,6 +1722,8 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
 
 }
 }
+
+
 
 
 

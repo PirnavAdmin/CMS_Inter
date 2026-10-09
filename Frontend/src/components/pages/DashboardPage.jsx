@@ -546,7 +546,55 @@ export default function DashboardPage() {
       const res = await apiClient.get("/api/v1/attendance/admin/students", { params });
 
       if (studentAttSeq.current === seq) {
-        const attendance = summarizeStudentAttendance(res.data, viewByVal);
+        const payload = res.data?.data || res.data || [];
+        const rows = Array.isArray(payload) ? payload : [];
+
+        const STUDENT_LABEL = { 1: "Present", 2: "Absent", 4: "Half Day", 5: "Holiday" };
+        const studentStatus = (v) => STUDENT_LABEL[v] ?? (v === "Half-Day" ? "Half Day" : v) ?? "—";
+        const getVal = (o, ...keys) => keys.map((k) => o?.[k]).find((v) => v !== undefined && v !== null);
+        const studentSessionStatus = (row, session) => studentStatus(getVal(row, `${session}Status`, `${session}AttendanceStatus`, `${session}SessionStatus`, session, `${session}Attendance`));
+
+        const processedRows = rows.map(r => {
+          const m = studentSessionStatus(r, "morning");
+          const a = studentSessionStatus(r, "afternoon");
+          let finalStatus = "—";
+          if (m === "Present" && a === "Present") finalStatus = "Present";
+          else if (m === "Half Day" || a === "Half Day") finalStatus = "Half Day";
+          else if ((m === "Present" && a === "Absent") || (a === "Present" && m === "Absent")) finalStatus = "Half Day";
+          else if (m === "Present" || a === "Present") finalStatus = "Present";
+          else if (m === "Absent" || a === "Absent") finalStatus = "Absent";
+          else if (m === "Holiday" || a === "Holiday") finalStatus = "Holiday";
+          return { ...r, finalStatus };
+        });
+
+        const presentCount = processedRows.filter(r => r.finalStatus === "Present").length;
+        const absentCount = processedRows.filter(r => r.finalStatus === "Absent").length;
+        const halfDayCount = processedRows.filter(r => r.finalStatus === "Half Day").length;
+        const totalCount = processedRows.length;
+        const percentage = totalCount ? Math.round(((presentCount + 0.5 * halfDayCount) * 100) / totalCount) : 0;
+
+        let breakdownList = [];
+        if (viewByVal !== "Overall") {
+          const groupMap = {};
+          processedRows.forEach(r => {
+            let key = "Unknown";
+            if (viewByVal === "Academic Level") key = getVal(r, "levelName", "academicLevelName") || "Unknown";
+            if (viewByVal === "Group") key = getVal(r, "groupName") || "Unknown";
+            if (viewByVal === "Section") key = getVal(r, "sectionName") || "Unknown";
+            
+            if (!groupMap[key]) groupMap[key] = { name: key, total: 0, present: 0, absent: 0, halfDay: 0 };
+            groupMap[key].total++;
+            if (r.finalStatus === "Present") groupMap[key].present++;
+            if (r.finalStatus === "Absent") groupMap[key].absent++;
+            if (r.finalStatus === "Half Day") groupMap[key].halfDay++;
+          });
+          
+          breakdownList = Object.values(groupMap).map(g => ({
+            ...g,
+            percentage: g.total ? Math.round(((g.present + 0.5 * g.halfDay) * 100) / g.total) : 0
+          }));
+        }
+
         setStudentAttState({
           loading: false,
           error: null,
@@ -598,12 +646,7 @@ export default function DashboardPage() {
         let lateCount = 0;
         let onLeaveCount = 0;
 
-        const validRows = rows.filter(r => {
-           const st = staffStatus(r.status);
-           return st !== "Holiday" && st !== "—";
-        });
-
-        validRows.forEach(r => {
+        rows.forEach(r => {
            const st = staffStatus(r.status);
            if (st === "Present") presentCount++;
            else if (st === "Absent") absentCount++;
@@ -611,7 +654,7 @@ export default function DashboardPage() {
            else if (st === "Leave") onLeaveCount++;
         });
 
-        const totalCount = validRows.length;
+        const totalCount = rows.length;
         const percentage = totalCount ? Math.round(((presentCount + 0.5 * lateCount) * 100) / totalCount) : 0;
 
         setStaffAttState({
@@ -1665,7 +1708,7 @@ export default function DashboardPage() {
               <EmptyState message="No upcoming holidays scheduled." />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-info-list">
+                <div className="dashboard-info-list" style={{ paddingBottom: '20px' }}>
                   {holidaysList.map((item, index) => (
                     <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
@@ -1704,7 +1747,7 @@ export default function DashboardPage() {
               <EmptyState message="No upcoming examinations scheduled." />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-info-list">
+                <div className="dashboard-info-list" style={{ paddingBottom: '20px' }}>
                   {examsList.map((item, index) => (
                     <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>

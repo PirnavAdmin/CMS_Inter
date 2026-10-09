@@ -11,6 +11,7 @@ import { useFaculty } from "../FacultyContext.jsx";
 import { facultyMockData } from "../data/facultyMockData.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { clearAuthSession } from "@/features/authStorage.js";
 
 export function NavbarIcon({ src }) {
   return <img className="cms-navbar-3d-icon" src={src} alt="" aria-hidden="true" />;
@@ -194,6 +195,7 @@ export default function FacultyNavbar() {
   };
 
   const handleLogout = () => {
+    clearAuthSession();
     navigate("/login", { replace: true });
   };
 

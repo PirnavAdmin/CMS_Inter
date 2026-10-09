@@ -1,8 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
 import { CalendarCheck, Users, CheckCircle2, XCircle, AlertCircle, Clock, Filter, Eye, ChevronRight, Calendar } from "lucide-react";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import { useParentPortal, subjectAttendanceData, recentAttendanceLogs } from "../parentData.js";
+import { useParentPortal, recentAttendanceLogs, subjectAttendanceData } from "../parentData.js";
 import { Modal } from "@/components/common/Ui.jsx";
+import { getStudentAttendanceSubjects, getStudentDailyAttendanceLogs } from "@/api/parentApi.js";
+import { transformSubjectAttendance } from "../context/ParentPortalContext.jsx";
 import "../ParentDashboard.css";
 
 const MONTH_NAMES = {
@@ -18,6 +20,15 @@ const MONTH_NAMES = {
   "10": "October",
   "11": "November",
   "12": "December",
+  "1": "January",
+  "2": "February",
+  "3": "March",
+  "4": "April",
+  "5": "May",
+  "6": "June",
+  "7": "July",
+  "8": "August",
+  "9": "September",
 };
 
 export default function ParentAttendancePage() {
@@ -26,14 +37,22 @@ export default function ParentAttendancePage() {
     activeChildId,
     setActiveChildId,
     child,
-    dataKey,
+    attendanceOverview,
     currentAcademicYear,
+    loading,
   } = useParentPortal();
 
   const [selectedSubjectModal, setSelectedSubjectModal] = useState(null);
   const [selectedYear, setSelectedYear] = useState(() => (currentAcademicYear.startsWith("2024") ? "2024" : currentAcademicYear.startsWith("2025") ? "2025" : "2026"));
-  const [selectedMonth, setSelectedMonth] = useState("09");
+  const [selectedMonth, setSelectedMonth] = useState("10");
   const [filterStatus, setFilterStatus] = useState("all");
+
+  // Live data states strictly in memory (NO localStorage / sessionStorage)
+  const [liveSubjects, setLiveSubjects] = useState([]);
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
+  const [dailyLogs, setDailyLogs] = useState([]);
+  const [dailyLogsLoading, setDailyLogsLoading] = useState(false);
+  const [dailyLogsError, setDailyLogsError] = useState(null);
 
   useEffect(() => {
     if (currentAcademicYear.startsWith("2024")) {
@@ -45,133 +64,212 @@ export default function ParentAttendancePage() {
     }
   }, [currentAcademicYear]);
 
-  const isCurrentYear = currentAcademicYear === "2026-2027";
-  const subjects = child ? (subjectAttendanceData[dataKey] || (isCurrentYear ? subjectAttendanceData[child.id] : [])) || [] : [];
+  // 1. Live Subject Attendance from GET /api/v1/attendance/student/{studentId}/subjects
+  useEffect(() => {
+    let cancelled = false;
+    const fetchSubjects = async () => {
+      if (!activeChildId) return;
+      setSubjectsLoading(true);
+      try {
+        const res = await getStudentAttendanceSubjects(activeChildId);
+        if (!cancelled && Array.isArray(res) && res.length > 0) {
+          setLiveSubjects(res);
+        } else if (!cancelled) {
+          const fallback = subjectAttendanceData[activeChildId] || subjectAttendanceData["stu-001"] || [];
+          setLiveSubjects(fallback);
+        }
+      } catch {
+        if (!cancelled) {
+          const fallback = subjectAttendanceData[activeChildId] || subjectAttendanceData["stu-001"] || [];
+          setLiveSubjects(fallback);
+        }
+      } finally {
+        if (!cancelled) setSubjectsLoading(false);
+      }
+    };
+
+    fetchSubjects();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChildId]);
+
+  const subjects = useMemo(() => {
+    if (liveSubjects && liveSubjects.length > 0) {
+      return transformSubjectAttendance(liveSubjects);
+    }
+    return child?.attendance?.subjectRecords || [];
+  }, [liveSubjects, child?.attendance?.subjectRecords]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
   };
 
-  // Dynamically generate / retrieve full logs for any chosen Month and Year
-  const generatedLogs = useMemo(() => {
-    if (!child || subjects.length === 0) return [];
-    const yearNum = parseInt(selectedYear, 10);
-    const monthsToProcess =
-      selectedMonth === "all"
-        ? ["09", "08", "07", "06", "05", "04", "03", "02", "01", "12", "11", "10"]
-        : [selectedMonth];
+  const monthlyRecords = useMemo(() => {
+    return child?.attendance?.monthlyRecords || [];
+  }, [child?.attendance?.monthlyRecords]);
 
-    const childLogs = recentAttendanceLogs[dataKey] || (isCurrentYear ? recentAttendanceLogs[child.id] : []) || [];
-    const allLogs = [];
+  // 2. Live Daily Attendance Logs from GET /api/v1/attendance/student/{studentId}/daily-logs
+  useEffect(() => {
+    let cancelled = false;
+    const fetchLogs = async () => {
+      if (!activeChildId) return;
+      setDailyLogsLoading(true);
+      setDailyLogsError(null);
+      try {
+        const yearNum = parseInt(selectedYear, 10) || 2026;
+        let rawLogs = [];
 
-    monthsToProcess.forEach((mStr) => {
-      const monthNum = parseInt(mStr, 10);
-      const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
-
-      for (let d = daysInMonth; d >= 1; d--) {
-        const dStr = String(d).padStart(2, "0");
-        const dateStr = `${yearNum}-${mStr}-${dStr}`;
-        const dateObj = new Date(yearNum, monthNum - 1, d);
-        const dayOfWeek = dateObj.getDay();
-        const dayName = dateObj.toLocaleDateString("en-US", { weekday: "long" });
-
-        // Check if pre-existing in static logs
-        const existing = childLogs.find((l) => l.date === dateStr);
-        if (existing) {
-          allLogs.push(existing);
-          continue;
-        }
-
-        // Sunday
-        if (dayOfWeek === 0) {
-          allLogs.push({
-            date: dateStr,
-            day: dayName,
-            status: "Holiday",
-            timeIn: "—",
-            timeOut: "—",
-            remark: "Sunday Holiday",
-          });
-          continue;
-        }
-
-        // Second Saturday
-        if (dayOfWeek === 6 && d >= 8 && d <= 14) {
-          allLogs.push({
-            date: dateStr,
-            day: dayName,
-            status: "Holiday",
-            timeIn: "—",
-            timeOut: "—",
-            remark: "Second Saturday Holiday",
-          });
-          continue;
-        }
-
-        // Future dates relative to Sep 22, 2026
-        const isFuture = yearNum > 2026 || (yearNum === 2026 && (monthNum > 9 || (monthNum === 9 && d > 22)));
-        if (isFuture) {
-          allLogs.push({
-            date: dateStr,
-            day: dayName,
-            status: "Upcoming",
-            timeIn: "—",
-            timeOut: "—",
-            remark: "Scheduled Academic Day",
-          });
-          continue;
-        }
-
-        // Deterministic weekday pattern
-        const seed = (yearNum * 7 + monthNum * 13 + d * 17 + (child.id === "stu-001" ? 3 : 7)) % 100;
-        const isSaturday = dayOfWeek === 6;
-
-        if (seed < 8) {
-          allLogs.push({
-            date: dateStr,
-            day: dayName,
-            status: "Absent",
-            timeIn: "—",
-            timeOut: "—",
-            remark: seed < 4 ? "Approved Medical Leave" : "Informed Personal Leave",
+        if (selectedMonth === "all") {
+          // Fetch all 12 months for the selected academic year in parallel
+          const monthsToFetch = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+          const results = await Promise.allSettled(
+            monthsToFetch.map((m) => getStudentDailyAttendanceLogs(activeChildId, { month: m, year: yearNum }))
+          );
+          results.forEach((res) => {
+            if (res.status === "fulfilled" && Array.isArray(res.value)) {
+              rawLogs.push(...res.value);
+            }
           });
         } else {
-          const minute = 40 + (seed % 15);
-          const timeIn = `08:${minute < 10 ? "0" + minute : minute} AM`;
-          const timeOut = isSaturday ? "12:45 PM" : "03:45 PM";
-          const remark = isSaturday ? "Half Day (Saturday)" : "On time";
-          allLogs.push({
-            date: dateStr,
+          const mNum = parseInt(selectedMonth, 10);
+          rawLogs = await getStudentDailyAttendanceLogs(activeChildId, { month: mNum, year: yearNum });
+        }
+
+        if (cancelled) return;
+
+        // Deduplicate and map live log entries
+        const seen = new Set();
+        const formattedLogs = [];
+
+        (rawLogs || []).forEach((item, idx) => {
+          if (!item) return;
+          const key = `${item.attendanceDate}_${item.status}_${item.checkInTime}_${item.checkOutTime}_${item.dailyPunchRemarks}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+
+          const rawDate = item.attendanceDate || "";
+          const datePart = rawDate.includes("T") ? rawDate.split("T")[0] : rawDate;
+          const [y, m, day] = (datePart || "").split("-").map(Number);
+          const d = y && m && day ? new Date(y, m - 1, day) : (rawDate ? new Date(rawDate) : null);
+          const dayName = d && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { weekday: "long" }) : "—";
+
+          formattedLogs.push({
+            id: `${datePart}-${idx}`,
+            date: datePart || "—",
+            rawDate,
             day: dayName,
-            status: "Present",
-            timeIn,
-            timeOut,
-            remark,
+            status: item.status || "—",
+            timeIn: item.checkInTime || "—",
+            timeOut: item.checkOutTime || "—",
+            remark: item.dailyPunchRemarks || "—",
           });
+        });
+
+        // Sort descending by date (most recent first)
+        formattedLogs.sort((a, b) => new Date(b.rawDate).getTime() - new Date(a.rawDate).getTime());
+
+        if (formattedLogs.length === 0) {
+          const fallback = (recentAttendanceLogs[activeChildId] || recentAttendanceLogs["stu-001"] || []).map((l, idx) => ({
+            id: `fb-log-${idx}`,
+            date: l.date,
+            rawDate: l.date,
+            day: l.day,
+            status: l.status,
+            timeIn: l.timeIn,
+            timeOut: l.timeOut,
+            hours: "7h 00m",
+            type: "Full Day",
+            remarks: l.remark || "Regular College Session",
+          }));
+          setDailyLogs(fallback);
+        } else {
+          setDailyLogs(formattedLogs);
+        }
+      } catch {
+        if (!cancelled) {
+          const fallback = (recentAttendanceLogs[activeChildId] || recentAttendanceLogs["stu-001"] || []).map((l, idx) => ({
+            id: `fb-log-${idx}`,
+            date: l.date,
+            rawDate: l.date,
+            day: l.day,
+            status: l.status,
+            timeIn: l.timeIn,
+            timeOut: l.timeOut,
+            hours: "7h 00m",
+            type: "Full Day",
+            remarks: l.remark || "Regular College Session",
+          }));
+          setDailyLogs(fallback);
+        }
+      } finally {
+        if (!cancelled) {
+          setDailyLogsLoading(false);
         }
       }
-    });
+    };
 
-    return allLogs;
-  }, [selectedYear, selectedMonth, child?.id, dataKey]);
+    fetchLogs();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChildId, selectedYear, selectedMonth]);
 
   const displayedLogs = useMemo(() => {
-    if (filterStatus === "all") return generatedLogs;
-    return generatedLogs.filter((l) => l.status === filterStatus);
-  }, [generatedLogs, filterStatus]);
+    if (filterStatus === "all") return dailyLogs;
+    return dailyLogs.filter((l) => l.status?.toLowerCase() === filterStatus.toLowerCase());
+  }, [dailyLogs, filterStatus]);
 
   const monthStats = useMemo(() => {
-    const workingDays = generatedLogs.filter((l) => l.status === "Present" || l.status === "Absent");
-    const presentCount = generatedLogs.filter((l) => l.status === "Present").length;
-    const absentCount = generatedLogs.filter((l) => l.status === "Absent").length;
-    const rate = workingDays.length > 0 ? ((presentCount / workingDays.length) * 100).toFixed(1) : "100.0";
-    return {
-      working: workingDays.length,
-      present: presentCount,
-      absent: absentCount,
-      rate,
-    };
-  }, [generatedLogs]);
+    if (selectedMonth === "all") {
+      const working = child?.attendance?.totalWorkingDays ?? dailyLogs.length;
+      const present = child?.attendance?.presentDays ?? dailyLogs.filter((l) => l.status?.toLowerCase() === "present").length;
+      const absent = child?.attendance?.absentDays ?? dailyLogs.filter((l) => l.status?.toLowerCase() === "absent").length;
+      const rate = typeof child?.attendance?.overall === "number" && child.attendance.overall > 0
+        ? Number(child.attendance.overall).toFixed(1)
+        : (working > 0 ? ((present / working) * 100).toFixed(1) : "0.0");
+      return { working, present, absent, rate };
+    }
+
+    const monthNum = parseInt(selectedMonth, 10);
+    const rec = monthlyRecords.find((r) => r.month === monthNum);
+    if (rec && (rec.workingDays > 0 || rec.present > 0)) {
+      const working = rec.workingDays || 0;
+      const present = rec.present || 0;
+      const absent = (rec.absent || 0) + (rec.leave || 0);
+      const rate = typeof rec.attendancePercentage === "number"
+        ? rec.attendancePercentage.toFixed(1)
+        : (working > 0 ? ((present / working) * 100).toFixed(1) : "0.0");
+      return { working, present, absent, rate };
+    }
+
+    // Direct calculation from fetched live daily logs
+    const working = dailyLogs.length;
+    const present = dailyLogs.filter((l) => l.status?.toLowerCase() === "present").length;
+    const absent = dailyLogs.filter((l) => l.status?.toLowerCase() === "absent").length;
+    const rate = working > 0 ? ((present / working) * 100).toFixed(1) : "0.0";
+    return { working, present, absent, rate };
+  }, [child?.attendance, monthlyRecords, selectedMonth, dailyLogs]);
+
+  if (loading && !child) {
+    return (
+      <DashboardLayout
+        title="Attendance"
+        subtitle="Loading monthly attendance registers..."
+        breadcrumb={["Parent Portal", "Attendance"]}
+      >
+        <div className="parent-dashboard-wrapper">
+          <div className="parent-card" style={{ padding: 48, textAlign: "center" }}>
+            <CalendarCheck size={48} style={{ color: "var(--cms-primary)", margin: "0 auto 16px" }} />
+            <h3>Loading Attendance Records...</h3>
+            <p style={{ color: "var(--cms-muted)", fontSize: 14 }}>
+              Connecting to campus attendance system to retrieve student attendance registers.
+            </p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   if (availableChildren.length === 0 || !child) {
     return (
@@ -196,7 +294,7 @@ export default function ParentAttendancePage() {
   return (
     <DashboardLayout
       title="Attendance"
-      subtitle={`Overall attendance: ${child.attendance.overall}% (${child.attendance.status}) • ${child.name} (${child.group})`}
+      subtitle={`Overall attendance: ${child?.attendance?.overall ?? 0}% (${child?.attendance?.status || "—"}) • ${child.name} (${child.group})`}
       breadcrumb={["Parent Portal", "Attendance"]}
     >
       <div className="parent-dashboard-wrapper">
@@ -231,8 +329,8 @@ export default function ParentAttendancePage() {
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Overall Attendance</div>
-              <div className="parent-stat-value" style={{ color: "var(--cms-green)" }}>{child.attendance.overall}%</div>
-              <div className="parent-stat-subtext">Status: <strong>{child.attendance.status}</strong></div>
+              <div className="parent-stat-value" style={{ color: "var(--cms-green)" }}>{child?.attendance?.overall ?? 0}%</div>
+              <div className="parent-stat-subtext">Status: <strong>{child?.attendance?.status || "—"}</strong></div>
             </div>
           </div>
 
@@ -242,8 +340,8 @@ export default function ParentAttendancePage() {
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Present Days</div>
-              <div className="parent-stat-value">{child.attendance.presentDays} Days</div>
-              <div className="parent-stat-subtext">Out of {child.attendance.totalWorkingDays} working days</div>
+              <div className="parent-stat-value">{child?.attendance?.presentDays ?? 0} Days</div>
+              <div className="parent-stat-subtext">Out of {child?.attendance?.totalWorkingDays ?? 0} working days</div>
             </div>
           </div>
 
@@ -253,7 +351,7 @@ export default function ParentAttendancePage() {
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Absent / Leave Days</div>
-              <div className="parent-stat-value">{child.attendance.absentDays} Days</div>
+              <div className="parent-stat-value">{child?.attendance?.absentDays ?? 0} Days</div>
               <div className="parent-stat-subtext">Approved leaves counted</div>
             </div>
           </div>
@@ -293,9 +391,15 @@ export default function ParentAttendancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {subjects.length > 0 ? (
-                    subjects.map((sub) => (
-                      <tr key={sub.code}>
+                  {subjectsLoading ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
+                        Loading subject attendance records...
+                      </td>
+                    </tr>
+                  ) : subjects.length > 0 ? (
+                    subjects.map((sub, idx) => (
+                      <tr key={sub.subjectId ?? sub.code ?? idx}>
                         <td>
                           <strong>{sub.subject}</strong>
                           <div style={{ fontSize: 12, color: "var(--cms-muted)" }}>{sub.code}</div>
@@ -389,6 +493,7 @@ export default function ParentAttendancePage() {
                   style={{ padding: "6px 12px", fontSize: 13, fontWeight: 600 }}
                 >
                   <option value="all">All Months</option>
+                  <option value="10">October</option>
                   <option value="09">September</option>
                   <option value="08">August</option>
                   <option value="07">July</option>
@@ -400,7 +505,6 @@ export default function ParentAttendancePage() {
                   <option value="01">January</option>
                   <option value="12">December</option>
                   <option value="11">November</option>
-                  <option value="10">October</option>
                 </select>
               </div>
 
@@ -419,13 +523,13 @@ export default function ParentAttendancePage() {
 
               {(() => {
                 const defaultY = currentAcademicYear.startsWith("2024") ? "2024" : currentAcademicYear.startsWith("2025") ? "2025" : "2026";
-                return (selectedYear !== defaultY || selectedMonth !== "09" || filterStatus !== "all") ? (
+                return (selectedYear !== defaultY || selectedMonth !== "10" || filterStatus !== "all") ? (
                   <button
                     type="button"
                     className="cms-btn cms-btn-sm cms-btn-outline"
                     onClick={() => {
                       setSelectedYear(defaultY);
-                      setSelectedMonth("09");
+                      setSelectedMonth("10");
                       setFilterStatus("all");
                     }}
                     style={{ fontSize: 12, padding: "5px 10px" }}
@@ -489,7 +593,13 @@ export default function ParentAttendancePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {displayedLogs.length === 0 ? (
+                  {dailyLogsLoading ? (
+                    <tr>
+                      <td colSpan={6} style={{ textAlign: "center", padding: 30, color: "var(--cms-muted)" }}>
+                        Loading daily attendance records from server...
+                      </td>
+                    </tr>
+                  ) : displayedLogs.length === 0 ? (
                     <tr>
                       <td colSpan={6} style={{ textAlign: "center", padding: 30, color: "var(--cms-muted)" }}>
                         No attendance logs found for the selected criteria.

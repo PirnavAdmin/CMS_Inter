@@ -18,5 +18,6 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task SaveUserPermissionOverridesAsync(int userId, List<ModulePermissionUpdateItem> overrides, int? adminUserId = null, string? notes = null);
         Task<bool> ResetUserPermissionOverridesAsync(int userId);
         Task<bool> HasPermissionAsync(int userId, string permissionCode);
+        Task<bool> HasModulePermissionAsync(int userId, string module, string action);
     }
 }

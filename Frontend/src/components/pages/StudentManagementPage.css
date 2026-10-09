@@ -83,6 +83,20 @@
 .student-management-actions { display:flex; justify-content:flex-end; gap:12px; }
 .student-import-modal { display:grid; gap:16px; }
 .student-import-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.student-import-dialog { width: min(620px, calc(100vw - 32px)); max-width: calc(100vw - 32px); border:1px solid var(--cms-border); border-radius:20px; background:var(--cms-surface); }
+.student-import-dialog .cms-modal-head { padding:20px 26px; border-bottom:1px solid var(--cms-border); }
+.student-import-dialog .cms-modal-body { padding:22px 26px; }
+.student-import-dialog .cms-modal-foot { display:flex; justify-content:flex-end; gap:10px; padding:18px 26px; border-top:1px solid var(--cms-border); }
+.student-import-dialog .student-import-actions { display:grid; gap:16px; align-items:stretch; }
+.student-import-step { min-width:0; padding:16px 18px; border:1px solid var(--cms-border); border-radius:14px; background:var(--cms-surface-alt, var(--cms-surface)); }
+.student-import-step-head { display:flex; align-items:flex-start; gap:10px; margin-bottom:8px; }
+.student-import-step-head > b { display:grid; place-items:center; width:28px; height:28px; flex:0 0 28px; border-radius:50%; background:var(--cms-primary-soft); color:var(--cms-primary); font-size:12px; }
+.student-import-step-head h4 { margin:2px 0 4px; color:var(--cms-text); font-size:14px; }
+.student-import-step-head p { margin:0; color:var(--cms-muted); font-size:12px; line-height:1.5; }
+.student-import-step .cms-btn { width:fit-content; max-width:100%; }
+.student-import-step label.cms-btn { border-style:dashed; border-color:var(--cms-primary); background:var(--cms-primary-soft); cursor:pointer; }
+.student-import-filename { margin:10px 0 0; overflow-wrap:anywhere; font-size:12px; }
+@media(max-width:560px){.student-import-dialog .cms-modal-head,.student-import-dialog .cms-modal-body,.student-import-dialog .cms-modal-foot{padding:16px}.student-import-step{padding:14px}.student-import-dialog .cms-modal-foot{flex-wrap:wrap}}
 .student-import-summary { display:grid; grid-template-columns:repeat(3, minmax(120px, 1fr)); gap:10px; }
 .student-import-summary span { display:grid; gap:4px; padding:11px 12px; border:1px solid var(--cms-border); border-radius:10px; color:var(--cms-muted); }
 .student-import-summary b { color:var(--cms-text); font-size:18px; }

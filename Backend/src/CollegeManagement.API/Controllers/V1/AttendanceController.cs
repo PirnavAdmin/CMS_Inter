@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CollegeManagement.API.Filters;
 using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Attendance.Requests;
@@ -8,6 +9,7 @@ using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Controllers.V1
 {
@@ -225,6 +227,22 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetAdminStudentsForAttendance([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
         {
             var request = requestBody ?? requestQuery;
+            
+            if (request.CampusId.HasValue && request.CampusId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Campus ID." });
+                
+            if (request.BoardId.HasValue && request.BoardId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Board ID." });
+                
+            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Academic Year ID." });
+                
+            if (!string.IsNullOrEmpty(request.AttendanceDate) && !DateTime.TryParse(request.AttendanceDate, out _))
+                return BadRequest(new { success = false, message = "Invalid Attendance Date format." });
+                
+            if (!string.IsNullOrEmpty(request.Date) && !DateTime.TryParse(request.Date, out _))
+                return BadRequest(new { success = false, message = "Invalid Date format." });
+
             var results = await _attendanceService.GetAdminStudentsForAttendanceAsync(request);
             return Ok(results);
         }
@@ -502,10 +520,90 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("student/{studentId}/yearly-overview")]
         [ProducesResponseType(typeof(CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> GetStudentYearlyOverview(int studentId, [FromQuery] int academicYearId)
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [CollegeManagement.API.Filters.ParentStudentAuthorization]
+        public async Task<IActionResult> GetStudentYearlyOverview([FromRoute] int studentId, [FromQuery] int academicYearId)
         {
-            var result = await _attendanceService.GetStudentYearlyOverviewAsync(studentId, academicYearId);
-            return Ok(result);
+            try
+            {
+                var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
+                var connection = dbContext.Database.GetDbConnection();
+                if (connection.State != System.Data.ConnectionState.Open) await connection.OpenAsync();
+
+                using var multi = await Dapper.SqlMapper.QueryMultipleAsync(
+                    connection,
+                    "CALL sp_GetStudentAttendances(@StudentId, @AcademicYearId);",
+                    new { StudentId = studentId, AcademicYearId = academicYearId },
+                    commandType: System.Data.CommandType.Text);
+
+                var yearInfo = await multi.ReadSingleOrDefaultAsync<dynamic>();
+                if (yearInfo == null || yearInfo.StartDate == null || yearInfo.EndDate == null)
+                    return NotFound(new { message = "No active Academic Year found in the system for this student." });
+
+                DateTime startDate = yearInfo.StartDate;
+                DateTime endDate = yearInfo.EndDate;
+                var records = (await multi.ReadAsync<CollegeManagement.API.Models.Attendance>()).ToList();
+
+                var response = new CollegeManagement.API.DTOs.Attendance.Responses.YearlyOverviewResponse();
+                var months = new List<CollegeManagement.API.DTOs.Attendance.Responses.MonthlyOverviewItem>();
+
+                var currentMonth = new DateTime(startDate.Year, startDate.Month, 1);
+                var endMonth = new DateTime(endDate.Year, endDate.Month, 1);
+
+                while (currentMonth <= endMonth)
+                {
+                    var monthRecords = records.Where(r => r.AttendanceDate.Month == currentMonth.Month && r.AttendanceDate.Year == currentMonth.Year).ToList();
+                    var distinctDays = monthRecords.Select(r => r.AttendanceDate.Date).Distinct().ToList();
+                    int workingDays = distinctDays.Count;
+                    
+                    int presentDays = 0, absentDays = 0, halfDays = 0;
+
+                    foreach (var day in distinctDays)
+                    {
+                        var dayRecords = monthRecords.Where(r => r.AttendanceDate.Date == day).ToList();
+                        var morning = dayRecords.FirstOrDefault(r => r.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Morning);
+                        var afternoon = dayRecords.FirstOrDefault(r => r.Session == CollegeManagement.API.Enums.StudentAttendanceSession.Afternoon);
+
+                        bool isMorningPresent = morning != null && morning.Status == CollegeManagement.API.Enums.AttendanceStatus.Present;
+                        bool isAfternoonPresent = afternoon != null && afternoon.Status == CollegeManagement.API.Enums.AttendanceStatus.Present;
+                        bool hasMorning = morning != null, hasAfternoon = afternoon != null;
+
+                        if (isMorningPresent && isAfternoonPresent) presentDays++;
+                        else if ((isMorningPresent && hasAfternoon && !isAfternoonPresent) || (isAfternoonPresent && hasMorning && !isMorningPresent)) halfDays++;
+                        else if (isMorningPresent || isAfternoonPresent) presentDays++;
+                        else absentDays++;
+                    }
+
+                    months.Add(new CollegeManagement.API.DTOs.Attendance.Responses.MonthlyOverviewItem
+                    {
+                        MonthName = currentMonth.ToString("MMMM"),
+                        Month = currentMonth.Month,
+                        Year = currentMonth.Year,
+                        WorkingDays = workingDays,
+                        Present = presentDays,
+                        Absent = absentDays,
+                        HalfDays = halfDays,
+                        AttendancePercentage = workingDays > 0 ? Math.Round(((presentDays + (halfDays * 0.5)) / workingDays) * 100, 2) : 0
+                    });
+
+                    currentMonth = currentMonth.AddMonths(1);
+                }
+
+                response.MonthlyRecords = months;
+                response.TotalWorkingDays = months.Sum(m => m.WorkingDays);
+                response.TotalPresent = months.Sum(m => m.Present);
+                response.TotalAbsent = months.Sum(m => m.Absent);
+                response.TotalHalfDays = months.Sum(m => m.HalfDays);
+                response.OverallAttendancePercentage = response.TotalWorkingDays > 0 
+                    ? Math.Round(((response.TotalPresent + (response.TotalHalfDays * 0.5)) / response.TotalWorkingDays) * 100, 2) 
+                    : 0;
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "An error occurred while retrieving student attendance.", details = ex.Message });
+            }
         }
 
         [HttpGet("import/template")]
@@ -528,6 +626,70 @@ namespace CollegeManagement.API.Controllers.V1
 
             var result = await _attendanceService.ImportAttendanceFromExcelAsync(ms.ToArray(), validateOnly, isAdmin, userName, userId);
             return Ok(result);
+        }
+        [HttpGet("student/{studentId}/subjects")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [ParentStudentAuthorization]
+        [ProducesResponseType(typeof(IEnumerable<SubjectWiseAttendanceResponse>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetStudentSubjectAttendance([FromRoute] int studentId)
+        {
+            try
+            {
+                var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
+                var connection = dbContext.Database.GetDbConnection();
+                
+                var results = await Dapper.SqlMapper.QueryAsync<SubjectWiseAttendanceResponse>(
+                    connection,
+                    "CALL sp_GetStudentSubjectAttendance(@StudentId);",
+                    new { StudentId = studentId },
+                    commandType: System.Data.CommandType.Text
+                );
+
+                return Ok(results);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    message = "An error occurred while retrieving subject-wise attendance.",
+                    details = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("student/{studentId}/daily-logs")]
+        [Authorize(Roles = "Admin,Teacher,Student,Parent")]
+        [ParentStudentAuthorization]
+        [ProducesResponseType(typeof(IEnumerable<DailyPunchLogResponse>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetStudentDailyPunchLogs([FromRoute] int studentId, [FromQuery] int month, [FromQuery] int year)
+        {
+            try
+            {
+                if (month < 1 || month > 12 || year < 2000)
+                {
+                    return BadRequest(new { message = "Invalid month or year." });
+                }
+
+                var dbContext = HttpContext.RequestServices.GetRequiredService<CollegeManagement.API.Data.AppDbContext>();
+                var connection = dbContext.Database.GetDbConnection();
+                
+                var results = await Dapper.SqlMapper.QueryAsync<DailyPunchLogResponse>(
+                    connection,
+                    "CALL sp_GetStudentDailyPunchLogs(@StudentId, @Month, @Year);",
+                    new { StudentId = studentId, Month = month, Year = year },
+                    commandType: System.Data.CommandType.Text
+                );
+
+                return Ok(results);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    message = "An error occurred while retrieving daily punch logs.",
+                    details = ex.Message
+                });
+            }
         }
     }
 }

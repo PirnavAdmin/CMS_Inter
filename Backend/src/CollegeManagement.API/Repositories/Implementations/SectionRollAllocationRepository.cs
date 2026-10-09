@@ -421,5 +421,26 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             return maxRoll + 1;
         }
+    
+        public async Task<(string Year, string Board, string BoardCode, string Level, string LevelCode, string Group, string GroupCode, string Program)> GetContextMetadataAsync(int? ayId, int? boardId, int? levelId, int? groupId, int? programId)
+        {
+            var year = ayId.HasValue ? await _context.AcademicYears.Where(x => x.AcademicYearId == ayId.Value).Select(x => x.AcademicYearName).FirstOrDefaultAsync() : "";
+            
+            var boardEntity = boardId.HasValue ? await _context.Boards.Where(x => x.BoardId == boardId.Value).Select(x => new { x.BoardName, x.BoardCode }).FirstOrDefaultAsync() : null;
+            var board = boardEntity?.BoardName ?? "";
+            var boardCode = boardEntity?.BoardCode ?? "";
+            
+            var levelEntity = levelId.HasValue ? await _context.AcademicLevels.Where(x => x.AcademicLevelId == levelId.Value).Select(x => new { x.LevelName, x.LevelCode }).FirstOrDefaultAsync() : null;
+            var level = levelEntity?.LevelName ?? "";
+            var levelCode = levelEntity?.LevelCode ?? "";
+            
+            var groupEntity = groupId.HasValue ? await _context.Groups.Where(x => x.GroupId == groupId.Value).Select(x => new { x.GroupName, x.GroupCode }).FirstOrDefaultAsync() : null;
+            var group = groupEntity?.GroupName ?? "";
+            var groupCode = groupEntity?.GroupCode ?? "";
+            
+            var program = programId.HasValue ? await _context.Programs.Where(x => x.ProgramId == programId.Value).Select(x => x.ProgramName).FirstOrDefaultAsync() : "";
+
+            return (year ?? "", board, boardCode, level, levelCode, group, groupCode, program ?? "");
+        }
     }
 }

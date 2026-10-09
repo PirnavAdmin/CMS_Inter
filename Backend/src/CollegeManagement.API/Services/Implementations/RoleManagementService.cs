@@ -218,6 +218,11 @@ namespace CollegeManagement.API.Services.Implementations
             return await _permissionRepository.GetUserPermissionsAsync(userId);
         }
 
+        public async Task<List<ModulePermissionMatrixDto>> GetModulesForRoleAsync(int roleId)
+        {
+            return await _permissionRepository.GetRolePermissionMatrixAsync(roleId);
+        }
+
         public async Task<bool> AssignUserRoleAsync(int userId, int? roleId, string? roleCode = null)
         {
             var user = await _userRepository.GetByIdAsync(userId);

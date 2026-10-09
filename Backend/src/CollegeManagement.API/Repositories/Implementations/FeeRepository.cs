@@ -32,7 +32,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeTypeResponse?> CreateFeeTypeAsync(
         CreateFeeTypeRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
             "sp_CreateFeeType",
@@ -48,7 +48,7 @@ public class FeeRepository : IFeeRepository
 
     public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryAsync<FeeTypeResponse>(
             "sp_GetFeeTypes",
@@ -64,7 +64,7 @@ public class FeeRepository : IFeeRepository
 
     public async Task<FeeTypeResponse?> GetFeeTypeByIdAsync(int feeTypeId)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
             "sp_GetFeeTypeById",
@@ -80,7 +80,7 @@ public class FeeRepository : IFeeRepository
         int id,
         UpdateFeeTypeRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
             "sp_UpdateFeeType",
@@ -97,7 +97,7 @@ public class FeeRepository : IFeeRepository
 
     public async Task<bool> DeleteFeeTypeAsync(int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.ExecuteAsync(
             "sp_DeleteFeeType",
@@ -116,7 +116,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeStructureResponse?> CreateFeeStructureAsync(
         CreateFeeStructureRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
         c.Open();
         using var tx = c.BeginTransaction();
 
@@ -250,7 +250,7 @@ public class FeeRepository : IFeeRepository
         }
         catch
         {
-            using var c = Connection();
+            var c = Connection();
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetFeeStructures",
                 new { p_CampusId = campusId },
@@ -287,7 +287,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeStructureResponse?> GetFeeStructureByIdAsync(
         int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         using var multi = await c.QueryMultipleAsync(
             "sp_GetFeeStructureById",
@@ -315,7 +315,7 @@ public class FeeRepository : IFeeRepository
     int id,
     UpdateFeeStructureRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         if (string.IsNullOrWhiteSpace(request.StructureName))
         {
@@ -339,7 +339,7 @@ public class FeeRepository : IFeeRepository
 
     public async Task<bool> DeleteFeeStructureAsync(int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.ExecuteAsync(
             "sp_DeleteFeeStructure",
@@ -356,7 +356,7 @@ public class FeeRepository : IFeeRepository
             int id,
             CreateFeeStructureItemRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeeStructureItemResponse>(
             "sp_AddFeeStructureItem",
@@ -374,7 +374,7 @@ public class FeeRepository : IFeeRepository
     public async Task<IEnumerable<FeeStructureItemResponse>>
         GetFeeStructureItemsAsync(int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryAsync<FeeStructureItemResponse>(
             "sp_GetFeeStructureItems",
@@ -391,7 +391,7 @@ public class FeeRepository : IFeeRepository
             int id,
             UpdateFeeStructureItemRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeeStructureItemResponse>(
             "sp_UpdateFeeStructureItem",
@@ -408,7 +408,7 @@ public class FeeRepository : IFeeRepository
 
     public async Task<bool> DeleteFeeStructureItemAsync(int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.ExecuteAsync(
             "sp_DeleteFeeStructureItem",
@@ -427,7 +427,7 @@ public class FeeRepository : IFeeRepository
     public async Task<ScholarshipResponse?> CreateScholarshipAsync(
         CreateScholarshipRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
             "sp_CreateScholarship",
@@ -445,7 +445,7 @@ public class FeeRepository : IFeeRepository
 
     public async Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryAsync<ScholarshipResponse>(
             "sp_GetScholarships",
@@ -462,7 +462,7 @@ public class FeeRepository : IFeeRepository
     public async Task<ScholarshipResponse?> GetScholarshipByIdAsync(
         int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
             "sp_GetScholarshipById",
@@ -478,7 +478,7 @@ public class FeeRepository : IFeeRepository
         int id,
         UpdateScholarshipRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
             "sp_UpdateScholarship",
@@ -497,7 +497,7 @@ public class FeeRepository : IFeeRepository
 
     public async Task<bool> DeleteScholarshipAsync(int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.ExecuteAsync(
             "sp_DeleteScholarship",
@@ -515,7 +515,7 @@ public class FeeRepository : IFeeRepository
     public async Task<StudentFeeResponse?> AssignStudentFeeAsync(
     AssignStudentFeeRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         using var multi = await c.QueryMultipleAsync(
             "sp_AssignStudentFee",
@@ -566,7 +566,7 @@ public class FeeRepository : IFeeRepository
 
     public async Task<StudentFeeDetailsResponse?> GetStudentFeeAsync(int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         // Resolve studentId: id could be a StudentFeeId or a StudentId directly
         var studentFee = await c.QueryFirstOrDefaultAsync<StudentFeeDetailsResponse>(
@@ -586,7 +586,7 @@ public class FeeRepository : IFeeRepository
     public async Task<StudentFeeDetailsResponse?>
     GetStudentFeeDetailsByStudentAsync(int studentId)
     {
-        using var c = Connection();
+        var c = Connection();
 
         using var multi = await c.QueryMultipleAsync(
             "sp_GetStudentFeeDetailsByStudent",
@@ -731,7 +731,7 @@ public class FeeRepository : IFeeRepository
         }
         catch
         {
-            using var c = Connection();
+            var c = Connection();
 
             return await c.QueryAsync<StudentFeeLedgerResponse>(
                 "sp_GetStudentFeeLedger",
@@ -758,7 +758,7 @@ public class FeeRepository : IFeeRepository
         ApplyFeeConcessionAsync(
             ApplyFeeConcessionRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeeConcessionResponse>(
             "sp_ApplyFeeConcession",
@@ -785,7 +785,7 @@ public class FeeRepository : IFeeRepository
         CreatePaymentPlanAsync(
             CreatePaymentPlanRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         c.Open();
 
@@ -814,7 +814,7 @@ public class FeeRepository : IFeeRepository
 
             tx.Commit();
 
-            using var c2 = Connection();
+            var c2 = Connection();
 
             using var multi =
                 await c2.QueryMultipleAsync(
@@ -851,7 +851,7 @@ public class FeeRepository : IFeeRepository
             int planId,
             CreateInstallmentRequest request)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeeScheduleResponse>(
             "sp_AddPaymentPlanInstallment",
@@ -871,12 +871,13 @@ public class FeeRepository : IFeeRepository
     // PAYMENTS
     // =========================================================
 
-    public async Task<FeePaymentResponse?>
-        CreateFeePaymentAsync(
-            CreateFeePaymentRequest request)
+    public async Task<FeePaymentResponse?> CreateFeePaymentAsync(CreateFeePaymentRequest request)
     {
-        using var tx = await _db.Database.BeginTransactionAsync();
-        try
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            using var tx = await _db.Database.BeginTransactionAsync();
+            try
         {
             var studentFee = await _db.StudentFees
                 .Include(sf => sf.Student)
@@ -1019,13 +1020,14 @@ public class FeeRepository : IFeeRepository
             await tx.RollbackAsync();
             throw;
         }
+        });
     }
 
 
     public async Task<IEnumerable<FeePaymentResponse>>
         GetFeePaymentsAsync(int studentId)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryAsync<FeePaymentResponse>(
             "sp_GetPaymentHistoryByStudent",
@@ -1040,7 +1042,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeePaymentResponse?>
         GetFeePaymentByIdAsync(int id)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeePaymentResponse>(
             "sp_GetFeePaymentById",
@@ -1055,7 +1057,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeReceiptResponse?>
         GetReceiptAsync(string receiptNumber)
     {
-        using var c = Connection();
+        var c = Connection();
 
         return await c.QueryFirstOrDefaultAsync<FeeReceiptResponse>(
             "sp_GetFeeReceipt",
@@ -1128,7 +1130,7 @@ public class FeeRepository : IFeeRepository
         }
         catch
         {
-            using var c = Connection();
+            var c = Connection();
 
             return await c.QueryAsync<FeeCollectionResponse>(
                 "sp_GetFeeCollection",
@@ -1197,7 +1199,7 @@ public class FeeRepository : IFeeRepository
         }
         catch
         {
-            using var c = Connection();
+            var c = Connection();
 
             return await c.QueryAsync<FeeDueResponse>(
                 "sp_GetDueFees",
@@ -1220,7 +1222,7 @@ public class FeeRepository : IFeeRepository
     {
         try
         {
-            using var c = Connection();
+            var c = Connection();
 
             using var multi =
                 await c.QueryMultipleAsync(
@@ -1298,7 +1300,7 @@ public class FeeRepository : IFeeRepository
         var targetDate = (date ?? DateTime.Today).Date;
         try
         {
-            using var c = Connection();
+            var c = Connection();
 
             using var multi =
                 await c.QueryMultipleAsync(
@@ -1378,7 +1380,7 @@ public class FeeRepository : IFeeRepository
 
         try
         {
-            using var c = Connection();
+            var c = Connection();
 
             using var multi =
                 await c.QueryMultipleAsync(
@@ -1441,3 +1443,6 @@ public class FeeRepository : IFeeRepository
         }
     }
 }
+
+
+

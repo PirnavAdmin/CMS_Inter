@@ -86,7 +86,7 @@ export const canonicalDate = (value) => {
   return str.split("T")[0];
 };
 
-export const formatTimeOnly = (timeStr) => {
+export const formatTimeOnly = (timeStr, referenceStartTime = null) => {
   if (!timeStr) return "09:00:00";
   const s = String(timeStr).trim();
   const isPM = /pm/i.test(s);
@@ -94,10 +94,26 @@ export const formatTimeOnly = (timeStr) => {
   const cleaned = s.replace(/[^\d:]/g, "");
   const parts = cleaned.split(":");
   let h = parseInt(parts[0] || "9", 10);
-  if (isPM && h < 12) h += 12;
-  if (isAM && h === 12) h = 0;
   const m = parseInt(parts[1] || "0", 10);
   const sec = parseInt(parts[2] || "0", 10);
+
+  if (isPM && h < 12) {
+    h += 12;
+  } else if (isAM && h === 12) {
+    h = 0;
+  } else if (!isAM && !isPM) {
+    // In college/school examinations, hours 1 to 6 without explicit AM are afternoon (PM) hours
+    if (h >= 1 && h <= 6) {
+      h += 12;
+    } else if (referenceStartTime) {
+      const refMin = parseTimeToMinutes(referenceStartTime);
+      const curMin = h * 60 + m;
+      if (curMin <= refMin && h < 12 && (h + 12) * 60 + m > refMin) {
+        h += 12;
+      }
+    }
+  }
+
   const hh = String(isNaN(h) ? 9 : h).padStart(2, "0");
   const mm = String(isNaN(m) ? 0 : m).padStart(2, "0");
   const ss = String(isNaN(sec) ? 0 : sec).padStart(2, "0");
@@ -106,7 +122,20 @@ export const formatTimeOnly = (timeStr) => {
 
 export const parseTimeToMinutes = (timeStr) => {
   if (!timeStr) return 0;
-  const [h, m] = String(timeStr).split(":").map(Number);
+  const s = String(timeStr).trim();
+  const isPM = /pm/i.test(s);
+  const isAM = /am/i.test(s);
+  const cleaned = s.replace(/[^\d:]/g, "");
+  const parts = cleaned.split(":");
+  let h = parseInt(parts[0] || "0", 10);
+  const m = parseInt(parts[1] || "0", 10);
+  if (isPM && h < 12) {
+    h += 12;
+  } else if (isAM && h === 12) {
+    h = 0;
+  } else if (!isAM && !isPM && h >= 1 && h <= 6) {
+    h += 12;
+  }
   return (h || 0) * 60 + (m || 0);
 };
 

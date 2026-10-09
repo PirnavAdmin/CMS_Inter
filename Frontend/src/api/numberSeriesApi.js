@@ -93,9 +93,18 @@ export async function updateNumberSeries(seriesCode, configData, campusId) {
  * 4. POST /api/v1/settings/number-series/{seriesCode}/generate-next (or /api/v1/number-series/{seriesCode}/generate-next)
  * Executes thread-safe atomic sequence increment and returns the newly generated sequence ID.
  */
-export async function generateNextNumber(seriesCode, context = {}, campusId) {
+export async function generateNextNumber(seriesCode, context = {}, campusId, campusCode = null) {
   if (!seriesCode) throw new Error("seriesCode is required");
+  const resolvedCampusId = context.campusId ?? campusId;
+  const resolvedCampusCode = context.campusCode ?? campusCode;
+  const scopeKeys = ["campusId", "boardId", "academicYearId", "groupId", "programId"];
+  if (seriesCode === "ROLL_NO" && scopeKeys.some((key) => !Number.isInteger(Number(key === "campusId" ? resolvedCampusId : context[key])) || Number(key === "campusId" ? resolvedCampusId : context[key]) <= 0)) {
+    throw new Error("Campus, Board, Academic Year, Group and Program are required for Roll Number generation.");
+  }
   const payload = {
+    ...Object.fromEntries(scopeKeys.filter((key) => (key === "campusId" ? resolvedCampusId : context[key]) != null).map((key) => [key, Number(key === "campusId" ? resolvedCampusId : context[key])])),
+    ...(resolvedCampusCode ? { campusCode: resolvedCampusCode } : {}),
+    ...(context.program != null ? { program: context.program } : {}),
     board: context.board ?? "",
     dept: context.dept ?? "",
     type: context.type ?? "",
@@ -112,13 +121,15 @@ export async function generateNextNumber(seriesCode, context = {}, campusId) {
   };
 
   const params = {};
-  if (campusId !== undefined && campusId !== null && campusId !== "") params.campusId = campusId;
+  if (resolvedCampusId !== undefined && resolvedCampusId !== null && resolvedCampusId !== "") params.campusId = resolvedCampusId;
+  if (resolvedCampusCode !== undefined && resolvedCampusCode !== null && resolvedCampusCode !== "") params.campusCode = resolvedCampusCode;
   const requestConfig = { params };
 
   try {
     const response = await apiClient.post(apiEndpoints.numberSeries.generateNext(seriesCode), payload, requestConfig);
     return response.data;
   } catch (err) {
+    if (seriesCode === "ROLL_NO") throw err;
     try {
       const fallbackRes = await apiClient.post(`/api/v1/number-series/${encodeURIComponent(seriesCode)}/generate-next`, payload, requestConfig);
       return fallbackRes.data;
@@ -132,13 +143,14 @@ export async function generateNextNumber(seriesCode, context = {}, campusId) {
  * 5. GET /api/v1/settings/number-series/{seriesCode}/preview (or /api/v1/number-series/{seriesCode}/preview)
  * Dynamic on-the-fly preview calculation for UI typing without persisting changes.
  */
-export async function previewNumberSeries(seriesCode, { pattern, numberLength, prefix, campusId } = {}) {
+export async function previewNumberSeries(seriesCode, { pattern, numberLength, prefix, campusId, campusCode } = {}) {
   if (!seriesCode) throw new Error("seriesCode is required");
   const params = {};
   if (pattern !== undefined) params.pattern = pattern;
   if (numberLength !== undefined) params.numberLength = Number(numberLength);
   if (prefix !== undefined) params.prefix = prefix;
   if (campusId !== undefined) params.campusId = campusId;
+  if (campusCode !== undefined && campusCode !== null && campusCode !== "") params.campusCode = campusCode;
 
   try {
     const response = await apiClient.get(apiEndpoints.numberSeries.preview(seriesCode), { params });

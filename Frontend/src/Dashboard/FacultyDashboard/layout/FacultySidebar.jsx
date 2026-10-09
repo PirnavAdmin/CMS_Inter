@@ -1,6 +1,6 @@
 import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import React from "react";
-import { Calendar } from "lucide-react";
+import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import staffIcon from "@/assets/dashboard-3d/teaching-staff.png";
@@ -49,7 +49,7 @@ export const NAV_ITEMS = [
   { id: "leave", label: "Faculty Leave", icon: generatedSidebarIcons.staffLeave, group: "HR & FINANCE" },
   { id: "salary", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll, group: "HR & FINANCE" },
   { id: "reimbursements", label: "Reimbursements", icon: feeManagementIcon, group: "HR & FINANCE" },
-  { id: "holidays", label: "Holidays", icon: Calendar, group: "HR & FINANCE" },
+  { id: "holidays", label: "Holidays", icon: holidayManagementIcon, group: "HR & FINANCE" },
   { id: "settings", label: "Settings", icon: generalSettingsIcon, group: "ADMINISTRATION" },
 ];
 
