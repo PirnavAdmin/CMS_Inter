@@ -1,3 +1,4 @@
+import { summarizeStudentAttendance } from "./dashboardStudentAttendance.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -597,14 +598,7 @@ export default function DashboardPage() {
         setStudentAttState({
           loading: false,
           error: null,
-          data: {
-            total: totalCount,
-            present: presentCount,
-            absent: absentCount,
-            halfDay: halfDayCount,
-            percentage: percentage,
-            breakdownList: breakdownList
-          },
+          data: attendance,
           timestamp: "Today"
         });
       }
@@ -1102,7 +1096,7 @@ export default function DashboardPage() {
       { name: "Half-day", value: halfDay, color: "#f59e0b" },
     ];
 
-    const breakdownList = data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
+    const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
     return { total, present, absent, halfDay, late: halfDay, percentage, chartData, breakdownList };
   }, [studentAttState.data]);

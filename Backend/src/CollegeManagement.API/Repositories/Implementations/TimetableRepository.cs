@@ -244,16 +244,18 @@ namespace CollegeManagement.API.Repositories.Implementations
             string sql = @"
                 SELECT 
                     CASE 
-                        WHEN `SectionId` = @sectionId THEN 'SECTION'
-                        WHEN `StaffId` = @staffId THEN 'STAFF'
-                        WHEN `RoomId` > 0 AND `RoomId` = @roomId THEN 'ROOM'
+                        WHEN t.`SectionId` = @sectionId THEN 'SECTION'
+                        WHEN t.`StaffId` = @staffId THEN 'STAFF'
+                        WHEN t.`RoomId` > 0 AND t.`RoomId` = @roomId THEN 'ROOM'
                     END AS ConflictType
-                FROM `Timetables`
-                WHERE `AcademicYearId` = @academicYearId 
-                  AND `DayOfWeek` = @dayOfWeek 
-                  AND `PeriodId` = @periodId 
-                  AND (@excludeId IS NULL OR `Id` != @excludeId)
-                  AND (`SectionId` = @sectionId OR `StaffId` = @staffId OR (@roomId > 0 AND `RoomId` = @roomId))
+                FROM `Timetables` t
+                JOIN `Periods` p_other ON p_other.`PeriodId` = t.`PeriodId`
+                JOIN `Periods` p_cur ON p_cur.`PeriodId` = @periodId
+                WHERE t.`AcademicYearId` = @academicYearId 
+                  AND t.`DayOfWeek` = @dayOfWeek 
+                  AND (@excludeId IS NULL OR t.`Id` != @excludeId)
+                  AND (p_other.`StartTime` < p_cur.`EndTime` AND p_other.`EndTime` > p_cur.`StartTime`)
+                  AND (t.`SectionId` = @sectionId OR t.`StaffId` = @staffId OR (@roomId > 0 AND t.`RoomId` = @roomId))
                 LIMIT 1;
             ";
             return await conn.QueryFirstOrDefaultAsync<string?>(sql, new { academicYearId, sectionId, staffId, roomId, dayOfWeek, periodId, excludeId });
@@ -375,12 +377,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = await GetOpenConnectionAsync();
             return await conn.ExecuteScalarAsync<bool>(@"
                 SELECT EXISTS(
-                    SELECT 1 FROM `Timetables` 
-                    WHERE `AcademicYearId` = @academicYearId 
-                      AND `SectionId` = @sectionId 
-                      AND `DayOfWeek` = @dayOfWeek 
-                      AND `PeriodId` = @periodId 
-                      AND (@excludeId IS NULL OR `Id` != @excludeId)
+                    SELECT 1 FROM `Timetables` t
+                    JOIN `Periods` p_other ON p_other.`PeriodId` = t.`PeriodId`
+                    JOIN `Periods` p_cur ON p_cur.`PeriodId` = @periodId
+                    WHERE t.`AcademicYearId` = @academicYearId 
+                      AND t.`SectionId` = @sectionId 
+                      AND t.`DayOfWeek` = @dayOfWeek 
+                      AND (@excludeId IS NULL OR t.`Id` != @excludeId)
+                      AND (p_other.`StartTime` < p_cur.`EndTime` AND p_other.`EndTime` > p_cur.`StartTime`)
                     LIMIT 1
                 );
             ", new { academicYearId, sectionId, dayOfWeek, periodId, excludeId });
@@ -391,12 +395,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = await GetOpenConnectionAsync();
             return await conn.ExecuteScalarAsync<bool>(@"
                 SELECT EXISTS(
-                    SELECT 1 FROM `Timetables` 
-                    WHERE `AcademicYearId` = @academicYearId 
-                      AND `StaffId` = @facultyId 
-                      AND `DayOfWeek` = @dayOfWeek 
-                      AND `PeriodId` = @periodId 
-                      AND (@excludeId IS NULL OR `Id` != @excludeId)
+                    SELECT 1 FROM `Timetables` t
+                    JOIN `Periods` p_other ON p_other.`PeriodId` = t.`PeriodId`
+                    JOIN `Periods` p_cur ON p_cur.`PeriodId` = @periodId
+                    WHERE t.`AcademicYearId` = @academicYearId 
+                      AND t.`StaffId` = @facultyId 
+                      AND t.`DayOfWeek` = @dayOfWeek 
+                      AND (@excludeId IS NULL OR t.`Id` != @excludeId)
+                      AND (p_other.`StartTime` < p_cur.`EndTime` AND p_other.`EndTime` > p_cur.`StartTime`)
                     LIMIT 1
                 );
             ", new { academicYearId, facultyId, dayOfWeek, periodId, excludeId });
@@ -407,12 +413,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = await GetOpenConnectionAsync();
             return await conn.ExecuteScalarAsync<bool>(@"
                 SELECT EXISTS(
-                    SELECT 1 FROM `Timetables` 
-                    WHERE `AcademicYearId` = @academicYearId 
-                      AND `RoomId` = @roomId 
-                      AND `DayOfWeek` = @dayOfWeek 
-                      AND `PeriodId` = @periodId 
-                      AND (@excludeId IS NULL OR `Id` != @excludeId)
+                    SELECT 1 FROM `Timetables` t
+                    JOIN `Periods` p_other ON p_other.`PeriodId` = t.`PeriodId`
+                    JOIN `Periods` p_cur ON p_cur.`PeriodId` = @periodId
+                    WHERE t.`AcademicYearId` = @academicYearId 
+                      AND t.`RoomId` = @roomId 
+                      AND t.`DayOfWeek` = @dayOfWeek 
+                      AND (@excludeId IS NULL OR t.`Id` != @excludeId)
+                      AND (p_other.`StartTime` < p_cur.`EndTime` AND p_other.`EndTime` > p_cur.`StartTime`)
                     LIMIT 1
                 );
             ", new { academicYearId, roomId, dayOfWeek, periodId, excludeId });

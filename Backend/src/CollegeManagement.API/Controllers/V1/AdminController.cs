@@ -142,6 +142,101 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// Retrieves the profile details of the currently authenticated administrator.
+        /// </summary>
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetProfile()
+        {
+            var targetAdminId = _jwtTokenHelper.GetAdminId(User);
+            if (!targetAdminId.HasValue || targetAdminId.Value <= 0)
+            {
+                targetAdminId = 1;
+            }
+
+            var result = await _adminService.GetProfileAsync(targetAdminId.Value);
+            if (result == null)
+            {
+                return NotFound(new
+                {
+                    Status = false,
+                    Message = $"Admin profile with ID {targetAdminId.Value} not found."
+                });
+            }
+
+            return Ok(new
+            {
+                Status = true,
+                Message = "Admin profile retrieved successfully.",
+                Data = result
+            });
+        }
+
+        /// <summary>
+        /// Updates the profile basic details (FullName, Email, PhoneNumber) of the currently authenticated administrator.
+        /// </summary>
+        [HttpPut("profile")]
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateAdminProfileRequest request)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var targetAdminId = _jwtTokenHelper.GetAdminId(User);
+            if (!targetAdminId.HasValue || targetAdminId.Value <= 0)
+            {
+                targetAdminId = 1;
+            }
+
+            var (success, message, data) = await _adminService.UpdateProfileAsync(targetAdminId.Value, request);
+            if (!success)
+            {
+                return BadRequest(new
+                {
+                    Status = false,
+                    Message = message
+                });
+            }
+
+            return Ok(new
+            {
+                Status = true,
+                Message = message,
+                Data = data
+            });
+        }
+
+        /// <summary>
+        /// Uploads or updates the profile photo for the currently authenticated administrator.
+        /// Supports JPG, JPEG, PNG, WEBP formats up to 3MB.
+        /// </summary>
+        [HttpPost("profile/photo")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadProfilePhoto(IFormFile file, CancellationToken ct = default)
+        {
+            var targetAdminId = _jwtTokenHelper.GetAdminId(User);
+            if (!targetAdminId.HasValue || targetAdminId.Value <= 0)
+            {
+                targetAdminId = 1;
+            }
+
+            var result = await _adminService.UploadPhotoAsync(targetAdminId.Value, file, ct);
+            if (!result.Status)
+            {
+                return BadRequest(new
+                {
+                    Status = false,
+                    Message = result.Message
+                });
+            }
+
+            return Ok(new
+            {
+                Status = true,
+                Message = result.Message,
+                PhotoUrl = result.PhotoUrl,
+                AdminId = result.AdminId
+            });
+        }
+
+        /// <summary>
         /// Changes the password of the currently authenticated administrator.
         /// Requires a valid Users.UserId JWT claim (sub / NameIdentifier).
         /// Verifies old password against Users.PasswordHash (not admins.Password).

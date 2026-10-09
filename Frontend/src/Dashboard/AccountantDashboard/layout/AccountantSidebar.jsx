@@ -1,3 +1,4 @@
+import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import { NavLink } from "react-router-dom";
 import { BarChart3, CalendarCheck, CircleUserRound, History, LayoutDashboard, ReceiptText, WalletCards } from "lucide-react";
 import logo from "@/assets/pirnav-colleges-logo.png";
@@ -17,7 +18,7 @@ const groups = [
 export default function AccountantSidebar({ open, onClose }) {
   return (
     <aside className={`sp-sidebar ${open ? "is-open" : ""}`}>
-      <div className="sp-brand"><img src={logo} alt="Pirnav Colleges" /></div>
+      <div className="sp-brand"><CampusBrandImage src={logo} alt="Pirnav Colleges"  /></div>
       <nav>
         {groups.map(([heading, links]) => (
           <section key={heading}>

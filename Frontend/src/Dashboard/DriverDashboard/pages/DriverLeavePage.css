@@ -27,6 +27,11 @@
 .dp-leave-dates { white-space: nowrap; font-family: ui-monospace, monospace; }
 .dp-leave-dates span { color: var(--dp-muted); padding: 0 6px; }
 .dp-leave-badge { display: inline-block; padding: 8px 16px; border: 1px solid var(--dp-border); border-radius: 30px; color: var(--dp-muted); background: var(--dp-soft); }
+.dp-leave-badge.status-approved { color: var(--dp-success); }
+.dp-leave-badge.status-pending { color: var(--dp-warning); }
+.dp-leave-badge.status-rejected, .dp-leave-badge.status-cancelled { color: var(--dp-danger); }
+.dp-leave-error { color: var(--dp-danger); font-size: 13px; }
+.dp-leave button:disabled { opacity: .5; cursor: not-allowed; }
 .dp-leave-table td.dp-leave-empty { padding: 44px 20px; color: var(--dp-muted); }
 .dp-leave-balance { min-width: 950px; }
 .dp-leave-balance th { max-width: 170px; line-height: 1.6; }
