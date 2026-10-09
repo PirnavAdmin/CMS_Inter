@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/components/pages/LandingPage.jsx";
 import DashboardPage from "@/components/pages/DashboardPage.jsx";
 import PrincipalDashboard from "@/Dashboard/PrincipalDashboard/PrincipalDashboard.jsx";
@@ -63,6 +63,8 @@ import ParentDocumentsPage from "@/Dashboard/Parent Dashboard/pages/ParentDocume
 import ParentNotificationsPage from "@/Dashboard/Parent Dashboard/pages/ParentNotificationsPage.jsx";
 import ParentProfilePage from "@/Dashboard/Parent Dashboard/pages/ParentProfilePage.jsx";
 import ParentSettingsPage from "@/Dashboard/Parent Dashboard/pages/ParentSettingsPage.jsx";
+import { ParentPortalProvider } from "@/Dashboard/Parent Dashboard/context/ParentPortalContext.jsx";
+import ErrorBoundary from "@/components/common/ErrorBoundary.jsx";
 import ProtectedRoute, { PublicOnlyRoute } from "./ProtectedRoute.jsx";
 import {
   HostelDashboard,
@@ -323,26 +325,30 @@ export default function AppRoutes() {
 
       {/* Parent Portal Module Routes */}
       <Route element={<ProtectedRoute requireParent />}>
-        <Route path="/parent-dashboard" element={<ParentDashboard />} />
-        <Route path="/parent-dashboard/children" element={<ParentChildrenPage />} />
-        <Route path="/parent-dashboard/children/:id" element={<ParentChildDetailsRoute />} />
-        <Route path="/parent-dashboard/attendance" element={<ParentAttendancePage />} />
-        <Route path="/parent-dashboard/academics" element={<ParentAcademicsPage />} />
-        <Route path="/parent-dashboard/examinations" element={<ParentExaminationsPage />} />
-        <Route path="/parent-dashboard/results" element={<Navigate to="/parent-dashboard/academics?tab=results" replace />} />
-        <Route path="/parent-dashboard/fees" element={<ParentFeesPage />} />
-        <Route path="/parent-dashboard/timetable" element={<ParentTimetablePage />} />
-        <Route path="/parent-dashboard/leave" element={<Navigate to="/parent-dashboard" replace />} />
-        <Route path="/parent-dashboard/communication" element={<ParentCommunicationPage />} />
-        <Route path="/parent-dashboard/announcements" element={<ParentAnnouncementsPage />} />
-        <Route path="/parent-dashboard/events" element={<Navigate to="/parent-dashboard/announcements?tab=events" replace />} />
-        <Route path="/parent-dashboard/documents" element={<ParentDocumentsPage />} />
-        <Route path="/parent-dashboard/notifications" element={<ParentNotificationsPage />} />
-        <Route path="/parent-dashboard/profile" element={<ParentProfilePage />} />
-        <Route path="/parent-dashboard/settings" element={<ParentSettingsPage />} />
+        <Route element={<ParentPortalProvider><ErrorBoundary><Outlet /></ErrorBoundary></ParentPortalProvider>}>
+          <Route path="/parent-dashboard" element={<ParentDashboard />} />
+          <Route path="/parent-dashboard/children" element={<ParentChildrenPage />} />
+          <Route path="/parent-dashboard/children/:id" element={<ParentChildDetailsRoute />} />
+          <Route path="/parent-dashboard/attendance" element={<ParentAttendancePage />} />
+          <Route path="/parent-dashboard/academics" element={<ParentAcademicsPage />} />
+          <Route path="/parent-dashboard/examinations" element={<ParentExaminationsPage />} />
+          <Route path="/parent-dashboard/results" element={<Navigate to="/parent-dashboard/academics?tab=results" replace />} />
+          <Route path="/parent-dashboard/fees" element={<ParentFeesPage />} />
+          <Route path="/parent-dashboard/timetable" element={<ParentTimetablePage />} />
+          <Route path="/parent-dashboard/leave" element={<Navigate to="/parent-dashboard" replace />} />
+          <Route path="/parent-dashboard/communication" element={<ParentCommunicationPage />} />
+          <Route path="/parent-dashboard/announcements" element={<ParentAnnouncementsPage />} />
+          <Route path="/parent-dashboard/events" element={<Navigate to="/parent-dashboard/announcements?tab=events" replace />} />
+          <Route path="/parent-dashboard/documents" element={<ParentDocumentsPage />} />
+          <Route path="/parent-dashboard/notifications" element={<ParentNotificationsPage />} />
+          <Route path="/parent-dashboard/profile" element={<ParentProfilePage />} />
+          <Route path="/parent-dashboard/settings" element={<ParentSettingsPage />} />
+        </Route>
       </Route>
 
-      <Route path="/faculty-dashboard/*" element={<ProtectedRoute requireFaculty><FacultyPortalRoutes /></ProtectedRoute>} />
+      <Route element={<ProtectedRoute requireFaculty />}>
+        <Route path="/faculty-dashboard/*" element={<FacultyPortalRoutes />} />
+      </Route>
       <Route path="/driver" element={<DriverDashboard />} />
       <Route path="/driver/*" element={<DriverDashboard />} />
       <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />

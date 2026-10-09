@@ -21,12 +21,11 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<UserRoleDetailsDto?> GetUserRoleDetailsAsync(int userId);
         Task<List<UserRoleAssignmentDto>> GetRoleMembersAsync(int roleId, int? campusId = null, int? boardId = null, int? academicYearId = null);
         Task<List<ModulePermissionMatrixDto>> GetUserPermissionsAsync(int userId);
+        Task<List<ModulePermissionMatrixDto>> GetModulesForRoleAsync(int roleId);
         Task<bool> AssignUserRoleAsync(int userId, int? roleId, string? roleCode = null);
         Task<bool> RemoveUserRoleAsync(int userId, string? roleCode = null);
         Task<bool> SaveUserPermissionOverridesAsync(int userId, SaveUserPermissionOverridesRequest request, int? adminUserId = null);
         Task<bool> ResetUserPermissionOverridesAsync(int userId);
         List<object> GetModulesMetadata();
-        Task<List<RoleModuleDto>> GetModulesForRoleAsync(int roleId);
-        Task<bool> SetModulesForRoleAsync(int roleId, UpdateRoleModulesRequest request);
     }
 }

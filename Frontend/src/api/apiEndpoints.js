@@ -714,7 +714,6 @@ export const apiEndpoints = {
     update: (id) => `/api/v1/roles/${id}`,
     delete: (id) => `/api/v1/roles/${id}`,
     modules: "/api/v1/roles/modules",
-    roleModules: (roleId) => `/api/v1/roles/${roleId}/modules`,
     permissions: (roleId) => `/api/v1/roles/${roleId}/permissions`,
     updatePermissions: (roleId) => `/api/v1/roles/${roleId}/permissions`,
     members: (roleId) => `/api/v1/roles/${roleId}/members`,

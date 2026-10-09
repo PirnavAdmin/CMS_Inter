@@ -13,8 +13,7 @@ import {
   AlertTriangle,
   Info,
 } from "lucide-react";
-import { getDriverIdentity } from "../data/driverIdentity.js";
-import { useDriverData } from "../DriverDataContext.jsx";
+import { driverProfile, notificationsList } from "../data/driverMockData.js";
 import { useCampusContext } from "../../../context/CampusContext.jsx";
 
 export default function DriverTopbar({
@@ -23,17 +22,17 @@ export default function DriverTopbar({
   onLogout,
   onSyncData,
 }) {
-  const { driverProfile, notifications, notificationError, connectionStatus, refresh, markAllRead } = useDriverData();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [campusOpen, setCampusOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const [notifications, setNotifications] = useState(notificationsList);
   const campusRef = useRef(null);
   const { activeCampuses, campuses, selectedCampus, setSelectedCampus } = useCampusContext();
   const campusOptions = activeCampuses?.length ? activeCampuses : campuses || [];
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = notifications.filter((n) => n.unread).length;
 
   const currentDate = new Date().toLocaleDateString("en-IN", {
     weekday: "short",
@@ -62,18 +61,20 @@ export default function DriverTopbar({
     };
   }, [campusOpen]);
 
-  const handleSyncClick = async () => {
+  const handleSyncClick = () => {
     setIsSyncing(true);
-    setSyncMessage("Refreshing driver data...");
-    try {
-      const success = await refresh();
-      setSyncMessage(success ? "Driver data refreshed." : "Some driver data could not be refreshed.");
-    } finally {
+    setSyncMessage("Syncing telemetry & student list...");
+    if (onSyncData) onSyncData();
+    setTimeout(() => {
       setIsSyncing(false);
-    }
+      setSyncMessage("Telemetry synchronized!");
+      setTimeout(() => setSyncMessage(""), 2500);
+    }, 1200);
   };
 
-  const handleMarkAllRead = markAllRead;
+  const handleMarkAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+  };
 
   return (
     <header className="dp-topbar">
@@ -168,8 +169,7 @@ export default function DriverTopbar({
           type="button"
           className={`dp-icon-btn ${isSyncing ? "is-syncing" : ""}`}
           onClick={handleSyncClick}
-          title="Refresh Driver Assignment & Notifications"
-          disabled={isSyncing}
+          title="Sync Live GPS & Student Data"
         >
           <RefreshCw size={17} className={isSyncing ? "dp-spin-icon" : ""} />
         </button>
@@ -201,13 +201,10 @@ export default function DriverTopbar({
                 )}
               </div>
               <div className="dp-notif-list">
-                <p className="dp-notif-item">Live updates: {connectionStatus}</p>
-                {notificationError && <p className="dp-notif-item" role="status">{notificationError}</p>}
-                {!notificationError && notifications.length === 0 && <p className="dp-notif-item">No notifications yet.</p>}
                 {notifications.map((item) => (
                   <div
                     key={item.id}
-                    className={`dp-notif-item ${!item.isRead ? "is-unread" : ""}`}
+                    className={`dp-notif-item ${item.unread ? "is-unread" : ""}`}
                   >
                     <div className="dp-notif-icon-box">
                       {item.tone === "warning" ? (
@@ -221,9 +218,9 @@ export default function DriverTopbar({
                     <div className="dp-notif-content">
                       <div className="dp-notif-row">
                         <strong>{item.title}</strong>
-                        <small>{item.createdTime || item.createdAt ? new Date(item.createdTime || item.createdAt).toLocaleString("en-IN") : ""}</small>
+                        <small>{item.time}</small>
                       </div>
-                      <p>{item.message}</p>
+                      <p>{item.content}</p>
                     </div>
                   </div>
                 ))}

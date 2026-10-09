@@ -190,7 +190,6 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
         }
 
         public async Task<int> AssignSalaryStructureAsync(
-
             AssignSalaryStructureRequest request)
         {
             var parameters = new DynamicParameters();
@@ -202,6 +201,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add(
                 "p_EffectiveFrom",
                 request.EffectiveFrom.Date);
+            parameters.Add("p_PaymentMode", request.PaymentMode);
+            parameters.Add("p_BankName", request.BankName);
+            parameters.Add("p_AccountNumber", request.AccountNumber);
+            parameters.Add("p_IFSCCode", request.IFSCCode ?? request.IfscCode);
+            parameters.Add("p_PANNumber", request.PANNumber ?? request.PanNumber);
+            parameters.Add("p_UANNumber", request.UANNumber ?? request.UanNumber);
 
             return await _dbConnection.QuerySingleAsync<int>(
                 "sp_PayrollStaffSalary_Assign",
@@ -222,6 +227,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add(
                 "p_EffectiveFrom",
                 request.EffectiveFrom.Date);
+            parameters.Add("p_PaymentMode", request.PaymentMode);
+            parameters.Add("p_BankName", request.BankName);
+            parameters.Add("p_AccountNumber", request.AccountNumber);
+            parameters.Add("p_IFSCCode", request.IFSCCode ?? request.IfscCode);
+            parameters.Add("p_PANNumber", request.PANNumber ?? request.PanNumber);
+            parameters.Add("p_UANNumber", request.UANNumber ?? request.UanNumber);
 
             var affectedRows =
                 await _dbConnection.QuerySingleAsync<int>(

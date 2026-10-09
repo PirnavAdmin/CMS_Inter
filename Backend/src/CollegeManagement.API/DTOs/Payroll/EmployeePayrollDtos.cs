@@ -29,6 +29,13 @@ namespace CollegeManagement.API.DTOs.Payroll
         public DateTime? EffectiveFrom { get; set; }
         public DateTime? EffectiveTo { get; set; }
         public int? CampusId { get; set; }
+
+        public string? PaymentMode { get; set; }
+        public string? BankName { get; set; }
+        public string? AccountNumber { get; set; }
+        public string? IfscCode { get; set; }
+        public string? PanNumber { get; set; }
+        public string? UanNumber { get; set; }
     }
 
     public class AssignSalaryStructureRequest
@@ -40,7 +47,10 @@ namespace CollegeManagement.API.DTOs.Payroll
         public string? BankName { get; set; }
         public string? AccountNumber { get; set; }
         public string? IFSCCode { get; set; }
+        public string? IfscCode { get => IFSCCode; set => IFSCCode = value; }
         public string? PANNumber { get; set; }
+        public string? PanNumber { get => PANNumber; set => PANNumber = value; }
         public string? UANNumber { get; set; }
+        public string? UanNumber { get => UANNumber; set => UANNumber = value; }
     }
 }

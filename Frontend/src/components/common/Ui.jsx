@@ -6,12 +6,11 @@ export { Skeleton, SkeletonText, SkeletonCard, SkeletonTable, SkeletonRow, Skele
 export function StatusBadge({ value }) {
   const v = String(value || "").toLowerCase();
   let cls = "cms-badge-inactive";
-  if (["active", "paid", "pass", "published", "present", "completed"].includes(v)) cls = "cms-badge-active";
+  if (["active", "paid", "pass", "published", "present"].includes(v)) cls = "cms-badge-active";
   else if (["partial", "pending", "late"].includes(v)) cls = "cms-badge-warn";
-  else if (["ongoing", "in progress"].includes(v)) cls = "cms-badge-info";
-  else if (["due", "fail", "absent", "cancelled"].includes(v)) cls = "cms-badge-danger";
-  else if (["inactive", "draft", "scheduled"].includes(v)) cls = "cms-badge-inactive";
-  return <span className={`cms-badge ${cls} status-${v.replace(/\s+/g, "-")}`}>{value}</span>;
+  else if (["due", "fail", "absent"].includes(v)) cls = "cms-badge-danger";
+  else if (["inactive"].includes(v)) cls = "cms-badge-inactive";
+  return <span className={`cms-badge ${cls}`}>{value}</span>;
 }
 
 /** @deprecated Use a named Skeleton component. Retained as a visual-skeleton compatibility layer. */

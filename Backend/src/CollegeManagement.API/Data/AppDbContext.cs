@@ -24,7 +24,6 @@ namespace CollegeManagement.API.Data
         public DbSet<Role> Roles { get; set; }
         public DbSet<Permission> Permissions { get; set; }
         public DbSet<RolePermission> RolePermissions { get; set; }
-        public DbSet<RoleModule> RoleModules { get; set; }
         public DbSet<UserPermission> UserPermissions { get; set; }
         public DbSet<OTP> OTPs { get; set; }
         public DbSet<AcademicYear> AcademicYears { get; set; }
@@ -70,8 +69,9 @@ namespace CollegeManagement.API.Data
         public DbSet<TransportVehicle> TransportVehicles => Set<TransportVehicle>();
         public DbSet<TransportDriver> TransportDrivers { get; set; } = null!;
         public DbSet<TransportVehicleAssignment> TransportVehicleAssignments { get; set; } = null!;
-        public DbSet<DriverNotification> DriverNotifications { get; set; } = null!;
         public DbSet<DriverPreference> DriverPreferences { get; set; } = null!;
+
+        public DbSet<DriverNotification> DriverNotifications { get; set; } = null!;
         public DbSet<StudentTransportAssignment> StudentTransportAssignments { get; set; } = null!;
         public DbSet<VehicleMaintenance> VehicleMaintenances { get; set; } = null!;
         public DbSet<TransportTrip> TransportTrips => Set<TransportTrip>();
@@ -1718,20 +1718,12 @@ private static void ConfigureVehicleMaintenance(ModelBuilder modelBuilder)
                     .HasForeignKey(e => e.PermissionId)
                     .OnDelete(DeleteBehavior.Cascade);
             });
-
-            // RoleModules Configuration
-            modelBuilder.Entity<RoleModule>(entity =>
-            {
-                entity.HasIndex(e => new { e.RoleId, e.SubModule }).IsUnique();
-                entity.HasOne(e => e.Role)
-                    .WithMany(r => r.RoleModules)
-                    .HasForeignKey(e => e.RoleId)
-                    .OnDelete(DeleteBehavior.Cascade);
-            });
         }
 
 }
 }
+
+
 
 
 

@@ -1,8 +1,9 @@
 import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import FacultyDashboard from "./FacultyDashboard.jsx";
+import { PermissionProvider, useFacultyPermissions } from "./PermissionContext.jsx";
 import { FacultyProvider } from "./FacultyContext.jsx";
-import { useEffectivePermissions } from "@/features/rolesPermissions/EffectivePermissionsContext.jsx";
+import ProtectedRoute from "@/routes/ProtectedRoute.jsx";
 
 import FacultyDashboardHome from "./pages/FacultyDashboardHome.jsx";
 import FacultyProfile from "./pages/FacultyProfile.jsx";
@@ -18,48 +19,44 @@ import FacultyReimbursements from "./pages/FacultyReimbursements.jsx";
 import FacultyHolidays from "./pages/FacultyHolidays.jsx";
 import FacultySettings from "./pages/FacultySettings.jsx";
 
-const routeModules = {
-  "": "dashboard",
-  profile: "dashboard",
-  timetable: "timetable",
-  classes: "section-room",
-  attendance: "attendance",
-  marks: "marks-evaluation",
-  "exam-duties": "examination",
-  "my-attendance": "staff-attendance",
-  leave: "staff-leave-management",
-  payslips: "payroll",
-  reimbursements: "payroll",
-  holidays: "holiday-management",
-  settings: "settings",
+const routePermissions = {
+  "": "VIEW_DASHBOARD",
+  profile: "VIEW_PROFILE",
+  timetable: "VIEW_TIMETABLE",
+  classes: "VIEW_CLASSES",
+  attendance: "MARK_ATTENDANCE",
+  marks: "ENTER_MARKS",
+  "exam-duties": "VIEW_EXAM_DUTIES",
+  "my-attendance": "VIEW_SELF_ATTENDANCE",
+  leave: "APPLY_LEAVE",
+  payslips: "VIEW_PAYSLIPS",
+  reimbursements: "VIEW_PAYSLIPS",
+  holidays: "VIEW_HOLIDAYS",
 };
 
-function PermissionRoute({ moduleKey, children }) {
-  const { status, canAccess } = useEffectivePermissions();
-  if (status === "idle" || status === "loading") return <main>Loading permissions...</main>;
-  return status === "ready" && canAccess(moduleKey)
-    ? children
-    : <main style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>Access denied</main>;
+function PermissionRoute({ permission, children }) {
+  const permissions = useFacultyPermissions();
+  return permissions.includes(permission) ? children : <Navigate to="/faculty-dashboard" replace />;
 }
 
 export function FacultyPortalContent() {
   return (
     <Routes>
       <Route path="/" element={<FacultyDashboard />}>
-        <Route index element={<PermissionRoute moduleKey={routeModules[""]}><FacultyDashboardHome /></PermissionRoute>} />
-        <Route path="profile" element={<PermissionRoute moduleKey={routeModules.profile}><FacultyProfile /></PermissionRoute>} />
-        <Route path="timetable" element={<PermissionRoute moduleKey={routeModules.timetable}><FacultyTimetable /></PermissionRoute>} />
-        <Route path="classes" element={<PermissionRoute moduleKey={routeModules.classes}><FacultyClasses /></PermissionRoute>} />
-        <Route path="attendance" element={<PermissionRoute moduleKey={routeModules.attendance}><FacultyStudentAttendance /></PermissionRoute>} />
-        <Route path="monthly-report" element={<PermissionRoute moduleKey={routeModules.attendance}><FacultyStudentAttendance initialView="monthly" /></PermissionRoute>} />
-        <Route path="marks" element={<PermissionRoute moduleKey={routeModules.marks}><FacultyMarks /></PermissionRoute>} />
-        <Route path="exam-duties" element={<PermissionRoute moduleKey={routeModules["exam-duties"]}><FacultyExamDuties /></PermissionRoute>} />
-        <Route path="my-attendance" element={<PermissionRoute moduleKey={routeModules["my-attendance"]}><FacultyMyAttendance /></PermissionRoute>} />
-        <Route path="leave" element={<PermissionRoute moduleKey={routeModules.leave}><FacultyLeave /></PermissionRoute>} />
-        <Route path="payslips" element={<PermissionRoute moduleKey={routeModules.payslips}><FacultyPayslips /></PermissionRoute>} />
-        <Route path="reimbursements" element={<PermissionRoute moduleKey={routeModules.reimbursements}><FacultyReimbursements /></PermissionRoute>} />
-        <Route path="holidays" element={<PermissionRoute moduleKey={routeModules.holidays}><FacultyHolidays /></PermissionRoute>} />
-        <Route path="settings" element={<PermissionRoute moduleKey={routeModules.settings}><FacultySettings /></PermissionRoute>} />
+        <Route index element={<PermissionRoute permission={routePermissions[""]}><FacultyDashboardHome /></PermissionRoute>} />
+        <Route path="profile" element={<PermissionRoute permission={routePermissions["profile"]}><FacultyProfile /></PermissionRoute>} />
+        <Route path="timetable" element={<PermissionRoute permission={routePermissions["timetable"]}><FacultyTimetable /></PermissionRoute>} />
+        <Route path="classes" element={<PermissionRoute permission={routePermissions["classes"]}><FacultyClasses /></PermissionRoute>} />
+        <Route path="attendance" element={<FacultyStudentAttendance />} />
+        <Route path="monthly-report" element={<FacultyStudentAttendance initialView="monthly" />} />
+        <Route path="marks" element={<PermissionRoute permission={routePermissions["marks"]}><FacultyMarks /></PermissionRoute>} />
+        <Route path="exam-duties" element={<PermissionRoute permission={routePermissions["exam-duties"]}><FacultyExamDuties /></PermissionRoute>} />
+        <Route path="my-attendance" element={<PermissionRoute permission={routePermissions["my-attendance"]}><FacultyMyAttendance /></PermissionRoute>} />
+        <Route path="leave" element={<PermissionRoute permission={routePermissions["leave"]}><FacultyLeave /></PermissionRoute>} />
+        <Route path="payslips" element={<PermissionRoute permission={routePermissions["payslips"]}><FacultyPayslips /></PermissionRoute>} />
+        <Route path="reimbursements" element={<PermissionRoute permission={routePermissions["reimbursements"]}><FacultyReimbursements /></PermissionRoute>} />
+        <Route path="holidays" element={<PermissionRoute permission={routePermissions["holidays"]}><FacultyHolidays /></PermissionRoute>} />
+        <Route path="settings" element={<FacultySettings />} />
         <Route path="*" element={<Navigate to="/faculty-dashboard" replace />} />
       </Route>
     </Routes>
@@ -68,9 +65,13 @@ export function FacultyPortalContent() {
 
 export default function FacultyPortalRoutes() {
   return (
-    <FacultyProvider>
-      <FacultyPortalContent />
-    </FacultyProvider>
+    <ProtectedRoute requireFaculty>
+      <PermissionProvider>
+        <FacultyProvider>
+          <FacultyPortalContent />
+        </FacultyProvider>
+      </PermissionProvider>
+    </ProtectedRoute>
   );
 }
 

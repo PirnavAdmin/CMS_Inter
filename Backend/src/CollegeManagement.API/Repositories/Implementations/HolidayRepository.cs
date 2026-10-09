@@ -105,95 +105,60 @@ namespace CollegeManagement.API.Repositories.Implementations
                 }
             }
 
-            // Force LINQ fallback if AppliesToIn is provided since SP does not support it
-            bool forceLinq = filter.AppliesToIn != null && filter.AppliesToIn.Length > 0;
-
-            if (!forceLinq)
+            try
             {
-                try
+                var conn = await GetOpenConnectionAsync();
+                using var multi = await conn.QueryMultipleAsync(
+                    "sp_GetHolidays",
+                    new
+                    {
+                        p_CampusId = filter.CampusId ?? 0,
+                        p_AcademicYearId = filter.AcademicYearId ?? 0,
+                        p_BoardId = filter.BoardId ?? 0,
+                        p_Search = filter.Search?.Trim() ?? "",
+                        p_Type = filter.Type?.Trim() ?? "",
+                        p_Status = filter.Status?.Trim() ?? "",
+                        p_MonthNum = monthNum,
+                        p_FromDate = filter.FromDate.HasValue ? filter.FromDate.Value.ToDateTime(TimeOnly.MinValue) : (DateTime?)null,
+                        p_ToDate = filter.ToDate.HasValue ? filter.ToDate.Value.ToDateTime(TimeOnly.MinValue) : (DateTime?)null,
+                        p_Limit = pageSize,
+                        p_Offset = offset
+                    },
+                    commandType: CommandType.StoredProcedure);
+
+                var totalCount = await multi.ReadFirstAsync<int>();
+                var items = await multi.ReadAsync<Holiday>();
+
+                return (items, totalCount);
+            }
+            catch
+            {
+                var query = _context.Holidays.AsNoTracking().Where(h => !h.IsDeleted);
+
+                if (filter.CampusId.HasValue)
                 {
-                    var conn = await GetOpenConnectionAsync();
-                    using var multi = await conn.QueryMultipleAsync(
-                        "sp_GetHolidays",
-                        new
-                        {
-                            p_CampusId = filter.CampusId ?? 0,
-                            p_AcademicYearId = filter.AcademicYearId ?? 0,
-                            p_BoardId = filter.BoardId ?? 0,
-                            p_Search = filter.Search?.Trim() ?? "",
-                            p_Type = filter.Type?.Trim() ?? "",
-                            p_Status = filter.Status?.Trim() ?? "",
-                            p_MonthNum = monthNum,
-                            p_FromDate = filter.FromDate.HasValue ? filter.FromDate.Value.ToDateTime(TimeOnly.MinValue) : (DateTime?)null,
-                            p_ToDate = filter.ToDate.HasValue ? filter.ToDate.Value.ToDateTime(TimeOnly.MinValue) : (DateTime?)null,
-                            p_Limit = pageSize,
-                            p_Offset = offset
-                        },
-                        commandType: CommandType.StoredProcedure);
-
-                    var totalCount = await multi.ReadFirstAsync<int>();
-                    var items = await multi.ReadAsync<Holiday>();
-
-                    return (items, totalCount);
+                    query = query.Where(h => h.CampusId == filter.CampusId.Value);
                 }
-                catch
+
+                if (filter.AcademicYearId.HasValue && filter.AcademicYearId.Value > 0)
                 {
-                    // Fallback to LINQ below
+                    query = query.Where(h => h.AcademicYearId == filter.AcademicYearId || h.AcademicYearId == null);
                 }
-            }
+                if (filter.BoardId.HasValue && filter.BoardId.Value > 0)
+                {
+                    query = query.Where(h => h.BoardId == filter.BoardId || h.BoardId == null);
+                }
+                if (!string.IsNullOrWhiteSpace(filter.Search))
+                {
+                    var s = filter.Search.Trim().ToLower();
+                    query = query.Where(h => h.HolidayName.ToLower().Contains(s) || (h.Description != null && h.Description.ToLower().Contains(s)));
+                }
 
-            // LINQ Fallback
-            var query = _context.Holidays.AsNoTracking().Where(h => !h.IsDeleted);
+                var count = await query.CountAsync();
+                var list = await query.OrderBy(h => h.StartDate).ThenBy(h => h.Id).Skip(offset).Take(pageSize).ToListAsync();
 
-            if (filter.CampusId.HasValue)
-            {
-                query = query.Where(h => h.CampusId == filter.CampusId.Value || h.CampusId == null);
+                return (list, count);
             }
-
-            if (filter.AcademicYearId.HasValue && filter.AcademicYearId.Value > 0)
-            {
-                query = query.Where(h => h.AcademicYearId == filter.AcademicYearId || h.AcademicYearId == null);
-            }
-            if (filter.BoardId.HasValue && filter.BoardId.Value > 0)
-            {
-                query = query.Where(h => h.BoardId == filter.BoardId || h.BoardId == null);
-            }
-            if (!string.IsNullOrWhiteSpace(filter.Search))
-            {
-                var s = filter.Search.Trim().ToLower();
-                query = query.Where(h => h.HolidayName.ToLower().Contains(s) || (h.Description != null && h.Description.ToLower().Contains(s)));
-            }
-            if (!string.IsNullOrWhiteSpace(filter.Type) && filter.Type != "All")
-            {
-                query = query.Where(h => h.HolidayType == filter.Type);
-            }
-            if (!string.IsNullOrWhiteSpace(filter.Status) && filter.Status != "All")
-            {
-                query = query.Where(h => h.Status == filter.Status);
-            }
-            if (monthNum > 0)
-            {
-                query = query.Where(h => h.StartDate.Month == monthNum || h.EndDate.Month == monthNum);
-            }
-            if (filter.FromDate.HasValue)
-            {
-                var fromDt = filter.FromDate.Value.ToDateTime(TimeOnly.MinValue);
-                query = query.Where(h => h.EndDate >= fromDt);
-            }
-            if (filter.ToDate.HasValue)
-            {
-                var toDt = filter.ToDate.Value.ToDateTime(TimeOnly.MinValue);
-                query = query.Where(h => h.StartDate <= toDt);
-            }
-            if (filter.AppliesToIn != null && filter.AppliesToIn.Length > 0)
-            {
-                query = query.Where(h => h.AppliesTo != null && filter.AppliesToIn.Contains(h.AppliesTo));
-            }
-
-            var count = await query.CountAsync();
-            var list = await query.OrderBy(h => h.StartDate).ThenBy(h => h.Id).Skip(offset).Take(pageSize).ToListAsync();
-
-            return (list, count);
         }
 
         public async Task<Holiday?> GetByIdAsync(int id)

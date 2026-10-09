@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Clock,
   RefreshCw,
@@ -30,6 +30,11 @@ import {
   CartesianGrid,
 } from "recharts";
 import { useFaculty } from "../FacultyContext.jsx";
+import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
+import apiClient from "@/api/axios.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getAuthUser } from "@/features/authStorage.js";
 import totalStudentsIcon from "@/assets/dashboard-3d/total-students.png";
 import teachingStaffIcon from "@/assets/dashboard-3d/teaching-staff.png";
 import nonTeachingStaffIcon from "@/assets/dashboard-3d/non-teaching-staff.png";
@@ -42,6 +47,58 @@ import createSectionIcon from "@/assets/dashboard-3d/create-section.png";
 import createExamIcon from "@/assets/dashboard-3d/create-exam.png";
 import markAttendanceIcon from "@/assets/dashboard-3d/mark-attendance.png";
 import "../styles/FacultyDashboardHome.css";
+
+function formatTime12h(timeStr) {
+  if (!timeStr) return "";
+  const parts = String(timeStr).split(":");
+  if (parts.length < 2) return timeStr;
+  let hour = parseInt(parts[0], 10);
+  const min = parts[1];
+  const ampm = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  const padHour = String(hour).padStart(2, "0");
+  return `${padHour}:${min} ${ampm}`;
+}
+
+function resolveFacultyId(profile, auth) {
+  const candidates = [
+    profile?.facultyId,
+    profile?.staffId,
+    auth?.facultyId,
+    auth?.staffId,
+    profile?.id,
+    auth?.id,
+  ];
+  for (const c of candidates) {
+    if (c != null && !isNaN(Number(c)) && Number(c) > 0) {
+      return Number(c);
+    }
+  }
+  return 6;
+}
+
+function getLectureStatus(startTimeStr, endTimeStr) {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const toMinutes = (timeStr) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(":").map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const startMin = toMinutes(startTimeStr);
+  const endMin = toMinutes(endTimeStr);
+
+  if (currentMinutes > endMin) {
+    return { status: "Completed", tone: "green" };
+  }
+  if (currentMinutes >= startMin && currentMinutes <= endMin) {
+    return { status: "In Progress", tone: "orange" };
+  }
+  return { status: "Upcoming", tone: "blue" };
+}
 
 function greetingForHour(hour) {
   if (hour < 12) return { message: "Good Morning", icon: "🌅" };
@@ -149,44 +206,6 @@ const SECTION_STUDENTS_DATA = [
   { name: "MEC 1A", students: 30, boys: 16, girls: 14, fill: "#16a34a" },
 ];
 
-const TODAY_LECTURES = [
-  {
-    id: 1,
-    time: "09:00 – 10:00 AM",
-    subject: "Mathematics I-A",
-    code: "MATH101",
-    section: "MPC 1A",
-    room: "Room 203",
-    enrolled: 45,
-    status: "Completed",
-    statusTone: "green",
-    note: "Marked: 42/45",
-  },
-  {
-    id: 2,
-    time: "10:00 – 11:00 AM",
-    subject: "Mathematics I-A",
-    code: "MATH101",
-    section: "MPC 1A",
-    room: "Room 203",
-    enrolled: 45,
-    status: "In Progress",
-    statusTone: "orange",
-    note: "Active Lecture",
-  },
-  {
-    id: 3,
-    time: "11:15 – 12:15 PM",
-    subject: "Mathematics II-A",
-    code: "MATH201",
-    section: "MPC 2B",
-    room: "Room 205",
-    enrolled: 40,
-    status: "Upcoming",
-    statusTone: "blue",
-    note: "Hall 2 • Scheduled",
-  },
-];
 
 const FACULTY_ATTENDANCE_DONUT = [
   { name: "Present", value: 21, color: "#22a447" },
@@ -346,10 +365,101 @@ function KpiCard({ label, value, subtext, badge, tone, icon, tooltip, onClick })
 
 export default function FacultyDashboardHome() {
   const { profileData, punchState, setActiveModule, notify } = useFaculty();
+  const authUser = getAuthUser();
+  const { selectedCampusId } = useCampusContext?.() || {};
+  const { selectedAcademicYearId } = useAcademicContext?.() || {};
+
+  const facultyId = useMemo(() => resolveFacultyId(profileData, authUser), [profileData, authUser]);
 
   const [studentAttView, setStudentAttView] = useState("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(() => formattedTimestamp());
+  const [timetableSlots, setTimetableSlots] = useState([]);
+  const [timetableLoading, setTimetableLoading] = useState(true);
+
+  const fetchTimetableData = useCallback(async () => {
+    if (!facultyId) return;
+    setTimetableLoading(true);
+    try {
+      const endpoint = apiEndpoints?.timetable?.getByFaculty
+        ? apiEndpoints.timetable.getByFaculty(facultyId)
+        : `/api/v1/timetable/faculty/${facultyId}`;
+
+      const params = {};
+      if (selectedCampusId) params.campusId = selectedCampusId;
+      if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
+
+      let res = await apiClient.get(endpoint, { params }).catch(() => null);
+
+      let data = Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.data?.data)
+        ? res.data.data
+        : Array.isArray(res)
+        ? res
+        : [];
+
+      // Fallback: If filtered call yields no slots, try endpoint without query params
+      if (!data.length && (selectedCampusId || selectedAcademicYearId)) {
+        const fallbackRes = await apiClient.get(endpoint).catch(() => null);
+        const fallbackData = Array.isArray(fallbackRes?.data)
+          ? fallbackRes.data
+          : Array.isArray(fallbackRes?.data?.data)
+          ? fallbackRes.data.data
+          : Array.isArray(fallbackRes)
+          ? fallbackRes
+          : [];
+        if (fallbackData.length) {
+          data = fallbackData;
+        }
+      }
+
+      setTimetableSlots(data);
+    } catch (err) {
+      console.warn("Failed to load today timetable in dashboard:", err);
+    } finally {
+      setTimetableLoading(false);
+    }
+  }, [facultyId, selectedCampusId, selectedAcademicYearId]);
+
+  useEffect(() => {
+    fetchTimetableData();
+  }, [fetchTimetableData]);
+
+  const todayDayIndex = new Date().getDay(); // 0: Sunday, 1..6: Mon..Sat
+  const dayNames = useMemo(
+    () => ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+    []
+  );
+  const todayDayName = dayNames[todayDayIndex];
+
+  const todayLectures = useMemo(() => {
+    if (!timetableSlots || !timetableSlots.length) return [];
+    return timetableSlots
+      .filter((slot) => {
+        const slotDayName = String(slot.dayName || "").trim().toLowerCase();
+        return (
+          slotDayName === todayDayName.toLowerCase() ||
+          slot.dayOfWeek === todayDayIndex
+        );
+      })
+      .sort((a, b) => {
+        if (a.startTime && b.startTime) return a.startTime.localeCompare(b.startTime);
+        return (a.periodNumber || 0) - (b.periodNumber || 0);
+      });
+  }, [timetableSlots, todayDayIndex, todayDayName]);
+
+  const lectureCounts = useMemo(() => {
+    let completed = 0;
+    let inProgress = 0;
+    todayLectures.forEach((item) => {
+      const { status } = getLectureStatus(item.startTime, item.endTime);
+      if (status === "Completed") completed++;
+      else if (status === "In Progress") inProgress++;
+    });
+    const remaining = todayLectures.length - completed;
+    return { completed, inProgress, remaining };
+  }, [todayLectures]);
 
   const currentHour = new Date().getHours();
   const greeting = greetingForHour(currentHour);
@@ -360,6 +470,7 @@ export default function FacultyDashboardHome() {
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
+    fetchTimetableData();
     setTimeout(() => {
       setIsRefreshing(false);
       const nowStr = formattedTimestamp();
@@ -368,7 +479,7 @@ export default function FacultyDashboardHome() {
         notify(`Faculty dashboard refreshed with latest data (${nowStr})`);
       }
     }, 600);
-  }, [notify]);
+  }, [fetchTimetableData, notify]);
 
   const kpis = [
     {
@@ -383,12 +494,22 @@ export default function FacultyDashboardHome() {
     },
     {
       label: "Today's Lectures",
-      value: "3",
-      badge: "1 COMPLETED",
-      subtext: "2 remaining lectures today",
+      value: String(todayLectures.length),
+      badge:
+        todayLectures.length === 0
+          ? "NO SESSIONS"
+          : lectureCounts.completed > 0
+          ? `${lectureCounts.completed} COMPLETED`
+          : "SCHEDULED",
+      subtext:
+        todayLectures.length === 0
+          ? "No lectures scheduled today"
+          : lectureCounts.remaining === 0
+          ? "All lectures completed today"
+          : `${lectureCounts.remaining} remaining lecture${lectureCounts.remaining === 1 ? "" : "s"} today`,
       tone: "blue",
       icon: teachingStaffIcon,
-      tooltip: "3 lecture periods scheduled on today's timetable",
+      tooltip: `${todayLectures.length} lecture period${todayLectures.length === 1 ? "" : "s"} scheduled on today's timetable`,
       onClick: () => setActiveModule("timetable"),
     },
     {
@@ -690,10 +811,10 @@ export default function FacultyDashboardHome() {
           </div>
         </article>
 
-        {/* Card 3: Today's Lecture Schedule (3) */}
+        {/* Card 3: Today's Lecture Schedule */}
         <article className="dashboard-card dashboard-schedule-card">
           <CardHeader
-            title="Today's Lecture Schedule (3)"
+            title={`Today's Lecture Schedule (${todayLectures.length})`}
             action={
               <button
                 type="button"
@@ -705,38 +826,135 @@ export default function FacultyDashboardHome() {
             }
           />
           <div className="dashboard-card-body">
-            <div className="dashboard-schedule-list">
-              {TODAY_LECTURES.map((item) => (
-                <div key={item.id} className={`schedule-item schedule-${item.statusTone}`}>
-                  <div className="schedule-item-head">
-                    <span className="schedule-time">{item.time}</span>
-                    <span className={`schedule-status-pill pill-${item.statusTone}`}>
-                      {item.status}
-                    </span>
-                  </div>
-                  <div className="schedule-subject-row">
-                    <strong>{item.subject}</strong>
-                    <span className="schedule-section-tag">{item.section}</span>
-                  </div>
-                  <div className="schedule-item-meta">
-                    <span>📍 {item.room}</span>
-                    <span className="meta-sep">•</span>
-                    <span>{item.enrolled} Enrolled</span>
-                    <span className="meta-sep">•</span>
-                    <span className="schedule-note">{item.note}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="dashboard-card-footer">
-              <button
-                type="button"
-                className="dashboard-footer-btn"
-                onClick={() => setActiveModule("timetable")}
+            {timetableLoading ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "28px 12px",
+                  gap: 8,
+                  color: "var(--cms-muted, #64748b)",
+                  fontSize: 11,
+                  flex: 1,
+                  minHeight: 140,
+                }}
               >
-                View Full Timetable <ChevronRight size={13} />
-              </button>
-            </div>
+                <RefreshCw size={18} className="dashboard-spin" color="var(--cms-primary, #6F8400)" />
+                <span>Loading today's schedule...</span>
+              </div>
+            ) : todayLectures.length === 0 ? (
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  textAlign: "center",
+                  padding: "16px 12px",
+                  flex: 1,
+                  minHeight: 140,
+                  background: "var(--cms-subtle, #f8fafc)",
+                  borderRadius: 8,
+                  border: "1px dashed var(--cms-border, #e2e8f0)",
+                }}
+              >
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: "50%",
+                    background: "rgba(111, 132, 0, 0.1)",
+                    color: "var(--cms-primary, #6F8400)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 8,
+                  }}
+                >
+                  <CalendarDays size={18} />
+                </div>
+                <strong
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 750,
+                    color: "var(--cms-text, #1e293b)",
+                    marginBottom: 3,
+                  }}
+                >
+                  No Lectures Scheduled Today
+                </strong>
+                <p
+                  style={{
+                    fontSize: 10.5,
+                    color: "var(--cms-muted, #64748b)",
+                    lineHeight: 1.35,
+                    margin: "0 0 10px 0",
+                    maxWidth: 220,
+                  }}
+                >
+                  You have no teaching periods scheduled for {todayDayName}. Use this free time to prepare course material or review your schedule.
+                </p>
+                <button
+                  type="button"
+                  className="dashboard-footer-btn"
+                  style={{ fontSize: 10.5, padding: "3px 8px" }}
+                  onClick={() => setActiveModule("timetable")}
+                >
+                  View Weekly Timetable <ChevronRight size={12} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="dashboard-schedule-list">
+                  {todayLectures.map((item) => {
+                    const { status, tone } = getLectureStatus(item.startTime, item.endTime);
+                    const timeFormatted = `${formatTime12h(item.startTime)} – ${formatTime12h(item.endTime)}`;
+                    const sectionLabel = [item.groupName, item.sectionName].filter(Boolean).join(" ") || "General";
+                    const roomLabel = item.roomCode || item.roomName ? `Room ${item.roomCode || item.roomName}` : "Classroom TBA";
+                    const periodLabel = item.periodName || (item.periodNumber ? `Period ${item.periodNumber}` : "");
+
+                    return (
+                      <div key={item.id || `${item.periodId}-${item.startTime}`} className={`schedule-item schedule-${tone}`}>
+                        <div className="schedule-item-head">
+                          <span className="schedule-time">{timeFormatted}</span>
+                          <span className={`schedule-status-pill pill-${tone}`}>
+                            {status}
+                          </span>
+                        </div>
+                        <div className="schedule-subject-row">
+                          <strong title={item.subjectName || item.subjectCode}>
+                            {item.subjectName || item.subjectCode || "Subject"}
+                          </strong>
+                          <span className="schedule-section-tag">{sectionLabel}</span>
+                        </div>
+                        <div className="schedule-item-meta">
+                          <span>📍 {roomLabel}</span>
+                          {item.academicLevelName && (
+                            <>
+                              <span className="meta-sep">•</span>
+                              <span>{item.academicLevelName}</span>
+                            </>
+                          )}
+                          <span className="meta-sep">•</span>
+                          <span className="schedule-note">{item.remarks || periodLabel || "Scheduled"}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="dashboard-card-footer">
+                  <button
+                    type="button"
+                    className="dashboard-footer-btn"
+                    onClick={() => setActiveModule("timetable")}
+                  >
+                    View Full Timetable <ChevronRight size={13} />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </article>
       </section>
