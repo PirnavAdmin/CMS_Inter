@@ -316,13 +316,119 @@ namespace CollegeManagement.API.Services.Implementations
             response.TotalEligibleSubjects = eligibleSubjects.Count();
             response.ScheduledSubjectsCount = exam.ExamSchedules?.Count(s => s.IsActive) ?? 0;
 
+            // Populate SelectedSubjectIds from active schedules
+            if (exam.ExamSchedules != null && exam.ExamSchedules.Any(s => s.IsActive))
+            {
+                response.SelectedSubjectIds = exam.ExamSchedules
+                    .Where(s => s.IsActive && s.SubjectId > 0)
+                    .Select(s => s.SubjectId)
+                    .Distinct()
+                    .ToList();
+            }
+
+            // Populate multi-context collections
+            if (exam.ProgramId.HasValue && exam.ProgramId.Value > 0)
+            {
+                response.ProgramIds = new List<int> { exam.ProgramId.Value };
+            }
+            if (exam.GroupId > 0)
+            {
+                response.GroupIds = new List<int> { exam.GroupId };
+            }
+            if (exam.AcademicLevelId > 0)
+            {
+                response.AcademicLevelIds = new List<int> { exam.AcademicLevelId };
+            }
+
+            // Populate category and schedule mode
+            response.ExamCategory = !string.IsNullOrWhiteSpace(exam.ExamPattern) && exam.ExamPattern.ToLower().Contains("objective")
+                ? "Objective"
+                : "Regular";
+            response.ScheduleMode = exam.ExamSchedules?.FirstOrDefault(s => s.IsActive && !string.IsNullOrWhiteSpace(s.ScheduleMode))?.ScheduleMode ?? "SUBJECT_WISE";
+
+            // Authoritative IST Status
+            var istNow = Helpers.ExaminationStatusHelper.GetIstNow();
+            var authoritativeStatus = Helpers.ExaminationStatusHelper.CalculateAuthoritativeStatus(
+                exam.Status,
+                exam.StartDate,
+                exam.EndDate,
+                exam.ExamSchedules,
+                istNow);
+
+            if (!string.Equals(exam.Status, authoritativeStatus, StringComparison.OrdinalIgnoreCase))
+            {
+                exam.Status = authoritativeStatus;
+                exam.UpdatedAt = DateTime.UtcNow;
+                await _examinationRepository.UpdateExaminationAsync(exam);
+            }
+            response.Status = authoritativeStatus;
+
+            // Check if any active schedules fall outside examination period for conditional rescheduling
+            if (exam.ExamSchedules != null && exam.ExamSchedules.Any(s => s.IsActive))
+            {
+                var outOfRange = exam.ExamSchedules
+                    .Where(s => s.IsActive && (s.ExamDate < exam.StartDate || s.ExamDate > exam.EndDate))
+                    .ToList();
+
+                if (outOfRange.Count > 0)
+                {
+                    response.RequiresRescheduling = true;
+                    response.OutOfRangeScheduleCount = outOfRange.Count;
+                    response.OutOfRangeScheduleIds = outOfRange.Select(s => s.ExamScheduleId).ToList();
+                    response.ReschedulingMessage = $"{outOfRange.Count} schedule session(s) fall outside examination period ({exam.StartDate:yyyy-MM-dd} - {exam.EndDate:yyyy-MM-dd}). Rescheduling required.";
+
+                    foreach (var sResp in response.Schedules)
+                    {
+                        if (sResp.ExamDate < exam.StartDate || sResp.ExamDate > exam.EndDate)
+                        {
+                            sResp.IsOutOfRange = true;
+                            sResp.RescheduleWarning = $"Exam date {sResp.ExamDate:yyyy-MM-dd} is outside examination period ({exam.StartDate:yyyy-MM-dd} - {exam.EndDate:yyyy-MM-dd}).";
+                        }
+                    }
+                }
+            }
+
             _memoryCache.Set(cacheKey, response, TimeSpan.FromMinutes(10));
             return response;
         }
 
         public async Task<IEnumerable<ExaminationResponse>> GetExaminationsAsync(ExaminationSearchRequestDto filter)
         {
-            return await _examinationRepository.GetExaminationResponsesAsync(filter);
+            var results = (await _examinationRepository.GetExaminationResponsesAsync(filter)).ToList();
+            var istNow = Helpers.ExaminationStatusHelper.GetIstNow();
+
+            foreach (var r in results)
+            {
+                if (r.Status != "CANCELLED" && r.Status != "DRAFT")
+                {
+                    var authoritative = Helpers.ExaminationStatusHelper.CalculateAuthoritativeStatusForResponse(
+                        r.Status,
+                        r.StartDate,
+                        r.EndDate,
+                        r.ScheduledSubjectsCount,
+                        istNow);
+                    r.Status = authoritative;
+                }
+
+                if (r.ProgramId.HasValue && r.ProgramId.Value > 0 && (r.ProgramIds == null || r.ProgramIds.Count == 0))
+                {
+                    r.ProgramIds = new List<int> { r.ProgramId.Value };
+                }
+                if (r.GroupId > 0 && (r.GroupIds == null || r.GroupIds.Count == 0))
+                {
+                    r.GroupIds = new List<int> { r.GroupId };
+                }
+                if (r.AcademicLevelId > 0 && (r.AcademicLevelIds == null || r.AcademicLevelIds.Count == 0))
+                {
+                    r.AcademicLevelIds = new List<int> { r.AcademicLevelId };
+                }
+
+                r.ExamCategory = !string.IsNullOrWhiteSpace(r.ExamPattern) && r.ExamPattern.ToLower().Contains("objective")
+                    ? "Objective"
+                    : "Regular";
+            }
+
+            return results;
         }
 
         public async Task<ExaminationResponse?> UpdateExaminationAsync(int examinationId, UpdateExaminationRequest request)
@@ -348,20 +454,6 @@ namespace CollegeManagement.API.Services.Implementations
             if (isObjective && targetStartDate != targetEndDate)
             {
                 throw new ValidationException("For OBJECTIVE examinations, Start Date must be equal to End Date.");
-            }
-
-            // Check if any existing active scheduled subjects fall outside the new date range
-            if (exam.ExamSchedules != null && exam.ExamSchedules.Any(s => s.IsActive))
-            {
-                var outOfRange = exam.ExamSchedules
-                    .Where(s => s.IsActive && (s.ExamDate < targetStartDate || s.ExamDate > targetEndDate))
-                    .ToList();
-
-                if (outOfRange.Any())
-                {
-                    var conflicts = string.Join(", ", outOfRange.Select(s => $"'{s.Subject?.SubjectName ?? "Subject"}' ({s.ExamDate:yyyy-MM-dd})"));
-                    throw new ValidationException($"Cannot update examination period to {targetStartDate:yyyy-MM-dd} - {targetEndDate:yyyy-MM-dd}. Existing scheduled subject(s) fall outside this window: {conflicts}. Please reschedule or remove those subjects first.");
-                }
             }
 
             if (!string.IsNullOrWhiteSpace(request.ExamName)) exam.ExamName = request.ExamName;
@@ -405,11 +497,41 @@ namespace CollegeManagement.API.Services.Implementations
             if (request.Description != null) exam.Description = request.Description;
             if (!string.IsNullOrWhiteSpace(request.Status)) exam.Status = request.Status.ToUpper();
 
+            // Dynamic status calculation if not DRAFT or CANCELLED
+            if (exam.Status != "DRAFT" && exam.Status != "CANCELLED")
+            {
+                var istNow = Helpers.ExaminationStatusHelper.GetIstNow();
+                exam.Status = Helpers.ExaminationStatusHelper.CalculateAuthoritativeStatus(
+                    exam.Status,
+                    exam.StartDate,
+                    exam.EndDate,
+                    exam.ExamSchedules,
+                    istNow);
+            }
+
             await _examinationRepository.UpdateExaminationAsync(exam);
             EvictExamCache(examinationId);
 
-            var updatedExam = await _examinationRepository.GetExaminationByIdAsync(examinationId);
-            return updatedExam == null ? null : _mapper.Map<ExaminationResponse>(updatedExam);
+            // Fetch freshly populated response using GetExaminationByIdAsync
+            var response = await GetExaminationByIdAsync(examinationId);
+            if (response != null)
+            {
+                // Handle subject differences if SelectedSubjectIds was provided
+                if (request.SelectedSubjectIds != null && request.SelectedSubjectIds.Count > 0)
+                {
+                    var scheduledSubjectIds = exam.ExamSchedules?
+                        .Where(s => s.IsActive && s.SubjectId > 0)
+                        .Select(s => s.SubjectId)
+                        .Distinct()
+                        .ToList() ?? new List<int>();
+
+                    var newSubjects = request.SelectedSubjectIds.Except(scheduledSubjectIds).ToList();
+                    response.UnscheduledSubjectIds = newSubjects;
+                    response.SelectedSubjectIds = request.SelectedSubjectIds;
+                }
+            }
+
+            return response;
         }
 
         public async Task<bool> DeleteExaminationAsync(int examinationId)
