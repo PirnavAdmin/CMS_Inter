@@ -93,7 +93,7 @@ export async function updateNumberSeries(seriesCode, configData, campusId) {
  * 4. POST /api/v1/settings/number-series/{seriesCode}/generate-next (or /api/v1/number-series/{seriesCode}/generate-next)
  * Executes thread-safe atomic sequence increment and returns the newly generated sequence ID.
  */
-export async function generateNextNumber(seriesCode, context = {}, campusId) {
+export async function generateNextNumber(seriesCode, context = {}, campusId, campusCode = null) {
   if (!seriesCode) throw new Error("seriesCode is required");
   const payload = {
     board: context.board ?? "",
@@ -113,6 +113,7 @@ export async function generateNextNumber(seriesCode, context = {}, campusId) {
 
   const params = {};
   if (campusId !== undefined && campusId !== null && campusId !== "") params.campusId = campusId;
+  if (campusCode !== undefined && campusCode !== null && campusCode !== "") params.campusCode = campusCode;
   const requestConfig = { params };
 
   try {

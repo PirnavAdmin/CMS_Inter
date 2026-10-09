@@ -534,6 +534,20 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException("Start Time and End Time are required.");
             }
 
+            if (request.StartTime.Hour >= 1 && request.StartTime.Hour <= 6)
+            {
+                request.StartTime = request.StartTime.AddHours(12);
+            }
+
+            if (request.EndTime.Hour >= 1 && request.EndTime.Hour <= 6)
+            {
+                request.EndTime = request.EndTime.AddHours(12);
+            }
+            else if (request.EndTime <= request.StartTime && request.EndTime.Hour < 12 && (request.EndTime.Hour + 12) > request.StartTime.Hour)
+            {
+                request.EndTime = request.EndTime.AddHours(12);
+            }
+
             if (request.EndTime <= request.StartTime)
             {
                 _logger.LogWarning("Time validation failed: End Time ({EndTime}) must be later than Start Time ({StartTime}) for Exam ID {ExamId}.",
@@ -965,7 +979,24 @@ namespace CollegeManagement.API.Services.Implementations
             var targetHall = request.Hall ?? request.RoomNumber ?? request.Venue ?? schedule.Hall;
             var targetInvigilator = request.Invigilator ?? request.InvigilatorName ?? schedule.Invigilator;
 
-            if (request.StartTime.HasValue && request.EndTime.HasValue && request.EndTime.Value <= request.StartTime.Value)
+            if (targetStartTime.Hour >= 1 && targetStartTime.Hour <= 6)
+            {
+                targetStartTime = targetStartTime.AddHours(12);
+                if (request.StartTime.HasValue) request.StartTime = targetStartTime;
+            }
+
+            if (targetEndTime.Hour >= 1 && targetEndTime.Hour <= 6)
+            {
+                targetEndTime = targetEndTime.AddHours(12);
+                if (request.EndTime.HasValue) request.EndTime = targetEndTime;
+            }
+            else if (targetEndTime <= targetStartTime && targetEndTime.Hour < 12 && (targetEndTime.Hour + 12) > targetStartTime.Hour)
+            {
+                targetEndTime = targetEndTime.AddHours(12);
+                if (request.EndTime.HasValue) request.EndTime = targetEndTime;
+            }
+
+            if (targetEndTime <= targetStartTime)
             {
                 throw new ValidationException("End Time must be later than Start Time.");
             }
@@ -1342,7 +1373,21 @@ namespace CollegeManagement.API.Services.Implementations
 
             // 3. Timings & Schedule Mode
             var startTime = request.DefaultStartTime ?? new TimeOnly(9, 0);
+            if (startTime.Hour >= 1 && startTime.Hour <= 6)
+            {
+                startTime = startTime.AddHours(12);
+            }
+
             var endTime = request.DefaultEndTime ?? new TimeOnly(12, 0);
+            if (endTime.Hour >= 1 && endTime.Hour <= 6)
+            {
+                endTime = endTime.AddHours(12);
+            }
+            else if (endTime <= startTime && endTime.Hour < 12 && (endTime.Hour + 12) > startTime.Hour)
+            {
+                endTime = endTime.AddHours(12);
+            }
+
             if (endTime <= startTime)
             {
                 throw new ValidationException($"End Time ({endTime:HH\\:mm}) must be later than Start Time ({startTime:HH\\:mm}).");
