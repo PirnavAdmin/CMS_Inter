@@ -98,8 +98,8 @@
 }
 .promotion-setup-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 42px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 36px minmax(0, 1fr);
+  gap: 8px;
   align-items: stretch;
 }
 .promotion-setup-grid > * {

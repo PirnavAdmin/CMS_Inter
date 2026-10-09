@@ -201,8 +201,8 @@ export default function HolidayManagementPage() {
       setLoading(true);
       setHolidays([]);
       const [summaryRes, listRes] = await Promise.allSettled([
-        holidayApi.getSummary({ academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined }),
-        holidayApi.getHolidays({ academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined, page: 1, pageSize: 100 }),
+        holidayApi.getSummary({ campusId: selectedCampusId || undefined, academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined }),
+        holidayApi.getHolidays({ campusId: selectedCampusId || undefined, academicYearId: selectedAcademicYearId || undefined, boardId: selectedBoardId || undefined, page: 1, pageSize: 100 }),
       ]);
 
       if (summaryRes.status === "fulfilled" && summaryRes.value) {
@@ -212,7 +212,7 @@ export default function HolidayManagementPage() {
       if (listRes.status === "fulfilled" && Array.isArray(listRes.value?.data) && listRes.value.data.length > 0) {
         setHolidays(listRes.value.data.filter((holiday) => {
           const campusId = holiday?.campusId ?? holiday?.CampusId;
-          return campusId == null || String(campusId) === String(selectedCampusId);
+          return selectedCampusId == null || selectedCampusId === "" || campusId == null || String(campusId) === String(selectedCampusId);
         }));
       }
     } catch (err) {

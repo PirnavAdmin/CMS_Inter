@@ -1,3 +1,4 @@
+import CampusBrandImage from "@/components/common/CampusBrandImage.jsx";
 import React from "react";
 import {
   LayoutDashboard,
@@ -28,7 +29,7 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
     <aside className={`dp-sidebar ${open ? "is-open" : ""}`}>
       <div className="dp-sidebar-brand">
         <div className="dp-brand-logo-wrap">
-          <img src={pirnavLogo} alt="Pirnav College" className="dp-brand-logo" />
+          <CampusBrandImage src={pirnavLogo} alt="Pirnav College" className="dp-brand-logo"  />
         </div>
         <button type="button" className="dp-sidebar-close-btn" onClick={onClose} aria-label="Close sidebar">
           <X size={18} />
