@@ -94,11 +94,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         connectionString,
         serverVersion,
         mySqlOptions => mySqlOptions
-            .CommandTimeout(120)
-            .EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(3),
-                errorNumbersToAdd: null)));
+            .CommandTimeout(120)));;
 
 builder.Services.AddSingleton<DatabaseContext>();
 
@@ -541,6 +537,9 @@ app.MapGet("/", () => Results.Redirect("/swagger"));
 #endregion
 
 app.Run();
+
+
+
 
 
 
