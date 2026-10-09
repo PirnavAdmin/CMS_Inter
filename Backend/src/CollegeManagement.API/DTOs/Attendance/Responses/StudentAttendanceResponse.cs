@@ -13,7 +13,11 @@ namespace CollegeManagement.API.DTOs.Attendance.Responses
         public string RollNumber { get; set; } = string.Empty;
         public string StudentName { get; set; } = string.Empty;
         
+        public int? AcademicLevelId { get; set; }
+        public string AcademicLevelName { get; set; } = string.Empty;
+        public int? GroupId { get; set; }
         public string GroupName { get; set; } = string.Empty;
+        public int? SectionId { get; set; }
         public string SectionName { get; set; } = string.Empty;
 
         // Admin Session-wise Attendance

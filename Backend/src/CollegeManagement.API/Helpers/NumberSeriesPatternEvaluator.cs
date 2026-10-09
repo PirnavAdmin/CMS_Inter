@@ -31,9 +31,13 @@ namespace CollegeManagement.API.Helpers
             result = Regex.Replace(result, @"\{SEQ\}", paddedSeq, RegexOptions.IgnoreCase);
 
             // 2. Date & Year tokens
-            result = Regex.Replace(result, @"\{YYYY\}", now.ToString("yyyy"), RegexOptions.IgnoreCase);
-            result = Regex.Replace(result, @"\{YEAR\}", now.ToString("yyyy"), RegexOptions.IgnoreCase);
-            result = Regex.Replace(result, @"\{YY\}", now.ToString("yy"), RegexOptions.IgnoreCase);
+            string ayStr = !string.IsNullOrWhiteSpace(context?.AcademicYear) ? context.AcademicYear : $"{now.Year}-{(now.Year + 1)}";
+            string yyyy = ayStr.Length >= 4 ? ayStr.Substring(0, 4) : now.ToString("yyyy");
+            string yy = ayStr.Length >= 4 ? ayStr.Substring(2, 2) : now.ToString("yy");
+            
+            result = Regex.Replace(result, @"\{YYYY\}", yyyy, RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"\{YEAR\}", yyyy, RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"\{YY\}", yy, RegexOptions.IgnoreCase);
             result = Regex.Replace(result, @"\{YYYYMMDD\}", now.ToString("yyyyMMdd"), RegexOptions.IgnoreCase);
             result = Regex.Replace(result, @"\{MM\}", now.ToString("MM"), RegexOptions.IgnoreCase);
             result = Regex.Replace(result, @"\{DD\}", now.ToString("dd"), RegexOptions.IgnoreCase);
@@ -42,10 +46,7 @@ namespace CollegeManagement.API.Helpers
             result = Regex.Replace(result, @"\{PREFIX\}", prefix ?? string.Empty, RegexOptions.IgnoreCase);
 
             // 4. Academic Year token
-            var ay = !string.IsNullOrWhiteSpace(context?.AcademicYear)
-                ? context.AcademicYear
-                : $"{now.Year}-{(now.Year + 1)}";
-            result = Regex.Replace(result, @"\{AY\}", ay, RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"\{AY\}", ayStr, RegexOptions.IgnoreCase);
 
             // 5. Random Alphanumeric Token (e.g. 82FC40)
             if (Regex.IsMatch(result, @"\{RANDOM\}", RegexOptions.IgnoreCase))
@@ -64,8 +65,9 @@ namespace CollegeManagement.API.Helpers
             }
 
             // 6. Contextual dynamic tokens
-            var board = !string.IsNullOrWhiteSpace(context?.Board) ? context.Board : "BIEAP";
-            result = Regex.Replace(result, @"\{BOARD\}", board, RegexOptions.IgnoreCase);
+            var board = !string.IsNullOrWhiteSpace(context?.BoardCode) ? context.BoardCode : (!string.IsNullOrWhiteSpace(context?.Board) ? context.Board : "BIEAP");
+            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{BOARD\}", board, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{BOARD:1\}", board.StartsWith("[") ? board : board.Substring(0, 1), System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
             var dept = !string.IsNullOrWhiteSpace(context?.Dept) ? context.Dept : "MATH";
             result = Regex.Replace(result, @"\{DEPT\}", dept, RegexOptions.IgnoreCase);
@@ -79,16 +81,26 @@ namespace CollegeManagement.API.Helpers
             var cert = !string.IsNullOrWhiteSpace(context?.Cert) ? context.Cert : "CND";
             result = Regex.Replace(result, @"\{CERT\}", cert, RegexOptions.IgnoreCase);
 
+            var campusStr = !string.IsNullOrWhiteSpace(context?.CampusCode) ? context.CampusCode : "M";
+            var campus = campusStr.ToUpperInvariant();
+            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{CAMPUS\}", campus, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{CAMPUS:2\}", campus.Length >= 2 ? campus.Substring(0, 2) : campus, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
             var type = !string.IsNullOrWhiteSpace(context?.Type) ? context.Type : "GEN";
             result = Regex.Replace(result, @"\{TYPE\}", type, RegexOptions.IgnoreCase);
 
-            var group = !string.IsNullOrWhiteSpace(context?.Group) ? context.Group : (!string.IsNullOrWhiteSpace(context?.GroupCode) ? context.GroupCode : "MPC");
+            var group = !string.IsNullOrWhiteSpace(context?.GroupCode) ? context.GroupCode : (!string.IsNullOrWhiteSpace(context?.Group) ? context.Group : "GROUP");
             result = Regex.Replace(result, @"\{GROUP\}", group, RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"\{GROUP:1\}", group.Length >= 1 ? group.Substring(0, 1) : group, RegexOptions.IgnoreCase);
+
+            var program = !string.IsNullOrWhiteSpace(context?.Program) ? context.Program : "PROGRAM";
+            result = Regex.Replace(result, @"\{PROGRAM\}", program, RegexOptions.IgnoreCase);
+            result = Regex.Replace(result, @"\{PROGRAM:1\}", program.Length >= 1 ? program.Substring(0, 1) : program, RegexOptions.IgnoreCase);
 
             var section = !string.IsNullOrWhiteSpace(context?.Section) ? context.Section : "A";
             result = Regex.Replace(result, @"\{SECTION\}", section, RegexOptions.IgnoreCase);
 
-            var level = !string.IsNullOrWhiteSpace(context?.Level) ? context.Level : "1st Year";
+            var level = !string.IsNullOrWhiteSpace(context?.LevelCode) ? context.LevelCode : (!string.IsNullOrWhiteSpace(context?.Level) ? context.Level : "1st Year");
             result = Regex.Replace(result, @"\{LEVEL\}", level, RegexOptions.IgnoreCase);
 
             var exam = !string.IsNullOrWhiteSpace(context?.Exam) ? context.Exam : "FINAL";
@@ -120,7 +132,7 @@ namespace CollegeManagement.API.Helpers
                 "TEACHING_STAFF_ID" or "EMPLOYEE_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}" },
                 "NON_TEACHING_STAFF_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}" },
                 "ADMISSION_NO" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{AY}", "{BOARD}" },
-                "ROLL_NO" => new List<string> { "{SEQ}", "{GROUP}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}" },
+                "ROLL_NO" => new List<string> { "{SEQ}", "{GROUP}", "{GROUP:1}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{BOARD}", "{BOARD:1}", "{AY}", "{PROGRAM}", "{PROGRAM:1}", "{LEVEL}" },
                 "STUDENT_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}" },
                 "SECTION_NAME" => new List<string> { "{GROUP}", "{SECTION}", "{LEVEL}", "{BOARD}" },
                 "EXAM_CODE" => new List<string> { "{GROUP}", "{TYPE}", "{YEAR}", "{SEQ}", "{EXAM}" },
@@ -159,6 +171,7 @@ namespace CollegeManagement.API.Helpers
                     new() { Pattern = "{PREFIX}{SEQ}", Example = "MPC-1" },
                     new() { Pattern = "{GROUP}-{SEQ}", Example = "MPC-01" },
                     new() { Pattern = "{YYYY}-{GROUP}-{SEQ}", Example = $"2026-MPC-001" },
+                    new() { Pattern = "{YY}{CAMPUS:2}{BOARD}{PROGRAM:1}{GROUP:1}{SEQ}", Example = $"211FA04217" }
                 },
                 "STUDENT_ID" => new List<SampleFormatDto>
                 {

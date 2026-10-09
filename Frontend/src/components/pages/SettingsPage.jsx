@@ -17,6 +17,26 @@ export default function SettingsPage() {
 
   const settingsCards = [
     {
+      id: "landing-configuration",
+      title: "Landing Page Configuration",
+      description: "Set the college name, headline, descriptions, logos, home-page image and footer contact details.",
+      icon: Building2,
+      image: campusConfigImage,
+      to: "/dashboard/settings/landing-page",
+      buttonText: "Configure Landing Page",
+      primary: true,
+    },
+    {
+      id: "login-configuration",
+      title: "Login Page Configuration",
+      description: "Set the college name, tagline, login form text, logo and background image.",
+      icon: Building2,
+      image: campusConfigImage,
+      to: "/dashboard/settings/login-page",
+      buttonText: "Configure Login Page",
+      primary: true,
+    },
+    {
       id: "campus-configuration",
       title: "Campus Configuration",
       description: "Configure multi-campus branches, branch codes, address, affiliated education boards and active header branch selector.",
