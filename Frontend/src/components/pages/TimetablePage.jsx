@@ -192,6 +192,24 @@ const slotFacultyName = (slot) => pick(slot, "facultyName", "FacultyName", "staf
 const slotRoomName = (slot) => pick(slot, "roomName", "RoomName", "roomCode", "RoomCode") ?? pick(slot?.room, "roomName", "RoomName", "roomCode", "RoomCode", "name", "Name") ?? "—";
 const slotSectionId = (slot) => pick(slot, "sectionId", "SectionId") ?? pick(slot?.section ?? slot?.Section, "sectionId", "SectionId", "id", "Id");
 const slotCampusId = (slot) => pick(slot, "campusId", "CampusId") ?? pick(slot?.campus ?? slot?.Campus, "campusId", "CampusId", "id", "Id");
+const campusMatches = (record, campusId) => slotCampusId(record) == null || String(slotCampusId(record)) === String(campusId);
+const staffIdOf = (record) => String(pick(record, "staffId", "StaffId", "facultyId", "FacultyId", "id", "Id") ?? "");
+const campusTeachingStaff = async (campusId) => {
+  if (!Number(campusId)) throw new Error("Select a campus first.");
+  const records = [];
+  for (let page = 1; ; page += 1) {
+    const response = await apiClient.get(apiEndpoints.faculty.getAll, {
+      params: { CampusId: Number(campusId), StaffType: "Teaching", Status: "Active", PageNumber: page, PageSize: 100 },
+    });
+    const rows = list(response.data);
+    records.push(...rows);
+    const total = Number(response.data?.totalCount ?? response.data?.data?.totalCount ?? response.headers?.["x-total-count"]);
+    if (!rows.length || (Number.isFinite(total) ? records.length >= total : rows.length < 100)) break;
+    if (page >= 100) throw new Error("Unable to verify the complete campus staff list.");
+  }
+  return records.filter((record) => slotCampusId(record) != null
+    && campusMatches(record, campusId) && isActiveRecord(record));
+};
 const periodNumber = (period) => pick(period?.raw ?? period, "periodNumber", "PeriodNumber", "number", "Number");
 const isBreakPeriod = (period) => {
   const raw = period?.raw ?? period;
@@ -401,17 +419,69 @@ function useLookups(initial = {}) {
     periods: [],
     rooms: [],
   });
+  const prevCampusRef = useRef(selectedCampusId);
+  const prevBoardRef = useRef(selectedBoardId);
+  const prevYearRef = useRef(selectedAcademicYearId);
+
   useEffect(() => {
     const campusId = String(selectedCampusId ?? initial?.campusId ?? "");
-    if (!campusId) return;
-    setValue((current) => String(current.campusId) === campusId
-      ? current
-      : {
+    const boardId = String(selectedBoardId ?? initial?.boardId ?? "");
+    const academicYearId = String(selectedAcademicYearId ?? initial?.academicYearId ?? "");
+
+    const campusChanged = prevCampusRef.current !== undefined && prevCampusRef.current !== selectedCampusId;
+    const boardChanged = prevBoardRef.current !== undefined && prevBoardRef.current !== selectedBoardId;
+    const yearChanged = prevYearRef.current !== undefined && prevYearRef.current !== selectedAcademicYearId;
+
+    prevCampusRef.current = selectedCampusId;
+    prevBoardRef.current = selectedBoardId;
+    prevYearRef.current = selectedAcademicYearId;
+
+    setValue((current) => {
+      if (campusChanged) {
+        return {
           ...EMPTY,
           campusId,
-          boardId: String(selectedBoardId ?? initial?.boardId ?? ""),
-          academicYearId: String(selectedAcademicYearId ?? initial?.academicYearId ?? ""),
-        });
+          boardId: boardId || "",
+          academicYearId: academicYearId || "",
+        };
+      }
+      if (boardChanged) {
+        return {
+          ...current,
+          boardId: boardId || "",
+          academicYearId: academicYearId || current.academicYearId || "",
+          academicLevelId: "",
+          groupId: "",
+          programId: "",
+          sectionId: "",
+        };
+      }
+      if (yearChanged) {
+        return {
+          ...current,
+          academicYearId: academicYearId || "",
+          academicLevelId: "",
+          groupId: "",
+          programId: "",
+          sectionId: "",
+        };
+      }
+
+      const nextCampus = current.campusId || campusId;
+      const nextBoard = current.boardId || boardId;
+      const nextYear = current.academicYearId || academicYearId;
+
+      if (current.campusId === nextCampus && current.boardId === nextBoard && current.academicYearId === nextYear) {
+        return current;
+      }
+
+      return {
+        ...current,
+        campusId: nextCampus,
+        boardId: nextBoard,
+        academicYearId: nextYear,
+      };
+    });
   }, [initial?.academicYearId, initial?.boardId, initial?.campusId, selectedAcademicYearId, selectedBoardId, selectedCampusId]);
   useEffect(() => {
     Promise.allSettled([
@@ -613,7 +683,7 @@ function useLookups(initial = {}) {
         : Promise.resolve({ data: [] }),
       apiClient.get(apiEndpoints.subjects.context, {
         params: {
-          boardId: value.boardId,
+          boardId: value.boardId || selectedBoardId || 0,
           groupId: value.groupId,
           academicLevelId: value.academicLevelId,
         },
@@ -1420,6 +1490,7 @@ function Generate({ goDraft, notify, initial }) {
   };
   const generate = async () => {
     if (busy) return;
+    if (!ready) return notify("Select a complete campus and academic context first.");
     const selectedProgram = data.programs.find((program) => String(program.id) === String(value.programId));
     const programId = Number(pick(selectedProgram?.raw, "programId", "ProgramId", "id", "Id"));
     const sectionIds = data.sections
@@ -1457,12 +1528,34 @@ function Generate({ goDraft, notify, initial }) {
         notify("Enter at least one subject weekly-period requirement before generating the timetable.");
         return;
       }
+      const staff = await campusTeachingStaff(value.campusId);
+      if (!staff.length) {
+        notify("No active teaching staff are available in the selected campus. Add staff and allocate subjects before generating a timetable.");
+        return;
+      }
+      const campusStaffIds = new Set(staff.map(staffIdOf));
+      for (const sectionId of sectionIds) {
+        const allocations = await Promise.all(subjectRequirements.map(async ({ subjectId }) => {
+          const response = await apiClient.get(apiEndpoints.timetable.getAllocatedFaculties, {
+            params: { ...value, campusId: Number(value.campusId), programId, sectionId, subjectId },
+          });
+          return { subjectId, eligible: list(response.data).some((record) =>
+            campusMatches(record, value.campusId) && isActiveRecord(record) && campusStaffIds.has(staffIdOf(record))) };
+        }));
+        const missing = allocations.find((allocation) => !allocation.eligible);
+        if (missing) {
+          const subject = data.subjects.find((entry) => Number(entry.id) === missing.subjectId)?.name ?? missing.subjectId;
+          const section = data.sections.find((entry) => Number(entry.id) === sectionId)?.name ?? sectionId;
+          notify(`Allocate an active teacher from the selected campus to ${subject} in ${section} before generating the timetable.`);
+          return;
+        }
+      }
       const response = await apiClient.post(
         apiEndpoints.timetable.generate,
         {
-          boardId: Number(value.boardId),
-          campusId: Number(value.campusId),
-          academicYearId: Number(value.academicYearId),
+          boardId: Number(value.boardId || selectedBoardId),
+          campusId: Number(value.campusId || selectedCampusId),
+          academicYearId: Number(value.academicYearId || selectedAcademicYearId),
           academicLevelId: Number(value.academicLevelId),
           groupId: Number(value.groupId),
           programId,
@@ -1474,7 +1567,7 @@ function Generate({ goDraft, notify, initial }) {
         {
           // The live endpoint reports this exact parameter name. Include it
           // in the query collection as well as the JSON command body.
-          params: { p_ProgramId: programId },
+          params: { CampusId: Number(value.campusId), p_ProgramId: programId },
         },
       );
       const result = response.data?.data ?? response.data ?? {};
@@ -1573,29 +1666,40 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
     dayOfWeek: String(pick(slot, "dayOfWeek", "DayOfWeek") ?? ""),
     periodId: String(pick(slot, "periodId", "PeriodId") ?? ""),
     subjectId: String(pick(slot, "subjectId", "SubjectId") ?? ""),
-    facultyId: String(pick(slot, "facultyId", "FacultyId") ?? ""),
+    facultyId: String(pick(slot, "staffId", "StaffId", "facultyId", "FacultyId") ?? ""),
     roomId: String(pick(slot, "roomId", "RoomId") ?? ""),
     remarks: pick(slot, "remarks", "Remarks") ?? "",
   });
   const [faculty, setFaculty] = useState([]);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    if (!form.subjectId) return;
-    apiClient
-      .get(apiEndpoints.timetable.getAllocatedFaculties, {
+    let cancelled = false;
+    setFaculty([]);
+    if (!form.subjectId || !context.campusId) return;
+    Promise.all([
+      campusTeachingStaff(context.campusId),
+      apiClient.get(apiEndpoints.timetable.getAllocatedFaculties, {
         params: { ...context, subjectId: form.subjectId },
-      })
-      .then((r) =>
+      }),
+    ])
+      .then(([staff, r]) => {
+        if (cancelled) return;
+        const staffIds = new Set(staff.map(staffIdOf));
         setFaculty(
           optionize(r.data, ["facultyId", "FacultyId", "staffId", "StaffId", "id", "Id"], ["facultyName", "FacultyName", "staffName", "StaffName", "name", "Name"])
-            .filter((entry) => isActiveRecord(entry.raw)),
-        ),
-      )
-      .catch((e) => notify(getApiErrorMessage(e)));
+            .filter((entry) => campusMatches(entry.raw, context.campusId) && isActiveRecord(entry.raw) && staffIds.has(staffIdOf(entry.raw))),
+        );
+      })
+      .catch((e) => { if (!cancelled) notify(getApiErrorMessage(e)); });
+    return () => { cancelled = true; };
   }, [context, form.subjectId, notify]);
   const set = (key) => (e) => setForm((x) => ({ ...x, [key]: e.target.value }));
   const save = async () => {
     if (saving) return;
+    if (!faculty.some((entry) => String(entry.id) === String(form.facultyId))) {
+      notify("Select an allocated teacher from the selected campus before saving.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -1607,6 +1711,7 @@ function SlotEditor({ context, data, slot, workingDays, close, saved, notify, la
           ]),
         ),
         isPublished: Boolean(pick(slot, "isPublished") ?? false),
+        staffId: Number(form.facultyId),
       };
       timetableId(slot)
         ? await apiClient.put(apiEndpoints.timetable.update(timetableId(slot)), payload)
@@ -1946,9 +2051,7 @@ function Draft({ initial, notify }) {
     }
     let cancelled = false;
     Promise.allSettled([
-      apiClient.get(apiEndpoints.faculty.getAll, {
-        params: { StaffType: "Teaching", Status: "Active", PageSize: 100 },
-      }),
+      campusTeachingStaff(value.campusId).then((staff) => ({ data: staff })),
       apiClient.get(apiEndpoints.students.getBySection(value.sectionId)),
     ]).then(([staffResult, studentsResult]) => {
       if (cancelled) return;
@@ -1972,7 +2075,7 @@ function Draft({ initial, notify }) {
       setStaffSearch("");
     });
     return () => { cancelled = true; };
-  }, [published, value.sectionId]);
+  }, [published, value.sectionId, value.campusId]);
   const find = (day, periodId) =>
     slots.find(
       (slot) => {
@@ -2562,7 +2665,7 @@ function LatestDraft({ notify }) {
     ])
       .then((response) => {
         if (!active) return;
-        const rows = list(response.data);
+        const rows = list(response.data).filter((record) => campusMatches(record, selectedCampusId));
         const latest = [...rows].sort((a, b) => {
           const date = (entry) => Date.parse(pick(entry, "generatedAt", "GeneratedAt", "createdAt", "CreatedAt", "updatedAt", "UpdatedAt", "date", "Date") ?? "") || 0;
           return date(b) - date(a) || Number(pick(b, "id", "Id", "timetableId", "TimetableId") ?? 0) - Number(pick(a, "id", "Id", "timetableId", "TimetableId") ?? 0);

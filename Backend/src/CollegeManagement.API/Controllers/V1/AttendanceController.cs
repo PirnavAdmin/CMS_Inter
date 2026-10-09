@@ -227,6 +227,22 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetAdminStudentsForAttendance([FromQuery] AttendanceSearchRequest requestQuery, [FromBody] AttendanceSearchRequest? requestBody = null)
         {
             var request = requestBody ?? requestQuery;
+            
+            if (request.CampusId.HasValue && request.CampusId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Campus ID." });
+                
+            if (request.BoardId.HasValue && request.BoardId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Board ID." });
+                
+            if (request.AcademicYearId.HasValue && request.AcademicYearId.Value <= 0)
+                return BadRequest(new { success = false, message = "Invalid Academic Year ID." });
+                
+            if (!string.IsNullOrEmpty(request.AttendanceDate) && !DateTime.TryParse(request.AttendanceDate, out _))
+                return BadRequest(new { success = false, message = "Invalid Attendance Date format." });
+                
+            if (!string.IsNullOrEmpty(request.Date) && !DateTime.TryParse(request.Date, out _))
+                return BadRequest(new { success = false, message = "Invalid Date format." });
+
             var results = await _attendanceService.GetAdminStudentsForAttendanceAsync(request);
             return Ok(results);
         }

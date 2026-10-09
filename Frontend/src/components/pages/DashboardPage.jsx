@@ -1,3 +1,4 @@
+import { summarizeStudentAttendance } from "./dashboardStudentAttendance.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -564,7 +565,7 @@ export default function DashboardPage() {
           else if (m === "Absent" || a === "Absent") finalStatus = "Absent";
           else if (m === "Holiday" || a === "Holiday") finalStatus = "Holiday";
           return { ...r, finalStatus };
-        }).filter(r => r.finalStatus !== "—" && r.finalStatus !== "Holiday");
+        });
 
         const presentCount = processedRows.filter(r => r.finalStatus === "Present").length;
         const absentCount = processedRows.filter(r => r.finalStatus === "Absent").length;
@@ -597,14 +598,7 @@ export default function DashboardPage() {
         setStudentAttState({
           loading: false,
           error: null,
-          data: {
-            total: totalCount,
-            present: presentCount,
-            absent: absentCount,
-            halfDay: halfDayCount,
-            percentage: percentage,
-            breakdownList: breakdownList
-          },
+          data: attendance,
           timestamp: "Today"
         });
       }
@@ -652,12 +646,7 @@ export default function DashboardPage() {
         let lateCount = 0;
         let onLeaveCount = 0;
 
-        const validRows = rows.filter(r => {
-           const st = staffStatus(r.status);
-           return st !== "Holiday" && st !== "—";
-        });
-
-        validRows.forEach(r => {
+        rows.forEach(r => {
            const st = staffStatus(r.status);
            if (st === "Present") presentCount++;
            else if (st === "Absent") absentCount++;
@@ -665,7 +654,7 @@ export default function DashboardPage() {
            else if (st === "Leave") onLeaveCount++;
         });
 
-        const totalCount = validRows.length;
+        const totalCount = rows.length;
         const percentage = totalCount ? Math.round(((presentCount + 0.5 * lateCount) * 100) / totalCount) : 0;
 
         setStaffAttState({
@@ -1107,7 +1096,7 @@ export default function DashboardPage() {
       { name: "Half-day", value: halfDay, color: "#f59e0b" },
     ];
 
-    const breakdownList = data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
+    const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
     return { total, present, absent, halfDay, late: halfDay, percentage, chartData, breakdownList };
   }, [studentAttState.data]);
@@ -1719,7 +1708,7 @@ export default function DashboardPage() {
               <EmptyState message="No upcoming holidays scheduled." />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-info-list">
+                <div className="dashboard-info-list" style={{ paddingBottom: '20px' }}>
                   {holidaysList.map((item, index) => (
                     <div key={`holiday-${item.id}-${index}`} className="dashboard-info-item dashboard-holiday-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>
@@ -1758,7 +1747,7 @@ export default function DashboardPage() {
               <EmptyState message="No upcoming examinations scheduled." />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-info-list">
+                <div className="dashboard-info-list" style={{ paddingBottom: '20px' }}>
                   {examsList.map((item, index) => (
                     <div key={`exam-${item.id}-${index}`} className="dashboard-info-item dashboard-exam-item">
                       <span className={`dashboard-list-icon tone-${item.tone}`}>

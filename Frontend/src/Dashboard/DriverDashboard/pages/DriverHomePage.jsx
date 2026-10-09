@@ -176,7 +176,7 @@ export default function DriverHomePage({
           icon={Sun}
           title="Morning Trip"
           value={dashboardData?.morningTrip?.status || morningTripStatus}
-          subtitle={dashboardData?.morningTrip?.time || "07:00 AM – 08:30 AM"}
+          subtitle={dashboardData?.morningTrip?.time || dashboardData?.assignment?.morningTripTime || "Trip time not available"}
           tone={(dashboardData?.morningTrip?.status || morningTripStatus) === "In Progress" ? "warning" : "success"}
           badge={(dashboardData?.morningTrip?.status || morningTripStatus) === "In Progress" ? "Live" : undefined}
           onClick={() => onNavigateTab("trips")}
@@ -185,7 +185,7 @@ export default function DriverHomePage({
           icon={Moon}
           title="Evening Trip"
           value={dashboardData?.eveningTrip?.status || eveningTripStatus}
-          subtitle={dashboardData?.eveningTrip?.time || "04:00 PM – 05:30 PM"}
+          subtitle={dashboardData?.eveningTrip?.time || dashboardData?.assignment?.eveningTripTime || "Trip time not available"}
           tone="purple"
           onClick={() => onNavigateTab("trips")}
         />
